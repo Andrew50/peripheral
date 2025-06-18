@@ -76,13 +76,14 @@ export interface Settings {
     divideTaS: boolean;
     filterTaS: boolean;
     showFilings: boolean;
-    enableScreensaver: boolean;
-    screensaverTimeframes: string[];
-    screensaverSpeed: number;
-    screensaverTimeout: number;
-    screensaverDataSource: 'gainers-losers' | 'watchlist' | 'user-defined';
-    screensaverWatchlistId?: number;
-    screensaverTickers?: string[];
+    // DEPRECATED: Screensaver properties
+    // enableScreensaver: boolean;
+    // screensaverTimeframes: string[];
+    // screensaverSpeed: number;
+    // screensaverTimeout: number;
+    // screensaverDataSource: 'gainers-losers' | 'watchlist' | 'user-defined';
+    // screensaverWatchlistId?: number;
+    // screensaverTickers?: string[];
     colorScheme: 'default' | 'dark-blue' | 'midnight' | 'forest' | 'sunset';
 }
 export interface StreamInfo {

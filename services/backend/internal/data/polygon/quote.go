@@ -108,7 +108,7 @@ func GetAggsData(client *polygon.Client, ticker string, multiplier int, timefram
 }
 
 // GetTradeAtTimestamp performs operations related to GetTradeAtTimestamp functionality.
-func GetTradeAtTimestamp(conn *data.Conn, securityID int, timestamp time.Time) (models.Trade, error) {
+func GetTradeAtTimestamp(conn *data.Conn, securityID int, timestamp time.Time, fullLot bool) (models.Trade, error) {
 	ticker, err := postgres.GetTicker(conn, securityID, timestamp)
 	if err != nil {
 		return models.Trade{}, fmt.Errorf("sif20ih %v", err)
@@ -124,7 +124,11 @@ func GetTradeAtTimestamp(conn *data.Conn, securityID int, timestamp time.Time) (
 	}
 
 	for iter.Next() {
-		return iter.Item(), nil
+		if iter.Item().Size >= 100 && fullLot {
+			return iter.Item(), nil
+		} else if !fullLot {
+			return iter.Item(), nil
+		}
 	}
 	if err := iter.Err(); err != nil {
 		return models.Trade{}, fmt.Errorf("error fetching trade: %v", err)

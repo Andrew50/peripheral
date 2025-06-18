@@ -386,35 +386,7 @@
 		font-size: 0.875rem;
 	}
 
-	/* Features preview */
-	.features-preview {
-		display: flex;
-		gap: 2rem;
-		justify-content: center;
-		flex-wrap: wrap;
-		margin-top: 4rem;
-		padding-top: 2rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
-	}
 
-	.feature-item {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		color: #9ca3af;
-		font-size: 0.875rem;
-		transition: color 0.3s ease;
-	}
-
-	.feature-item:hover {
-		color: #60a5fa;
-	}
-
-	.feature-item svg {
-		width: 1.25rem;
-		height: 1.25rem;
-		stroke: currentColor;
-	}
 
 	/* Mobile responsiveness */
 	@media (max-width: 640px) {
@@ -435,11 +407,7 @@
 			width: 100%;
 		}
 
-		.features-preview {
-			flex-direction: column;
-			align-items: center;
-			gap: 1rem;
-		}
+
 
 		.badge {
 			font-size: 0.75rem;

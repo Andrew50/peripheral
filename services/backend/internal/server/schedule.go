@@ -156,7 +156,7 @@ func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 func updateSectorsJob(conn *data.Conn) error {
 	////fmt.Println("Starting sector update - fetching latest sector/industry data...")
 	err := securities.UpdateSectors(context.Background(), conn) // Discard the statBlock
-	return err                                                     // Return the error, if any
+	return err                                                  // Return the error, if any
 }
 
 // Define all jobs and their schedules
@@ -192,20 +192,6 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "StopServices",
-			Function:       stopServicesJob,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
-			RunOnInit:      false,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "UpdateSectors",
-			Function:       updateSectorsJob,                    // Use the new wrapper function
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
 			Name:           "SimpleUpdateSecurities",
 			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
@@ -216,6 +202,20 @@ var (
 			Name:           "UpdateSecurityDetails",
 			Function:       securityDetailUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Run at 9:00 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "StopServices",
+			Function:       stopServicesJob,
+			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "UpdateSectors",
+			Function:       updateSectorsJob,                    // Use the new wrapper function
+			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},

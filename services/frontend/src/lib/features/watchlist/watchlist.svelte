@@ -1,14 +1,14 @@
 <script lang="ts">
-	import List from '$lib/components/list.svelte';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import type { Instance, Watchlist } from '$lib/utils/types/types';
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist } from '$lib/utils/stores/stores';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { flagWatchlistId, watchlists, flagWatchlist, isPublicViewing } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
-
+	import WatchlistList from './watchlistList.svelte';
+	import { showAuthModal } from '$lib/stores/authModal';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -106,8 +106,13 @@
 	});
 
 	function addInstance() {
-		const inst = { ticker: '', timestamp: 0 };
-		queryInstanceInput(['ticker'], ['ticker', 'timestamp'], inst).then((i: WatchlistItem) => {
+		if (get(isPublicViewing)) {
+			showAuthModal('watchlists', 'signup');
+			return;
+		}
+
+		const inst = { ticker: ''};
+		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
 			const aList = get(activeList);
 			const empty = !Array.isArray(aList);
 			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
@@ -332,13 +337,13 @@
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-			<div class="watchlist-selector">
-				<select
-					class="default-select"
-					id="watchlists"
-					value={currentWatchlistId?.toString()}
-					on:change={handleWatchlistChange}
-				>
+				<div class="watchlist-selector glass glass--rounded glass--medium">
+		<select
+			class="default-select"
+			id="watchlists"
+			value={currentWatchlistId?.toString()}
+			on:change={handleWatchlistChange}
+		>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
@@ -356,20 +361,19 @@
 					</optgroup>
 				</select>
 				{#if !showWatchlistInput}
-					<button class="utility-button" title="Add Symbol" on:click={addInstance}>+</button>
-					<button
-						class="utility-button new-watchlist-button"
+					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
+					<!--<button
+						class="utility-button new-watchlist-button glass glass--small glass--light"
 						title="New Watchlist"
 						on:click={() => selectWatchlist('new')}
 					>
 						<span>+</span>
-						<span class="list-icon">📋</span>
-					</button>
+					</button>-->
 				{/if}
 			</div>
 
 			{#if showWatchlistInput}
-				<div class="new-watchlist-container">
+				<div class="new-watchlist-container glass glass--rounded glass--medium">
 					<input
 						class="input"
 						bind:this={newNameInput}
@@ -384,8 +388,8 @@
 						placeholder="New Watchlist Name"
 					/>
 					<div class="new-watchlist-buttons">
-						<button class="utility-button" on:click={newWatchlist}>✓</button>
-						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
+						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}>✓</button>
+						<button class="utility-button glass glass--small glass--light" on:click={closeNewWatchlistWindow}>✕</button>
 					</div>
 				</div>
 			{/if}
@@ -393,11 +397,11 @@
 	</div>
 
 	<!-- Shortcut buttons between controls and list -->
-	<div class="shortcut-container">
+	<div class="shortcut-container glass glass--rounded glass--light">
 		{#if Array.isArray($watchlists)}
 			{#each $watchlists as watchlist}
 				<button
-					class="shortcut-button {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+					class="shortcut-button glass glass--small glass--light {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					title={watchlist.watchlistName}
 				>
@@ -417,8 +421,8 @@
 	</div>
 
 	<!-- Wrap List component for scrolling -->
-	<div class="list-scroll-container">
-		<List
+	<div class="list-scroll-container glass glass--rounded glass--medium">
+		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
 			list={activeList}
@@ -431,35 +435,57 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 4px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
+		padding: 12px;
 	}
 
 	.watchlist-selector select {
 		flex: 1;
 		min-width: 200px;
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		padding: 8px 32px 8px 12px;
+		font-size: 14px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: right 8px center;
+		background-size: 16px;
+	}
+
+	.watchlist-selector select:hover {
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+
+	.watchlist-selector select:focus {
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
 	}
 
 	.watchlist-selector .utility-button {
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		width: 32px;
-		height: 32px;
+		color: #ffffff;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 18px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	.watchlist-selector .utility-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.watchlist-selector .new-watchlist-button {
@@ -480,39 +506,43 @@
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
-		background: var(--ui-bg-secondary);
-		border-radius: 8px;
-		border: 1px solid var(--ui-border);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 		animation: slideDown 0.2s ease-out;
 	}
 
 	@keyframes slideDown {
 		from {
 			opacity: 0;
-			transform: translateY(-10px);
+			transform: translateY(-10px) scale(0.95);
 		}
 		to {
 			opacity: 1;
-			transform: translateY(0);
+			transform: translateY(0) scale(1);
 		}
 	}
 
 	.new-watchlist-container .input {
 		width: 100%;
 		margin-bottom: 12px;
-		padding: 10px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		padding: 12px 16px;
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	.new-watchlist-container .input:focus {
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
+	}
+
+	.new-watchlist-container .input::placeholder {
+		color: rgba(255, 255, 255, 0.6);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.new-watchlist-buttons {
@@ -523,11 +553,10 @@
 
 	.new-watchlist-buttons .utility-button {
 		padding: 8px 16px;
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		color: #ffffff;
 		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 		min-width: 40px;
 		display: flex;
@@ -536,28 +565,25 @@
 	}
 
 	.new-watchlist-buttons .utility-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-container {
 		display: flex;
-		gap: 8px;
-		padding: 12px 16px;
+		gap: 6px;
+		padding: 12px;
 		flex-wrap: wrap;
-		border-bottom: 1px solid var(--ui-border);
-		background: var(--ui-bg-secondary);
 	}
 
 	.shortcut-button {
 		padding: 8px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		color: #ffffff;
 		font-size: 14px;
-		font-weight: 500;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 		min-width: 36px;
 		height: 36px;
@@ -567,15 +593,17 @@
 	}
 
 	.shortcut-button:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-button.active {
-		background: var(--accent-color);
-		color: var(--text-on-accent);
-		border-color: var(--accent-color);
+		background: rgba(255, 255, 255, 0.2);
+		color: #ffffff;
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
 	}
 
 	.feature-container {
@@ -583,48 +611,50 @@
 		flex-direction: column;
 		gap: 8px;
 		height: 100%;
-		background: var(--ui-bg-primary);
-		border-radius: 8px;
+		background: transparent;
+		border-radius: 0;
 		overflow: visible;
+		padding: 12px;
 	}
 
 	.controls-container {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 16px;
-		background: var(--ui-bg-primary);
-		border-bottom: 1px solid var(--ui-border);
+		gap: 12px;
+		background: transparent;
 	}
 
 	:global(.default-select) {
 		padding: 8px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
 		font-size: 14px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
 	}
 
 	:global(.default-select:hover) {
-		border-color: var(--accent-color);
+		border-color: rgba(255, 255, 255, 0.4);
 	}
 
 	:global(.default-select:focus) {
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
 	}
 
 	:global(.default-select option) {
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
+		background: rgba(0, 0, 0, 0.9);
+		color: #ffffff;
 		padding: 8px;
 	}
 
 	:global(.default-select optgroup) {
 		font-weight: 600;
-		color: var(--text-secondary);
+		color: rgba(255, 255, 255, 0.7);
+		background: rgba(0, 0, 0, 0.9);
 	}
 
 	/* New style for the list container */
@@ -632,26 +662,28 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
+		padding: 4px;
 	}
 
 	/* Custom scrollbar for WebKit browsers */
 	.list-scroll-container::-webkit-scrollbar {
-		width: 8px; /* Width of the scrollbar */
+		width: 6px; /* Width of the scrollbar */
 	}
 
 	.list-scroll-container::-webkit-scrollbar-track {
-		background: var(--ui-bg-primary); /* Match the primary background */
-		border-radius: 4px;
+		background: transparent; /* Transparent background */
+		border-radius: 3px;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: var(--ui-border); /* Use border color for the thumb */
-		border-radius: 4px;
-		border: 2px solid var(--ui-bg-primary); /* Creates padding around thumb */
+		background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white */
+		border-radius: 3px;
+		border: 1px solid transparent; /* Creates padding around thumb */
+		background-clip: content-box;
 	}
 
 	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: var(--text-secondary); /* Slightly lighter on hover */
+		background-color: rgba(255, 255, 255, 0.4); /* Slightly more opaque on hover */
 	}
 
 	/* Shortcut flag icon styling */
@@ -663,6 +695,7 @@
 	.flag-shortcut-icon svg {
 		width: 14px;
 		height: 14px;
-		color: var(--accent-color);
+		color: #4a80f0;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 </style>

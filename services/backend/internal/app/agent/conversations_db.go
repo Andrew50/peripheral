@@ -18,8 +18,23 @@ type ConversationSummary struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	MessageCount     int       `json:"message_count"`
-	TotalTokenCount  int       `json:"total_token_count"`
 	LastMessageQuery string    `json:"last_message_query,omitempty"`
+}
+
+// VerifyConversationOwnership verifies that a user owns a conversation
+func VerifyConversationOwnership(conn *data.Conn, conversationID string, userID int) error {
+	var ownerID int
+	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("conversation not found")
+		}
+		return fmt.Errorf("failed to verify conversation ownership: %w", err)
+	}
+	if ownerID != userID {
+		return fmt.Errorf("unauthorized access to conversation")
+	}
+	return nil
 }
 
 // DBConversationMessage represents a message stored in the database
@@ -39,6 +54,13 @@ type DBConversationMessage struct {
 	Status           string                   `json:"status"`
 	TokenCount       int                      `json:"token_count"`
 	MessageOrder     int                      `json:"message_order"`
+}
+
+// MessageCompletionData represents the data returned when completing a message
+type MessageCompletionData struct {
+	MessageID   string     `json:"message_id"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CompletedAt *time.Time `json:"completed_at"`
 }
 
 // CreateConversation creates a new conversation in the database
@@ -73,7 +95,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			c.created_at,
 			c.updated_at,
 			c.message_count,
-			c.total_token_count,
 			(
 				SELECT cm.query 
 				FROM conversation_messages cm 
@@ -102,7 +123,6 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 			&conv.CreatedAt,
 			&conv.UpdatedAt,
 			&conv.MessageCount,
-			&conv.TotalTokenCount,
 			&lastMessageQuery,
 		)
 		if err != nil {
@@ -126,13 +146,8 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 // GetConversationMessages retrieves all messages for a conversation
 func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
 	// First verify the user owns this conversation
-	var ownerID int
-	err := conn.DB.QueryRow(ctx, "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
-	if err != nil {
-		return nil, fmt.Errorf("conversation not found: %w", err)
-	}
-	if ownerID != userID {
-		return nil, fmt.Errorf("unauthorized access to conversation")
+	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
+		return nil, err
 	}
 
 	query := `
@@ -238,14 +253,16 @@ func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationI
 
 // SaveConversationMessage saves a message to the database
 func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationID string, userID int, message ChatMessage) (string, error) {
-	// First verify the user owns this conversation
-	var ownerID int
-	err := conn.DB.QueryRow(ctx, "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	// Start transaction for atomic operation
+	tx, err := conn.DB.Begin(ctx)
 	if err != nil {
-		return "", fmt.Errorf("conversation not found: %w", err)
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	if ownerID != userID {
-		return "", fmt.Errorf("unauthorized access to conversation")
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// First verify the user owns this conversation
+	if err = VerifyConversationOwnership(conn, conversationID, userID); err != nil {
+		return "", err
 	}
 
 	// Marshal JSON fields
@@ -276,22 +293,19 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 
 	messageID := uuid.New().String()
 
-	// Get the next message order for this conversation
-	var maxOrder int
-	err = conn.DB.QueryRow(ctx, "SELECT COALESCE(MAX(message_order), 0) FROM conversation_messages WHERE conversation_id = $1", conversationID).Scan(&maxOrder)
-	if err != nil {
-		return "", fmt.Errorf("failed to get max message order: %w", err)
-	}
-	nextOrder := maxOrder + 1
-
+	// Use atomic operation to get next order and insert message
+	// This prevents race conditions when multiple messages are inserted concurrently
 	query := `
 		INSERT INTO conversation_messages (
 			message_id, conversation_id, query, response_text, content_chunks, 
 			function_calls, tool_results, context_items, suggested_queries, citations,
 			created_at, completed_at, status, token_count, message_order
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $2)
+		)`
 
-	_, err = conn.DB.Exec(ctx, query,
+	_, err = tx.Exec(ctx, query,
 		messageID,
 		conversationID,
 		message.Query,
@@ -306,11 +320,28 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 		message.CompletedAt,
 		message.Status,
 		message.TokenCount,
-		nextOrder,
 	)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to save conversation message: %w", err)
+	}
+
+	// Update conversation metadata
+	updateQuery := `
+		UPDATE conversations 
+		SET message_count = message_count + 1,
+			total_token_count = total_token_count + $1,
+			updated_at = $2
+		WHERE conversation_id = $3`
+
+	_, err = tx.Exec(ctx, updateQuery, message.TokenCount, message.Timestamp, conversationID)
+	if err != nil {
+		return "", fmt.Errorf("failed to update conversation metadata: %w", err)
+	}
+
+	// Commit transaction
+	if err = tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return messageID, nil
@@ -319,13 +350,8 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 // DeleteConversationInDB deletes a conversation and all its messages
 func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) error {
 	// Verify ownership before deletion
-	var ownerID int
-	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
-	if err != nil {
-		return fmt.Errorf("conversation not found: %w", err)
-	}
-	if ownerID != userID {
-		return fmt.Errorf("unauthorized access to conversation")
+	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
+		return err
 	}
 
 	// Delete the conversation (messages will be deleted via CASCADE)
@@ -446,6 +472,11 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 		return fmt.Errorf("no active conversation found")
 	}
 
+	// Verify user owns the conversation
+	if err = VerifyConversationOwnership(conn, activeConversationID, userID); err != nil {
+		return err
+	}
+
 	// Update the database first
 	querySQL := `
 		UPDATE conversation_messages 
@@ -500,34 +531,28 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 }
 
 // UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
-func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (string, error) {
-	// First get the message ID before updating
-	var messageID string
-	getMessageIDQuery := `
-		SELECT message_id 
-		FROM conversation_messages 
-		WHERE conversation_id = $1 AND query = $2 AND status = 'pending'`
-
-	err := conn.DB.QueryRow(ctx, getMessageIDQuery, conversationID, query).Scan(&messageID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get message ID: %w", err)
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (*MessageCompletionData, error) {
+	// Verify user owns the conversation
+	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
+		return nil, err
 	}
-
-	// Update the database
-	querySQL := `
-		UPDATE conversation_messages 
-		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
-			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
-		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'`
-
 	// Marshal JSON fields
 	contentChunksJSON, _ := json.Marshal(contentChunks)
 	functionCallsJSON, _ := json.Marshal(functionCalls)
 	toolResultsJSON, _ := json.Marshal(toolResults)
 	suggestedQueriesJSON, _ := json.Marshal(suggestedQueries)
 
+	// Update the database and get the timestamps in a single operation
 	now := time.Now()
-	result, err := conn.DB.Exec(ctx, querySQL,
+	querySQL := `
+		UPDATE conversation_messages 
+		SET content_chunks = $1, function_calls = $2, tool_results = $3, 
+			suggested_queries = $4, token_count = $5, completed_at = $6, status = $7
+		WHERE conversation_id = $8 AND query = $9 AND status = 'pending'
+		RETURNING message_id, created_at, completed_at`
+
+	var messageData MessageCompletionData
+	err := conn.DB.QueryRow(ctx, querySQL,
 		contentChunksJSON,
 		functionCallsJSON,
 		toolResultsJSON,
@@ -537,15 +562,13 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		"completed",
 		conversationID,
 		query,
-	)
+	).Scan(&messageData.MessageID, &messageData.CreatedAt, &messageData.CompletedAt)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to update pending message: %w", err)
-	}
-
-	rowsAffected := result.RowsAffected()
-	if rowsAffected == 0 {
-		return "", fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		}
+		return nil, fmt.Errorf("failed to update pending message: %w", err)
 	}
 
 	// Invalidate cache for this conversation since the message was updated
@@ -553,7 +576,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
 	}
 
-	return messageID, nil
+	return &messageData, nil
 }
 
 // DeletePendingMessageInConversation deletes a pending message when a request is cancelled or fails

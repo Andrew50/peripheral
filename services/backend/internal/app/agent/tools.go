@@ -50,24 +50,6 @@ var (
 			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
 			StatusMessage: "Looking up {ticker}...",
 		},
-		"getSecuritiesFromTicker": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getSecuritiesFromTicker",
-				Description: "Get a list of the closest 10 security ticker symbols to an input string.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "string input to retrieve the list based on.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetSecuritiesFromTicker),
-			StatusMessage: "Searching for matching tickers...",
-		},
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",
@@ -103,24 +85,6 @@ var (
 			},
 			Function:      wrapWithContext(watchlist.GetWatchlists),
 			StatusMessage: "Fetching watchlists...",
-		},
-		"deleteWatchlist": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "deleteWatchlist",
-				Description: "Delete a watchlist.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to delete.",
-						},
-					},
-					Required: []string{"watchlistId"},
-				},
-			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlist),
-			StatusMessage: "Deleting watchlist...",
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -199,42 +163,7 @@ var (
 			StatusMessage: "Adding item to watchlist...",
 		},
 		//singles
-		/*"getPrevClose": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getPrevClose",
-				Description: "Retrieves the previous closing price for a specified security ticker symbol. This also gets the most recent price if the market is closed or in after hours.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the stock to get the previous close for.",
-						},
-					},
-					Required: []string{"securityId"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetPrevClose),
-			StatusMessage: "Getting previous closing price...",
-		},*/ // We can get prev close using daily snapshot
-		"getLastPrice": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getLastPrice",
-				Description: "Retrieves the last price for a specified security ticker symbol.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetLastPrice),
-			StatusMessage: "Getting current price of {ticker}...",
-		},
+
 		"setHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
@@ -496,7 +425,7 @@ var (
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getDailySnapshot",
-				Description: "Get the current price, change, volume, OHLC, previous close for a specified stock.",
+				Description: "Get the current (regular or extended hours) price, change, volume, OHLC, previous close for a specified stock.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -511,7 +440,62 @@ var (
 			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
 			StatusMessage: "Getting market data...",
 		},
-		"getAllTickerSnapshots": {
+		"getLastPrice": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getLastPrice",
+				Description: "Retrieves the last price (regular or extended hours)for a specified security ticker symbol.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol to get the last price for.",
+						},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			Function:      wrapWithContext(helpers.GetLastPrice),
+			StatusMessage: "Getting current price of {ticker}...",
+		},
+		"getStockPriceAtTime": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getStockPriceAtTime",
+				Description: "Get the price of a stock at a specific time.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId":    {Type: genai.TypeInteger, Description: "The security ID of the stock to get the price for."},
+						"timestamp":     {Type: genai.TypeInteger, Description: "The timestamp in milliseconds."},
+						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the price should be split-adjusted. Default true."},
+					},
+					Required: []string{"securityId", "timestamp"},
+				},
+			},
+			Function:      wrapWithContext(GetStockPriceAtTime),
+			StatusMessage: "Getting price at time...",
+		},
+		"getStockChange": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getStockChange",
+				Description: "Returns the change and percent change in the price of a stock between two specific times.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"securityId":    {Type: genai.TypeInteger, Description: "The security ID of the stock to get the change for."},
+						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
+						"to":            {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
+						"fromPoint":     {Type: genai.TypeString, Description: "Optional. The point of the day of the from timestamp to get the price from. 'open', 'high', 'low', 'close'. If omitted, the most recent price to the timestamp is used."},
+						"toPoint":       {Type: genai.TypeString, Description: "Optional. The point of the day of the to timestamp to get the price to. 'open', 'high', 'low', 'close'. If omitted, the most recent price to the timestamp is used."},
+						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the price should be split-adjusted. Default true."},
+					},
+					Required: []string{"securityId", "from", "to"},
+				},
+			},
+			Function:      wrapWithContext(GetStockChange),
+			StatusMessage: "Getting stock change...",
+		},
+		/*"getAllTickerSnapshots": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAllTickerSnapshots",
 				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
@@ -523,11 +507,12 @@ var (
 			},
 			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
 			StatusMessage: "Scanning market data...",
-		},
+		}, */
+
 		"getOHLCVData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getOHLCVData",
-				Description: "Get OHLCV data for a stock",
+				Description: "Get OHLCV data for a stock. Only use this function if other market data tools are not sufficient.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -535,7 +520,7 @@ var (
 						"timeframe":     {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
 						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
 						"to":            {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
-						"bars":          {Type: genai.TypeInteger, Description: "Required. The number of bars to get. Max is 300."},
+						"bars":          {Type: genai.TypeInteger, Description: "Required. The number of bars to get. MAX is 100."},
 						"extended":      {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
 						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
 						"columns":       {Type: genai.TypeArray, Description: "Optional. The columns to include in the OHLCV data. Use 'o' for open, 'h' for high, 'v' for volume, etc. Defaults to all columns."},
@@ -610,7 +595,7 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.CreateStrategyFromNaturalLanguage),
+			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
 			StatusMessage: "Building strategy...",
 		},
 		"calculateBacktestStatistic": {
@@ -647,7 +632,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"query": {Type: genai.TypeString, Description: "The query to search for."},
+						"query": {Type: genai.TypeString, Description: "The query to search. Be highly specific and detailed, asking for the specific information you need. "},
 					},
 					Required: []string{"query"},
 				},
@@ -662,7 +647,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be specific and detailed. Do NOT leave this field as an empty string."},
+						"prompt":   {Type: genai.TypeString, Description: "The query to search for. Be HIGHLY specific and detailed, asking for the specific information you need."},
 						"handles":  {Type: genai.TypeArray, Description: "A list of Twitter handles. If omitted, the search will search the entirety of Twitter."},
 						"fromDate": {Type: genai.TypeString, Description: "The date YYYY-MM-DD to start searching from."},
 						"toDate":   {Type: genai.TypeString, Description: "The date YYYY-MM-DD to stop searching at."},

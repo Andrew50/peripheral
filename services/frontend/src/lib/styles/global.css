@@ -34,6 +34,7 @@ html {
 @import './colors.css';
 @import './input.css';
 @import './select.css';
+@import './glass.css';
 @import './responsive.css';
 
 /* Global responsive settings */

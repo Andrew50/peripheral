@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
-	import { derived, writable } from 'svelte/store';
+	import { derived, writable, get } from 'svelte/store';
 	import {
 		inputValue,
 		contextItems,
@@ -15,21 +15,18 @@
 		type FilingContext, // Import the new type
 		pendingChatQuery,
 	} from './interface'
-	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk } from './interface';
-	import { parseMarkdown, formatChipDate } from './utils';
+	import type { Message, ConversationData, QueryResponse, TableData, ContentChunk, PlotData } from './interface';
+	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick, cleanContentChunk, getContentChunkTextForCopy } from './utils';
+	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
 	import './chat.css'; // Import the CSS file
+	import { generateSharedConversationLink } from './chatHelpers';
+	import { showAuthModal } from '$lib/stores/authModal';
+	import type { ConversationSummary } from './interface';
 
-	// Conversation management types
-	type ConversationSummary = {
-		conversation_id: string;
-		title: string;
-		created_at: string;
-		updated_at: string;
-		last_message_query?: string;
-	};
-
+	export let sharedConversationId: string = '';
+	export let isPublicViewing: boolean;
 
 	// Conversation management state
 	let conversations: ConversationSummary[] = [];
@@ -39,6 +36,12 @@
 	let conversationDropdown: HTMLDivElement;
 	let loadingConversations = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
+	
+	import ConversationHeader from './components/ConversationHeader.svelte';
+	import PlotChunk from './components/PlotChunk.svelte';
+	
+	// Share modal reference
+	let shareModalRef: HTMLDivElement;
 
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
@@ -82,9 +85,6 @@
 	// State for showing all initial suggestions
 	let showAllInitialSuggestions = false;
 
-	// Manage active chart context: subscribe to add new and remove old chart contexts
-	let previousChartInstance: Instance | null = null;
-
 	// Add abort controller for cancelling requests
 	let currentAbortController: AbortController | null = null;
 	let requestCancelled = false;
@@ -97,6 +97,13 @@
 	// Copy feedback state
 	let copiedMessageId = '';
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Share modal state
+	let showShareModal = false;
+	let shareLink = '';
+	let shareLoading = false;
+	let shareCopied = false;
+	let shareCopyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -120,6 +127,8 @@
 
 	// Conversation management functions
 	async function loadConversations() {
+		if (isPublicViewing) return; // Don't load conversations in public viewing mode
+		
 		try {
 			loadingConversations = true;
 			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
@@ -217,6 +226,11 @@
 	}
 
 	function toggleConversationDropdown() {
+		// Close share modal if it's open
+		if (showShareModal) {
+			closeShareModal();
+		}
+		
 		showConversationDropdown = !showConversationDropdown;
 		if (showConversationDropdown) {
 			loadConversations();
@@ -225,8 +239,18 @@
 
 	// Close dropdown when clicking outside
 	function handleClickOutside(event: MouseEvent) {
+		// Don't handle clicks on the share button itself
+		const target = event.target as HTMLElement;
+		if (target && target.closest('.share-btn')) {
+			return;
+		}
+		
 		if (showConversationDropdown && conversationDropdown && !conversationDropdown.contains(event.target as Node)) {
 			showConversationDropdown = false;
+		}
+		// Close share modal when clicking outside
+		if (showShareModal && shareModalRef && !shareModalRef.contains(event.target as Node)) {
+			closeShareModal();
 		}
 	}
 
@@ -234,8 +258,16 @@
 	async function loadConversationHistory(shouldAutoScroll: boolean = true) {
 		try {
 			isLoading = true;
-			const response = await privateRequest('getUserConversation', {});
-
+			let response;
+			if (isPublicViewing && sharedConversationId) {
+				// For public viewing, use publicRequest to get shared conversation
+				response = await publicRequest('getPublicConversation', {
+					conversation_id: sharedConversationId
+				});
+			} else {
+				// For authenticated users, use privateRequest 
+				response = await privateRequest('getUserConversation', {});
+			}
 			// Check if we have a valid conversation history
 			const conversation = response as ConversationData;
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
@@ -327,8 +359,14 @@
 				}
 
 				// Update conversation details from backend response
+				// Only update conversation ID if we don't already have one or if it matches
 				if (conversation.conversation_id) {
-					currentConversationId = conversation.conversation_id;
+					if (!currentConversationId || currentConversationId === conversation.conversation_id) {
+						currentConversationId = conversation.conversation_id;
+					} else {
+						// Conversation ID mismatch - log warning but don't switch
+						console.warn('Conversation ID mismatch detected, keeping current conversation');
+					}
 				}
 				if (conversation.title) {
 					currentConversationTitle = conversation.title;
@@ -368,12 +406,20 @@
 	async function checkForUpdates() {
 		if (isLoading) return; // Don't check if we're already loading
 		if (document.hidden) return; // Don't poll when tab is not visible
+		if (isPublicViewing) return; // Don't poll for public shared conversations
 		
 		try {
 			const response = await privateRequest('getUserConversation', {});
 			const conversation = response as ConversationData;
 			
 			if (conversation && conversation.messages && conversation.messages.length > 0) {
+				// Validate that the polled conversation matches our current conversation
+				// If conversation IDs don't match, don't process updates to prevent switching to wrong conversation
+				if (currentConversationId && conversation.conversation_id && 
+					conversation.conversation_id !== currentConversationId) {
+					console.log('Polling returned different conversation ID, skipping update to prevent chat switching');
+					return;
+				}
 				const lastSeenKey = 'chat_last_seen_timestamp';
 				const lastSeenStr = localStorage.getItem(lastSeenKey);
 				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
@@ -391,7 +437,8 @@
 					}
 					
 					// Check if we have pending messages that might have been completed
-					const existingMessage = $messagesStore.find(m => m.content === msg.query && m.sender === 'user');
+					// Use message_id for proper identification instead of content matching
+					const existingMessage = $messagesStore.find(m => m.message_id === msg.message_id && m.sender === 'user');
 					if (existingMessage && isCompleted && (!existingMessage.status || existingMessage.status === 'pending')) {
 						hasUpdates = true;
 						break;
@@ -423,14 +470,16 @@
 	}
 
 	onMount(() => {
-		if (queryInput) {
+		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
 		loadConversationHistory();
-		loadConversations(); // Load conversations on mount
+		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
-		// Set up periodic polling for updates (every 10 seconds)
-		pollInterval = setInterval(checkForUpdates, 10000);
+		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
+		if (!isPublicViewing) {
+			pollInterval = setInterval(checkForUpdates, 10000);
+		}
 
 		// Resume polling when tab becomes visible and check for updates immediately
 		const handleVisibilityChange = () => {
@@ -474,6 +523,11 @@
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
 		}
+
+		// Clean up share copy timeout
+		if (shareCopyTimeout) {
+			clearTimeout(shareCopyTimeout);
+		}
 	});
 
 	// Scroll to bottom of chat (for user-initiated actions)
@@ -487,6 +541,10 @@
 
 	// Function to handle clicking on a suggested query
 	function handleSuggestedQueryClick(query: string) {
+		if(isPublicViewing) {
+			showAuthModal('conversations', 'signup');
+			return;
+		}
 		inputValue.set(query)
 		handleSubmit();
 	}
@@ -572,8 +630,15 @@
 				// Update conversation ID if this was a new chat
 				if (typedResponse.conversation_id && !currentConversationId) {
 					currentConversationId = typedResponse.conversation_id;
-					// Load conversations to get the title
-					await loadConversations();
+					// Load conversations to get the title (only for authenticated users)
+					if (!isPublicViewing) {
+						await loadConversations();
+						// Update the title immediately if we have one in the response
+						const newConversation = conversations.find(c => c.conversation_id === currentConversationId);
+						if (newConversation) {
+							currentConversationTitle = newConversation.title;
+						}
+					}
 				}
 
 				// Update the temporary user message with the real backend message ID
@@ -587,25 +652,26 @@
 					);
 				}
 
-				const now = new Date();
+				// Use timestamps from backend response if available, otherwise use current time
+				const messageTimestamp = typedResponse.timestamp ? new Date(typedResponse.timestamp) : new Date();
+				const messageCompletedAt = typedResponse.completed_at ? new Date(typedResponse.completed_at) : new Date();
 
 				const assistantMessage: Message = {
 					message_id: typedResponse.message_id  + '_response' || '',
 					content: typedResponse.text || "Error processing request.",
 					sender: 'assistant',
-					timestamp: now,
-					responseType: typedResponse.type,
+					timestamp: messageTimestamp,
 					contentChunks: typedResponse.content_chunks,
 					suggestedQueries: typedResponse.suggestions || [],
 					status: 'completed',
-					completedAt: now
+					completedAt: messageCompletedAt
 				};
 
 				messagesStore.update(current => [...current, assistantMessage]);
 				
 				// Update last seen timestamp since we just saw this response
 				const lastSeenKey = 'chat_last_seen_timestamp';
-				localStorage.setItem(lastSeenKey, now.toISOString());
+				localStorage.setItem(lastSeenKey, messageCompletedAt.toISOString());
 				
 				// If we didn't have a conversation ID before, we should have one now
 				// Load conversation history to get the new conversation ID
@@ -636,7 +702,7 @@
 					content: `Error: ${error.message || 'Failed to get response'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
-					responseType: 'error'
+					status: 'error'
 				};
 
 				messagesStore.update(current => [...current, errorMessage]);
@@ -657,7 +723,7 @@
 					content: `Error: ${error.message || 'An unexpected error occurred'}`,
 					sender: 'assistant',
 					timestamp: new Date(),
-					responseType: 'error'
+					status: 'error'
 				};
 
 				messagesStore.update(current => [...current, errorMessage]);
@@ -751,63 +817,6 @@
 		return null;
 	}
 
-	// Function to handle clicks on ticker buttons
-	async function handleTickerButtonClick(event: MouseEvent) {
-		const target = event.target as HTMLButtonElement; // Assert as Button Element
-		if (target && target.classList.contains('ticker-button')) {
-			const ticker = target.dataset.ticker;
-			const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
-
-			if (ticker && timestampMsStr) {
-				const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
-
-				if (isNaN(timestampMs)) {
-					console.error('Invalid timestampMs on ticker button');
-					return; // Don't proceed if timestamp is invalid
-				}
-
-				try {
-					target.disabled = true;
-
-					// Call the new backend function to get the securityId
-					// Define expected response shape
-					type SecurityIdResponse = { securityId?: number };
-					console.log('ticker', ticker);
-					console.log('timestampMs', timestampMs);
-					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
-						ticker: ticker,
-						timestampMs: timestampMs // Pass timestamp as number
-					});
-
-					// Safely access the securityId
-					const securityId = response?.securityId;
-
-					if (securityId && !isNaN(securityId)) {
-						// If securityId is valid, query the chart
-						queryChart({
-							ticker: ticker,
-							securityId: securityId,
-							timestamp: timestampMs // Pass timestamp as number (milliseconds)
-						} as Instance);
-					} else {
-						console.error('Failed to retrieve a valid securityId from backend:', response);
-						// Handle error visually if needed (e.g., show error message)
-						target.textContent = 'Error'; // Revert button text or indicate error
-						await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-					}
-
-				} catch (error) {
-					console.error('Error fetching securityId:', error);
-					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-				} finally {
-					target.disabled = false;
-				}
-
-			} else {
-				console.error('Missing data attributes on ticker button');
-			}
-		}
-	}
 
 	// Function to toggle table expansion state
 	function toggleTableExpansion(tableKey: string) {
@@ -929,65 +938,17 @@
 		editingContent = '';
 	}
 
-	// Helper function to clean HTML content and extract plain text with ticker symbols
-	function cleanHtmlContent(htmlContent: string): string {
-		if (!htmlContent) return '';
-		
-		// First, handle the original $$$ ticker patterns before they're converted to buttons
-		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
-		const dollarTickerRegex = /\$\$\$([A-Z]{1,5})-(\d+)\$\$\$/g;
-		let processedContent = htmlContent.replace(dollarTickerRegex, '$1');
-		
-		// Create a temporary DOM element to parse HTML
-		const tempDiv = document.createElement('div');
-		tempDiv.innerHTML = processedContent;
-		
-		// Find all ticker buttons and replace them with just the ticker symbol
-		const tickerButtons = tempDiv.querySelectorAll('button.ticker-button[data-ticker]');
-		tickerButtons.forEach(button => {
-			const ticker = button.getAttribute('data-ticker');
-			if (ticker) {
-				button.replaceWith(document.createTextNode(ticker));
-			}
-		});
-		
-		// Return the text content (automatically strips all HTML tags)
-		return tempDiv.textContent || '';
-	}
-
 	// Function to copy message content to clipboard
 	async function copyMessageToClipboard(message: Message) {
 		try {
 			let textToCopy = '';
 			
-			if (message.contentChunks && message.contentChunks.length > 0) {
-				// For messages with content chunks, extract text from each chunk
-				textToCopy = message.contentChunks.map(chunk => {
-					if (chunk.type === 'text') {
-						const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
-						return cleanHtmlContent(content);
-					} else if (chunk.type === 'table' && isTableData(chunk.content)) {
-						// For tables, create a simple text representation
-						const tableData = chunk.content;
-						let tableText = '';
-						if (tableData.caption) {
-							const cleanCaption = cleanHtmlContent(tableData.caption);
-							tableText += cleanCaption + '\n\n';
-						}
-						// Add headers
-						tableText += tableData.headers.join('\t') + '\n';
-						// Add rows (also clean ticker formatting from table cells)
-						tableText += tableData.rows.map(row => {
-							if (Array.isArray(row)) {
-								return row.map(cell => cleanHtmlContent(String(cell))).join('\t');
-							} else {
-								return cleanHtmlContent(String(row));
-							}
-						}).join('\n');
-						return tableText;
-					}
-					return '';
-				}).join('\n\n');
+							if (message.contentChunks && message.contentChunks.length > 0) {
+			// For messages with content chunks, extract text from each chunk
+			textToCopy = message.contentChunks
+				.map(chunk => getContentChunkTextForCopy(chunk, isTableData, plotDataToText))
+				.filter(text => text.length > 0)
+				.join('\n\n');
 			} else {
 				// For simple text messages
 				textToCopy = cleanHtmlContent(message.content);
@@ -1129,106 +1090,96 @@
 			await loadConversationHistory(false);
 		}
 	}
+
+	// Share conversation functions
+	async function handleShareConversation() {
+		if (!currentConversationId) {
+			console.error('No active conversation to share');
+			return;
+		}
+
+		// Close conversation dropdown if it's open
+		if (showConversationDropdown) {
+			showConversationDropdown = false;
+		}
+
+		showShareModal = true;
+		shareLoading = true;
+		shareLink = '';
+		shareCopied = false;
+
+		try {
+			const link = await generateSharedConversationLink(currentConversationId);
+			if (link) {
+				shareLink = link;
+			} else {
+				console.error('Failed to generate share link');
+			}
+		} catch (error) {
+			console.error('Error generating share link:', error);
+		} finally {
+			shareLoading = false;
+		}
+	}
+
+	function closeShareModal() {
+		showShareModal = false;
+		shareLink = '';
+		shareLoading = false;
+		shareCopied = false;
+		if (shareCopyTimeout) {
+			clearTimeout(shareCopyTimeout);
+			shareCopyTimeout = null;
+		}
+	}
+
+	async function copyShareLink() {
+		if (!shareLink) return;
+		
+		try {
+			await navigator.clipboard.writeText(shareLink);
+			shareCopied = true;
+			
+			if (shareCopyTimeout) {
+				clearTimeout(shareCopyTimeout);
+			}
+			shareCopyTimeout = setTimeout(() => {
+				shareCopied = false;
+				shareCopyTimeout = null;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy share link:', error);
+		}
+	}
 </script>
 
 <div class="chat-container">
-	<div class="chat-header">
-		<div class="header-left">
-			<div class="conversation-dropdown-container" bind:this={conversationDropdown}>
-				<button class="hamburger-button" on:click={toggleConversationDropdown} aria-label="Open conversations menu">
-					<svg viewBox="0 0 24 24" width="20" height="20">
-						<path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
-					</svg>
-				</button>
-				
-				{#if showConversationDropdown}
-					<div class="conversation-dropdown">
-						<div class="dropdown-header">
-							<h4>Conversations</h4>
-							<button class="new-conversation-btn" on:click={createNewConversation}>
-								<svg viewBox="0 0 24 24" width="16" height="16">
-									<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
-								</svg>
-								New Chat
-							</button>
-						</div>
-						
-						<div class="conversation-list">
-							{#if loadingConversations}
-								<div class="loading-conversations">Loading...</div>
-							{:else if conversations.length === 0}
-								<div class="no-conversations">No conversations yet</div>
-							{:else}
-								{#each conversations as conversation (conversation.conversation_id)}
-									<div 
-										class="conversation-item {conversation.conversation_id === currentConversationId ? 'active' : ''}"
-										on:click={() => switchToConversation(conversation.conversation_id, conversation.title)}
-									>
-										<div class="conversation-info">
-											<div class="conversation-title">{conversation.title}</div>
-											<div class="conversation-meta">
-												{new Date(conversation.updated_at).toLocaleDateString()}
-											</div>
-										</div>
-										
-										{#if conversationToDelete === conversation.conversation_id}
-											<!-- Show Yes/No buttons when in delete mode -->
-											<div class="delete-confirmation-buttons">
-												<button 
-													class="confirm-delete-btn yes"
-													on:click={(e) => {
-														e.stopPropagation();
-														confirmDeleteConversation(conversation.conversation_id);
-													}}
-													aria-label="Confirm delete"
-												>
-													Delete
-												</button>
-												<button 
-													class="confirm-delete-btn no"
-													on:click={(e) => {
-														e.stopPropagation();
-														cancelDeleteConversation();
-													}}
-													aria-label="Cancel delete"
-												>
-													Cancel
-												</button>
-											</div>
-										{:else}
-											<!-- Show normal delete button -->
-											<button 
-												class="delete-conversation-btn"
-												on:click={(e) => deleteConversation(conversation.conversation_id, e)}
-												aria-label="Delete conversation"
-											>
-												<svg viewBox="0 0 24 24" width="14" height="14">
-													<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
-												</svg>
-											</button>
-										{/if}
-									</div>
-								{/each}
-							{/if}
-						</div>
-					</div>	
-				{/if}
-			</div>
-			
-			<h3>{currentConversationTitle}</h3>
+	{#if !isPublicViewing}
+		<ConversationHeader 
+			bind:conversationDropdown
+			{showConversationDropdown}
+			{conversations}
+			{currentConversationId}
+			{currentConversationTitle}
+			{loadingConversations}
+			{conversationToDelete}
+			{messagesStore}
+			{isLoading}
+			{toggleConversationDropdown}
+			{createNewConversation}
+			{switchToConversation}
+			{deleteConversation}
+			{confirmDeleteConversation}
+			{cancelDeleteConversation}
+			{handleShareConversation}
+			{clearConversation}
+		/>
+	{:else}
+		<!-- Simple header for public viewing -->
+		<div class="public-conversation-header">
+			<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
 		</div>
-		
-		<div class="header-right">
-			{#if $messagesStore.length > 0}
-				<button class="clear-button" on:click={clearConversation} disabled={isLoading}>
-					<svg viewBox="0 0 24 24" width="16" height="16">
-						<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
-					</svg>
-					New Chat
-				</button>
-			{/if}
-		</div>
-	</div>
+	{/if}
 
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if $messagesStore.length === 0}
@@ -1244,9 +1195,9 @@
 			{#each $messagesStore as message (message.message_id)}
 				<div class="message-wrapper {message.sender}">
 					<div
-						class="message {message.sender} {message.responseType === 'error'
+						class="message {message.sender} {message.status === 'error' || message.content.includes('Error:')
 							? 'error'
-							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''}"
+							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
@@ -1269,10 +1220,10 @@
 									}}
 								></textarea>
 								<div class="edit-actions">
-									<button class="edit-cancel-btn" on:click={cancelEditing}>
+									<button class="edit-cancel-btn glass glass--small glass--responsive" on:click={cancelEditing}>
 										Cancel
 									</button>
-									<button class="edit-save-btn" on:click={saveMessageEdit}>
+									<button class="edit-save-btn glass glass--small glass--responsive" on:click={saveMessageEdit}>
 										Send
 									</button>
 								</div>
@@ -1302,80 +1253,99 @@
 								</div>
 							{/if}
 							<div class="message-content">
+								{#if message.sender === 'assistant' && message.completedAt && message.timestamp}
+									<div class="message-runtime">
+										{formatRuntime(message.timestamp, message.completedAt)}
+									</div>
+								{/if}
 								{#if message.contentChunks && message.contentChunks.length > 0}
 									<div class="content-chunks">
-										{#each message.contentChunks as chunk, index}
-											{#if chunk.type === 'text'}
-												<div class="chunk-text">
-													{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
-												</div>
-											{:else if chunk.type === 'table'}
-												{#if isTableData(chunk.content)}
-													{@const tableData = getTableData(chunk.content)}
-													{@const tableKey = message.message_id + '-' + index}
-													{@const isLongTable = tableData && tableData.rows.length > 5}
-													{@const isExpanded = tableExpansionStates[tableKey] === true}
-													{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
+																										{#each message.contentChunks as chunk, index}
+									{#if chunk.type === 'text'}
+										<div class="chunk-text">
+											{@html parseMarkdown(typeof chunk.content === 'string' ? chunk.content : String(chunk.content))}
+										</div>
+									{:else if chunk.type === 'table'}
+										{#if isTableData(chunk.content)}
+											{@const tableData = getTableData(chunk.content)}
+											{@const tableKey = message.message_id + '-' + index}
+											{@const isLongTable = tableData && tableData.rows.length > 5}
+											{@const isExpanded = tableExpansionStates[tableKey] === true}
+											{@const currentSort = tableSortStates[tableKey] || { columnIndex: null, direction: null }}
 
-													{#if tableData}
-														<div class="chunk-table-wrapper">
-															{#if tableData.caption}
-																<div class="table-caption">
-																	{@html parseMarkdown(tableData.caption)}
-																</div>
-															{/if}
-															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
-																<table>
-																	<thead>
-																		<tr>
-																			{#each tableData.headers as header, colIndex}
-																				<th
-																					on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
-																					class:sortable={true}
-																					class:sorted={currentSort.columnIndex === colIndex}
-																					class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
-																					class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
-																				>
-																					{header}
-																					{#if currentSort.columnIndex === colIndex}
-																						<span class="sort-indicator">
-																							{currentSort.direction === 'asc' ? '▲' : '▼'}
-																						</span>
-																					{/if}
-																				</th>
-																			{/each}
-																		</tr>
-																	</thead>
-																	<tbody>
-																		{#each tableData.rows as row, rowIndex}
-																			{#if rowIndex < 5 || isExpanded}
-																			<tr>
-																				{#if Array.isArray(row)}
-																					{#each row as cell}
-																					<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
-																					{/each}
-																				{:else}
-																					<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
-																				{/if}
-																			</tr>
-																			{/if}
-																		{/each}
-																	</tbody>
-																</table>
-															</div>
-															{#if isLongTable}
-																<button class="table-toggle-btn" on:click={() => toggleTableExpansion(tableKey)}>
-																	{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
-																</button>
-															{/if}
+											{#if tableData}
+												<div class="chunk-table-container">
+													{#if tableData.caption}
+														<div class="table-caption">
+															{@html parseMarkdown(tableData.caption)}
 														</div>
-													{:else}
-														<div class="chunk-error">Invalid table data structure</div>
 													{/if}
-												{:else}
-													<div class="chunk-error">Invalid table data format</div>
-												{/if}
+													<div class="chunk-table {isExpanded ? 'expanded' : ''}">
+														<table>
+															<thead>
+																<tr>
+																	{#each tableData.headers as header, colIndex}
+																		<th
+																			on:click={() => sortTable(tableKey, colIndex, JSON.parse(JSON.stringify(tableData)))}
+																			class:sortable={true}
+																			class:sorted={currentSort.columnIndex === colIndex}
+																			class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
+																			class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
+																		>
+																			{header}
+																			{#if currentSort.columnIndex === colIndex}
+																				<span class="sort-indicator">
+																					{currentSort.direction === 'asc' ? '▲' : '▼'}
+																				</span>
+																			{/if}
+																		</th>
+																	{/each}
+																</tr>
+															</thead>
+															<tbody>
+																{#each tableData.rows as row, rowIndex}
+																	{#if rowIndex < 5 || isExpanded}
+																	<tr>
+																		{#if Array.isArray(row)}
+																			{#each row as cell}
+																			<td>{@html parseMarkdown(typeof cell === 'string' ? cell : String(cell))}</td>
+																			{/each}
+																		{:else}
+																			<td colspan="{tableData.headers.length}">Invalid row data: {typeof row === 'string' ? row : String(row)}</td>
+																		{/if}
+																	</tr>
+																	{/if}
+																{/each}
+															</tbody>
+														</table>
+													</div>
+													{#if isLongTable}
+														<button class="table-toggle-btn glass glass--small glass--responsive" on:click={() => toggleTableExpansion(tableKey)}>
+															{isExpanded ? 'Show less' : `Show more (${tableData.rows.length} rows)`}
+														</button>
+													{/if}
+												</div>
+											{:else}
+												<div class="chunk-error">Invalid table data structure</div>
 											{/if}
+										{:else}
+											<div class="chunk-error">Invalid table data format</div>
+										{/if}
+									{:else if chunk.type === 'plot'}
+										{@const cleanedChunk = cleanContentChunk(chunk)}
+										{#if isPlotData(cleanedChunk.content)}
+											{@const plotData = getPlotData(cleanedChunk.content)}
+											{@const plotKey = generatePlotKey(message.message_id, index)}
+
+											{#if plotData}
+												<PlotChunk {plotData} {plotKey} />
+											{:else}
+												<div class="chunk-error">Invalid plot data structure</div>
+											{/if}
+										{:else}
+											<div class="chunk-error">Invalid plot data format</div>
+										{/if}
+									{/if}
 										{/each}
 									</div>
 								{:else}
@@ -1385,7 +1355,7 @@
 							{#if message.sender === 'assistant'}
 								<div class="message-actions">
 									<button 
-										class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 										on:click={() => copyMessageToClipboard(message)}
 									>
 										{#if copiedMessageId === message.message_id}
@@ -1403,10 +1373,10 @@
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
 								<div class="suggested-queries">
 									{#each message.suggestedQueries as query}
-										<button 
-											class="suggested-query-btn" 
-											on:click={() => handleSuggestedQueryClick(query)}
-										>
+																		<button 
+									class="suggested-query-btn glass glass--rounded glass--responsive" 
+									on:click={() => handleSuggestedQueryClick(query)}
+								>
 											{query}
 										</button>
 									{/each}
@@ -1419,7 +1389,7 @@
 					{#if message.sender === 'user' && editingMessageId !== message.message_id}
 						<div class="message-actions">
 							<button 
-								class="copy-btn {copiedMessageId === message.message_id ? 'copied' : ''}" 
+								class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
 								on:click={() => copyMessageToClipboard(message)}
 							>
 								{#if copiedMessageId === message.message_id}
@@ -1432,7 +1402,7 @@
 									</svg>
 								{/if}
 							</button>
-							<button class="edit-btn" on:click={() => startEditing(message)}>
+							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)}>
 								<svg viewBox="0 0 24 24" width="14" height="14">
 									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
 								</svg>
@@ -1444,21 +1414,22 @@
 		{/if}
 	</div>
 
-	<div class="chat-input-wrapper">
-		{#if $showChips && topChips.length}
-		  <div class="chip-row">
-		    {#each initialSuggestions as q, i}
-		      {#if i < 3 || showAllInitialSuggestions}
-		      <button class="chip suggestion-chip" on:click={() => handleSuggestedQueryClick(q)}>
-		        <kbd>{i + 1}</kbd> {q}
-		      </button>
-		      {/if}
-		    {/each}
-		    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
-		      <button class="chip suggestion-chip more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
-		    {/if}
-		  </div>
-		{/if}
+	{#if !isPublicViewing}
+		<div class="chat-input-wrapper">
+			{#if $showChips && topChips.length}
+			  <div class="chip-row">
+			    {#each initialSuggestions as q, i}
+			      {#if i < 3 || showAllInitialSuggestions}
+			      					<button class="chip suggestion-chip glass glass--pill glass--responsive" on:click={() => handleSuggestedQueryClick(q)}>
+			        <kbd>{i + 1}</kbd> {q}
+			      </button>
+			      {/if}
+			    {/each}
+			    {#if initialSuggestions.length > 3 && !showAllInitialSuggestions}
+			      <button class="chip suggestion-chip glass glass--pill glass--responsive more" on:click={() => showAllInitialSuggestions = true}>⋯ More</button>
+			    {/if}
+			  </div>
+			{/if}
 
 		<div class="input-area-wrapper">
 			{#if $contextItems.length > 0}
@@ -1469,7 +1440,7 @@
 						{@const isFiling = 'filingType' in item}
 						<button
 							type="button"
-							class="chip"
+							class="chip glass glass--pill glass--responsive"
 							on:click={() => {
 								if (isFiling) {
 									removeFilingFromChat(item);
@@ -1490,7 +1461,7 @@
 				</div>
 			{/if}
 
-			<div class="input-field-container">
+			<div class="input-field-container glass glass--rounded glass--responsive">
 				<textarea
 					class="chat-input"
 					placeholder="Ask anything..."
@@ -1529,12 +1500,78 @@
 							<path d="M6,6H18V18H6V6Z" />
 						</svg>
 					{:else}
-						<svg viewBox="0 0 24 24" class="send-icon">
-							<path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+						<svg viewBox="0 0 18 18" class="send-icon">
+							<path d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z" />
 						</svg>
 					{/if}
 				</button>
 			</div>
 		</div>
-	</div>
+		</div>
+	{:else}
+		<!-- Public viewing message -->
+		<div class="public-viewing-notice">
+			<p>You are viewing a shared conversation. <a href="/app">Sign in</a> to start your own chat.</p>
+		</div>
+	{/if}
+
+	<!-- Share Modal -->
+	{#if showShareModal}
+		<div class="share-modal-popup glass glass--rounded glass--responsive" bind:this={shareModalRef}>
+			<div class="share-modal-header">
+				<h4>Share Conversation</h4>
+				<button class="close-btn" on:click={closeShareModal} aria-label="Close">
+					<svg viewBox="0 0 24 24" width="16" height="16">
+						<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+					</svg>
+				</button>
+			</div>
+			
+			<div class="share-modal-content">
+				{#if shareLoading}
+					<div class="share-loading">
+						<p>Generating share link...</p>
+					</div>
+				{:else if shareLink}
+					<div class="share-link-container">
+						<p class="share-description">
+							Anyone with this link can view this conversation.
+						</p>
+						
+						<div class="share-link-field">
+							<input 
+								type="text" 
+								value={shareLink} 
+								readonly 
+								class="share-link-input"
+							/>
+							<button 
+								class="copy-link-btn glass glass--small glass--responsive {shareCopied ? 'copied' : ''}"
+								on:click={copyShareLink}
+							>
+								{#if shareCopied}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+									</svg>
+									Copied!
+								{:else}
+									<svg viewBox="0 0 24 24" width="14" height="14">
+										<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+									</svg>
+									Copy
+								{/if}
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="share-error">
+						<p>Failed to generate share link. Please try again.</p>
+						<button class="retry-btn glass glass--small glass--responsive" on:click={handleShareConversation}>
+							Retry
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if	}
 </div>

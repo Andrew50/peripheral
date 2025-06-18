@@ -2,7 +2,7 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/components/input.svelte';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
@@ -201,7 +201,7 @@
 >
 	<div class="content">
 		<!-- Header Section -->
-		<div class="quote-header">
+		<div class="quote-header glass glass--rounded glass--medium">
 			{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
 				<div class="logo-container">
 					<img
@@ -218,49 +218,54 @@
 					</div>
 				</div>
 			{/if}
-			<div class="ticker">{$instance.ticker || '--'}</div>
+			<div class="ticker-wrapper">
+				<div class="ticker">{$instance.ticker || '--'}</div>
+				{#if ($instance?.active === false || currentDetails?.active === false)}
+					<div class="warning-triangle-container">
+						<div class="warning-triangle"></div>
+						<div class="tooltip">Delisted</div>
+					</div>
+				{/if}
+			</div>
 			<div class="company-info">
 				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
 			</div>
 		</div>
 
 		<!-- Key Metrics Section -->
-		<div class="quote-key-metrics">
-			<div class="metric-item">
+		<div class="quote-key-metrics glass glass--rounded glass--medium">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Price</span>
 				<StreamCell instance={$instance} type="price" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change %</span>
 				<StreamCell instance={$instance} type="change %" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Change</span>
 				<StreamCell instance={$instance} type="change" />
 			</div>
-			<div class="metric-item">
+			<div class="metric-item glass glass--small glass--light">
 				<span class="label">Ext %</span>
 				<StreamCell instance={$instance} type="change % extended" />
 			</div>
 		</div>
 
 		<!-- Market Data Section -->
-		<div class="quote-market-data">
+		<div class="quote-market-data glass glass--rounded glass--medium">
 			<L1 {instance} />
+			<!--
 			<button class="time-sales-button" on:click|stopPropagation={toggleTimeAndSales}>
 				{showTimeAndSales ? 'Hide Time & Sales' : 'Show Time & Sales'}
 			</button>
 			{#if showTimeAndSales}
 				<TimeAndSales {instance} />
-			{/if}
+			{/if} -->
 		</div>
 
 		<!-- Details Section -->
-		<div class="quote-details">
-			<div class="detail-item">
-				<span class="label">Active:</span>
-				<span class="value">{$instance?.active || currentDetails?.active || 'N/A'}</span>
-			</div>
+		<div class="quote-details glass glass--rounded glass--medium">
 			<div class="detail-item">
 				<span class="label">Market Cap:</span>
 				<span class="value">
@@ -305,8 +310,8 @@
 		</div>
 
 		<!-- Countdown Section -->
-		<div class="countdown-section">
-				<div class="countdown-container">
+		<div class="countdown-section glass glass--rounded glass--medium">
+				<div class="countdown-container glass glass--small glass--light">
 					<span class="countdown-label">Next Bar Close:</span>
 					<span class="countdown-value">{$countdown}</span>
 				</div>
@@ -314,7 +319,7 @@
 
 		<!-- Description Section -->
 		{#if $activeChartInstance?.description}
-			<div class="description">
+			<div class="description glass glass--rounded glass--medium">
 				<span class="label">Description:</span>
 				<p class="value description-text">{$activeChartInstance?.description}</p>
 			</div>
@@ -367,9 +372,6 @@
 		gap: 10px;
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.logo-container {
@@ -411,13 +413,78 @@
 		color: var(--text-primary);
 	}
 
+	.ticker-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
 	.ticker {
 		font-size: 1.4em;
 		font-weight: 700;
 		color: var(--text-primary);
 		text-transform: uppercase;
 		line-height: 1.1;
-		flex-shrink: 0;
+	}
+
+	.warning-triangle-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.warning-triangle {
+		width: 0;
+		height: 0;
+		border-left: 10px solid transparent;
+		border-right: 10px solid transparent;
+		border-bottom: 16px solid #ff4444;
+		cursor: pointer;
+		transition: transform 0.15s ease;
+		position: relative;
+	}
+
+	.warning-triangle::after {
+		content: '';
+		position: absolute;
+		top: 3px;
+		left: -7px;
+		width: 0;
+		height: 0;
+		border-left: 7px solid transparent;
+		border-right: 7px solid transparent;
+		border-bottom: 11px solid var(--ui-bg-primary);
+	}
+
+	.tooltip {
+		position: absolute;
+		bottom: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--ui-bg-secondary);
+		color: var(--text-primary);
+		padding: 6px 8px;
+		border-radius: 4px;
+		font-size: 0.75em;
+		font-weight: 500;
+		white-space: nowrap;
+		border: 1px solid var(--ui-border);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.2s ease, visibility 0.2s ease;
+		margin-bottom: 4px;
+		z-index: 1000;
+	}
+
+	.warning-triangle-container:hover .warning-triangle {
+		transform: scale(1.1);
+	}
+
+	.warning-triangle-container:hover .tooltip {
+		opacity: 1;
+		visibility: visible;
 	}
 
 	.company-info {
@@ -443,14 +510,12 @@
 		grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
 		gap: 8px;
 		margin-bottom: 16px;
+		padding: 12px;
 	}
 
 	.metric-item {
-		background: var(--ui-bg-secondary);
 		padding: 8px 6px;
-		border-radius: 4px;
 		text-align: center;
-		border: 1px solid var(--ui-border);
 	}
 
 	.metric-item .label {
@@ -473,9 +538,6 @@
 	.quote-market-data {
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.time-sales-button {
@@ -506,9 +568,6 @@
 		gap: 8px 12px;
 		margin-bottom: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.detail-item {
@@ -536,9 +595,6 @@
 	.countdown-section {
 		margin-top: 12px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-container {
@@ -546,9 +602,6 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 8px 12px;
-		background: var(--ui-bg-primary);
-		border-radius: 4px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.countdown-label {
@@ -575,9 +628,6 @@
 	.description {
 		margin-top: 16px;
 		padding: 12px;
-		background: var(--ui-bg-secondary);
-		border-radius: 6px;
-		border: 1px solid var(--ui-border);
 	}
 
 	.description .label {

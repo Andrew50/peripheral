@@ -7,11 +7,18 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 //go:embed prompts/*
 var fs embed.FS // 2️⃣ compiled into the binary
+
+// Cache for enhanced system prompts to avoid recomputing on every request
+var (
+	cachedEnhancedSystemPrompts = make(map[string]string)
+	systemPromptCacheMutex      sync.RWMutex
+)
 
 // getSystemInstruction returns the processed prompt named <name>.txt
 func getSystemInstruction(name string) (string, error) {
@@ -32,11 +39,11 @@ func getSystemInstruction(name string) (string, error) {
 
 	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
-		now.Format(rfc3339Seconds))
+		estTime.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(now.UnixMilli(), 10))
+		strconv.FormatInt(estTime.UnixMilli(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
-		strconv.Itoa(now.Year()))
+		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
 		estTime.Format("01-02-2006"))
 	return s, nil
@@ -44,6 +51,15 @@ func getSystemInstruction(name string) (string, error) {
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
 func enhanceSystemPromptWithTools(basePrompt string) string {
+	// Check cache first
+	systemPromptCacheMutex.RLock()
+	if cached, exists := cachedEnhancedSystemPrompts[basePrompt]; exists {
+		systemPromptCacheMutex.RUnlock()
+		return cached
+	}
+	systemPromptCacheMutex.RUnlock()
+
+	// Compute enhanced prompt
 	var toolsDescription strings.Builder
 
 	// Start with the base prompt
@@ -87,5 +103,25 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 		// Add spacing between functions
 		toolsDescription.WriteString("\n")
 	}
-	return toolsDescription.String()
+
+	enhancedPrompt := toolsDescription.String()
+
+	// Cache the result
+	systemPromptCacheMutex.Lock()
+	cachedEnhancedSystemPrompts[basePrompt] = enhancedPrompt
+	systemPromptCacheMutex.Unlock()
+
+	return enhancedPrompt
+}
+
+// ClearSystemPromptCache clears the cached enhanced system prompts
+// This should be called during hot reloads when tools or prompts change
+func ClearSystemPromptCache() {
+	systemPromptCacheMutex.Lock()
+	defer systemPromptCacheMutex.Unlock()
+
+	// Clear the cache map
+	for k := range cachedEnhancedSystemPrompts {
+		delete(cachedEnhancedSystemPrompts, k)
+	}
 }

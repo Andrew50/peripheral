@@ -51,15 +51,12 @@
 	}
 
 	.conversation-dropdown {
+		/* Glass effect now provided by global .glass classes */
 		position: absolute;
 		top: 100%;
 		left: 0;
 		width: 350px;
 		max-height: 400px;
-		background: #333;
-		border: 1px solid var(--ui-border, #444);
-		border-radius: 0.5rem;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 		z-index: 1000;
 		margin-top: 0.5rem;
 		overflow: hidden;
@@ -70,8 +67,8 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 1rem;
-		border-bottom: 1px solid var(--ui-border, #444);
-		background: #2a2a2a;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.dropdown-header h4 {
@@ -82,22 +79,22 @@
 	}
 
 	.new-conversation-btn {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.6rem;
-		background: var(--accent-color, #3a8bf7);
+		gap: 0.35rem;
+		padding: 0.25rem 0.5rem;
 		color: white;
-		border: none;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
+		outline: none;
 	}
 
 	.new-conversation-btn:hover {
-		background: var(--accent-color-hover, #2c7ae0);
+		--glass-bg: rgba(255, 255, 255, 0.15);
+		--glass-border: rgba(255, 255, 255, 0.3);
 		transform: translateY(-1px);
 	}
 
@@ -121,8 +118,8 @@
 	}
 
 	.conversation-item.active {
-		background: var(--accent-color-faded, rgba(58, 139, 247, 0.1));
-		border-left: 3px solid var(--accent-color, #3a8bf7);
+		background: rgba(255, 255, 255, 0.1);
+		border-left: 3px solid rgba(255, 255, 255, 0.6);
 	}
 
 	.conversation-info {
@@ -250,23 +247,24 @@
 	}
 
 	.clear-button {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.6rem;
-		background: transparent;
+		gap: 0.35rem;
+		padding: 0.25rem 0.5rem;
 		color: var(--text-secondary, #aaa);
-		border: 1px solid transparent;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
+		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
+		outline: none;
 	}
 
 	.clear-button:hover:not(:disabled) {
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.2);
 		color: var(--text-primary, #fff);
-		border-color: var(--ui-border, #444);
+		transform: translateY(-1px);
 	}
 
 	.clear-button:disabled {
@@ -315,7 +313,8 @@
 	}
 
 	.message.user {
-		background: var(--accent-color, #3a8bf7);
+		/* Glass effect now provided by global .glass classes */
+		--glass-bg: var(--accent-color, #3a8bf7);
 		color: white;
 		border-bottom-right-radius: 0.25rem;
 	}
@@ -355,11 +354,9 @@
 	}
 
 	.suggested-query-btn {
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border: 1px solid var(--ui-border, #444);
+		/* Glass effect now provided by global .glass classes */
 		color: var(--text-primary, #fff);
 		padding: 0.25rem 0.8rem;
-		border-radius: 0.25rem;
 		font-size: 0.8rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -372,8 +369,8 @@
 	}
 
 	.suggested-query-btn:hover {
-		background: var(--ui-bg-element, #333);
-		border-color: var(--ui-accent, #3a8bf7);
+		--glass-bg: rgba(255, 255, 255, 0.08);
+		--glass-border: rgba(255, 255, 255, 0.2);
 		color: var(--text-primary, #fff);
 	}
 
@@ -387,19 +384,25 @@
 	}
 
 	.input-field-container {
+		/* Glass effect now provided by global .glass classes */
 		position: relative;
 		display: flex;
 		width: 100%;
 	}
+	
+	.input-field-container:focus-within {
+		--glass-bg: rgba(255, 255, 255, 0.05);
+		--glass-border: rgba(255, 255, 255, 0.15);
+	}
 
 	.chat-input {
+		/* Background and border now provided by parent's glass effect */
 		flex: 1;
 		padding: clamp(0.75rem, 1.5vw, 1rem);
 		font-size: clamp(0.875rem, 1vw, 1rem);
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
+		background: transparent;
+		border: none;
 		color: var(--text-primary, #fff);
-		border-radius: 0.25rem;
 		padding-right: 3rem;
 		resize: none;
 		overflow-y: hidden;
@@ -408,6 +411,12 @@
 		box-sizing: border-box;
 		font-family: inherit;
 		max-height: 200px;
+		outline: none;
+	}
+	
+	.chat-input:focus {
+		outline: none;
+		box-shadow: none;
 	}
 
 	.send-button {
@@ -417,7 +426,7 @@
 		height: 32px;
 		position: absolute;
 		right: 0.5rem;
-		bottom: 0.5rem;
+		bottom: 0.8rem;
 		background: white;
 		border: none;
 		border-radius: 50%;
@@ -504,7 +513,7 @@
 	}
 	
 	.message-content :global(a:hover) {
-		text-decoration: underline;
+		cursor: pointer;
 	}
 	
 	.message-content :global(img) {
@@ -521,14 +530,14 @@
 		margin-bottom: 1rem;
 	}
 	
-	.chunk-table {
+	.chunk-table-container {
 		margin-bottom: 1rem;
+	}
+	
+	.chunk-table {
 		overflow-x: auto;
 	}
 
-	.chunk-table.expanded {
-		/* No height constraints when expanded */
-	}
 
 	.table-caption {
 		font-weight: bold;
@@ -540,15 +549,15 @@
 		width: 100%;
 		border-collapse: collapse;
 		margin-bottom: 1rem;
-		background: rgba(0, 0, 0, 0.2);
+		background: transparent;
 		font-size: 0.8rem;
 	}
 	
 	.content-chunks th {
-		background: rgba(0, 0, 0, 0.3);
+		background: rgba(255, 255, 255, 0.05);
 		padding: 0.5rem;
 		text-align: left;
-		border: 1px solid var(--ui-border, #444);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
 	.content-chunks th.sortable {
@@ -558,7 +567,7 @@
 	}
 
 	.content-chunks th.sortable:hover {
-		background: rgba(255, 255, 255, 0.05);
+		background: rgba(255, 255, 255, 0.1);
 	}
 
 	.content-chunks th .sort-indicator {
@@ -574,7 +583,7 @@
 	
 	.content-chunks td {
 		padding: 0.5rem;
-		border: 1px solid var(--ui-border, #444);
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 	
 	.chunk-error {
@@ -591,13 +600,9 @@
 	button[data-ticker].ticker-button,
 	.message-content button[data-ticker],
 	.chunk-text button[data-ticker] {
-		all: unset;
-		display: inline-block;
-		background: var(--ui-bg-element-darker, #2a2a2a);
-		border: 1px solid var(--ui-border, #444);
+		/* Glass effect now provided by global .glass classes */
 		color: var(--text-primary, #fff);
 		padding: 0.2rem 0.5rem;
-		border-radius: 0.25rem;
 		font-size: 0.8rem;
 		font-weight: 500;
 		font-family: inherit;
@@ -609,13 +614,14 @@
 		text-decoration: none;
 		box-sizing: border-box;
 		white-space: nowrap;
+		display: inline-block;
 	}
 
 	button[data-ticker].ticker-button:hover,
 	.message-content button[data-ticker]:hover,
 	.chunk-text button[data-ticker]:hover {
-		background: var(--ui-bg-element, #333);
-		border-color: var(--ui-accent, #3a8bf7);
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.3);
 		color: var(--text-primary, #fff);
 	}
 
@@ -646,20 +652,26 @@
 	}
 
 	.table-toggle-btn {
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		color: var(--text-secondary, #aaa);
+		/* Glass effect now provided by global .glass classes */
+		color: var(--text-primary, #fff);
 		padding: 0.3rem 0.8rem;
 		font-size: 0.7rem;
-		border-radius: 0.25rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		margin-top: -0.5rem;
 		display: inline-block;
+		/* Ensure immediate styling to prevent flash */
+		opacity: 1;
+		visibility: visible;
+		/* Fallback styling before glass effect loads */
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
 	}
 
 	.table-toggle-btn:hover {
-		border-color: var(--accent-color, #3a8bf7);
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.3);
 		color: var(--text-primary, #fff);
 	}
 
@@ -671,17 +683,16 @@
 	}
 
 	.chip {
-		background: var(--ui-bg-element, #333);
+		/* Glass effect now provided by global .glass classes */
 		color: var(--text-primary, #fff);
-		border: 1px solid var(--ui-border, #444);
 		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
 		font-size: 0.75rem;
 		cursor: pointer;
 	}
 
 	.chip:hover {
-		background: var(--ui-bg-hover, rgba(255,255,255,0.05));
+		--glass-bg: rgba(255, 255, 255, 0.08);
+		--glass-border: rgba(255, 255, 255, 0.15);
 	}
 
 	/* Styles for context chips within user messages */
@@ -766,19 +777,17 @@
 	}
 
 	.suggestion-chip {
+		/* Glass effect now provided by global .glass classes */
 		font-size: 0.75rem;
 		padding: 0.3rem 0.75rem;
-		border-radius: 9999px;
-		background: var(--ui-bg-element);
-		border: 1px solid var(--ui-border);
 		color: var(--text-secondary);
 		transition: .15s ease;
 		cursor: pointer;
 	}
 
 	.suggestion-chip:hover {
-		border-color: var(--ui-accent);
-		background: var(--ui-bg-element-hover, #444);
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.2);
 		color: var(--text-primary);
 	}
 
@@ -851,13 +860,11 @@
 
 	.copy-btn,
 	.edit-btn {
+		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: 0.3rem;
-		background: var(--ui-bg-element, #333);
-		border: 1px solid var(--ui-border, #444);
-		border-radius: 0.25rem;
 		color: var(--text-secondary, #aaa);
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -866,8 +873,8 @@
 
 	.copy-btn:hover,
 	.edit-btn:hover {
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
-		border-color: var(--accent-color, #3a8bf7);
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.3);
 		color: var(--text-primary, #fff);
 	}
 
@@ -879,15 +886,15 @@
 
 	/* Copied state styling */
 	.copy-btn.copied {
-		background: rgba(76, 175, 80, 0.2);
-		border-color: #4caf50;
+		--glass-bg: rgba(76, 175, 80, 0.2);
+		--glass-border: #4caf50;
 		color: #4caf50;
 		animation: copySuccess 0.3s ease;
 	}
 
 	.copy-btn.copied:hover {
-		background: rgba(76, 175, 80, 0.3);
-		border-color: #4caf50;
+		--glass-bg: rgba(76, 175, 80, 0.3);
+		--glass-border: #4caf50;
 		color: #4caf50;
 	}
 
@@ -901,6 +908,14 @@
 		100% {
 			transform: scale(1);
 		}
+	}
+
+	/* Message runtime display */
+	.message-runtime {
+		font-size: 0.8rem;
+		color: var(--text-secondary, #ffffff);
+		margin-top: 0.25rem;
+		margin-bottom: 0.25rem;
 	}
 
 	/* Message editing state */
@@ -950,34 +965,255 @@
 
 	.edit-save-btn,
 	.edit-cancel-btn {
+		/* Glass effect now provided by global .glass classes */
 		padding: 0.4rem 0.8rem;
-		border-radius: 0.25rem;
 		font-size: 0.75rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		border: 1px solid transparent;
+		color: var(--text-primary, #fff);
 	}
 
 	.edit-save-btn {
-		background: var(--accent-color, #3a8bf7);
+		/* Use glass variables for accent styling */
+		--glass-bg: var(--accent-color, #3a8bf7);
+		--glass-border: var(--accent-color, #3a8bf7);
 		color: white;
-		border-color: var(--accent-color, #3a8bf7);
 	}
 
 	.edit-save-btn:hover {
-		background: var(--accent-color-hover, #2c7ae0);
-		border-color: var(--accent-color-hover, #2c7ae0);
+		--glass-bg: rgba(255, 255, 255, 0.9);
+		--glass-border: rgba(255, 255, 255, 1);
+		color: var(--ui-bg-primary, #000);
 	}
 
 	.edit-cancel-btn {
-		background: transparent;
+		/* Use transparent glass for cancel button */
+		--glass-bg: rgba(255, 255, 255, 0.05);
+		--glass-border: rgba(255, 255, 255, 0.15);
 		color: var(--text-secondary, #aaa);
-		border-color: var(--ui-border, #444);
 	}
 
 	.edit-cancel-btn:hover {
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: rgba(255, 255, 255, 0.3);
+		color: var(--text-primary, #fff);
+	}
+
+	/* Updated Header Button and Share Modal Styling */
+	.header-buttons {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.header-btn {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 12px;
+		font-size: 0.9em;
+		font-weight: 500;
+		border-radius: 8px;
+		transition: all 0.2s ease;
+		white-space: nowrap;
+		/* Glass effect provided by global .glass classes */
+	}
+
+	.header-btn:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		--glass-bg: rgba(255, 255, 255, 0.15);
+		--glass-border: rgba(255, 255, 255, 0.3);
+	}
+
+	.header-btn:active:not(:disabled) {
+		transform: translateY(0);
+	}
+
+	.header-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.new-chat-text {
+		font-size: 0.9em;
+		font-weight: 500;
+	}
+
+	/* Share Modal Popup Styling - Matching Conversation Dropdown */
+	.share-modal-popup {
+		/* Glass effect now provided by global .glass classes */
+		position: absolute;
+		top: 50px;
+		right: 20px;
+		width: 350px;
+		max-height: 400px;
+		z-index: 1000;
+		margin-top: 0.5rem;
+		overflow: hidden;
+	}
+
+	.share-modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.share-modal-header h4 {
+		margin: 0;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--text-primary, #fff);
+	}
+
+	.share-modal-header .close-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.3rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s;
+		opacity: 0.8;
+	}
+
+	.share-modal-header .close-btn:hover {
 		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
 		color: var(--text-primary, #fff);
-		border-color: var(--text-secondary, #aaa);
-	} 
+		border-color: var(--ui-border, #444);
+		opacity: 1;
+	}
+
+	.share-modal-content {
+		padding: 1rem;
+	}
+
+	.share-description {
+		margin: 0 0 1rem 0;
+		color: var(--text-secondary, #aaa);
+		font-size: 0.8rem;
+		line-height: 1.4;
+	}
+
+	.share-link-field {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.share-link-input {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		background: var(--ui-bg-secondary, #2a2e36);
+		border: 1px solid var(--ui-border, #333);
+		border-radius: 0.25rem;
+		color: var(--text-primary, #fff);
+		font-size: 0.75rem;
+		font-family: monospace;
+		outline: none;
+		transition: all 0.2s;
+	}
+
+	.share-link-input:focus {
+		border-color: var(--ui-border, rgba(255, 255, 255, 0.3));
+		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
+	}
+
+	.copy-link-btn {
+		/* Glass effect now provided by global .glass classes */
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.5rem 0.75rem;
+		color: white;
+		font-size: 0.7rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		outline: none;
+		white-space: nowrap;
+	}
+
+	.copy-link-btn:hover {
+		--glass-bg: rgba(255, 255, 255, 0.15);
+		--glass-border: rgba(255, 255, 255, 0.3);
+		transform: translateY(-1px);
+	}
+
+	.copy-link-btn.copied {
+		color: var(--success-color, #22c55e);
+	}
+
+	.share-loading, .share-error {
+		text-align: center;
+		color: var(--text-secondary, #aaa);
+		padding: 1rem 0;
+	}
+
+	.share-loading p, .share-error p {
+		margin: 0 0 1rem 0;
+		font-size: 0.8rem;
+	}
+
+	.retry-btn {
+		/* Glass effect now provided by global .glass classes */
+		margin: 0 auto;
+		padding: 0.5rem 1rem;
+		color: var(--text-primary, #fff);
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.retry-btn:hover {
+		--glass-bg: rgba(255, 255, 255, 0.15);
+		--glass-border: rgba(255, 255, 255, 0.3);
+		transform: translateY(-1px);
+	}
+
+	/* Public viewing styles */
+	.public-conversation-header {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+		border-bottom: 1px solid var(--ui-border, #333);
+		background: var(--ui-bg-secondary, #1a1a1a);
+	}
+
+	.public-conversation-header h3 {
+		margin: 0;
+		color: var(--text-primary, #fff);
+		font-size: 1.1rem;
+		font-weight: 500;
+	}
+
+	.public-viewing-notice {
+		padding: 1rem;
+		text-align: center;
+		background: var(--ui-bg-secondary, #1a1a1a);
+		border-top: 1px solid var(--ui-border, #333);
+	}
+
+	.public-viewing-notice p {
+		margin: 0;
+		color: var(--text-secondary, #aaa);
+		font-size: 0.9rem;
+	}
+
+	.public-viewing-notice a {
+		color: var(--accent-color, #00d4ff);
+		text-decoration: none;
+	}
+
+	.public-viewing-notice a:hover {
+		text-decoration: underline;
+	}

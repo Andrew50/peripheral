@@ -77,18 +77,52 @@ export type TableData = {
 	rows: any[][];
 };
 
+export type PlotData = {
+	chart_type: 'line' | 'bar' | 'scatter' | 'histogram' | 'heatmap';
+	data: PlotTrace[];
+	title?: string;
+	layout?: PlotLayout;
+};
+
+export type PlotTrace = {
+	x?: any[];
+	y?: any[];
+	z?: any[];
+	name?: string;
+	type?: string;
+	mode?: string;
+	marker?: any;
+	line?: any;
+	[key: string]: any; // Allow additional Plotly trace properties
+};
+
+export type PlotLayout = {
+	title?: string;
+	xaxis?: PlotAxis;
+	yaxis?: PlotAxis;
+	width?: number;
+	height?: number;
+	[key: string]: any; // Allow additional Plotly layout properties
+};
+
+export type PlotAxis = {
+	title?: string;
+	[key: string]: any; // Allow additional Plotly axis properties
+};
+
 export type ContentChunk = {
-	type: 'text' | 'table';
-	content: string | TableData;
+	type: 'text' | 'table' | 'plot';
+	content: string | TableData | PlotData;
 };
 
 export type QueryResponse = {
-	type: 'text' | 'mixed_content';
 	text?: string;
 	content_chunks?: ContentChunk[];
 	suggestions?: string[];
 	conversation_id?: string;
 	message_id?: string;
+	timestamp?: string | Date;
+	completed_at?: string | Date;
 };
 
 // Conversation history type
@@ -116,7 +150,6 @@ export type Message = {
 	sender: 'user' | 'assistant' | 'system';
 	timestamp: Date;
 	contentChunks?: ContentChunk[];
-	responseType?: string;
 	isLoading?: boolean;
 	suggestedQueries?: string[];
 	contextItems?: (Instance | FilingContext)[];
@@ -128,4 +161,12 @@ export type Message = {
 // Type for suggested queries response
 export type SuggestedQueriesResponse = {
 	suggestions: string[];
+};
+// Conversation management types
+export type ConversationSummary = {
+	conversation_id: string;
+	title: string;
+	created_at: string;
+	updated_at: string;
+	last_message_query?: string;
 };

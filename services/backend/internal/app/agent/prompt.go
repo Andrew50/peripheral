@@ -45,9 +45,11 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 				}
 
 				conversationContext := _buildConversationContext(chatMessages)
-				sb.WriteString("<ConversationHistory>\n")
-				sb.WriteString(conversationContext)
-				sb.WriteString("\n</ConversationHistory>\n")
+				if conversationContext != "" {
+					sb.WriteString("<ConversationHistory>\n")
+					sb.WriteString(conversationContext)
+					sb.WriteString("\n</ConversationHistory>\n")
+				}
 			}
 		}
 	}
@@ -126,7 +128,9 @@ func _buildConversationContext(messages []ChatMessage) string {
 	if len(messages) > 10 {
 		startIdx = len(messages) - 10
 	}
-
+	if len(messages) == 0 {
+		return ""
+	}
 	for i := startIdx; i < len(messages); i++ {
 		// Skip pending messages to avoid empty Assistant responses
 		if messages[i].Status == "pending" {
@@ -197,7 +201,7 @@ func BuildFinalResponsePrompt(conn *data.Conn, userID int, query string, context
 }
 
 // BuildFinalResponsePromptWithConversationID builds a final response prompt for a specific conversation ID
-func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult) (string, error) {
+func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, allResults []ExecuteResult, thoughts []string) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
 	planningPrompt, err := BuildPlanningPromptWithConversationID(conn, userID, conversationID, query, contextItems, activeChartContext)
@@ -206,6 +210,14 @@ func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, con
 	}
 	sb.WriteString(planningPrompt)
 
+	// Add previous thoughts if any
+	if len(thoughts) > 0 {
+		sb.WriteString("\n<PreviousThoughts>\n")
+		for i, thought := range thoughts {
+			sb.WriteString(fmt.Sprintf("Turn %d: %s\n", i+1, thought))
+		}
+		sb.WriteString("</PreviousThoughts>\n")
+	}
 	// Add execution results
 	if len(allResults) > 0 {
 		sb.WriteString("\n<ExecRes>\n")
@@ -221,8 +233,6 @@ func BuildFinalResponsePromptWithConversationID(conn *data.Conn, userID int, con
 	}
 	return sb.String(), nil
 }
-
-var defaultSystemPromptTokenCount int
 
 func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	apiKey, err := conn.GetGeminiKey()
@@ -302,7 +312,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 		ticker, _ := activeChartContext["ticker"].(string)
 		secID := fmt.Sprint(activeChartContext["securityId"])
 		tsStr := fmt.Sprint(activeChartContext["timestamp"])
-		sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s", ticker, secID, tsStr))
+		sb.WriteString(fmt.Sprintf("Ticker: %s, SecurityId: %s, TimestampMs: %s", ticker, secID, tsStr))
 		sb.WriteString("\n</UserActiveChart>\n")
 	}
 	sb.WriteString("<UserQuery>\n")
@@ -313,7 +323,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 }
 
 // BuildPlanningPromptWithResultsAndConversationID builds a planning prompt with results for a specific conversation ID
-func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult) (string, error) {
+func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, results []ExecuteResult, thoughts []string) (string, error) {
 	// Start with the basic planning prompt
 	sb := strings.Builder{}
 	planningPrompt, err := BuildPlanningPromptWithConversationID(conn, userID, conversationID, query, contextItems, activeChartContext)
@@ -321,7 +331,14 @@ func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int
 		return "", err
 	}
 	sb.WriteString(planningPrompt)
-
+	// Add previous thoughts if any
+	if len(thoughts) > 0 {
+		sb.WriteString("\n<PreviousThoughts>\n")
+		for i, thought := range thoughts {
+			sb.WriteString(fmt.Sprintf("Turn %d: %s\n", i+1, thought))
+		}
+		sb.WriteString("</PreviousThoughts>\n")
+	}
 	// Add execution results
 	if len(results) > 0 {
 		sb.WriteString("\n<ExecutionResults>\n")

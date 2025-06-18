@@ -2,8 +2,10 @@ export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
 import { goto } from '$app/navigation';
 
-// Default value for server-side rendering
-base_url = 'http://localhost:5058';
+// Default value for server-side rendering - use environment variable if available
+base_url = typeof process !== 'undefined' && process.env?.BACKEND_URL
+    ? process.env.BACKEND_URL
+    : 'http://localhost:5058';
 
 if (typeof window !== 'undefined') {
     // For client-side code
@@ -120,17 +122,18 @@ export async function privateRequest<T>(
         body: JSON.stringify(payload),
         keepalive: keepalive,
         signal: signal
-        
+
     }).catch((e) => {
         return Promise.reject(e);
     });
 
     if (response.status === 401) {
-        goto('/login');
-        throw new Error('Authentication failed');
+        // For public viewing mode, silently handle 401 errors
+        console.warn('Authentication required for:', func);
+        throw new Error('Authentication required');
     } else if (response.ok) {
         const result = (await response.json()) as T;
-        
+
         // Check if this is a cancellation response
         if (typeof result === 'object' && result !== null && 'type' in result && (result as any).type === 'cancelled') {
             // Throw a special cancellation error that can be handled differently
@@ -138,7 +141,7 @@ export async function privateRequest<T>(
             (cancelError as any).cancelled = true;
             throw cancelError;
         }
-        
+
         if (verbose) {
             // Removed console.log(payload)
         }
@@ -148,6 +151,9 @@ export async function privateRequest<T>(
         console.error('payload: ', payload, 'error: ', errorMessage);
         return Promise.reject(errorMessage);
     }
+    
+    // This should never be reached, but TypeScript requires a return
+    throw new Error('Unexpected end of function');
 }
 
 export async function queueRequest<T>(

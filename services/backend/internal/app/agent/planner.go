@@ -6,10 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+// Pre-compile regex pattern for ticker formatting cleanup
+var tickerFormattingRegex = regexp.MustCompile(`\$\$\$([A-Z0-9]+)-\d+\$\$\$`)
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
@@ -19,8 +23,8 @@ type DirectAnswer struct {
 
 // ContentChunk represents a piece of content in the response sequence
 type ContentChunk struct {
-	Type    string      `json:"type"`    // "text" or "table" (or others later, e.g., "image")
-	Content interface{} `json:"content"` // string for "text", TableData for "table"
+	Type    string      `json:"type"`    // "text", "table", "backtest_table", "plot" (or others later, e.g., "image")
+	Content interface{} `json:"content"` // string for "text", TableData for "table", PlotData for "plot"
 }
 
 type Round struct {
@@ -30,6 +34,7 @@ type Round struct {
 type Plan struct {
 	Stage          Stage       `json:"stage"`
 	Rounds         []Round     `json:"rounds,omitempty"`
+	Thoughts       string      `json:"thoughts,omitempty"`
 	DiscardResults []int64     `json:"discard_results,omitempty"`
 	TokenCounts    TokenCounts `json:"token_counts,omitempty"`
 }
@@ -145,19 +150,82 @@ func contentChunkSchema() *genai.Schema {
 		},
 	}
 
+	// plot chunk
+	plotSchema := &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"type", "content"},
+		Properties: map[string]*genai.Schema{
+			"type": {Type: genai.TypeString, Enum: []string{"plot"}},
+			"content": {
+				Type:     genai.TypeObject,
+				Required: []string{"chart_type", "data"},
+				Properties: map[string]*genai.Schema{
+					"chart_type": {
+						Type: genai.TypeString,
+						Enum: []string{"line", "bar", "scatter", "histogram", "heatmap"},
+					},
+					"title": {Type: genai.TypeString},
+					"data": {
+						Type: genai.TypeArray,
+						Items: &genai.Schema{
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"x":    {Type: genai.TypeArray, Items: scalar},
+								"y":    {Type: genai.TypeArray, Items: scalar},
+								"z":    {Type: genai.TypeArray, Items: scalar}, // for heatmaps
+								"name": {Type: genai.TypeString},
+								"type": {Type: genai.TypeString},
+							},
+						},
+					},
+					"layout": {
+						Type: genai.TypeObject,
+						Properties: map[string]*genai.Schema{
+							"xaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
+							"yaxis": {
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"title": {Type: genai.TypeString},
+									"type":  {Type: genai.TypeString},
+									"range": {Type: genai.TypeArray, Items: scalar},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	// final union
 	return &genai.Schema{
-		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema},
+		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema, plotSchema},
 	}
 }
 
-const planningModel = "gemini-2.5-flash-preview-05-20"
-const finalResponseModel = "gemini-2.5-flash-preview-05-20"
+const planningModel = "gemini-2.5-flash"
+const finalResponseModel = "gemini-2.5-flash"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, prompt string) (interface{}, error) {
-	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
+func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
+	var systemPrompt string
+	var err error
+	if initialRound {
+		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
+	} else {
+		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
+		if err != nil {
+			return nil, fmt.Errorf("error getting system instruction: %w", err)
+		}
 	}
 	plan, err := _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {
@@ -209,6 +277,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {
 			if part.Thought {
+				fmt.Println("Thought: ", part.Text)
 				continue
 			}
 			if part.Text != "" {
@@ -241,6 +310,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			}
 		}
 		if hasValidContent {
+			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 			directAns.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -261,24 +331,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
 		}
 		return plan, nil
-	}
-
-	// If direct parsing fails, try to extract JSON from markdown code blocks first
-
-	// Look for ```json ... ``` blocks
-	jsonCodeBlockStart := strings.Index(resultText, "```json")
-	if jsonCodeBlockStart != -1 {
-		jsonCodeBlockStart += len("```json")
-		// Skip any whitespace after ```json
-		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
-			jsonCodeBlockStart++
-		}
-
-		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
-		if jsonCodeBlockEnd != -1 {
-			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-			jsonBlock = strings.TrimSpace(jsonBlock)
-		}
 	}
 
 	// If no markdown code block found, try to extract JSON block using { } method
@@ -322,6 +374,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				}
 			}
 			if hasValidContent {
+				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 				directAns.TokenCounts = TokenCounts{
 					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -416,6 +469,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 
 	// First try direct unmarshaling
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 		finalResponse.TokenCounts = TokenCounts{
 			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -475,6 +529,7 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	// Try parsing the extracted JSON block
 	if jsonBlock != "" {
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 			finalResponse.TokenCounts = TokenCounts{
 				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
 				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
@@ -490,6 +545,16 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
 		TokenCounts:   TokenCounts{},
 	}, nil
+}
+
+// cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
+// and replaces it with just the ticker symbol
+func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
+	cleaned := make([]string, len(suggestions))
+	for i, suggestion := range suggestions {
+		cleaned[i] = tickerFormattingRegex.ReplaceAllString(suggestion, "$1")
+	}
+	return cleaned
 }
 
 // </planner.go>

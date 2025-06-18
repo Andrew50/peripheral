@@ -1,0 +1,108 @@
+/* glass.css - Reusable glass morphism effects */
+
+:root {
+    --glass-radius: 36px;
+    --glass-bg: rgba(30, 30, 30, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.40);
+    --glass-shade: rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.40);
+    --glass-blur: blur(14px) saturate(160%);
+}
+
+/* Main glass effect container */
+.glass {
+    position: relative;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow:
+        var(--glass-shadow),
+        inset 0 1px 0 var(--glass-highlight),
+        inset 0 -1px 0 var(--glass-shade);
+    overflow: hidden;
+}
+
+/* Glass overlay gradient for extra depth */
+.glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(255, 255, 255, 0.04) 30%,
+        rgba(255, 255, 255, 0) 60%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Ensure content appears above the glass overlay */
+.glass > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Glass variants */
+.glass--pill {
+    --glass-radius: 36px;
+}
+
+.glass--rounded {
+    --glass-radius: 12px;
+}
+
+.glass--small {
+    --glass-radius: 8px;
+}
+
+.glass--large {
+    --glass-radius: 48px;
+}
+
+/* Glass with different opacity levels */
+.glass--light {
+    --glass-bg: rgba(30, 30, 30, 0.25);
+}
+
+.glass--medium {
+    --glass-bg: rgba(30, 30, 30, 0.45);
+}
+
+.glass--dark {
+    --glass-bg: rgba(30, 30, 30, 0.65);
+}
+
+/* Glass for light themes */
+.glass--light-theme {
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass-border: rgba(0, 0, 0, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.80);
+    --glass-shade: rgba(0, 0, 0, 0.06);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.glass--light-theme::before {
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.20) 0%,
+        rgba(255, 255, 255, 0.08) 30%,
+        rgba(255, 255, 255, 0) 60%
+    );
+}
+
+/* Responsive glass adjustments */
+@media (max-width: 768px) {
+    .glass--responsive {
+        --glass-radius: 12px;
+        border-radius: var(--glass-radius);
+    }
+    
+    .glass--pill.glass--responsive {
+        --glass-radius: 24px;
+    }
+} 

@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/jackc/pgx/v4"
 
@@ -47,66 +46,6 @@ func logAction(test bool, loop int, ticker string, targetTicker string, figi str
 	}
 }
 
-// validateTickerString validates a ticker string format.
-// Currently unused but kept for future input validation.
-// nolint:unused
-//
-//lint:ignore U1000 kept for future use
-func validateTickerString(ticker string) bool {
-	if strings.Contains(ticker, ".") {
-		return false
-	}
-	for _, char := range ticker {
-		if unicode.IsLower(char) {
-			return false
-		}
-	}
-	return true
-}
-
-// diff compares two sets of tickers and returns the differences.
-// Currently unused but kept for future reconciliation features.
-// nolint:unused
-//
-//lint:ignore U1000 kept for future use
-func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
-	additions := []models.Ticker{}
-	removals := []models.Ticker{}
-	figiChanges := []models.Ticker{}
-
-	// Trackers to ensure no duplicates
-	usedTickers := make(map[string]struct{})
-
-	// Process additions and figi changes
-	for ticker, sec := range firstSet {
-		if yesterdaySec, found := secondSet[ticker]; !found {
-			if _, exists := usedTickers[ticker]; !exists {
-				additions = append(additions, sec)
-				usedTickers[ticker] = struct{}{}
-			}
-		} else {
-			if yesterdaySec.CompositeFIGI != sec.CompositeFIGI {
-				if _, exists := usedTickers[ticker]; !exists {
-					figiChanges = append(figiChanges, sec)
-					usedTickers[ticker] = struct{}{}
-				}
-			}
-		}
-	}
-
-	// Process removals
-	for ticker, sec := range secondSet {
-		if _, found := firstSet[ticker]; !found {
-			if _, exists := usedTickers[ticker]; !exists {
-				removals = append(removals, sec)
-				usedTickers[ticker] = struct{}{}
-			}
-		}
-	}
-
-	return additions, removals, figiChanges
-}
-
 // dataExists checks if market data exists for a ticker in a given date range.
 // Currently unused but kept for future data validation features.
 // nolint:unused
@@ -131,21 +70,6 @@ func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate 
 	}
 	iter := client.ListAggs(context.Background(), &params)
 	return iter.Next()
-}
-
-// toFilteredMap converts a slice of tickers to a filtered map.
-// Currently unused but kept for future filtering features.
-// nolint:unused
-//
-//lint:ignore U1000 kept for future use
-func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
-	tickerMap := make(map[string]models.Ticker)
-	for _, sec := range tickers {
-		if validateTickerString(sec.Ticker) {
-			tickerMap[sec.Ticker] = sec
-		}
-	}
-	return tickerMap
 }
 
 // contains checks if a string slice contains a specific item.
@@ -675,4 +599,249 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	}
 
 	return nil
+}
+
+type CompositeFIGIUpdate struct {
+	Ticker           string
+	NewCompositeFIGI string
+}
+type ShareClassFIGIUpdate struct {
+	Ticker            string
+	NewShareClassFIGI string
+}
+
+/*
+func UpdateSecuritiesV2(conn *data.Conn, test bool) error {
+	var startDate time.Time
+
+	var startDateNull sql.NullTime
+	err := conn.DB.QueryRow(context.Background(), "SELECT MAX(maxDate) FROM securities").Scan(&startDateNull)
+	if err != nil {
+		return fmt.Errorf("failed to get max date: %v", err)
+	}
+	if startDateNull.Valid {
+		startDate = startDateNull.Time
+	} else {
+		startDate = time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC)
+	}
+	dateFormat := "2006-01-02"
+	yesterdayPolygonTickers, err := polygon.AllTickers(conn.Polygon, startDate.AddDate(0, 0, -1).Format(dateFormat))
+	if err != nil {
+		return fmt.Errorf("[UpdateSecuritiesV2] failed to get yesterday's tickers: %v", err)
+	}
+	activeYesterday := toFilteredMap(yesterdayPolygonTickers)
+	for currentDate := startDate; currentDate.Before(time.Now()); currentDate = currentDate.AddDate(0, 0, 1) {
+		if currentDate.Weekday() == time.Saturday || currentDate.Weekday() == time.Sunday {
+			continue
+		}
+		currentDateString := currentDate.Format(dateFormat)
+		currentDatePolygonTickers, err := polygon.AllTickers(conn.Polygon, currentDateString)
+		if err != nil {
+			return fmt.Errorf("[UpdateSecuritiesV2] failed to get %s tickers: %v", currentDateString, err)
+		}
+		activeToday := toFilteredMap(currentDatePolygonTickers)
+		additions, removals, compositeFigiChanges, shareClassFigiChanges := diff(activeToday, activeYesterday)
+		compositeFigiUpdates := []CompositeFIGIUpdate{}
+		for _, sec := range compositeFigiChanges {
+			compositeFigiUpdates = append(compositeFigiUpdates, CompositeFIGIUpdate{
+				Ticker:           sec.Ticker,
+				NewCompositeFIGI: sec.CompositeFIGI,
+			})
+		}
+		shareClassFigiUpdates := []ShareClassFIGIUpdate{}
+		for _, sec := range shareClassFigiChanges {
+			shareClassFigiUpdates = append(shareClassFigiUpdates, ShareClassFIGIUpdate{
+				Ticker:            sec.Ticker,
+				NewShareClassFIGI: sec.ShareClassFIGI,
+			})
+		}
+		for _, sec := range additions {
+			diagnoses := make([]string, 0)
+			var maxDate sql.NullTime
+			targetTicker := ""
+			if sec.CompositeFIGI != "" { // If the Polygon Security has a composite FIGI, check if it exists in the Database
+				rows, err := conn.DB.Query(context.Background(), "SELECT ticer, maxDate FROM securities where composite_figi=$1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.CompositeFIGI)
+				if rows.Next() {
+					err = rows.Scan(&targetTicker, &maxDate)
+					if err != nil {
+						fmt.Println("[UpdateSecuritiesV2][ttk3kr] Error scanning rows:", err)
+						continue
+					}
+					if targetTicker == sec.Ticker {
+						diagnoses = append(diagnoses, "false delist")
+					} else {
+						prevListing := false
+						for rows.Next() {
+							var targetTicker string
+							var date sql.NullTime
+							err = rows.Scan(&targetTicker, &date)
+							if err != nil {
+								prevListing = true //simply to avoid doing more actions with error case
+								break
+							}
+							if targetTicker == sec.Ticker {
+								logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "prev listing hit", nil)
+								prevListing = true
+								break
+							}
+						}
+						if !prevListing {
+							diagnoses = append(diagnoses, "ticker change")
+							if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
+								diagnoses = append(diagnoses, "false delist")
+							}
+						} // Otherwise, skip duplicate listing
+					}
+				} else if err == nil { // Composite FIGI does not exist in DB
+					targetTicker = sec.Ticker
+					err := conn.DB.QueryRow(context.Background(), "SELECT maxDate from securities where ticker = $1", sec.Ticker).Scan(&maxDate)
+					if err == nil {
+						if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
+							diagnoses = append(diagnoses, "false delist")
+							diagnoses = append(diagnoses, "figi change")
+						} else {
+							diagnoses = append(diagnoses, "stock listing")
+						}
+					} else if err == pgx.ErrNoRows {
+						diagnoses = append(diagnoses, "stock listing")
+					} else {
+						fmt.Println("[UpdateSecuritiesV2][0f9vk3kr] Error querying maxDate:", err)
+					}
+				} else { // This is some DB error then since rows had an issue
+
+				}
+			} else if sec.ShareClassFIGI != "" { // If the stock does not have a Composite FIGI, check if it has a Share Class FIGI
+				rows, err := conn.DB.Query(context.Background(), "SELECT ticker, maxDate FROM securities where share_class_figi=$1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.ShareClassFIGI)
+				if rows.Next() {
+					err = rows.Scan(&targetTicker, &maxDate)
+					if err != nil {
+						fmt.Println("[UpdateSecuritiesV2][vm9vkopo] Error scanning rows:", err)
+					}
+				}
+			} else { // No Share class or composite FIGI, so it is a removal
+				targetTicker = sec.Ticker
+				err := conn.DB.QueryRow(context.Background(), "SELECT figi, maxDate FROM securities where ticker = $1 order by COALESCE(maxDate, '2200-01-01') DESC LIMIT 1", sec.Ticker).Scan(&figiInDB, &maxDate)
+				if err == nil { // ticker exists in db and data exists
+					if dataExists(conn.Polygon, sec.Ticker, maxDate.Time.Format(dateFormat), currentDateString) {
+						diagnoses = append(diagnoses, "false delist")
+					} else {
+						diagnoses = append(diagnoses, "stock listing")
+					}
+				} else if err == pgx.ErrNoRows {
+					diagnoses = append(diagnoses, "stock listing")
+				}
+			}
+			if contains(diagnoses, "false delist") {
+				_, err := conn.DB.Exec(context.Background(), "UPDATE securities set maxDate = NULL where ticker = $1 AND (maxDate is null or maxDate = (SELECT max(maxDate) FROM securities WHERE ticker = $1))", targetTicker)
+				if err != nil {
+					fmt.Println("[UpdateSecuritiesV2][0f9vk3kr] Error updating maxDate:", err)
+				}
+			}
+			if contains(diagnoses, "ticker change") {
+
+			}
+		}
+		for i, sec := range removals {
+
+			cmdTag, _ := conn.DB.Exec(context.Background(), "UPDATE securities SET maxDate = $1 where ticker = $2 and maxDate is NULL", currentDateString, sec.Ticker)
+			// Log the number of rows affected if needed
+			if test && cmdTag.RowsAffected() > 0 {
+				log.Printf("Updated %d rows for ticker %s", cmdTag.RowsAffected(), sec.Ticker)
+			}
+			targetTicker := ""
+			if cmdTag.RowsAffected() == 0 { //this whole thing is just for error checking but if rows affected is zero then it should be a removal of a overdue removal after a ticker change
+				if sec.CompositeFIGI != "" { //if figi exists
+					rows, err := conn.DB.Query(context.Background(), "SELECT ticker, maxDate FROM securities where figi = $1 order by COALESCE(maxDate, '2200-01-01') DESC", sec.CompositeFIGI) //.Scan(&tickerInDB,&maxDate)
+					if err != nil {
+						logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "query error", err)
+						continue
+					}
+					var targetTicker string
+					var maxDate sql.NullTime
+					if rows.Next() {
+						err = rows.Scan(&targetTicker, &maxDate)
+						if err != nil {
+							continue
+						}
+						if targetTicker != sec.Ticker {
+							for rows.Next() {
+								var ticker string
+								var date sql.NullTime
+								err = rows.Scan(&ticker, &date)
+								if err != nil {
+									break
+								}
+								if ticker == sec.Ticker {
+									if date.Valid {
+										ok = true
+										break
+									}
+								}
+							}
+						}
+					}
+					rows.Close()
+				}
+			}
+		}
+		activeYesterday = activeToday
+	}
+
+}
+*/
+
+// toFilteredMap converts a slice of tickers to a filtered map.
+// Currently unused but kept for future filtering features.
+// nolint:unused
+//
+//lint:ignore U1000 kept for future use
+func toFilteredMap(tickers []models.Ticker) map[string]models.Ticker {
+	tickerMap := make(map[string]models.Ticker)
+	for _, sec := range tickers {
+		tickerMap[sec.Ticker] = sec
+	}
+	return tickerMap
+}
+
+// diff compares two sets of tickers and returns the differences.
+// Currently unused but kept for future reconciliation features.
+// nolint:unused
+//
+//lint:ignore U1000 kept for future use
+func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []models.Ticker, []models.Ticker) {
+	additions := []models.Ticker{}
+	removals := []models.Ticker{}
+	figiChanges := []models.Ticker{}
+
+	// Trackers to ensure no duplicates
+	usedTickers := make(map[string]struct{})
+
+	// Process additions and figi changes
+	for ticker, sec := range firstSet {
+		if yesterdaySec, found := secondSet[ticker]; !found {
+			if _, exists := usedTickers[ticker]; !exists {
+				additions = append(additions, sec)
+				usedTickers[ticker] = struct{}{}
+			}
+		} else {
+			if yesterdaySec.CompositeFIGI != sec.CompositeFIGI {
+				if _, exists := usedTickers[ticker]; !exists {
+					figiChanges = append(figiChanges, sec)
+					usedTickers[ticker] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Process removals
+	for ticker, sec := range secondSet {
+		if _, found := firstSet[ticker]; !found {
+			if _, exists := usedTickers[ticker]; !exists {
+				removals = append(removals, sec)
+				usedTickers[ticker] = struct{}{}
+			}
+		}
+	}
+
+	return additions, removals, figiChanges
 }
