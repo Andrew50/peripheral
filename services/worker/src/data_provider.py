@@ -125,24 +125,19 @@ class DataProvider:
         start_time: str = None, 
         end_time: str = None
     ) -> Dict:
-        """Get OHLCV price data for a symbol with flexible timeframe support"""
+        """Get price data with timeframe support"""
         try:
-            # Map timeframe to table name
+            # Map timeframes to database tables
             timeframe_tables = {
-                '1m': 'ohlcv_1',
-                '5m': 'ohlcv_1',  # Will aggregate from 1m
-                '15m': 'ohlcv_1', # Will aggregate from 1m
-                '30m': 'ohlcv_1', # Will aggregate from 1m
-                '1h': 'ohlcv_1h',
-                '4h': 'ohlcv_1h', # Will aggregate from 1h
-                '1d': 'ohlcv_1d',
+                '1m': 'ohlcv_1m', '5m': 'ohlcv_5m', '15m': 'ohlcv_15m', 
+                '30m': 'ohlcv_30m', '1h': 'ohlcv_1h', '1d': 'ohlcv_1d', 
                 '1w': 'ohlcv_1w',
                 '1M': 'ohlcv_1d'  # Will aggregate from 1d
             }
             
             table_name = timeframe_tables.get(timeframe, 'ohlcv_1d')
             
-            # Build query
+            # Build query with parameterized values
             query = f"""
             SELECT 
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
@@ -154,14 +149,18 @@ class DataProvider:
                 CASE WHEN o.extended_hours IS NOT NULL THEN o.extended_hours ELSE false END as extended_hours
             FROM {table_name} o
             JOIN securities s ON o.security_id = s.security_id
-            WHERE s.ticker = '{symbol}'
+            WHERE s.ticker = %s
             """
+            
+            params = [symbol]
             
             # Add time filtering
             if start_time and timeframe in ['1m', '5m', '15m', '30m', '1h']:
-                query += f" AND EXTRACT(TIME FROM o.timestamp) >= '{start_time}'"
+                query += " AND EXTRACT(TIME FROM o.timestamp) >= %s"
+                params.append(start_time)
             if end_time and timeframe in ['1m', '5m', '15m', '30m', '1h']:
-                query += f" AND EXTRACT(TIME FROM o.timestamp) <= '{end_time}'"
+                query += " AND EXTRACT(TIME FROM o.timestamp) <= %s"
+                params.append(end_time)
             
             # Add extended hours filtering
             if not extended_hours and timeframe in ['1m', '5m', '15m', '30m', '1h']:
@@ -169,11 +168,12 @@ class DataProvider:
             
             # Add days limit
             if days > 0:
-                query += f" AND o.timestamp >= NOW() - INTERVAL '{days} days'"
+                query += " AND o.timestamp >= NOW() - INTERVAL %s"
+                params.append(f"{days} days")
             
             query += " ORDER BY o.timestamp ASC LIMIT 10000"
             
-            result = await self.execute_sql(query)
+            result = await self.execute_sql_parameterized(query, params)
             if result and result['data']:
                 data = result['data']
                 return {
@@ -197,7 +197,51 @@ class DataProvider:
                 'timestamps': [], 'open': [], 'high': [], 'low': [], 
                 'close': [], 'volume': [], 'extended_hours': []
             }
-    
+
+    async def execute_sql_parameterized(self, query: str, params: list = None) -> Optional[Dict[str, Any]]:
+        """Execute SQL with parameterized queries to prevent injection"""
+        if not self.db_engine:
+            logger.error("Database engine not available")
+            return None
+        
+        try:
+            # Validate the query structure
+            if not self._validate_sql_query(query):
+                logger.error("SQL query validation failed")
+                return None
+            
+            # Execute parameterized query in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            
+            def execute_with_params():
+                if params:
+                    # Convert psycopg2-style parameters (%s) to pandas-compatible format
+                    param_dict = {f'param_{i}': param for i, param in enumerate(params)}
+                    # Replace %s with %(param_0)s, %(param_1)s, etc.
+                    formatted_query = query
+                    for i in range(len(params)):
+                        formatted_query = formatted_query.replace('%s', f'%(param_{i})s', 1)
+                    return pd.read_sql_query(formatted_query, self.db_engine, params=param_dict)
+                else:
+                    return pd.read_sql_query(query, self.db_engine)
+            
+            df = await loop.run_in_executor(None, execute_with_params)
+            
+            # Convert DataFrame to dictionary format
+            result = {
+                'data': df.to_dict('records'),
+                'columns': df.columns.tolist(),
+                'shape': df.shape,
+                'dtypes': df.dtypes.to_dict()
+            }
+            
+            logger.info(f"Parameterized SQL query executed successfully, returned {len(df)} rows")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error executing parameterized SQL query: {e}")
+            return None
+
     async def get_historical_data(
         self, 
         symbol: str, 
@@ -218,13 +262,14 @@ class DataProvider:
                 o.open, o.high, o.low, o.close, o.volume
             FROM {table_name} o
             JOIN securities s ON o.security_id = s.security_id
-            WHERE s.ticker = '{symbol}'
+            WHERE s.ticker = %s
             ORDER BY o.timestamp DESC
-            OFFSET {offset}
-            LIMIT {periods}
+            OFFSET %s
+            LIMIT %s
             """
             
-            result = await self.execute_sql(query)
+            params = [symbol, offset, periods]
+            result = await self.execute_sql_parameterized(query, params)
             if result and result['data']:
                 data = list(reversed(result['data']))  # Return chronological order
                 return {
@@ -245,7 +290,7 @@ class DataProvider:
     async def get_security_info(self, symbol: str) -> Dict:
         """Get detailed security metadata and classification"""
         try:
-            query = f"""
+            query = """
             SELECT 
                 security_id as securityid,
                 ticker,
@@ -260,11 +305,11 @@ class DataProvider:
                 composite_figi,
                 share_class_figi
             FROM securities
-            WHERE ticker = '{symbol}'
+            WHERE ticker = %s
             LIMIT 1
             """
             
-            result = await self.execute_sql(query)
+            result = await self.execute_sql_parameterized(query, [symbol])
             if result and result['data']:
                 return result['data'][0]
             
@@ -302,27 +347,35 @@ class DataProvider:
                     'operating_income', 'net_income', 'total_assets', 'total_liabilities'
                 ]
             
-            # Build dynamic query based on available metrics
-            available_metrics = []
-            for metric in metrics:
-                available_metrics.append(f'f.{metric}')
+            # Validate metrics to prevent injection
+            allowed_metrics = [
+                'market_cap', 'eps', 'revenue', 'dividend', 'shares_outstanding',
+                'book_value', 'debt', 'cash', 'free_cash_flow', 'gross_profit',
+                'operating_income', 'net_income', 'total_assets', 'total_liabilities'
+            ]
             
-            metrics_str = ', '.join(available_metrics)
+            # Filter metrics to only allowed ones
+            safe_metrics = [m for m in metrics if m in allowed_metrics]
+            if not safe_metrics:
+                return {}
+            
+            # Build dynamic query based on available metrics
+            metrics_str = ', '.join([f'f.{metric}' for metric in safe_metrics])
             
             query = f"""
             SELECT {metrics_str}
             FROM fundamentals f
             JOIN securities s ON f.security_id = s.security_id
-            WHERE s.ticker = '{symbol}'
+            WHERE s.ticker = %s
             ORDER BY f.timestamp DESC
             LIMIT 1
             """
             
-            result = await self.execute_sql(query)
+            result = await self.execute_sql_parameterized(query, [symbol])
             if result and result['data']:
                 data = result['data'][0]
                 fundamentals = {}
-                for metric in metrics:
+                for metric in safe_metrics:
                     fundamentals[metric] = data.get(metric)
                 
                 return fundamentals
@@ -346,6 +399,10 @@ class DataProvider:
             if not metrics:
                 metrics = ['return', 'volume', 'market_cap']
             
+            # Input validation
+            if days <= 0 or days > 365:
+                days = 5
+            
             base_query = """
             WITH sector_data AS (
                 SELECT 
@@ -359,12 +416,15 @@ class DataProvider:
                 JOIN fundamentals f ON s.security_id = f.security_id
                 JOIN ohlcv_1d o1 ON s.security_id = o1.security_id
                 JOIN ohlcv_1d o2 ON s.security_id = o2.security_id
-                WHERE o1.timestamp >= CURRENT_DATE - INTERVAL '%d days'
-                AND o2.timestamp = o1.timestamp - INTERVAL '%d days'
-            """ % (days, days)
+                WHERE o1.timestamp >= CURRENT_DATE - INTERVAL %s
+                AND o2.timestamp = o1.timestamp - INTERVAL %s
+            """
+            
+            params = [f"{days} days", f"{days} days"]
             
             if sector:
-                base_query += f" AND s.sector = '{sector}'"
+                base_query += " AND s.sector = %s"
+                params.append(sector)
             
             query = base_query + """
             )
@@ -379,7 +439,7 @@ class DataProvider:
             ORDER BY return DESC
             """
             
-            result = await self.execute_sql(query)
+            result = await self.execute_sql_parameterized(query, params)
             if result and result['data']:
                 if sector:
                     return result['data'][0] if result['data'] else {}
@@ -402,6 +462,10 @@ class DataProvider:
     ) -> Dict:
         """Screen stocks based on raw criteria"""
         try:
+            # Input validation
+            if limit <= 0 or limit > 1000:
+                limit = 100
+            
             query = """
             SELECT DISTINCT
                 s.ticker,
@@ -418,23 +482,31 @@ class DataProvider:
             AND o.timestamp >= CURRENT_DATE - INTERVAL '7 days'
             """
             
-            # Apply filters
+            params = []
+            
+            # Apply filters with parameterized queries
             if filters:
                 if 'sector' in filters:
-                    query += f" AND s.sector = '{filters['sector']}'"
+                    query += " AND s.sector = %s"
+                    params.append(filters['sector'])
                 if 'min_market_cap' in filters:
-                    query += f" AND f.market_cap >= {filters['min_market_cap']}"
-                if 'max_pe_ratio' in filters and 'pe_ratio' in filters:
-                    query += f" AND (f.market_cap / f.shares_outstanding) / f.eps <= {filters['max_pe_ratio']}"
+                    query += " AND f.market_cap >= %s"
+                    params.append(filters['min_market_cap'])
+                if 'max_pe_ratio' in filters:
+                    query += " AND (f.market_cap / f.shares_outstanding) / f.eps <= %s"
+                    params.append(filters['max_pe_ratio'])
             
-            if sort_by:
+            # Validate sort_by to prevent injection
+            allowed_sort_fields = ['ticker', 'sector', 'market_cap', 'eps', 'price', 'volume']
+            if sort_by and sort_by in allowed_sort_fields:
                 query += f" ORDER BY {sort_by} DESC"
             else:
                 query += " ORDER BY f.market_cap DESC"
             
-            query += f" LIMIT {limit}"
+            query += " LIMIT %s"
+            params.append(limit)
             
-            result = await self.execute_sql(query)
+            result = await self.execute_sql_parameterized(query, params)
             if result and result['data']:
                 return {'symbols': [row['ticker'] for row in result['data']], 'data': result['data']}
             
