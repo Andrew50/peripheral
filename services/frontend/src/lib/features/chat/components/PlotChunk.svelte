@@ -9,7 +9,7 @@
 	const defaultConfig = {
 		displayModeBar: false,
 		displaylogo: false,
-		responsive: true
+		showTips: false
 	};
 
 	const defaultLayout = {
