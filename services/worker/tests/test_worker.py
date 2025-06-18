@@ -2,9 +2,10 @@
 Basic tests for the Python worker
 """
 
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 # Add src to path for testing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -34,10 +35,10 @@ def calculate_moving_average(data, window):
     def test_worker_imports(self):
         """Test that worker dependencies can be imported"""
         try:
-            import redis
-            import psutil
             import numpy
             import pandas
+            import psutil
+            import redis
             assert True
         except ImportError as e:
             pytest.fail(f"Failed to import required dependency: {e}")

@@ -5,10 +5,12 @@ Uses direct Redis commands to test the queue system
 """
 
 import json
-import redis
 import time
 import uuid
 from datetime import datetime
+
+import redis
+
 
 def test_redis_commands():
     """Test the worker pipeline using direct Redis commands"""
