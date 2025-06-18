@@ -500,3 +500,4 @@
 2025-06-18 22:26:26,759 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
 2025-06-18 22:26:54,766 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
 2025-06-18 22:28:40,297 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 22:29:04,946 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
