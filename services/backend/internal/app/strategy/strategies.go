@@ -397,12 +397,12 @@ Please generate a Python classifier function that uses the above data accessor f
 
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-		SELECT strategyId, name, description, prompt, pythonCode, 
+		SELECT strategyid, name, description, prompt, pythoncode, 
 		       COALESCE(score, 0) as score,
 		       COALESCE(version, '1.0') as version,
-		       COALESCE(createdAt, NOW()) as createdAt,
-		       COALESCE(isAlertActive, false) as isAlertActive
-		FROM strategies WHERE userId = $1 ORDER BY createdAt DESC`, userID)
+		       COALESCE(createdat, NOW()) as createdat,
+		       COALESCE(isalertactive, false) as isalertactive
+		FROM strategies WHERE userid = $1 ORDER BY createdat DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -448,8 +448,8 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 
 	_, err := conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
-		SET isAlertActive = $1 
-		WHERE strategyId = $2 AND userId = $3`,
+		SET isalertactive = $1 
+		WHERE strategyid = $2 AND userid = $3`,
 		args.Active, args.StrategyID, userID)
 
 	if err != nil {
@@ -475,7 +475,7 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 
 	result, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM strategies 
-		WHERE strategyId = $1 AND userId = $2`, args.StrategyID, userID)
+		WHERE strategyid = $1 AND userid = $2`, args.StrategyID, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error deleting strategy: %v", err)
@@ -556,9 +556,9 @@ func generateStrategyName(prompt string) string {
 func saveStrategy(conn *data.Conn, userID int, name, description, prompt, pythonCode string) (int, error) {
 	var strategyID int
 	err := conn.DB.QueryRow(context.Background(), `
-		INSERT INTO strategies (name, description, prompt, pythonCode, userId, createdAt, version, score, isAlertActive)
+		INSERT INTO strategies (name, description, prompt, pythoncode, userid, createdat, version, score, isalertactive)
 		VALUES ($1, $2, $3, $4, $5, NOW(), '1.0', 0, false) 
-		RETURNING strategyId`,
+		RETURNING strategyid`,
 		name, description, prompt, pythonCode, userID).Scan(&strategyID)
 
 	if err != nil {
