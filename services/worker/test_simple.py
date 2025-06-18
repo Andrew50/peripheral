@@ -5,8 +5,8 @@ Simple test to verify raw data approach without database
 
 import asyncio
 import logging
-import sys
 import os
+import sys
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))

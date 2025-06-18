@@ -5,12 +5,14 @@ Monitors Python files and restarts the worker when changes are detected
 """
 
 import os
-import sys
-import subprocess
 import signal
+import subprocess
+import sys
 import time
-from watchdog.observers import Observer
+
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
 
 class WorkerRestartHandler(FileSystemEventHandler):
     """Handler for file system events that restarts the worker"""

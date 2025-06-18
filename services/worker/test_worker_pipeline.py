@@ -7,11 +7,12 @@ Tests the complete worker pipeline using Redis commands and monitoring
 import asyncio
 import json
 import logging
-import redis
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict
+
+import redis
 
 # Configure logging
 logging.basicConfig(

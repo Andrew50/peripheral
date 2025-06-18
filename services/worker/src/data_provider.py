@@ -6,10 +6,10 @@ Provides market data and executes SQL queries for Python strategies
 import asyncio
 import logging
 import os
-import numpy as np
-from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
 import pandas as pd
 import psycopg2
 from sqlalchemy import create_engine

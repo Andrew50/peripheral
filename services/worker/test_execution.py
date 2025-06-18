@@ -5,15 +5,15 @@ Test script to verify Python execution functionality
 
 import asyncio
 import logging
-import sys
 import os
+import sys
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
+from src.data_provider import DataProvider
 from src.execution_engine import PythonExecutionEngine
 from src.security_validator import SecurityValidator
-from src.data_provider import DataProvider
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
