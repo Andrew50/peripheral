@@ -29,7 +29,14 @@ class WorkerRestartHandler(FileSystemEventHandler):
             self.stop_worker()
         
         print("🚀 Starting Python worker...")
-        self.process = subprocess.Popen([sys.executable, 'worker.py'])
+        # Using subprocess.Popen with explicit args list for security
+        # shell=False is the default and provides better security
+        self.process = subprocess.Popen(
+            [sys.executable, 'worker.py'],
+            shell=False,  # Explicitly set for security
+            cwd=os.getcwd(),  # Set working directory explicitly
+            env=os.environ.copy()  # Use current environment
+        )
         print(f"✅ Worker started with PID: {self.process.pid}")
     
     def stop_worker(self):
