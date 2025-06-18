@@ -397,7 +397,10 @@ Please generate a Python classifier function that uses the above data accessor f
 
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
-		SELECT strategyid, name, description, prompt, pythoncode, 
+		SELECT strategyid, name, 
+		       COALESCE(description, '') as description,
+		       COALESCE(prompt, '') as prompt,
+		       COALESCE(pythoncode, '') as pythoncode,
 		       COALESCE(score, 0) as score,
 		       COALESCE(version, '1.0') as version,
 		       COALESCE(createdat, NOW()) as createdat,
