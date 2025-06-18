@@ -58,8 +58,7 @@ class PythonWorker:
             password=redis_password,
             decode_responses=True,
             socket_connect_timeout=30,
-            socket_timeout=30,
-            retry_on_timeout=True
+            socket_timeout=30
         )
     
     async def run(self):
