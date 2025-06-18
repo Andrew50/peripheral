@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        16, 
+        20, 
         'Initial schema version'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
