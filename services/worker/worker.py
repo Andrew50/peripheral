@@ -24,6 +24,7 @@ from src.security_validator import SecurityValidator, SecurityError
 from src.data_provider import DataProvider
 
 # Configure logging
+os.makedirs('/app/logs', exist_ok=True)  # Ensure the logs directory exists before logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
