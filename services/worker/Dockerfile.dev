@@ -1,0 +1,43 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    build-essential \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY worker.py .
+
+# Create directories for data and results
+RUN mkdir -p /app/data /app/results /app/logs
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create non-root user for security
+RUN useradd -m -u 1000 worker && \
+    chown -R worker:worker /app
+USER worker
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Development command with hot reload
+CMD ["python", "-c", "import os; os.system('watchmedo auto-restart --directory=/app --pattern=\"*.py\" --recursive -- python worker.py')"] 
