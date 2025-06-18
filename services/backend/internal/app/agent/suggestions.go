@@ -12,7 +12,7 @@ import (
 	"google.golang.org/genai"
 )
 
-var thinkingModel = "gemini-2.5-flash-preview-05-20"
+var thinkingModel = "gemini-2.5-flash"
 
 // buildContextPrompt formats incoming chart/filing context for the model
 func buildContextPrompt(contextItems []map[string]interface{}) string {
@@ -29,7 +29,7 @@ func buildContextPrompt(contextItems []map[string]interface{}) string {
 			ticker, _ := item["ticker"].(string)
 			secID := fmt.Sprint(item["securityId"])
 			tsStr := fmt.Sprint(item["timestamp"])
-			sb.WriteString(fmt.Sprintf("Instance - Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
+			sb.WriteString(fmt.Sprintf("Ticker: %s, SecurityId: %s, TimestampMs: %s\n", ticker, secID, tsStr))
 		}
 	}
 	return sb.String()
@@ -251,7 +251,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	// Use GenerateContent with []*genai.Content input
 	result, err := client.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash-preview-05-20",
+		"gemini-2.5-flash",
 		[]*genai.Content{userContent},
 		cfg,
 	)

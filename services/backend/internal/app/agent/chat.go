@@ -44,7 +44,6 @@ type Citation struct {
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
-	Type           string         `json:"type"` //"mixed_content", "function_calls", "simple_text"
 	ContentChunks  []ContentChunk `json:"content_chunks,omitempty"`
 	Citations      []Citation     `json:"citations,omitempty"`
 	Suggestions    []string       `json:"suggestions,omitempty"`
@@ -146,7 +145,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 
 			return QueryResponse{
-				Type:           "mixed_content",
 				ContentChunks:  processedChunks,
 				Suggestions:    v.Suggestions, // Include suggestions from direct answer
 				ConversationID: conversationID,
@@ -213,7 +211,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 			case StageFinishedExecuting:
 				// Generate final response based on active execution results
-				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults)
+				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
@@ -250,7 +248,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 
 				return QueryResponse{
-					Type:           "mixed_content",
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
 					ConversationID: conversationID,
