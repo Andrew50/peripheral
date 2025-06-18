@@ -105,13 +105,23 @@ func GetTickerDetailsMarketCapShareOut(client *polygon.Client, ticker string, da
 	return tickerDetails.MarketCap, tickerDetails.ShareClassSharesOutstanding, nil
 }
 
-func GetPolygonIPOs(client *polygon.Client, dateString string) ([]string, error) {
+type GetPolygonIPOResult struct {
+	ListingDate string
+	Tickers     []string
+}
+
+func GetPolygonIPOs(client *polygon.Client, dateString string) (GetPolygonIPOResult, error) {
 	params := models.ListIPOsParams{}.
 		WithListingDate(models.EQ, dateString)
 	iter := client.VX.ListIPOs(context.Background(), params)
+	var listingDate string
 	tickerList := []string{}
 	for iter.Next() {
+		listingDate = *iter.Item().ListingDate
 		tickerList = append(tickerList, iter.Item().Ticker)
 	}
-	return tickerList, nil
+	return GetPolygonIPOResult{
+		ListingDate: listingDate,
+		Tickers:     tickerList,
+	}, nil
 }

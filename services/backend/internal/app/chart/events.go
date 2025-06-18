@@ -379,26 +379,7 @@ func fetchChartEventsInRange(conn *data.Conn, userID int, securityID int, fromMs
 
 // getStockSplits fetches stock splits for a given ticker.
 func getStockSplits(conn *data.Conn, ticker string) ([]models.Split, error) {
-	// Set up parameters for the splits API call
-	params := models.ListSplitsParams{
-		TickerEQ: &ticker,
-	}.WithOrder(models.Order("desc")).WithLimit(10)
-
-	// Execute the API call and get an iterator
-	iter := conn.Polygon.ListSplits(context.Background(), params)
-
-	// Collect all splits
-	var splits []models.Split
-	for iter.Next() {
-		split := iter.Item()
-		splits = append(splits, split)
-	}
-	// Check for errors during iteration
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("error fetching splits for %s: %w", ticker, err)
-	}
-
-	return splits, nil
+	return postgres.GetStockSplits(conn.Polygon, ticker)
 }
 
 // getStockDividends fetches stock dividends for a given ticker.
