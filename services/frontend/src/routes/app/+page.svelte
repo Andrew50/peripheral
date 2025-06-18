@@ -142,7 +142,7 @@
 	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 550; // <-- Set initial width to 300
+	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
 
 	// Calendar state
@@ -363,6 +363,7 @@
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 	let maxWidth = 600; // Restored to 600px maximum
+	let leftMinWidth = 600; // Minimum width for chat left menu
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -786,12 +787,8 @@
 		let newWidth = clientX;
 		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
-		// Manage resize
-		if (newWidth < minWidth) {
-			leftMenuWidth = 0;
-		} else {
-			leftMenuWidth = Math.min(newWidth, maxLeftSidebarWidth);
-		}
+		// Enforce minimum and maximum width without auto-closing
+		leftMenuWidth = Math.max(leftMinWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
 		updateChartWidth();
 	}
@@ -810,7 +807,7 @@
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
-			leftMenuWidth = 300;
+			leftMenuWidth = leftMinWidth;
 		}
 		updateChartWidth();
 	}

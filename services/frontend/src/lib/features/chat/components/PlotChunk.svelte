@@ -20,7 +20,7 @@
 		},
 		paper_bgcolor: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
 		plot_bgcolor: 'rgba(30, 41, 59, 0.5)', // slate-800 with opacity
-		margin: { l: 25, r: 10, t: 20, b: 150, autoexpand: true },
+		margin: { l: 40, r: 20, t: 30, b: 80, autoexpand: true },
 		autosize: true,
 		showlegend: true,
 		legend: {
@@ -30,7 +30,7 @@
 			orientation: 'h' as const,
 			x: 0.5,
 			xanchor: 'center' as const,
-			y: -0.75,
+			y: -0.3,
 			yanchor: 'top' as const
 		},
 		xaxis: {
@@ -138,7 +138,7 @@
 			data={processedData} 
 			{layout} 
 			config={defaultConfig}
-			useResizeHandler
+			fillParent={true}
 			debounce={250}
 		/>
 	</div>
@@ -166,7 +166,7 @@
 		min-height: 500px;
 		height: 100%;
 		width: 100%;
-		padding: .5rem;
+		padding: .25rem;
 		overflow: hidden;
 	}
 
