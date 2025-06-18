@@ -9,7 +9,7 @@ import os
 import sys
 
 # Add the src directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.execution_engine import PythonExecutionEngine
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def test_basic_execution():
     """Test basic strategy execution with mock data"""
     print("Testing basic strategy execution with mock data...")
-    
+
     # Simple strategy that implements its own SMA
     strategy_code = """
 # Mock price data (simulating what get_price_data would return)
@@ -54,25 +54,25 @@ else:
     save_result('current_sma', current_sma)
     save_result('reason', f'Price {"above" if result else "below"} SMA')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Basic execution result: {result}")
     # Check that we have the expected results
-    assert 'classification' in result
-    assert 'current_price' in result
-    assert 'current_sma' in result
-    assert result['current_price'] == 120
-    assert result['current_sma'] == 110.5
-    assert result['classification'] == True  # Price above SMA
+    assert "classification" in result
+    assert "current_price" in result
+    assert "current_sma" in result
+    assert result["current_price"] == 120
+    assert result["current_sma"] == 110.5
+    assert result["classification"] == True  # Price above SMA
     print("✓ Basic execution test passed")
 
 
 async def test_custom_rsi_implementation():
     """Test strategy that implements its own RSI calculation"""
     print("Testing custom RSI implementation...")
-    
+
     # Strategy that implements RSI from scratch
     strategy_code = """
 # Mock price data
@@ -125,25 +125,25 @@ else:
     save_result('current_rsi', current_rsi)
     save_result('reason', f'RSI is {current_rsi:.2f} - {"oversold" if result else "not oversold"}')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Custom RSI result: {result}")
     # Check that we have the expected results
-    assert 'classification' in result
-    assert 'current_rsi' in result
-    assert 'rsi_values' in result
-    assert len(result['rsi_values']) > 0
-    assert isinstance(result['current_rsi'], (int, float))
-    assert 0 <= result['current_rsi'] <= 100  # RSI should be between 0 and 100
+    assert "classification" in result
+    assert "current_rsi" in result
+    assert "rsi_values" in result
+    assert len(result["rsi_values"]) > 0
+    assert isinstance(result["current_rsi"], (int, float))
+    assert 0 <= result["current_rsi"] <= 100  # RSI should be between 0 and 100
     print("✓ Custom RSI implementation test passed")
 
 
 async def test_bollinger_bands_implementation():
     """Test strategy that implements Bollinger Bands from scratch"""
     print("Testing custom Bollinger Bands implementation...")
-    
+
     # Strategy that implements Bollinger Bands
     strategy_code = """
 # Mock price data
@@ -196,22 +196,22 @@ else:
     save_result('lower_band', lower_band)
     save_result('reason', f'Price {"near" if result else "not near"} lower Bollinger Band')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Custom Bollinger Bands result: {result}")
     # Check that we have the expected results
-    assert 'classification' in result
-    assert 'current_price' in result
-    assert 'lower_band' in result
-    assert 'bb' in result
-    assert 'upper' in result['bb']
-    assert 'middle' in result['bb']
-    assert 'lower' in result['bb']
-    assert len(result['bb']['upper']) > 0
-    assert len(result['bb']['middle']) > 0
-    assert len(result['bb']['lower']) > 0
+    assert "classification" in result
+    assert "current_price" in result
+    assert "lower_band" in result
+    assert "bb" in result
+    assert "upper" in result["bb"]
+    assert "middle" in result["bb"]
+    assert "lower" in result["bb"]
+    assert len(result["bb"]["upper"]) > 0
+    assert len(result["bb"]["middle"]) > 0
+    assert len(result["bb"]["lower"]) > 0
     print("✓ Custom Bollinger Bands implementation test passed")
 
 
@@ -219,16 +219,16 @@ async def run_all_tests():
     """Run all tests"""
     print("🚀 Starting simple Python execution tests (no database required)...")
     print()
-    
+
     tests = [
         ("Basic Execution", test_basic_execution),
         ("Custom RSI Implementation", test_custom_rsi_implementation),
         ("Bollinger Bands Implementation", test_bollinger_bands_implementation),
     ]
-    
+
     passed = 0
     failed = 0
-    
+
     for test_name, test_func in tests:
         try:
             print(f"Running {test_name} test...")
@@ -239,15 +239,17 @@ async def run_all_tests():
             print(f"❌ {test_name} test failed: {e}")
             failed += 1
         print()
-    
+
     print("📊 Test Results Summary:")
     print("=" * 50)
     for test_name, _ in tests:
-        status = "✅ PASSED" if test_name in [t[0] for t in tests[:passed]] else "❌ FAILED"
+        status = (
+            "✅ PASSED" if test_name in [t[0] for t in tests[:passed]] else "❌ FAILED"
+        )
         print(f"{test_name:<30} {status}")
     print("=" * 50)
     print(f"Total: {passed}/{len(tests)} tests passed")
-    
+
     if failed == 0:
         print("🎉 All tests passed! The raw data approach is working correctly.")
     else:
@@ -255,4 +257,4 @@ async def run_all_tests():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_all_tests()) 
+    asyncio.run(run_all_tests())
