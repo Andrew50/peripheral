@@ -16,25 +16,24 @@ import redis
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 class WorkerPipelineTester:
     """Test class for the worker pipeline"""
-    
+
     def __init__(self):
         self.redis_client = redis.Redis(
-            host='localhost',
+            host="localhost",
             port=6379,
             decode_responses=True,
             socket_connect_timeout=5,
-            socket_timeout=5
+            socket_timeout=5,
         )
         self.test_results = []
-    
+
     def test_redis_connection(self):
         """Test Redis connection"""
         try:
@@ -44,80 +43,90 @@ class WorkerPipelineTester:
         except Exception as e:
             logger.error(f"✗ Redis connection failed: {e}")
             return False
-    
-    def create_test_job(self, job_name: str, python_code: str, input_data: Dict = None) -> Dict[str, Any]:
+
+    def create_test_job(
+        self, job_name: str, python_code: str, input_data: Dict = None
+    ) -> Dict[str, Any]:
         """Create a test job"""
         execution_id = f"test_{job_name}_{uuid.uuid4().hex[:8]}"
-        
+
         job = {
-            'execution_id': execution_id,
-            'python_code': python_code,
-            'input_data': input_data or {},
-            'timeout_seconds': 60,
-            'memory_limit_mb': 256,
-            'libraries': ['pandas', 'numpy'],
-            'created_at': datetime.utcnow().isoformat()
+            "execution_id": execution_id,
+            "python_code": python_code,
+            "input_data": input_data or {},
+            "timeout_seconds": 60,
+            "memory_limit_mb": 256,
+            "libraries": ["pandas", "numpy"],
+            "created_at": datetime.utcnow().isoformat(),
         }
-        
+
         return job
-    
+
     def submit_job_to_queue(self, job: Dict[str, Any]) -> bool:
         """Submit a job to the Redis queue"""
         try:
             job_json = json.dumps(job)
-            result = self.redis_client.rpush('python_execution_queue', job_json)
-            logger.info(f"✓ Job {job['execution_id']} submitted to queue (position: {result})")
+            result = self.redis_client.rpush("python_execution_queue", job_json)
+            logger.info(
+                f"✓ Job {job['execution_id']} submitted to queue (position: {result})"
+            )
             return True
         except Exception as e:
             logger.error(f"✗ Failed to submit job: {e}")
             return False
-    
-    def monitor_execution_updates(self, execution_id: str, timeout: int = 60) -> Dict[str, Any]:
+
+    def monitor_execution_updates(
+        self, execution_id: str, timeout: int = 60
+    ) -> Dict[str, Any]:
         """Monitor execution updates for a specific job"""
         pubsub = self.redis_client.pubsub()
-        pubsub.subscribe('python_execution_updates')
-        
+        pubsub.subscribe("python_execution_updates")
+
         start_time = time.time()
         logger.info(f"Monitoring updates for execution {execution_id}...")
-        
+
         try:
             for message in pubsub.listen():
-                if message['type'] == 'message':
+                if message["type"] == "message":
                     try:
-                        update = json.loads(message['data'])
-                        if update.get('execution_id') == execution_id:
-                            logger.info(f"📢 Update for {execution_id}: {update['status']}")
-                            
-                            if update['status'] in ['completed', 'failed', 'timeout']:
-                                logger.info(f"✓ Execution {execution_id} finished with status: {update['status']}")
+                        update = json.loads(message["data"])
+                        if update.get("execution_id") == execution_id:
+                            logger.info(
+                                f"📢 Update for {execution_id}: {update['status']}"
+                            )
+
+                            if update["status"] in ["completed", "failed", "timeout"]:
+                                logger.info(
+                                    f"✓ Execution {execution_id} finished with status: {update['status']}"
+                                )
                                 return update
                     except json.JSONDecodeError:
                         continue
-                
+
                 # Check timeout
                 if time.time() - start_time > timeout:
                     logger.warning(f"⚠️ Monitoring timeout for {execution_id}")
                     break
         finally:
             pubsub.close()
-        
-        return {'status': 'timeout', 'execution_id': execution_id}
-    
+
+        return {"status": "timeout", "execution_id": execution_id}
+
     def check_queue_status(self):
         """Check the current queue status"""
         try:
-            queue_length = self.redis_client.llen('python_execution_queue')
+            queue_length = self.redis_client.llen("python_execution_queue")
             logger.info(f"📊 Current queue length: {queue_length}")
             return queue_length
         except Exception as e:
             logger.error(f"✗ Failed to check queue status: {e}")
             return -1
-    
+
     def test_simple_strategy(self):
         """Test a simple strategy execution"""
         logger.info("🔧 Testing simple strategy...")
-        
-        simple_code = '''
+
+        simple_code = """
 # Simple test strategy
 result = {
     'test': 'hello from worker',
@@ -128,26 +137,28 @@ result = {
 
 # Save the result
 save_result('test_output', result)
-'''
-        
-        job = self.create_test_job('simple', simple_code, {'symbol': 'TEST'})
-        
+"""
+
+        job = self.create_test_job("simple", simple_code, {"symbol": "TEST"})
+
         if self.submit_job_to_queue(job):
-            update = self.monitor_execution_updates(job['execution_id'])
-            self.test_results.append({
-                'test': 'simple_strategy',
-                'success': update.get('status') == 'completed',
-                'details': update
-            })
-            return update.get('status') == 'completed'
-        
+            update = self.monitor_execution_updates(job["execution_id"])
+            self.test_results.append(
+                {
+                    "test": "simple_strategy",
+                    "success": update.get("status") == "completed",
+                    "details": update,
+                }
+            )
+            return update.get("status") == "completed"
+
         return False
-    
+
     def test_data_access_strategy(self):
         """Test strategy with data access functions"""
         logger.info("🔧 Testing data access strategy...")
-        
-        data_code = '''
+
+        data_code = """
 # Test data access functions
 try:
     # Test price data access
@@ -168,25 +179,27 @@ try:
 except Exception as e:
     save_result('error', str(e))
     save_result('test_passed', False)
-'''
-        
-        job = self.create_test_job('data_access', data_code, {'symbol': 'AAPL'})
-        
+"""
+
+        job = self.create_test_job("data_access", data_code, {"symbol": "AAPL"})
+
         if self.submit_job_to_queue(job):
-            update = self.monitor_execution_updates(job['execution_id'])
-            self.test_results.append({
-                'test': 'data_access_strategy',
-                'success': update.get('status') == 'completed',
-                'details': update
-            })
-            return update.get('status') == 'completed'
-        
+            update = self.monitor_execution_updates(job["execution_id"])
+            self.test_results.append(
+                {
+                    "test": "data_access_strategy",
+                    "success": update.get("status") == "completed",
+                    "details": update,
+                }
+            )
+            return update.get("status") == "completed"
+
         return False
-    
+
     def test_calculation_strategy(self):
         """Test strategy with calculations"""
         logger.info("🔧 Testing calculation strategy...")
-        
+
         calc_code = '''
 # Test mathematical calculations
 import math
@@ -234,25 +247,27 @@ result = {
 
 save_result('calculation_test', result)
 '''
-        
-        job = self.create_test_job('calculation', calc_code)
-        
+
+        job = self.create_test_job("calculation", calc_code)
+
         if self.submit_job_to_queue(job):
-            update = self.monitor_execution_updates(job['execution_id'])
-            self.test_results.append({
-                'test': 'calculation_strategy',
-                'success': update.get('status') == 'completed',
-                'details': update
-            })
-            return update.get('status') == 'completed'
-        
+            update = self.monitor_execution_updates(job["execution_id"])
+            self.test_results.append(
+                {
+                    "test": "calculation_strategy",
+                    "success": update.get("status") == "completed",
+                    "details": update,
+                }
+            )
+            return update.get("status") == "completed"
+
         return False
-    
+
     def test_security_validation(self):
         """Test security validation by submitting prohibited code"""
         logger.info("🔧 Testing security validation...")
-        
-        malicious_code = '''
+
+        malicious_code = """
 # This should be blocked by security validation
 import os
 import subprocess
@@ -260,47 +275,48 @@ import subprocess
 # Try to execute system command (should be blocked)
 result = os.system('ls -la')
 save_result('security_breach', result)
-'''
-        
-        job = self.create_test_job('security_test', malicious_code)
-        
+"""
+
+        job = self.create_test_job("security_test", malicious_code)
+
         if self.submit_job_to_queue(job):
-            update = self.monitor_execution_updates(job['execution_id'])
+            update = self.monitor_execution_updates(job["execution_id"])
             # Security test passes if the job fails due to security violation
-            success = update.get('status') == 'failed' and 'security' in update.get('error_message', '').lower()
-            self.test_results.append({
-                'test': 'security_validation',
-                'success': success,
-                'details': update
-            })
+            success = (
+                update.get("status") == "failed"
+                and "security" in update.get("error_message", "").lower()
+            )
+            self.test_results.append(
+                {"test": "security_validation", "success": success, "details": update}
+            )
             return success
-        
+
         return False
-    
+
     def run_all_tests(self):
         """Run all tests"""
         logger.info("🚀 Starting Worker Pipeline Tests")
         logger.info("=" * 50)
-        
+
         # Test Redis connection first
         if not self.test_redis_connection():
             logger.error("❌ Cannot proceed without Redis connection")
             return False
-        
+
         # Check initial queue status
         self.check_queue_status()
-        
+
         # Run tests
         tests = [
-            ('Simple Strategy', self.test_simple_strategy),
-            ('Data Access Strategy', self.test_data_access_strategy),
-            ('Calculation Strategy', self.test_calculation_strategy),
-            ('Security Validation', self.test_security_validation)
+            ("Simple Strategy", self.test_simple_strategy),
+            ("Data Access Strategy", self.test_data_access_strategy),
+            ("Calculation Strategy", self.test_calculation_strategy),
+            ("Security Validation", self.test_security_validation),
         ]
-        
+
         passed = 0
         total = len(tests)
-        
+
         for test_name, test_func in tests:
             logger.info(f"\n{'='*20} {test_name} {'='*20}")
             try:
@@ -311,26 +327,26 @@ save_result('security_breach', result)
                     logger.error(f"❌ {test_name} FAILED")
             except Exception as e:
                 logger.error(f"❌ {test_name} ERROR: {e}")
-        
+
         # Summary
-        logger.info("\n" + "="*50)
+        logger.info("\n" + "=" * 50)
         logger.info(f"📊 TEST SUMMARY: {passed}/{total} tests passed")
-        
+
         if passed == total:
             logger.info("🎉 All tests passed!")
         else:
             logger.warning(f"⚠️ {total - passed} tests failed")
-        
+
         # Check final queue status
         self.check_queue_status()
-        
+
         return passed == total
 
 
 async def main():
     """Main test runner"""
     tester = WorkerPipelineTester()
-    
+
     print("Python Strategy Worker Pipeline Tester")
     print("=" * 50)
     print("This script will test the worker pipeline by:")
@@ -340,18 +356,18 @@ async def main():
     print("4. Validating results")
     print("\nMake sure the worker is running in another terminal!")
     print("=" * 50)
-    
+
     input("Press Enter to start tests...")
-    
+
     success = tester.run_all_tests()
-    
+
     if success:
         print("\n🎉 All pipeline tests completed successfully!")
     else:
         print("\n⚠️ Some tests failed. Check the logs above.")
-    
+
     return success
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

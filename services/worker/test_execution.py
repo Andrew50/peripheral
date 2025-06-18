@@ -9,7 +9,7 @@ import os
 import sys
 
 # Add the src directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.data_provider import DataProvider
 from src.execution_engine import PythonExecutionEngine
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 async def test_basic_execution():
     """Test basic strategy execution with raw data only"""
     print("Testing basic strategy execution...")
-    
+
     # Simple strategy that uses raw data and implements its own SMA
     strategy_code = """
 # Get symbol from context
@@ -63,20 +63,20 @@ else:
         save_result('sma_20', current_sma)
         save_result('reason', f'Price {"above" if result else "below"} SMA')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Basic execution result: {result}")
-    assert result['success'] == True
-    assert 'result' in result
+    assert result["success"] == True
+    assert "result" in result
     print("✓ Basic execution test passed")
 
 
 async def test_data_functions():
     """Test that raw data accessor functions work"""
     print("Testing raw data accessor functions...")
-    
+
     # Strategy that tests multiple raw data functions
     strategy_code = """
 def classify_symbol(symbol):
@@ -102,19 +102,19 @@ def classify_symbol(symbol):
     # Simple strategy: return True if we have data
     return len(price_data['close']) > 10 and len(returns) > 5
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Data functions result: {result}")
-    assert result['success'] == True
+    assert result["success"] == True
     print("✓ Data functions test passed")
 
 
 async def test_custom_rsi_implementation():
     """Test strategy that implements its own RSI calculation"""
     print("Testing custom RSI implementation...")
-    
+
     # Strategy that implements RSI from scratch
     strategy_code = """
 def classify_symbol(symbol):
@@ -165,19 +165,19 @@ def classify_symbol(symbol):
     current_rsi = rsi_values[-1]
     return current_rsi < 30  # Oversold
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Custom RSI result: {result}")
-    assert result['success'] == True
+    assert result["success"] == True
     print("✓ Custom RSI implementation test passed")
 
 
 async def test_bollinger_bands_implementation():
     """Test strategy that implements Bollinger Bands from scratch"""
     print("Testing custom Bollinger Bands implementation...")
-    
+
     # Strategy that implements Bollinger Bands
     strategy_code = """
 def classify_symbol(symbol):
@@ -227,55 +227,57 @@ def classify_symbol(symbol):
     
     return current_price <= lower_band * 1.02  # Within 2% of lower band
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'AAPL'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "AAPL"})
+
     print(f"Custom Bollinger Bands result: {result}")
-    assert result['success'] == True
+    assert result["success"] == True
     print("✓ Custom Bollinger Bands implementation test passed")
 
 
 async def test_security_validation():
     """Test security validation"""
     print("Testing security validation...")
-    
+
     validator = SecurityValidator()
-    
+
     # Test safe code
     safe_code = """
 def classify_symbol(symbol):
     price_data = get_price_data(symbol)
     return len(price_data.get('close', [])) > 0
 """
-    
+
     # Test unsafe code
     unsafe_code = """
 import os
 os.system('rm -rf /')
 """
-    
+
     safe_result = validator.validate_code(safe_code)
     unsafe_result = validator.validate_code(unsafe_code)
-    
+
     if safe_result and not unsafe_result:
         print("✅ Security validation test passed")
         return True
     else:
-        print(f"❌ Security validation test failed: safe={safe_result}, unsafe={unsafe_result}")
+        print(
+            f"❌ Security validation test failed: safe={safe_result}, unsafe={unsafe_result}"
+        )
         return False
 
 
 async def test_data_provider():
     """Test data provider directly"""
     print("Testing data provider...")
-    
+
     provider = DataProvider()
-    
+
     try:
         # Test basic SQL execution
         result = await provider.execute_sql("SELECT 1 as test_column")
-        if result and result.get('data'):
+        if result and result.get("data"):
             print(f"✅ Data provider SQL test passed: {result}")
             return True
         else:
@@ -289,7 +291,7 @@ async def test_data_provider():
 async def run_all_tests():
     """Run all tests"""
     print("🚀 Starting Python execution functionality tests...\n")
-    
+
     tests = [
         ("Security Validation", test_security_validation),
         ("Data Provider", test_data_provider),
@@ -298,7 +300,7 @@ async def run_all_tests():
         ("Custom RSI Implementation", test_custom_rsi_implementation),
         ("Bollinger Bands Implementation", test_bollinger_bands_implementation),
     ]
-    
+
     results = []
     for test_name, test_func in tests:
         print(f"Running {test_name} test...")
@@ -309,24 +311,26 @@ async def run_all_tests():
             print(f"❌ {test_name} test crashed: {e}")
             results.append((test_name, False))
         print()
-    
+
     # Summary
     print("📊 Test Results Summary:")
     print("=" * 50)
     passed = 0
     total = len(results)
-    
+
     for test_name, result in results:
         status = "✅ PASSED" if result else "❌ FAILED"
         print(f"{test_name:<25} {status}")
         if result:
             passed += 1
-    
+
     print("=" * 50)
     print(f"Total: {passed}/{total} tests passed")
-    
+
     if passed == total:
-        print("🎉 All tests passed! The Python execution functionality is working correctly.")
+        print(
+            "🎉 All tests passed! The Python execution functionality is working correctly."
+        )
         return True
     else:
         print("⚠️  Some tests failed. The functionality needs attention.")
@@ -334,4 +338,4 @@ async def run_all_tests():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_all_tests()) 
+    asyncio.run(run_all_tests())
