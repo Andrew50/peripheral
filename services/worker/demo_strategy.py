@@ -11,7 +11,7 @@ import os
 import sys
 
 # Add the src directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.execution_engine import PythonExecutionEngine
 
@@ -20,7 +20,7 @@ async def demo_mean_reversion_strategy():
     """Demo: Mean reversion strategy using custom RSI and Bollinger Bands"""
     print("📈 Demo: Mean Reversion Strategy")
     print("-" * 50)
-    
+
     strategy_code = """
 # Mean Reversion Strategy
 # Buy when RSI < 30 AND price is below lower Bollinger Band
@@ -115,10 +115,10 @@ else:
     save_result('classification', False)
     save_result('reason', 'Insufficient data for analysis')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'DEMO'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "DEMO"})
+
     print("Strategy Results:")
     print(f"  📊 Classification: {result.get('classification')}")
     print(f"  💰 Current Price: ${result.get('current_price', 0):.2f}")
@@ -133,7 +133,7 @@ async def demo_momentum_strategy():
     """Demo: Momentum strategy using custom moving averages"""
     print("🚀 Demo: Momentum Strategy")
     print("-" * 50)
-    
+
     strategy_code = """
 # Momentum Strategy
 # Buy when short-term MA crosses above long-term MA (Golden Cross)
@@ -206,10 +206,10 @@ else:
     save_result('classification', False)
     save_result('reason', 'Insufficient data for moving averages')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'DEMO'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "DEMO"})
+
     print("Strategy Results:")
     print(f"  📊 Classification: {result.get('classification')}")
     print(f"  💰 Current Price: ${result.get('current_price', 0)}")
@@ -225,7 +225,7 @@ async def demo_custom_indicator():
     """Demo: Custom technical indicator (Stochastic Oscillator)"""
     print("⚡ Demo: Custom Stochastic Oscillator")
     print("-" * 50)
-    
+
     strategy_code = """
 # Custom Stochastic Oscillator Strategy
 # Buy when %K crosses above %D and both are below 20 (oversold)
@@ -293,10 +293,10 @@ else:
     save_result('classification', False)
     save_result('reason', 'Insufficient data for Stochastic calculation')
 """
-    
+
     engine = PythonExecutionEngine()
-    result = await engine.execute(strategy_code, {'symbol': 'DEMO'})
-    
+    result = await engine.execute(strategy_code, {"symbol": "DEMO"})
+
     print("Strategy Results:")
     print(f"  📊 Classification: {result.get('classification')}")
     print(f"  📈 %K: {result.get('current_k', 0)}")
@@ -316,11 +316,11 @@ async def main():
     print("that implement their own technical indicators from scratch.")
     print("=" * 60)
     print()
-    
+
     await demo_mean_reversion_strategy()
     await demo_momentum_strategy()
     await demo_custom_indicator()
-    
+
     print("✅ Demo complete!")
     print()
     print("Key Takeaways:")
@@ -332,4 +332,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
