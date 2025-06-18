@@ -201,3 +201,5 @@ public
 # Temporary folders
 tmp/
 temp/
+services/backend/tmp/build-errors.log
+services/backend/tmp/build-errors.log

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        22,
+        20,
         'Schema version 22 with conversations, archived messages, and query_logs table'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     -- Conversation Sharing
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     view_count INTEGER DEFAULT 0,
-    last_viewed_at TIMESTAMP WITH TIME ZONE,
+    last_viewed_at TIMESTAMP WITH TIME ZONE
 );
 -- Conversation messages table
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -342,7 +342,8 @@ CREATE TABLE why_is_it_moving (
     content TEXT NOT NULL,
     source VARCHAR(100),
     -- Optional: track the source of the information
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_content BOOLEAN NOT NULL DEFAULT FALSE
 );
 -- Create indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker ON why_is_it_moving(ticker);
