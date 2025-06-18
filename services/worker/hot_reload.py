@@ -17,6 +17,8 @@ class WorkerRestartHandler(FileSystemEventHandler):
     
     def __init__(self):
         self.process = None
+        self.last_restart = 0
+        self.debounce_seconds = 1  # Prevent rapid restarts
         self.start_worker()
     
     def start_worker(self):
@@ -48,6 +50,12 @@ class WorkerRestartHandler(FileSystemEventHandler):
         
         # Only restart on Python file changes
         if event.src_path.endswith('.py'):
+            # Debounce rapid changes
+            current_time = time.time()
+            if current_time - self.last_restart < self.debounce_seconds:
+                return
+            
+            self.last_restart = current_time
             print(f"📝 File changed: {event.src_path}")
             print("🔄 Restarting worker...")
             self.start_worker()
