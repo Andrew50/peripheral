@@ -764,7 +764,13 @@ func GetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (inter
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).UTC()
+
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+
+	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).In(easternLocation)
 	ticker, err := postgres.GetTicker(conn, args.SecurityID, timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
