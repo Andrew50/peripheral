@@ -44,15 +44,29 @@ class PythonExecutionEngine:
         code: str,
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute Python code in a restricted environment"""
+        """Execute Python code in a restricted environment with enhanced security"""
+        
+        # Validate code before execution
+        validator = CodeValidator()
+        if not validator.validate(code):
+            raise SecurityError("Code validation failed - contains prohibited operations")
+        
+        # Additional security checks
+        if not self._perform_security_checks(code):
+            raise SecurityError("Code contains security violations")
         
         # Prepare execution environment
         exec_globals = await self._create_safe_globals(context)
         exec_locals = {}
         
         try:
-            # Execute the code
-            exec(code, exec_globals, exec_locals)
+            # Compile code first for additional validation
+            compiled_code = compile(code, '<strategy>', 'exec')
+            
+            # Execute the compiled code in restricted environment  
+            # Note: exec() is necessary here for dynamic strategy execution
+            # but we've added multiple layers of security validation
+            exec(compiled_code, exec_globals, exec_locals)  # nosec B102
             
             # Extract results
             result = self._extract_results(exec_locals, exec_globals)
@@ -62,6 +76,59 @@ class PythonExecutionEngine:
         except Exception as e:
             logger.error(f"Execution error: {e}")
             raise
+    
+    def _perform_security_checks(self, code: str) -> bool:
+        """Perform additional security checks on code"""
+        try:
+            # Parse code into AST for analysis
+            tree = ast.parse(code)
+            
+            # Check for prohibited operations
+            for node in ast.walk(tree):
+                # Block eval, exec, compile usage in user code
+                if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name):
+                        if node.func.id in ['eval', 'exec', 'compile', '__import__']:
+                            logger.warning(f"Prohibited function call: {node.func.id}")
+                            return False
+                
+                # Block subprocess, os module calls
+                if isinstance(node, ast.Attribute):
+                    if isinstance(node.value, ast.Name):
+                        if node.value.id in ['os', 'subprocess', 'sys']:
+                            logger.warning(f"Prohibited module access: {node.value.id}")
+                            return False
+                
+                # Block file operations
+                if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name):
+                        if node.func.id in ['open', 'file']:
+                            logger.warning(f"Prohibited file operation: {node.func.id}")
+                            return False
+            
+            # Additional string-based checks
+            code_lower = code.lower()
+            prohibited_patterns = [
+                '__import__', 'import os', 'import sys', 'import subprocess',
+                'from os', 'from sys', 'from subprocess', 'exec(', 'eval(',
+                'compile(', 'globals()', 'locals()', 'vars()', 'dir()',
+                'getattr(', 'setattr(', 'delattr(', 'hasattr(',
+                '__builtins__', '__globals__', '__locals__'
+            ]
+            
+            for pattern in prohibited_patterns:
+                if pattern in code_lower:
+                    logger.warning(f"Prohibited pattern found: {pattern}")
+                    return False
+            
+            return True
+            
+        except SyntaxError as e:
+            logger.error(f"Syntax error in code: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error performing security checks: {e}")
+            return False
     
     async def _create_safe_globals(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Create a safe global namespace for execution"""

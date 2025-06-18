@@ -535,10 +535,10 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 					 ELSE NULL 
 				 END
 			 WHERE securityid = $11`,
-			utils.NullString(details.Name),
-			utils.NullString(string(details.Market)),
-			utils.NullString(string(details.Locale)),
-			utils.NullString(details.PrimaryExchange),
+			utils.NullString(truncateString(details.Name, 500)),
+			utils.NullString(truncateString(string(details.Market), 50)),
+			utils.NullString(truncateString(string(details.Locale), 50)),
+			utils.NullString(truncateString(details.PrimaryExchange, 50)),
 			details.Active,
 			utils.NullInt64(int64(details.MarketCap)),
 			utils.NullString(details.Description),
@@ -844,4 +844,12 @@ func diff(firstSet, secondSet map[string]models.Ticker) ([]models.Ticker, []mode
 	}
 
 	return additions, removals, figiChanges
+}
+
+// Helper function to truncate string if it exceeds maximum length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }
