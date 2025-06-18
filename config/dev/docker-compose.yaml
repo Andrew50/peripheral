@@ -104,7 +104,7 @@ services:
   worker:
     build:
       context: ../../services/worker
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     platform: ${PLATFORM:-linux/amd64}
     depends_on:
       db:

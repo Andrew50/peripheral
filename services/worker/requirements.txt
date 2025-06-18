@@ -25,6 +25,7 @@ tqdm>=4.65.0
 
 # Development tools (optional)
 black>=23.0.0
+watchdog>=3.0.0  # For hot reload file monitoring
 
 # Note: This system is designed to NOT use pre-built technical analysis libraries
 # Strategies implement indicators from scratch using raw data only 
