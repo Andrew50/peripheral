@@ -124,6 +124,7 @@ services:
       - REDIS_HOST=cache
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
+      - HOT_RELOAD=true
     deploy:
       replicas: 3
       resources:
