@@ -322,33 +322,49 @@ func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, 
 	}
 	return isPublic, userID, title, nil
 }
-func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, error) {
+func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, string, error) {
 	var isPublic bool
 	var userID int
-	var firstUserMessage string
+	var title string
+	var firstUserMessage sql.NullString
 	var firstAssistantMessage string
-
-	isPublic, userID, _, err := checkIfConversationIsPublic(conn, conversationID)
-	// If not public, don't fetch messages
-	if err != nil || !isPublic {
-		return false, 0, "", "", err
-	}
-
-	// Get the first user message (query)
-	err = conn.DB.QueryRow(context.Background(),
-		"SELECT query FROM conversation_messages WHERE conversation_id = $1 AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
-		conversationID).Scan(&firstUserMessage)
-	if err != nil && err.Error() != "no rows in result set" {
-		return false, 0, "", "", err
-	}
-
-	// Get the first assistant message content_chunks
 	var contentChunksJSON []byte
-	err = conn.DB.QueryRow(context.Background(),
-		"SELECT COALESCE(content_chunks, '[]') FROM conversation_messages WHERE conversation_id = $1 AND content_chunks IS NOT NULL AND archived = FALSE ORDER BY created_at ASC LIMIT 1",
-		conversationID).Scan(&contentChunksJSON)
-	if err != nil && err.Error() != "no rows in result set" {
-		return false, 0, "", "", err
+
+	// Single query to get all conversation data and preview messages
+	query := `
+		WITH first_messages AS (
+			SELECT 
+				query,
+				content_chunks,
+				ROW_NUMBER() OVER (ORDER BY created_at ASC) as rn
+			FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		)
+		SELECT 
+			c.is_public,
+			c.user_id,
+			c.title,
+			fm1.query as first_query,
+			COALESCE(fm2.content_chunks, '[]'::jsonb) as first_content_chunks
+		FROM conversations c
+		LEFT JOIN first_messages fm1 ON fm1.rn = 1
+		LEFT JOIN first_messages fm2 ON fm2.rn = 1 AND fm2.content_chunks IS NOT NULL
+		WHERE c.conversation_id = $1`
+
+	err := conn.DB.QueryRow(context.Background(), query, conversationID).Scan(
+		&isPublic,
+		&userID,
+		&title,
+		&firstUserMessage,
+		&contentChunksJSON,
+	)
+	if err != nil {
+		return false, 0, "", "", "", err
+	}
+
+	// If not public, return early
+	if !isPublic {
+		return false, 0, "", "", "", fmt.Errorf("conversation is not public")
 	}
 
 	// Extract text from content_chunks
@@ -381,7 +397,13 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		}
 	}
 
-	return isPublic, userID, firstUserMessage, firstAssistantMessage, nil
+	// Handle nullable first message
+	var firstUserMessageStr string
+	if firstUserMessage.Valid {
+		firstUserMessageStr = firstUserMessage.String
+	}
+
+	return isPublic, userID, title, firstUserMessageStr, firstAssistantMessage, nil
 }
 
 type GetPublicConversationRequest struct {
@@ -457,6 +479,7 @@ type GetConversationSnippetArgs struct {
 
 type ConversationSnippetResponse struct {
 	Title         string `json:"title"`
+	FirstQuery    string `json:"first_query"`
 	FirstResponse string `json:"first_response"`
 }
 
@@ -471,7 +494,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 	}
 
 	// Use the updated function to get conversation preview data
-	isPublic, _, title, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
+	isPublic, _, title, firstUserMessage, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
 	if !isPublic {
 		return nil, fmt.Errorf("conversation not public")
 	}
@@ -481,6 +504,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 
 	return ConversationSnippetResponse{
 		Title:         title,
+		FirstQuery:    firstUserMessage,
 		FirstResponse: firstResponse,
 	}, nil
 }
