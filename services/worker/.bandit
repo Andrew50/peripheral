@@ -1,0 +1,9 @@
+[bandit]
+# Configuration file for bandit security scanner
+# https://bandit.readthedocs.io/en/latest/config.html
+
+# Skip certain checks for test files where they're expected
+skips = B101  # Skip assert_used warnings for test files
+
+# Test files where assert statements are expected and safe
+exclude_dirs = tests/
