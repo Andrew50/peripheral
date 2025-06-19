@@ -68,6 +68,18 @@
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
 		
+		// Filter out malformed traces for histograms
+		if (plotData.chart_type === 'histogram') {
+			// For histograms, we need either x data or y data with actual values
+			const hasValidX = processedTrace.x && Array.isArray(processedTrace.x) && processedTrace.x.length > 0;
+			const hasValidY = processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length > 0;
+			
+			// Skip traces that don't have any valid data
+			if (!hasValidX && !hasValidY) {
+				return null;
+			}
+		}
+		
 		// Apply default colors if not specified
 		if (!processedTrace.marker?.color && !processedTrace.line?.color) {
 			const color = colorPalette[index % colorPalette.length];
@@ -85,37 +97,63 @@
 			}
 		}
 
-		// Set trace type based on chart_type if not specified
-		if (!processedTrace.type) {
-			switch (plotData.chart_type) {
-				case 'line':
-					processedTrace.type = 'scatter';
-					processedTrace.mode = 'lines';
-					break;
-				case 'scatter':
-					processedTrace.type = 'scatter';
-					processedTrace.mode = 'markers';
-					break;
-				case 'bar':
-					processedTrace.type = 'bar';
-					break;
-				case 'histogram':
-					processedTrace.type = 'histogram';
-					break;
-				case 'heatmap':
-					processedTrace.type = 'heatmap';
-					processedTrace.colorscale = 'Viridis';
-					break;
-			}
+		// Set trace type based on chart_type - always override for consistency
+		switch (plotData.chart_type) {
+			case 'line':
+				processedTrace.type = 'scatter';
+				processedTrace.mode = 'lines';
+				break;
+			case 'scatter':
+				processedTrace.type = 'scatter';
+				processedTrace.mode = 'markers';
+				break;
+			case 'bar':
+				processedTrace.type = 'bar';
+				break;
+			case 'histogram':
+				processedTrace.type = 'histogram';
+				
+				// Clean up empty arrays that might confuse Plotly
+				if (processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length === 0) {
+					delete processedTrace.y;
+				}
+				if (processedTrace.z && Array.isArray(processedTrace.z) && processedTrace.z.length === 0) {
+					delete processedTrace.z;
+				}
+				
+				// Configure automatic binning if not specified
+				if (!processedTrace.autobinx && !processedTrace.xbins && processedTrace.x && processedTrace.x.length > 0) {
+					processedTrace.autobinx = true;
+				}
+				if (!processedTrace.autobiny && !processedTrace.ybins && processedTrace.y && processedTrace.y.length > 0) {
+					processedTrace.autobiny = true;
+				}
+				// Set default number of bins if using x data
+				if (processedTrace.x && processedTrace.x.length > 0 && !processedTrace.nbinsx && !processedTrace.xbins) {
+					processedTrace.nbinsx = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.x.length))));
+				}
+				// Set default number of bins if using y data  
+				if (processedTrace.y && processedTrace.y.length > 0 && !processedTrace.nbinsy && !processedTrace.ybins) {
+					processedTrace.nbinsy = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.y.length))));
+				}
+				break;
+			case 'heatmap':
+				processedTrace.type = 'heatmap';
+				processedTrace.colorscale = 'Viridis';
+				break;
 		}
 
 		return processedTrace;
 	}
 
 	// Process trace data reactively
-	$: processedData = plotData.data.map((trace, index) => 
-		processTraceData(trace, index)
-	);
+	$: processedData = plotData.data
+		.map((trace, index) => processTraceData(trace, index))
+		.filter(trace => trace !== null);
+	
+	// Debug logging
+	$: console.log('Plot data:', plotData);
+	$: console.log('Processed data:', processedData);
 
 	// Merge layouts (user layout takes precedence)
 	$: layout = {
