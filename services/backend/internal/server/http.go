@@ -211,7 +211,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		result, err := publicFunc[req.Function](conn, req.Arguments)
 		if err != nil {
 			// Log the detailed error on the server
-			//log.Printf("public_handler error: %s - %v", req.Function, err)
+			log.Printf("Public handler error [%s]: %v", req.Function, err)
 			// Send the specific error message back to the client
 			// Use StatusBadRequest for general input/logic errors from Login/Signup
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -529,7 +529,7 @@ func WSHandler(conn *data.Conn) http.HandlerFunc {
 		// Upgrade the connection to a WebSocket
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			//		////fmt.Println("Failed to upgrade to WebSocket:", err)
+			log.Printf("Failed to upgrade to WebSocket: %v", err)
 			return
 		}
 

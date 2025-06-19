@@ -72,8 +72,13 @@ for FILE in "${MIGRATION_FILES[@]}"; do
 
   # -- run the file and capture full output -----------------------------
   if OUTPUT=$(PSQL -v ON_ERROR_STOP=1 -f "$FILE" 2>&1); then
-      PSQL -c "INSERT INTO schema_versions(version, description)
-               VALUES ($VERSION, \$\$${DESCRIPTION}\$\$);"
+      # Check if the migration file already inserted the version record
+      EXISTING_AFTER=$(PSQL -c "SELECT COUNT(*) FROM schema_versions WHERE version = $VERSION;")
+      if [[ $EXISTING_AFTER -eq 0 ]]; then
+        # Migration file didn't insert version record, so we do it
+        PSQL -c "INSERT INTO schema_versions(version, description)
+                 VALUES ($VERSION, \$\$${DESCRIPTION}\$\$);"
+      fi
       CURRENT_VERSION=$VERSION
       log "Migration $VERSION applied successfully."
   else
