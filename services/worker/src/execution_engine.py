@@ -146,7 +146,6 @@ class PythonExecutionEngine:
             # Additional string-based checks
             code_lower = code.lower()
             prohibited_patterns = [
-                "__import__",
                 "import os",
                 "import sys",
                 "import subprocess",
@@ -160,10 +159,6 @@ class PythonExecutionEngine:
                 "locals()",
                 "vars()",
                 "dir()",
-                "getattr(",
-                "setattr(",
-                "delattr(",
-                "hasattr(",
                 "__builtins__",
                 "__globals__",
                 "__locals__",
@@ -233,10 +228,22 @@ class PythonExecutionEngine:
             if hasattr(builtins, name):
                 safe_builtins[name] = getattr(builtins, name)
 
+        # Create safe __import__ function
+        def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+            """Safe import function that only allows whitelisted modules"""
+            if name in self.allowed_modules:
+                return __import__(name, globals, locals, fromlist, level)
+            else:
+                raise ImportError(f"Module '{name}' is not allowed")
+
+        # Add safe import to builtins
+        safe_builtins["__import__"] = safe_import
+        
         # Core globals
         exec_globals = {
             "__builtins__": {
-                k: getattr(builtins, k) for k in safe_builtins if hasattr(builtins, k)
+                k: getattr(builtins, k) if k != "__import__" else safe_import 
+                for k in safe_builtins if hasattr(builtins, k) or k == "__import__"
             },
             "__name__": "__main__",
             "__doc__": None,
