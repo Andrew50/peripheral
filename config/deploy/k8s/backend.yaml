@@ -105,11 +105,13 @@ spec:
                 secretKeyRef:
                   name: telegram-secret
                   key: bot-token
+                  optional: true
             - name: TELEGRAM_CHAT_ID
               valueFrom:
                 secretKeyRef:
                   name: telegram-secret
                   key: chat-id
+                  optional: true
           resources:
             requests:
               cpu: "1000m"
