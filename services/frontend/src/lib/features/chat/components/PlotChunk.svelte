@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Plot from 'svelte-plotly.js';
 	import type { PlotData } from '../interface';
-
+	
 	export let plotData: PlotData;
 	export let plotKey: string; // Unique identifier for this plot
 
@@ -9,7 +9,7 @@
 	const defaultConfig = {
 		displayModeBar: false,
 		displaylogo: false,
-		responsive: true
+		showTips: false
 	};
 
 	const defaultLayout = {
@@ -20,7 +20,7 @@
 		},
 		paper_bgcolor: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
 		plot_bgcolor: 'rgba(30, 41, 59, 0.5)', // slate-800 with opacity
-		margin: { l: 25, r: 10, t: 20, b: 150, autoexpand: true },
+		margin: { l: 40, r: 20, t: 30, b: 80, autoexpand: true },
 		autosize: true,
 		showlegend: true,
 		legend: {
@@ -30,7 +30,7 @@
 			orientation: 'h' as const,
 			x: 0.5,
 			xanchor: 'center' as const,
-			y: -0.75,
+			y: -0.3,
 			yanchor: 'top' as const
 		},
 		xaxis: {
@@ -62,20 +62,20 @@
 		'#c084fc', // purple-400
 		'#fb7185', // rose-400
 		'#38bdf8', // sky-400
-		'#4ade80' // green-400
+		'#4ade80'  // green-400
 	];
 
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
-
+		
 		// Apply default colors if not specified
 		if (!processedTrace.marker?.color && !processedTrace.line?.color) {
 			const color = colorPalette[index % colorPalette.length];
-
+			
 			if (plotData.chart_type === 'line' || plotData.chart_type === 'scatter') {
 				if (!processedTrace.line) processedTrace.line = {};
 				processedTrace.line.color = color;
-
+				
 				if (plotData.chart_type === 'scatter' && !processedTrace.marker) {
 					processedTrace.marker = { color };
 				}
@@ -113,14 +113,16 @@
 	}
 
 	// Process trace data reactively
-	$: processedData = plotData.data.map((trace, index) => processTraceData(trace, index));
+	$: processedData = plotData.data.map((trace, index) => 
+		processTraceData(trace, index)
+	);
 
 	// Merge layouts (user layout takes precedence)
 	$: layout = {
 		...defaultLayout,
 		...plotData.layout,
 		// Don't set title in layout if we're showing it separately
-		title: plotData.title ? '' : plotData.layout?.title || ''
+		title: plotData.title ? '' : (plotData.layout?.title || '')
 	};
 </script>
 
@@ -130,9 +132,15 @@
 			{plotData.title}
 		</div>
 	{/if}
-
+	
 	<div class="plot-container">
-		<Plot data={processedData} {layout} config={defaultConfig} debounce={250} />
+		<Plot 
+			data={processedData} 
+			{layout} 
+			config={defaultConfig}
+			fillParent={true}
+			debounce={250}
+		/>
 	</div>
 </div>
 
@@ -154,20 +162,21 @@
 	}
 
 	.plot-container {
-		flex: 1 1 0; /* or min-width:0; */
+		flex: 1 1 0;   /* or min-width:0; */
 		min-height: 500px;
 		height: 100%;
 		width: 100%;
-		padding: 0.5rem;
+		padding: .25rem;
 		overflow: hidden;
 	}
+
 
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
 		.plot-container {
 			min-height: 300px;
 		}
-
+		
 		.plot-title {
 			font-size: 1rem;
 		}
@@ -177,19 +186,19 @@
 	:global(.plot-container .plotly) {
 		background: transparent !important;
 	}
-
+	
 	:global(.plot-container .plotly .modebar) {
 		background: rgba(15, 23, 42, 0.8) !important;
 		border: 1px solid rgba(71, 85, 105, 0.3) !important;
 		border-radius: 4px !important;
 	}
-
+	
 	:global(.plot-container .plotly .modebar-btn) {
 		color: #cbd5e1 !important;
 	}
-
+	
 	:global(.plot-container .plotly .modebar-btn:hover) {
 		background: rgba(71, 85, 105, 0.3) !important;
 		color: #e2e8f0 !important;
 	}
-</style>
+</style>	

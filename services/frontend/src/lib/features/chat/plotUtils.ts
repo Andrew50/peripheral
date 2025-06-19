@@ -137,24 +137,3 @@ export function plotDataToText(plotData: PlotData): string {
 export function generatePlotKey(messageId: string, chunkIndex: number): string {
 	return `${messageId}-plot-${chunkIndex}`;
 }
-
-/**
- * Default theme configuration for plots
- */
-export const defaultPlotTheme = {
-	colorPalette: [
-		'#60a5fa', // blue-400
-		'#34d399', // emerald-400
-		'#f87171', // red-400
-		'#fbbf24', // amber-400
-		'#c084fc', // purple-400
-		'#fb7185', // rose-400
-		'#38bdf8', // sky-400
-		'#4ade80'  // green-400
-	],
-	backgroundColor: 'rgba(15, 23, 42, 0.8)', // slate-900
-	gridColor: 'rgba(71, 85, 105, 0.3)', // slate-600
-	textColor: '#e2e8f0', // text-slate-200
-	axisTitleColor: '#e2e8f0',
-	tickColor: '#cbd5e1' // text-slate-300
-};

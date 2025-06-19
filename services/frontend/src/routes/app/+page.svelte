@@ -76,6 +76,9 @@
 		activeChartInstance
 	} from '$lib/features/chart/interface';
 
+	// Import TopBar component
+	import TopBar from '$lib/components/TopBar.svelte';
+
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
@@ -142,7 +145,7 @@
 	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 550; // <-- Set initial width to 300
+	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
 
 	// Calendar state
@@ -363,6 +366,7 @@
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 	let maxWidth = 600; // Restored to 600px maximum
+	let leftMinWidth = 600; // Minimum width for chat left menu
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -705,27 +709,6 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
-	// DEPRECATED: Screensaver functions
-	// Add function after other function declarations
-	// function resetInactivityTimer() {
-	// 	if (inactivityTimer) {
-	// 		clearTimeout(inactivityTimer);
-	// 	}
-	// 	if (!screensaverActive) {
-	// 		inactivityTimer = setTimeout(() => {
-	// 			// Only activate screensaver, don't hide the chart
-	// 			screensaverActive = true;
-	// 		}, INACTIVITY_TIMEOUT);
-	// 	}
-	// }
-
-	// function toggleScreensaver() {
-	// 	screensaverActive = !screensaverActive;
-	// 	// If turning off screensaver, reset the inactivity timer
-	// 	if (!screensaverActive) {
-	// 		resetInactivityTimer();
-	// 	}
-	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -786,12 +769,8 @@
 		let newWidth = clientX;
 		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
-		// Manage resize
-		if (newWidth < minWidth) {
-			leftMenuWidth = 0;
-		} else {
-			leftMenuWidth = Math.min(newWidth, maxLeftSidebarWidth);
-		}
+		// Enforce minimum and maximum width without auto-closing
+		leftMenuWidth = Math.max(leftMinWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
 		updateChartWidth();
 	}
@@ -810,7 +789,7 @@
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
-			leftMenuWidth = 300;
+			leftMenuWidth = leftMinWidth;
 		}
 		updateChartWidth();
 	}
@@ -845,7 +824,6 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
-	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
 	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
@@ -862,7 +840,7 @@
 		}}
 		on:close={hideAuthModal}
 	/>
-	<!--<Algo />-->
+
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
@@ -886,89 +864,90 @@
 				</div>
 			{/if}
 
-			<!-- Main content area -->
-			<div class="main-content">
-				<!-- Chart area -->
-				<div class="chart-wrapper">
-					<ChartContainer width={chartWidth} />
-					<!-- DEPRECATED: Screensaver functionality -->
-					<!-- {#if screensaverActive}
-						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if} -->
-				</div>
+			<!-- Main content and sidebar wrapper -->
+			<div class="main-and-sidebar-wrapper">
+				<!-- Top bar -->
+				<TopBar instance={$activeChartInstance || {}} />
 
-				<!-- Bottom windows container -->
-				<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
-					{#each bottomWindows as w}
-						<div class="bottom-window">
-							<div class="window-content">
-								{#if w.type === 'screener'}
-									<Screener />
-								{:else if w.type === 'strategies'}
-									<Strategies />
-									<!-- {:else if w.type === 'account'}
-									<Account /> -->
-								{:else if w.type === 'settings'}
-									<Settings />
-								{/if}
+				<!-- Content below top bar -->
+				<div class="content-below-topbar">
+					<!-- Main content area -->
+					<div class="main-content">
+						<!-- Chart area -->
+						<div class="chart-wrapper">
+							<ChartContainer width={chartWidth} />
+						</div>
+
+						<!-- Bottom windows container -->
+						<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
+							{#each bottomWindows as w}
+								<div class="bottom-window">
+									<div class="window-content">
+										{#if w.type === 'screener'}
+											<Screener />
+										{:else if w.type === 'strategies'}
+											<Strategies />
+										{:else if w.type === 'settings'}
+											<Settings />
+										{/if}
+									</div>
+								</div>
+							{/each}
+							{#if bottomWindows.length > 0}
+								<div
+									class="bottom-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startBottomResize}
+									on:keydown={handleKeyboardBottomResize}
+									tabindex="0"
+								></div>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Sidebar -->
+					{#if $menuWidth > 0}
+						<div class="sidebar" style="width: {$menuWidth}px;">
+							<div
+								class="resize-handle"
+								role="separator"
+								aria-orientation="vertical"
+								on:mousedown={startResize}
+								on:touchstart={startResize}
+								on:keydown={handleKeyboardResize}
+								tabindex="0"
+							/>
+							<div class="sidebar-content">
+								<!-- Main sidebar content -->
+								<div class="main-sidebar-content">
+									{#if $activeMenu === 'watchlist'}
+										<Watchlist />
+									{:else if $activeMenu === 'alerts'}
+										<Alerts />
+										<!--{:else if $activeMenu === 'news'}
+										<News />-->
+									{/if}
+								</div>
+
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
-					{/each}
-					{#if bottomWindows.length > 0}
-						<div
-							class="bottom-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startBottomResize}
-							on:keydown={handleKeyboardBottomResize}
-							tabindex="0"
-						></div>
 					{/if}
 				</div>
 			</div>
-
-			<!-- Sidebar -->
-			{#if $menuWidth > 0}
-				<div class="sidebar" style="width: {$menuWidth}px;">
-					<div
-						class="resize-handle"
-						role="separator"
-						aria-orientation="vertical"
-						on:mousedown={startResize}
-						on:touchstart={startResize}
-						on:keydown={handleKeyboardResize}
-						tabindex="0"
-					/>
-					<div class="sidebar-content">
-						<!-- Main sidebar content -->
-						<div class="main-sidebar-content">
-							{#if $activeMenu === 'watchlist'}
-								<Watchlist />
-							{:else if $activeMenu === 'alerts'}
-								<Alerts />
-								<!--{:else if $activeMenu === 'study'}
-								<Study />-->
-								<!--{:else if $activeMenu === 'news'}
-								<News />-->
-							{/if}
-						</div>
-
-						<div
-							class="sidebar-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startSidebarResize}
-							on:touchstart|preventDefault={startSidebarResize}
-							on:keydown={handleKeyboardSidebarResize}
-							tabindex="0"
-						></div>
-
-						<div class="ticker-info-container" style="height: {tickerHeight}px">
-							<Quote />
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- Sidebar toggle buttons -->
@@ -1015,12 +994,6 @@
 			>
 				Screener
 			</button>
-			<!-- <button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
-				on:click={() => openBottomWindow('account')}
-			>
-				Account
-			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1116,8 +1089,7 @@
 				{:else}
 					Loading Time...
 				{/if}
-			</span>
-			-->
+			</span>	
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1170,6 +1142,8 @@
 		padding: 0;
 	}
 
+
+
 	.content-wrapper {
 		flex: 1;
 		display: flex;
@@ -1177,6 +1151,24 @@
 		min-height: 0;
 		position: relative;
 		margin-right: 45px;
+	}
+
+	.main-and-sidebar-wrapper {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		position: relative;
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	.content-below-topbar {
+		flex: 1;
+		display: flex;
+		position: relative;
+		overflow: hidden;
+		min-height: 0;
+		padding-top: 40px; /* Add padding for the absolutely positioned top bar */
 	}
 
 	.main-content {
@@ -1191,7 +1183,7 @@
 	.bottom-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: var(--c2);
+		background-color: #0F0F0F;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1200,7 +1192,7 @@
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 3;
-		border-top: 1px solid var(--c1);
+		border-top: 4px solid var(--c1);
 	}
 
 	.chart-wrapper {
@@ -1208,31 +1200,32 @@
 		position: relative;
 		overflow: hidden;
 		min-height: 0;
+		height: 100%; /* Ensure it takes available height */
 	}
 
 	.sidebar {
 		height: 100%;
-		background-color: var(--ui-bg-primary);
+		background-color: #0F0F0F;
 		display: flex;
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-left: 1px solid var(--ui-border);
+		border-left: 4px solid var(--c1);
 		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
 	.sidebar-buttons {
 		position: fixed;
-		top: 0;
+		top: 40px; /* Start below the top bar */
 		right: 0;
-		height: 100vh;
+		height: calc(100vh - 80px); /* Subtract both top bar and bottom bar heights */
 		width: 45px;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--c2);
+		background-color: #0F0F0F;
 		z-index: 2;
 		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
+		border-left: 4px solid var(--c1);
 		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
@@ -1240,7 +1233,7 @@
 		width: 4px;
 		height: 100%;
 		cursor: ew-resize;
-		background-color: var(--c4);
+		background-color: var(--c1);
 		flex-shrink: 0;
 		transition: background-color 0.2s;
 		position: absolute;
@@ -1254,7 +1247,7 @@
 	}
 
 	.resize-handle:hover {
-		background-color: var(--c3);
+		background-color: var(--c1);
 	}
 
 	.side-btn {
@@ -1377,14 +1370,14 @@
 		left: 0;
 		right: 0;
 		height: 4px;
-		background: var(--c4);
+		background: var(--c1);
 		cursor: ns-resize;
 		z-index: 100;
 		transition: background-color 0.2s;
 	}
 
 	.bottom-resize-handle:hover {
-		background: var(--c3);
+		background: var(--c1);
 	}
 
 	.sidebar-content {
@@ -1493,7 +1486,7 @@
 
 	.sidebar-resize-handle {
 		height: 4px;
-		background: var(--c4);
+		background: var(--c1);
 		cursor: ns-resize;
 		margin: -2px 0;
 		z-index: 10;
@@ -1502,7 +1495,7 @@
 	}
 
 	.sidebar-resize-handle:hover {
-		background: var(--c3);
+		background: var(--c1);
 	}
 
 	.profile-button {
@@ -1518,12 +1511,12 @@
 	/* Add styles for left sidebar */
 	.left-sidebar {
 		height: 100%;
-		background-color: var(--ui-bg-primary);
+		background-color: #0F0F0F;
 		display: flex;
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
+		border-right: 4px solid var(--c1);
 		max-width: min(800px, calc(100vw - 60px));
 	}
 
@@ -1533,10 +1526,6 @@
 		right: -4px;
 	}
 
-	/* Query feature button styling */
-	.query-feature {
-		/* Remove special styling - use default button styles */
-	}
 
 	.chat-icon {
 		width: 20px;

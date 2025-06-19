@@ -113,7 +113,7 @@
         {#if $messagesStore.length > 0}
             <div class="header-buttons">
                 <button 
-                    class="header-btn share-btn glass glass--small glass--responsive" 
+                    class="header-btn share-btn" 
                     on:click={handleShareConversation}
                     disabled={!currentConversationId}
                     title="Share Current Conversation"
@@ -125,7 +125,7 @@
                     </svg>
                     Share
                 </button>
-                <button class="header-btn new-chat-btn glass glass--small glass--responsive" on:click={clearConversation} disabled={isLoading}>
+                <button class="header-btn new-chat-btn" on:click={clearConversation} disabled={isLoading}>
                     <svg viewBox="0 0 24 24" width="14" height="14">
                         <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
                     </svg>
