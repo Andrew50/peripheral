@@ -102,16 +102,16 @@ type TickerEventsAPIResponse struct {
 }
 
 // GetTickerEventsCustom bypasses the SDK to call the API directly
-func GetTickerEventsCustom(client *polygon.Client, id string, apiKey string) ([]models.TickerEventResult, error) {
+func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) ([]models.TickerEventResult, error) {
 	// Validate ticker ID to prevent URL manipulation
 	if id == "" || len(id) > 10 || strings.ContainsAny(id, "/:?#[]@!$&'()*+,;=") {
 		return nil, fmt.Errorf("invalid ticker ID: %s", id)
 	}
 
-	polygonUrl := fmt.Sprintf("https://api.polygon.io/vX/reference/tickers/%s/events?apiKey=%s", id, apiKey)
+	polygonURL := fmt.Sprintf("https://api.polygon.io/vX/reference/tickers/%s/events?apiKey=%s", id, apiKey)
 
 	// #nosec G107 - URL is constructed with validated ticker ID for Polygon API only
-	resp, err := http.Get(polygonUrl)
+	resp, err := http.Get(polygonURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
