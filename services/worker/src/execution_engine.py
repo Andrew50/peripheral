@@ -13,7 +13,10 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 
-from .data_provider import DataProvider
+try:
+    from .data_provider import DataProvider
+except ImportError:
+    from data_provider import DataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,10 @@ class PythonExecutionEngine:
             "functools",
             "re",
             "json",
+            "fuzzywuzzy",
+            "difflib",
+            "string",
+            "unicodedata",
         }
 
         self.restricted_builtins = {
@@ -612,6 +619,501 @@ class PythonExecutionEngine:
             else:
                 return [False] * min_len
 
+        # ==================== ENHANCED SYMBOL SEARCH & UNIVERSE FUNCTIONS ====================
+
+        def fuzzy_search_symbols(query: str, threshold: int = 80, limit: int = 10) -> List[Dict]:
+            """
+            Fuzzy search for symbols using difflib for approximate matching
+            Can be used to find tickers when you have partial/approximate names
+            """
+            import difflib
+            
+            # Get all available symbols from scan_universe with no filters
+            universe_data = scan_universe(filters=None, sort_by="market_cap", limit=1000)
+            all_symbols = universe_data.get("data", [])
+            
+            if not query or not all_symbols:
+                return []
+            
+            query = query.upper().strip()
+            matches = []
+            
+            for symbol_data in all_symbols:
+                ticker = symbol_data.get("ticker", "")
+                # Calculate similarity ratio for ticker
+                ticker_ratio = difflib.SequenceMatcher(None, query, ticker).ratio() * 100
+                
+                if ticker_ratio >= threshold:
+                    matches.append({
+                        "ticker": ticker,
+                        "similarity": round(ticker_ratio, 2),
+                        "symbol_data": symbol_data
+                    })
+            
+            # Sort by similarity score
+            matches.sort(key=lambda x: x["similarity"], reverse=True)
+            return matches[:limit]
+
+        def search_by_name(company_name: str, threshold: int = 70, limit: int = 10) -> List[Dict]:
+            """
+            Search symbols by company name using fuzzy matching
+            Useful when you know company name but not ticker
+            """
+            import difflib
+            
+            # Get all available symbols with their info
+            universe_data = scan_universe(filters=None, sort_by="market_cap", limit=1000)
+            all_symbols = universe_data.get("data", [])
+            
+            if not company_name or not all_symbols:
+                return []
+            
+            query = company_name.lower().strip()
+            matches = []
+            
+            for symbol_data in all_symbols:
+                ticker = symbol_data.get("ticker", "")
+                # Get full company info
+                company_info = get_security_info(ticker)
+                company_full_name = company_info.get("name", "").lower()
+                
+                if company_full_name:
+                    # Calculate similarity for company name
+                    name_ratio = difflib.SequenceMatcher(None, query, company_full_name).ratio() * 100
+                    
+                    if name_ratio >= threshold:
+                        matches.append({
+                            "ticker": ticker,
+                            "company_name": company_info.get("name", ""),
+                            "similarity": round(name_ratio, 2),
+                            "symbol_data": symbol_data,
+                            "company_info": company_info
+                        })
+            
+            # Sort by similarity score
+            matches.sort(key=lambda x: x["similarity"], reverse=True)
+            return matches[:limit]
+
+        def autocomplete_symbols(partial: str, limit: int = 10) -> List[str]:
+            """
+            Autocomplete ticker symbols for partial matches
+            Returns list of tickers that start with the partial string
+            """
+            if not partial:
+                return []
+            
+            partial = partial.upper().strip()
+            universe_data = scan_universe(filters=None, sort_by="market_cap", limit=1000)
+            all_symbols = universe_data.get("data", [])
+            
+            matches = []
+            for symbol_data in all_symbols:
+                ticker = symbol_data.get("ticker", "")
+                if ticker.startswith(partial):
+                    matches.append(ticker)
+            
+            return sorted(matches)[:limit]
+
+        def get_advanced_universe(universe_type: str, **kwargs) -> List[str]:
+            """
+            Advanced universe selection with multiple built-in universes
+            Can be extended by strategies to create custom universes
+            """
+            universe_type = universe_type.lower()
+            
+            if universe_type == "sp500":
+                # Large cap US stocks - filter by market cap
+                data = scan_universe(
+                    filters={"min_market_cap": 10000000000},  # $10B+
+                    sort_by="market_cap", 
+                    limit=500
+                )
+                return data.get("symbols", [])
+            
+            elif universe_type == "nasdaq100":
+                # Tech-heavy large caps - filter by sector and market cap
+                data = scan_universe(
+                    filters={
+                        "sector": "Technology",
+                        "min_market_cap": 5000000000  # $5B+
+                    },
+                    sort_by="market_cap", 
+                    limit=100
+                )
+                return data.get("symbols", [])
+            
+            elif universe_type == "smallcap":
+                # Small cap stocks
+                data = scan_universe(
+                    filters={"min_market_cap": 300000000},  # $300M - $2B range
+                    sort_by="market_cap", 
+                    limit=kwargs.get("limit", 200)
+                )
+                # Filter to exclude large caps (assuming $2B+ is large cap)
+                return [s for s in data.get("symbols", [])][:kwargs.get("limit", 200)]
+            
+            elif universe_type == "sector":
+                # Sector-specific universe
+                sector = kwargs.get("sector", "Technology")
+                data = scan_universe(
+                    filters={"sector": sector},
+                    sort_by="market_cap",
+                    limit=kwargs.get("limit", 100)
+                )
+                return data.get("symbols", [])
+            
+            elif universe_type == "high_volume":
+                # High volume stocks for day trading
+                data = scan_universe(
+                    filters={"min_market_cap": 1000000000},  # $1B+
+                    sort_by="volume",
+                    limit=kwargs.get("limit", 50)
+                )
+                return data.get("symbols", [])
+            
+            elif universe_type == "custom":
+                # Custom universe based on multiple criteria
+                filters = kwargs.get("filters", {})
+                sort_by = kwargs.get("sort_by", "market_cap")
+                limit = kwargs.get("limit", 100)
+                
+                data = scan_universe(
+                    filters=filters,
+                    sort_by=sort_by,
+                    limit=limit
+                )
+                return data.get("symbols", [])
+            
+            else:
+                # Default to basic list
+                return ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
+
+        def create_custom_universe(criteria: Dict, name: str = "custom") -> Dict:
+            """
+            Create a custom universe based on complex criteria
+            Returns both symbols and metadata for further analysis
+            """
+            # Extract criteria
+            min_market_cap = criteria.get("min_market_cap", 0)
+            max_market_cap = criteria.get("max_market_cap", float('inf'))
+            sectors = criteria.get("sectors", [])
+            min_volume = criteria.get("min_volume", 0)
+            max_pe = criteria.get("max_pe_ratio", float('inf'))
+            
+            # Start with base universe
+            base_data = scan_universe(filters=None, sort_by="market_cap", limit=1000)
+            all_symbols = base_data.get("data", [])
+            
+            filtered_symbols = []
+            
+            for symbol_data in all_symbols:
+                # Apply market cap filter
+                market_cap = symbol_data.get("market_cap", 0) or 0
+                if not (min_market_cap <= market_cap <= max_market_cap):
+                    continue
+                
+                # Apply sector filter
+                if sectors:
+                    sector = symbol_data.get("sector", "")
+                    if sector not in sectors:
+                        continue
+                
+                # Apply volume filter
+                volume = symbol_data.get("volume", 0) or 0
+                if volume < min_volume:
+                    continue
+                
+                # Apply PE ratio filter (approximate)
+                eps = symbol_data.get("eps", 0) or 0
+                price = symbol_data.get("price", 0) or 0
+                if eps > 0 and price > 0:
+                    pe_ratio = price / eps
+                    if pe_ratio > max_pe:
+                        continue
+                
+                filtered_symbols.append(symbol_data)
+            
+            return {
+                "name": name,
+                "criteria": criteria,
+                "symbols": [s["ticker"] for s in filtered_symbols],
+                "count": len(filtered_symbols),
+                "data": filtered_symbols
+            }
+
+        def find_similar_stocks(reference_ticker: str, similarity_type: str = "sector", limit: int = 10) -> List[Dict]:
+            """
+            Find stocks similar to a reference stock based on various criteria
+            similarity_type: 'sector', 'industry', 'market_cap', 'fundamentals'
+            """
+            ref_info = get_security_info(reference_ticker)
+            if not ref_info:
+                return []
+            
+            ref_fundamentals = get_fundamental_data(reference_ticker)
+            
+            if similarity_type == "sector":
+                # Find stocks in same sector
+                sector = ref_info.get("sector", "")
+                if sector:
+                    data = scan_universe(
+                        filters={"sector": sector},
+                        sort_by="market_cap",
+                        limit=limit + 1  # +1 to exclude reference
+                    )
+                    similar = [s for s in data.get("data", []) if s.get("ticker") != reference_ticker]
+                    return similar[:limit]
+            
+            elif similarity_type == "industry":
+                # Find stocks in same industry (would need industry-based filtering)
+                industry = ref_info.get("industry", "")
+                # This would require additional filtering logic
+                return []
+            
+            elif similarity_type == "market_cap":
+                # Find stocks with similar market cap
+                ref_market_cap = ref_fundamentals.get("market_cap", 0)
+                if ref_market_cap > 0:
+                    # Define range as +/- 50% of reference market cap
+                    min_cap = ref_market_cap * 0.5
+                    max_cap = ref_market_cap * 1.5
+                    
+                    # Would need custom filtering for market cap range
+                    data = scan_universe(
+                        filters={"min_market_cap": min_cap},
+                        sort_by="market_cap",
+                        limit=limit * 2
+                    )
+                    
+                    # Filter out reference and apply max cap
+                    similar = []
+                    for s in data.get("data", []):
+                        if s.get("ticker") == reference_ticker:
+                            continue
+                        s_market_cap = s.get("market_cap", 0)
+                        if s_market_cap <= max_cap:
+                            similar.append(s)
+                    
+                    return similar[:limit]
+            
+            return []
+
+        # ==================== EXAMPLE STRATEGY IMPLEMENTATIONS ====================
+        
+        def example_enhanced_symbol_search():
+            """
+            Example demonstrating all enhanced symbol search capabilities
+            This shows how strategies can implement sophisticated ticker/company finding
+            """
+            log("Starting enhanced symbol search examples")
+            
+            # Example 1: Fuzzy ticker search
+            log("1. Fuzzy ticker search for 'APL' (should find AAPL)")
+            fuzzy_results = fuzzy_search_symbols("APL", threshold=60, limit=5)
+            for result in fuzzy_results:
+                log(f"   Found: {result['ticker']} (similarity: {result['similarity']}%)")
+            
+            # Example 2: Company name search
+            log("2. Searching for companies with 'apple' in name")
+            name_results = search_by_name("apple", threshold=60, limit=3)
+            for result in name_results:
+                log(f"   Found: {result['ticker']} - {result['company_name']} (similarity: {result['similarity']}%)")
+            
+            # Example 3: Autocomplete
+            log("3. Autocomplete for 'AA'")
+            autocomplete_results = autocomplete_symbols("AA", limit=5)
+            log(f"   Autocomplete results: {autocomplete_results}")
+            
+            # Example 4: Advanced universe selection
+            log("4. Getting S&P 500 universe")
+            sp500_symbols = get_advanced_universe("sp500")
+            log(f"   S&P 500 contains {len(sp500_symbols)} symbols")
+            
+            log("5. Getting tech sector universe")
+            tech_symbols = get_advanced_universe("sector", sector="Technology", limit=10)
+            log(f"   Tech sector top 10: {tech_symbols}")
+            
+            # Example 5: Custom universe creation
+            log("6. Creating custom universe with complex criteria")
+            custom_criteria = {
+                "min_market_cap": 1000000000,  # $1B+
+                "max_market_cap": 50000000000,  # Max $50B
+                "sectors": ["Technology", "Healthcare"],
+                "min_volume": 1000000,  # 1M+ volume
+                "max_pe_ratio": 30
+            }
+            custom_universe = create_custom_universe(custom_criteria, "mid_cap_tech_health")
+            log(f"   Custom universe '{custom_universe['name']}' has {custom_universe['count']} symbols")
+            log(f"   First 5: {custom_universe['symbols'][:5]}")
+            
+            # Example 6: Find similar stocks
+            log("7. Finding stocks similar to AAPL by sector")
+            similar_to_aapl = find_similar_stocks("AAPL", similarity_type="sector", limit=5)
+            similar_tickers = [s['ticker'] for s in similar_to_aapl]
+            log(f"   Stocks similar to AAPL: {similar_tickers}")
+            
+            return {
+                "fuzzy_search": fuzzy_results,
+                "name_search": name_results,
+                "autocomplete": autocomplete_results,
+                "sp500_count": len(sp500_symbols),
+                "tech_symbols": tech_symbols,
+                "custom_universe": custom_universe,
+                "similar_to_aapl": similar_tickers
+            }
+
+        def example_custom_classification_strategy():
+            """
+            Example showing how to implement custom stock classifications
+            This demonstrates how strategies can create their own categorization systems
+            """
+            import difflib
+            
+            log("Creating custom stock classification system")
+            
+            # Get universe to classify
+            all_stocks = scan_universe(filters=None, sort_by="market_cap", limit=200)
+            stock_data = all_stocks.get("data", [])
+            
+            # Custom classification categories
+            classifications = {
+                "mega_cap_tech": [],
+                "dividend_aristocrats": [],
+                "high_growth_small_cap": [],
+                "value_plays": [],
+                "momentum_leaders": [],
+                "defensive_stocks": []
+            }
+            
+            for stock in stock_data:
+                ticker = stock.get("ticker", "")
+                market_cap = stock.get("market_cap", 0) or 0
+                sector = stock.get("sector", "")
+                price = stock.get("price", 0) or 0
+                eps = stock.get("eps", 0) or 0
+                volume = stock.get("volume", 0) or 0
+                
+                # Get additional fundamentals
+                fundamentals = get_fundamental_data(ticker)
+                dividend = fundamentals.get("dividend", 0) or 0
+                
+                # Mega cap tech classification
+                if (market_cap > 100000000000 and  # $100B+
+                    sector == "Technology"):
+                    classifications["mega_cap_tech"].append(ticker)
+                
+                # Dividend aristocrats (simplified - just dividend paying large caps)
+                elif (market_cap > 10000000000 and  # $10B+
+                      dividend > 0):
+                    classifications["dividend_aristocrats"].append(ticker)
+                
+                # High growth small cap (simplified)
+                elif (market_cap < 2000000000 and  # Under $2B
+                      market_cap > 300000000):  # Over $300M
+                    classifications["high_growth_small_cap"].append(ticker)
+                
+                # Value plays (low PE ratio)
+                elif (eps > 0 and price > 0 and
+                      (price / eps) < 15):  # PE < 15
+                    classifications["value_plays"].append(ticker)
+                
+                # High volume momentum
+                elif volume > 5000000:  # 5M+ volume
+                    classifications["momentum_leaders"].append(ticker)
+                
+                # Defensive sectors
+                elif sector in ["Utilities", "Consumer Staples", "Healthcare"]:
+                    classifications["defensive_stocks"].append(ticker)
+            
+            # Log results
+            for category, symbols in classifications.items():
+                log(f"{category}: {len(symbols)} stocks - {symbols[:5]}...")
+            
+            return classifications
+
+        def example_advanced_screening_strategy():
+            """
+            Example showing advanced screening techniques that go beyond basic filters
+            Demonstrates how to implement complex multi-factor screening
+            """
+            log("Running advanced multi-factor screening")
+            
+            # Get base universe
+            base_universe = scan_universe(filters=None, sort_by="market_cap", limit=500)
+            all_stocks = base_universe.get("data", [])
+            
+            # Advanced screening criteria
+            screening_results = {
+                "quality_growth": [],
+                "contrarian_value": [],
+                "momentum_breakout": [],
+                "dividend_growth": [],
+                "turnaround_candidates": []
+            }
+            
+            for stock in all_stocks:
+                ticker = stock.get("ticker", "")
+                market_cap = stock.get("market_cap", 0) or 0
+                sector = stock.get("sector", "")
+                volume = stock.get("volume", 0) or 0
+                price = stock.get("price", 0) or 0
+                
+                # Get fundamentals for detailed analysis
+                fundamentals = get_fundamental_data(ticker)
+                if not fundamentals:
+                    continue
+                
+                eps = fundamentals.get("eps", 0) or 0
+                revenue = fundamentals.get("revenue", 0) or 0
+                debt = fundamentals.get("debt", 0) or 0
+                cash = fundamentals.get("cash", 0) or 0
+                book_value = fundamentals.get("book_value", 0) or 0
+                
+                # Quality Growth Screen
+                if (market_cap > 1000000000 and  # $1B+
+                    eps > 0 and revenue > 0 and
+                    debt < cash and  # Net cash position
+                    15 < (price / eps) < 25):  # Reasonable PE
+                    screening_results["quality_growth"].append({
+                        "ticker": ticker,
+                        "market_cap": market_cap,
+                        "pe_ratio": round(price / eps, 2) if eps > 0 else None,
+                        "net_cash": cash - debt
+                    })
+                
+                # Contrarian Value Screen
+                elif (market_cap > 500000000 and  # $500M+
+                      eps > 0 and price > 0 and
+                      (price / eps) < 10 and  # Very low PE
+                      book_value > 0 and
+                      price < book_value * 1.2):  # Near book value
+                    screening_results["contrarian_value"].append({
+                        "ticker": ticker,
+                        "pe_ratio": round(price / eps, 2),
+                        "price_to_book": round(price / book_value, 2) if book_value > 0 else None
+                    })
+                
+                # High volume momentum
+                elif volume > 2000000:  # High volume
+                    screening_results["momentum_breakout"].append({
+                        "ticker": ticker,
+                        "volume": volume,
+                        "sector": sector
+                    })
+            
+            # Limit results for each category
+            for category in screening_results:
+                screening_results[category] = screening_results[category][:10]
+            
+            # Log summary
+            for category, results in screening_results.items():
+                log(f"{category}: Found {len(results)} candidates")
+                if results:
+                    tickers = [r["ticker"] for r in results]
+                    log(f"  Top picks: {tickers[:3]}")
+            
+            return screening_results
+
         # Return all raw data accessor functions
         return {
             # Raw data retrieval
@@ -652,6 +1154,17 @@ class PythonExecutionEngine:
             "normalize_data": normalize_data,
             "vectorized_operation": vectorized_operation,
             "compare_lists": compare_lists,
+            # Enhanced universe functions
+            "fuzzy_search_symbols": fuzzy_search_symbols,
+            "search_by_name": search_by_name,
+            "autocomplete_symbols": autocomplete_symbols,
+            "get_advanced_universe": get_advanced_universe,
+            "create_custom_universe": create_custom_universe,
+            "find_similar_stocks": find_similar_stocks,
+            # Example strategies
+            "example_enhanced_symbol_search": example_enhanced_symbol_search,
+            "example_custom_classification_strategy": example_custom_classification_strategy,
+            "example_advanced_screening_strategy": example_advanced_screening_strategy,
         }
 
     def _get_strategy_helpers(self) -> Dict[str, Any]:
