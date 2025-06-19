@@ -265,6 +265,26 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 	}
 	return securities, nil
 }
+func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetTickerDetailsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	details, err := GetTickerMenuDetails(conn, 0, rawArgs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ticker details: %v", err)
+	}
+	detailsMap := details.(map[string]interface{})
+	return GetTickerMenuDetailsResults{
+		Ticker:                      detailsMap["ticker"].(string),
+		Name:                        detailsMap["name"].(sql.NullString),
+		PrimaryExchange:             detailsMap["primary_exchange"].(sql.NullString),
+		MarketCap:                   detailsMap["market_cap"].(sql.NullFloat64),
+		ShareClassSharesOutstanding: detailsMap["share_class_shares_outstanding"].(sql.NullInt64),
+		Industry:                    detailsMap["industry"].(sql.NullString),
+		Sector:                      detailsMap["sector"].(sql.NullString),
+	}, nil
+}
 
 // GetTickerDetailsArgs represents a structure for handling GetTickerDetailsArgs data.
 type GetTickerDetailsArgs struct {
@@ -275,22 +295,20 @@ type GetTickerDetailsArgs struct {
 
 // GetTickerMenuDetailsResults represents a structure for handling GetTickerMenuDetailsResults data.
 type GetTickerMenuDetailsResults struct {
-	Ticker          string          `json:"ticker"`
-	Name            sql.NullString  `json:"name"`
-	Market          sql.NullString  `json:"market"`
-	Locale          sql.NullString  `json:"locale"`
-	PrimaryExchange sql.NullString  `json:"primary_exchange"`
-	Active          string          `json:"active"`
-	MarketCap       sql.NullFloat64 `json:"market_cap"`
-	Description     sql.NullString  `json:"description"`
-	Logo            sql.NullString  `json:"logo"`
-	Icon            sql.NullString  `json:"icon"`
-
-	ShareClassSharesOutstanding sql.NullInt64 `json:"share_class_shares_outstanding"`
-
-	Industry    sql.NullString `json:"industry"`
-	Sector      sql.NullString `json:"sector"`
-	TotalShares sql.NullInt64  `json:"totalShares"`
+	Ticker                      string          `json:"ticker"`
+	Name                        sql.NullString  `json:"name"`
+	Market                      sql.NullString  `json:"market,omitempty"`
+	Locale                      sql.NullString  `json:"locale,omitempty"`
+	PrimaryExchange             sql.NullString  `json:"primary_exchange"`
+	Active                      string          `json:"active,omitempty"`
+	MarketCap                   sql.NullFloat64 `json:"market_cap"`
+	Description                 sql.NullString  `json:"description,omitempty"`
+	Logo                        sql.NullString  `json:"logo,omitempty"`
+	Icon                        sql.NullString  `json:"icon,omitempty"`
+	ShareClassSharesOutstanding sql.NullInt64   `json:"share_class_shares_outstanding"`
+	Industry                    sql.NullString  `json:"industry"`
+	Sector                      sql.NullString  `json:"sector"`
+	TotalShares                 sql.NullInt64   `json:"totalShares"`
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
