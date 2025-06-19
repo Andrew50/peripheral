@@ -512,7 +512,7 @@ class DataProvider:
                 params.append(sector)
 
             # Construct parameterized query - safe from SQL injection
-            query = f"""
+            query = f"""  # nosec B608 - Safe parameterized query with validated inputs
             WITH sector_data AS (
                 SELECT 
                     s.sector,

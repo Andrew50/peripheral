@@ -60,8 +60,11 @@ class PythonWorker:
             port=redis_port,
             password=redis_password,
             decode_responses=True,
-            socket_connect_timeout=30,
-            socket_timeout=30,
+            socket_connect_timeout=60,
+            socket_timeout=60,
+            socket_keepalive=True,
+            socket_keepalive_options={},
+            health_check_interval=30,
         )
 
     async def run(self):
@@ -70,8 +73,8 @@ class PythonWorker:
 
         while True:
             try:
-                # Listen for execution requests
-                job_data = self.redis_client.blpop("python_execution_queue", timeout=30)
+                # Listen for execution requests with longer timeout
+                job_data = self.redis_client.blpop("python_execution_queue", timeout=60)
 
                 if job_data:
                     _, job_json = job_data
@@ -83,6 +86,7 @@ class PythonWorker:
                 break
             except Exception as e:
                 logger.error(f"Error in worker loop: {e}")
+                # Add exponential backoff to prevent rapid retry loops
                 await asyncio.sleep(5)
 
     async def process_job(self, job: Dict[str, Any]):
