@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, onDestroy } from 'svelte';
-	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest, streamingChatRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
 	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/utils/types/types';
@@ -602,12 +602,23 @@
 			const currentActiveChart = $activeChartInstance; // Get current active chart instance
 			
 			try {
-				const response = await privateRequest('getQuery', {
+				const response = await streamingChatRequest('getQuery', {
 					query: finalQuery,
 					context: $contextItems, // Send only manually added context items
 					activeChartContext: currentActiveChart, // Send active chart separately
 					conversation_id: currentConversationId || '' // Send empty string for new chats
-				}, false, false, currentAbortController?.signal);
+				}, 
+				// Progress callback
+				(progress: string) => {
+					functionStatusStore.set({
+						type: 'function_status',
+						userMessage: progress
+					});
+				},
+				// Partial content callback (for future use)
+				undefined,
+				// Abort signal
+				currentAbortController?.signal);
 
 				// Check if request was cancelled while awaiting
 				if (requestCancelled) {

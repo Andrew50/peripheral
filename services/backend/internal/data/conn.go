@@ -76,12 +76,12 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 
 		// Configure connection pool with better defaults
-		poolConfig.MaxConns = 20                               // Set max connections to 20 (default is 4)
-		poolConfig.MinConns = 3                                // Keep at least 5 connections in the pool
-		poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
-		poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
-		poolConfig.HealthCheckPeriod = 1 * time.Minute         // How often to check connection health
-		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Connection timeout
+		poolConfig.MaxConns = 25                                // Increase max connections
+		poolConfig.MinConns = 5                                 // Increase minimum connections
+		poolConfig.MaxConnLifetime = 1 * time.Hour              // Maximum lifetime of a connection
+		poolConfig.MaxConnIdleTime = 30 * time.Minute           // Maximum idle time for a connection
+		poolConfig.HealthCheckPeriod = 30 * time.Second         // More frequent health checks
+		poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // Increase connection timeout
 
 		// Create the connection pool with our custom configuration
 		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
