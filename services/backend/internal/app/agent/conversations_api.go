@@ -3,6 +3,7 @@ package agent
 import (
 	"backend/internal/data"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,63 @@ import (
 	"strings"
 	"time"
 )
+
+// GetUserConversations retrieves all conversations for a user
+func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+	query := `
+		SELECT 
+			c.conversation_id,
+			c.title,
+			c.created_at,
+			c.updated_at,
+			c.message_count,
+			(
+				SELECT cm.query 
+				FROM conversation_messages cm 
+				WHERE cm.conversation_id = c.conversation_id AND archived = FALSE
+				ORDER BY cm.message_order DESC 
+				LIMIT 1
+			) as last_message_query
+		FROM conversations c
+		WHERE c.user_id = $1
+		ORDER BY c.updated_at DESC`
+
+	rows, err := conn.DB.Query(context.Background(), query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var conversations []ConversationSummary
+	for rows.Next() {
+		var conv ConversationSummary
+		var lastMessageQuery sql.NullString
+
+		err := rows.Scan(
+			&conv.ConversationID,
+			&conv.Title,
+			&conv.CreatedAt,
+			&conv.UpdatedAt,
+			&conv.MessageCount,
+			&lastMessageQuery,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan conversation row: %w", err)
+		}
+
+		if lastMessageQuery.Valid {
+			conv.LastMessageQuery = lastMessageQuery.String
+		}
+
+		conversations = append(conversations, conv)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating conversation rows: %w", err)
+	}
+
+	return conversations, nil
+}
 
 // ConversationSwitchRequest represents the request for switching conversations
 type ConversationSwitchRequest struct {
@@ -19,48 +77,6 @@ type ConversationSwitchRequest struct {
 // ConversationDeleteRequest represents the request for deleting a conversation
 type ConversationDeleteRequest struct {
 	ConversationID string `json:"conversation_id"`
-}
-
-// ConversationCreateRequest represents the request for creating a new conversation
-type ConversationCreateRequest struct {
-	Query string `json:"query,omitempty"` // Optional first message
-}
-
-// NewConversation frontend endpoint to create a new conversation
-// Note: The frontend "New Chat" button creates conversations lazily when the first message is sent.
-// This endpoint is still available for API clients or explicit conversation creation.
-func NewConversation(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
-	var req ConversationCreateRequest
-	if err := json.Unmarshal(args, &req); err != nil {
-		return nil, fmt.Errorf("error parsing request: %w", err)
-	}
-
-	// Generate title from query if provided, otherwise use default
-	title := "New Conversation"
-	if req.Query != "" {
-		if len(req.Query) > 40 {
-			title = req.Query[:40]
-		} else {
-			title = req.Query
-		}
-	}
-
-	conversationID, err := CreateConversationInDB(context.Background(), conn, userID, title)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create conversation: %w", err)
-	}
-
-	// Set as active conversation
-	if err := SetActiveConversationID(context.Background(), conn, userID, conversationID); err != nil {
-		log.Printf("Warning: failed to set active conversation: %v", err)
-	}
-
-	// If there's an initial query, we could optionally handle it here
-	// For now, just return the conversation ID
-	return map[string]interface{}{
-		"conversation_id": conversationID,
-		"title":           title,
-	}, nil
 }
 
 // SwitchConversation frontend endpoint to switch to a different conversation

@@ -146,6 +146,47 @@ func SendFunctionStatus(userID int, userMessage string) {
 	}
 }
 
+// TitleUpdate represents a conversation title update message sent to the client
+// when the title is generated or updated asynchronously.
+type TitleUpdate struct {
+	Type           string `json:"type"` // Will be "title_update"
+	ConversationID string `json:"conversation_id"`
+	Title          string `json:"title"`
+}
+
+// SendTitleUpdate sends a title update for a conversation to a specific user.
+func SendTitleUpdate(userID int, conversationID string, title string) {
+	titleUpdate := TitleUpdate{
+		Type:           "title_update",
+		ConversationID: conversationID,
+		Title:          title,
+	}
+
+	jsonData, err := json.Marshal(titleUpdate)
+	if err != nil {
+		////fmt.Printf("Error marshaling title update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		////fmt.Printf("SendTitleUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		////fmt.Printf("Sent title update to user %d for conversation %s: '%s'\n", userID, conversationID, title)
+	default:
+		// Drop the title update if the channel is full - it's not critical
+		////fmt.Printf("SendTitleUpdate: send channel blocked for userID: %d. Dropping title update.\n", userID)
+	}
+}
+
 func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {

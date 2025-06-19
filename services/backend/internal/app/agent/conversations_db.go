@@ -2,10 +2,12 @@ package agent
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,63 +86,6 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	}
 
 	return returnedID, nil
-}
-
-// GetUserConversations retrieves all conversations for a user
-func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
-	query := `
-		SELECT 
-			c.conversation_id,
-			c.title,
-			c.created_at,
-			c.updated_at,
-			c.message_count,
-			(
-				SELECT cm.query 
-				FROM conversation_messages cm 
-				WHERE cm.conversation_id = c.conversation_id AND archived = FALSE
-				ORDER BY cm.message_order DESC 
-				LIMIT 1
-			) as last_message_query
-		FROM conversations c
-		WHERE c.user_id = $1
-		ORDER BY c.updated_at DESC`
-
-	rows, err := conn.DB.Query(context.Background(), query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query conversations: %w", err)
-	}
-	defer rows.Close()
-
-	var conversations []ConversationSummary
-	for rows.Next() {
-		var conv ConversationSummary
-		var lastMessageQuery sql.NullString
-
-		err := rows.Scan(
-			&conv.ConversationID,
-			&conv.Title,
-			&conv.CreatedAt,
-			&conv.UpdatedAt,
-			&conv.MessageCount,
-			&lastMessageQuery,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan conversation row: %w", err)
-		}
-
-		if lastMessageQuery.Valid {
-			conv.LastMessageQuery = lastMessageQuery.String
-		}
-
-		conversations = append(conversations, conv)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating conversation rows: %w", err)
-	}
-
-	return conversations, nil
 }
 
 // GetConversationMessages retrieves all messages for a conversation
@@ -370,33 +315,6 @@ func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) 
 	return nil
 }
 
-// AutoGenerateConversationTitle generates a title from the first message
-func AutoGenerateConversationTitle(query string) string {
-	const maxLength = 50
-
-	if len(query) <= maxLength {
-		return query
-	}
-
-	// Truncate and add ellipsis
-	truncated := query[:maxLength-3]
-	// Find the last space to avoid cutting words
-	if lastSpace := findLastSpace(truncated); lastSpace > 0 {
-		truncated = truncated[:lastSpace]
-	}
-
-	return truncated + "..."
-}
-
-func findLastSpace(s string) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == ' ' {
-			return i
-		}
-	}
-	return -1
-}
-
 // GetMessageContextItems retrieves context items from a specific message
 func GetMessageContextItems(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) ([]map[string]interface{}, error) {
 	querySQL := `SELECT context_items FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
@@ -420,21 +338,6 @@ func GetMessageContextItems(ctx context.Context, conn *data.Conn, conversationID
 	return contextItems, nil
 }
 
-// SavePendingMessageToActiveConversation saves a pending message when a request starts
-func SavePendingMessageToActiveConversation(ctx context.Context, conn *data.Conn, userID int, query string, contextItems []map[string]interface{}) error {
-	// Create pending message
-	now := time.Now()
-	message := ChatMessage{
-		Query:        query,
-		ContextItems: contextItems,
-		Timestamp:    now,
-		Status:       "pending",
-	}
-
-	// Use cached save function
-	return SaveMessageToActiveConversationWithCache(ctx, conn, userID, message)
-}
-
 // SavePendingMessageToConversation saves a pending message to a specific conversation ID
 func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contextItems []map[string]interface{}) (string, string, error) {
 	// Create pending message
@@ -445,15 +348,16 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 		Timestamp:    now,
 		Status:       "pending",
 	}
-
 	// If conversationID is empty, create a new conversation
 	if conversationID == "" {
-		title := AutoGenerateConversationTitle(query)
-		newConversationID, err := CreateConversationInDB(ctx, conn, userID, title)
+		newConversationID, err := CreateConversationInDB(ctx, conn, userID, "New Chat")
 		if err != nil {
 			return "", "", fmt.Errorf("failed to create new conversation: %w", err)
 		}
 		conversationID = newConversationID
+
+		// Generate better title asynchronously and send via websocket
+		go generateTitleAsync(conn, userID, query, conversationID)
 	}
 
 	// Save to database
@@ -463,6 +367,27 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	}
 
 	return conversationID, messageID, nil
+}
+
+// generateTitleAsync generates a title in the background and sends it via websocket
+func generateTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if betterTitle, err := GenerateConversationTitle(conn, userID, query); err == nil {
+		// Send title update via websocket
+		socket.SendTitleUpdate(userID, conversationID, betterTitle)
+		// Update the title in the database
+		_, updateErr := conn.DB.Exec(ctx,
+			"UPDATE conversations SET title = $1 WHERE conversation_id = $2",
+			betterTitle, conversationID)
+		if updateErr != nil {
+			log.Printf("Failed to update conversation title: %v", updateErr)
+			return
+		}
+	} else {
+		log.Printf("Failed to generate better title: %v", err)
+	}
 }
 
 // UpdatePendingMessageToCompleted updates a pending message to completed status
@@ -693,7 +618,7 @@ func FindMessageToEdit(ctx context.Context, conn *data.Conn, conversationID stri
 	return foundOrder, foundQuery, nil
 }
 
-// PruneMessagesAfterOrder archives all messages after the specified order instead of deleting them
+// PruneMessagesAfterOrder archives all messages after the specified order
 func PruneMessagesAfterOrder(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) error {
 	querySQL := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
 
