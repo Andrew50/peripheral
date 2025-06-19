@@ -660,3 +660,13 @@
 2025-06-18 23:49:49,556 - __main__ - INFO - Python worker 326aff6e8110 starting...
 2025-06-18 23:49:49,622 - __main__ - INFO - Python worker c0059435283f starting...
 2025-06-18 23:49:49,697 - __main__ - INFO - Python worker f61dd72921dc starting...
+2025-06-18 23:51:57,255 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:51:58,155 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:52:00,412 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:54:06,054 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:54:08,654 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:56:15,431 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:56:16,715 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:57:54,525 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-18 23:58:26,204 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:00:00,179 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
