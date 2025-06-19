@@ -40,10 +40,12 @@ When analyzing user requests, pay special attention to these common patterns:
 1. Your function MUST be named `classify_symbol(symbol)` and take a single symbol parameter
 2. Return `True` if the symbol matches the criteria, `False` otherwise
 3. Use the provided data accessor functions - don't try to import external libraries
-4. Handle errors gracefully (return `False` if data is unavailable)
-5. Include clear comments explaining your logic
-6. Be efficient - avoid unnecessary data fetches
-7. For gap calculations, use: `gap_percent = ((open_price - prev_close) / prev_close) * 100`
+4. DO NOT use any import statements, especially `from typing import` - the execution environment has restricted imports
+5. DO NOT use typing annotations like List, Dict, Tuple, Union, Optional - use built-in types (list, dict, etc.)
+6. Handle errors gracefully (return `False` if data is unavailable)
+7. Include clear comments explaining your logic
+8. Be efficient - avoid unnecessary data fetches
+9. For gap calculations, use: `gap_percent = ((open_price - prev_close) / prev_close) * 100`
 
 ## Response Format
 
