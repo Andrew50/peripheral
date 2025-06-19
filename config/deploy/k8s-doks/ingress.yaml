@@ -1,0 +1,109 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+#  annotations:
+#    kubernetes.io/ingress.class: "ingress-nginx"
+#
+#    # Timeouts
+#    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+#    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+#    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+#    nginx.ingress.kubernetes.io/send-timeout: "600"
+#
+#    # Increase body size
+#    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+#
+#    # Buffers
+#    nginx.ingress.kubernetes.io/proxy-buffer-size: "256k"
+#    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+#    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "512k"
+#
+#    # WebSockets
+#    nginx.ingress.kubernetes.io/enable-websocket: "true"
+#    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+#
+#    # SSL redirect off (since Cloudflare is terminating SSL)
+#    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: digitalocean.atlantis.trading
+      http:
+        paths:
+          - path: /private
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /public
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: www.digitalocean.atlantis.trading
+      http:
+        paths:
+          - path: /private
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /public
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+
+
