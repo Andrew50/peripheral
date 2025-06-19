@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '$lib/styles/global.css';
+	import '$lib/styles/app.css';
 	import ChartContainer from '$lib/features/chart/chartContainer.svelte';
 	import Alerts from '$lib/features/alerts/alert.svelte';
 	import RightClick from '$lib/components/rightClick.svelte';
@@ -16,12 +17,9 @@
 
 	// Windows that will be opened in draggable divs
 	import Screener from '$lib/features/screener/screener.svelte';
-	import Account from '$lib/features/account/account.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings/settings.svelte';
 	import News from '$lib/features/news/news.svelte';
-	import Deploy from '$lib/features/deploy/deploy.svelte';
-	import Backtest from '$lib/features/backtest/backtest.svelte';
 
 	// Replay logic
 	import {
@@ -75,6 +73,9 @@
 		hideExtendedHoursToggle,
 		activeChartInstance
 	} from '$lib/features/chart/interface';
+
+	// Import TopBar component
+	import TopBar from '$lib/components/TopBar.svelte';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
@@ -142,7 +143,7 @@
 	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 550; // <-- Set initial width to 300
+	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
 
 	// Calendar state
@@ -167,9 +168,6 @@
 	import { connect } from '$lib/utils/stream/socket';
 	connect();
 
-	// DEPRECATED: Screensaver import
-	// Add import near the top with other imports
-	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -291,9 +289,7 @@
 			privateRequest<string>('verifyAuth', {}).catch(() => {
 				goto('/login');
 			});
-		} else {
-			console.log('Public viewing mode for conversation:', sharedConversationId);
-		}
+		} 
 
 		initStores();
 
@@ -316,10 +312,7 @@
 	});
 
 	onDestroy(() => {
-		// DEPRECATED: Screensaver inactivity timer cleanup
-		// if (inactivityTimer) {
-		// 	clearTimeout(inactivityTimer);
-		// }
+
 
 		// Clean up all activity listeners
 		if (browser && document) {
@@ -328,13 +321,6 @@
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
-
-			// DEPRECATED: Clean up screensaver activity listeners
-			// Clean up all activity listeners
-			// const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-			// activityEvents.forEach((event) => {
-			// 	document.removeEventListener(event, resetInactivityTimer);
-			// });
 		}
 	});
 
@@ -363,6 +349,7 @@
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 	let maxWidth = 600; // Restored to 600px maximum
+	let leftMinWidth = 600; // Minimum width for chat left menu
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -705,27 +692,6 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
-	// DEPRECATED: Screensaver functions
-	// Add function after other function declarations
-	// function resetInactivityTimer() {
-	// 	if (inactivityTimer) {
-	// 		clearTimeout(inactivityTimer);
-	// 	}
-	// 	if (!screensaverActive) {
-	// 		inactivityTimer = setTimeout(() => {
-	// 			// Only activate screensaver, don't hide the chart
-	// 			screensaverActive = true;
-	// 		}, INACTIVITY_TIMEOUT);
-	// 	}
-	// }
-
-	// function toggleScreensaver() {
-	// 	screensaverActive = !screensaverActive;
-	// 	// If turning off screensaver, reset the inactivity timer
-	// 	if (!screensaverActive) {
-	// 		resetInactivityTimer();
-	// 	}
-	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -786,12 +752,8 @@
 		let newWidth = clientX;
 		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
-		// Manage resize
-		if (newWidth < minWidth) {
-			leftMenuWidth = 0;
-		} else {
-			leftMenuWidth = Math.min(newWidth, maxLeftSidebarWidth);
-		}
+		// Enforce minimum and maximum width without auto-closing
+		leftMenuWidth = Math.max(leftMinWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
 		updateChartWidth();
 	}
@@ -810,7 +772,7 @@
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
-			leftMenuWidth = 300;
+			leftMenuWidth = leftMinWidth;
 		}
 		updateChartWidth();
 	}
@@ -845,7 +807,6 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
-	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
 	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
@@ -862,7 +823,7 @@
 		}}
 		on:close={hideAuthModal}
 	/>
-	<!--<Algo />-->
+
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
@@ -886,89 +847,90 @@
 				</div>
 			{/if}
 
-			<!-- Main content area -->
-			<div class="main-content">
-				<!-- Chart area -->
-				<div class="chart-wrapper">
-					<ChartContainer width={chartWidth} />
-					<!-- DEPRECATED: Screensaver functionality -->
-					<!-- {#if screensaverActive}
-						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if} -->
-				</div>
+			<!-- Main content and sidebar wrapper -->
+			<div class="main-and-sidebar-wrapper">
+				<!-- Top bar -->
+				<TopBar instance={$activeChartInstance || {}} />
 
-				<!-- Bottom windows container -->
-				<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
-					{#each bottomWindows as w}
-						<div class="bottom-window">
-							<div class="window-content">
-								{#if w.type === 'screener'}
-									<Screener />
-								{:else if w.type === 'strategies'}
-									<Strategies />
-									<!-- {:else if w.type === 'account'}
-									<Account /> -->
-								{:else if w.type === 'settings'}
-									<Settings />
-								{/if}
+				<!-- Content below top bar -->
+				<div class="content-below-topbar">
+					<!-- Main content area -->
+					<div class="main-content">
+						<!-- Chart area -->
+						<div class="chart-wrapper">
+							<ChartContainer width={chartWidth} />
+						</div>
+
+						<!-- Bottom windows container -->
+						<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
+							{#each bottomWindows as w}
+								<div class="bottom-window">
+									<div class="window-content">
+										{#if w.type === 'screener'}
+											<Screener />
+										{:else if w.type === 'strategies'}
+											<Strategies />
+										{:else if w.type === 'settings'}
+											<Settings />
+										{/if}
+									</div>
+								</div>
+							{/each}
+							{#if bottomWindows.length > 0}
+								<div
+									class="bottom-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startBottomResize}
+									on:keydown={handleKeyboardBottomResize}
+									tabindex="0"
+								></div>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Sidebar -->
+					{#if $menuWidth > 0}
+						<div class="sidebar" style="width: {$menuWidth}px;">
+							<div
+								class="resize-handle"
+								role="separator"
+								aria-orientation="vertical"
+								on:mousedown={startResize}
+								on:touchstart={startResize}
+								on:keydown={handleKeyboardResize}
+								tabindex="0"
+							/>
+							<div class="sidebar-content">
+								<!-- Main sidebar content -->
+								<div class="main-sidebar-content">
+									{#if $activeMenu === 'watchlist'}
+										<Watchlist />
+									{:else if $activeMenu === 'alerts'}
+										<Alerts />
+										<!--{:else if $activeMenu === 'news'}
+										<News />-->
+									{/if}
+								</div>
+
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
-					{/each}
-					{#if bottomWindows.length > 0}
-						<div
-							class="bottom-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startBottomResize}
-							on:keydown={handleKeyboardBottomResize}
-							tabindex="0"
-						></div>
 					{/if}
 				</div>
 			</div>
-
-			<!-- Sidebar -->
-			{#if $menuWidth > 0}
-				<div class="sidebar" style="width: {$menuWidth}px;">
-					<div
-						class="resize-handle"
-						role="separator"
-						aria-orientation="vertical"
-						on:mousedown={startResize}
-						on:touchstart={startResize}
-						on:keydown={handleKeyboardResize}
-						tabindex="0"
-					/>
-					<div class="sidebar-content">
-						<!-- Main sidebar content -->
-						<div class="main-sidebar-content">
-							{#if $activeMenu === 'watchlist'}
-								<Watchlist />
-							{:else if $activeMenu === 'alerts'}
-								<Alerts />
-								<!--{:else if $activeMenu === 'study'}
-								<Study />-->
-								<!--{:else if $activeMenu === 'news'}
-								<News />-->
-							{/if}
-						</div>
-
-						<div
-							class="sidebar-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startSidebarResize}
-							on:touchstart|preventDefault={startSidebarResize}
-							on:keydown={handleKeyboardSidebarResize}
-							tabindex="0"
-						></div>
-
-						<div class="ticker-info-container" style="height: {tickerHeight}px">
-							<Quote />
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- Sidebar toggle buttons -->
@@ -1015,12 +977,6 @@
 			>
 				Screener
 			</button>
-			<!-- <button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
-				on:click={() => openBottomWindow('account')}
-			>
-				Account
-			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1116,8 +1072,7 @@
 				{:else}
 					Loading Time...
 				{/if}
-			</span>
-			-->
+			</span>	
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1156,443 +1111,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	.page {
-		width: 100vw;
-		height: 100vh;
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-		background-color: var(--c1);
-		margin: 0;
-		padding: 0;
-	}
-
-	.content-wrapper {
-		flex: 1;
-		display: flex;
-		height: 100%;
-		min-height: 0;
-		position: relative;
-		margin-right: 45px;
-	}
-
-	.main-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		position: relative;
-		overflow: hidden;
-		min-height: 0;
-	}
-
-	.bottom-bar {
-		height: 40px;
-		min-height: 40px;
-		background-color: var(--c2);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0 10px;
-		gap: 10px;
-		flex-shrink: 0;
-		width: 100%;
-		z-index: 3;
-		border-top: 1px solid var(--c1);
-	}
-
-	.chart-wrapper {
-		flex: 1;
-		position: relative;
-		overflow: hidden;
-		min-height: 0;
-	}
-
-	.sidebar {
-		height: 100%;
-		background-color: var(--ui-bg-primary);
-		display: flex;
-		flex-direction: column;
-		position: relative;
-		flex-shrink: 0;
-		border-left: 1px solid var(--ui-border);
-		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
-	}
-
-	.sidebar-buttons {
-		position: fixed;
-		top: 0;
-		right: 0;
-		height: 100vh;
-		width: 45px;
-		display: flex;
-		flex-direction: column;
-		background-color: var(--c2);
-		z-index: 2;
-		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
-		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
-	}
-
-	.resize-handle {
-		width: 4px;
-		height: 100%;
-		cursor: ew-resize;
-		background-color: var(--c4);
-		flex-shrink: 0;
-		transition: background-color 0.2s;
-		position: absolute;
-		left: -4px;
-		top: 0;
-		z-index: 100;
-		overflow: hidden;
-		font-size: 0;
-		line-height: 0;
-		text-indent: -9999px;
-	}
-
-	.resize-handle:hover {
-		background-color: var(--c3);
-	}
-
-	.side-btn {
-		flex: 0 0 45px;
-	}
-
-	.menu-icon {
-		filter: brightness(0) invert(1);
-		width: 24px;
-		height: 24px;
-		object-fit: contain;
-	}
-
-	.bottom-bar-left {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
-
-	.bottom-bar-right {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-left: auto;
-	}
-
-	.bottom-bar .pfp {
-		width: 28px;
-		height: 28px;
-		border-radius: 50%;
-		cursor: pointer;
-		margin-left: 8px;
-		background-color: var(--c3);
-		border: 1px solid var(--c4);
-		overflow: hidden;
-		display: block;
-	}
-
-	.speed-label {
-		display: flex;
-		align-items: center;
-		color: #fff;
-		font-size: 0.9em;
-	}
-
-	.speed-input {
-		width: 50px;
-		margin-left: 5px;
-		height: 24px;
-		background: var(--c1);
-		border: 1px solid var(--c3);
-		color: #fff;
-		border-radius: 3px;
-		padding: 0 4px;
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		color: #fff;
-		cursor: pointer;
-	}
-
-	.window-content {
-		padding: 10px;
-		background-color: var(--ui-bg-primary);
-		height: calc(100% - 30px);
-		overflow-y: auto;
-		scrollbar-width: none;
-		-ms-overflow-style: none;
-	}
-	.window-content::-webkit-scrollbar {
-		display: none;
-	}
-
-	:global(body) {
-		margin: 0;
-		padding: 0;
-		overflow: hidden;
-	}
-
-	:global(*) {
-		box-sizing: border-box;
-	}
-
-	.bottom-windows-container {
-		position: relative;
-		height: var(--bottom-height);
-		background: var(--c1);
-		border-top: 1px solid var(--c4);
-		overflow: hidden;
-		display: flex;
-		border-top: none;
-		max-width: 100%; /* Ensure container doesn't overflow */
-	}
-
-	.bottom-window {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-		background: var(--ui-bg-primary);
-		min-width: 0; /* Allow window to shrink */
-	}
-
-	.window-content {
-		flex: 1;
-		overflow-y: auto;
-		overflow-x: hidden; /* Prevent horizontal overflow */
-		padding: 8px;
-		scrollbar-width: none;
-		height: 100%;
-		background: var(--ui-bg-primary);
-		min-width: 0; /* Allow content to shrink */
-	}
-
-	.bottom-resize-handle {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 4px;
-		background: var(--c4);
-		cursor: ns-resize;
-		z-index: 100;
-		transition: background-color 0.2s;
-	}
-
-	.bottom-resize-handle:hover {
-		background: var(--c3);
-	}
-
-	.sidebar-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-		height: 100%;
-	}
-
-	.main-sidebar-content {
-		flex: 1;
-		overflow-y: auto;
-		scrollbar-width: none;
-		min-height: 0;
-	}
-
-	.ticker-info-container {
-		flex-shrink: 0;
-		border-top: 1px solid var(--c3);
-		background: var(--c2);
-		height: var(--ticker-height);
-		overflow-y: auto;
-		overflow-x: hidden;
-	}
-
-	.main-sidebar-content::-webkit-scrollbar,
-	.sidebar-content::-webkit-scrollbar {
-		display: none;
-	}
-
-	.settings-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background-color: rgba(0, 0, 0, 0.7);
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		z-index: 1000;
-	}
-
-	.settings-modal {
-		width: 85%;
-		height: 90%;
-		min-width: 800px;
-		min-height: 600px;
-		background-color: var(--c1);
-		border-radius: 8px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.settings-header {
-		background-color: var(--c2);
-		padding: 16px 24px;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		border-bottom: 1px solid var(--c3);
-	}
-
-	.settings-header h2 {
-		margin: 0;
-		color: var(--f1);
-		font-size: 1.25rem;
-		font-weight: 600;
-	}
-
-	.settings-header .close-btn {
-		background: none;
-		border: none;
-		color: var(--f1);
-		font-size: 1.75rem;
-		cursor: pointer;
-		padding: 0 8px;
-		line-height: 1;
-	}
-
-	.settings-header .close-btn:hover {
-		color: var(--f2);
-	}
-
-	.settings-content {
-		flex: 1;
-		overflow: hidden;
-	}
-
-	/* Prevent text-selection while dragging */
-	.bottom-bar,
-	.bottom-bar button,
-	.side-btn,
-	.menu-icon,
-	.pfp,
-	.close-btn,
-	.speed-label {
-		-webkit-user-select: none;
-		-moz-user-select: none;
-		-ms-user-select: none;
-		user-select: none;
-	}
-
-	.sidebar-resize-handle {
-		height: 4px;
-		background: var(--c4);
-		cursor: ns-resize;
-		margin: -2px 0;
-		z-index: 10;
-		position: relative;
-		transition: background-color 0.2s;
-	}
-
-	.sidebar-resize-handle:hover {
-		background: var(--c3);
-	}
-
-	.profile-button {
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	/* Add styles for left sidebar */
-	.left-sidebar {
-		height: 100%;
-		background-color: var(--ui-bg-primary);
-		display: flex;
-		flex-direction: column;
-		position: relative;
-		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
-		max-width: min(800px, calc(100vw - 60px));
-	}
-
-	/* Add right position for left sidebar handle */
-	.resize-handle.right {
-		left: auto;
-		right: -4px;
-	}
-
-	/* Query feature button styling */
-	.query-feature {
-		/* Remove special styling - use default button styles */
-	}
-
-	.chat-icon {
-		width: 20px;
-		height: 20px;
-		color: var(--f1);
-	}
-
-	/* Calendar and Replay button styles */
-	.calendar-button,
-	.replay-button {
-		padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
-		min-width: auto; /* Remove fixed min-width */
-		min-height: 32px;
-		display: inline-flex; /* Use inline-flex */
-		justify-content: center;
-		align-items: center;
-		gap: 0.4rem; /* Add gap between icon and text */
-	}
-
-	.calendar-button svg,
-	.replay-button svg {
-		width: 16px; /* Adjust icon size */
-		height: 16px;
-		fill: currentColor; /* Use button text color for icon */
-	}
-
-	.replay-button.play {
-		/* Optional: Style play button differently, maybe green? */
-		/* background-color: var(--success-color-faded); */
-		/* border-color: var(--success-color); */
-		/* color: var(--success-color); */
-	}
-
-	.replay-button.pause {
-		/* Optional: Style pause button differently, maybe orange? */
-		/* background-color: var(--warning-color-faded); */
-		/* border-color: var(--warning-color); */
-		/* color: var(--warning-color); */
-	}
-
-	.replay-button.stop {
-		/* Optional: Style stop button differently, maybe red? */
-		/* background-color: var(--error-color-faded); */
-		/* border-color: var(--error-color); */
-		/* color: var(--error-color); */
-	}
-
-	.calendar-button:hover,
-	.replay-button:hover {
-		background-color: var(--ui-bg-hover);
-		border-color: var(--ui-border-hover);
-	}
-
-	.calendar-button:active,
-	.replay-button:active {
-		background-color: var(--ui-bg-active);
-		transform: translateY(1px);
-	}
-</style>

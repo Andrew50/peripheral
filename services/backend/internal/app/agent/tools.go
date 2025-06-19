@@ -57,11 +57,7 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The security ticker symbol to get details for.",
-						},
-						"securityId": {
+						"securityID": {
 							Type:        genai.TypeInteger,
 							Description: "The securityID of the security to get details for",
 						},
@@ -69,7 +65,7 @@ var (
 					Required: []string{"securityID"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetTickerMenuDetails),
+			Function:      wrapWithContext(helpers.GetAgentTickerMenuDetails),
 			StatusMessage: "Getting {ticker} details...",
 		},
 		//watchlist

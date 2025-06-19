@@ -18,11 +18,9 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
-            #env:
-            #- name: PUBLIC_BASE_URL
-            #value: ${PUBLIC_BASE_URL}
-            #- name: PUBLIC_RELATIVE_PATHS
-            #value: "false"
+          env:
+            - name: ORIGIN
+              value: "https://${INGRESS_HOST}"
           resources:
             requests:
               cpu: 100m

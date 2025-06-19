@@ -80,6 +80,14 @@ else
   exit 1
 fi
 
+# Fix sequence values to prevent duplicate key errors
+log "Synchronizing SERIAL sequences with existing data..."
+if psql -U postgres -d postgres -f /app/scripts/fix-sequences.sql > /dev/null 2>&1; then
+  log "Sequence synchronization completed successfully."
+else
+  error_log "Sequence synchronization failed, but continuing startup..."
+fi
+
 # Stop the temporary PostgreSQL instance cleanly
 log "Stopping temporary PostgreSQL instance (PID: $PG_PID)..."
 # Send SIGTERM for graceful shutdown

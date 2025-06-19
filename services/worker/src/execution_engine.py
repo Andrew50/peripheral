@@ -18,11 +18,17 @@ try:
 except ImportError:
     from data_provider import DataProvider
 
+try:
+    from .data_provider import DataProvider
+except ImportError:
+    from data_provider import DataProvider
+
 logger = logging.getLogger(__name__)
 
 
 class PythonExecutionEngine:
     """Secure Python execution engine for trading strategies"""
+
 
     def __init__(self):
         self.allowed_modules = {
@@ -58,7 +64,42 @@ class PythonExecutionEngine:
             "difflib",
             "string",
             "unicodedata",
+            "numpy",
+            "np",
+            "pandas",
+            "pd",
+            "scipy",
+            "sklearn",
+            "matplotlib",
+            "seaborn",
+            "plotly",
+            "ta",
+            "talib",
+            "zipline",
+            "pyfolio",
+            "quantlib",
+            "statsmodels",
+            "arch",
+            "empyrical",
+            "tsfresh",
+            "stumpy",
+            "prophet",
+            "math",
+            "statistics",
+            "datetime",
+            "time",
+            "typing",
+            "collections",
+            "itertools",
+            "functools",
+            "re",
+            "json",
+            "fuzzywuzzy",
+            "difflib",
+            "string",
+            "unicodedata",
         }
+
 
         self.restricted_builtins = {
             "open",
@@ -188,6 +229,7 @@ class PythonExecutionEngine:
     async def _create_safe_globals(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Create a safe global namespace for execution"""
 
+
         # Start with restricted builtins
         safe_builtins = {
             name: getattr(builtins, name)
@@ -195,7 +237,57 @@ class PythonExecutionEngine:
             if not name.startswith("_") and name not in self.restricted_builtins
         }
 
+
         # Add safe built-in functions
+        safe_builtin_names = {
+            "len",
+            "range",
+            "enumerate",
+            "zip",
+            "map",
+            "filter",
+            "sorted",
+            "sum",
+            "min",
+            "max",
+            "abs",
+            "round",
+            "pow",
+            "divmod",
+            "int",
+            "float",
+            "str",
+            "bool",
+            "list",
+            "tuple",
+            "dict",
+            "set",
+            "any",
+            "all",
+            "isinstance",
+            "issubclass",
+            "hasattr",
+            "getattr",
+            "setattr",
+            "type",
+            "callable",
+            "print",
+        }
+
+        for name in safe_builtin_names:
+            if hasattr(builtins, name):
+                safe_builtins[name] = getattr(builtins, name)
+
+        # Create safe __import__ function
+        def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+            """Safe import function that only allows whitelisted modules"""
+            if name in self.allowed_modules:
+                return __import__(name, globals, locals, fromlist, level)
+            else:
+                raise ImportError(f"Module '{name}' is not allowed")
+
+        # Add safe import to builtins
+        safe_builtins["__import__"] = safe_import
         safe_builtin_names = {
             "len",
             "range",
@@ -254,11 +346,22 @@ class PythonExecutionEngine:
             },
             "__name__": "__main__",
             "__doc__": None,
+            "__builtins__": {
+                k: getattr(builtins, k) if k != "__import__" else safe_import 
+                for k in safe_builtins if hasattr(builtins, k) or k == "__import__"
+            },
+            "__name__": "__main__",
+            "__doc__": None,
         }
+
 
         # Add allowed modules
         for module_name in self.allowed_modules:
             try:
+                if module_name == "np":
+                    exec_globals["np"] = np
+                elif module_name == "pd":
+                    exec_globals["pd"] = pd
                 if module_name == "np":
                     exec_globals["np"] = np
                 elif module_name == "pd":
@@ -269,6 +372,7 @@ class PythonExecutionEngine:
             except ImportError:
                 logger.warning(f"Module {module_name} not available")
                 continue
+
 
         # Add context data
         exec_globals.update(
@@ -284,7 +388,21 @@ class PythonExecutionEngine:
         exec_globals.update(data_functions)
 
         # Add other helper functions
+        exec_globals.update(
+            {
+                "input_data": context.get("input_data", {}),
+                "prepared_data": context.get("prepared_data", {}),
+                "libraries": context.get("libraries", []),
+            }
+        )
+
+        # Add strategy helper functions and data accessors
+        data_functions = await self._get_data_accessor_functions()
+        exec_globals.update(data_functions)
+
+        # Add other helper functions
         exec_globals.update(self._get_strategy_helpers())
+
 
         return exec_globals
 
@@ -295,21 +413,35 @@ class PythonExecutionEngine:
         def make_sync_wrapper(async_func):
             """Convert async function to sync for use in strategy code"""
             import asyncio
+            import concurrent.futures
 
             def wrapper(*args, **kwargs):
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # If we're already in an async context, create a new task
-                        import concurrent.futures
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(
-                                asyncio.run, async_func(*args, **kwargs)
-                            )
-                            return future.result()
-                    else:
-                        return loop.run_until_complete(async_func(*args, **kwargs))
+                    # Get the current event loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        return asyncio.run(async_func(*args, **kwargs))
+                    
+                    # We're in an async context - we need to handle this carefully
+                    # Create a new task in the current loop
+                    task = loop.create_task(async_func(*args, **kwargs))
+                    
+                    # Since we can't await in a sync context, we need to run this
+                    # in a separate thread with its own event loop
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        def run_async():
+                            new_loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(new_loop)
+                            try:
+                                return new_loop.run_until_complete(async_func(*args, **kwargs))
+                            finally:
+                                new_loop.close()
+                        
+                        future = executor.submit(run_async)
+                        return future.result(timeout=30)  # Add timeout to prevent hanging
+                        
                 except Exception as e:
                     logger.error(f"Error in data accessor function: {e}")
                     return {}
@@ -898,6 +1030,226 @@ class PythonExecutionEngine:
             
             return []
 
+        # ==================== SIMPLE PAIR TRADING & SIMILAR TICKER FUNCTIONS ====================
+        
+        def find_pairs(ticker: str, pair_type: str = "sector") -> List[str]:
+            """
+            Simple function to find potential pair trading candidates
+            Usage: pairs = find_pairs("SNOW", "sector")  # Find sector peers for SNOW
+            """
+            info = get_security_info(ticker)
+            if not info:
+                return []
+            
+            if pair_type == "sector":
+                # Find stocks in same sector with similar market cap
+                sector = info.get("sector", "")
+                if not sector:
+                    return []
+                
+                # Get sector peers
+                sector_stocks = scan_universe(
+                    filters={"sector": sector},
+                    sort_by="market_cap",
+                    limit=20
+                )
+                
+                # Filter out the original ticker and return just ticker symbols
+                pairs = [s.get("ticker") for s in sector_stocks.get("data", []) 
+                        if s.get("ticker") != ticker]
+                return pairs[:5]  # Return top 5 candidates
+            
+            elif pair_type == "industry":
+                # For industry-based pairing (simplified - using sector for now)
+                return find_pairs(ticker, "sector")
+            
+            elif pair_type == "size":
+                # Find stocks with similar market cap regardless of sector
+                fundamentals = get_fundamental_data(ticker)
+                ref_market_cap = fundamentals.get("market_cap", 0)
+                
+                if ref_market_cap > 0:
+                    # Get stocks in similar market cap range (+/- 30%)
+                    min_cap = ref_market_cap * 0.7
+                    max_cap = ref_market_cap * 1.3
+                    
+                    similar_size = scan_universe(
+                        filters={"min_market_cap": min_cap},
+                        sort_by="market_cap",
+                        limit=30
+                    )
+                    
+                    # Filter by max cap and exclude original
+                    pairs = []
+                    for s in similar_size.get("data", []):
+                        if s.get("ticker") == ticker:
+                            continue
+                        s_market_cap = s.get("market_cap", 0)
+                        if s_market_cap <= max_cap:
+                            pairs.append(s.get("ticker"))
+                    
+                    return pairs[:5]
+            
+            return []
+
+        def get_similar_tickers(ticker: str, count: int = 3) -> List[str]:
+            """
+            Get similar tickers for correlation/pair analysis
+            Usage: similar = get_similar_tickers("AFRM", 3)
+            """
+            return find_pairs(ticker, "sector")[:count]
+
+        def check_correlation(ticker1: str, ticker2: str, days: int = 30) -> float:
+            """
+            Calculate simple correlation between two tickers
+            Returns correlation coefficient (-1 to 1)
+            Usage: corr = check_correlation("SNOW", "AFRM", 30)
+            """
+            # Get price data for both tickers
+            data1 = get_price_data(ticker1, "1d", days)
+            data2 = get_price_data(ticker2, "1d", days)
+            
+            if not data1 or not data2:
+                return 0.0
+            
+            prices1 = data1.get("close", [])
+            prices2 = data2.get("close", [])
+            
+            if len(prices1) < 2 or len(prices2) < 2:
+                return 0.0
+            
+            # Calculate returns
+            returns1 = calculate_returns(prices1, 1)
+            returns2 = calculate_returns(prices2, 1)
+            
+            if len(returns1) != len(returns2) or len(returns1) < 2:
+                return 0.0
+            
+            # Calculate correlation
+            n = len(returns1)
+            sum_x = sum(returns1)
+            sum_y = sum(returns2)
+            sum_xx = sum(x * x for x in returns1)
+            sum_yy = sum(y * y for y in returns2)
+            sum_xy = sum(returns1[i] * returns2[i] for i in range(n))
+            
+            # Correlation formula
+            numerator = n * sum_xy - sum_x * sum_y
+            denominator = ((n * sum_xx - sum_x * sum_x) * (n * sum_yy - sum_y * sum_y)) ** 0.5
+            
+            if denominator == 0:
+                return 0.0
+            
+            correlation = numerator / denominator
+            return round(correlation, 3)
+
+        def create_pair_trade(long_ticker: str, short_ticker: str, market_filter: str = None) -> Dict:
+            """
+            Simple pair trade setup with market condition check
+            Usage: pair = create_pair_trade("SNOW", "AFRM", "QQQ_up")
+            """
+            # Check market condition if specified
+            market_condition = True
+            if market_filter:
+                if market_filter == "QQQ_up":
+                    qqq_data = get_price_data("QQQ", "1d", 5)
+                    if qqq_data and qqq_data.get("close"):
+                        prices = qqq_data["close"]
+                        if len(prices) >= 2:
+                            # Check if QQQ is trending up (current > 5-day average)
+                            recent_avg = sum(prices[-5:]) / min(5, len(prices))
+                            current = prices[-1]
+                            market_condition = current > recent_avg
+                        else:
+                            market_condition = False
+                elif market_filter == "SPY_down":
+                    spy_data = get_price_data("SPY", "1d", 5)
+                    if spy_data and spy_data.get("close"):
+                        prices = spy_data["close"]
+                        if len(prices) >= 2:
+                            recent_avg = sum(prices[-5:]) / min(5, len(prices))
+                            current = prices[-1]
+                            market_condition = current < recent_avg
+                        else:
+                            market_condition = False
+            
+            # Get current data for both tickers
+            long_data = get_price_data(long_ticker, "1d", 1)
+            short_data = get_price_data(short_ticker, "1d", 1)
+            
+            # Calculate correlation
+            correlation = check_correlation(long_ticker, short_ticker, 20)
+            
+            return {
+                "long_ticker": long_ticker,
+                "short_ticker": short_ticker,
+                "market_condition_met": market_condition,
+                "market_filter": market_filter,
+                "correlation": correlation,
+                "long_price": long_data.get("close", [0])[-1] if long_data else 0,
+                "short_price": short_data.get("close", [0])[-1] if short_data else 0,
+                "trade_viable": market_condition and abs(correlation) > 0.3,
+                "timestamp": long_data.get("timestamps", [""])[-1] if long_data else ""
+            }
+
+        def quick_sector_pairs(sector: str, market_condition: str = None) -> List[Dict]:
+            """
+            Quick function to find all potential pairs in a sector
+            Usage: tech_pairs = quick_sector_pairs("Technology", "QQQ_up")
+            """
+            # Get sector stocks
+            sector_stocks = scan_universe(
+                filters={"sector": sector},
+                sort_by="market_cap",
+                limit=10
+            )
+            
+            tickers = [s.get("ticker") for s in sector_stocks.get("data", [])]
+            
+            if len(tickers) < 2:
+                return []
+            
+            # Create all possible pairs
+            pairs = []
+            for i in range(len(tickers)):
+                for j in range(i + 1, len(tickers)):
+                    ticker1, ticker2 = tickers[i], tickers[j]
+                    
+                    # Check correlation
+                    corr = check_correlation(ticker1, ticker2, 20)
+                    
+                    # Only include pairs with meaningful correlation
+                    if abs(corr) > 0.2:
+                        pair_data = create_pair_trade(ticker1, ticker2, market_condition)
+                        pairs.append(pair_data)
+            
+            # Sort by correlation strength
+            pairs.sort(key=lambda x: abs(x.get("correlation", 0)), reverse=True)
+            return pairs[:5]  # Return top 5 pairs
+
+        def market_condition_check(index_ticker: str = "QQQ", direction: str = "up", days: int = 3) -> bool:
+            """
+            Simple market condition check
+            Usage: qqq_bullish = market_condition_check("QQQ", "up", 3)
+            """
+            data = get_price_data(index_ticker, "1d", days + 2)
+            if not data or not data.get("close"):
+                return False
+            
+            prices = data["close"]
+            if len(prices) < days + 1:
+                return False
+            
+            current = prices[-1]
+            past_avg = sum(prices[-(days+1):-1]) / days
+            
+            if direction == "up":
+                return current > past_avg * 1.01  # 1% threshold
+            elif direction == "down":
+                return current < past_avg * 0.99  # 1% threshold
+            else:
+                return True
+
         # ==================== EXAMPLE STRATEGY IMPLEMENTATIONS ====================
         
         def example_enhanced_symbol_search():
@@ -1114,6 +1466,110 @@ class PythonExecutionEngine:
             
             return screening_results
 
+        def example_simple_pair_trade_strategy():
+            """
+            Simple example of SNOW/AFRM pair trade when QQQ is going up
+            Demonstrates how easy it is to use the new pair trading functions
+            """
+            log("Testing SNOW/AFRM pair trade strategy")
+            
+            # Step 1: Check if QQQ is trending up
+            qqq_bullish = market_condition_check("QQQ", "up", 3)
+            log(f"QQQ bullish condition: {qqq_bullish}")
+            
+            if not qqq_bullish:
+                log("QQQ not trending up, skipping trade")
+                return {"trade_signal": "none", "reason": "QQQ not bullish"}
+            
+            # Step 2: Check correlation between SNOW and AFRM
+            correlation = check_correlation("SNOW", "AFRM", 20)
+            log(f"SNOW/AFRM correlation: {correlation}")
+            
+            # Step 3: Get similar tickers to both for context
+            snow_peers = get_similar_tickers("SNOW", 3)
+            afrm_peers = get_similar_tickers("AFRM", 3)
+            log(f"SNOW similar tickers: {snow_peers}")
+            log(f"AFRM similar tickers: {afrm_peers}")
+            
+            # Step 4: Create the pair trade setup
+            pair_trade = create_pair_trade("SNOW", "AFRM", "QQQ_up")
+            log(f"Pair trade viable: {pair_trade['trade_viable']}")
+            
+            # Step 5: Additional analysis - check both stocks individually
+            snow_data = get_price_data("SNOW", "1d", 5)
+            afrm_data = get_price_data("AFRM", "1d", 5)
+            
+            # Simple momentum check
+            if snow_data and afrm_data:
+                snow_prices = snow_data.get("close", [])
+                afrm_prices = afrm_data.get("close", [])
+                
+                if len(snow_prices) >= 2 and len(afrm_prices) >= 2:
+                    snow_momentum = (snow_prices[-1] / snow_prices[-2]) - 1
+                    afrm_momentum = (afrm_prices[-1] / afrm_prices[-2]) - 1
+                    
+                    log(f"SNOW 1-day momentum: {snow_momentum:.2%}")
+                    log(f"AFRM 1-day momentum: {afrm_momentum:.2%}")
+                    
+                    # Determine trade direction based on relative momentum
+                    if snow_momentum > afrm_momentum:
+                        trade_signal = "long_SNOW_short_AFRM"
+                        log("Signal: Long SNOW, Short AFRM (SNOW has better momentum)")
+                    else:
+                        trade_signal = "long_AFRM_short_SNOW" 
+                        log("Signal: Long AFRM, Short SNOW (AFRM has better momentum)")
+                else:
+                    trade_signal = "insufficient_data"
+            else:
+                trade_signal = "no_data"
+            
+            # Return comprehensive results
+            return {
+                "strategy": "SNOW_AFRM_pair_trade",
+                "market_condition": "QQQ_bullish" if qqq_bullish else "QQQ_neutral_bearish",
+                "correlation": correlation,
+                "pair_trade_setup": pair_trade,
+                "trade_signal": trade_signal,
+                "snow_peers": snow_peers,
+                "afrm_peers": afrm_peers,
+                "snow_price": pair_trade["long_price"] if trade_signal == "long_SNOW_short_AFRM" else pair_trade["short_price"],
+                "afrm_price": pair_trade["short_price"] if trade_signal == "long_SNOW_short_AFRM" else pair_trade["long_price"],
+                "timestamp": pair_trade["timestamp"]
+            }
+
+        def example_sector_pair_screening():
+            """
+            Example showing how to quickly screen for pair opportunities in a sector
+            """
+            log("Screening Technology sector for pair trading opportunities")
+            
+            # Get all tech pairs when QQQ is bullish
+            tech_pairs = quick_sector_pairs("Technology", "QQQ_up")
+            
+            log(f"Found {len(tech_pairs)} viable tech pairs")
+            
+            # Show top 3 pairs
+            top_pairs = []
+            for i, pair in enumerate(tech_pairs[:3]):
+                log(f"Pair {i+1}: {pair['long_ticker']} vs {pair['short_ticker']}")
+                log(f"  Correlation: {pair['correlation']}")
+                log(f"  Market condition met: {pair['market_condition_met']}")
+                log(f"  Trade viable: {pair['trade_viable']}")
+                
+                top_pairs.append({
+                    "rank": i + 1,
+                    "pair": f"{pair['long_ticker']}/{pair['short_ticker']}",
+                    "correlation": pair['correlation'],
+                    "viable": pair['trade_viable']
+                })
+            
+            return {
+                "sector": "Technology",
+                "total_pairs_found": len(tech_pairs),
+                "top_pairs": top_pairs,
+                "all_pairs": tech_pairs
+            }
+
         # Return all raw data accessor functions
         return {
             # Raw data retrieval
@@ -1161,10 +1617,181 @@ class PythonExecutionEngine:
             "get_advanced_universe": get_advanced_universe,
             "create_custom_universe": create_custom_universe,
             "find_similar_stocks": find_similar_stocks,
+            # Simple pair trading functions
+            "find_pairs": find_pairs,
+            "get_similar_tickers": get_similar_tickers,
+            "check_correlation": check_correlation,
+            "create_pair_trade": create_pair_trade,
+            "quick_sector_pairs": quick_sector_pairs,
+            "market_condition_check": market_condition_check,
             # Example strategies
             "example_enhanced_symbol_search": example_enhanced_symbol_search,
             "example_custom_classification_strategy": example_custom_classification_strategy,
             "example_advanced_screening_strategy": example_advanced_screening_strategy,
+            "example_simple_pair_trade_strategy": example_simple_pair_trade_strategy,
+            "example_sector_pair_screening": example_sector_pair_screening,
+        }
+
+
+    async def _get_data_accessor_functions(self) -> Dict[str, Any]:
+        """Get data accessor functions for strategy code"""
+
+        # Create async wrapper for data provider methods
+        def make_sync_wrapper(async_func):
+            """Convert async function to sync for use in strategy code"""
+            import asyncio
+            import concurrent.futures
+
+            def wrapper(*args, **kwargs):
+                try:
+                    # Get the current event loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        return asyncio.run(async_func(*args, **kwargs))
+                    
+                    # We're in an async context - we need to handle this carefully
+                    # Create a new task in the current loop
+                    task = loop.create_task(async_func(*args, **kwargs))
+                    
+                    # Since we can't await in a sync context, we need to run this
+                    # in a separate thread with its own event loop
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        def run_async():
+                            new_loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(new_loop)
+                            try:
+                                return new_loop.run_until_complete(async_func(*args, **kwargs))
+                            finally:
+                                new_loop.close()
+                        
+                        future = executor.submit(run_async)
+                        return future.result(timeout=30)  # Add timeout to prevent hanging
+                        
+                except Exception as e:
+                    logger.error(f"Error in data accessor function: {e}")
+                    return {}
+
+            return wrapper
+
+        # Core data retrieval functions
+        def get_price_data(
+            symbol: str,
+            timeframe: str = "1d",
+            days: int = 30,
+            extended_hours: bool = False,
+            start_time: str = None,
+            end_time: str = None,
+        ) -> Dict:
+            return make_sync_wrapper(self.data_provider.get_price_data)(
+                symbol, timeframe, days, extended_hours, start_time, end_time
+            )
+
+        def get_historical_data(
+            symbol: str, timeframe: str = "1d", periods: int = 100, offset: int = 0
+        ) -> Dict:
+            return make_sync_wrapper(self.data_provider.get_historical_data)(
+                symbol, timeframe, periods, offset
+            )
+
+        def get_security_info(symbol: str) -> Dict:
+            return make_sync_wrapper(self.data_provider.get_security_info)(symbol)
+
+        def get_multiple_symbols_data(
+            symbols: List[str], timeframe: str = "1d", days: int = 30
+        ) -> Dict[str, Dict]:
+            return make_sync_wrapper(self.data_provider.get_multiple_symbols_data)(
+                symbols, timeframe, days
+            )
+
+        def get_fundamental_data(
+            symbol: str, metrics: Optional[List[str]] = None
+        ) -> Dict:
+            return make_sync_wrapper(self.data_provider.get_fundamental_data)(
+                symbol, metrics
+            )
+
+        def scan_universe(
+            filters: Dict = None, sort_by: str = None, limit: int = 100
+        ) -> Dict:
+            return make_sync_wrapper(self.data_provider.scan_universe)(
+                filters, sort_by, limit
+            )
+
+        # Utility calculation functions
+        def calculate_returns(prices: List[float], periods: int = 1) -> List[float]:
+            """Calculate simple returns over specified periods"""
+            if len(prices) <= periods:
+                return []
+
+            returns = []
+            for i in range(periods, len(prices)):
+                ret = (prices[i] / prices[i - periods]) - 1
+                returns.append(ret)
+
+            return returns
+
+        def calculate_log_returns(prices: List[float], periods: int = 1) -> List[float]:
+            """Calculate logarithmic returns"""
+            if len(prices) <= periods:
+                return []
+
+            import math
+
+            returns = []
+            for i in range(periods, len(prices)):
+                ret = math.log(prices[i] / prices[i - periods])
+                returns.append(ret)
+
+            return returns
+
+        def rolling_window(data: List[float], window: int) -> List[List[float]]:
+            """Create rolling windows of data for calculations"""
+            if len(data) < window:
+                return []
+
+            windows = []
+            for i in range(window - 1, len(data)):
+                windows.append(data[i - window + 1 : i + 1])
+
+            return windows
+
+        def calculate_correlation(data1: List[float], data2: List[float]) -> float:
+            """Calculate correlation coefficient between two datasets"""
+            if len(data1) != len(data2) or len(data1) < 2:
+                return 0.0
+
+            n = len(data1)
+            sum_x = sum(data1)
+            sum_y = sum(data2)
+            sum_xx = sum(x * x for x in data1)
+            sum_yy = sum(y * y for y in data2)
+            sum_xy = sum(data1[i] * data2[i] for i in range(n))
+
+            # Correlation formula
+            numerator = n * sum_xy - sum_x * sum_y
+            denominator = ((n * sum_xx - sum_x * sum_x) * (n * sum_yy - sum_y * sum_y)) ** 0.5
+
+            if denominator == 0:
+                return 0.0
+
+            return numerator / denominator
+
+        # Return core data accessor functions
+        return {
+            # Data retrieval
+            "get_price_data": get_price_data,
+            "get_historical_data": get_historical_data,
+            "get_security_info": get_security_info,
+            "get_multiple_symbols_data": get_multiple_symbols_data,
+            "get_fundamental_data": get_fundamental_data,
+            "scan_universe": scan_universe,
+            # Calculation utilities
+            "calculate_returns": calculate_returns,
+            "calculate_log_returns": calculate_log_returns,
+            "rolling_window": rolling_window,
+            "calculate_correlation": calculate_correlation,
         }
 
     def _get_strategy_helpers(self) -> Dict[str, Any]:
@@ -1174,11 +1801,13 @@ class PythonExecutionEngine:
             """Log a message during strategy execution"""
             getattr(logger, level.lower())(f"Strategy: {message}")
 
+
         def save_result(key: str, value: Any):
             """Save a result to be returned"""
             if not hasattr(save_result, "results"):
                 save_result.results = {}
             save_result.results[key] = value
+
 
         return {
             "log": log,
@@ -1212,12 +1841,15 @@ class PythonExecutionEngine:
                 except Exception:
                     results[key] = f"<{type(value).__name__}>"
 
+
         return results
+
 
     def _is_json_serializable(self, obj: Any) -> bool:
         """Check if an object is JSON serializable"""
         try:
             import json
+
 
             json.dumps(obj)
             return True
@@ -1228,6 +1860,7 @@ class PythonExecutionEngine:
 class CodeValidator:
     """Validates Python code for security issues"""
 
+
     def __init__(self):
         self.forbidden_nodes = {
             ast.Import: self._check_import,
@@ -1235,6 +1868,7 @@ class CodeValidator:
             ast.Call: self._check_function_call,
             ast.Attribute: self._check_attribute_access,
         }
+
 
         self.forbidden_functions = {
             "exec",
@@ -1248,7 +1882,19 @@ class CodeValidator:
             "globals",
             "locals",
             "vars",
+            "exec",
+            "eval",
+            "compile",
+            "__import__",
+            "open",
+            "file",
+            "input",
+            "raw_input",
+            "globals",
+            "locals",
+            "vars",
         }
+
 
         self.forbidden_modules = {
             "os",
@@ -1268,7 +1914,25 @@ class CodeValidator:
             "sqlite3",
             "threading",
             "multiprocessing",
+            "os",
+            "sys",
+            "subprocess",
+            "socket",
+            "urllib",
+            "requests",
+            "http",
+            "ftplib",
+            "smtplib",
+            "telnetlib",
+            "pickle",
+            "marshal",
+            "shelve",
+            "dbm",
+            "sqlite3",
+            "threading",
+            "multiprocessing",
         }
+
 
     def validate(self, code: str) -> bool:
         """Validate code for security issues"""
@@ -1279,6 +1943,7 @@ class CodeValidator:
         except (SyntaxError, SecurityError):
             return False
 
+
     def _check_ast_node(self, node: ast.AST):
         """Recursively check AST nodes"""
         for node_type, checker in self.forbidden_nodes.items():
@@ -1286,8 +1951,10 @@ class CodeValidator:
                 if not checker(node):
                     raise SecurityError(f"Forbidden operation: {node_type.__name__}")
 
+
         for child in ast.iter_child_nodes(node):
             self._check_ast_node(child)
+
 
     def _check_import(self, node: ast.Import) -> bool:
         """Check import statements"""
@@ -1296,11 +1963,13 @@ class CodeValidator:
                 return False
         return True
 
+
     def _check_import_from(self, node: ast.ImportFrom) -> bool:
         """Check from-import statements"""
         if node.module in self.forbidden_modules:
             return False
         return True
+
 
     def _check_function_call(self, node: ast.Call) -> bool:
         """Check function calls"""
@@ -1308,6 +1977,7 @@ class CodeValidator:
             if node.func.id in self.forbidden_functions:
                 return False
         return True
+
 
     def _check_attribute_access(self, node: ast.Attribute) -> bool:
         """Check attribute access"""
@@ -1321,4 +1991,6 @@ class CodeValidator:
 class SecurityError(Exception):
     """Raised when code contains security violations"""
 
+
     pass
+

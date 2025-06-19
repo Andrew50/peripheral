@@ -2,7 +2,6 @@
 	import Chart from './chart.svelte';
 	import { settings } from '$lib/utils/stores/stores';
 	import { onMount, tick } from 'svelte';
-	import { get } from 'svelte/store';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryChart } from './interface';
 	export let width: number;
@@ -50,7 +49,7 @@
 
 				queryInstanceInput(
 					'any',
-					['ticker', 'timeframe', 'timestamp', 'extendedHours'],
+					['ticker', 'timeframe'],
 					instanceWithInput
 				).then((updatedInstance) => {
 					queryChart(updatedInstance, true);
@@ -100,11 +99,7 @@
 		flex-direction: column;
 		width: 100%;
 		height: 100%;
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
+		position: relative; /* Changed from absolute to relative */
 		outline: none; /* Remove focus outline but maintain accessibility */
 	}
 

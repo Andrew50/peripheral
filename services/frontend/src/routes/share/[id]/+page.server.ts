@@ -45,8 +45,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 			.replace(/<[^>]*>/g, '') // Remove HTML tags
 			.substring(0, 160); // Limit to 160 characters for meta description
 
-		// For ngrok tunnel, use the ngrok URL as ORIGIN
-		const origin = process.env.ORIGIN || 'https://e59a-24-237-65-191.ngrok-free.app';
+		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const shareUrl = `${origin}/share/${params.id}`;
 		const ogImageUrl = `${origin}/og/${params.id}`;
 
@@ -64,7 +63,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 		console.error('Error loading conversation for preview:', error);
 		
 		// Return fallback meta data
-		const origin = process.env.ORIGIN || 'https://e59a-24-237-65-191.ngrok-free.app';
+		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const fallbackUrl = `${origin}/share/${params.id}`;
 		const fallbackImageUrl = `${origin}/og/${params.id}`;
 		
