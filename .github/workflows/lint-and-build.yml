@@ -37,6 +37,7 @@ jobs:
       last_success_sha: ${{ steps.get-last-success.outputs.sha }}
       has_backend_changes: ${{ steps.changed-paths.outputs.has_backend_changes }}
       has_frontend_changes: ${{ steps.changed-paths.outputs.has_frontend_changes }}
+      has_worker_changes: ${{ steps.changed-paths.outputs.has_worker_changes }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -182,6 +183,16 @@ jobs:
           else
             echo "Changes detected in frontend."
             echo "has_frontend_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+          # Check worker
+          WORKER_CHANGES=$(git diff --name-only $BASE_SHA $HEAD_SHA -- 'services/worker/')
+          if [ -z "$WORKER_CHANGES" ]; then
+            echo "No changes in worker."
+            echo "has_worker_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected in worker."
+            echo "has_worker_changes=true" >> $GITHUB_OUTPUT
           fi
 
   lint-and-build-backend:
@@ -399,4 +410,99 @@ jobs:
           else
             echo "### Frontend CI Results ❌" >> $GITHUB_STEP_SUMMARY
             echo "❌ Frontend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  lint-and-security-worker:
+    needs: [check-workflow-conditions]
+    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    permissions:
+      contents: read
+      checks: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: services/worker
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import sorting check with isort
+        working-directory: services/worker
+        run: |
+          echo "Checking import sorting with isort..."
+          isort --check-only --diff . || true
+
+      - name: Code style check with flake8
+        working-directory: services/worker
+        run: |
+          echo "Running flake8 code style checks..."
+          flake8 . || true
+
+      - name: Static type checking with mypy
+        working-directory: services/worker
+        run: |
+          echo "Running mypy static type checking..."
+          mypy . || true  # Allow mypy to fail softly for now
+
+      - name: Comprehensive linting with pylint
+        working-directory: services/worker
+        run: |
+          echo "Running pylint comprehensive linting..."
+          pylint src/ worker.py hot_reload.py || true  # Allow pylint to fail softly
+
+      - name: Security linting with bandit
+        working-directory: services/worker
+        run: |
+          echo "Running bandit security checks..."
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f txt
+
+      - name: Dependency vulnerability scanning with safety
+        working-directory: services/worker
+        run: |
+          echo "Scanning dependencies for known vulnerabilities..."
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Run tests with coverage
+        working-directory: services/worker
+        run: |
+          echo "Running tests with coverage..."
+          pytest --cov=src --cov-report=xml --cov-report=term-missing || true
+
+      - name: Upload coverage to Codecov
+        if: github.event_name == 'pull_request'
+        uses: codecov/codecov-action@v3
+        with:
+          file: services/worker/coverage.xml
+          flags: worker
+          name: worker-coverage
+          fail_ci_if_error: false
+
+      - name: Create job summary for Worker
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+            echo "### Worker CI Results ✅" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Worker lint and security checks completed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ job.status }}" == "skipped" ]]; then
+            echo "### Worker CI Results ➡️" >> $GITHUB_STEP_SUMMARY
+            echo "➡️ Worker checks skipped as no changes were detected in 'services/worker/'." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Worker CI Results ❌" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Worker lint and security checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi

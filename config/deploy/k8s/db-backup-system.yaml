@@ -373,5 +373,5 @@ data:
   # Base64 encoded values - replace with your actual values:
   # echo -n "YOUR_BOT_TOKEN" | base64
   # echo -n "YOUR_CHAT_ID" | base64
-  bot-token: "" # Replace with your bot token (base64 encoded)
-  chat-id: "" # Replace with your chat ID (base64 encoded)
+  bot-token: ${TELEGRAM_BOT_TOKEN_B64}
+  chat-id: ${TELEGRAM_CHAT_ID_B64}

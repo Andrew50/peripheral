@@ -1,8 +1,8 @@
 module backend
 
-go 1.24
+go 1.23.0
 
-toolchain go1.24.1
+toolchain go1.24.3
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
