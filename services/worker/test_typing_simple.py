@@ -54,7 +54,7 @@ result = classify_symbol('TEST')
         compiled_code = compile(code_with_builtins, "<test>", "exec")
         exec_globals = {'__builtins__': __builtins__}
         exec_locals = {}
-        exec(compiled_code, exec_globals, exec_locals)
+        exec(compiled_code, exec_globals, exec_locals)  # nosec B102 - Safe test execution
         
         if exec_locals.get('result') is True:
             print("✅ Built-in types work correctly")
@@ -117,7 +117,7 @@ result = classify_symbol('TEST')
         
         compiled = compile(strategy_code, "<strategy>", "exec")
         exec_locals = {}
-        exec(compiled, restricted_globals, exec_locals)
+        exec(compiled, restricted_globals, exec_locals)  # nosec B102 - Safe test execution
         
         if exec_locals.get('result') is True:
             print("✅ Execution environment simulation successful")

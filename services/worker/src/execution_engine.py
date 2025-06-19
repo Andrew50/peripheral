@@ -898,7 +898,593 @@ class PythonExecutionEngine:
             
             return []
 
-        # ==================== EXAMPLE STRATEGY IMPLEMENTATIONS ====================
+        # ==================== PAIR TRADING FUNCTIONS ====================
+        
+        def calculate_correlation(prices1: List[float], prices2: List[float]) -> float:
+            """
+            Calculate Pearson correlation coefficient between two price series
+            Returns correlation value between -1 and 1
+            """
+            if len(prices1) != len(prices2) or len(prices1) < 2:
+                return 0.0
+            
+            n = len(prices1)
+            sum_x = sum(prices1)
+            sum_y = sum(prices2)
+            sum_x_sq = sum(x * x for x in prices1)
+            sum_y_sq = sum(y * y for y in prices2)
+            sum_xy = sum(prices1[i] * prices2[i] for i in range(n))
+            
+            # Calculate correlation coefficient
+            numerator = n * sum_xy - sum_x * sum_y
+            denominator_x = (n * sum_x_sq - sum_x * sum_x) ** 0.5
+            denominator_y = (n * sum_y_sq - sum_y * sum_y) ** 0.5
+            
+            if denominator_x == 0 or denominator_y == 0:
+                return 0.0
+            
+            correlation = numerator / (denominator_x * denominator_y)
+            return max(-1.0, min(1.0, correlation))  # Clamp to [-1, 1]
+
+        def calculate_cointegration_score(prices1: List[float], prices2: List[float]) -> Dict:
+            """
+            Calculate cointegration metrics for pair trading
+            Returns spread statistics and cointegration score
+            """
+            if len(prices1) != len(prices2) or len(prices1) < 10:
+                return {"score": 0.0, "spread_mean": 0.0, "spread_std": 0.0, "half_life": 0}
+            
+            # Calculate price ratio spread
+            spreads = []
+            for i in range(len(prices1)):
+                if prices2[i] != 0:
+                    spreads.append(prices1[i] / prices2[i])
+            
+            if len(spreads) < 10:
+                return {"score": 0.0, "spread_mean": 0.0, "spread_std": 0.0, "half_life": 0}
+            
+            # Calculate spread statistics
+            spread_mean = sum(spreads) / len(spreads)
+            spread_variance = sum((s - spread_mean) ** 2 for s in spreads) / len(spreads)
+            spread_std = spread_variance ** 0.5
+            
+            # Simplified Augmented Dickey-Fuller test approximation
+            # Calculate first differences of spread
+            diffs = [spreads[i] - spreads[i-1] for i in range(1, len(spreads))]
+            
+            # Calculate autocorrelation at lag 1
+            if len(diffs) > 1:
+                autocorr = calculate_correlation(spreads[:-1], spreads[1:])
+                # Simplified cointegration score (higher is better for mean reversion)
+                coint_score = 1.0 - abs(autocorr)
+            else:
+                coint_score = 0.0
+            
+            # Estimate half-life of mean reversion (simplified)
+            half_life = 0
+            if autocorr > 0 and autocorr < 1:
+                import math
+                half_life = int(-math.log(0.5) / math.log(autocorr))
+            
+            return {
+                "score": coint_score,
+                "spread_mean": spread_mean,
+                "spread_std": spread_std,
+                "half_life": half_life,
+                "current_spread": spreads[-1] if spreads else 0,
+                "z_score": (spreads[-1] - spread_mean) / spread_std if spread_std > 0 and spreads else 0
+            }
+
+        def find_pair_candidates(
+            reference_ticker: str, 
+            universe: List[str] = None, 
+            min_correlation: float = 0.7,
+            lookback_days: int = 60,
+            max_candidates: int = 20
+        ) -> List[Dict]:
+            """
+            Find potential pair trading candidates for a reference ticker
+            Returns list of candidates sorted by pair trading potential
+            """
+            if not universe:
+                # Get a diverse universe from multiple sectors
+                tech_stocks = get_advanced_universe("sector", sector="Technology", limit=50)
+                finance_stocks = get_advanced_universe("sector", sector="Financial Services", limit=30)
+                healthcare_stocks = get_advanced_universe("sector", sector="Healthcare", limit=30)
+                universe = list(set(tech_stocks + finance_stocks + healthcare_stocks))
+            
+            # Get reference stock data
+            ref_data = get_price_data(reference_ticker, "1d", lookback_days)
+            if not ref_data or not ref_data.get("close"):
+                return []
+            
+            ref_prices = ref_data["close"]
+            candidates = []
+            
+            for candidate_ticker in universe:
+                if candidate_ticker == reference_ticker:
+                    continue
+                
+                # Get candidate data
+                candidate_data = get_price_data(candidate_ticker, "1d", lookback_days)
+                if not candidate_data or not candidate_data.get("close"):
+                    continue
+                
+                candidate_prices = candidate_data["close"]
+                
+                # Ensure same length
+                min_length = min(len(ref_prices), len(candidate_prices))
+                if min_length < 20:  # Need minimum data points
+                    continue
+                
+                ref_subset = ref_prices[-min_length:]
+                candidate_subset = candidate_prices[-min_length:]
+                
+                # Calculate correlation
+                correlation = calculate_correlation(ref_subset, candidate_subset)
+                
+                if abs(correlation) >= min_correlation:
+                    # Calculate cointegration metrics
+                    coint_metrics = calculate_cointegration_score(ref_subset, candidate_subset)
+                    
+                    # Get additional stock info
+                    candidate_info = get_security_info(candidate_ticker)
+                    
+                    # Calculate pair score (combination of correlation and cointegration)
+                    pair_score = (abs(correlation) * 0.4) + (coint_metrics["score"] * 0.6)
+                    
+                    candidates.append({
+                        "ticker": candidate_ticker,
+                        "correlation": correlation,
+                        "cointegration_score": coint_metrics["score"],
+                        "pair_score": pair_score,
+                        "spread_stats": coint_metrics,
+                        "sector": candidate_info.get("sector", "Unknown"),
+                        "market_cap": candidate_info.get("market_cap", 0),
+                        "current_z_score": coint_metrics["z_score"]
+                    })
+            
+            # Sort by pair score (best pairs first)
+            candidates.sort(key=lambda x: x["pair_score"], reverse=True)
+            return candidates[:max_candidates]
+
+        def analyze_pair_relationship(
+            ticker1: str, 
+            ticker2: str, 
+            lookback_days: int = 90,
+            regime_filter: str = None,
+            regime_ticker: str = "SPY"
+        ) -> Dict:
+            """
+            Comprehensive analysis of pair relationship including regime filtering
+            Example: analyze_pair_relationship("SNOW", "AFRM", regime_filter="bull", regime_ticker="QQQ")
+            """
+            # Get price data for both tickers
+            data1 = get_price_data(ticker1, "1d", lookback_days)
+            data2 = get_price_data(ticker2, "1d", lookback_days)
+            
+            if not all([data1, data2, data1.get("close"), data2.get("close")]):
+                return {"error": "Unable to get price data for one or both tickers"}
+            
+            # Align data lengths
+            min_length = min(len(data1["close"]), len(data2["close"]))
+            prices1 = data1["close"][-min_length:]
+            prices2 = data2["close"][-min_length:]
+            timestamps = data1["timestamps"][-min_length:] if data1.get("timestamps") else []
+            
+            # Get regime data if specified
+            regime_data = None
+            if regime_filter and regime_ticker:
+                regime_data = get_price_data(regime_ticker, "1d", lookback_days)
+                if regime_data and regime_data.get("close"):
+                    regime_prices = regime_data["close"][-min_length:]
+                    # Simple regime classification: bull if price > 20-day MA
+                    if len(regime_prices) >= 20:
+                        ma_20 = []
+                        for i in range(19, len(regime_prices)):
+                            ma_20.append(sum(regime_prices[i-19:i+1]) / 20)
+                        
+                        # Classify regime for each day
+                        regimes = []
+                        for i in range(len(ma_20)):
+                            if regime_prices[i+19] > ma_20[i]:
+                                regimes.append("bull")
+                            else:
+                                regimes.append("bear")
+            
+            # Basic correlation and cointegration
+            correlation = calculate_correlation(prices1, prices2)
+            coint_metrics = calculate_cointegration_score(prices1, prices2)
+            
+            # Calculate rolling correlations (30-day windows)
+            rolling_correls = []
+            window = 30
+            for i in range(window-1, len(prices1)):
+                rolling_corr = calculate_correlation(
+                    prices1[i-window+1:i+1], 
+                    prices2[i-window+1:i+1]
+                )
+                rolling_correls.append(rolling_corr)
+            
+            # Calculate returns for additional analysis
+            returns1 = calculate_returns(prices1, 1)
+            returns2 = calculate_returns(prices2, 1)
+            
+            # Calculate spread (price ratio)
+            spreads = [prices1[i] / prices2[i] for i in range(len(prices1)) if prices2[i] != 0]
+            
+            # Calculate z-score of current spread
+            if len(spreads) > 1:
+                spread_mean = sum(spreads) / len(spreads)
+                spread_std = (sum((s - spread_mean) ** 2 for s in spreads) / len(spreads)) ** 0.5
+                current_z_score = (spreads[-1] - spread_mean) / spread_std if spread_std > 0 else 0
+            else:
+                current_z_score = 0
+                spread_mean = 0
+                spread_std = 0
+            
+            # Regime-specific analysis
+            regime_analysis = {}
+            if regime_data and regime_filter:
+                # Filter data by regime
+                if len(regimes) == len(prices1) - 19:  # Account for MA calculation
+                    filtered_indices = []
+                    for i, regime in enumerate(regimes):
+                        if regime == regime_filter:
+                            filtered_indices.append(i + 19)  # Adjust for MA offset
+                    
+                    if len(filtered_indices) > 10:  # Need minimum points
+                        filtered_prices1 = [prices1[i] for i in filtered_indices]
+                        filtered_prices2 = [prices2[i] for i in filtered_indices]
+                        
+                        regime_correlation = calculate_correlation(filtered_prices1, filtered_prices2)
+                        regime_coint = calculate_cointegration_score(filtered_prices1, filtered_prices2)
+                        
+                        regime_analysis = {
+                            "regime": regime_filter,
+                            "correlation": regime_correlation,
+                            "cointegration": regime_coint,
+                            "data_points": len(filtered_indices),
+                            "regime_ticker": regime_ticker
+                        }
+            
+            # Trading signals based on z-score
+            trading_signals = {
+                "signal": "neutral",
+                "strength": 0,
+                "entry_threshold": 2.0,  # Standard z-score threshold
+                "exit_threshold": 0.5,
+                "current_z_score": current_z_score
+            }
+            
+            if abs(current_z_score) > 2.0:
+                if current_z_score > 2.0:
+                    trading_signals["signal"] = "short_spread"  # Short ticker1, Long ticker2
+                    trading_signals["strength"] = min(abs(current_z_score) / 2.0, 3.0)
+                elif current_z_score < -2.0:
+                    trading_signals["signal"] = "long_spread"  # Long ticker1, Short ticker2
+                    trading_signals["strength"] = min(abs(current_z_score) / 2.0, 3.0)
+            elif abs(current_z_score) < 0.5:
+                trading_signals["signal"] = "close_position"
+                trading_signals["strength"] = 1.0
+            
+            return {
+                "ticker1": ticker1,
+                "ticker2": ticker2,
+                "correlation": correlation,
+                "cointegration": coint_metrics,
+                "rolling_correlations": rolling_correls[-10:],  # Last 10 values
+                "spread_stats": {
+                    "current_spread": spreads[-1] if spreads else 0,
+                    "mean_spread": spread_mean,
+                    "std_spread": spread_std,
+                    "current_z_score": current_z_score
+                },
+                "trading_signals": trading_signals,
+                "regime_analysis": regime_analysis,
+                "data_points": len(prices1),
+                "lookback_days": lookback_days
+            }
+
+        def screen_for_pairs(
+            universe: List[str] = None,
+            min_correlation: float = 0.6,
+            min_cointegration: float = 0.3,
+            max_pairs: int = 50,
+            lookback_days: int = 60,
+            same_sector_only: bool = False
+        ) -> List[Dict]:
+            """
+            Screen entire universe for potential pair trading opportunities
+            Returns ranked list of pair candidates
+            """
+            if not universe:
+                # Create diverse universe
+                universe = get_advanced_universe("sp500")[:100]  # Top 100 S&P stocks
+            
+            log(f"Screening {len(universe)} stocks for pair trading opportunities")
+            
+            pair_candidates = []
+            processed_pairs = set()
+            
+            for i, ticker1 in enumerate(universe):
+                if i % 10 == 0:  # Progress logging
+                    log(f"Processing {i}/{len(universe)} stocks...")
+                
+                # Get ticker1 info for sector filtering
+                info1 = get_security_info(ticker1) if same_sector_only else {}
+                sector1 = info1.get("sector", "") if same_sector_only else ""
+                
+                for ticker2 in universe[i+1:]:  # Avoid duplicates
+                    pair_key = tuple(sorted([ticker1, ticker2]))
+                    if pair_key in processed_pairs:
+                        continue
+                    processed_pairs.add(pair_key)
+                    
+                    # Sector filtering if requested
+                    if same_sector_only:
+                        info2 = get_security_info(ticker2)
+                        sector2 = info2.get("sector", "")
+                        if sector1 != sector2 or not sector1:
+                            continue
+                    
+                    # Analyze pair
+                    pair_analysis = analyze_pair_relationship(ticker1, ticker2, lookback_days)
+                    
+                    if "error" in pair_analysis:
+                        continue
+                    
+                    correlation = abs(pair_analysis["correlation"])
+                    cointegration = pair_analysis["cointegration"]["score"]
+                    
+                    # Filter by minimum thresholds
+                    if correlation >= min_correlation and cointegration >= min_cointegration:
+                        # Calculate overall pair score
+                        pair_score = (correlation * 0.4) + (cointegration * 0.6)
+                        
+                        # Add volatility factor (prefer pairs with reasonable volatility)
+                        z_score = abs(pair_analysis["spread_stats"]["current_z_score"])
+                        volatility_score = min(z_score / 3.0, 1.0)  # Normalize to 0-1
+                        
+                        final_score = (pair_score * 0.8) + (volatility_score * 0.2)
+                        
+                        pair_candidates.append({
+                            "ticker1": ticker1,
+                            "ticker2": ticker2,
+                            "correlation": pair_analysis["correlation"],
+                            "cointegration_score": cointegration,
+                            "pair_score": final_score,
+                            "current_z_score": pair_analysis["spread_stats"]["current_z_score"],
+                            "trading_signal": pair_analysis["trading_signals"]["signal"],
+                            "signal_strength": pair_analysis["trading_signals"]["strength"],
+                            "sectors": [sector1, info2.get("sector", "")] if same_sector_only else []
+                        })
+            
+            # Sort by pair score
+            pair_candidates.sort(key=lambda x: x["pair_score"], reverse=True)
+            
+            log(f"Found {len(pair_candidates)} potential pairs")
+            return pair_candidates[:max_pairs]
+
+        def create_pair_trading_strategy(
+            ticker1: str,
+            ticker2: str,
+            entry_z_threshold: float = 2.0,
+            exit_z_threshold: float = 0.5,
+            stop_loss_z: float = 3.0,
+            lookback_days: int = 90,
+            regime_filter: str = None,
+            regime_ticker: str = "SPY"
+        ) -> Dict:
+            """
+            Create a complete pair trading strategy with entry/exit rules
+            Example: create_pair_trading_strategy("SNOW", "AFRM", regime_filter="bull", regime_ticker="QQQ")
+            """
+            # Analyze the pair relationship
+            pair_analysis = analyze_pair_relationship(
+                ticker1, ticker2, lookback_days, regime_filter, regime_ticker
+            )
+            
+            if "error" in pair_analysis:
+                return pair_analysis
+            
+            # Get current market data
+            current_data1 = get_price_data(ticker1, "1d", 1)
+            current_data2 = get_price_data(ticker2, "1d", 1)
+            
+            current_price1 = current_data1["close"][-1] if current_data1 and current_data1.get("close") else 0
+            current_price2 = current_data2["close"][-1] if current_data2 and current_data2.get("close") else 0
+            
+            # Strategy configuration
+            strategy_config = {
+                "pair": f"{ticker1}/{ticker2}",
+                "entry_z_threshold": entry_z_threshold,
+                "exit_z_threshold": exit_z_threshold,
+                "stop_loss_z": stop_loss_z,
+                "current_prices": {
+                    ticker1: current_price1,
+                    ticker2: current_price2
+                },
+                "regime_filter": {
+                    "enabled": regime_filter is not None,
+                    "regime": regime_filter,
+                    "regime_ticker": regime_ticker
+                }
+            }
+            
+            # Current position recommendations
+            current_z = pair_analysis["spread_stats"]["current_z_score"]
+            position_size = min(abs(current_z) / entry_z_threshold, 1.0) if entry_z_threshold > 0 else 0
+            
+            recommendations = {
+                "action": "hold",
+                "position_size": 0,
+                "target_weights": {ticker1: 0, ticker2: 0},
+                "reasoning": ""
+            }
+            
+            # Generate trading recommendations
+            if abs(current_z) >= entry_z_threshold:
+                if current_z > entry_z_threshold:
+                    # Spread is high: short ticker1, long ticker2
+                    recommendations.update({
+                        "action": "enter_short_spread",
+                        "position_size": position_size,
+                        "target_weights": {ticker1: -0.5, ticker2: 0.5},
+                        "reasoning": f"Spread z-score ({current_z:.2f}) above entry threshold ({entry_z_threshold}). Short {ticker1}, Long {ticker2}."
+                    })
+                elif current_z < -entry_z_threshold:
+                    # Spread is low: long ticker1, short ticker2
+                    recommendations.update({
+                        "action": "enter_long_spread",
+                        "position_size": position_size,
+                        "target_weights": {ticker1: 0.5, ticker2: -0.5},
+                        "reasoning": f"Spread z-score ({current_z:.2f}) below entry threshold ({-entry_z_threshold}). Long {ticker1}, Short {ticker2}."
+                    })
+            elif abs(current_z) <= exit_z_threshold:
+                recommendations.update({
+                    "action": "close_position",
+                    "position_size": 0,
+                    "target_weights": {ticker1: 0, ticker2: 0},
+                    "reasoning": f"Spread z-score ({current_z:.2f}) within exit threshold (±{exit_z_threshold}). Close positions."
+                })
+            elif abs(current_z) >= stop_loss_z:
+                recommendations.update({
+                    "action": "stop_loss",
+                    "position_size": 0,
+                    "target_weights": {ticker1: 0, ticker2: 0},
+                    "reasoning": f"Spread z-score ({current_z:.2f}) hit stop loss threshold (±{stop_loss_z}). Exit immediately."
+                })
+            
+            # Risk metrics
+            risk_metrics = {
+                "correlation_stability": len([c for c in pair_analysis["rolling_correlations"] if abs(c) > 0.5]) / len(pair_analysis["rolling_correlations"]) if pair_analysis["rolling_correlations"] else 0,
+                "mean_reversion_strength": pair_analysis["cointegration"]["score"],
+                "current_risk_level": min(abs(current_z) / 3.0, 1.0),  # 0-1 scale
+                "half_life_days": pair_analysis["cointegration"]["half_life"]
+            }
+            
+            return {
+                "strategy_config": strategy_config,
+                "pair_analysis": pair_analysis,
+                "recommendations": recommendations,
+                "risk_metrics": risk_metrics,
+                "backtest_ready": True
+            }
+
+        # ==================== EXAMPLE PAIR TRADING STRATEGY ====================
+        
+        def example_snow_afrm_qqq_strategy():
+            """
+            Example implementation of SNOW-AFRM pair trade when QQQ is in bull regime
+            This demonstrates a complete pair trading strategy with regime filtering
+            """
+            log("=== SNOW-AFRM Pair Trading Strategy (QQQ Bull Regime) ===")
+            
+            # Step 1: Analyze QQQ regime
+            qqq_data = get_price_data("QQQ", "1d", 30)
+            if qqq_data and qqq_data.get("close"):
+                qqq_prices = qqq_data["close"]
+                if len(qqq_prices) >= 20:
+                    # Calculate 20-day moving average
+                    ma_20 = sum(qqq_prices[-20:]) / 20
+                    current_qqq = qqq_prices[-1]
+                    qqq_regime = "bull" if current_qqq > ma_20 else "bear"
+                    
+                    log(f"QQQ Current: ${current_qqq:.2f}, 20-day MA: ${ma_20:.2f}")
+                    log(f"QQQ Regime: {qqq_regime.upper()}")
+                else:
+                    qqq_regime = "unknown"
+            else:
+                qqq_regime = "unknown"
+                log("Unable to determine QQQ regime - insufficient data")
+            
+            # Step 2: Analyze SNOW-AFRM pair relationship
+            log("\n--- Analyzing SNOW-AFRM Pair Relationship ---")
+            pair_analysis = analyze_pair_relationship(
+                "SNOW", "AFRM", 
+                lookback_days=90, 
+                regime_filter="bull" if qqq_regime == "bull" else None,
+                regime_ticker="QQQ"
+            )
+            
+            if "error" in pair_analysis:
+                log(f"Error analyzing pair: {pair_analysis['error']}")
+                return {"error": pair_analysis["error"]}
+            
+            # Log pair analysis results
+            log(f"Overall Correlation: {pair_analysis['correlation']:.3f}")
+            log(f"Cointegration Score: {pair_analysis['cointegration']['score']:.3f}")
+            log(f"Current Z-Score: {pair_analysis['spread_stats']['current_z_score']:.2f}")
+            log(f"Trading Signal: {pair_analysis['trading_signals']['signal']}")
+            
+            if pair_analysis.get("regime_analysis"):
+                regime_data = pair_analysis["regime_analysis"]
+                log(f"\nBull Regime Analysis (QQQ > 20-day MA):")
+                log(f"  Bull Regime Correlation: {regime_data['correlation']:.3f}")
+                log(f"  Bull Regime Cointegration: {regime_data['cointegration']['score']:.3f}")
+                log(f"  Data Points in Bull Regime: {regime_data['data_points']}")
+            
+            # Step 3: Create trading strategy (only if in bull regime)
+            strategy_result = None
+            if qqq_regime == "bull":
+                log("\n--- Creating Pair Trading Strategy ---")
+                strategy_result = create_pair_trading_strategy(
+                    "SNOW", "AFRM",
+                    entry_z_threshold=2.0,
+                    exit_z_threshold=0.5,
+                    stop_loss_z=3.0,
+                    lookback_days=90,
+                    regime_filter="bull",
+                    regime_ticker="QQQ"
+                )
+                
+                if "error" not in strategy_result:
+                    recs = strategy_result["recommendations"]
+                    log(f"Strategy Recommendation: {recs['action'].upper()}")
+                    log(f"Position Size: {recs['position_size']:.2f}")
+                    log(f"Target Weights - SNOW: {recs['target_weights']['SNOW']:.1f}, AFRM: {recs['target_weights']['AFRM']:.1f}")
+                    log(f"Reasoning: {recs['reasoning']}")
+                    
+                    # Risk assessment
+                    risk = strategy_result["risk_metrics"]
+                    log(f"\nRisk Assessment:")
+                    log(f"  Correlation Stability: {risk['correlation_stability']:.2f}")
+                    log(f"  Mean Reversion Strength: {risk['mean_reversion_strength']:.2f}")
+                    log(f"  Current Risk Level: {risk['current_risk_level']:.2f}")
+                    log(f"  Half-life (days): {risk['half_life_days']}")
+            else:
+                log(f"\nStrategy NOT activated - QQQ not in bull regime (current: {qqq_regime})")
+                log("Waiting for QQQ to move above 20-day MA to activate pair trading")
+            
+            # Step 4: Find alternative pairs in case SNOW-AFRM isn't optimal
+            log("\n--- Finding Alternative Tech Pair Candidates ---")
+            tech_universe = get_advanced_universe("sector", sector="Technology", limit=20)
+            
+            if "SNOW" in tech_universe and "AFRM" in tech_universe:
+                snow_alternatives = find_pair_candidates("SNOW", tech_universe, min_correlation=0.6, max_candidates=5)
+                afrm_alternatives = find_pair_candidates("AFRM", tech_universe, min_correlation=0.6, max_candidates=5)
+                
+                log("Top SNOW pair candidates:")
+                for i, candidate in enumerate(snow_alternatives[:3]):
+                    log(f"  {i+1}. {candidate['ticker']} - Correlation: {candidate['correlation']:.3f}, Pair Score: {candidate['pair_score']:.3f}")
+                
+                log("Top AFRM pair candidates:")
+                for i, candidate in enumerate(afrm_alternatives[:3]):
+                    log(f"  {i+1}. {candidate['ticker']} - Correlation: {candidate['correlation']:.3f}, Pair Score: {candidate['pair_score']:.3f}")
+            
+            return {
+                "qqq_regime": qqq_regime,
+                "pair_analysis": pair_analysis,
+                "strategy": strategy_result,
+                "alternatives": {
+                    "snow_pairs": snow_alternatives[:3] if 'snow_alternatives' in locals() else [],
+                    "afrm_pairs": afrm_alternatives[:3] if 'afrm_alternatives' in locals() else []
+                },
+                "strategy_active": qqq_regime == "bull"
+            }
+
+        # ==================== ENHANCED SYMBOL SEARCH EXAMPLES ====================
         
         def example_enhanced_symbol_search():
             """
