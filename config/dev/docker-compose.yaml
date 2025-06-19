@@ -104,7 +104,7 @@ services:
   worker:
     build:
       context: ../../services/worker
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     platform: ${PLATFORM:-linux/amd64}
     depends_on:
       db:
@@ -124,6 +124,7 @@ services:
       - REDIS_HOST=cache
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
+      - HOT_RELOAD=true
     deploy:
       replicas: 3
       resources:

@@ -1,0 +1,45 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install minimal system dependencies (no TA-Lib)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    build-essential \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy minimal requirements (no TA-Lib)
+COPY requirements_minimal_working.txt ./requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY worker.py .
+COPY test_simple.py .
+COPY demo_strategy.py .
+
+# Create directories for data and results
+RUN mkdir -p /app/data /app/results /app/logs
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create non-root user for security
+RUN useradd -m -u 1000 worker && \
+    chown -R worker:worker /app
+USER worker
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Default command
+CMD ["python", "worker.py"] 

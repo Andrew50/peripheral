@@ -1,0 +1,353 @@
+# Cluster Monitor - Comprehensive monitoring and alerting system
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-monitor
+  labels:
+    app: cluster-monitor
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Only one monitor should run
+  selector:
+    matchLabels:
+      app: cluster-monitor
+  template:
+    metadata:
+      labels:
+        app: cluster-monitor
+    spec:
+      serviceAccountName: cluster-monitor
+      restartPolicy: Always
+      containers:
+        - name: cluster-monitor
+          image: ${DOCKER_USERNAME}/cluster-monitor:${DOCKER_TAG}
+          imagePullPolicy: Always
+          command: ["/app/cluster-monitor.sh"]
+          env:
+            - name: ENVIRONMENT
+              value: "${ENVIRONMENT:-Development}"
+            - name: K8S_NAMESPACE
+              value: "${K8S_NAMESPACE:-default}"
+            - name: MINIKUBE_PROFILE
+              value: "${MINIKUBE_PROFILE:-minikube}"
+            - name: CHECK_INTERVAL
+              value: "30" # Check every 30 seconds
+            - name: RESOURCE_CHECK_INTERVAL
+              value: "300" # Resource report every 5 minutes
+            - name: MAX_FAILURE_COUNT
+              value: "3"
+            - name: AUTO_RESTART_ENABLED
+              value: "true"
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: bot-token
+                  optional: true
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
+                  optional: true
+          volumeMounts:
+            - name: monitor-logs
+              mountPath: /var/log/monitor
+            - name: kubectl-config
+              mountPath: /root/.kube
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /var/log/monitor/cluster-monitor.log && test $(find /var/log/monitor/cluster-monitor.log -mmin -2 | wc -l) -gt 0"
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /var/log/monitor/cluster-monitor.log"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: monitor-logs
+          persistentVolumeClaim:
+            claimName: monitor-logs-pvc
+        - name: kubectl-config
+          hostPath:
+            path: /home/aj/.kube
+            type: Directory
+
+---
+# Service Account for cluster monitoring
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-monitor
+  labels:
+    app: cluster-monitor
+
+---
+# ClusterRole for cluster monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-monitor
+rules:
+  - apiGroups: [""]
+    resources:
+      [
+        "nodes",
+        "pods",
+        "services",
+        "persistentvolumeclaims",
+        "events",
+        "namespaces",
+      ]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for cluster monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitor
+subjects:
+  - kind: ServiceAccount
+    name: cluster-monitor
+    namespace: ${K8S_NAMESPACE}
+
+---
+# PVC for monitor logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: monitor-logs-pvc
+  labels:
+    app: cluster-monitor
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Service for cluster monitor (for potential web interface)
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-monitor
+  labels:
+    app: cluster-monitor
+spec:
+  selector:
+    app: cluster-monitor
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  type: ClusterIP
+
+---
+# Node Monitor DaemonSet for host-level monitoring
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-monitor
+  labels:
+    app: node-monitor
+spec:
+  selector:
+    matchLabels:
+      app: node-monitor
+  template:
+    metadata:
+      labels:
+        app: node-monitor
+    spec:
+      serviceAccountName: cluster-monitor
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-monitor
+          image: ${DOCKER_USERNAME}/cluster-monitor:${DOCKER_TAG}
+          imagePullPolicy: Always
+          command: ["/app/node-monitor.sh"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: ENVIRONMENT
+              value: "${ENVIRONMENT:-Development}"
+            - name: CHECK_INTERVAL
+              value: "60" # Check every minute
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: bot-token
+                  optional: true
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
+                  optional: true
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            privileged: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+
+---
+# ConfigMap for monitoring scripts and configurations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitor-config
+  labels:
+    app: cluster-monitor
+data:
+  thresholds.conf: |
+    # Cluster Monitor Configuration
+    # CPU usage thresholds
+    CPU_WARNING_THRESHOLD=70
+    CPU_CRITICAL_THRESHOLD=85
+
+    # Memory usage thresholds
+    MEMORY_WARNING_THRESHOLD=75
+    MEMORY_CRITICAL_THRESHOLD=90
+
+    # Disk usage thresholds
+    DISK_WARNING_THRESHOLD=80
+    DISK_CRITICAL_THRESHOLD=95
+
+    # Pod restart thresholds
+    POD_RESTART_WARNING=5
+    POD_RESTART_CRITICAL=10
+
+    # Network thresholds
+    NETWORK_ERROR_THRESHOLD=100
+
+    # Node condition checks
+    CHECK_NODE_CONDITIONS=true
+    CHECK_DISK_PRESSURE=true
+    CHECK_MEMORY_PRESSURE=true
+    CHECK_PID_PRESSURE=true
+
+    # Auto-restart configuration
+    AUTO_RESTART_CLUSTER=true
+    AUTO_RESTART_PODS=true
+    MAX_RESTART_ATTEMPTS=3
+    RESTART_COOLDOWN=3600  # 1 hour cooldown
+
+---
+# Resource monitoring CronJob - Detailed report every hour
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: resource-report
+  labels:
+    app: cluster-monitor
+spec:
+  schedule: "0 * * * *" # Every hour
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300 # 5 minutes timeout
+      template:
+        metadata:
+          labels:
+            app: resource-report
+        spec:
+          serviceAccountName: cluster-monitor
+          restartPolicy: OnFailure
+          containers:
+            - name: resource-report
+              image: ${DOCKER_USERNAME}/cluster-monitor:${DOCKER_TAG}
+              imagePullPolicy: Always
+              command: ["/app/resource-report.sh"]
+              env:
+                - name: ENVIRONMENT
+                  value: "${ENVIRONMENT:-Development}"
+                - name: K8S_NAMESPACE
+                  value: "${K8S_NAMESPACE:-default}"
+                - name: MINIKUBE_PROFILE
+                  value: "${MINIKUBE_PROFILE:-minikube}"
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-secret
+                      key: bot-token
+                      optional: true
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-secret
+                      key: chat-id
+                      optional: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi

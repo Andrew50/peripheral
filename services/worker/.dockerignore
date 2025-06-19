@@ -49,10 +49,8 @@ README.md
 docs/
 *.md
 
-# Test files
+# Test files (allow specific test files for demos)
 tests/
-test_*.py
-*_test.py
 
 # Logs
 *.log
