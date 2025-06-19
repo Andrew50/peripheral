@@ -1192,7 +1192,7 @@
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 3;
-		border-top: 1px solid var(--c1);
+		border-top: 3px solid var(--c4);
 	}
 
 	.chart-wrapper {
@@ -1210,7 +1210,7 @@
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-left: 1px solid var(--ui-border);
+		border-left: 3px solid var(--c4);
 		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
@@ -1247,7 +1247,7 @@
 	}
 
 	.resize-handle:hover {
-		background-color: var(--c3);
+		background-color: var(--c4);
 	}
 
 	.side-btn {
@@ -1495,7 +1495,7 @@
 	}
 
 	.sidebar-resize-handle:hover {
-		background: var(--c3);
+		background: var(--c4);
 	}
 
 	.profile-button {
@@ -1516,7 +1516,7 @@
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
+		border-right: 3px solid var(--c4);
 		max-width: min(800px, calc(100vw - 60px));
 	}
 

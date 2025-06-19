@@ -12,7 +12,7 @@
 		height: 40px;
 		min-height: 40px;
 		padding: 0 1rem 0 1rem;
-		border-bottom: 1px solid var(--c1);
+		border-bottom: 3px solid var(--c4);
 		background: var(--c2);
 		flex-shrink: 0;
 	}

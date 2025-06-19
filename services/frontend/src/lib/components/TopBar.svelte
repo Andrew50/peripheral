@@ -132,7 +132,7 @@
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 10;
-		border-bottom: 1px solid var(--c1);
+		border-bottom: 3px solid var(--c4);
 		position: absolute; /* Position absolutely */
 		top: 0;
 		left: 0;
