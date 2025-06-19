@@ -66,13 +66,14 @@ const dataAccessorFunctions = `
 # Use PyPy 3.10+ for maximum performance gains
 
 import numpy as np
-from typing import List, Dict, Tuple, Union, Optional
+# Note: typing module is not available in the execution environment
+# Use built-in types: list, dict, tuple, str, int, float, bool
 
 # ==================== RAW DATA RETRIEVAL ONLY ====================
 # Note: You must implement your own technical indicators using the raw data below
 
-def get_price_data(symbol: str, timeframe: str = '1d', days: int = 30, 
-                  extended_hours: bool = False, start_time: str = None, end_time: str = None) -> Dict:
+def get_price_data(symbol, timeframe='1d', days=30, 
+                  extended_hours=False, start_time=None, end_time=None):
     """
     Get raw OHLCV price data for a symbol
     
@@ -84,13 +85,13 @@ def get_price_data(symbol: str, timeframe: str = '1d', days: int = 30,
         start_time: Time filter start (e.g., '09:30:00')
         end_time: Time filter end (e.g., '16:00:00')
     
-    Returns: Dict with 'timestamps': List[int], 'open': List[float], 'high': List[float], 
-             'low': List[float], 'close': List[float], 'volume': List[int], 
-             'extended_hours': List[bool]
+    Returns: Dict with 'timestamps': list of int, 'open': list of float, 'high': list of float, 
+             'low': list of float, 'close': list of float, 'volume': list of int, 
+             'extended_hours': list of bool
     """
     pass  # Implemented by backend
 
-def get_historical_data(symbol: str, timeframe: str = '1d', periods: int = 100, offset: int = 0) -> Dict:
+def get_historical_data(symbol, timeframe='1d', periods=100, offset=0):
     """
     Get historical raw price data with lag support
     
@@ -104,7 +105,7 @@ def get_historical_data(symbol: str, timeframe: str = '1d', periods: int = 100, 
     """
     pass  # Implemented by backend
 
-def get_security_info(symbol: str) -> Dict:
+def get_security_info(symbol):
     """
     Get basic security metadata
     
@@ -113,12 +114,12 @@ def get_security_info(symbol: str) -> Dict:
     """
     pass  # Implemented by backend
 
-def get_multiple_symbols_data(symbols: List[str], timeframe: str = '1d', days: int = 30) -> Dict[str, Dict]:
+def get_multiple_symbols_data(symbols, timeframe='1d', days=30):
     """
     Get raw price data for multiple symbols efficiently
     
     Args:
-        symbols: List of ticker symbols
+        symbols: list of ticker symbols
         timeframe: Data frequency
         days: Number of days of data
     
@@ -128,12 +129,12 @@ def get_multiple_symbols_data(symbols: List[str], timeframe: str = '1d', days: i
 
 # ==================== RAW FUNDAMENTAL DATA ====================
 
-def get_fundamental_data(symbol: str, metrics: Optional[List[str]] = None) -> Dict:
+def get_fundamental_data(symbol, metrics=None):
     """
     Get raw fundamental data for a symbol
     
     Args:
-        metrics: List of specific metrics to retrieve, or None for all available
+        metrics: list of specific metrics to retrieve, or None for all available
                 Available: 'market_cap', 'shares_outstanding', 'eps', 'revenue', 'dividend',
                           'book_value', 'debt', 'cash', 'free_cash_flow', 'gross_profit',
                           'operating_income', 'net_income', 'total_assets', 'total_liabilities'
@@ -142,17 +143,17 @@ def get_fundamental_data(symbol: str, metrics: Optional[List[str]] = None) -> Di
     """
     pass  # Implemented by backend
 
-def get_earnings_data(symbol: str, quarters: int = 8) -> Dict:
+def get_earnings_data(symbol, quarters=8):
     """
     Get raw historical earnings data
     
-    Returns: Dict with eps_actual: List[float], eps_estimate: List[float], 
-             revenue_actual: List[float], revenue_estimate: List[float],
-             report_dates: List[str], surprise_percent: List[float]
+    Returns: Dict with eps_actual: list of float, eps_estimate: list of float, 
+             revenue_actual: list of float, revenue_estimate: list of float,
+             report_dates: list of str, surprise_percent: list of float
     """
     pass  # Implemented by backend
 
-def get_financial_statements(symbol: str, statement_type: str = 'income', periods: int = 4) -> Dict:
+def get_financial_statements(symbol, statement_type='income', periods=4):
     """
     Get raw financial statement data
     
@@ -160,13 +161,13 @@ def get_financial_statements(symbol: str, statement_type: str = 'income', period
         statement_type: 'income', 'balance', 'cash_flow'
         periods: Number of periods (quarters) to retrieve
     
-    Returns: Dict with 'periods': List[str], 'line_items': Dict[str, List[float]]
+    Returns: Dict with 'periods': list of str, 'line_items': dict mapping str to list of float
     """
     pass  # Implemented by backend
 
 # ==================== RAW MARKET DATA ====================
 
-def get_sector_data(sector: str = None, days: int = 5) -> Dict:
+def get_sector_data(sector=None, days=5):
     """
     Get raw sector performance data
     
@@ -178,52 +179,52 @@ def get_sector_data(sector: str = None, days: int = 5) -> Dict:
     """
     pass  # Implemented by backend
 
-def get_market_indices(indices: List[str] = None, days: int = 30) -> Dict[str, Dict]:
+def get_market_indices(indices=None, days=30):
     """
     Get raw market index data
     
     Args:
-        indices: List of index symbols ['SPY', 'QQQ', 'IWM', 'VIX'] or None for all
+        indices: list of index symbols ['SPY', 'QQQ', 'IWM', 'VIX'] or None for all
         days: Number of days of data
     
     Returns: Dict mapping index -> raw OHLCV data
     """
     pass  # Implemented by backend
 
-def get_economic_calendar(days_ahead: int = 30) -> List[Dict]:
+def get_economic_calendar(days_ahead=30):
     """
     Get upcoming economic events
     
-    Returns: List of dicts with event_date, event_name, importance, previous, forecast, actual
+    Returns: list of dicts with event_date, event_name, importance, previous, forecast, actual
     """
     pass  # Implemented by backend
 
 # ==================== RAW VOLUME & FLOW DATA ====================
 
-def get_volume_data(symbol: str, days: int = 30) -> Dict:
+def get_volume_data(symbol, days=30):
     """
     Get raw volume data with timestamps
     
-    Returns: Dict with 'timestamps': List[int], 'volume': List[int], 
-             'dollar_volume': List[float], 'trade_count': List[int]
+    Returns: Dict with 'timestamps': list of int, 'volume': list of int, 
+             'dollar_volume': list of float, 'trade_count': list of int
     """
     pass  # Implemented by backend
 
-def get_options_chain(symbol: str, expiration: str = None) -> Dict:
+def get_options_chain(symbol, expiration=None):
     """
     Get raw options chain data
     
     Args:
         expiration: Specific expiration date (YYYY-MM-DD), or None for next expiration
     
-    Returns: Dict with calls: List[Dict], puts: List[Dict], each containing
+    Returns: Dict with calls: list of dict, puts: list of dict, each containing
              strike, bid, ask, volume, open_interest, implied_volatility
     """
     pass  # Implemented by backend
 
 # ==================== RAW SENTIMENT & NEWS DATA ====================
 
-def get_news_sentiment(symbol: str = None, days: int = 7) -> List[Dict]:
+def get_news_sentiment(symbol=None, days=7):
     """
     Get raw news articles with sentiment scores
     
@@ -231,11 +232,11 @@ def get_news_sentiment(symbol: str = None, days: int = 7) -> List[Dict]:
         symbol: Specific symbol or None for market news
         days: Number of days of news data
     
-    Returns: List of dicts with timestamp, headline, sentiment_score, source, url
+    Returns: list of dicts with timestamp, headline, sentiment_score, source, url
     """
     pass  # Implemented by backend
 
-def get_social_mentions(symbol: str, days: int = 7) -> Dict:
+def get_social_mentions(symbol, days=7):
     """
     Get raw social media mention data
     
@@ -246,25 +247,25 @@ def get_social_mentions(symbol: str, days: int = 7) -> Dict:
 
 # ==================== RAW INSIDER & INSTITUTIONAL DATA ====================
 
-def get_insider_trades(symbol: str, days: int = 90) -> List[Dict]:
+def get_insider_trades(symbol, days=90):
     """
     Get raw insider trading transactions
     
-    Returns: List of dicts with date, insider_name, title, transaction_type,
+    Returns: list of dicts with date, insider_name, title, transaction_type,
              shares, price, value, shares_owned_after
     """
     pass  # Implemented by backend
 
-def get_institutional_holdings(symbol: str, quarters: int = 4) -> List[Dict]:
+def get_institutional_holdings(symbol, quarters=4):
     """
     Get raw institutional ownership data
     
-    Returns: List of dicts with quarter, institution_name, shares_held,
+    Returns: list of dicts with quarter, institution_name, shares_held,
              market_value, percent_ownership, change_in_shares
     """
     pass  # Implemented by backend
 
-def get_short_data(symbol: str) -> Dict:
+def get_short_data(symbol):
     """
     Get raw short interest data
     
@@ -275,7 +276,7 @@ def get_short_data(symbol: str) -> Dict:
 
 # ==================== SCREENING & FILTERING ====================
 
-def scan_universe(filters: Dict = None, sort_by: str = None, limit: int = 100) -> Dict:
+def scan_universe(filters=None, sort_by=None, limit=100):
     """
     Screen stocks based on raw criteria
     
@@ -286,18 +287,18 @@ def scan_universe(filters: Dict = None, sort_by: str = None, limit: int = 100) -
         sort_by: Field to sort results by ('market_cap', 'volume', 'price')
         limit: Maximum number of results
     
-    Returns: Dict with 'symbols': List[str], 'data': List[Dict] with basic info
+    Returns: Dict with 'symbols': list of str, 'data': list of dict with basic info
     """
     pass  # Implemented by backend
 
-def get_universe_symbols(universe: str = 'sp500') -> List[str]:
+def get_universe_symbols(universe='sp500'):
     """
     Get list of symbols from predefined universes
     
     Args:
         universe: 'sp500', 'nasdaq100', 'russell2000', 'all_stocks'
     
-    Returns: List of ticker symbols
+    Returns: list of ticker symbols
     """
     pass  # Implemented by backend
 `
@@ -309,7 +310,7 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 	}
 
 	var existingStrategy *Strategy
-	var isEdit bool = args.StrategyID != -1
+	isEdit := args.StrategyID != -1
 
 	// Handle strategy ID - if -1, create new strategy, otherwise edit existing
 	if isEdit {

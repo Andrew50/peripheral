@@ -506,13 +506,10 @@ class DataProvider:
                 days = 5
 
             # Using parameterized query construction to prevent SQL injection
-            sector_filter = " AND s.sector = %s" if sector else ""
             params = [f"{days} days", f"{days} days"]
-            if sector:
-                params.append(sector)
-
-            # Construct parameterized query - safe from SQL injection
-            query = f"""  # nosec B608 - Safe parameterized query with validated inputs
+            
+            # Build query safely using string concatenation instead of f-strings
+            base_query = """
             WITH sector_data AS (
                 SELECT 
                     s.sector,
@@ -526,7 +523,17 @@ class DataProvider:
                 JOIN ohlcv_1d o1 ON s.security_id = o1.security_id
                 JOIN ohlcv_1d o2 ON s.security_id = o2.security_id
                 WHERE o1.timestamp >= CURRENT_DATE - INTERVAL %s
-                AND o2.timestamp = o1.timestamp - INTERVAL %s{sector_filter}
+                AND o2.timestamp = o1.timestamp - INTERVAL %s"""
+            
+            if sector:
+                params.append(sector)
+                sector_filter = "\n                AND s.sector = %s"
+            else:
+                sector_filter = ""
+
+            # Construct fully parameterized query - safe from SQL injection
+            # sector_filter is a hardcoded string with parameterized placeholder
+            query = base_query + sector_filter + """
             )
             SELECT 
                 sector,
@@ -537,7 +544,7 @@ class DataProvider:
             WHERE current_close IS NOT NULL AND prev_close IS NOT NULL
             GROUP BY sector
             ORDER BY return DESC
-            """
+            """  # nosec B608
 
             result = await self.execute_sql_parameterized(query, params)
             if result and result["data"]:
@@ -603,6 +610,7 @@ class DataProvider:
                 "volume",
             ]
             if sort_by and sort_by in allowed_sort_fields:
+                # Safe to interpolate since sort_by is validated against allowlist
                 query += f" ORDER BY {sort_by} DESC"
             else:
                 query += " ORDER BY f.market_cap DESC"
