@@ -77,6 +77,13 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
+# Service-specific log directories
+services/*/logs/
+services/worker/logs/
+services/backend/logs/
+services/frontend/logs/
+logs/
+
 # Runtime Data
 pids
 *.pid

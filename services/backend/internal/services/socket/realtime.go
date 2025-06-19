@@ -2,8 +2,6 @@ package socket
 
 import (
 	"backend/internal/data"
-	"log"
-	"os"
 )
 
 // Subscribes the client WebSocket to the requested channel in "realtime" mode
@@ -12,10 +10,8 @@ func (c *Client) subscribeRealtime(conn *data.Conn, channelName string) {
 		return
 	}
 	channelsMutex.Lock()
-	if err := os.Stdout.Sync(); err != nil {
-		// Log the error but don't fail the subscription
-		log.Printf("Error syncing stdout: %v", err)
-	}
+	// Note: os.Stdout.Sync() removed as it doesn't work properly in Docker containers
+	// and is not necessary for WebSocket subscriptions
 	subscribers, exists := channelSubscribers[channelName]
 	if !exists {
 		subscribers = make(map[*Client]bool)
