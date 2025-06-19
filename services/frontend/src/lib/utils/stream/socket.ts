@@ -14,8 +14,18 @@ export type FunctionStatusUpdate = {
 	userMessage: string;
 };
 
+// Define the type for title updates from backend
+export type TitleUpdate = {
+	type: 'title_update';
+	conversation_id: string;
+	title: string;
+};
+
 // Store to hold the current function status message
 export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
+
+// Store to hold the latest title update
+export const titleUpdateStore = writable<TitleUpdate | null>(null);
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -101,6 +111,13 @@ export function connect() {
 			const statusUpdate = data as FunctionStatusUpdate;
 			functionStatusStore.set(statusUpdate);
 			return; // Handled function status update
+		}
+
+		// Handle title updates
+		if (data && data.type === 'title_update') {
+			const titleUpdate = data as TitleUpdate;
+			titleUpdateStore.set(titleUpdate);
+			return; // Handled title update
 		}
 
 		// Handle other message types (based on channel)

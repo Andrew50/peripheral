@@ -557,4 +557,53 @@ func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
 	return cleaned
 }
 
+const titleModel = "gemini-2.5-flash-lite-preview-06-17"
+const titleSystemPrompt = "You are a helpful assistant that generates a title for a conversation based on the first query message given to you. It should be no more than 40 characters and should be 3-4 words, capitalized like a title. Stock symbols should be fully capitalized. Make the title memorable but not cringe."
+
+func GenerateConversationTitle(conn *data.Conn, userID int, query string) (string, error) {
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return "", fmt.Errorf("error getting gemini key: %w", err)
+	}
+	// Create a new client using the API key
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error creating gemini client: %w", err)
+	}
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: titleSystemPrompt},
+			},
+		},
+	}
+	result, err := client.Models.GenerateContent(
+		context.Background(),
+		titleModel,
+		genai.Text(query),
+		config,
+	)
+	if err != nil {
+		return "", fmt.Errorf("error generating content with thinking model: %w", err)
+	}
+	// Extract the clean text response for display
+	responseText := ""
+	if len(result.Candidates) > 0 {
+		candidate := result.Candidates[0]
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part.Text != "" {
+					responseText = part.Text
+					break
+				}
+			}
+		}
+	}
+	return responseText, nil
+
+}
+
 // </planner.go>

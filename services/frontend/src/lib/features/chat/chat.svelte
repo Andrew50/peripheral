@@ -19,7 +19,7 @@
 	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick, cleanContentChunk, getContentChunkTextForCopy } from './utils';
 	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
-	import { functionStatusStore, type FunctionStatusUpdate } from '$lib/utils/stream/socket'; // <-- Import the status store and FunctionStatusUpdate type
+	import { functionStatusStore, titleUpdateStore, type FunctionStatusUpdate, type TitleUpdate } from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
 	import { generateSharedConversationLink } from './chatHelpers';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -1150,6 +1150,35 @@
 		} catch (error) {
 			console.error('Failed to copy share link:', error);
 		}
+	}
+
+	// Reactive block to handle title updates from websocket
+	$: if ($titleUpdateStore && browser) {
+		const titleUpdate = $titleUpdateStore;
+		
+		// Handle title updates for current conversation OR new conversations (when currentConversationId is empty)
+		if (titleUpdate.conversation_id === currentConversationId || 
+			(!currentConversationId && titleUpdate.conversation_id)) {
+			
+			// If this is a new conversation, set the conversation ID
+			if (!currentConversationId) {
+				currentConversationId = titleUpdate.conversation_id;
+			}
+			
+			currentConversationTitle = titleUpdate.title;
+			
+			// Also update the conversations list if it's loaded
+			if (conversations.length > 0) {
+				conversations = conversations.map(conv => 
+					conv.conversation_id === titleUpdate.conversation_id 
+						? { ...conv, title: titleUpdate.title }
+						: conv
+				);
+			}
+		}
+		
+		// Clear the store after processing
+		titleUpdateStore.set(null);
 	}
 </script>
 

@@ -201,42 +201,6 @@ func SetActiveConversationID(ctx context.Context, conn *data.Conn, userID int, c
 	return nil
 }
 
-// SaveMessageToActiveConversationWithCache saves a message and updates cache
-func SaveMessageToActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID int, message ChatMessage) error {
-	// Get or create active conversation
-	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get active conversation: %w", err)
-	}
-
-	// If no active conversation, create a new one
-	if activeConversationID == "" {
-		title := AutoGenerateConversationTitle(message.Query)
-		activeConversationID, err = CreateConversationInDB(ctx, conn, userID, title)
-		if err != nil {
-			return fmt.Errorf("failed to create new conversation: %w", err)
-		}
-
-		if err := SetActiveConversationIDCached(ctx, conn, userID, activeConversationID); err != nil {
-			// Log but don't fail - the conversation is created
-			fmt.Printf("Warning: failed to set new conversation as active: %v\n", err)
-		}
-	}
-
-	// Invalidate cache BEFORE saving to database to prevent stale data
-	if err := InvalidateActiveConversationCache(ctx, conn, userID); err != nil {
-		fmt.Printf("Warning: failed to invalidate active conversation cache: %v\n", err)
-	}
-
-	// Save to database
-	_, err = SaveConversationMessage(ctx, conn, activeConversationID, userID, message)
-	if err != nil {
-		return fmt.Errorf("failed to save message to database: %w", err)
-	}
-
-	return nil
-}
-
 // UpdateMessageInActiveConversationCache updates a specific message in cache
 func UpdateMessageInActiveConversationCache(ctx context.Context, conn *data.Conn, userID int, query string, updateFunc func(*ChatMessage)) error {
 	cachedConv, err := GetActiveConversationFromCache(ctx, conn, userID)
