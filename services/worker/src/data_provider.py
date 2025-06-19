@@ -186,7 +186,7 @@ class DataProvider:
 
             # Build query with parameterized values
             # table_name is validated against allowlist above
-            query = f"""  # nosec B608
+            query = f"""
             SELECT 
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
                 o.open,
@@ -198,7 +198,7 @@ class DataProvider:
             FROM {table_name} o
             JOIN securities s ON o.security_id = s.security_id
             WHERE s.ticker = %s
-            """
+            """  # nosec B608
 
             params = [symbol]
 
@@ -329,7 +329,7 @@ class DataProvider:
                 return {}
 
             # table_name is validated against allowlist above
-            query = f"""  # nosec B608
+            query = f"""
             SELECT 
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
                 o.open, o.high, o.low, o.close, o.volume
@@ -339,7 +339,7 @@ class DataProvider:
             ORDER BY o.timestamp DESC
             OFFSET %s
             LIMIT %s
-            """
+            """  # nosec B608
 
             params = [symbol, offset, periods]
             result = await self.execute_sql_parameterized(query, params)
@@ -467,14 +467,14 @@ class DataProvider:
             metrics_str = ", ".join([f"f.{metric}" for metric in safe_metrics])
 
             # metrics are validated against allowed list above
-            query = f"""  # nosec B608
+            query = f"""
             SELECT {metrics_str}
             FROM fundamentals f
             JOIN securities s ON f.security_id = s.security_id
             WHERE s.ticker = %s
             ORDER BY f.timestamp DESC
             LIMIT 1
-            """
+            """  # nosec B608
 
             result = await self.execute_sql_parameterized(query, [symbol])
             if result and result["data"]:
@@ -529,9 +529,9 @@ class DataProvider:
                 params.append(sector)
 
             # base_query is static SQL with parameterized values
-            query = (  # nosec B608
+            query = (
                 base_query
-                + """
+                + """  # nosec B608
             )
             SELECT 
                 sector,
