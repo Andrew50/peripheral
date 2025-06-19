@@ -34,7 +34,7 @@
 
 <svelte:head>
 	<!-- Basic meta tags -->
-	<title>{data.meta.title} - Atlantis TEST</title>
+	<title>{data.meta.title}Atlantis</title>
 	<meta name="description" content={data.meta.description} />
 	
 	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
