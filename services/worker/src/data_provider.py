@@ -185,7 +185,8 @@ class DataProvider:
                 return {}
 
             # Build query with parameterized values
-            query = f"""
+            # table_name is validated against allowlist above
+            query = f"""  # nosec B608
             SELECT 
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
                 o.open,
@@ -327,7 +328,8 @@ class DataProvider:
                 logger.error(f"Invalid table name: {table_name}")
                 return {}
 
-            query = f"""
+            # table_name is validated against allowlist above
+            query = f"""  # nosec B608
             SELECT 
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
                 o.open, o.high, o.low, o.close, o.volume
@@ -464,8 +466,8 @@ class DataProvider:
             # Build dynamic query based on available metrics - safe since metrics are validated
             metrics_str = ", ".join([f"f.{metric}" for metric in safe_metrics])
 
-            # Use string formatting safely since metrics are validated against allowed list
-            query = f"""
+            # metrics are validated against allowed list above
+            query = f"""  # nosec B608
             SELECT {metrics_str}
             FROM fundamentals f
             JOIN securities s ON f.security_id = s.security_id
@@ -526,7 +528,8 @@ class DataProvider:
                 base_query += " AND s.sector = %s"
                 params.append(sector)
 
-            query = (
+            # base_query is static SQL with parameterized values
+            query = (  # nosec B608
                 base_query
                 + """
             )
