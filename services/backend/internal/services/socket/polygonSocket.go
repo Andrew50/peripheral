@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	//"log"
 	"sync"
@@ -144,8 +145,10 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				//if alerts.IsAggsInitialized() {
 				if useAlerts {
 					if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
-						// Log the error but continue processing
-						//fmt.Printf("Error appending tick: %v\n", err)
+						// Only log non-initialization errors to reduce noise
+						if !strings.Contains(err.Error(), "aggregates not yet initialized") {
+							fmt.Printf("Error appending tick: %v\n", err)
+						}
 					}
 				}
 				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
