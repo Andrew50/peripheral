@@ -76,6 +76,9 @@
 		activeChartInstance
 	} from '$lib/features/chart/interface';
 
+	// Import TopBar component
+	import TopBar from '$lib/components/TopBar.svelte';
+
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
@@ -706,27 +709,6 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
-	// DEPRECATED: Screensaver functions
-	// Add function after other function declarations
-	// function resetInactivityTimer() {
-	// 	if (inactivityTimer) {
-	// 		clearTimeout(inactivityTimer);
-	// 	}
-	// 	if (!screensaverActive) {
-	// 		inactivityTimer = setTimeout(() => {
-	// 			// Only activate screensaver, don't hide the chart
-	// 			screensaverActive = true;
-	// 		}, INACTIVITY_TIMEOUT);
-	// 	}
-	// }
-
-	// function toggleScreensaver() {
-	// 	screensaverActive = !screensaverActive;
-	// 	// If turning off screensaver, reset the inactivity timer
-	// 	if (!screensaverActive) {
-	// 		resetInactivityTimer();
-	// 	}
-	// }
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -842,7 +824,6 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
-	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
 	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
@@ -886,8 +867,7 @@
 			<!-- Main content and sidebar wrapper -->
 			<div class="main-and-sidebar-wrapper">
 				<!-- Top bar -->
-				<div class="top-bar">
-				</div>
+				<TopBar instance={$activeChartInstance || {}} />
 
 				<!-- Content below top bar -->
 				<div class="content-below-topbar">
@@ -1014,12 +994,6 @@
 			>
 				Screener
 			</button>
-			<!-- <button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'account') ? 'active' : ''}"
-				on:click={() => openBottomWindow('account')}
-			>
-				Account
-			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1168,24 +1142,7 @@
 		padding: 0;
 	}
 
-	.top-bar {
-		height: 40px;
-		min-height: 40px;
-		background-color: var(--c2);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0 10px;
-		gap: 10px;
-		flex-shrink: 0;
-		width: 100%;
-		z-index: 10;
-		border-bottom: 1px solid var(--c1);
-		position: absolute; /* Position absolutely */
-		top: 0;
-		left: 0;
-		right: 0;
-	}
+
 
 	.content-wrapper {
 		flex: 1;
