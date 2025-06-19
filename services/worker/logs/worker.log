@@ -674,3 +674,10 @@
 2025-06-19 00:01:05,542 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
 2025-06-19 00:03:23,251 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
 2025-06-19 00:04:17,321 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:06:26,825 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:07:05,978 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:08:37,693 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:09:29,929 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:09:44,917 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:11:52,878 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:11:55,328 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
