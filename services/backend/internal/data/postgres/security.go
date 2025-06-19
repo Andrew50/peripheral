@@ -103,9 +103,9 @@ type TickerEventsAPIResponse struct {
 
 // GetTickerEventsCustom bypasses the SDK to call the API directly
 func GetTickerEventsCustom(client *polygon.Client, id string, apiKey string) ([]models.TickerEventResult, error) {
-	url := fmt.Sprintf("https://api.polygon.io/vX/reference/tickers/%s/events?apiKey=%s", id, apiKey)
+	polygonUrl := fmt.Sprintf("https://api.polygon.io/vX/reference/tickers/%s/events?apiKey=%s", id, apiKey)
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(polygonUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
