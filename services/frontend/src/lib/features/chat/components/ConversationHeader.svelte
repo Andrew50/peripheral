@@ -25,7 +25,7 @@
     <div class="header-left">
         <div class="conversation-dropdown-container" bind:this={conversationDropdown}>
             <button class="hamburger-button" on:click={toggleConversationDropdown} aria-label="Open conversations menu">
-                <svg viewBox="0 0 24 24" width="20" height="20">
+                <svg viewBox="0 0 24 24" width="16" height="16">
                     <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
                 </svg>
             </button>

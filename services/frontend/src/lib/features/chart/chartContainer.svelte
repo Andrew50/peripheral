@@ -100,11 +100,7 @@
 		flex-direction: column;
 		width: 100%;
 		height: 100%;
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
+		position: relative; /* Changed from absolute to relative */
 		outline: none; /* Remove focus outline but maintain accessibility */
 	}
 

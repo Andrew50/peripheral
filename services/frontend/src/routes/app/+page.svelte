@@ -859,7 +859,7 @@
 		}}
 		on:close={hideAuthModal}
 	/>
-	<!--<Algo />-->
+
 	<!-- Main area wrapper -->
 	<div class="app-container">
 		<div class="content-wrapper">
@@ -883,89 +883,91 @@
 				</div>
 			{/if}
 
-			<!-- Main content area -->
-			<div class="main-content">
-				<!-- Chart area -->
-				<div class="chart-wrapper">
-					<ChartContainer width={chartWidth} />
-					<!-- DEPRECATED: Screensaver functionality -->
-					<!-- {#if screensaverActive}
-						<Screensaver on:exit={() => (screensaverActive = false)} />
-					{/if} -->
+			<!-- Main content and sidebar wrapper -->
+			<div class="main-and-sidebar-wrapper">
+				<!-- Top bar -->
+				<div class="top-bar">
 				</div>
 
-				<!-- Bottom windows container -->
-				<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
-					{#each bottomWindows as w}
-						<div class="bottom-window">
-							<div class="window-content">
-								{#if w.type === 'screener'}
-									<Screener />
-								{:else if w.type === 'strategies'}
-									<Strategies />
-									<!-- {:else if w.type === 'account'}
-									<Account /> -->
-								{:else if w.type === 'settings'}
-									<Settings />
-								{/if}
+				<!-- Content below top bar -->
+				<div class="content-below-topbar">
+					<!-- Main content area -->
+					<div class="main-content">
+						<!-- Chart area -->
+						<div class="chart-wrapper">
+							<ChartContainer width={chartWidth} />
+						</div>
+
+						<!-- Bottom windows container -->
+						<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
+							{#each bottomWindows as w}
+								<div class="bottom-window">
+									<div class="window-content">
+										{#if w.type === 'screener'}
+											<Screener />
+										{:else if w.type === 'strategies'}
+											<Strategies />
+										{:else if w.type === 'settings'}
+											<Settings />
+										{/if}
+									</div>
+								</div>
+							{/each}
+							{#if bottomWindows.length > 0}
+								<div
+									class="bottom-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startBottomResize}
+									on:keydown={handleKeyboardBottomResize}
+									tabindex="0"
+								></div>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Sidebar -->
+					{#if $menuWidth > 0}
+						<div class="sidebar" style="width: {$menuWidth}px;">
+							<div
+								class="resize-handle"
+								role="separator"
+								aria-orientation="vertical"
+								on:mousedown={startResize}
+								on:touchstart={startResize}
+								on:keydown={handleKeyboardResize}
+								tabindex="0"
+							/>
+							<div class="sidebar-content">
+								<!-- Main sidebar content -->
+								<div class="main-sidebar-content">
+									{#if $activeMenu === 'watchlist'}
+										<Watchlist />
+									{:else if $activeMenu === 'alerts'}
+										<Alerts />
+										<!--{:else if $activeMenu === 'news'}
+										<News />-->
+									{/if}
+								</div>
+
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
-					{/each}
-					{#if bottomWindows.length > 0}
-						<div
-							class="bottom-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startBottomResize}
-							on:keydown={handleKeyboardBottomResize}
-							tabindex="0"
-						></div>
 					{/if}
 				</div>
 			</div>
-
-			<!-- Sidebar -->
-			{#if $menuWidth > 0}
-				<div class="sidebar" style="width: {$menuWidth}px;">
-					<div
-						class="resize-handle"
-						role="separator"
-						aria-orientation="vertical"
-						on:mousedown={startResize}
-						on:touchstart={startResize}
-						on:keydown={handleKeyboardResize}
-						tabindex="0"
-					/>
-					<div class="sidebar-content">
-						<!-- Main sidebar content -->
-						<div class="main-sidebar-content">
-							{#if $activeMenu === 'watchlist'}
-								<Watchlist />
-							{:else if $activeMenu === 'alerts'}
-								<Alerts />
-								<!--{:else if $activeMenu === 'study'}
-								<Study />-->
-								<!--{:else if $activeMenu === 'news'}
-								<News />-->
-							{/if}
-						</div>
-
-						<div
-							class="sidebar-resize-handle"
-							role="separator"
-							aria-orientation="horizontal"
-							on:mousedown={startSidebarResize}
-							on:touchstart|preventDefault={startSidebarResize}
-							on:keydown={handleKeyboardSidebarResize}
-							tabindex="0"
-						></div>
-
-						<div class="ticker-info-container" style="height: {tickerHeight}px">
-							<Quote />
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- Sidebar toggle buttons -->
@@ -1113,8 +1115,7 @@
 				{:else}
 					Loading Time...
 				{/if}
-			</span>
-			-->
+			</span>	
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1167,6 +1168,25 @@
 		padding: 0;
 	}
 
+	.top-bar {
+		height: 40px;
+		min-height: 40px;
+		background-color: var(--c2);
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0 10px;
+		gap: 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 1px solid var(--c1);
+		position: absolute; /* Position absolutely */
+		top: 0;
+		left: 0;
+		right: 0;
+	}
+
 	.content-wrapper {
 		flex: 1;
 		display: flex;
@@ -1174,6 +1194,24 @@
 		min-height: 0;
 		position: relative;
 		margin-right: 45px;
+	}
+
+	.main-and-sidebar-wrapper {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		position: relative;
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	.content-below-topbar {
+		flex: 1;
+		display: flex;
+		position: relative;
+		overflow: hidden;
+		min-height: 0;
+		padding-top: 40px; /* Add padding for the absolutely positioned top bar */
 	}
 
 	.main-content {
@@ -1205,6 +1243,7 @@
 		position: relative;
 		overflow: hidden;
 		min-height: 0;
+		height: 100%; /* Ensure it takes available height */
 	}
 
 	.sidebar {
@@ -1220,9 +1259,9 @@
 
 	.sidebar-buttons {
 		position: fixed;
-		top: 0;
+		top: 40px; /* Start below the top bar */
 		right: 0;
-		height: 100vh;
+		height: calc(100vh - 80px); /* Subtract both top bar and bottom bar heights */
 		width: 45px;
 		display: flex;
 		flex-direction: column;
