@@ -9,7 +9,6 @@ import importlib
 import logging
 import sys
 from typing import Any, Dict, List, Optional, Union
-from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -88,6 +87,8 @@ class PythonExecutionEngine:
             "math",
             "statistics",
             "datetime",
+            "time",
+            "typing",
             "collections",
             "itertools",
             "functools",
@@ -120,44 +121,7 @@ class PythonExecutionEngine:
             "license",
             "quit",
             "exit",
-            "open",
-            "file",
-            "input",
-            "raw_input",
-            "execfile",
-            "reload",
-            "compile",
-            "eval",
-            "__import__",
-            "globals",
-            "locals",
-            "vars",
-            "dir",
-            "help",
-            "copyright",
-            "credits",
-            "license",
-            "quit",
-            "exit",
         }
-
-        # Initialize data provider
-        self.data_provider = DataProvider()
-
-    async def execute(self, code: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute Python code in a restricted environment with enhanced security"""
-
-        # Validate code before execution
-        validator = CodeValidator()
-        if not validator.validate(code):
-            raise SecurityError(
-                "Code validation failed - contains prohibited operations"
-            )
-
-        # Additional security checks
-        if not self._perform_security_checks(code):
-            raise SecurityError("Code contains security violations")
-
 
         # Initialize data provider
         self.data_provider = DataProvider()
@@ -178,19 +142,9 @@ class PythonExecutionEngine:
 
         # Prepare execution environment
         exec_globals = await self._create_safe_globals(context)
-        exec_globals = await self._create_safe_globals(context)
         exec_locals = {}
 
-
         try:
-            # Compile code first for additional validation
-            compiled_code = compile(code, "<strategy>", "exec")
-
-            # Execute the compiled code in restricted environment
-            # Note: exec() is necessary here for dynamic strategy execution
-            # but we've added multiple layers of security validation
-            exec(compiled_code, exec_globals, exec_locals)  # nosec B102
-
             # Compile code first for additional validation
             compiled_code = compile(code, "<strategy>", "exec")
 
@@ -202,80 +156,11 @@ class PythonExecutionEngine:
             # Extract results
             result = self._extract_results(exec_locals, exec_globals)
 
-            result = self._extract_results(exec_locals, exec_globals)
-
             return result
-
 
         except Exception as e:
             logger.error(f"Execution error: {e}")
             raise
-
-    def _perform_security_checks(self, code: str) -> bool:
-        """Perform additional security checks on code"""
-        try:
-            # Parse code into AST for analysis
-            tree = ast.parse(code)
-
-            # Check for prohibited operations
-            for node in ast.walk(tree):
-                # Block eval, exec, compile usage in user code
-                if isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Name):
-                        if node.func.id in ["eval", "exec", "compile", "__import__"]:
-                            logger.warning(f"Prohibited function call: {node.func.id}")
-                            return False
-
-                # Block subprocess, os module calls
-                if isinstance(node, ast.Attribute):
-                    if isinstance(node.value, ast.Name):
-                        if node.value.id in ["os", "subprocess", "sys"]:
-                            logger.warning(f"Prohibited module access: {node.value.id}")
-                            return False
-
-                # Block file operations
-                if isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Name):
-                        if node.func.id in ["open", "file"]:
-                            logger.warning(f"Prohibited file operation: {node.func.id}")
-                            return False
-
-            # Additional string-based checks
-            code_lower = code.lower()
-            prohibited_patterns = [
-                "import os",
-                "import sys",
-                "import subprocess",
-                "from os",
-                "from sys",
-                "from subprocess",
-                "exec(",
-                "eval(",
-                "compile(",
-                "globals()",
-                "locals()",
-                "vars()",
-                "dir()",
-                "__builtins__",
-                "__globals__",
-                "__locals__",
-            ]
-
-            for pattern in prohibited_patterns:
-                if pattern in code_lower:
-                    logger.warning(f"Prohibited pattern found: {pattern}")
-                    return False
-
-            return True
-
-        except SyntaxError as e:
-            logger.error(f"Syntax error in code: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error performing security checks: {e}")
-            return False
-
-    async def _create_safe_globals(self, context: Dict[str, Any]) -> Dict[str, Any]:
 
     def _perform_security_checks(self, code: str) -> bool:
         """Perform additional security checks on code"""
@@ -349,7 +234,6 @@ class PythonExecutionEngine:
         safe_builtins = {
             name: getattr(builtins, name)
             for name in dir(builtins)
-            if not name.startswith("_") and name not in self.restricted_builtins
             if not name.startswith("_") and name not in self.restricted_builtins
         }
 
@@ -529,21 +413,35 @@ class PythonExecutionEngine:
         def make_sync_wrapper(async_func):
             """Convert async function to sync for use in strategy code"""
             import asyncio
+            import concurrent.futures
 
             def wrapper(*args, **kwargs):
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # If we're already in an async context, create a new task
-                        import concurrent.futures
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(
-                                asyncio.run, async_func(*args, **kwargs)
-                            )
-                            return future.result()
-                    else:
-                        return loop.run_until_complete(async_func(*args, **kwargs))
+                    # Get the current event loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        return asyncio.run(async_func(*args, **kwargs))
+                    
+                    # We're in an async context - we need to handle this carefully
+                    # Create a new task in the current loop
+                    task = loop.create_task(async_func(*args, **kwargs))
+                    
+                    # Since we can't await in a sync context, we need to run this
+                    # in a separate thread with its own event loop
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        def run_async():
+                            new_loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(new_loop)
+                            try:
+                                return new_loop.run_until_complete(async_func(*args, **kwargs))
+                            finally:
+                                new_loop.close()
+                        
+                        future = executor.submit(run_async)
+                        return future.result(timeout=30)  # Add timeout to prevent hanging
+                        
                 except Exception as e:
                     logger.error(f"Error in data accessor function: {e}")
                     return {}
@@ -1742,21 +1640,35 @@ class PythonExecutionEngine:
         def make_sync_wrapper(async_func):
             """Convert async function to sync for use in strategy code"""
             import asyncio
+            import concurrent.futures
 
             def wrapper(*args, **kwargs):
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # If we're already in an async context, create a new task
-                        import concurrent.futures
-
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(
-                                asyncio.run, async_func(*args, **kwargs)
-                            )
-                            return future.result()
-                    else:
-                        return loop.run_until_complete(async_func(*args, **kwargs))
+                    # Get the current event loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        return asyncio.run(async_func(*args, **kwargs))
+                    
+                    # We're in an async context - we need to handle this carefully
+                    # Create a new task in the current loop
+                    task = loop.create_task(async_func(*args, **kwargs))
+                    
+                    # Since we can't await in a sync context, we need to run this
+                    # in a separate thread with its own event loop
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        def run_async():
+                            new_loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(new_loop)
+                            try:
+                                return new_loop.run_until_complete(async_func(*args, **kwargs))
+                            finally:
+                                new_loop.close()
+                        
+                        future = executor.submit(run_async)
+                        return future.result(timeout=30)  # Add timeout to prevent hanging
+                        
                 except Exception as e:
                     logger.error(f"Error in data accessor function: {e}")
                     return {}
@@ -1886,15 +1798,12 @@ class PythonExecutionEngine:
         """Get helper functions for strategy development"""
 
         def log(message: str, level: str = "info"):
-
-        def log(message: str, level: str = "info"):
             """Log a message during strategy execution"""
             getattr(logger, level.lower())(f"Strategy: {message}")
 
 
         def save_result(key: str, value: Any):
             """Save a result to be returned"""
-            if not hasattr(save_result, "results"):
             if not hasattr(save_result, "results"):
                 save_result.results = {}
             save_result.results[key] = value
@@ -1903,15 +1812,7 @@ class PythonExecutionEngine:
         return {
             "log": log,
             "save_result": save_result,
-            "log": log,
-            "save_result": save_result,
         }
-
-    def _extract_results(
-        self, locals_dict: Dict[str, Any], globals_dict: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Extract results from execution locals and globals"""
-
 
     def _extract_results(
         self, locals_dict: Dict[str, Any], globals_dict: Dict[str, Any]
@@ -1927,16 +1828,8 @@ class PythonExecutionEngine:
         if save_result_func and hasattr(save_result_func, "results"):
             results.update(save_result_func.results)
 
-        # Check both locals and globals for save_result function
-        save_result_func = locals_dict.get("save_result") or globals_dict.get(
-            "save_result"
-        )
-        if save_result_func and hasattr(save_result_func, "results"):
-            results.update(save_result_func.results)
-
         # Extract variables that don't start with underscore
         for key, value in locals_dict.items():
-            if not key.startswith("_") and key not in {"save_result"}:
             if not key.startswith("_") and key not in {"save_result"}:
                 try:
                     # Try to serialize the value to ensure it's JSON-compatible
@@ -2089,7 +1982,6 @@ class CodeValidator:
     def _check_attribute_access(self, node: ast.Attribute) -> bool:
         """Check attribute access"""
         # Prevent access to dangerous attributes
-        dangerous_attrs = {"__globals__", "__locals__", "__code__", "__dict__"}
         dangerous_attrs = {"__globals__", "__locals__", "__code__", "__dict__"}
         if node.attr in dangerous_attrs:
             return False

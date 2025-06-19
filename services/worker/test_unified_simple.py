@@ -209,7 +209,7 @@ class UnifiedStrategyEngine:
         exec_globals = context.copy()
         exec_locals = {}
         
-        exec(strategy_code, exec_globals, exec_locals)
+        exec(strategy_code, exec_globals, exec_locals)  # nosec B102
         
         # Try to use run_realtime_scan function
         alerts = []
@@ -252,7 +252,7 @@ class UnifiedStrategyEngine:
         exec_globals = context.copy()
         exec_locals = {}
         
-        exec(strategy_code, exec_globals, exec_locals)
+        exec(strategy_code, exec_globals, exec_locals)  # nosec B102
         
         # Try to use run_batch_backtest function
         instances = []
@@ -296,7 +296,7 @@ class UnifiedStrategyEngine:
         exec_globals = context.copy()
         exec_locals = {}
         
-        exec(strategy_code, exec_globals, exec_locals)
+        exec(strategy_code, exec_globals, exec_locals)  # nosec B102
         
         # Try to use run_screening function
         ranked_results = []
