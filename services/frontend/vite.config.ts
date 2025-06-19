@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [sveltekit()],
+	ssr: {
+		noExternal: ['svelte-plotly.js', 'plotly.js-dist']
+	},
 	server: {
 		fs: {
 			// Allow serving files from the entire project
