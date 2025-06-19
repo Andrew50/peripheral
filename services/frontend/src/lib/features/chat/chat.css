@@ -12,8 +12,8 @@
 		height: 40px;
 		min-height: 40px;
 		padding: 0 1rem 0 1rem;
-		border-bottom: 3px solid var(--c4);
-		background: var(--c2);
+		border-bottom: 4px solid var(--c1);
+		background: #0F0F0F;
 		flex-shrink: 0;
 	}
 

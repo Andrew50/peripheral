@@ -1183,7 +1183,7 @@
 	.bottom-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: var(--c2);
+		background-color: #0F0F0F;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1192,7 +1192,7 @@
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 3;
-		border-top: 3px solid var(--c4);
+		border-top: 4px solid var(--c1);
 	}
 
 	.chart-wrapper {
@@ -1205,12 +1205,12 @@
 
 	.sidebar {
 		height: 100%;
-		background-color: var(--ui-bg-primary);
+		background-color: #0F0F0F;
 		display: flex;
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-left: 3px solid var(--c4);
+		border-left: 4px solid var(--c1);
 		max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
 	}
 
@@ -1222,10 +1222,10 @@
 		width: 45px;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--c2);
+		background-color: #0F0F0F;
 		z-index: 2;
 		flex-shrink: 0;
-		border-right: 1px solid var(--ui-border);
+		border-left: 4px solid var(--c1);
 		max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
 	}
 
@@ -1233,7 +1233,7 @@
 		width: 4px;
 		height: 100%;
 		cursor: ew-resize;
-		background-color: var(--c4);
+		background-color: var(--c1);
 		flex-shrink: 0;
 		transition: background-color 0.2s;
 		position: absolute;
@@ -1247,7 +1247,7 @@
 	}
 
 	.resize-handle:hover {
-		background-color: var(--c4);
+		background-color: var(--c1);
 	}
 
 	.side-btn {
@@ -1370,14 +1370,14 @@
 		left: 0;
 		right: 0;
 		height: 4px;
-		background: var(--c4);
+		background: var(--c1);
 		cursor: ns-resize;
 		z-index: 100;
 		transition: background-color 0.2s;
 	}
 
 	.bottom-resize-handle:hover {
-		background: var(--c3);
+		background: var(--c1);
 	}
 
 	.sidebar-content {
@@ -1486,7 +1486,7 @@
 
 	.sidebar-resize-handle {
 		height: 4px;
-		background: var(--c4);
+		background: var(--c1);
 		cursor: ns-resize;
 		margin: -2px 0;
 		z-index: 10;
@@ -1495,7 +1495,7 @@
 	}
 
 	.sidebar-resize-handle:hover {
-		background: var(--c4);
+		background: var(--c1);
 	}
 
 	.profile-button {
@@ -1511,12 +1511,12 @@
 	/* Add styles for left sidebar */
 	.left-sidebar {
 		height: 100%;
-		background-color: var(--ui-bg-primary);
+		background-color: #0F0F0F;
 		display: flex;
 		flex-direction: column;
 		position: relative;
 		flex-shrink: 0;
-		border-right: 3px solid var(--c4);
+		border-right: 4px solid var(--c1);
 		max-width: min(800px, calc(100vw - 60px));
 	}
 
@@ -1526,10 +1526,6 @@
 		right: -4px;
 	}
 
-	/* Query feature button styling */
-	.query-feature {
-		/* Remove special styling - use default button styles */
-	}
 
 	.chat-icon {
 		width: 20px;
