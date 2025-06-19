@@ -558,7 +558,7 @@ func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
 }
 
 const titleModel = "gemini-2.5-flash-lite-preview-06-17"
-const titleSystemPrompt = "You are a helpful assistant that generates a title for a conversation based on the first query message given to you. It should be no more than 40 characters and should be 3-4 words, capitalized like a title. Stock symbols should be fully capitalized. Make the title memorable but not cringe."
+const titleSystemPrompt = "You are a helpful assistant that generates a title for a conversation based on the first query message given to you. It should be no more than 40 characters and should be 2-4 words, capitalized like a title. Stock symbols should be fully capitalized. Make the title informative and accurately encapsulate the query. Never make it fully capitalized."
 
 func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, error) {
 	apiKey, err := conn.GetGeminiKey()
