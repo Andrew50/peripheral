@@ -168,9 +168,6 @@
 	import { connect } from '$lib/utils/stream/socket';
 	connect();
 
-	// DEPRECATED: Screensaver import
-	// Add import near the top with other imports
-	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -292,9 +289,7 @@
 			privateRequest<string>('verifyAuth', {}).catch(() => {
 				goto('/login');
 			});
-		} else {
-			console.log('Public viewing mode for conversation:', sharedConversationId);
-		}
+		} 
 
 		initStores();
 
@@ -317,10 +312,7 @@
 	});
 
 	onDestroy(() => {
-		// DEPRECATED: Screensaver inactivity timer cleanup
-		// if (inactivityTimer) {
-		// 	clearTimeout(inactivityTimer);
-		// }
+
 
 		// Clean up all activity listeners
 		if (browser && document) {
@@ -329,13 +321,6 @@
 			document.removeEventListener('keydown', keydownHandler);
 			stopSidebarResize();
 			stopLeftResize();
-
-			// DEPRECATED: Clean up screensaver activity listeners
-			// Clean up all activity listeners
-			// const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-			// activityEvents.forEach((event) => {
-			// 	document.removeEventListener(event, resetInactivityTimer);
-			// });
 		}
 	});
 

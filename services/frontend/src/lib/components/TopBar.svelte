@@ -186,7 +186,6 @@
 	.symbol.metadata-button {
 		font-size: 14px;
 		line-height: 20px;
-		font-weight: 600;
 		color: #ffffff;
 		padding: 6px 12px;
 		gap: 4px;
@@ -203,12 +202,17 @@
 
 	/* Styles for preset timeframe buttons */
 	.timeframe-preset-button {
-		min-width: 30px;
+		min-width: 24px;
 		text-align: center;
-		padding: 6px 8px;
+		padding: 6px 4px;
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
+		margin-left: -2px; /* Reduce spacing between timeframe buttons */
+	}
+
+	.timeframe-preset-button:first-of-type {
+		margin-left: 0; /* Don't apply negative margin to first timeframe button */
 	}
 
 	.timeframe-preset-button.active {
@@ -221,12 +225,13 @@
 
 	/* Styles for the custom timeframe '...' button */
 	.timeframe-custom-button {
-		padding: 6px 8px;
-		min-width: 30px;
+		padding: 6px 4px;
+		min-width: 24px;
 		text-align: center;
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
+		margin-left: -2px; /* Reduce spacing with preceding timeframe buttons */
 	}
 
 	.timeframe-custom-button.active {

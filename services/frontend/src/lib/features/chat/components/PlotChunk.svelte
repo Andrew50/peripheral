@@ -151,9 +151,6 @@
 		.map((trace, index) => processTraceData(trace, index))
 		.filter(trace => trace !== null);
 	
-	// Debug logging
-	$: console.log('Plot data:', plotData);
-	$: console.log('Processed data:', processedData);
 
 	// Merge layouts (user layout takes precedence)
 	$: layout = {
