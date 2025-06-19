@@ -505,7 +505,14 @@ class DataProvider:
             if days <= 0 or days > 365:
                 days = 5
 
-            base_query = """
+            # Using parameterized query construction to prevent SQL injection
+            sector_filter = " AND s.sector = %s" if sector else ""
+            params = [f"{days} days", f"{days} days"]
+            if sector:
+                params.append(sector)
+
+            # Construct parameterized query - safe from SQL injection
+            query = f"""
             WITH sector_data AS (
                 SELECT 
                     s.sector,
@@ -519,19 +526,7 @@ class DataProvider:
                 JOIN ohlcv_1d o1 ON s.security_id = o1.security_id
                 JOIN ohlcv_1d o2 ON s.security_id = o2.security_id
                 WHERE o1.timestamp >= CURRENT_DATE - INTERVAL %s
-                AND o2.timestamp = o1.timestamp - INTERVAL %s
-            """
-
-            params = [f"{days} days", f"{days} days"]
-
-            if sector:
-                base_query += " AND s.sector = %s"
-                params.append(sector)
-
-            # base_query is static SQL with parameterized values
-            query = (
-                base_query
-                + """  # nosec B608
+                AND o2.timestamp = o1.timestamp - INTERVAL %s{sector_filter}
             )
             SELECT 
                 sector,
@@ -543,7 +538,6 @@ class DataProvider:
             GROUP BY sector
             ORDER BY return DESC
             """
-            )
 
             result = await self.execute_sql_parameterized(query, params)
             if result and result["data"]:

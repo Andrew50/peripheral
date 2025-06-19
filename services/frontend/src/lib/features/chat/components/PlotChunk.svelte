@@ -1,21 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import Plot from 'svelte-plotly.js';
 	import type { PlotData } from '../interface';
 
 	export let plotData: PlotData;
 	export let plotKey: string; // Unique identifier for this plot
-
-	let Plot: any;
-	let plotContainer: HTMLDivElement;
-
-	onMount(async () => {
-		try {
-			const module = await import('svelte-plotly.js');
-			Plot = module.default;
-		} catch (error) {
-			console.error('Failed to load svelte-plotly.js:', error);
-		}
-	});
 
 	// Default styling that matches the app theme
 	const defaultConfig = {
@@ -143,18 +131,8 @@
 		</div>
 	{/if}
 
-	<div class="plot-container" bind:this={plotContainer}>
-		{#if Plot}
-			<svelte:component
-				this={Plot}
-				data={processedData}
-				{layout}
-				config={defaultConfig}
-				debounce={250}
-			/>
-		{:else}
-			<div class="loading">Loading plot...</div>
-		{/if}
+	<div class="plot-container">
+		<Plot data={processedData} {layout} config={defaultConfig} debounce={250} />
 	</div>
 </div>
 
@@ -184,22 +162,9 @@
 		overflow: hidden;
 	}
 
-	.loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 500px;
-		color: #e2e8f0;
-		font-size: 1rem;
-	}
-
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
 		.plot-container {
-			min-height: 300px;
-		}
-
-		.loading {
 			min-height: 300px;
 		}
 
