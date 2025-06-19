@@ -35,7 +35,8 @@ type Strategy struct {
 
 // CreateStrategyFromPromptArgs contains the user's natural language prompt
 type CreateStrategyFromPromptArgs struct {
-	Prompt string `json:"prompt"`
+	Query      string `json:"query"`      // Changed from Prompt to Query to match tool args
+	StrategyID int    `json:"strategyId"` // Added StrategyID field to match tool args
 }
 
 // Data accessor functions that will be available in the generated Python code
@@ -307,6 +308,40 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	var existingStrategy *Strategy
+	var isEdit bool = args.StrategyID != -1
+
+	// Handle strategy ID - if -1, create new strategy, otherwise edit existing
+	if isEdit {
+		// Read existing strategy for editing
+		var strategyRow Strategy
+		err := conn.DB.QueryRow(context.Background(), `
+			SELECT strategyid, name, 
+			       COALESCE(description, '') as description,
+			       COALESCE(prompt, '') as prompt,
+			       COALESCE(pythoncode, '') as pythoncode,
+			       COALESCE(score, 0) as score,
+			       COALESCE(version, '1.0') as version,
+			       COALESCE(createdat, NOW()) as createdat,
+			       COALESCE(isalertactive, false) as isalertactive
+			FROM strategies WHERE strategyid = $1 AND userid = $2`, args.StrategyID, userID).Scan(
+			&strategyRow.StrategyID,
+			&strategyRow.Name,
+			&strategyRow.Description,
+			&strategyRow.Prompt,
+			&strategyRow.PythonCode,
+			&strategyRow.Score,
+			&strategyRow.Version,
+			&strategyRow.CreatedAt,
+			&strategyRow.IsAlertActive,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error reading existing strategy: %v", err)
+		}
+		existingStrategy = &strategyRow
+		existingStrategy.UserID = userID
+	}
+
 	apikey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %v", err)
@@ -334,11 +369,59 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 	}
 
 	// Create the prompt with data accessor functions
-	fullPrompt := fmt.Sprintf(`%s
+	// Check if this is a symbol-specific gap strategy and enhance the prompt accordingly
+	enhancedQuery := args.Query
+	if strings.Contains(strings.ToLower(args.Query), "gap") &&
+		(strings.Contains(strings.ToUpper(args.Query), "ARM") ||
+			strings.Contains(strings.ToLower(args.Query), "arm ")) {
+		enhancedQuery = fmt.Sprintf(`%s
+
+IMPORTANT: This query is asking specifically for ARM (ticker: ARM) gap-up analysis. 
+- Create a classifier that checks if the ARM symbol specifically gaps up by the specified percentage
+- A gap up means: current day's opening price > previous day's closing price by the specified percentage
+- Use the formula: gap_percent = ((current_open - previous_close) / previous_close) * 100
+- Make sure to handle the ARM symbol specifically in your classifier`, args.Query)
+	}
+
+	var fullPrompt string
+	if isEdit && existingStrategy != nil {
+		// For editing existing strategies, include current strategy content
+		fullPrompt = fmt.Sprintf(`%s
+
+EDITING EXISTING STRATEGY:
+
+Current Strategy Name: %s
+Current Description: %s
+Original Prompt: %s
+
+Current Python Code:
+`+"```python"+`
+%s
+`+"```"+`
+
+User's Edit Request: %s
+
+Please modify the existing strategy based on the user's edit request. You can:
+1. Update the logic while keeping the same structure if the request is minor
+2. Completely rewrite the strategy if the request requires major changes
+3. Add new functionality while preserving existing behavior where appropriate
+4. Fix any bugs or improve performance if requested
+
+Generate the updated Python classifier function named 'classify_symbol(symbol)' that incorporates the requested changes.`,
+			dataAccessorFunctions,
+			existingStrategy.Name,
+			existingStrategy.Description,
+			existingStrategy.Prompt,
+			existingStrategy.PythonCode,
+			enhancedQuery)
+	} else {
+		// For new strategies, use the original prompt format
+		fullPrompt = fmt.Sprintf(`%s
 
 User Request: %s
 
-Please generate a Python classifier function that uses the above data accessor functions to identify the pattern the user is requesting. The function should be named 'classify_symbol(symbol)' and return a boolean indicating if the symbol matches the criteria.`, dataAccessorFunctions, args.Prompt)
+Please generate a Python classifier function that uses the above data accessor functions to identify the pattern the user is requesting. The function should be named 'classify_symbol(symbol)' and return a boolean indicating if the symbol matches the criteria.`, dataAccessorFunctions, enhancedQuery)
+	}
 
 	content := genai.Text(fullPrompt)
 	if len(content) == 0 {
@@ -372,13 +455,37 @@ Please generate a Python classifier function that uses the above data accessor f
 		return nil, fmt.Errorf("no Python code generated")
 	}
 
-	// Generate a name from the prompt
-	name := generateStrategyName(args.Prompt)
+	var strategyID int
+	var name string
 
-	// Save to database
-	strategyID, err := saveStrategy(conn, userID, name, description, args.Prompt, pythonCode)
-	if err != nil {
-		return nil, fmt.Errorf("error saving strategy: %w", err)
+	if isEdit && existingStrategy != nil {
+		// Update existing strategy
+		name = existingStrategy.Name // Keep existing name unless user specifically requested a name change
+
+		// Check if user requested a name change in their query
+		if strings.Contains(strings.ToLower(args.Query), "rename") ||
+			strings.Contains(strings.ToLower(args.Query), "name") ||
+			strings.Contains(strings.ToLower(args.Query), "call it") {
+			name = generateStrategyName(args.Query)
+		}
+
+		// Update the existing strategy in database
+		_, err = conn.DB.Exec(context.Background(), `
+			UPDATE strategies 
+			SET name = $1, description = $2, prompt = $3, pythoncode = $4, version = $5
+			WHERE strategyid = $6 AND userid = $7`,
+			name, description, args.Query, pythonCode, "1.1", args.StrategyID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("error updating strategy: %w", err)
+		}
+		strategyID = args.StrategyID
+	} else {
+		// Create new strategy
+		name = generateStrategyName(args.Query)
+		strategyID, err = saveStrategy(conn, userID, name, description, args.Query, pythonCode)
+		if err != nil {
+			return nil, fmt.Errorf("error saving strategy: %w", err)
+		}
 	}
 
 	return Strategy{
@@ -386,10 +493,10 @@ Please generate a Python classifier function that uses the above data accessor f
 		UserID:        userID,
 		Name:          name,
 		Description:   description,
-		Prompt:        args.Prompt,
+		Prompt:        args.Query,
 		PythonCode:    pythonCode,
 		Score:         0,
-		Version:       "1.0",
+		Version:       "1.1",
 		CreatedAt:     time.Now().Format(time.RFC3339),
 		IsAlertActive: false,
 	}, nil

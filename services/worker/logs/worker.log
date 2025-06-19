@@ -650,3 +650,475 @@
 2025-06-19 00:30:50,271 - __main__ - INFO - Python worker f5c9032ce750 starting...
 2025-06-19 00:30:50,279 - __main__ - INFO - Python worker af21fc787ad5 starting...
 2025-06-19 00:30:50,282 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:34:58,880 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:37:10,424 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:37:26,787 - __main__ - INFO - Python worker f5c9032ce750 starting...
+2025-06-19 00:37:26,798 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:37:26,856 - __main__ - INFO - Python worker af21fc787ad5 starting...
+2025-06-19 00:38:09,374 - __main__ - INFO - Python worker f5c9032ce750 starting...
+2025-06-19 00:38:09,375 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:38:09,428 - __main__ - INFO - Python worker af21fc787ad5 starting...
+2025-06-19 00:38:22,625 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:38:22,638 - __main__ - INFO - Python worker f5c9032ce750 starting...
+2025-06-19 00:38:22,651 - __main__ - INFO - Python worker af21fc787ad5 starting...
+2025-06-19 00:38:52,376 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:38:52,384 - __main__ - INFO - Python worker af21fc787ad5 starting...
+2025-06-19 00:38:52,425 - __main__ - INFO - Python worker f5c9032ce750 starting...
+2025-06-19 00:45:34,660 - __main__ - INFO - Python worker fff2115c7b01 starting...
+2025-06-19 00:45:34,667 - __main__ - INFO - Python worker f5c9032ce750 starting...
+2025-06-19 00:45:34,719 - __main__ - INFO - Python worker af21fc787ad5 starting...
+2025-06-19 00:46:31,096 - __main__ - INFO - Python worker 00ee22950b8d starting...
+2025-06-19 00:46:31,289 - __main__ - INFO - Python worker 93d4ab832159 starting...
+2025-06-19 00:46:31,524 - __main__ - INFO - Python worker c39bf19b9a49 starting...
+2025-06-19 00:47:05,867 - __main__ - INFO - Python worker 93d4ab832159 starting...
+2025-06-19 00:47:05,884 - __main__ - INFO - Python worker c39bf19b9a49 starting...
+2025-06-19 00:47:05,910 - __main__ - INFO - Python worker 00ee22950b8d starting...
+2025-06-19 00:48:59,671 - __main__ - INFO - Python worker 00ee22950b8d starting...
+2025-06-19 00:48:59,678 - __main__ - INFO - Python worker c39bf19b9a49 starting...
+2025-06-19 00:48:59,723 - __main__ - INFO - Python worker 93d4ab832159 starting...
+2025-06-19 00:54:09,497 - __main__ - ERROR - Error in worker loop: Timeout reading from socket
+2025-06-19 00:56:14,366 - __main__ - INFO - Python worker 93d4ab832159 starting...
+2025-06-19 00:56:14,371 - __main__ - INFO - Python worker 00ee22950b8d starting...
+2025-06-19 00:56:14,375 - __main__ - INFO - Python worker c39bf19b9a49 starting...
+2025-06-19 00:57:30,750 - __main__ - INFO - Processing job backtest_A_20230802_1750294650749842610
+2025-06-19 00:57:30,751 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,751 - __main__ - ERROR - Security violation in job backtest_A_20230802_1750294650749842610: Code contains prohibited operations
+2025-06-19 00:57:30,752 - __main__ - INFO - Processing job backtest_A_20230803_1750294650751734170
+2025-06-19 00:57:30,752 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,752 - __main__ - ERROR - Security violation in job backtest_A_20230803_1750294650751734170: Code contains prohibited operations
+2025-06-19 00:57:30,753 - __main__ - INFO - Processing job backtest_A_20230804_1750294650753153032
+2025-06-19 00:57:30,754 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,754 - __main__ - ERROR - Security violation in job backtest_A_20230804_1750294650753153032: Code contains prohibited operations
+2025-06-19 00:57:30,754 - __main__ - INFO - Processing job backtest_A_20230807_1750294650754240467
+2025-06-19 00:57:30,754 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,754 - __main__ - ERROR - Security violation in job backtest_A_20230807_1750294650754240467: Code contains prohibited operations
+2025-06-19 00:57:30,755 - __main__ - INFO - Processing job backtest_A_20230808_1750294650754954544
+2025-06-19 00:57:30,755 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,755 - __main__ - ERROR - Security violation in job backtest_A_20230808_1750294650754954544: Code contains prohibited operations
+2025-06-19 00:57:30,755 - __main__ - INFO - Processing job backtest_A_20230809_1750294650755633325
+2025-06-19 00:57:30,756 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,756 - __main__ - ERROR - Security violation in job backtest_A_20230809_1750294650755633325: Code contains prohibited operations
+2025-06-19 00:57:30,756 - __main__ - INFO - Processing job backtest_A_20230810_1750294650756459909
+2025-06-19 00:57:30,756 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,756 - __main__ - ERROR - Security violation in job backtest_A_20230810_1750294650756459909: Code contains prohibited operations
+2025-06-19 00:57:30,757 - __main__ - INFO - Processing job backtest_A_20230811_1750294650757098239
+2025-06-19 00:57:30,757 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,757 - __main__ - ERROR - Security violation in job backtest_A_20230811_1750294650757098239: Code contains prohibited operations
+2025-06-19 00:57:30,757 - __main__ - INFO - Processing job backtest_A_20230814_1750294650757735114
+2025-06-19 00:57:30,758 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,758 - __main__ - ERROR - Security violation in job backtest_A_20230814_1750294650757735114: Code contains prohibited operations
+2025-06-19 00:57:30,758 - __main__ - INFO - Processing job backtest_A_20230815_1750294650758379880
+2025-06-19 00:57:30,758 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,758 - __main__ - ERROR - Security violation in job backtest_A_20230815_1750294650758379880: Code contains prohibited operations
+2025-06-19 00:57:30,759 - __main__ - INFO - Processing job backtest_A_20230816_1750294650759032845
+2025-06-19 00:57:30,759 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,759 - __main__ - ERROR - Security violation in job backtest_A_20230816_1750294650759032845: Code contains prohibited operations
+2025-06-19 00:57:30,759 - __main__ - INFO - Processing job backtest_A_20230817_1750294650759717212
+2025-06-19 00:57:30,760 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,760 - __main__ - ERROR - Security violation in job backtest_A_20230817_1750294650759717212: Code contains prohibited operations
+2025-06-19 00:57:30,760 - __main__ - INFO - Processing job backtest_A_20230818_1750294650760424867
+2025-06-19 00:57:30,760 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,760 - __main__ - ERROR - Security violation in job backtest_A_20230818_1750294650760424867: Code contains prohibited operations
+2025-06-19 00:57:30,761 - __main__ - INFO - Processing job backtest_A_20230821_1750294650761077757
+2025-06-19 00:57:30,761 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,761 - __main__ - ERROR - Security violation in job backtest_A_20230821_1750294650761077757: Code contains prohibited operations
+2025-06-19 00:57:30,762 - __main__ - INFO - Processing job backtest_A_20230822_1750294650761992706
+2025-06-19 00:57:30,762 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,762 - __main__ - ERROR - Security violation in job backtest_A_20230822_1750294650761992706: Code contains prohibited operations
+2025-06-19 00:57:30,762 - __main__ - INFO - Processing job backtest_A_20230823_1750294650762716178
+2025-06-19 00:57:30,763 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,763 - __main__ - ERROR - Security violation in job backtest_A_20230823_1750294650762716178: Code contains prohibited operations
+2025-06-19 00:57:30,763 - __main__ - INFO - Processing job backtest_A_20230824_1750294650763355428
+2025-06-19 00:57:30,763 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,764 - __main__ - ERROR - Security violation in job backtest_A_20230824_1750294650763355428: Code contains prohibited operations
+2025-06-19 00:57:30,764 - __main__ - INFO - Processing job backtest_A_20230825_1750294650764183482
+2025-06-19 00:57:30,764 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,764 - __main__ - ERROR - Security violation in job backtest_A_20230825_1750294650764183482: Code contains prohibited operations
+2025-06-19 00:57:30,764 - __main__ - INFO - Processing job backtest_A_20230828_1750294650764833024
+2025-06-19 00:57:30,765 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,765 - __main__ - ERROR - Security violation in job backtest_A_20230828_1750294650764833024: Code contains prohibited operations
+2025-06-19 00:57:30,765 - __main__ - INFO - Processing job backtest_A_20230829_1750294650765553470
+2025-06-19 00:57:30,766 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,766 - __main__ - ERROR - Security violation in job backtest_A_20230829_1750294650765553470: Code contains prohibited operations
+2025-06-19 00:57:30,766 - __main__ - INFO - Processing job backtest_A_20230830_1750294650766330414
+2025-06-19 00:57:30,767 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,767 - __main__ - ERROR - Security violation in job backtest_A_20230830_1750294650766330414: Code contains prohibited operations
+2025-06-19 00:57:30,767 - __main__ - INFO - Processing job backtest_A_20230831_1750294650767209416
+2025-06-19 00:57:30,767 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,767 - __main__ - ERROR - Security violation in job backtest_A_20230831_1750294650767209416: Code contains prohibited operations
+2025-06-19 00:57:30,768 - __main__ - INFO - Processing job backtest_A_20230901_1750294650768025211
+2025-06-19 00:57:30,768 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,768 - __main__ - ERROR - Security violation in job backtest_A_20230901_1750294650768025211: Code contains prohibited operations
+2025-06-19 00:57:30,768 - __main__ - INFO - Processing job backtest_A_20230905_1750294650768595783
+2025-06-19 00:57:30,769 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,769 - __main__ - ERROR - Security violation in job backtest_A_20230905_1750294650768595783: Code contains prohibited operations
+2025-06-19 00:57:30,769 - __main__ - INFO - Processing job backtest_A_20230906_1750294650769159165
+2025-06-19 00:57:30,769 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,769 - __main__ - ERROR - Security violation in job backtest_A_20230906_1750294650769159165: Code contains prohibited operations
+2025-06-19 00:57:30,769 - __main__ - INFO - Processing job backtest_A_20230907_1750294650769810590
+2025-06-19 00:57:30,770 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,770 - __main__ - ERROR - Security violation in job backtest_A_20230907_1750294650769810590: Code contains prohibited operations
+2025-06-19 00:57:30,770 - __main__ - INFO - Processing job backtest_A_20230908_1750294650770340069
+2025-06-19 00:57:30,770 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,770 - __main__ - ERROR - Security violation in job backtest_A_20230908_1750294650770340069: Code contains prohibited operations
+2025-06-19 00:57:30,771 - __main__ - INFO - Processing job backtest_A_20230911_1750294650770893758
+2025-06-19 00:57:30,771 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,771 - __main__ - ERROR - Security violation in job backtest_A_20230911_1750294650770893758: Code contains prohibited operations
+2025-06-19 00:57:30,771 - __main__ - INFO - Processing job backtest_A_20230912_1750294650771585054
+2025-06-19 00:57:30,771 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,772 - __main__ - ERROR - Security violation in job backtest_A_20230912_1750294650771585054: Code contains prohibited operations
+2025-06-19 00:57:30,772 - __main__ - INFO - Processing job backtest_A_20230913_1750294650772140034
+2025-06-19 00:57:30,772 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,772 - __main__ - ERROR - Security violation in job backtest_A_20230913_1750294650772140034: Code contains prohibited operations
+2025-06-19 00:57:30,772 - __main__ - INFO - Processing job backtest_A_20230914_1750294650772668767
+2025-06-19 00:57:30,773 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,773 - __main__ - ERROR - Security violation in job backtest_A_20230914_1750294650772668767: Code contains prohibited operations
+2025-06-19 00:57:30,773 - __main__ - INFO - Processing job backtest_A_20230915_1750294650773491476
+2025-06-19 00:57:30,773 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,773 - __main__ - ERROR - Security violation in job backtest_A_20230915_1750294650773491476: Code contains prohibited operations
+2025-06-19 00:57:30,774 - __main__ - INFO - Processing job backtest_A_20230918_1750294650774048166
+2025-06-19 00:57:30,774 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,774 - __main__ - ERROR - Security violation in job backtest_A_20230918_1750294650774048166: Code contains prohibited operations
+2025-06-19 00:57:30,774 - __main__ - INFO - Processing job backtest_A_20230919_1750294650774844283
+2025-06-19 00:57:30,775 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,775 - __main__ - ERROR - Security violation in job backtest_A_20230919_1750294650774844283: Code contains prohibited operations
+2025-06-19 00:57:30,775 - __main__ - INFO - Processing job backtest_A_20230920_1750294650775864685
+2025-06-19 00:57:30,776 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,776 - __main__ - ERROR - Security violation in job backtest_A_20230920_1750294650775864685: Code contains prohibited operations
+2025-06-19 00:57:30,776 - __main__ - INFO - Processing job backtest_A_20230921_1750294650776476552
+2025-06-19 00:57:30,777 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,777 - __main__ - ERROR - Security violation in job backtest_A_20230921_1750294650776476552: Code contains prohibited operations
+2025-06-19 00:57:30,777 - __main__ - INFO - Processing job backtest_A_20230922_1750294650777336199
+2025-06-19 00:57:30,777 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,778 - __main__ - ERROR - Security violation in job backtest_A_20230922_1750294650777336199: Code contains prohibited operations
+2025-06-19 00:57:30,778 - __main__ - INFO - Processing job backtest_A_20230925_1750294650778196490
+2025-06-19 00:57:30,778 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,778 - __main__ - ERROR - Security violation in job backtest_A_20230925_1750294650778196490: Code contains prohibited operations
+2025-06-19 00:57:30,779 - __main__ - INFO - Processing job backtest_A_20230926_1750294650779057699
+2025-06-19 00:57:30,779 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,779 - __main__ - ERROR - Security violation in job backtest_A_20230926_1750294650779057699: Code contains prohibited operations
+2025-06-19 00:57:30,780 - __main__ - INFO - Processing job backtest_A_20230927_1750294650780005277
+2025-06-19 00:57:30,780 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,780 - __main__ - ERROR - Security violation in job backtest_A_20230927_1750294650780005277: Code contains prohibited operations
+2025-06-19 00:57:30,780 - __main__ - INFO - Processing job backtest_A_20230928_1750294650780715022
+2025-06-19 00:57:30,781 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,781 - __main__ - ERROR - Security violation in job backtest_A_20230928_1750294650780715022: Code contains prohibited operations
+2025-06-19 00:57:30,781 - __main__ - INFO - Processing job backtest_A_20230929_1750294650781543996
+2025-06-19 00:57:30,781 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,782 - __main__ - ERROR - Security violation in job backtest_A_20230929_1750294650781543996: Code contains prohibited operations
+2025-06-19 00:57:30,782 - __main__ - INFO - Processing job backtest_A_20231002_1750294650782102280
+2025-06-19 00:57:30,782 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,782 - __main__ - ERROR - Security violation in job backtest_A_20231002_1750294650782102280: Code contains prohibited operations
+2025-06-19 00:57:30,782 - __main__ - INFO - Processing job backtest_A_20231003_1750294650782852223
+2025-06-19 00:57:30,783 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,783 - __main__ - ERROR - Security violation in job backtest_A_20231003_1750294650782852223: Code contains prohibited operations
+2025-06-19 00:57:30,783 - __main__ - INFO - Processing job backtest_A_20231004_1750294650783598314
+2025-06-19 00:57:30,784 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,784 - __main__ - ERROR - Security violation in job backtest_A_20231004_1750294650783598314: Code contains prohibited operations
+2025-06-19 00:57:30,784 - __main__ - INFO - Processing job backtest_A_20231005_1750294650784167009
+2025-06-19 00:57:30,784 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,784 - __main__ - ERROR - Security violation in job backtest_A_20231005_1750294650784167009: Code contains prohibited operations
+2025-06-19 00:57:30,785 - __main__ - INFO - Processing job backtest_A_20231006_1750294650784941873
+2025-06-19 00:57:30,785 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,785 - __main__ - ERROR - Security violation in job backtest_A_20231006_1750294650784941873: Code contains prohibited operations
+2025-06-19 00:57:30,785 - __main__ - INFO - Processing job backtest_A_20231009_1750294650785656085
+2025-06-19 00:57:30,786 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,786 - __main__ - ERROR - Security violation in job backtest_A_20231009_1750294650785656085: Code contains prohibited operations
+2025-06-19 00:57:30,786 - __main__ - INFO - Processing job backtest_A_20231010_1750294650786356052
+2025-06-19 00:57:30,786 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,786 - __main__ - ERROR - Security violation in job backtest_A_20231010_1750294650786356052: Code contains prohibited operations
+2025-06-19 00:57:30,787 - __main__ - INFO - Processing job backtest_A_20231011_1750294650787087582
+2025-06-19 00:57:30,787 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,787 - __main__ - ERROR - Security violation in job backtest_A_20231011_1750294650787087582: Code contains prohibited operations
+2025-06-19 00:57:30,787 - __main__ - INFO - Processing job backtest_A_20231012_1750294650787689279
+2025-06-19 00:57:30,788 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,788 - __main__ - ERROR - Security violation in job backtest_A_20231012_1750294650787689279: Code contains prohibited operations
+2025-06-19 00:57:30,788 - __main__ - INFO - Processing job backtest_A_20231013_1750294650788453180
+2025-06-19 00:57:30,788 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,788 - __main__ - ERROR - Security violation in job backtest_A_20231013_1750294650788453180: Code contains prohibited operations
+2025-06-19 00:57:30,789 - __main__ - INFO - Processing job backtest_A_20231016_1750294650789013902
+2025-06-19 00:57:30,789 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,789 - __main__ - ERROR - Security violation in job backtest_A_20231016_1750294650789013902: Code contains prohibited operations
+2025-06-19 00:57:30,790 - __main__ - INFO - Processing job backtest_A_20231017_1750294650789875434
+2025-06-19 00:57:30,790 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,790 - __main__ - ERROR - Security violation in job backtest_A_20231017_1750294650789875434: Code contains prohibited operations
+2025-06-19 00:57:30,790 - __main__ - INFO - Processing job backtest_A_20231018_1750294650790657432
+2025-06-19 00:57:30,791 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,791 - __main__ - ERROR - Security violation in job backtest_A_20231018_1750294650790657432: Code contains prohibited operations
+2025-06-19 00:57:30,791 - __main__ - INFO - Processing job backtest_A_20231019_1750294650791502031
+2025-06-19 00:57:30,792 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,792 - __main__ - ERROR - Security violation in job backtest_A_20231019_1750294650791502031: Code contains prohibited operations
+2025-06-19 00:57:30,792 - __main__ - INFO - Processing job backtest_A_20231020_1750294650792337414
+2025-06-19 00:57:30,793 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,793 - __main__ - ERROR - Security violation in job backtest_A_20231020_1750294650792337414: Code contains prohibited operations
+2025-06-19 00:57:30,793 - __main__ - INFO - Processing job backtest_A_20231023_1750294650793288196
+2025-06-19 00:57:30,793 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,794 - __main__ - ERROR - Security violation in job backtest_A_20231023_1750294650793288196: Code contains prohibited operations
+2025-06-19 00:57:30,794 - __main__ - INFO - Processing job backtest_A_20231024_1750294650794164018
+2025-06-19 00:57:30,794 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,794 - __main__ - ERROR - Security violation in job backtest_A_20231024_1750294650794164018: Code contains prohibited operations
+2025-06-19 00:57:30,795 - __main__ - INFO - Processing job backtest_A_20231025_1750294650795052717
+2025-06-19 00:57:30,795 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,795 - __main__ - ERROR - Security violation in job backtest_A_20231025_1750294650795052717: Code contains prohibited operations
+2025-06-19 00:57:30,795 - __main__ - INFO - Processing job backtest_A_20231026_1750294650795851807
+2025-06-19 00:57:30,796 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,796 - __main__ - ERROR - Security violation in job backtest_A_20231026_1750294650795851807: Code contains prohibited operations
+2025-06-19 00:57:30,796 - __main__ - INFO - Processing job backtest_A_20231027_1750294650796484833
+2025-06-19 00:57:30,797 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,797 - __main__ - ERROR - Security violation in job backtest_A_20231027_1750294650796484833: Code contains prohibited operations
+2025-06-19 00:57:30,797 - __main__ - INFO - Processing job backtest_A_20231030_1750294650797194692
+2025-06-19 00:57:30,797 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,797 - __main__ - ERROR - Security violation in job backtest_A_20231030_1750294650797194692: Code contains prohibited operations
+2025-06-19 00:57:30,798 - __main__ - INFO - Processing job backtest_A_20231031_1750294650797879610
+2025-06-19 00:57:30,798 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,798 - __main__ - ERROR - Security violation in job backtest_A_20231031_1750294650797879610: Code contains prohibited operations
+2025-06-19 00:57:30,798 - __main__ - INFO - Processing job backtest_A_20231101_1750294650798632928
+2025-06-19 00:57:30,799 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,799 - __main__ - ERROR - Security violation in job backtest_A_20231101_1750294650798632928: Code contains prohibited operations
+2025-06-19 00:57:30,799 - __main__ - INFO - Processing job backtest_A_20231102_1750294650799375957
+2025-06-19 00:57:30,799 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,799 - __main__ - ERROR - Security violation in job backtest_A_20231102_1750294650799375957: Code contains prohibited operations
+2025-06-19 00:57:30,800 - __main__ - INFO - Processing job backtest_A_20231103_1750294650800118024
+2025-06-19 00:57:30,800 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,800 - __main__ - ERROR - Security violation in job backtest_A_20231103_1750294650800118024: Code contains prohibited operations
+2025-06-19 00:57:30,800 - __main__ - INFO - Processing job backtest_A_20231106_1750294650800690229
+2025-06-19 00:57:30,801 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,801 - __main__ - ERROR - Security violation in job backtest_A_20231106_1750294650800690229: Code contains prohibited operations
+2025-06-19 00:57:30,801 - __main__ - INFO - Processing job backtest_A_20231107_1750294650801324598
+2025-06-19 00:57:30,801 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,801 - __main__ - ERROR - Security violation in job backtest_A_20231107_1750294650801324598: Code contains prohibited operations
+2025-06-19 00:57:30,802 - __main__ - INFO - Processing job backtest_A_20231108_1750294650802021642
+2025-06-19 00:57:30,802 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,802 - __main__ - ERROR - Security violation in job backtest_A_20231108_1750294650802021642: Code contains prohibited operations
+2025-06-19 00:57:30,802 - __main__ - INFO - Processing job backtest_A_20231109_1750294650802561464
+2025-06-19 00:57:30,802 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,802 - __main__ - ERROR - Security violation in job backtest_A_20231109_1750294650802561464: Code contains prohibited operations
+2025-06-19 00:57:30,803 - __main__ - INFO - Processing job backtest_A_20231110_1750294650803102661
+2025-06-19 00:57:30,803 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,803 - __main__ - ERROR - Security violation in job backtest_A_20231110_1750294650803102661: Code contains prohibited operations
+2025-06-19 00:57:30,803 - __main__ - INFO - Processing job backtest_A_20231113_1750294650803768152
+2025-06-19 00:57:30,804 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,804 - __main__ - ERROR - Security violation in job backtest_A_20231113_1750294650803768152: Code contains prohibited operations
+2025-06-19 00:57:30,804 - __main__ - INFO - Processing job backtest_A_20231114_1750294650804299546
+2025-06-19 00:57:30,804 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,804 - __main__ - ERROR - Security violation in job backtest_A_20231114_1750294650804299546: Code contains prohibited operations
+2025-06-19 00:57:30,804 - __main__ - INFO - Processing job backtest_A_20231115_1750294650804817092
+2025-06-19 00:57:30,805 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,805 - __main__ - ERROR - Security violation in job backtest_A_20231115_1750294650804817092: Code contains prohibited operations
+2025-06-19 00:57:30,805 - __main__ - INFO - Processing job backtest_A_20231116_1750294650805507937
+2025-06-19 00:57:30,806 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,806 - __main__ - ERROR - Security violation in job backtest_A_20231116_1750294650805507937: Code contains prohibited operations
+2025-06-19 00:57:30,806 - __main__ - INFO - Processing job backtest_A_20231117_1750294650806183172
+2025-06-19 00:57:30,806 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,806 - __main__ - ERROR - Security violation in job backtest_A_20231117_1750294650806183172: Code contains prohibited operations
+2025-06-19 00:57:30,807 - __main__ - INFO - Processing job backtest_A_20231120_1750294650807013994
+2025-06-19 00:57:30,807 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,807 - __main__ - ERROR - Security violation in job backtest_A_20231120_1750294650807013994: Code contains prohibited operations
+2025-06-19 00:57:30,807 - __main__ - INFO - Processing job backtest_A_20231121_1750294650807627159
+2025-06-19 00:57:30,808 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,808 - __main__ - ERROR - Security violation in job backtest_A_20231121_1750294650807627159: Code contains prohibited operations
+2025-06-19 00:57:30,808 - __main__ - INFO - Processing job backtest_A_20231122_1750294650808173983
+2025-06-19 00:57:30,808 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,808 - __main__ - ERROR - Security violation in job backtest_A_20231122_1750294650808173983: Code contains prohibited operations
+2025-06-19 00:57:30,808 - __main__ - INFO - Processing job backtest_A_20231124_1750294650808727222
+2025-06-19 00:57:30,809 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,809 - __main__ - ERROR - Security violation in job backtest_A_20231124_1750294650808727222: Code contains prohibited operations
+2025-06-19 00:57:30,809 - __main__ - INFO - Processing job backtest_A_20231127_1750294650809244506
+2025-06-19 00:57:30,809 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,809 - __main__ - ERROR - Security violation in job backtest_A_20231127_1750294650809244506: Code contains prohibited operations
+2025-06-19 00:57:30,810 - __main__ - INFO - Processing job backtest_A_20231128_1750294650809890890
+2025-06-19 00:57:30,810 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,810 - __main__ - ERROR - Security violation in job backtest_A_20231128_1750294650809890890: Code contains prohibited operations
+2025-06-19 00:57:30,810 - __main__ - INFO - Processing job backtest_A_20231129_1750294650810737212
+2025-06-19 00:57:30,811 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,811 - __main__ - ERROR - Security violation in job backtest_A_20231129_1750294650810737212: Code contains prohibited operations
+2025-06-19 00:57:30,811 - __main__ - INFO - Processing job backtest_A_20231130_1750294650811639980
+2025-06-19 00:57:30,812 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,812 - __main__ - ERROR - Security violation in job backtest_A_20231130_1750294650811639980: Code contains prohibited operations
+2025-06-19 00:57:30,812 - __main__ - INFO - Processing job backtest_A_20231201_1750294650812273221
+2025-06-19 00:57:30,812 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,812 - __main__ - ERROR - Security violation in job backtest_A_20231201_1750294650812273221: Code contains prohibited operations
+2025-06-19 00:57:30,813 - __main__ - INFO - Processing job backtest_A_20231204_1750294650813111461
+2025-06-19 00:57:30,813 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,813 - __main__ - ERROR - Security violation in job backtest_A_20231204_1750294650813111461: Code contains prohibited operations
+2025-06-19 00:57:30,814 - __main__ - INFO - Processing job backtest_A_20231205_1750294650813909700
+2025-06-19 00:57:30,814 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,814 - __main__ - ERROR - Security violation in job backtest_A_20231205_1750294650813909700: Code contains prohibited operations
+2025-06-19 00:57:30,814 - __main__ - INFO - Processing job backtest_A_20231206_1750294650814454357
+2025-06-19 00:57:30,815 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,815 - __main__ - ERROR - Security violation in job backtest_A_20231206_1750294650814454357: Code contains prohibited operations
+2025-06-19 00:57:30,815 - __main__ - INFO - Processing job backtest_A_20231207_1750294650815228327
+2025-06-19 00:57:30,815 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,815 - __main__ - ERROR - Security violation in job backtest_A_20231207_1750294650815228327: Code contains prohibited operations
+2025-06-19 00:57:30,815 - __main__ - INFO - Processing job backtest_A_20231208_1750294650815857557
+2025-06-19 00:57:30,816 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:30,816 - __main__ - ERROR - Security violation in job backtest_A_20231208_1750294650815857557: Code contains prohibited operations
+2025-06-19 00:57:56,889 - __main__ - INFO - Processing job test_backtest_624a2f53
+2025-06-19 00:57:56,889 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:57:56,889 - __main__ - ERROR - Security violation in job test_backtest_624a2f53: Code contains prohibited operations
+2025-06-19 00:58:30,817 - __main__ - INFO - Processing job backtest_A_20231211_1750294710817064828
+2025-06-19 00:58:30,818 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,818 - __main__ - ERROR - Security violation in job backtest_A_20231211_1750294710817064828: Code contains prohibited operations
+2025-06-19 00:58:30,818 - __main__ - INFO - Processing job backtest_A_20231212_1750294710818777563
+2025-06-19 00:58:30,819 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,819 - __main__ - ERROR - Security violation in job backtest_A_20231212_1750294710818777563: Code contains prohibited operations
+2025-06-19 00:58:30,819 - __main__ - INFO - Processing job backtest_A_20231213_1750294710819523126
+2025-06-19 00:58:30,820 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,820 - __main__ - ERROR - Security violation in job backtest_A_20231213_1750294710819523126: Code contains prohibited operations
+2025-06-19 00:58:30,820 - __main__ - INFO - Processing job backtest_A_20231214_1750294710820158387
+2025-06-19 00:58:30,820 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,820 - __main__ - ERROR - Security violation in job backtest_A_20231214_1750294710820158387: Code contains prohibited operations
+2025-06-19 00:58:30,820 - __main__ - INFO - Processing job backtest_A_20231215_1750294710820743703
+2025-06-19 00:58:30,821 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,821 - __main__ - ERROR - Security violation in job backtest_A_20231215_1750294710820743703: Code contains prohibited operations
+2025-06-19 00:58:30,821 - __main__ - INFO - Processing job backtest_A_20231218_1750294710821328303
+2025-06-19 00:58:30,821 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,821 - __main__ - ERROR - Security violation in job backtest_A_20231218_1750294710821328303: Code contains prohibited operations
+2025-06-19 00:58:30,822 - __main__ - INFO - Processing job backtest_A_20231219_1750294710821918484
+2025-06-19 00:58:30,822 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,822 - __main__ - ERROR - Security violation in job backtest_A_20231219_1750294710821918484: Code contains prohibited operations
+2025-06-19 00:58:30,822 - __main__ - INFO - Processing job backtest_A_20231220_1750294710822444812
+2025-06-19 00:58:30,822 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,822 - __main__ - ERROR - Security violation in job backtest_A_20231220_1750294710822444812: Code contains prohibited operations
+2025-06-19 00:58:30,823 - __main__ - INFO - Processing job backtest_A_20231221_1750294710823128351
+2025-06-19 00:58:30,823 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,823 - __main__ - ERROR - Security violation in job backtest_A_20231221_1750294710823128351: Code contains prohibited operations
+2025-06-19 00:58:30,823 - __main__ - INFO - Processing job backtest_A_20231222_1750294710823756566
+2025-06-19 00:58:30,824 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,824 - __main__ - ERROR - Security violation in job backtest_A_20231222_1750294710823756566: Code contains prohibited operations
+2025-06-19 00:58:30,824 - __main__ - INFO - Processing job backtest_A_20231226_1750294710824368631
+2025-06-19 00:58:30,824 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,824 - __main__ - ERROR - Security violation in job backtest_A_20231226_1750294710824368631: Code contains prohibited operations
+2025-06-19 00:58:30,825 - __main__ - INFO - Processing job backtest_A_20231227_1750294710825068725
+2025-06-19 00:58:30,825 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,825 - __main__ - ERROR - Security violation in job backtest_A_20231227_1750294710825068725: Code contains prohibited operations
+2025-06-19 00:58:30,825 - __main__ - INFO - Processing job backtest_A_20231228_1750294710825631346
+2025-06-19 00:58:30,826 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,826 - __main__ - ERROR - Security violation in job backtest_A_20231228_1750294710825631346: Code contains prohibited operations
+2025-06-19 00:58:30,826 - __main__ - INFO - Processing job backtest_A_20231229_1750294710826469066
+2025-06-19 00:58:30,826 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,827 - __main__ - ERROR - Security violation in job backtest_A_20231229_1750294710826469066: Code contains prohibited operations
+2025-06-19 00:58:30,827 - __main__ - INFO - Processing job backtest_A_20240102_1750294710827164994
+2025-06-19 00:58:30,827 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,827 - __main__ - ERROR - Security violation in job backtest_A_20240102_1750294710827164994: Code contains prohibited operations
+2025-06-19 00:58:30,827 - __main__ - INFO - Processing job backtest_A_20240103_1750294710827743124
+2025-06-19 00:58:30,828 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,828 - __main__ - ERROR - Security violation in job backtest_A_20240103_1750294710827743124: Code contains prohibited operations
+2025-06-19 00:58:30,828 - __main__ - INFO - Processing job backtest_A_20240104_1750294710828509711
+2025-06-19 00:58:30,828 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,828 - __main__ - ERROR - Security violation in job backtest_A_20240104_1750294710828509711: Code contains prohibited operations
+2025-06-19 00:58:30,829 - __main__ - INFO - Processing job backtest_A_20240105_1750294710829045757
+2025-06-19 00:58:30,829 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,829 - __main__ - ERROR - Security violation in job backtest_A_20240105_1750294710829045757: Code contains prohibited operations
+2025-06-19 00:58:30,829 - __main__ - INFO - Processing job backtest_A_20240108_1750294710829636073
+2025-06-19 00:58:30,830 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,830 - __main__ - ERROR - Security violation in job backtest_A_20240108_1750294710829636073: Code contains prohibited operations
+2025-06-19 00:58:30,830 - __main__ - INFO - Processing job backtest_A_20240109_1750294710830456722
+2025-06-19 00:58:30,830 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,830 - __main__ - ERROR - Security violation in job backtest_A_20240109_1750294710830456722: Code contains prohibited operations
+2025-06-19 00:58:30,831 - __main__ - INFO - Processing job backtest_A_20240110_1750294710831039436
+2025-06-19 00:58:30,831 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,831 - __main__ - ERROR - Security violation in job backtest_A_20240110_1750294710831039436: Code contains prohibited operations
+2025-06-19 00:58:30,831 - __main__ - INFO - Processing job backtest_A_20240111_1750294710831590766
+2025-06-19 00:58:30,832 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,832 - __main__ - ERROR - Security violation in job backtest_A_20240111_1750294710831590766: Code contains prohibited operations
+2025-06-19 00:58:30,832 - __main__ - INFO - Processing job backtest_A_20240112_1750294710832358153
+2025-06-19 00:58:30,832 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,832 - __main__ - ERROR - Security violation in job backtest_A_20240112_1750294710832358153: Code contains prohibited operations
+2025-06-19 00:58:30,833 - __main__ - INFO - Processing job backtest_A_20240116_1750294710832908912
+2025-06-19 00:58:30,833 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,833 - __main__ - ERROR - Security violation in job backtest_A_20240116_1750294710832908912: Code contains prohibited operations
+2025-06-19 00:58:30,833 - __main__ - INFO - Processing job backtest_A_20240117_1750294710833464647
+2025-06-19 00:58:30,834 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,834 - __main__ - ERROR - Security violation in job backtest_A_20240117_1750294710833464647: Code contains prohibited operations
+2025-06-19 00:58:30,834 - __main__ - INFO - Processing job backtest_A_20240118_1750294710834250760
+2025-06-19 00:58:30,834 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,834 - __main__ - ERROR - Security violation in job backtest_A_20240118_1750294710834250760: Code contains prohibited operations
+2025-06-19 00:58:30,834 - __main__ - INFO - Processing job backtest_A_20240119_1750294710834811965
+2025-06-19 00:58:30,835 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,835 - __main__ - ERROR - Security violation in job backtest_A_20240119_1750294710834811965: Code contains prohibited operations
+2025-06-19 00:58:30,836 - __main__ - INFO - Processing job backtest_A_20240122_1750294710835947420
+2025-06-19 00:58:30,836 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,837 - __main__ - ERROR - Security violation in job backtest_A_20240122_1750294710835947420: Code contains prohibited operations
+2025-06-19 00:58:30,837 - __main__ - INFO - Processing job backtest_A_20240123_1750294710837181900
+2025-06-19 00:58:30,837 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,837 - __main__ - ERROR - Security violation in job backtest_A_20240123_1750294710837181900: Code contains prohibited operations
+2025-06-19 00:58:30,837 - __main__ - INFO - Processing job backtest_A_20240124_1750294710837785155
+2025-06-19 00:58:30,838 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,838 - __main__ - ERROR - Security violation in job backtest_A_20240124_1750294710837785155: Code contains prohibited operations
+2025-06-19 00:58:30,838 - __main__ - INFO - Processing job backtest_A_20240125_1750294710838605235
+2025-06-19 00:58:30,839 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,839 - __main__ - ERROR - Security violation in job backtest_A_20240125_1750294710838605235: Code contains prohibited operations
+2025-06-19 00:58:30,839 - __main__ - INFO - Processing job backtest_A_20240126_1750294710839199969
+2025-06-19 00:58:30,839 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,839 - __main__ - ERROR - Security violation in job backtest_A_20240126_1750294710839199969: Code contains prohibited operations
+2025-06-19 00:58:30,839 - __main__ - INFO - Processing job backtest_A_20240129_1750294710839793446
+2025-06-19 00:58:30,840 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,840 - __main__ - ERROR - Security violation in job backtest_A_20240129_1750294710839793446: Code contains prohibited operations
+2025-06-19 00:58:30,840 - __main__ - INFO - Processing job backtest_A_20240130_1750294710840378274
+2025-06-19 00:58:30,840 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,840 - __main__ - ERROR - Security violation in job backtest_A_20240130_1750294710840378274: Code contains prohibited operations
+2025-06-19 00:58:30,841 - __main__ - INFO - Processing job backtest_A_20240131_1750294710840950717
+2025-06-19 00:58:30,841 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,841 - __main__ - ERROR - Security violation in job backtest_A_20240131_1750294710840950717: Code contains prohibited operations
+2025-06-19 00:58:30,841 - __main__ - INFO - Processing job backtest_A_20240201_1750294710841543258
+2025-06-19 00:58:30,841 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,841 - __main__ - ERROR - Security violation in job backtest_A_20240201_1750294710841543258: Code contains prohibited operations
+2025-06-19 00:58:30,842 - __main__ - INFO - Processing job backtest_A_20240202_1750294710842090680
+2025-06-19 00:58:30,842 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,842 - __main__ - ERROR - Security violation in job backtest_A_20240202_1750294710842090680: Code contains prohibited operations
+2025-06-19 00:58:30,842 - __main__ - INFO - Processing job backtest_A_20240205_1750294710842671956
+2025-06-19 00:58:30,843 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,843 - __main__ - ERROR - Security violation in job backtest_A_20240205_1750294710842671956: Code contains prohibited operations
+2025-06-19 00:58:30,843 - __main__ - INFO - Processing job backtest_A_20240206_1750294710843257258
+2025-06-19 00:58:30,844 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,844 - __main__ - ERROR - Security violation in job backtest_A_20240206_1750294710843257258: Code contains prohibited operations
+2025-06-19 00:58:30,844 - __main__ - INFO - Processing job backtest_A_20240207_1750294710844145808
+2025-06-19 00:58:30,844 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,844 - __main__ - ERROR - Security violation in job backtest_A_20240207_1750294710844145808: Code contains prohibited operations
+2025-06-19 00:58:30,844 - __main__ - INFO - Processing job backtest_A_20240208_1750294710844707813
+2025-06-19 00:58:30,845 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,845 - __main__ - ERROR - Security violation in job backtest_A_20240208_1750294710844707813: Code contains prohibited operations
+2025-06-19 00:58:30,845 - __main__ - INFO - Processing job backtest_A_20240209_1750294710845264679
+2025-06-19 00:58:30,845 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,845 - __main__ - ERROR - Security violation in job backtest_A_20240209_1750294710845264679: Code contains prohibited operations
+2025-06-19 00:58:30,845 - __main__ - INFO - Processing job backtest_A_20240212_1750294710845818748
+2025-06-19 00:58:30,846 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,846 - __main__ - ERROR - Security violation in job backtest_A_20240212_1750294710845818748: Code contains prohibited operations
+2025-06-19 00:58:30,846 - __main__ - INFO - Processing job backtest_A_20240213_1750294710846590189
+2025-06-19 00:58:30,847 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,847 - __main__ - ERROR - Security violation in job backtest_A_20240213_1750294710846590189: Code contains prohibited operations
+2025-06-19 00:58:30,847 - __main__ - INFO - Processing job backtest_A_20240214_1750294710847146904
+2025-06-19 00:58:30,847 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,847 - __main__ - ERROR - Security violation in job backtest_A_20240214_1750294710847146904: Code contains prohibited operations
+2025-06-19 00:58:30,847 - __main__ - INFO - Processing job backtest_A_20240215_1750294710847826862
+2025-06-19 00:58:30,848 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,848 - __main__ - ERROR - Security violation in job backtest_A_20240215_1750294710847826862: Code contains prohibited operations
+2025-06-19 00:58:30,848 - __main__ - INFO - Processing job backtest_A_20240216_1750294710848565571
+2025-06-19 00:58:30,849 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,849 - __main__ - ERROR - Security violation in job backtest_A_20240216_1750294710848565571: Code contains prohibited operations
+2025-06-19 00:58:30,849 - __main__ - INFO - Processing job backtest_A_20240220_1750294710849306553
+2025-06-19 00:58:30,849 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,849 - __main__ - ERROR - Security violation in job backtest_A_20240220_1750294710849306553: Code contains prohibited operations
+2025-06-19 00:58:30,849 - __main__ - INFO - Processing job backtest_A_20240221_1750294710849840976
+2025-06-19 00:58:30,850 - src.security_validator - WARNING - Code failed security validation
+2025-06-19 00:58:30,850 - __main__ - ERROR - Security violation in job backtest_A_20240221_1750294710849840976: Code contains prohibited operations
+2025-06-19 00:58:46,330 - __main__ - INFO - Processing job test_backtest_2651d528
+2025-06-19 00:58:46,331 - src.execution_engine - WARNING - Module statsmodels not available
+2025-06-19 00:58:46,331 - src.execution_engine - WARNING - Module stumpy not available
+2025-06-19 00:58:46,332 - src.execution_engine - WARNING - Module empyrical not available
+2025-06-19 00:58:46,332 - src.execution_engine - WARNING - Module pyfolio not available
+2025-06-19 00:58:46,332 - src.execution_engine - WARNING - Module talib not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module sklearn not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module quantlib not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module plotly not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module tsfresh not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module ta not available
+2025-06-19 00:58:46,333 - src.execution_engine - WARNING - Module seaborn not available
+2025-06-19 00:58:46,337 - src.execution_engine - WARNING - Module arch not available
+2025-06-19 00:58:46,337 - src.execution_engine - WARNING - Module zipline not available
+2025-06-19 00:58:46,337 - src.execution_engine - WARNING - Module matplotlib not available
+2025-06-19 00:58:46,337 - src.execution_engine - WARNING - Module prophet not available
+2025-06-19 00:58:46,338 - src.execution_engine - ERROR - Execution error: Module 'typing' is not allowed
+2025-06-19 00:58:46,338 - __main__ - ERROR - Execution error: Module 'typing' is not allowed
+2025-06-19 00:58:46,338 - __main__ - ERROR - Job test_backtest_2651d528 failed: Module 'typing' is not allowed
