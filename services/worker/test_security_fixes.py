@@ -7,10 +7,10 @@ Tests all the security vulnerabilities that were fixed to ensure they are proper
 import asyncio
 import sys
 import traceback
-from typing import Dict, Any
+from typing import Any, Dict
 
-from src.execution_engine import PythonExecutionEngine, SecurityError
 from src.data_provider import DataProvider
+from src.execution_engine import PythonExecutionEngine, SecurityError
 
 
 class SecurityFixesTest:
