@@ -6,7 +6,7 @@ Monitors Python files and restarts the worker when changes are detected
 
 import os
 import signal
-import subprocess
+import subprocess  # nosec B404 - Required for worker process management
 import sys
 import time
 
@@ -31,7 +31,7 @@ class WorkerRestartHandler(FileSystemEventHandler):
         print("🚀 Starting Python worker...")
         # Using subprocess.Popen with explicit args list for security
         # shell=False is the default and provides better security
-        self.process = subprocess.Popen(
+        self.process = subprocess.Popen(  # nosec B603 - Safe: shell=False, hardcoded args
             [sys.executable, "worker.py"],
             shell=False,  # Explicitly set for security
             cwd=os.getcwd(),  # Set working directory explicitly
