@@ -139,14 +139,6 @@
 		right: 0;
 	}
 
-	.metadata {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex-wrap: wrap;
-		overflow: hidden;
-		min-width: 0;
-	}
 
 	/* Base styles for metadata buttons */
 	.metadata-button {
