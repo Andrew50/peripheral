@@ -162,7 +162,7 @@
 		text-overflow: ellipsis;
 		border: 1px solid transparent;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: none;
 		text-align: left;
 		display: inline-flex;
 		align-items: center;
@@ -177,7 +177,7 @@
 
 	.metadata-button:hover {
 		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 0.3);
+		border-color: transparent;
 		color: #ffffff;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
@@ -213,7 +213,7 @@
 
 	.timeframe-preset-button.active {
 		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.5);
+		border-color: transparent;
 		color: #ffffff;
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
@@ -231,7 +231,7 @@
 
 	.timeframe-custom-button.active {
 		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.5);
+		border-color: transparent;
 		color: #ffffff;
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);

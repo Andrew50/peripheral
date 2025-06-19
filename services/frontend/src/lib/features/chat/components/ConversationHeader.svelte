@@ -25,7 +25,7 @@
     <div class="header-left">
         <div class="conversation-dropdown-container" bind:this={conversationDropdown}>
             <button class="hamburger-button" on:click={toggleConversationDropdown} aria-label="Open conversations menu">
-                <svg viewBox="0 0 24 24" width="16" height="16">
+                <svg viewBox="0 0 24 24" width="20" height="20">
                     <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
                 </svg>
             </button>
@@ -113,7 +113,7 @@
         {#if $messagesStore.length > 0}
             <div class="header-buttons">
                 <button 
-                    class="header-btn share-btn glass glass--small glass--responsive" 
+                    class="header-btn share-btn" 
                     on:click={handleShareConversation}
                     disabled={!currentConversationId}
                     title="Share Current Conversation"
@@ -125,7 +125,7 @@
                     </svg>
                     Share
                 </button>
-                <button class="header-btn new-chat-btn glass glass--small glass--responsive" on:click={clearConversation} disabled={isLoading}>
+                <button class="header-btn new-chat-btn" on:click={clearConversation} disabled={isLoading}>
                     <svg viewBox="0 0 24 24" width="14" height="14">
                         <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
                     </svg>

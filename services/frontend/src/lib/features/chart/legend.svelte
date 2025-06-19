@@ -17,9 +17,6 @@
 
 	let isUpdating = false;
 
-
-
-
 	function formatLargeNumber(volume: number, dolvol: boolean): string {
 		if (volume === undefined) {
 			return 'NA';

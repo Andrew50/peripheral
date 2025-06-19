@@ -11,9 +11,9 @@
 		align-items: center;
 		height: 40px;
 		min-height: 40px;
-		padding: 0 1rem;
-		border-bottom: 1px solid var(--ui-border);
-		background: var(--ui-bg-primary);
+		padding: 0 1rem 0 1rem;
+		border-bottom: 1px solid var(--c1);
+		background: var(--c2);
 		flex-shrink: 0;
 	}
 
@@ -26,6 +26,7 @@
 	.header-right {
 		display: flex;
 		align-items: center;
+		margin-right: -0.5rem;
 	}
 
 	.conversation-dropdown-container {
@@ -44,13 +45,14 @@
 		border-radius: 0.25rem;
 		color: var(--text-secondary, #aaa);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: none;
 	}
 
 	.hamburger-button:hover {
-		background: var(--ui-bg-hover, rgba(255, 255, 255, 0.1));
-		color: var(--text-primary, #fff);
-		border-color: var(--ui-border, #444);
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		border-color: transparent;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
 
 	.conversation-dropdown {
@@ -1007,27 +1009,30 @@
 	.header-buttons {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 2px;
 	}
 
 	.header-btn {
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		padding: 4px 8px;
-		font-size: 0.75em;
+		padding: 6px 10px;
+		font-size: 14px;
 		font-weight: 500;
 		border-radius: 6px;
-		transition: all 0.2s ease;
+		transition: none;
 		white-space: nowrap;
-		/* Glass effect provided by global .glass classes */
+		background: transparent;
+		border: 1px solid transparent;
+		color: rgba(255, 255, 255, 0.9);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
 	.header-btn:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-		--glass-bg: rgba(255, 255, 255, 0.15);
-		--glass-border: rgba(255, 255, 255, 0.3);
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
 
 	.header-btn:active:not(:disabled) {
@@ -1040,7 +1045,7 @@
 	}
 
 	.new-chat-text {
-		font-size: 0.9em;
+		font-size: 14px;
 		font-weight: 500;
 	}
 
