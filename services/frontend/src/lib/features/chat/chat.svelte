@@ -37,6 +37,12 @@
 	let loadingConversations = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
 	
+	// Title typing effect state
+	let isTypingTitle = false;
+	let typingTitleText = '';
+	let typingTitleTarget = '';
+	let typingInterval: ReturnType<typeof setInterval> | null = null;
+
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
 	
@@ -527,6 +533,11 @@
 		// Clean up share copy timeout
 		if (shareCopyTimeout) {
 			clearTimeout(shareCopyTimeout);
+		}
+
+		// Clean up typing interval
+		if (typingInterval) {
+			clearInterval(typingInterval);
 		}
 	});
 
@@ -1152,6 +1163,40 @@
 		}
 	}
 
+	// Function to create typing effect for title
+	function startTitleTypingEffect(newTitle: string) {
+		// Don't start typing if already typing or if the title is the same
+		if (isTypingTitle || currentConversationTitle === newTitle) {
+			return;
+		}
+		
+		isTypingTitle = true;
+		typingTitleTarget = newTitle;
+		typingTitleText = '';
+		
+		let currentIndex = 0;
+		const typingSpeed = 50; // milliseconds per character
+		
+		// Clear any existing interval
+		if (typingInterval) {
+			clearInterval(typingInterval);
+		}
+		
+		typingInterval = setInterval(() => {
+			if (currentIndex < typingTitleTarget.length) {
+				typingTitleText = typingTitleTarget.substring(0, currentIndex + 1);
+				currentIndex++;
+			} else {
+				// Typing complete
+				clearInterval(typingInterval!);
+				typingInterval = null;
+				isTypingTitle = false;
+				currentConversationTitle = typingTitleTarget;
+				typingTitleText = '';
+			}
+		}, typingSpeed);
+	}
+
 	// Reactive block to handle title updates from websocket
 	$: if ($titleUpdateStore && browser) {
 		const titleUpdate = $titleUpdateStore;
@@ -1165,7 +1210,8 @@
 				currentConversationId = titleUpdate.conversation_id;
 			}
 			
-			currentConversationTitle = titleUpdate.title;
+			// Start typing effect for the new title
+			startTitleTypingEffect(titleUpdate.title);
 			
 			// Also update the conversations list if it's loaded
 			if (conversations.length > 0) {
@@ -1194,6 +1240,8 @@
 			{conversationToDelete}
 			{messagesStore}
 			{isLoading}
+			{isTypingTitle}
+			{typingTitleText}
 			{toggleConversationDropdown}
 			{createNewConversation}
 			{switchToConversation}

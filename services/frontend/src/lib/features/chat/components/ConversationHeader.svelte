@@ -10,6 +10,8 @@
     export let conversationToDelete: string;
     export let messagesStore: any;
     export let isLoading: boolean;
+    export let isTypingTitle: boolean;
+    export let typingTitleText: string;
     
     export let toggleConversationDropdown: () => void;
     export let createNewConversation: () => void;
@@ -106,7 +108,13 @@
             {/if}
         </div>
         
-        <h3>{currentConversationTitle}</h3>
+        <h3 class="conversation-title">
+            {#if isTypingTitle}
+                {typingTitleText}<span class="typing-cursor">|</span>
+            {:else}
+                {currentConversationTitle}
+            {/if}
+        </h3>
     </div>
     
     <div class="header-right">
