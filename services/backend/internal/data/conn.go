@@ -29,6 +29,7 @@ type Conn struct {
 	PerplexityKey   string
 	XAPIKey         string
 	TwitterAPIioKey string
+	OpenAIKey       string
 }
 
 var conn *Conn
@@ -51,6 +52,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
 	XAPIKey := getEnv("X_API_KEY", "")
 	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
+	openAIKey := getEnv("OPENAI_API_KEY", "")
 	var dbURL string
 	var cacheURL string
 
@@ -159,6 +161,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		PerplexityKey:   perplexityKey,
 		XAPIKey:         XAPIKey,
 		TwitterAPIioKey: twitterAPIioKey,
+		OpenAIKey:       openAIKey,
 	}
 
 	cleanup := func() {

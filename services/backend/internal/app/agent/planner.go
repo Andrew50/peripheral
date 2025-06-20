@@ -10,7 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invopop/jsonschema"
 	"google.golang.org/genai"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
@@ -213,6 +217,7 @@ func contentChunkSchema() *genai.Schema {
 
 const planningModel = "gemini-2.5-flash"
 const finalResponseModel = "gemini-2.5-flash"
+const openAIFinalResponseModel = "o3"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
 	var systemPrompt string
@@ -548,6 +553,61 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	}, nil
 }
 
+func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
+	apiKey := conn.OpenAIKey
+
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+
+	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
+	}
+	ref := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	finalRespSchema := ref.Reflect(&FinalResponse{})
+
+	params := openai.ChatCompletionNewParams{
+		Model: openAIFinalResponseModel,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(systemPrompt),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+					Name:        "atlantis_final_response",
+					Description: openai.String("A valid Atlantis agent response"),
+					Schema:      finalRespSchema,
+					Strict:      openai.Bool(true),
+				},
+			},
+		},
+	}
+	chat, err := client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error generating openai final response: %w", err)
+	}
+	raw := chat.Choices[0].Message.Content
+	var finalResp FinalResponse
+	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
+		return &FinalResponse{
+			ContentChunks: []ContentChunk{{Type: "text", Content: raw}},
+			TokenCounts:   TokenCounts{},
+		}, nil
+	}
+	fmt.Println("finalResp openai\n\n\n ", finalResp)
+	finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
+	finalResp.TokenCounts = TokenCounts{
+		InputTokenCount:  int32(chat.Usage.PromptTokens),
+		OutputTokenCount: int32(chat.Usage.CompletionTokens),
+		TotalTokenCount:  int32(chat.Usage.TotalTokens),
+	}
+	return &finalResp, nil
+
+}
+
+// <Helper functions>
 // cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
 // and replaces it with just the ticker symbol
 func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
