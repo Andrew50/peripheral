@@ -180,7 +180,7 @@ type GetPopularTickersResults struct {
 	Name       string `json:"name"`
 }
 
-func GetPopularTickers(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func GetPopularTickers(conn *data.Conn, _ json.RawMessage) (interface{}, error) {
 	// Get the 5 most popular tickers based on chart queries in the last 24 hours
 	query := `
 	WITH popular_securities AS (
