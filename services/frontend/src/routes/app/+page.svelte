@@ -77,6 +77,9 @@
 	// Import TopBar component
 	import TopBar from '$lib/components/TopBar.svelte';
 
+	// Import mobile banner component
+	import MobileBanner from '$lib/components/mobileBanner.svelte';
+
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
@@ -807,6 +810,7 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
+	<MobileBanner />
 	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
