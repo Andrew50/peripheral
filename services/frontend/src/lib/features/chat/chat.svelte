@@ -479,7 +479,8 @@
 		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
-		loadConversationHistory();
+		// For public shared conversations, don't auto-scroll to bottom - keep at top
+		loadConversationHistory(!isPublicViewing);
 		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
 		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
