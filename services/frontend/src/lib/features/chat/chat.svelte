@@ -1099,7 +1099,14 @@
 
 	// Share conversation functions
 	async function handleShareConversation() {
-		if (!currentConversationId) {
+		// If modal is already open, close it (toggle behavior)
+		if (showShareModal) {
+			closeShareModal();
+			return;
+		}
+
+		const conversationIdToShare = currentConversationId || sharedConversationId;
+		if (!conversationIdToShare) {
 			console.error('No active conversation to share');
 			return;
 		}
@@ -1115,11 +1122,19 @@
 		shareCopied = false;
 
 		try {
-			const link = await generateSharedConversationLink(currentConversationId);
-			if (link) {
-				shareLink = link;
+			// If we're in public viewing mode, we know the conversation is already public
+			// so we can generate the link directly without calling the backend
+			if (isPublicViewing && sharedConversationId) {
+				shareLink = `${window.location.origin}/share/${sharedConversationId}`;
+				console.log('Generated share link for public conversation:', shareLink);
 			} else {
-				console.error('Failed to generate share link');
+				// For authenticated users, we need to make the conversation public via backend
+				const link = await generateSharedConversationLink(conversationIdToShare);
+				if (link) {
+					shareLink = link;
+				} else {
+					console.error('Failed to generate share link');
+				}
 			}
 		} catch (error) {
 			console.error('Error generating share link:', error);
@@ -1250,6 +1265,21 @@
 		<!-- Simple header for public viewing -->
 		<div class="public-conversation-header">
 			<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
+			<div class="header-buttons">
+				<button 
+					class="header-btn share-btn" 
+					on:click={handleShareConversation}
+					disabled={!currentConversationId && !sharedConversationId}
+					title="Share This Conversation"
+				>
+					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+						<polyline points="16,6 12,2 8,6"/>
+						<line x1="12" y1="2" x2="12" y2="15"/>
+					</svg>
+					Share
+				</button>
+			</div>
 		</div>
 	{/if}
 
