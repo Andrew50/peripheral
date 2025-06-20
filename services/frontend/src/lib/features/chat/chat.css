@@ -21,12 +21,15 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		flex: 1;
+		min-width: 0; /* Allow flex items to shrink below their content size */
 	}
 
 	.header-right {
 		display: flex;
 		align-items: center;
 		margin-right: -0.5rem;
+		flex-shrink: 0; /* Prevent the right section from shrinking */
 	}
 
 	.conversation-dropdown-container {
@@ -252,6 +255,8 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		flex: 1;
+		min-width: 0; /* Allow title to shrink */
 	}
 
 	.clear-button {
