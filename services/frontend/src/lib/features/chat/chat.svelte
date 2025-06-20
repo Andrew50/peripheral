@@ -316,33 +316,12 @@
 				// Clear existing messages to avoid duplicates during polling updates
 				messagesStore.set([]);
 				
-				// Get the last seen timestamp from localStorage
-				const lastSeenKey = 'chat_last_seen_timestamp';
-				const lastSeenStr = localStorage.getItem(lastSeenKey);
-				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
-				
-				// Track if we found any new responses
-				let hasNewResponses = false;
-				let latestCompletedTimestamp: Date | null = null;
-
 				// Process each message in the conversation history
 				conversation.messages.forEach((msg) => {
 					const msgTimestamp = new Date(msg.timestamp);
 					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : undefined;
 					const isCompleted = msg.status === 'completed';
 					const isPending = msg.status === 'pending';
-					
-					// Check if this is a new response (completed after last seen timestamp)
-					const isNewResponse = isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp ? true : undefined;
-					
-					if (isNewResponse) {
-						hasNewResponses = true;
-					}
-
-					// Track the latest completed timestamp
-					if (isCompleted && msgCompletedAt && (!latestCompletedTimestamp || msgCompletedAt > latestCompletedTimestamp)) {
-						latestCompletedTimestamp = msgCompletedAt;
-					}
 
 					// Only process messages that have backend message IDs
 					if (!msg.message_id) {
@@ -359,8 +338,7 @@
 						timestamp: msgTimestamp,
 						contextItems: msg.context_items || [],
 						status: msg.status,
-						completedAt: msgCompletedAt,
-						isNewResponse: isNewResponse
+						completedAt: msgCompletedAt
 					}]);
 
 					// Only add assistant message if it's completed (has content)
@@ -375,8 +353,7 @@
 							timestamp: msgTimestamp,
 							suggestedQueries: msg.suggested_queries || [],
 							status: msg.status,
-							completedAt: msgCompletedAt,
-							isNewResponse: isNewResponse
+							completedAt: msgCompletedAt
 						}]);
 					} else if (isPending) {
 						// Add a loading message for pending requests
@@ -392,13 +369,7 @@
 					}
 				});
 
-				// Update last seen timestamp if we have new responses
-				if (hasNewResponses && latestCompletedTimestamp) {
-					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
-				} else if (!lastSeenTimestamp && latestCompletedTimestamp) {
-					// First time loading, set the timestamp
-					localStorage.setItem(lastSeenKey, (latestCompletedTimestamp as Date).toISOString());
-				}
+
 
 				// Update conversation details from backend response
 				// Only update conversation ID if we don't already have one or if it matches
@@ -462,21 +433,12 @@
 					console.log('Polling returned different conversation ID, skipping update to prevent chat switching');
 					return;
 				}
-				const lastSeenKey = 'chat_last_seen_timestamp';
-				const lastSeenStr = localStorage.getItem(lastSeenKey);
-				const lastSeenTimestamp = lastSeenStr ? new Date(lastSeenStr) : null;
 				
 				let hasUpdates = false;
 				
 				// Check if there are any new completed messages or status changes
 				for (const msg of conversation.messages) {
-					const msgCompletedAt = msg.completed_at ? new Date(msg.completed_at) : null;
 					const isCompleted = msg.status === 'completed';
-					
-					if (isCompleted && msgCompletedAt && lastSeenTimestamp && msgCompletedAt > lastSeenTimestamp) {
-						hasUpdates = true;
-						break;
-					}
 					
 					// Check if we have pending messages that might have been completed
 					// Use message_id for proper identification instead of content matching
@@ -716,10 +678,6 @@
 				};
 
 				messagesStore.update(current => [...current, assistantMessage]);
-				
-				// Update last seen timestamp since we just saw this response
-				const lastSeenKey = 'chat_last_seen_timestamp';
-				localStorage.setItem(lastSeenKey, messageCompletedAt.toISOString());
 				
 				// If we didn't have a conversation ID before, we should have one now
 				// Load conversation history to get the new conversation ID
@@ -1311,7 +1269,7 @@
 					<div
 						class="message {message.sender} {message.status === 'error' || message.content.includes('Error:')
 							? 'error'
-							: ''} {message.isNewResponse ? 'new-response' : ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
+							: ''} {editingMessageId === message.message_id ? 'editing' : ''} {message.sender === 'user' ? 'glass glass--pill glass--responsive' : ''}"
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
@@ -1343,13 +1301,6 @@
 								</div>
 							</div>
 						{:else}
-							<!-- Show new response indicator -->
-							{#if message.isNewResponse && message.sender === 'assistant'}
-								<div class="new-response-indicator">
-									<span class="new-badge">New</span>
-								</div>
-							{/if}
-							
 							<!-- Display context chips for user messages -->
 							{#if message.sender === 'user' && message.contextItems && message.contextItems.length > 0}
 								<div class="message-context-chips">
