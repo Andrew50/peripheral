@@ -1112,7 +1112,7 @@
 		}
 
 		// Close conversation dropdown if it's open
-		if (showConversationDropdown) {
+		if (showConversationDropdown) {	
 			showConversationDropdown = false;
 		}
 
