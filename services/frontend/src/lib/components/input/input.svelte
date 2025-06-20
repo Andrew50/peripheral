@@ -107,7 +107,7 @@
 		const thisSecurityResultRequest = currentSecurityResultRequest;
 
 		// Set isLoadingSecurities to true before validation starts
-		if (inputType === 'ticker' && inputString.length > 0) {
+		if (inputType === 'ticker') {
 			isLoadingSecurities = true;
 
 			// Extra update to ensure UI shows loading state immediately
@@ -281,6 +281,12 @@
 				inputType: forcedInputType,
 				securities: forcedInputType === 'ticker' ? [] : q.securities
 			}));
+			
+			// If forced to ticker type with no input, load popular tickers
+			if (forcedInputType === 'ticker') {
+				isLoadingSecurities = true;
+				determineInputType(''); // This will trigger popular tickers loading
+			}
 		}, 0);
 	}
 
@@ -671,6 +677,11 @@
 						</div>
 						<div class="search-divider"></div>
 						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+							{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
+								<div class="popular-section-header">
+									<span class="popular-text">Popular</span>
+								</div>
+							{/if}
 							<div class="securities-list-flex securities-scrollable">
 								{#each $inputQuery.securities as sec, i}
 									<div
@@ -1031,6 +1042,27 @@
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		opacity: 0.9;
+	}
+
+	.popular-section-header {
+		padding: 0.5rem 0.75rem 0.25rem 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.popular-text {
+		color: rgba(255, 255, 255, 0.6);
+		font-size: 0.75rem;
+		font-weight: 400;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	@keyframes pulse {
+		0%, 100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.6;
+		}
 	}
 
 	.search-divider {
