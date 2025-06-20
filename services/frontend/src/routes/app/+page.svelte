@@ -7,8 +7,7 @@
 	import StrategiesPopup from '$lib/components/strategiesPopup.svelte';
 	import Input from '$lib/components/input/input.svelte';
 	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
-	//import Similar from '$lib/features/similar/similar.svelte';
-	//import Study from '$lib/features/study.svelte';
+
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
 	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
@@ -30,7 +29,8 @@
 		changeSpeed,
 		nextDay
 	} from '$lib/utils/stream/interface';
-	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { queryInstanceInput, inputQuery } from '$lib/components/input/input.svelte';
+	import { queryChart } from '$lib/features/chart/interface';
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
@@ -208,21 +208,77 @@
 		}
 	}
 
+	// Track the last auto-input trigger to prevent rapid successive calls
+	let lastAutoInputTime = 0;
+	const AUTO_INPUT_DEBOUNCE_MS = 100; // Prevent auto-input triggers within 100ms of each other
+
 	// Define the keydown handler with a stable reference outside of onMount
 	const keydownHandler = (event: KeyboardEvent) => {
-		// Check if input window is active - don't handle keyboard events when input is active
-		const inputWindow = document.getElementById('input-window');
-		const hiddenInput = document.getElementById('hidden-input');
-
-		// Don't interfere with the input component's keyboard events
-		//if (inputWindow || hiddenInput === document.activeElement) {
-		if (hiddenInput === document.activeElement) {
+		// Check if input component is already active or recently triggered
+		const currentInputStatus = get(inputQuery).status;
+		const inputWindowExists = document.getElementById('input-window') !== null;
+		const now = Date.now();
+		
+		// Don't trigger if input is active, input window exists, or we recently triggered auto-input
+		if (currentInputStatus !== 'inactive' || 
+			inputWindowExists || 
+			(now - lastAutoInputTime) < AUTO_INPUT_DEBOUNCE_MS) {
 			return;
 		}
 
-		// Only handle events when no element is focused or body is focused
+		// Check if the user is currently in any standard input field
+		const activeElement = document.activeElement;
+		const isInputField =
+			activeElement?.tagName === 'INPUT' ||
+			activeElement?.tagName === 'TEXTAREA' ||
+			activeElement?.getAttribute('contenteditable') === 'true';
+
+		// If user is typing in any input field, don't intercept keystrokes
+		if (isInputField) {
+			return;
+		}
+
+		// Handle alphanumeric keys for auto-input capture
+		if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
+			// Update last trigger time
+			lastAutoInputTime = now;
+			
+			// Prevent the event from propagating to avoid double capture
+			event.preventDefault();
+			event.stopPropagation();
+
+			// Create an initial instance with the first key as the inputString
+			const initialKey = event.key.toUpperCase();
+
+			// Use type assertion to allow the inputString property
+			const instanceWithInput = {
+				inputString: initialKey
+			} as any;
+
+			queryInstanceInput(
+				'any',
+				['ticker', 'timeframe'],
+				instanceWithInput
+			).then((updatedInstance) => {
+				queryChart(updatedInstance, true);
+			}).catch((error) => {
+				// Handle cancellation silently
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in auto-input capture:', error);
+				}
+			});
+
+			// Focus the chart container after input activation
+			const chartContainer = document.getElementById(`chart_container-0`);
+			if (chartContainer) {
+				setTimeout(() => chartContainer.focus(), 0);
+			}
+			return;
+		}
+
+		// For non-alphanumeric keys, delegate to chart container if no specific element is focused
 		if (!document.activeElement || document.activeElement === document.body) {
-			const chartContainer = document.getElementById(`chart_container-0`); // Assuming first chart has ID 0
+			const chartContainer = document.getElementById(`chart_container-0`);
 
 			if (chartContainer) {
 				// Focus the chart container

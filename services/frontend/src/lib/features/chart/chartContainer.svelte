@@ -16,56 +16,6 @@
 				containerRef.focus();
 			}
 		});
-
-		// Add global keyboard event listener for chart container
-		const handleGlobalKeydown = (event: KeyboardEvent) => {
-			// Check if input popup is active by looking for the hidden input
-			const hiddenInput = document.getElementById('hidden-input');
-			if (hiddenInput && document.activeElement === hiddenInput) {
-				// Input popup is active, don't trigger new input
-				return;
-			}
-
-			// Check if the user is currently in any standard input field
-			const activeElement = document.activeElement;
-			const isInputField =
-				activeElement?.tagName === 'INPUT' ||
-				activeElement?.tagName === 'TEXTAREA' ||
-				activeElement?.getAttribute('contenteditable') === 'true';
-
-			// If user is typing in any input field, don't intercept keystrokes
-			if (isInputField) {
-				return;
-			}
-
-			if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
-				// Create an initial instance with the first key as the inputString
-				const initialKey = event.key.toUpperCase();
-
-				// Use type assertion to allow the inputString property
-				const instanceWithInput = {
-					inputString: initialKey
-				} as any;
-
-				queryInstanceInput(
-					'any',
-					['ticker', 'timeframe'],
-					instanceWithInput
-				).then((updatedInstance) => {
-					queryChart(updatedInstance, true);
-				});
-
-				// Only focus if we're not in an input field or similar
-				if (containerRef) {
-					containerRef.focus();
-				}
-			}
-		};
-
-		document.addEventListener('keydown', handleGlobalKeydown);
-		return () => {
-			document.removeEventListener('keydown', handleGlobalKeydown);
-		};
 	});
 
 	// Handle focus management
