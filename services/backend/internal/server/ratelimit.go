@@ -148,9 +148,20 @@ func (rl *RateLimiter) slidingWindowRateLimit(ctx context.Context, identifier, f
 func (rl *RateLimiter) RateLimitMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Add CORS headers first, before any potential early returns
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
 			// Skip rate limiting for health checks
 			if r.URL.Path == "/healthz" {
 				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Skip rate limiting for OPTIONS requests (CORS preflight)
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
 				return
 			}
 
