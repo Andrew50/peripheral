@@ -681,6 +681,10 @@
 								<div class="popular-section-header">
 									<span class="popular-text">Popular</span>
 								</div>
+							{:else}
+								<div class="securities-section-header">
+									<span class="securities-text">Securities</span>
+								</div>
 							{/if}
 							<div class="securities-list-flex securities-scrollable">
 								{#each $inputQuery.securities as sec, i}
@@ -957,13 +961,13 @@
 	.security-item-flex {
 		display: flex;
 		align-items: center;
-		padding: 0.5rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		cursor: pointer;
 		border-radius: 0.375rem;
 		border: 1px solid transparent;
 		transition: background-color 0.15s ease, border-color 0.15s ease;
-		gap: 1rem;
-		min-height: 2.75rem;
+		gap: 0.75rem;
+		min-height: 2.25rem;
 	}
 
 	.security-item-flex.highlighted {
@@ -972,8 +976,8 @@
 	}
 
 	.security-icon-flex {
-		width: 1.5rem;
-		height: 1.5rem;
+		width: 1.25rem;
+		height: 1.25rem;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -992,16 +996,16 @@
 		flex: 1;
 		display: flex;
 		align-items: baseline;
-		gap: 0.75rem;
+		gap: 0.625rem;
 		overflow: hidden;
-		font-size: 1rem;
+		font-size: 0.875rem;
 		white-space: nowrap;
 	}
 
 	.ticker-flex {
 		font-weight: 600;
 		color: #ffffff;
-		flex-basis: 5rem;
+		flex-basis: 4rem;
 		flex-shrink: 0;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
@@ -1044,12 +1048,14 @@
 		opacity: 0.9;
 	}
 
-	.popular-section-header {
-		padding: 0.5rem 0.75rem 0.25rem 0.75rem;
-		margin-bottom: 0.25rem;
+	.popular-section-header,
+	.securities-section-header {
+		padding: 0.25rem 0.75rem 0.125rem 0.75rem;
+		margin-bottom: 0.125rem;
 	}
 
-	.popular-text {
+	.popular-text,
+	.securities-text {
 		color: rgba(255, 255, 255, 0.6);
 		font-size: 0.75rem;
 		font-weight: 400;
