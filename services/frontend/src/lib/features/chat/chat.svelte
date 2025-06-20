@@ -178,25 +178,44 @@
 			return;
 		}
 
+		// Immediately update UI for snappy feel
+		const previousConversationId = currentConversationId;
+		const previousTitle = currentConversationTitle;
+		const previousMessages = [...$messagesStore];
+		const previousContext = [...$contextItems];
+		
+		currentConversationId = conversationId;
+		currentConversationTitle = title;
+		showConversationDropdown = false;
+		
+		// Clear current messages and context items immediately
+		messagesStore.set([]);
+		contextItems.set([]);
+
+		// Make backend request and load messages in background
 		try {
 			const response = await privateRequest('switchConversation', {
 				conversation_id: conversationId
 			});
 			
 			if (response) {
-				currentConversationId = conversationId;
-				currentConversationTitle = title;
-				
-				// Clear current messages and context items to prevent leakage
-				messagesStore.set([]);
-				contextItems.set([]); // Clear context items when switching conversations
-				
+				// Load the conversation messages
 				await loadConversationHistory();
-				
-				showConversationDropdown = false;
+			} else {
+				// If backend fails, restore previous state
+				currentConversationId = previousConversationId;
+				currentConversationTitle = previousTitle;
+				messagesStore.set(previousMessages);
+				contextItems.set(previousContext);
 			}
 		} catch (error) {
 			console.error('Error switching conversation:', error);
+			
+			// Restore previous state on error
+			currentConversationId = previousConversationId;
+			currentConversationTitle = previousTitle;
+			messagesStore.set(previousMessages);
+			contextItems.set(previousContext);
 		}
 	}
 
@@ -208,22 +227,39 @@
 	}
 
 	async function confirmDeleteConversation(conversationId: string) {
+		// Store the conversation being deleted for potential restoration
+		const conversationToDeleteData = conversations.find(c => c.conversation_id === conversationId);
+		
+		// Immediately remove from UI for snappy feel
+		conversations = conversations.filter(c => c.conversation_id !== conversationId);
+		conversationToDelete = ''; // Clear delete mode immediately
+		
+		// If we deleted the current conversation, start a new one immediately
+		if (conversationId === currentConversationId) {
+			createNewConversation(); // This will clear the UI state
+		}
+		
+		// Make backend request in background
 		try {
 			await privateRequest('deleteConversation', {
 				conversation_id: conversationId
 			});
-			
-			// If we deleted the current conversation, start a new one
-			if (conversationId === currentConversationId) {
-				createNewConversation(); // This will clear the UI state
-			} else {
-				// Just refresh the conversation list
-				await loadConversations();
-			}
+			// Success - no need to do anything as UI is already updated
 		} catch (error) {
 			console.error('Error deleting conversation:', error);
-		} finally {
-			conversationToDelete = ''; // Clear delete mode
+			
+			// Restore the conversation on error if we have the data
+			if (conversationToDeleteData) {
+				// Insert back into conversations list in the right position
+				const updatedConversations = [...conversations, conversationToDeleteData];
+				// Sort by updated_at to maintain proper order
+				conversations = updatedConversations.sort((a, b) => 
+					new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+				);
+			}
+			
+			// Could show a toast notification here about the error
+			// For now, just log the error
 		}
 	}
 
