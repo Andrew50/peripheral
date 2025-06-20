@@ -1798,7 +1798,7 @@
 			// Backward loading condition:
 			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
 			// Corrected condition: Check if number of bars to the left is less than the buffer
-			if (logicalRange.from > 10 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
+			if (logicalRange.from < 20 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
