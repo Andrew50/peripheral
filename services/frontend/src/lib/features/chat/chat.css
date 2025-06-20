@@ -822,32 +822,7 @@
 		to { opacity: 1; transform: translateY(0); }
 	}
 
-	/* New response indicator styles */
-	.new-response-indicator {
-		display: flex;
-		justify-content: flex-end;
-		margin-bottom: 0.5rem;
-	}
 
-	.new-badge {
-		background: var(--accent-color, #3a8bf7);
-		color: white;
-		padding: 0.2rem 0.5rem;
-		border-radius: 1rem;
-		font-size: 0.7rem;
-		font-weight: 500;
-		animation: newResponsePulse 2s ease-in-out;
-	}
-
-	.message.new-response {
-		border-left: 3px solid var(--accent-color, #3a8bf7);
-		background: rgba(58, 139, 247, 0.05);
-	}
-
-	@keyframes newResponsePulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.7; }
-	}
 
 	/* Message actions styles - consolidated and fixed */
 	.message-actions {
