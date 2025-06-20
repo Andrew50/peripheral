@@ -56,7 +56,7 @@ export async function GET({ params }: { params: { id: string } }) {
 
     // Use the user query as the main title
     const rawTitle = q || 'Atlantis Query';
-    const title = rawTitle.length > 80 ? rawTitle.substring(0, 80) + '...' : rawTitle;
+    const title = rawTitle.length > 95 ? rawTitle.substring(0, 95) + '...' : rawTitle;  
 
     // ---------- 3) Render SVG via Satori -----------
     const svg = await satori(
@@ -68,7 +68,7 @@ export async function GET({ params }: { params: { id: string } }) {
             height: HEIGHT,
             display: 'flex',
             flexDirection: 'column',
-            background: 'linear-gradient(135deg, #2a4d5a 0%, #1a3a47 100%)',
+            background: 'linear-gradient(135deg, #308494 0%, #2c7a85 100%)',
             color: 'white',
             padding: '48px',
             fontFamily: 'Inter',
@@ -133,7 +133,7 @@ export async function GET({ params }: { params: { id: string } }) {
                         width: '108px',
                         height: '108px',
                         borderRadius: '50%',
-                        background: '#ffffff',
+                        background: '#43daf5',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'
@@ -143,17 +143,18 @@ export async function GET({ params }: { params: { id: string } }) {
                           type: 'svg',
                           props: {
                             viewBox: '0 0 18 18',
-                            width: '68',
-                            height: '68',
+                            width: '70',
+                            height: '70',
                             style: {
                               transform: 'rotate(90deg)',
-                              fill: '#2a4d5a'
+                              fill: '#ffffff'
                             },
                             children: [
                               {
                                 type: 'path',
                                 props: {
-                                  d: 'M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z'
+                                  d: 'M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z',
+                                  fill: '#ffffff'
                                 }
                               }
                             ]

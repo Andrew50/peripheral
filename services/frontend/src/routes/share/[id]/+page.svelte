@@ -8,7 +8,6 @@
 		isBot: boolean;
 		meta: {
 			title: string;
-			description: string;
 			shareUrl: string;
 			ogImageUrl: string;
 		};
@@ -35,12 +34,12 @@
 <svelte:head>
 	<!-- Basic meta tags -->
 	<title>{data.meta.title} | Atlantis</title>
-	<meta name="description" content={data.meta.description} />
+	<meta name="description" content="The new best way to trade." />
 	
 	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
 	<meta property="og:title" content={data.meta.title} />
 	<meta property="og:image" content={data.meta.ogImageUrl} />
-	<meta property="og:description" content={data.meta.description} />
+	<meta property="og:description" content="The new best way to trade." />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:image:type" content="image/png" />
@@ -53,7 +52,7 @@
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:site" content="@atlantis" />
 	<meta name="twitter:title" content={data.meta.title} />
-	<meta name="twitter:description" content={data.meta.description} />
+	<meta name="twitter:description" content="The new best way to trade." />
 	<meta name="twitter:image" content={data.meta.ogImageUrl} />
 	<meta name="twitter:image:alt" content={data.meta.title} />
 	
