@@ -23,38 +23,16 @@
 				if (checkMobile()) {
 					bannerVisible = true;
 					mobileBannerStore.set({ visible: true });
-					// Add body class to adjust app layout
-					document.body.classList.add('mobile-banner-visible');
 				}
 			}
 		}
 	});
 
-	function addBodyClass() {
-		if (browser && bannerVisible) {
-			document.body.classList.add('mobile-banner-visible');
-		}
-	}
-
-	function removeBodyClass() {
-		if (browser) {
-			document.body.classList.remove('mobile-banner-visible');
-		}
-	}
-
-	// Update body class when banner visibility changes
-	$: if (browser) {
-		if (bannerVisible) {
-			addBodyClass();
-		} else {
-			removeBodyClass();
-		}
-	}
+	// No need for body class management since banner is in normal document flow
 
 	function dismissBanner() {
 		bannerVisible = false;
 		mobileBannerStore.set({ visible: false });
-		removeBodyClass();
 		
 		if (browser) {
 			// Store dismissal in localStorage
@@ -104,15 +82,11 @@
 
 <style>
 	.mobile-banner {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		z-index: 1001;
+		position: static;
+		width: 100%;
 		background: var(--ui-bg-primary);
 		border-bottom: 1px solid var(--ui-border);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-		backdrop-filter: blur(10px);
 		padding: var(--space-sm) var(--space-md);
 	}
 
@@ -204,14 +178,5 @@
 		}
 	}
 
-	/* Global styles for when banner is visible */
-	:global(body.mobile-banner-visible) .app-container {
-		padding-top: 50px;
-	}
-
-	@media (max-width: 640px) {
-		:global(body.mobile-banner-visible) .app-container {
-			padding-top: 45px;
-		}
-	}
+	/* No global styles needed since banner is in normal document flow */
 </style>
