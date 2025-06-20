@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        20,
-        'Schema version 22 with conversations, archived messages, and query_logs table'
+        27,
+        'Schema version 27 with chart_queries table'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -349,5 +349,25 @@ CREATE TABLE why_is_it_moving (
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker ON why_is_it_moving(ticker);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_created_at ON why_is_it_moving(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_why_is_it_moving_ticker_date ON why_is_it_moving(ticker, created_at DESC);
+-- Chart Queries table for tracking chart data requests
+CREATE TABLE IF NOT EXISTS chart_queries (
+    id SERIAL PRIMARY KEY,
+    securityid INTEGER NOT NULL,
+    timeframe VARCHAR(20) NOT NULL,
+    timestamp BIGINT NOT NULL,
+    direction VARCHAR(10) NOT NULL,
+    bars INTEGER NOT NULL,
+    extended_hours BOOLEAN NOT NULL DEFAULT FALSE,
+    is_replay BOOLEAN NOT NULL DEFAULT FALSE,
+    include_sec_filings BOOLEAN NOT NULL DEFAULT FALSE,
+    user_id INTEGER REFERENCES users(userId) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- Create indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid ON chart_queries(securityid);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_created_at ON chart_queries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_user_id ON chart_queries(user_id);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_timeframe ON chart_queries(timeframe);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid_timeframe ON chart_queries(securityid, timeframe);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
 FROM '/docker-entrypoint-initdb.d/securities.csv' DELIMITER ',' CSV HEADER;

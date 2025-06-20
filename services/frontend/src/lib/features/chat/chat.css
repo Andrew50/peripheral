@@ -1174,10 +1174,13 @@
 	.public-conversation-header {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		padding: 1rem;
-		border-bottom: 1px solid var(--ui-border, #333);
-		background: var(--ui-bg-secondary, #1a1a1a);
+		justify-content: space-between;
+		height: 40px;
+		min-height: 40px;
+		padding: 0 1rem 0 1rem;
+		border-bottom: 4px solid var(--c1);
+		background: #0F0F0F;
+		flex-shrink: 0;
 	}
 
 	.public-conversation-header h3 {

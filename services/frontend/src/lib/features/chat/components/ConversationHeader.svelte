@@ -118,7 +118,7 @@
     </div>
     
     <div class="header-right">
-        {#if $messagesStore.length > 0}
+        {#if $messagesStore.length > 0 || currentConversationId}
             <div class="header-buttons">
                 <button 
                     class="header-btn share-btn" 
