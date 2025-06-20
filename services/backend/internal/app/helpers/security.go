@@ -297,14 +297,57 @@ func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) 
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
 	detailsMap := details.(map[string]interface{})
+
+	// Helper function to safely convert string to sql.NullString
+	toNullString := func(val interface{}) sql.NullString {
+		if val == nil {
+			return sql.NullString{Valid: false}
+		}
+		if str, ok := val.(string); ok {
+			return sql.NullString{String: str, Valid: str != ""}
+		}
+		if nullStr, ok := val.(sql.NullString); ok {
+			return nullStr
+		}
+		return sql.NullString{Valid: false}
+	}
+
+	// Helper function to safely convert to sql.NullFloat64
+	toNullFloat64 := func(val interface{}) sql.NullFloat64 {
+		if val == nil {
+			return sql.NullFloat64{Valid: false}
+		}
+		if f, ok := val.(float64); ok {
+			return sql.NullFloat64{Float64: f, Valid: true}
+		}
+		if nullFloat, ok := val.(sql.NullFloat64); ok {
+			return nullFloat
+		}
+		return sql.NullFloat64{Valid: false}
+	}
+
+	// Helper function to safely convert to sql.NullInt64
+	toNullInt64 := func(val interface{}) sql.NullInt64 {
+		if val == nil {
+			return sql.NullInt64{Valid: false}
+		}
+		if i, ok := val.(int64); ok {
+			return sql.NullInt64{Int64: i, Valid: true}
+		}
+		if nullInt, ok := val.(sql.NullInt64); ok {
+			return nullInt
+		}
+		return sql.NullInt64{Valid: false}
+	}
+
 	return GetTickerMenuDetailsResults{
 		Ticker:                      detailsMap["ticker"].(string),
-		Name:                        detailsMap["name"].(sql.NullString),
-		PrimaryExchange:             detailsMap["primary_exchange"].(sql.NullString),
-		MarketCap:                   detailsMap["market_cap"].(sql.NullFloat64),
-		ShareClassSharesOutstanding: detailsMap["share_class_shares_outstanding"].(sql.NullInt64),
-		Industry:                    detailsMap["industry"].(sql.NullString),
-		Sector:                      detailsMap["sector"].(sql.NullString),
+		Name:                        toNullString(detailsMap["name"]),
+		PrimaryExchange:             toNullString(detailsMap["primary_exchange"]),
+		MarketCap:                   toNullFloat64(detailsMap["market_cap"]),
+		ShareClassSharesOutstanding: toNullInt64(detailsMap["share_class_shares_outstanding"]),
+		Industry:                    toNullString(detailsMap["industry"]),
+		Sector:                      toNullString(detailsMap["sector"]),
 	}, nil
 }
 

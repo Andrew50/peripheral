@@ -33,6 +33,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 		interface ConversationSnippetResponse {
 			title: string;
 			first_response: string;
+			first_query: string;
 		}
 
 		const result = await publicRequest<ConversationSnippetResponse>('getConversationSnippet', {

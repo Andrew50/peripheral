@@ -9,6 +9,18 @@ const WIDTH = 1200;
 const HEIGHT = 630;
 const CACHE_DIR = '/tmp/og'; // Use /tmp instead of /var/www for development
 
+// Helper function to get logo as base64
+async function getLogoBase64(): Promise<string> {
+  try {
+    const logoPath = path.join(process.cwd(), 'static', 'atlantis_logo_transparent.png');
+    const logoBuffer = await fs.readFile(logoPath);
+    return logoBuffer.toString('base64');
+  } catch (error) {
+    console.error('Failed to load logo:', error);
+    // Return empty string as fallback
+    return '';
+  }
+}
 
 export async function HEAD({ params }) {
     // Reuse the same meta lookup you do for GET
@@ -40,11 +52,11 @@ export async function GET({ params }: { params: { id: string } }) {
 
     // ---------- 2) Fetch data ----------------------
     const snippetData = await getChatSnippet(params.id);
-    const { q, a } = snippetData ?? { q: 'Atlantis', a: 'The new best way to trade.' };
+    const { t, q, a } = snippetData ?? { t: 'Atlantis Chat', q: 'Can you get all the dates of the big boeing plane crashes within the last 5 years....', a: 'The new best way to trade.' };
 
-    // Truncate text to fit nicely in the image
-    const truncatedQ = q.length > 80 ? q.substring(0, 77) + '...' : q;
-    const truncatedA = a.length > 200 ? a.substring(0, 197) + '...' : a;
+    // Use the user query as the main title
+    const rawTitle = q || 'Atlantis Query';
+    const title = rawTitle.length > 80 ? rawTitle.substring(0, 80) + '...' : rawTitle;
 
     // ---------- 3) Render SVG via Satori -----------
     const svg = await satori(
@@ -56,63 +68,101 @@ export async function GET({ params }: { params: { id: string } }) {
             height: HEIGHT,
             display: 'flex',
             flexDirection: 'column',
-            background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
+            background: 'linear-gradient(135deg, #2a4d5a 0%, #1a3a47 100%)',
             color: 'white',
-            padding: '60px',
-            fontFamily: 'Roboto',
-            position: 'relative'
+            padding: '48px',
+            fontFamily: 'Inter',
+            position: 'relative',
+            borderRadius: '16px'
           },
           children: [
-            // Atlantis branding
+            // Main title at the top
+            {
+              type: 'h1',
+              props: {
+                style: {
+                  fontSize: '72px',
+                  margin: '0 0 60px 0',
+                  lineHeight: 1.2,
+                  fontWeight: '600',
+                  color: '#ffffff',
+                  flex: '1'
+                },
+                children: title
+              }
+            },
+            // Bottom section with logo/branding and arrow
             {
               type: 'div',
               props: {
                 style: {
                   display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: '40px'
+                  width: '100%'
                 },
                 children: [
+                  // Left side - Atlantis branding
                   {
                     type: 'div',
                     props: {
                       style: {
-                        fontSize: '24px',
-                        fontWeight: 'bold',
-                        color: '#3b82f6'
+                        display: 'flex',
+                        alignItems: 'center'
                       },
-                      children: 'Atlantis'
+                      children: [
+                        {
+                          type: 'span',
+                          props: {
+                            style: {
+                              fontSize: '84px',
+                              fontWeight: '600',
+                              color: '#ffffff'
+                            },
+                            children: 'Atlantis'
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  // Right side - Arrow
+                  {
+                    type: 'div',
+                    props: {
+                      style: {
+                        width: '108px',
+                        height: '108px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      },
+                      children: [
+                        {
+                          type: 'svg',
+                          props: {
+                            viewBox: '0 0 18 18',
+                            width: '68',
+                            height: '68',
+                            style: {
+                              transform: 'rotate(90deg)',
+                              fill: '#2a4d5a'
+                            },
+                            children: [
+                              {
+                                type: 'path',
+                                props: {
+                                  d: 'M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z'
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
                     }
                   }
                 ]
-              }
-            },
-            // Main question
-            {
-              type: 'h1',
-              props: {
-                style: {
-                  fontSize: '48px',
-                  margin: '0 0 30px 0',
-                  lineHeight: 1.2,
-                  fontWeight: 'bold',
-                  color: '#ffffff'
-                },
-                children: truncatedQ
-              }
-            },
-            // Response preview
-            {
-              type: 'p',
-              props: {
-                style: {
-                  fontSize: '28px',
-                  margin: 0,
-                  lineHeight: 1.4,
-                  color: '#e5e7eb',
-                  opacity: 0.9
-                },
-                children: truncatedA
               }
             }
           ]
@@ -123,9 +173,15 @@ export async function GET({ params }: { params: { id: string } }) {
         height: HEIGHT,
         fonts: [
           {
-            name: 'Roboto',
-            data: await fetch('https://cdn.jsdelivr.net/fontsource/fonts/roboto@latest/latin-400-normal.ttf').then(res => res.arrayBuffer()),
+            name: 'Inter',
+            data: await fetch('https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf').then(res => res.arrayBuffer()),
             weight: 400,
+            style: 'normal',
+          },
+          {
+            name: 'Inter',
+            data: await fetch('https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-600-normal.ttf').then(res => res.arrayBuffer()),
+            weight: 600,
             style: 'normal',
           }
         ]
@@ -163,11 +219,12 @@ export async function GET({ params }: { params: { id: string } }) {
   }
 }
 
-async function getChatSnippet(conversationId: string): Promise<{ q: string; a: string } | null> {
+async function getChatSnippet(conversationId: string): Promise<{ t: string; q: string; a: string } | null> {
   try {
     interface ConversationSnippetResponse {
       title: string;
       first_response: string;
+      first_query: string;
     }
     // For server-side requests in Docker, use the backend service name
     const backendUrl = process.env.BACKEND_URL || "http://backend:5058";
@@ -188,8 +245,9 @@ async function getChatSnippet(conversationId: string): Promise<{ q: string; a: s
     const result = await response.json() as ConversationSnippetResponse;
     console.log(result);
     return {
-      q: result.title || 'Atlantis Chat',
-      a: result.first_response || 'The new best way to trade'
+      t: result.title || 'Atlantis Chat',
+      a: result.first_response || 'The new best way to trade',
+      q: result.first_query || 'Atlantis Chat'
     };
   } catch (error) {
     console.error('Error fetching conversation snippet:', error);
