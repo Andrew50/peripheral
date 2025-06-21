@@ -18,9 +18,9 @@
 			size: 12,
 			color: '#e2e8f0' // text-slate-200
 		},
-		paper_bgcolor: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
-		plot_bgcolor: 'rgba(30, 41, 59, 0.5)', // slate-800 with opacity
-		margin: { l: 40, r: 20, t: 30, b: 80, autoexpand: true },
+		paper_bgcolor: 'transparent', // Match chat background
+		plot_bgcolor: 'transparent', // Match chat background
+		margin: { l: 45, r: 60, t: 10, b: 30, autoexpand: true },
 		autosize: true,
 		showlegend: true,
 		legend: {
@@ -139,7 +139,26 @@
 				break;
 			case 'heatmap':
 				processedTrace.type = 'heatmap';
-				processedTrace.colorscale = 'Viridis';
+				// Clean red-green colorscale without orange
+				processedTrace.colorscale = [
+					[0, '#d32f2f'],    // Dark red for most negative
+					[0.25, '#f44336'], // Medium red
+					[0.5, '#424242'],  // Dark neutral/gray
+					[0.75, '#4caf50'], // Medium green
+					[1, '#2e7d32']     // Dark green for most positive
+				];
+				// Ensure zero is always at the center (gray) so negative=red, positive=green
+				processedTrace.zmid = 0;
+				// Configure colorbar positioning for heatmaps
+				if (!processedTrace.colorbar) {
+					processedTrace.colorbar = {
+						x: 1.05, // Position colorbar further to the right
+						xanchor: 'left',
+						thickness: 12,
+						len: 0.8,
+						xpad: 10 // Add padding between plot and colorbar
+					};
+				}
 				break;
 		}
 
@@ -173,7 +192,7 @@
 	}
 </script>
 
-<div class="plot-chunk-wrapper glass glass--rounded glass--responsive">
+<div class="chunk-plot-container">
 	{#if plotData.title}
 		<div class="plot-title">
 			{plotData.title}
@@ -192,28 +211,20 @@
 </div>
 
 <style>
-	.plot-chunk-wrapper {
-		margin: 1rem -1rem;
-		overflow: hidden;
-		width: calc(100% + 2rem);
-		max-width: none;
+	.chunk-plot-container {
+		margin-bottom: 1rem;
 	}
 
 	.plot-title {
-		padding: 1rem 1rem 0.5rem 1rem;
-		font-weight: 600;
-		font-size: 1.1rem;
-		color: #e2e8f0;
-		border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+		font-weight: bold;
 		margin-bottom: 0.5rem;
+		font-size: 0.8rem;
 	}
 
 	.plot-container {
-		flex: 1 1 0;   /* or min-width:0; */
-		min-height: 500px;
-		height: 100%;
+		min-height: 350px;
+		height: 350px;
 		width: 100%;
-		padding: .25rem;
 		overflow: hidden;
 	}
 
