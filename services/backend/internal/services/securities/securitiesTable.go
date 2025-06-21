@@ -308,8 +308,19 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				} else {
 					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "remove prev exec", err)
 				}
-				_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (securityId, figi, ticker, minDate) SELECT securityID, figi, $1, $2 from securities where figi = $3", sec.Ticker, currentDateString, sec.CompositeFIGI)
-				logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "ticker change exec", err)
+
+				// Validate insertion before attempting it
+				err = validateSecurityInsertion(conn, nil, sec.Ticker, currentDateString, sec.CompositeFIGI, test)
+				if err != nil {
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "ticker change validation failed", err)
+					if test {
+						fmt.Printf("VALIDATION ERROR: %v\n", err)
+					}
+				} else {
+					// Insert new security record with a new securityID (let it auto-increment)
+					_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) VALUES ($1, $2, $3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "ticker change exec", err)
+				}
 			}
 			if contains(diagnoses, "figi change") {
 				cmdTag, err := conn.DB.Exec(context.Background(), "UPDATE securities set figi = $1 where ticker = $2 and (maxDate is NULL or maxDate = (SELECT max(maxDate) FROM securities where ticker = $2) )", sec.CompositeFIGI, sec.Ticker)
@@ -322,9 +333,17 @@ func UpdateSecurities(conn *data.Conn, test bool) error {
 				}
 			}
 			if contains(diagnoses, "listing") {
-				_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
-
-				logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing exec", err)
+				// Validate insertion before attempting it
+				err = validateSecurityInsertion(conn, nil, sec.Ticker, currentDateString, sec.CompositeFIGI, test)
+				if err != nil {
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing validation failed", err)
+					if test {
+						fmt.Printf("VALIDATION ERROR: %v\n", err)
+					}
+				} else {
+					_, err = conn.DB.Exec(context.Background(), "INSERT INTO securities (figi, ticker, minDate) values ($1,$2,$3)", sec.CompositeFIGI, sec.Ticker, currentDateString)
+					logAction(test, i, sec.Ticker, targetTicker, sec.CompositeFIGI, currentDateString, "listing exec", err)
+				}
 			}
 		}
 		for i, sec := range removals {
@@ -852,4 +871,39 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen]
+}
+
+// validateSecurityInsertion checks if a security insertion would violate database constraints
+func validateSecurityInsertion(conn *data.Conn, securityID *int, ticker string, minDate string, figi string, test bool) error {
+	ctx := context.Background()
+
+	// Check for (securityid, minDate) constraint violation
+	if securityID != nil {
+		var count int
+		err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE securityid = $1 AND minDate = $2", *securityID, minDate).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check securityid+minDate constraint: %v", err)
+		}
+		if count > 0 {
+			if test {
+				log.Printf("VALIDATION FAILED: securityid=%d with minDate=%s already exists", *securityID, minDate)
+			}
+			return fmt.Errorf("constraint violation: securityid=%d with minDate=%s already exists", *securityID, minDate)
+		}
+	}
+
+	// Check for (ticker, minDate) constraint violation
+	var count int
+	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE ticker = $1 AND minDate = $2", ticker, minDate).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check ticker+minDate constraint: %v", err)
+	}
+	if count > 0 {
+		if test {
+			log.Printf("VALIDATION FAILED: ticker=%s with minDate=%s already exists", ticker, minDate)
+		}
+		return fmt.Errorf("constraint violation: ticker=%s with minDate=%s already exists", ticker, minDate)
+	}
+
+	return nil
 }
