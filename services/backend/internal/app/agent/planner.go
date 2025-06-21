@@ -655,25 +655,29 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 	if len(executionResults) > 0 {
 		var allResults []map[string]interface{}
 		for _, result := range executionResults {
+			// Skip results that had errors
+			if result.Error != nil {
+				continue
+			}
+
 			resultData := map[string]interface{}{
 				"fn":   result.FunctionName,
 				"res":  result.Result,
 				"args": result.Args,
 			}
-			// Only include error if it exists (not nil)
-			if result.Error != nil {
-				resultData["err"] = *result.Error
-			}
 			allResults = append(allResults, resultData)
 		}
 
-		combinedContent, err := json.Marshal(map[string]interface{}{
-			"execution_results": allResults,
-		})
-		if err != nil {
-			combinedContent = []byte(fmt.Sprintf("Error marshaling execution results: %v", err))
+		// Only add execution results message if we have successful results
+		if len(allResults) > 0 {
+			combinedContent, err := json.Marshal(map[string]interface{}{
+				"execution_results": allResults,
+			})
+			if err != nil {
+				combinedContent = []byte(fmt.Sprintf("Error marshaling execution results: %v", err))
+			}
+			messages = append(messages, openai.SystemMessage(string(combinedContent)))
 		}
-		messages = append(messages, openai.SystemMessage(string(combinedContent)))
 	}
 
 	return messages, nil
