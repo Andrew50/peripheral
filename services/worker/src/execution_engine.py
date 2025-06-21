@@ -32,60 +32,18 @@ class PythonExecutionEngine:
 
     def __init__(self):
         self.allowed_modules = {
+            # Core data science modules (installed)
             "numpy",
-            "np",
+            "np", 
             "pandas",
             "pd",
             "scipy",
             "sklearn",
             "matplotlib",
-            "seaborn",
-            "plotly",
-            "ta",
-            "talib",
-            "zipline",
-            "pyfolio",
-            "quantlib",
-            "statsmodels",
-            "arch",
-            "empyrical",
-            "tsfresh",
-            "stumpy",
-            "prophet",
+            
+            # Python standard library
             "math",
-            "statistics",
-            "datetime",
-            "collections",
-            "itertools",
-            "functools",
-            "re",
-            "json",
-            "fuzzywuzzy",
-            "difflib",
-            "string",
-            "unicodedata",
-            "numpy",
-            "np",
-            "pandas",
-            "pd",
-            "scipy",
-            "sklearn",
-            "matplotlib",
-            "seaborn",
-            "plotly",
-            "ta",
-            "talib",
-            "zipline",
-            "pyfolio",
-            "quantlib",
-            "statsmodels",
-            "arch",
-            "empyrical",
-            "tsfresh",
-            "stumpy",
-            "prophet",
-            "math",
-            "statistics",
+            "statistics", 
             "datetime",
             "time",
             "typing",
@@ -94,10 +52,25 @@ class PythonExecutionEngine:
             "functools",
             "re",
             "json",
-            "fuzzywuzzy",
-            "difflib",
             "string",
             "unicodedata",
+            "difflib",
+            
+            # Optional modules (may not be installed)
+            "seaborn",
+            "plotly", 
+            "ta",
+            "talib",
+            "zipline",
+            "pyfolio",
+            "quantlib",
+            "statsmodels",
+            "arch",
+            "empyrical",
+            "tsfresh",
+            "stumpy",
+            "prophet",
+            "fuzzywuzzy",
         }
 
 
@@ -355,13 +328,9 @@ class PythonExecutionEngine:
         }
 
 
-        # Add allowed modules
+        # Add allowed modules that are actually available
         for module_name in self.allowed_modules:
             try:
-                if module_name == "np":
-                    exec_globals["np"] = np
-                elif module_name == "pd":
-                    exec_globals["pd"] = pd
                 if module_name == "np":
                     exec_globals["np"] = np
                 elif module_name == "pd":
@@ -370,7 +339,7 @@ class PythonExecutionEngine:
                     module = importlib.import_module(module_name)
                     exec_globals[module_name] = module
             except ImportError:
-                logger.warning(f"Module {module_name} not available")
+                # Silently skip unavailable modules - they're optional
                 continue
 
 

@@ -196,7 +196,7 @@ class DataProvider:
                 o.volume,
                 CASE WHEN o.extended_hours IS NOT NULL THEN o.extended_hours ELSE false END as extended_hours
             FROM {table_name} o
-            JOIN securities s ON o.security_id = s.security_id
+            JOIN securities s ON o.securityid = s.securityid
             WHERE s.ticker = %s
             """  # nosec B608
 
@@ -334,7 +334,7 @@ class DataProvider:
                 EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp,
                 o.open, o.high, o.low, o.close, o.volume
             FROM {table_name} o
-            JOIN securities s ON o.security_id = s.security_id
+            JOIN securities s ON o.securityid = s.securityid
             WHERE s.ticker = %s
             ORDER BY o.timestamp DESC
             OFFSET %s
@@ -379,7 +379,7 @@ class DataProvider:
         try:
             query = """
             SELECT 
-                security_id as securityid,
+                securityid,
                 ticker,
                 name,
                 sector,
@@ -470,7 +470,7 @@ class DataProvider:
             query = f"""
             SELECT {metrics_str}
             FROM fundamentals f
-            JOIN securities s ON f.security_id = s.security_id
+            JOIN securities s ON f.security_id = s.securityid
             WHERE s.ticker = %s
             ORDER BY f.timestamp DESC
             LIMIT 1
@@ -519,9 +519,9 @@ class DataProvider:
                     o2.close as prev_close,
                     o1.volume as current_volume
                 FROM securities s
-                JOIN fundamentals f ON s.security_id = f.security_id
-                JOIN ohlcv_1d o1 ON s.security_id = o1.security_id
-                JOIN ohlcv_1d o2 ON s.security_id = o2.security_id
+                JOIN fundamentals f ON s.securityid = f.security_id
+                JOIN ohlcv_1d o1 ON s.securityid = o1.securityid
+                JOIN ohlcv_1d o2 ON s.securityid = o2.securityid
                 WHERE o1.timestamp >= CURRENT_DATE - INTERVAL %s
                 AND o2.timestamp = o1.timestamp - INTERVAL %s"""
             
@@ -580,8 +580,8 @@ class DataProvider:
                 o.close as price,
                 o.volume
             FROM securities s
-            LEFT JOIN fundamentals f ON s.security_id = f.security_id
-            LEFT JOIN ohlcv_1d o ON s.security_id = o.security_id
+            LEFT JOIN fundamentals f ON s.securityid = f.security_id
+            LEFT JOIN ohlcv_1d o ON s.securityid = o.securityid
             WHERE s.active = true
             AND o.timestamp >= CURRENT_DATE - INTERVAL '7 days'
             """
