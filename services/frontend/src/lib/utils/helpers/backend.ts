@@ -1,6 +1,7 @@
+import { goto } from '$app/navigation';
+
 export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
-import { goto } from '$app/navigation';
 
 // Default value for server-side rendering - use environment variable if available
 base_url = typeof process !== 'undefined' && process.env?.BACKEND_URL
@@ -151,7 +152,7 @@ export async function privateRequest<T>(
         console.error('payload: ', payload, 'error: ', errorMessage);
         return Promise.reject(errorMessage);
     }
-    
+
     // This should never be reached, but TypeScript requires a return
     throw new Error('Unexpected end of function');
 }
@@ -225,4 +226,123 @@ export async function queueRequest<T>(
             }
         }, pollInterval);
     });
+}
+
+export async function streamingChatRequest<T>(
+    func: string,
+    args: Record<string, unknown>,
+    progressCallback?: (progress: string) => void,
+    partialCallback?: (partial: any) => void,
+    signal?: AbortSignal
+): Promise<T> {
+    // Skip API calls during SSR to prevent crashes
+    if (typeof window === 'undefined') {
+        return {} as T; // Return empty data during SSR
+    }
+
+    let authToken;
+    try {
+        authToken = sessionStorage.getItem('authToken');
+    } catch {
+        throw new Error('Failed to get auth token');
+    }
+
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: authToken } : {})
+    };
+
+    const payload = {
+        func: func,
+        args: args,
+        stream_id: generateStreamId()
+    };
+
+    const response = await fetch(`${base_url}/streaming-chat`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload),
+        signal: signal
+    }).catch((e) => {
+        return Promise.reject(e);
+    });
+
+    if (response.status === 401) {
+        goto('/login');
+        throw new Error('Authentication required');
+    } else if (!response.ok) {
+        const errorMessage = await response.text();
+        console.error('Streaming request failed:', errorMessage);
+        return Promise.reject(errorMessage);
+    }
+
+    // Handle Server-Sent Events
+    return new Promise<T>((resolve, reject) => {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        if (!reader) {
+            reject(new Error('Failed to get response reader'));
+            return;
+        }
+
+        const processStream = async () => {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        break;
+                    }
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // Keep the last incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+
+                                switch (data.type) {
+                                    case 'progress':
+                                        if (progressCallback && data.content?.message) {
+                                            progressCallback(data.content.message);
+                                        }
+                                        break;
+                                    case 'partial':
+                                        if (partialCallback) {
+                                            partialCallback(data.content);
+                                        }
+                                        break;
+                                    case 'complete':
+                                        resolve(data.content as T);
+                                        return;
+                                    case 'error':
+                                        reject(new Error(data.content?.error || 'Streaming error'));
+                                        return;
+                                }
+                            } catch (parseError) {
+                                console.warn('Failed to parse SSE data:', line, parseError);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                if (signal?.aborted) {
+                    reject(new Error('Request was cancelled'));
+                } else {
+                    reject(error);
+                }
+            }
+        };
+
+        processStream();
+    });
+}
+
+// Helper function to generate stream IDs
+function generateStreamId(): string {
+    return 'stream_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }

@@ -126,7 +126,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 		}
 
 		progressCallback(fmt.Sprintf("Running planner (turn %d/%d)...", maxTurns-maxTurns+1, 15))
-		result, err := RunPlanner(ctx, conn, planningPrompt, firstRound)
+		plannerResult, err := RunPlanner(ctx, conn, planningPrompt, firstRound)
 		if err != nil {
 			// Mark as error instead of deleting for debugging
 			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
@@ -135,17 +135,20 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			return nil, fmt.Errorf("error running planner: %w", err)
 		}
 
-		totalRequestOutputTokenCount += int(result.TokenCounts.OutputTokenCount)
-		totalRequestInputTokenCount += int(result.TokenCounts.InputTokenCount)
-		totalRequestThoughtsTokenCount += int(result.TokenCounts.ThoughtsTokenCount)
-		totalRequestTokenCount += int(result.TokenCounts.TotalTokenCount)
+		// Type assert the result to either Plan or DirectAnswer
+		switch result := plannerResult.(type) {
+		case Plan:
+			totalRequestOutputTokenCount += int(result.TokenCounts.OutputTokenCount)
+			totalRequestInputTokenCount += int(result.TokenCounts.InputTokenCount)
+			totalRequestThoughtsTokenCount += int(result.TokenCounts.ThoughtsTokenCount)
+			totalRequestTokenCount += int(result.TokenCounts.TotalTokenCount)
 
-		// Add the thoughts to our accumulated list
-		if result.Thoughts != "" {
-			accumulatedThoughts = append(accumulatedThoughts, result.Thoughts)
-		}
+			// Add the thoughts to our accumulated list
+			if result.Thoughts != "" {
+				accumulatedThoughts = append(accumulatedThoughts, result.Thoughts)
+			}
 
-		switch result.Stage {
+			switch result.Stage {
 		case StagePlanMore:
 			progressCallback("Planner requested more planning...")
 			// The planner wants to continue planning
