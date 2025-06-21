@@ -658,10 +658,8 @@ type GetStockChangeArgs struct {
 	SplitAdjusted *bool  `json:"splitAdjusted,omitempty"`
 }
 type GetStockChangeResponse struct {
-	StartPrice    float64 `json:"startPrice"`
-	EndPrice      float64 `json:"endPrice"`
-	Change        float64 `json:"change"`
-	ChangePercent float64 `json:"changePercent"`
+	Change        float64 `json:"chg"`
+	ChangePercent float64 `json:"chgPct"`
 }
 
 func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
@@ -764,8 +762,6 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	changePercent := (change / startPrice) * 100
 
 	return GetStockChangeResponse{
-		StartPrice:    math.Round(startPrice*1000) / 1000,
-		EndPrice:      math.Round(endPrice*1000) / 1000,
 		Change:        math.Round(change*1000) / 1000,
 		ChangePercent: math.Round(changePercent*1000) / 1000,
 	}, nil
