@@ -54,7 +54,7 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
         *   **Discard outdated information** when you have more recent data
         *   **Discard large datasets** once you've extracted the key insights
         *   Example: `"discard_results": [1, 3, 5]` to remove results with IDs 1, 3, and 5
-        *   IF STAGE = FINISHED_EXECUTING, DO NOT DISCARD ANY RESULTS.
+        *   IF STAGE = FINISHED_EXECUTING, DISCARD FUNCTION CALLS WITH ERRORS, BUT DO NOT DISCARD ANYTHING ELSE!!
 
 **Continuing Planning (Multi-Turn):**
 *   **Your Task for This New Turn:**

@@ -134,8 +134,14 @@
 		pointer-events: none;
 		display: flex;
 		justify-content: center;
-		padding-top: 20px; /* Positioned much higher */
+		padding-top: 100px; /* Moved down from 20px */
 		z-index: 1002;
+	}
+	
+	.wm-box {
+		background: rgba(255, 255, 255, 0.05) !important;
+		backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 	.wm-content {
 		padding: 0.5rem 0.75rem;
@@ -174,7 +180,7 @@
 	/* Responsive design */
 	@media (max-width: 768px) {
 		.wm-overlay {
-			padding-top: 10px;
+			padding-top: 60px;
 		}
 		.wm-box {
 			margin: 0 15px;

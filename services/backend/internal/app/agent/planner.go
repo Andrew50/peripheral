@@ -10,7 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invopop/jsonschema"
 	"google.golang.org/genai"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
@@ -47,10 +51,10 @@ type FinalResponse struct {
 }
 
 type TokenCounts struct {
-	InputTokenCount    int32 `json:"input_token_count,omitempty"`
-	OutputTokenCount   int32 `json:"output_token_count,omitempty"`
-	ThoughtsTokenCount int32 `json:"thoughts_token_count,omitempty"`
-	TotalTokenCount    int32 `json:"total_token_count,omitempty"`
+	InputTokenCount    int64 `json:"input_token_count,omitempty"`
+	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
+	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
+	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
 }
 
 func replySchema() *genai.Schema {
@@ -213,6 +217,7 @@ func contentChunkSchema() *genai.Schema {
 
 const planningModel = "gemini-2.5-flash"
 const finalResponseModel = "gemini-2.5-flash"
+const openAIFinalResponseModel = "o3"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
 	var systemPrompt string
@@ -313,10 +318,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		if hasValidContent {
 			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 			directAns.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return directAns, nil
 		}
@@ -326,10 +331,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
 	if planParseErr == nil && plan.Stage != "" {
 		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 		}
 		return plan, nil
 	}
@@ -377,10 +382,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			if hasValidContent {
 				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 				directAns.TokenCounts = TokenCounts{
-					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-					ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-					TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+					InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+					OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+					ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+					TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 				}
 				return directAns, nil
 			}
@@ -393,10 +398,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
 		if blockPlanParseErr == nil && plan.Stage != "" {
 			plan.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return plan, nil
 		}
@@ -472,58 +477,38 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 		finalResponse.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 		}
 		return &finalResponse, nil
 	}
 
 	// Try to extract JSON from markdown code blocks first
 	var jsonBlock string
+	jsonStartIdx := strings.Index(resultText, "{")
 
-	// Look for ```json ... ``` blocks
-	jsonCodeBlockStart := strings.Index(resultText, "```json")
-	if jsonCodeBlockStart != -1 {
-		jsonCodeBlockStart += len("```json")
-		// Skip any whitespace after ```json
-		for jsonCodeBlockStart < len(resultText) && (resultText[jsonCodeBlockStart] == '\n' || resultText[jsonCodeBlockStart] == '\r' || resultText[jsonCodeBlockStart] == ' ' || resultText[jsonCodeBlockStart] == '\t') {
-			jsonCodeBlockStart++
-		}
+	if jsonStartIdx != -1 {
+		// Try to find the matching closing brace by counting braces
+		braceCount := 0
+		jsonEndIdx := -1
 
-		jsonCodeBlockEnd := strings.Index(resultText[jsonCodeBlockStart:], "```")
-		if jsonCodeBlockEnd != -1 {
-			jsonBlock = resultText[jsonCodeBlockStart : jsonCodeBlockStart+jsonCodeBlockEnd]
-			jsonBlock = strings.TrimSpace(jsonBlock)
-		}
-	}
-
-	// If no markdown code block found, try to extract JSON block using { } method
-	if jsonBlock == "" {
-		jsonStartIdx := strings.Index(resultText, "{")
-
-		if jsonStartIdx != -1 {
-			// Try to find the matching closing brace by counting braces
-			braceCount := 0
-			jsonEndIdx := -1
-
-			for i := jsonStartIdx; i < len(resultText); i++ {
-				if resultText[i] == '{' {
-					braceCount++
-				} else if resultText[i] == '}' {
-					braceCount--
-					if braceCount == 0 {
-						jsonEndIdx = i
-						break
-					}
+		for i := jsonStartIdx; i < len(resultText); i++ {
+			if resultText[i] == '{' {
+				braceCount++
+			} else if resultText[i] == '}' {
+				braceCount--
+				if braceCount == 0 {
+					jsonEndIdx = i
+					break
 				}
 			}
+		}
 
-			if jsonEndIdx != -1 {
-				jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
-				jsonBlock = strings.TrimSpace(jsonBlock)
-			}
+		if jsonEndIdx != -1 {
+			jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+			jsonBlock = strings.TrimSpace(jsonBlock)
 		}
 	}
 
@@ -532,10 +517,10 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 			finalResponse.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return &finalResponse, nil
 		}
@@ -548,6 +533,150 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	}, nil
 }
 
+func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
+	apiKey := conn.OpenAIKey
+
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+
+	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
+	}
+	conversationHistory, err := GetConversationMessages(ctx, conn, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting conversation history: %w", err)
+	}
+	// Build OpenAI messages with rich context
+	messages, err := buildOpenAIFinalResponseMessages(systemPrompt, userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
+	if err != nil {
+		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
+	}
+
+	ref := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	oaSchema := ref.Reflect(AtlantisFinalResponse{})
+
+	params := openai.ChatCompletionNewParams{
+		Model:    openAIFinalResponseModel,
+		Messages: messages,
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+					Name:   "atlantis_final_response",
+					Schema: oaSchema,
+					Strict: openai.Bool(true),
+				},
+			},
+		},
+	}
+
+	// Debug print: Show all messages being sent to OpenAI
+	fmt.Println("\n=== OpenAI Final Response Messages ===")
+	for i, msg := range messages {
+		fmt.Printf("Message %d: %+v\n", i, msg)
+	}
+	b, _ := json.MarshalIndent(oaSchema, "", "  ")
+	fmt.Printf("[DEBUG] schema sent to OpenAI:\n%s\n", b)
+	chat, err := client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error generating openai final response: %w", err)
+	}
+	raw := chat.Choices[0].Message.Content
+
+	// Debug print: Show the raw JSON response from OpenAI
+	fmt.Println("\n=== OpenAI Raw JSON Response ===")
+	fmt.Println(raw)
+	var finalResp FinalResponse
+	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
+		return &FinalResponse{
+			ContentChunks: []ContentChunk{{Type: "text", Content: raw}},
+			TokenCounts:   TokenCounts{},
+		}, nil
+	}
+	fmt.Println("finalResp openai\n\n\n ", finalResp)
+	finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
+	finalResp.TokenCounts = TokenCounts{
+		InputTokenCount:  chat.Usage.PromptTokens,
+		OutputTokenCount: chat.Usage.CompletionTokens,
+		TotalTokenCount:  chat.Usage.TotalTokens,
+	}
+	return &finalResp, nil
+}
+
+// buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
+func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) ([]openai.ChatCompletionMessageParamUnion, error) {
+	var messages []openai.ChatCompletionMessageParamUnion
+
+	messages = append(messages, openai.DeveloperMessage(systemPrompt))
+
+	// Add conversation history as alternating user/assistant messages
+	for _, msg := range conversationHistory {
+		// Skip pending messages to avoid empty Assistant responses
+		if msg.Status == "pending" {
+			continue
+		}
+
+		// Add user message
+		messages = append(messages, openai.UserMessage(msg.Query))
+
+		// Add assistant message from content chunks
+		assistantContent := ""
+		for _, chunk := range msg.ContentChunks {
+			switch v := chunk.Content.(type) {
+			case string:
+				assistantContent += v
+			case map[string]interface{}:
+				// For table data or other structured content, convert to a simple text representation
+				jsonData, err := json.Marshal(v)
+				if err == nil {
+					assistantContent += fmt.Sprintf("[Table data: %s]", string(jsonData))
+				} else {
+					assistantContent += "[Table data]"
+				}
+			default:
+				// Handle any other type by converting to string
+				assistantContent += fmt.Sprintf("%v", v)
+			}
+		}
+		if assistantContent == "" {
+			assistantContent = msg.ResponseText
+		}
+		messages = append(messages, openai.AssistantMessage(assistantContent))
+	}
+
+	// Add current user query
+	messages = append(messages, openai.UserMessage(userQuery))
+
+	if len(thoughts) > 0 {
+		messages = append(messages, openai.SystemMessage(strings.Join(thoughts, "\n")))
+	}
+	if len(executionResults) > 0 {
+		var allResults []map[string]interface{}
+		for _, result := range executionResults {
+			resultData := map[string]interface{}{
+				"fn":   result.FunctionName,
+				"res":  result.Result,
+				"err":  result.Error,
+				"args": result.Args,
+			}
+			allResults = append(allResults, resultData)
+		}
+
+		combinedContent, err := json.Marshal(map[string]interface{}{
+			"execution_results": allResults,
+		})
+		if err != nil {
+			combinedContent = []byte(fmt.Sprintf("Error marshaling execution results: %v", err))
+		}
+		messages = append(messages, openai.SystemMessage(string(combinedContent)))
+	}
+
+	return messages, nil
+}
+
+// <Helper functions>
 // cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
 // and replaces it with just the ticker symbol
 func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
