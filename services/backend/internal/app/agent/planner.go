@@ -572,13 +572,6 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		},
 	}
 
-	// Debug print: Show all messages being sent to OpenAI
-	fmt.Println("\n=== OpenAI Final Response Messages ===")
-	for i, msg := range messages {
-		fmt.Printf("Message %d: %+v\n", i, msg)
-	}
-	b, _ := json.MarshalIndent(oaSchema, "", "  ")
-	fmt.Printf("[DEBUG] schema sent to OpenAI:\n%s\n", b)
 	chat, err := client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("error generating openai final response: %w", err)
