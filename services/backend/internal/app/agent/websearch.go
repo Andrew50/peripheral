@@ -15,7 +15,6 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
-	"google.golang.org/genai"
 )
 
 const geminiWebSearchModel = "gemini-2.5-flash"
@@ -70,62 +69,65 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 	}, nil
 }
 
-func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
+/*
+	// using chatgpt now for websearch
 
-	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-	thinkingBudget := int32(1000)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemPrompt},
+	func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
+		apiKey, err := conn.GetGeminiKey()
+		if err != nil {
+			return nil, fmt.Errorf("error getting gemini key: %w", err)
+		}
+
+		client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+			APIKey:  apiKey,
+			Backend: genai.BackendGeminiAPI,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error creating gemini client: %w", err)
+		}
+		thinkingBudget := int32(1000)
+		config := &genai.GenerateContentConfig{
+			SystemInstruction: &genai.Content{
+				Parts: []*genai.Part{
+					{Text: systemPrompt},
+				},
 			},
-		},
-		Tools: []*genai.Tool{
-			{GoogleSearch: &genai.GoogleSearch{}},
-		},
-		ThinkingConfig: &genai.ThinkingConfig{
-			IncludeThoughts: true,
-			ThinkingBudget:  &thinkingBudget,
-		},
-	}
-	result, err := client.Models.GenerateContent(context.Background(), geminiWebSearchModel, genai.Text(prompt), config)
-	if err != nil {
-		return WebSearchResult{}, fmt.Errorf("error generating web search: %w", err)
-	}
-	resultText := ""
-	if len(result.Candidates) <= 0 {
-		return WebSearchResult{}, fmt.Errorf("no candidates found in result")
-	}
-	candidate := result.Candidates[0]
-	if candidate.Content != nil {
-		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				resultText = part.Text
-				break
+			Tools: []*genai.Tool{
+				{GoogleSearch: &genai.GoogleSearch{}},
+			},
+			ThinkingConfig: &genai.ThinkingConfig{
+				IncludeThoughts: true,
+				ThinkingBudget:  &thinkingBudget,
+			},
+		}
+		result, err := client.Models.GenerateContent(context.Background(), geminiWebSearchModel, genai.Text(prompt), config)
+		if err != nil {
+			return WebSearchResult{}, fmt.Errorf("error generating web search: %w", err)
+		}
+		resultText := ""
+		if len(result.Candidates) <= 0 {
+			return WebSearchResult{}, fmt.Errorf("no candidates found in result")
+		}
+		candidate := result.Candidates[0]
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					resultText = part.Text
+					break
+				}
 			}
 		}
+		//if candidate.GroundingMetadata != nil {
+		////fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+		//}
+		return WebSearchResult{
+			ResultText: resultText,
+		}, nil
 	}
-	//if candidate.GroundingMetadata != nil {
-	////fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	//}
-	return WebSearchResult{
-		ResultText: resultText,
-	}, nil
-}
-
+*/
 type GrokMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
