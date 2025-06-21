@@ -289,14 +289,6 @@ func extractFunctionFromRequest(r *http.Request) string {
 	return req.Function
 }
 
-func getUserIDFromContext(ctx context.Context) int {
-	// Extract user ID from context (this would be set by auth middleware)
-	if userID, ok := ctx.Value("userID").(int); ok {
-		return userID
-	}
-	return 0
-}
-
 func getUserIDFromRequest(r *http.Request) int {
 	// Extract user ID from JWT token in Authorization header
 	tokenString := r.Header.Get("Authorization")
