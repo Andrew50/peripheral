@@ -141,7 +141,8 @@ func securityCikUpdateJob(conn *data.Conn) error {
 
 func simpleSecuritiesUpdateJob(conn *data.Conn) error {
 	// We call the function from securities.go
-	return securities.SimpleUpdateSecurities(conn)
+	////fmt.Println("Starting securities update - refreshing security data...")
+	return securities.SimpleUpdateSecuritiesV2(conn)
 }
 
 // Wrapper for UpdateSectors to match JobFunc signature

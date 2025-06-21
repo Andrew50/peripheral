@@ -540,7 +540,7 @@
 		padding: 12px;
 	}
 
-	.time-sales-button {
+	/*.time-sales-button {
 		background: var(--ui-bg-primary);
 		color: var(--text-primary);
 		border: 1px solid var(--ui-border);
@@ -555,11 +555,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.time-sales-button:hover {
-		background: var(--ui-bg-hover);
-	}
+	}*/
 
 	/* Details */
 	.quote-details {

@@ -15,4 +15,6 @@ Give statements with specific, value-add information.
 
 Focus primarily on US stocks. 
 
+Be extremely comprehensive when asked to return events/dates of occurances.
+
 CURRENT TIME: {{CURRENT_TIME}} IN MS: {{CURRENT_TIME_MILLISECONDS}} CURRENT YEAR: {{CURRENT_YEAR}}

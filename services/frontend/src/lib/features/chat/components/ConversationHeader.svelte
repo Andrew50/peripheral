@@ -10,6 +10,8 @@
     export let conversationToDelete: string;
     export let messagesStore: any;
     export let isLoading: boolean;
+    export let isTypingTitle: boolean;
+    export let typingTitleText: string;
     
     export let toggleConversationDropdown: () => void;
     export let createNewConversation: () => void;
@@ -106,14 +108,20 @@
             {/if}
         </div>
         
-        <h3>{currentConversationTitle}</h3>
+        <h3 class="conversation-title">
+            {#if isTypingTitle}
+                {typingTitleText}<span class="typing-cursor">|</span>
+            {:else}
+                {currentConversationTitle}
+            {/if}
+        </h3>
     </div>
     
     <div class="header-right">
         {#if $messagesStore.length > 0}
             <div class="header-buttons">
                 <button 
-                    class="header-btn share-btn glass glass--small glass--responsive" 
+                    class="header-btn share-btn" 
                     on:click={handleShareConversation}
                     disabled={!currentConversationId}
                     title="Share Current Conversation"
@@ -125,7 +133,7 @@
                     </svg>
                     Share
                 </button>
-                <button class="header-btn new-chat-btn glass glass--small glass--responsive" on:click={clearConversation} disabled={isLoading}>
+                <button class="header-btn new-chat-btn" on:click={clearConversation} disabled={isLoading}>
                     <svg viewBox="0 0 24 24" width="14" height="14">
                         <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
                     </svg>
