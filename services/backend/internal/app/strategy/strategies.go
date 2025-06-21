@@ -2,11 +2,14 @@ package strategy
 
 import (
 	"backend/internal/data"
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +306,341 @@ def get_universe_symbols(universe='sp500'):
     """
     pass  # Implemented by backend
 `
+
+// ScreeningArgs contains arguments for strategy screening
+type ScreeningArgs struct {
+	StrategyID int      `json:"strategyId"`
+	Universe   []string `json:"universe,omitempty"`
+	Limit      int      `json:"limit,omitempty"`
+}
+
+// ScreeningResponse represents the screening results
+type ScreeningResponse struct {
+	RankedResults []ScreeningResult  `json:"rankedResults"`
+	Scores        map[string]float64 `json:"scores"`
+	UniverseSize  int                `json:"universeSize"`
+}
+
+type ScreeningResult struct {
+	Symbol       string                 `json:"symbol"`
+	Score        float64                `json:"score"`
+	CurrentPrice float64                `json:"currentPrice,omitempty"`
+	Sector       string                 `json:"sector,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
+}
+
+// AlertArgs contains arguments for strategy alerts
+type AlertArgs struct {
+	StrategyID int      `json:"strategyId"`
+	Symbols    []string `json:"symbols,omitempty"`
+}
+
+// AlertResponse represents the alert monitoring results
+type AlertResponse struct {
+	Alerts           []Alert           `json:"alerts"`
+	Signals          map[string]Signal `json:"signals"`
+	SymbolsMonitored int               `json:"symbolsMonitored"`
+}
+
+type Alert struct {
+	Symbol    string                 `json:"symbol"`
+	Type      string                 `json:"type"`
+	Message   string                 `json:"message"`
+	Timestamp string                 `json:"timestamp"`
+	Priority  string                 `json:"priority,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+type Signal struct {
+	Signal    bool                   `json:"signal"`
+	Timestamp string                 `json:"timestamp"`
+	Symbol    string                 `json:"symbol,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+// RunScreening executes a complete strategy screening using the new worker architecture
+func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args ScreeningArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	log.Printf("Starting complete screening for strategy %d using new worker architecture", args.StrategyID)
+
+	// Verify strategy exists and user has permission
+	var strategyExists bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
+		args.StrategyID, userID).Scan(&strategyExists)
+	if err != nil {
+		return nil, fmt.Errorf("error checking strategy: %v", err)
+	}
+	if !strategyExists {
+		return nil, fmt.Errorf("strategy not found or access denied")
+	}
+
+	// Call the worker's run_screener function
+	result, err := callWorkerScreening(args.StrategyID, args.Universe, args.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("error executing worker screening: %v", err)
+	}
+
+	// Convert worker result to ScreeningResponse format for API compatibility
+	rankedResults := convertWorkerRankedResults(result.RankedResults)
+
+	response := ScreeningResponse{
+		RankedResults: rankedResults,
+		Scores:        result.Scores,
+		UniverseSize:  result.UniverseSize,
+	}
+
+	log.Printf("Complete screening finished for strategy %d: %d opportunities found",
+		args.StrategyID, len(rankedResults))
+
+	return response, nil
+}
+
+// RunAlert executes complete alert monitoring using the new worker architecture
+func RunAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args AlertArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	log.Printf("Starting complete alert monitoring for strategy %d using new worker architecture", args.StrategyID)
+
+	// Verify strategy exists and user has permission
+	var strategyExists bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
+		args.StrategyID, userID).Scan(&strategyExists)
+	if err != nil {
+		return nil, fmt.Errorf("error checking strategy: %v", err)
+	}
+	if !strategyExists {
+		return nil, fmt.Errorf("strategy not found or access denied")
+	}
+
+	// Call the worker's run_alert function
+	result, err := callWorkerAlert(args.StrategyID, args.Symbols)
+	if err != nil {
+		return nil, fmt.Errorf("error executing worker alert: %v", err)
+	}
+
+	// Convert worker result to AlertResponse format for API compatibility
+	alerts := convertWorkerAlerts(result.Alerts)
+	signals := convertWorkerSignals(result.Signals)
+
+	response := AlertResponse{
+		Alerts:           alerts,
+		Signals:          signals,
+		SymbolsMonitored: result.SymbolsMonitored,
+	}
+
+	log.Printf("Complete alert monitoring finished for strategy %d: %d alerts, %d signals",
+		args.StrategyID, len(alerts), len(signals))
+
+	return response, nil
+}
+
+// Worker screening types and functions
+type WorkerScreeningResult struct {
+	Success         bool                 `json:"success"`
+	StrategyID      int                  `json:"strategy_id"`
+	ExecutionMode   string               `json:"execution_mode"`
+	RankedResults   []WorkerRankedResult `json:"ranked_results"`
+	Scores          map[string]float64   `json:"scores"`
+	UniverseSize    int                  `json:"universe_size"`
+	ExecutionTimeMs int                  `json:"execution_time_ms"`
+	ErrorMessage    string               `json:"error_message,omitempty"`
+}
+
+type WorkerRankedResult struct {
+	Symbol       string                 `json:"symbol"`
+	Score        float64                `json:"score"`
+	CurrentPrice float64                `json:"current_price,omitempty"`
+	Sector       string                 `json:"sector,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
+}
+
+// Worker alert types
+type WorkerAlertResult struct {
+	Success          bool                    `json:"success"`
+	StrategyID       int                     `json:"strategy_id"`
+	ExecutionMode    string                  `json:"execution_mode"`
+	Alerts           []WorkerAlert           `json:"alerts"`
+	Signals          map[string]WorkerSignal `json:"signals"`
+	SymbolsMonitored int                     `json:"symbols_monitored"`
+	ExecutionTimeMs  int                     `json:"execution_time_ms"`
+	ErrorMessage     string                  `json:"error_message,omitempty"`
+}
+
+type WorkerAlert struct {
+	Symbol    string                 `json:"symbol"`
+	Type      string                 `json:"type"`
+	Message   string                 `json:"message"`
+	Timestamp string                 `json:"timestamp,omitempty"`
+	Priority  string                 `json:"priority,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+type WorkerSignal struct {
+	Signal    bool                   `json:"signal"`
+	Timestamp string                 `json:"timestamp"`
+	Symbol    string                 `json:"symbol,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+// callWorkerScreening calls the worker's run_screener function
+func callWorkerScreening(strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
+	// Set defaults
+	if limit == 0 {
+		limit = 100
+	}
+
+	// Prepare request payload
+	payload := map[string]interface{}{
+		"function":    "run_screener",
+		"strategy_id": strategyID,
+	}
+
+	if len(universe) > 0 {
+		payload["universe"] = universe
+	}
+	if limit > 0 {
+		payload["limit"] = limit
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling payload: %v", err)
+	}
+
+	// Call worker service
+	workerURL := "http://localhost:8080/execute"
+
+	resp, err := http.Post(workerURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("error calling worker: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("worker returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading worker response: %v", err)
+	}
+
+	var result WorkerScreeningResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error unmarshaling worker response: %v", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("worker execution failed: %s", result.ErrorMessage)
+	}
+
+	return &result, nil
+}
+
+// callWorkerAlert calls the worker's run_alert function
+func callWorkerAlert(strategyID int, symbols []string) (*WorkerAlertResult, error) {
+	// Prepare request payload
+	payload := map[string]interface{}{
+		"function":    "run_alert",
+		"strategy_id": strategyID,
+	}
+
+	if len(symbols) > 0 {
+		payload["symbols"] = symbols
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling payload: %v", err)
+	}
+
+	// Call worker service
+	workerURL := "http://localhost:8080/execute"
+
+	resp, err := http.Post(workerURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("error calling worker: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("worker returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading worker response: %v", err)
+	}
+
+	var result WorkerAlertResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error unmarshaling worker response: %v", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("worker execution failed: %s", result.ErrorMessage)
+	}
+
+	return &result, nil
+}
+
+// Conversion functions
+func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningResult {
+	results := make([]ScreeningResult, len(workerResults))
+
+	for i, wr := range workerResults {
+		results[i] = ScreeningResult{
+			Symbol:       wr.Symbol,
+			Score:        wr.Score,
+			CurrentPrice: wr.CurrentPrice,
+			Sector:       wr.Sector,
+			Data:         wr.Data,
+		}
+	}
+
+	return results
+}
+
+func convertWorkerAlerts(workerAlerts []WorkerAlert) []Alert {
+	alerts := make([]Alert, len(workerAlerts))
+
+	for i, wa := range workerAlerts {
+		alerts[i] = Alert{
+			Symbol:    wa.Symbol,
+			Type:      wa.Type,
+			Message:   wa.Message,
+			Timestamp: wa.Timestamp,
+			Priority:  wa.Priority,
+			Data:      wa.Data,
+		}
+	}
+
+	return alerts
+}
+
+func convertWorkerSignals(workerSignals map[string]WorkerSignal) map[string]Signal {
+	signals := make(map[string]Signal)
+
+	for symbol, ws := range workerSignals {
+		signals[symbol] = Signal{
+			Signal:    ws.Signal,
+			Timestamp: ws.Timestamp,
+			Symbol:    ws.Symbol,
+			Data:      ws.Data,
+		}
+	}
+
+	return signals
+}
 
 func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START ===")

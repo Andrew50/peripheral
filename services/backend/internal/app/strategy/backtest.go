@@ -2,11 +2,14 @@ package strategy
 
 import (
 	"backend/internal/data"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"net/http"
 	"sort"
 	"time"
 )
@@ -51,70 +54,69 @@ type BacktestResponse struct {
 	Summary   BacktestSummary  `json:"summary"`
 }
 
-// RunBacktest executes a prompt-based strategy backtest
+// WorkerBacktestResult represents the result from the worker's run_backtest function
+type WorkerBacktestResult struct {
+	Success            bool                   `json:"success"`
+	StrategyID         int                    `json:"strategy_id"`
+	ExecutionMode      string                 `json:"execution_mode"`
+	Instances          []WorkerInstance       `json:"instances"`
+	Summary            WorkerSummary          `json:"summary"`
+	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
+	ExecutionTimeMs    int                    `json:"execution_time_ms"`
+	ErrorMessage       string                 `json:"error_message,omitempty"`
+}
+
+type WorkerInstance struct {
+	Ticker          string                 `json:"ticker"`
+	Timestamp       int64                  `json:"timestamp"`
+	Classification  bool                   `json:"classification"`
+	EntryPrice      float64                `json:"entry_price,omitempty"`
+	StrategyResults map[string]interface{} `json:"strategy_results,omitempty"`
+	FutureReturn    float64                `json:"future_return,omitempty"`
+}
+
+type WorkerSummary struct {
+	TotalInstances            int      `json:"total_instances"`
+	PositiveSignals           int      `json:"positive_signals"`
+	DateRange                 []string `json:"date_range"`
+	SymbolsProcessed          int      `json:"symbols_processed"`
+	ExecutionType             string   `json:"execution_type,omitempty"`
+	SuccessfulClassifications int      `json:"successful_classifications,omitempty"`
+}
+
+// RunBacktest executes a complete strategy backtest using the new worker architecture
 func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
 	var args BacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Get the strategy from the database
-	var strategy Strategy
+	log.Printf("Starting complete backtest for strategy %d using new worker architecture", args.StrategyID)
+
+	// Verify strategy exists and user has permission
+	var strategyExists bool
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT strategyid, name, 
-		       COALESCE(description, '') as description,
-		       COALESCE(prompt, '') as prompt,
-		       COALESCE(pythoncode, '') as pythoncode,
-		       COALESCE(version, '1.0') as version
-		FROM strategies WHERE strategyid = $1 AND userid = $2`, args.StrategyID, userID).Scan(
-		&strategy.StrategyID,
-		&strategy.Name,
-		&strategy.Description,
-		&strategy.Prompt,
-		&strategy.PythonCode,
-		&strategy.Version,
-	)
+		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
+		args.StrategyID, userID).Scan(&strategyExists)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving strategy: %v", err)
+		return nil, fmt.Errorf("error checking strategy: %v", err)
+	}
+	if !strategyExists {
+		return nil, fmt.Errorf("strategy not found or access denied")
 	}
 
-	if strategy.PythonCode == "" {
-		return nil, fmt.Errorf("strategy has no Python code to execute")
-	}
-
-	// Default return windows if not specified
-	returnWindows := args.ReturnWindows
-	if len(returnWindows) == 0 {
-		returnWindows = []int{1, 5, 10} // Default to 1, 5, and 10 day returns
-	}
-
-	// Get historical data for backtesting (last 2 years)
-	endDate := time.Now()
-	startDate := endDate.AddDate(-2, 0, 0) // 2 years ago
-
-	// Get all active stocks for backtesting
-	symbols, err := getActiveSymbols(conn)
+	// Call the worker's run_backtest function
+	result, err := callWorkerBacktest(args.StrategyID)
 	if err != nil {
-		return nil, fmt.Errorf("error getting symbols: %v", err)
+		return nil, fmt.Errorf("error executing worker backtest: %v", err)
 	}
 
-	// Limit symbols for performance (can be made configurable)
-	if len(symbols) > 500 {
-		symbols = symbols[:500]
-	}
+	// Convert worker result to BacktestResponse format for API compatibility
+	instances := convertWorkerInstancesToBacktestResults(result.Instances)
+	summary := convertWorkerSummaryToBacktestSummary(result.Summary)
 
-	log.Printf("Running backtest for strategy %d with %d symbols from %s to %s",
-		args.StrategyID, len(symbols), startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-
-	// Run the backtest
-	results, summary, err := executeBacktest(ctx, conn, strategy, symbols, startDate, endDate, returnWindows)
-	if err != nil {
-		return nil, fmt.Errorf("error executing backtest: %v", err)
-	}
-
-	// Prepare response
 	response := BacktestResponse{
-		Instances: results,
+		Instances: instances,
 		Summary:   summary,
 	}
 
@@ -123,6 +125,9 @@ func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.
 		log.Printf("Warning: Failed to cache backtest results: %v", err)
 		// Don't return error, just log warning
 	}
+
+	log.Printf("Complete backtest finished for strategy %d: %d instances found",
+		args.StrategyID, len(instances))
 
 	return response, nil
 }
@@ -394,5 +399,89 @@ func createBacktestSummary(results []BacktestResult, processedSymbols, positiveS
 		SymbolsProcessed: processedSymbols,
 		Columns:          columns,
 		ColumnSamples:    columnSamples,
+	}
+}
+
+// callWorkerBacktest calls the worker's run_backtest function
+func callWorkerBacktest(strategyID int) (*WorkerBacktestResult, error) {
+	// Prepare request payload
+	payload := map[string]interface{}{
+		"function":    "run_backtest",
+		"strategy_id": strategyID,
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling payload: %v", err)
+	}
+
+	// Call worker service (assuming it's running on localhost:8080)
+	// In production, this would be configured via environment variables
+	workerURL := "http://localhost:8080/execute"
+
+	resp, err := http.Post(workerURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("error calling worker: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("worker returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading worker response: %v", err)
+	}
+
+	var result WorkerBacktestResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error unmarshaling worker response: %v", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("worker execution failed: %s", result.ErrorMessage)
+	}
+
+	return &result, nil
+}
+
+// convertWorkerInstancesToBacktestResults converts worker instances to API format
+func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []BacktestResult {
+	results := make([]BacktestResult, len(instances))
+
+	for i, instance := range instances {
+		results[i] = BacktestResult{
+			Ticker:          instance.Ticker,
+			SecurityID:      0, // Will be populated if needed
+			Timestamp:       instance.Timestamp,
+			Open:            instance.EntryPrice,
+			High:            instance.EntryPrice,
+			Low:             instance.EntryPrice,
+			Close:           instance.EntryPrice,
+			Volume:          0,
+			Classification:  instance.Classification,
+			FutureReturns:   map[string]float64{},
+			StrategyResults: instance.StrategyResults,
+		}
+
+		// Add future return if available
+		if instance.FutureReturn != 0 {
+			results[i].FutureReturns["1d"] = instance.FutureReturn
+		}
+	}
+
+	return results
+}
+
+// convertWorkerSummaryToBacktestSummary converts worker summary to API format
+func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummary {
+	return BacktestSummary{
+		TotalInstances:   summary.TotalInstances,
+		PositiveSignals:  summary.PositiveSignals,
+		DateRange:        summary.DateRange,
+		SymbolsProcessed: summary.SymbolsProcessed,
+		Columns:          []string{"ticker", "timestamp", "classification", "entry_price"},
+		ColumnSamples:    map[string][]any{},
 	}
 }

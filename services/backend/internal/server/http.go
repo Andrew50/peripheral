@@ -114,6 +114,8 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 
 	// --- strategy / back-testing ---------------------------------------------
 	"run_backtest":             wrapContextFunc(strategy.RunBacktest),
+	"run_screening":            strategy.RunScreening,
+	"run_alert":                strategy.RunAlert,
 	"getStrategies":            strategy.GetStrategies,
 	"createStrategyFromPrompt": strategy.CreateStrategyFromPrompt,
 	"setAlert":                 strategy.SetAlert,
