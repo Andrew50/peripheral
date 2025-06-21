@@ -553,32 +553,22 @@ func HealthCheck() http.HandlerFunc {
 
 // StartServer performs operations related to StartServer functionality.
 func StartServer(conn *data.Conn) {
-	// Initialize rate limiter
-	rateLimiter := NewRateLimiter(conn)
-	
-	// Create a new ServeMux to apply middleware
-	mux := http.NewServeMux()
-	
-	// Register handlers
-	mux.HandleFunc("/public", publicHandler(conn))
-	mux.HandleFunc("/private", privateHandler(conn))
-	mux.HandleFunc("/ws", WSHandler(conn))
-	mux.HandleFunc("/upload", privateUploadHandler(conn))
-	mux.HandleFunc("/healthz", HealthCheck())
-	
-	// Apply rate limiting middleware
-	handler := rateLimiter.RateLimitMiddleware()(mux)
+	http.HandleFunc("/public", publicHandler(conn))
+	http.HandleFunc("/private", privateHandler(conn))
+	http.HandleFunc("/ws", WSHandler(conn))
+	http.HandleFunc("/upload", privateUploadHandler(conn))
+	http.HandleFunc("/healthz", HealthCheck())
 
 	server := &http.Server{
 		Addr:    ":5058",
-		Handler: handler,
+		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
 		// Good practice to set timeouts to prevent resource exhaustion.
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 240 * time.Second,
 		IdleTimeout:  240 * time.Second,
 	}
 
-	log.Println("debug: Server running on port 5058 with rate limiting enabled")
+	log.Println("debug: Server running on port 5058")
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}

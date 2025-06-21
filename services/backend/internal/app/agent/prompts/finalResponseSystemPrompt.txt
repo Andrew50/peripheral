@@ -25,7 +25,7 @@ CURRENT DATE (EST/Market Time): {{CURRENT_DATE_EST}}
     *   Include relevant data visualizations (tables and charts) where appropriate
 *   Each chunk object MUST have:
     *   `type`: A string indicating the content type. Available types:
-        *   `"text"`: For text. Use Markdown formatting (like lists, bolding) where appropriate.
+        *   `"text"`: For text. Use markdown formatting.
         *   `"table"`: For structured data best presented in a table (Use ONLY for non-backtest data).
         *   `"backtest_table"`: **(Use ONLY for Backtest Results)** To instruct the backend to generate and insert a table from cached backtest results.
         *   `"plot"`: For data visualization using Plotly charts. Create interactive charts to visualize trends, comparisons, and patterns in financial data.
