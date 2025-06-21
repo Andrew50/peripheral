@@ -1799,6 +1799,7 @@ class PythonExecutionEngine:
 
         def log(message: str, level: str = "info"):
             """Log a message during strategy execution"""
+            print(f"[{level.upper()}] Strategy: {message}")
             getattr(logger, level.lower())(f"Strategy: {message}")
 
 

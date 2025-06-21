@@ -24,16 +24,13 @@ from src.data_provider import DataProvider
 from src.execution_engine import PythonExecutionEngine
 from src.security_validator import SecurityError, SecurityValidator
 
-# Configure logging
-os.makedirs(
-    "/app/logs", exist_ok=True
-)  # Ensure the logs directory exists before logging setup
+# Configure logging - console only
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/app/logs/worker.log"),
+        #logging.FileHandler("/app/logs/worker.log"),
     ],
 )
 logger = logging.getLogger(__name__)

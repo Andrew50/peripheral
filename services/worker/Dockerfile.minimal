@@ -26,7 +26,7 @@ COPY test_simple.py .
 COPY demo_strategy.py .
 
 # Create directories for data and results
-RUN mkdir -p /app/data /app/results /app/logs
+RUN mkdir -p /app/data /app/results
 
 # Set environment variables
 ENV PYTHONPATH=/app
