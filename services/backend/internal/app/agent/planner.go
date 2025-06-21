@@ -658,8 +658,11 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 			resultData := map[string]interface{}{
 				"fn":   result.FunctionName,
 				"res":  result.Result,
-				"err":  result.Error,
 				"args": result.Args,
+			}
+			// Only include error if it exists (not nil)
+			if result.Error != nil {
+				resultData["err"] = *result.Error
 			}
 			allResults = append(allResults, resultData)
 		}

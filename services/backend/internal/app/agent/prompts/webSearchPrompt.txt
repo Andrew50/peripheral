@@ -15,4 +15,4 @@ Be EXTREMELY comprehensive when asked to return events/dates of occurences.
 
 If asked for events/dates of occurences, return a table with rows of the events and columns of important information pertaining to each event.
 
-CURRENT TIME: {{CURRENT_TIME}} IN MS: {{CURRENT_TIME_MILLISECONDS}} CURRENT YEAR: {{CURRENT_YEAR}}
+CURRENT TIME: {{CURRENT_TIME}} CURRENT YEAR: {{CURRENT_YEAR}}

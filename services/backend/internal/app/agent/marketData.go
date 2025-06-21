@@ -22,8 +22,8 @@ import (
 type GetOHLCVDataArgs struct {
 	SecurityID    int      `json:"securityId"`
 	Timeframe     string   `json:"timeframe"`
-	From          int64    `json:"from"`
-	To            int64    `json:"to,omitempty"`
+	From          int64    `json:"from"`         //seconds since epoch
+	To            int64    `json:"to,omitempty"` //seconds since epoch
 	Bars          int      `json:"bars"`
 	ExtendedHours bool     `json:"extended"`
 	SplitAdjusted *bool    `json:"splitAdjusted,omitempty"`
@@ -200,10 +200,10 @@ func GetOHLCVData(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	// Convert timestamps to time.Time
 	var fromTime, toTime time.Time
 	if args.From > 0 {
-		fromTime = time.Unix(args.From/1000, (args.From%1000)*1e6).UTC()
+		fromTime = time.Unix(args.From, 0).UTC()
 	}
 	if args.To > 0 {
-		toTime = time.Unix(args.To/1000, (args.To%1000)*1e6).UTC()
+		toTime = time.Unix(args.To, 0).UTC()
 	} else {
 		// If no end time provided, use current time
 		toTime = time.Now().UTC()
@@ -525,7 +525,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	}
 
 	currentTimeEST := time.Now().In(easternLocation)
-	fromTimeEST := time.Unix(args.From/1000, (args.From%1000)*1e6).In(easternLocation)
+	fromTimeEST := time.Unix(args.From, 0).In(easternLocation)
 	if fromTimeEST.After(currentTimeEST) {
 		return nil, fmt.Errorf("from time %s is in the future", fromTimeEST.Format("2006-01-02 15:04:05 MST"))
 	}
@@ -559,7 +559,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("error getting OHLCV data: %v", err)
 	}
 	// Convert timestamp to date and get ticker from OHLCV response
-	fromTime := time.Unix(args.From/1000, (args.From%1000)*1e6).UTC()
+	fromTime := time.Unix(args.From, 0).UTC()
 	dateStr := fromTime.Format("2006-01-02")
 
 	ohlcvResponse, ok := ohlcvData.(*GetOHLCVDataResponse)
@@ -651,8 +651,8 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 
 type GetStockChangeArgs struct {
 	SecurityID    int    `json:"securityId"`
-	From          int64  `json:"from"`
-	To            int64  `json:"to"`
+	From          int64  `json:"from"` //seconds since epoch
+	To            int64  `json:"to"`   //seconds since epoch
 	FromPoint     string `json:"fromPoint,omitempty"`
 	ToPoint       string `json:"toPoint,omitempty"`
 	SplitAdjusted *bool  `json:"splitAdjusted,omitempty"`
@@ -675,7 +675,7 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	}
 
 	currentTimeEST := time.Now().In(easternLocation)
-	fromTimeEST := time.Unix(args.From/1000, (args.From%1000)*1e6).In(easternLocation)
+	fromTimeEST := time.Unix(args.From, 0).In(easternLocation)
 	if fromTimeEST.After(currentTimeEST) {
 		return nil, fmt.Errorf("from time %s is in the future", fromTimeEST.Format("2006-01-02 15:04:05 MST"))
 	}
@@ -686,7 +686,7 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	if args.FromPoint != "" {
 		switch args.FromPoint {
 		case "open", "high", "low", "close":
-			fromDateString = time.Unix(args.From/1000, (args.From%1000)*1e6).UTC().Format("2006-01-02")
+			fromDateString = time.Unix(args.From, 0).UTC().Format("2006-01-02")
 		default:
 			return nil, fmt.Errorf("invalid fromPoint '%s': must be one of 'open', 'high', 'low', 'close'", args.FromPoint)
 		}
@@ -695,7 +695,7 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	if args.ToPoint != "" {
 		switch args.ToPoint {
 		case "open", "high", "low", "close":
-			toDateString = time.Unix(args.To/1000, (args.To%1000)*1e6).UTC().Format("2006-01-02")
+			toDateString = time.Unix(args.To, 0).UTC().Format("2006-01-02")
 		default:
 			return nil, fmt.Errorf("invalid toPoint '%s': must be one of 'open', 'high', 'low', 'close'", args.ToPoint)
 		}
@@ -709,12 +709,12 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 
 	var startPrice float64
 	var endPrice float64
-	ticker, err := postgres.GetTicker(conn, args.SecurityID, time.Unix(args.From/1000, (args.From%1000)*1e6).UTC())
+	ticker, err := postgres.GetTicker(conn, args.SecurityID, time.Unix(args.From, 0).UTC())
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)
 	}
 	if args.FromPoint == "" {
-		fromTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.From/1000, (args.From%1000)*1e6).UTC(), true)
+		fromTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.From, 0).UTC(), true)
 		if err != nil {
 			return nil, fmt.Errorf("error getting from trade at timestamp: %v, %v", args.From, err)
 		}
@@ -737,7 +737,7 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	}
 
 	if args.ToPoint == "" {
-		toTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.To/1000, (args.To%1000)*1e6).UTC(), true)
+		toTrade, err := polygon.GetTradeAtTimestamp(conn, args.SecurityID, time.Unix(args.To, 0).UTC(), true)
 		if err != nil {
 			return nil, fmt.Errorf("error getting to trade at timestamp: %v, %v", args.To, err)
 		}
@@ -792,12 +792,10 @@ func GetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (inter
 
 	// Check if timestamp is in the future (compared to current EST time)
 	currentTimeEST := time.Now().In(easternLocation)
-	requestedTimeEST := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).In(easternLocation)
-	if requestedTimeEST.After(currentTimeEST) {
-		return nil, fmt.Errorf("requested time %s is in the future", requestedTimeEST.Format("2006-01-02 15:04:05 MST"))
+	timestamp := time.Unix(args.Timestamp, 0).In(easternLocation)
+	if timestamp.After(currentTimeEST) {
+		return nil, fmt.Errorf("requested time %s is in the future", timestamp.Format("2006-01-02 15:04:05 MST"))
 	}
-
-	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).In(easternLocation)
 	ticker, err := postgres.GetTicker(conn, args.SecurityID, timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ticker: %v", err)

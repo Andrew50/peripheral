@@ -37,11 +37,16 @@ func getSystemInstruction(name string) (string, error) {
 	estLocation, _ := time.LoadLocation("America/New_York")
 	estTime := now.In(estLocation)
 
+	executionConstraints, err := fs.ReadFile("prompts/executionConstraints.txt")
+	if err != nil {
+		return "", fmt.Errorf("reading execution constraints: %w", err)
+	}
 	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
+	s = strings.ReplaceAll(s, "{{EXECUTION_CONSTRAINTS}}", string(executionConstraints))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
 		estTime.Format(rfc3339Seconds))
-	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(estTime.UnixMilli(), 10))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME_SECONDS}}",
+		strconv.FormatInt(estTime.Unix(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
 		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
