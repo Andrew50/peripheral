@@ -51,10 +51,10 @@ type FinalResponse struct {
 }
 
 type TokenCounts struct {
-	InputTokenCount    int32 `json:"input_token_count,omitempty"`
-	OutputTokenCount   int32 `json:"output_token_count,omitempty"`
-	ThoughtsTokenCount int32 `json:"thoughts_token_count,omitempty"`
-	TotalTokenCount    int32 `json:"total_token_count,omitempty"`
+	InputTokenCount    int64 `json:"input_token_count,omitempty"`
+	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
+	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
+	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
 }
 
 func replySchema() *genai.Schema {
@@ -318,10 +318,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		if hasValidContent {
 			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 			directAns.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return directAns, nil
 		}
@@ -331,10 +331,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
 	if planParseErr == nil && plan.Stage != "" {
 		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 		}
 		return plan, nil
 	}
@@ -382,10 +382,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 			if hasValidContent {
 				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
 				directAns.TokenCounts = TokenCounts{
-					InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-					OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-					ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-					TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+					InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+					OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+					ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+					TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 				}
 				return directAns, nil
 			}
@@ -398,10 +398,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
 		if blockPlanParseErr == nil && plan.Stage != "" {
 			plan.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return plan, nil
 		}
@@ -477,10 +477,10 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 		finalResponse.TokenCounts = TokenCounts{
-			InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-			OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-			ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-			TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 		}
 		return &finalResponse, nil
 	}
@@ -517,10 +517,10 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
 			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
 			finalResponse.TokenCounts = TokenCounts{
-				InputTokenCount:    result.UsageMetadata.PromptTokenCount,
-				OutputTokenCount:   result.UsageMetadata.CandidatesTokenCount,
-				ThoughtsTokenCount: result.UsageMetadata.ThoughtsTokenCount,
-				TotalTokenCount:    result.UsageMetadata.TotalTokenCount,
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
 			return &finalResponse, nil
 		}
@@ -598,9 +598,9 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	fmt.Println("finalResp openai\n\n\n ", finalResp)
 	finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
 	finalResp.TokenCounts = TokenCounts{
-		InputTokenCount:  int32(chat.Usage.PromptTokens),
-		OutputTokenCount: int32(chat.Usage.CompletionTokens),
-		TotalTokenCount:  int32(chat.Usage.TotalTokens),
+		InputTokenCount:  chat.Usage.PromptTokens,
+		OutputTokenCount: chat.Usage.CompletionTokens,
+		TotalTokenCount:  chat.Usage.TotalTokens,
 	}
 	return &finalResp, nil
 }
