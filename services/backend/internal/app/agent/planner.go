@@ -275,15 +275,17 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		return Plan{}, fmt.Errorf("no candidates found in result")
 	}
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				fmt.Println("Thought: ", part.Text)
-				continue
-			}
-			if part.Text != "" {
-				sb.WriteString(part.Text)
-				sb.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					fmt.Println("Thought: ", part.Text)
+					continue
+				}
+				if part.Text != "" {
+					sb.WriteString(part.Text)
+					sb.WriteString("\n")
+				}
 			}
 		}
 	}
@@ -292,8 +294,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	fmt.Println("Candidates Token Count", result.UsageMetadata.CandidatesTokenCount)
 	fmt.Println("Thoughts Token Count", result.UsageMetadata.ThoughtsTokenCount)
 	fmt.Println("Total Token Count", result.UsageMetadata.TotalTokenCount)
-	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	fmt.Println("citationMetadata", candidate.CitationMetadata)
+	if candidate != nil {
+		fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+		fmt.Println("citationMetadata", candidate.CitationMetadata)
+	}
 	fmt.Println("\n\n\n\n\nresultText", resultText)
 
 	// --- Extract JSON block --- START
@@ -452,14 +456,16 @@ func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*Fin
 	// Concatenate the text from *all* parts to ensure we capture the full response
 	var frSB strings.Builder
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				frSB.WriteString(part.Text)
-				frSB.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					frSB.WriteString(part.Text)
+					frSB.WriteString("\n")
+				}
 			}
 		}
 	}
@@ -594,11 +600,13 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	responseText := ""
 	if len(result.Candidates) > 0 {
 		candidate := result.Candidates[0]
-		if candidate.Content != nil {
+		if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 			for _, part := range candidate.Content.Parts {
-				if part.Text != "" {
-					responseText = part.Text
-					break
+				if part != nil {
+					if part.Text != "" {
+						responseText = part.Text
+						break
+					}
 				}
 			}
 		}

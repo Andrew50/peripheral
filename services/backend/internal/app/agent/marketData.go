@@ -632,14 +632,16 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		return Plan{}, fmt.Errorf("no candidates found in result")
 	}
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				sb.WriteString(part.Text)
-				sb.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					sb.WriteString(part.Text)
+					sb.WriteString("\n")
+				}
 			}
 		}
 	}

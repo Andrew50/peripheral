@@ -100,12 +100,14 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 	var accumulatedThoughts []string
 	planningPrompt := ""
 	maxTurns := 15
+	currentTurn := 0
 	totalRequestOutputTokenCount := 0
 	totalRequestInputTokenCount := 0
 	totalRequestThoughtsTokenCount := 0
 	totalRequestTokenCount := 0
 
 	for {
+		currentTurn++
 		// Check if context is cancelled during the planning loop
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -125,7 +127,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			}
 		}
 
-		progressCallback(fmt.Sprintf("Running planner (turn %d/%d)...", maxTurns-maxTurns+1, 15))
+		progressCallback(fmt.Sprintf("Running planner (turn %d/%d)...", currentTurn, maxTurns))
 		plannerResult, err := RunPlanner(ctx, conn, planningPrompt, firstRound)
 		if err != nil {
 			// Mark as error instead of deleting for debugging
