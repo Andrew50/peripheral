@@ -687,7 +687,7 @@ func getSystemInstruction(name string) (string, error) {
 	now := time.Now()
 	s := strings.ReplaceAll(string(raw), "{{CURRENT_TIME}}",
 		now.Format(time.RFC3339))
-	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(now.UnixMilli(), 10))
+	s = strings.ReplaceAll(s, "{{CURRENT_TIME_SECONDS}}",
+		strconv.FormatInt(now.Unix(), 10))
 	return s, nil
 }
