@@ -462,7 +462,7 @@ var (
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId":    {Type: genai.TypeInteger, Description: "The security ID of the stock to get the price for."},
-						"timestamp":     {Type: genai.TypeInteger, Description: "The timestamp in milliseconds."},
+						"timestamp":     {Type: genai.TypeInteger, Description: "The timestamp in seconds."},
 						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the price should be split-adjusted. Default true."},
 					},
 					Required: []string{"securityId", "timestamp"},
@@ -479,8 +479,8 @@ var (
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId":    {Type: genai.TypeInteger, Description: "The security ID of the stock to get the change for."},
-						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
-						"to":            {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
+						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in seconds."},
+						"to":            {Type: genai.TypeInteger, Description: "The end of the date range in seconds."},
 						"fromPoint":     {Type: genai.TypeString, Description: "Optional. The point of the day of the from timestamp to get the price from. 'open', 'high', 'low', 'close'. If omitted, the most recent price to the timestamp is used."},
 						"toPoint":       {Type: genai.TypeString, Description: "Optional. The point of the day of the to timestamp to get the price to. 'open', 'high', 'low', 'close'. If omitted, the most recent price to the timestamp is used."},
 						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the price should be split-adjusted. Default true."},
@@ -505,17 +505,17 @@ var (
 			StatusMessage: "Scanning market data...",
 		}, */
 
-		"getOHLCVData": {
+		"getOHLCData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getOHLCVData",
+				Name:        "getOHLCData",
 				Description: "Get OHLCV data for a stock. Only use this function if other market data tools are not sufficient.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"securityId":    {Type: genai.TypeInteger, Description: "The security ID to get OHLCV data."},
 						"timeframe":     {Type: genai.TypeString, Description: "The timeframe. This is of the form 'n' + 'time_unit'. Minute data has no time unit, hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week, and month."},
-						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
-						"to":            {Type: genai.TypeInteger, Description: "Optional. The end of the date range in milliseconds."},
+						"from":          {Type: genai.TypeInteger, Description: "The start of the date range in seconds."},
+						"to":            {Type: genai.TypeInteger, Description: "Optional. The end of the date range in seconds."},
 						"bars":          {Type: genai.TypeInteger, Description: "Required. The number of bars to get. MAX is 10."},
 						"extended":      {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
 						"splitAdjusted": {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
@@ -536,8 +536,8 @@ var (
 					Properties: map[string]*genai.Schema{
 						"securityId":       {Type: genai.TypeInteger, Description: "The security ID to analyze."},
 						"timeframe":        {Type: genai.TypeString, Description: "The timeframe to analyze. This is of the form 'n' + 'time_unit'. Minute data has no time unit e.g 1 minute is '1', hour data is 'h', day data is 'd'. Supports second, minute, hour, day, week."},
-						"from":             {Type: genai.TypeInteger, Description: "The start of the date range in milliseconds."},
-						"to":               {Type: genai.TypeInteger, Description: "The end of the date range in milliseconds."},
+						"from":             {Type: genai.TypeInteger, Description: "The start of the date range in seconds."},
+						"to":               {Type: genai.TypeInteger, Description: "The end of the date range in seconds."},
 						"extended":         {Type: genai.TypeBoolean, Description: "Optional. Whether to include extended hours data. Defaults to false."},
 						"splitAdjusted":    {Type: genai.TypeBoolean, Description: "Optional. Whether the data should be split-adjusted. Defaults to true."},
 						"additionalPrompt": {Type: genai.TypeString, Description: "Optional. Additional prompt or context to pass to the intraday agent."},
@@ -671,10 +671,10 @@ var (
 		},
 		// [END SEARCH TOOLS]
 		// [MODEL HELPERS]
-		"dateToMS": {
+		"dateToSeconds": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "dateToMS",
-				Description: "Convert one or more dates to milliseconds since epoch (Unix timestamp in milliseconds). Pass an array of date objects. Example: {\"dates\": [{\"date\": \"2024-01-01\", \"hour\": 9, \"minute\": 30}, {\"date\": \"2024-01-02\"}]}",
+				Name:        "dateToSeconds",
+				Description: "Convert one or more dates to seconds since epoch (Unix timestamp in seconds). Pass an array of date objects. Example: {\"dates\": [{\"date\": \"2024-01-01\", \"hour\": 9, \"minute\": 30}, {\"date\": \"2024-01-02\"}]}",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -696,7 +696,7 @@ var (
 					Required: []string{"dates"},
 				},
 			},
-			Function:      wrapWithContext(DateToMS),
+			Function:      wrapWithContext(DateToSeconds),
 			StatusMessage: "Converting dates to timestamps...",
 		},
 	}

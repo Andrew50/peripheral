@@ -41,7 +41,7 @@ func getSystemInstruction(name string) (string, error) {
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
 		estTime.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
-		strconv.FormatInt(estTime.UnixMilli(), 10))
+		strconv.FormatInt(estTime.Unix(), 10))
 	s = strings.ReplaceAll(s, "{{CURRENT_YEAR}}",
 		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
