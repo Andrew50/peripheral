@@ -172,6 +172,62 @@ func GetPrevClose(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 
 }
 
+type GetPopularTickersResults struct {
+	SecurityID int    `json:"securityId"`
+	Ticker     string `json:"ticker"`
+	Timestamp  int64  `json:"timestamp"`
+	Icon       string `json:"icon"`
+	Name       string `json:"name"`
+}
+
+func GetPopularTickers(conn *data.Conn, _ json.RawMessage) (interface{}, error) {
+	// Get the 5 most popular tickers based on chart queries in the last 24 hours
+	query := `
+	WITH popular_securities AS (
+		SELECT 
+			securityid,
+			COUNT(*) as query_count
+		FROM chart_queries 
+		WHERE timestamp = 0 
+			AND created_at >= NOW() - INTERVAL '24 hours'
+		GROUP BY securityid
+		ORDER BY query_count DESC
+		LIMIT 5
+	)
+	SELECT 
+		s.securityid,
+		s.ticker,
+		COALESCE(s.icon, '') as icon,
+		COALESCE(s.name, '') as name
+	FROM popular_securities ps
+	JOIN securities s ON ps.securityid = s.securityid
+	WHERE s.maxDate IS NULL  -- only active securities
+	ORDER BY ps.query_count DESC`
+
+	rows, err := conn.DB.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query popular tickers: %v", err)
+	}
+	defer rows.Close()
+
+	var results []GetPopularTickersResults
+	for rows.Next() {
+		var result GetPopularTickersResults
+		if err := rows.Scan(&result.SecurityID, &result.Ticker, &result.Icon, &result.Name); err != nil {
+			return nil, fmt.Errorf("failed to scan popular ticker: %v", err)
+		}
+		// Set timestamp to 0 since we're filtering by timestamp = 0
+		result.Timestamp = 0
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over popular tickers: %v", err)
+	}
+
+	return results, nil
+}
+
 // GetSecurityFromTickerArgs represents a structure for handling GetSecurityFromTickerArgs data.
 type GetSecurityFromTickerArgs struct {
 	Ticker string `json:"ticker"`
@@ -186,7 +242,7 @@ type GetSecurityFromTickerResults struct {
 	Name       string `json:"name"`
 }
 
-// GetSecuritiesFromTicker performs operations related to GetSecuritiesFromTicker functionality.
+// GetSecuritiesFromTicker runs fuzzy finding to a user's input and returns similar tickers
 func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -297,14 +353,57 @@ func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) 
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
 	detailsMap := details.(map[string]interface{})
+
+	// Helper function to safely convert string to sql.NullString
+	toNullString := func(val interface{}) sql.NullString {
+		if val == nil {
+			return sql.NullString{Valid: false}
+		}
+		if str, ok := val.(string); ok {
+			return sql.NullString{String: str, Valid: str != ""}
+		}
+		if nullStr, ok := val.(sql.NullString); ok {
+			return nullStr
+		}
+		return sql.NullString{Valid: false}
+	}
+
+	// Helper function to safely convert to sql.NullFloat64
+	toNullFloat64 := func(val interface{}) sql.NullFloat64 {
+		if val == nil {
+			return sql.NullFloat64{Valid: false}
+		}
+		if f, ok := val.(float64); ok {
+			return sql.NullFloat64{Float64: f, Valid: true}
+		}
+		if nullFloat, ok := val.(sql.NullFloat64); ok {
+			return nullFloat
+		}
+		return sql.NullFloat64{Valid: false}
+	}
+
+	// Helper function to safely convert to sql.NullInt64
+	toNullInt64 := func(val interface{}) sql.NullInt64 {
+		if val == nil {
+			return sql.NullInt64{Valid: false}
+		}
+		if i, ok := val.(int64); ok {
+			return sql.NullInt64{Int64: i, Valid: true}
+		}
+		if nullInt, ok := val.(sql.NullInt64); ok {
+			return nullInt
+		}
+		return sql.NullInt64{Valid: false}
+	}
+
 	return GetTickerMenuDetailsResults{
 		Ticker:                      detailsMap["ticker"].(string),
-		Name:                        detailsMap["name"].(sql.NullString),
-		PrimaryExchange:             detailsMap["primary_exchange"].(sql.NullString),
-		MarketCap:                   detailsMap["market_cap"].(sql.NullFloat64),
-		ShareClassSharesOutstanding: detailsMap["share_class_shares_outstanding"].(sql.NullInt64),
-		Industry:                    detailsMap["industry"].(sql.NullString),
-		Sector:                      detailsMap["sector"].(sql.NullString),
+		Name:                        toNullString(detailsMap["name"]),
+		PrimaryExchange:             toNullString(detailsMap["primary_exchange"]),
+		MarketCap:                   toNullFloat64(detailsMap["market_cap"]),
+		ShareClassSharesOutstanding: toNullInt64(detailsMap["share_class_shares_outstanding"]),
+		Industry:                    toNullString(detailsMap["industry"]),
+		Sector:                      toNullString(detailsMap["sector"]),
 	}, nil
 }
 

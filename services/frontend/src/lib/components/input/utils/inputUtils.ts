@@ -82,9 +82,17 @@ let isLoadingSecurities = false;
 				// Add a small delay to avoid too many rapid requests during typing
 				await new Promise((resolve) => setTimeout(resolve, 10));
 
-				const securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
-					ticker: inputString
-				});
+				let securities: Instance[];
+
+				// If input string is empty, get popular tickers
+				if (!inputString || inputString.trim() === '') {
+					securities = await publicRequest<Instance[]>('getPopularTickers', {});
+				} else {
+					// Otherwise, search for tickers matching the input
+					securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
+						ticker: inputString
+					});
+				}
 
 				if (Array.isArray(securities) && securities.length > 0) {
 					return {
@@ -92,13 +100,13 @@ let isLoadingSecurities = false;
 						securities: securities
 					};
 				}
-				return { inputValid: false, securities: [] };
+				return { inputValid: inputString.length === 0, securities: [] }; // Empty input is valid
 			} catch (error) {
 				console.error('Error fetching securities:', error);
-				// Return empty results but mark as valid if we have some input
+				// Return empty results but mark as valid if we have some input or empty input
 				// This allows the UI to stay responsive even if backend request fails
 				return {
-					inputValid: inputString.length > 0,
+					inputValid: true, // Consider both empty and non-empty input as valid when there's an error
 					securities: []
 				};
 			} finally {

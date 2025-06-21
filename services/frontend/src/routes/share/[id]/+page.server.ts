@@ -33,17 +33,14 @@ export const load: ServerLoad = async ({ params, request }) => {
 		interface ConversationSnippetResponse {
 			title: string;
 			first_response: string;
+			first_query: string;
 		}
 
 		const result = await publicRequest<ConversationSnippetResponse>('getConversationSnippet', {
 			conversation_id: params.id
 		});
 
-		// Generate clean text for meta descriptions
 		const cleanTitle = result.title || 'Atlantis';
-		const cleanResponse = (result.first_response || 'The new best way to trade.')
-			.replace(/<[^>]*>/g, '') // Remove HTML tags
-			.substring(0, 160); // Limit to 160 characters for meta description
 
 		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const shareUrl = `${origin}/share/${params.id}`;
@@ -54,7 +51,6 @@ export const load: ServerLoad = async ({ params, request }) => {
 			isBot,
 			meta: {
 				title: cleanTitle,
-				description: cleanResponse,
 				shareUrl,
 				ogImageUrl
 			}
@@ -72,7 +68,6 @@ export const load: ServerLoad = async ({ params, request }) => {
 			isBot,
 			meta: {
 				title: 'Atlantis',
-				description: 'The new best way to trade.',
 				shareUrl: fallbackUrl,
 				ogImageUrl: fallbackImageUrl
 			}

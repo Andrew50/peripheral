@@ -518,6 +518,18 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	// Check if from timestamp is in the future (compared to current EST time)
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+
+	currentTimeEST := time.Now().In(easternLocation)
+	fromTimeEST := time.Unix(args.From/1000, (args.From%1000)*1e6).In(easternLocation)
+	if fromTimeEST.After(currentTimeEST) {
+		return nil, fmt.Errorf("from time %s is in the future", fromTimeEST.Format("2006-01-02 15:04:05 MST"))
+	}
+
 	// Default SplitAdjusted to true if not provided
 	splitAdjustedValue := true
 	if args.SplitAdjusted != nil {
@@ -657,6 +669,19 @@ func GetStockChange(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+
+	// Check if from timestamp is in the future (compared to current EST time)
+	easternLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+
+	currentTimeEST := time.Now().In(easternLocation)
+	fromTimeEST := time.Unix(args.From/1000, (args.From%1000)*1e6).In(easternLocation)
+	if fromTimeEST.After(currentTimeEST) {
+		return nil, fmt.Errorf("from time %s is in the future", fromTimeEST.Format("2006-01-02 15:04:05 MST"))
+	}
+
 	var fromDateString string
 	var toDateString string
 	// Validate fromPoint and toPoint values
@@ -764,10 +789,16 @@ func GetStockPriceAtTime(conn *data.Conn, _ int, rawArgs json.RawMessage) (inter
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
+	}
+
+	// Check if timestamp is in the future (compared to current EST time)
+	currentTimeEST := time.Now().In(easternLocation)
+	requestedTimeEST := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).In(easternLocation)
+	if requestedTimeEST.After(currentTimeEST) {
+		return nil, fmt.Errorf("requested time %s is in the future", requestedTimeEST.Format("2006-01-02 15:04:05 MST"))
 	}
 
 	timestamp := time.Unix(args.Timestamp/1000, (args.Timestamp%1000)*1e6).In(easternLocation)

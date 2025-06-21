@@ -62,6 +62,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+
 	//	if debug {
 	////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
 	//	}
@@ -278,6 +279,10 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			if queryStartTime.After(queryEndTime) {
 				// Requested time is before the earliest known data for this security record.
 				// Return empty data, indicating the earliest point was reached.
+
+				// Log chart query in goroutine
+				go logChartQuery(conn, userID, args)
+
 				return GetChartDataResponse{Bars: []GetChartDataResults{}, IsEarliestData: true}, nil
 			}
 		case "forward":
@@ -427,6 +432,10 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			}
 			// Integrate events just before returning for the aggregate/forward case
 			integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+
+			// Log chart query in goroutine
+			go logChartQuery(conn, userID, args)
+
 			return GetChartDataResponse{
 				Bars:           barDataList,
 				IsEarliestData: isEarliestData,
@@ -476,6 +485,10 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		}
 		// Integrate events just before returning for the backward case
 		integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
+
+		// Log chart query in goroutine
+		go logChartQuery(conn, userID, args)
+
 		return GetChartDataResponse{
 			Bars:           barDataList,
 			IsEarliestData: isEarliestData,
@@ -485,6 +498,10 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	//if debug {
 	////fmt.Printf("[DEBUG] No data found. numBarsRemaining=%d\n", numBarsRemaining)
 	//}
+
+	// Log chart query in goroutine (even for failed requests)
+	go logChartQuery(conn, userID, args)
+
 	return nil, fmt.Errorf("no data found")
 }
 
@@ -1137,4 +1154,35 @@ func integrateChartEvents(
 		}
 	}
 	// The modifications to 'bars' directly affect the slice pointed to by barDataList
+}
+
+// logChartQuery logs chart query parameters to the database for analytics
+func logChartQuery(conn *data.Conn, userID int, args GetChartDataArgs) {
+	// Use a separate context with timeout for the logging operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		INSERT INTO chart_queries (
+			securityid, timeframe, timestamp, direction, bars, 
+			extended_hours, is_replay, include_sec_filings, user_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err := conn.DB.Exec(ctx, query,
+		args.SecurityID,
+		args.Timeframe,
+		args.Timestamp,
+		args.Direction,
+		args.Bars,
+		args.ExtendedHours,
+		args.IsReplay,
+		args.IncludeSECFilings,
+		userID,
+	)
+
+	if err != nil {
+		// Log error but don't fail the main request
+		fmt.Printf("Warning: Failed to log chart query: %v\n", err)
+	}
 }

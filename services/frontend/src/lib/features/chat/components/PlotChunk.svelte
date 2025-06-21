@@ -152,12 +152,18 @@
 		.filter(trace => trace !== null);
 	
 
-	// Merge layouts (user layout takes precedence)
+	// Merge layouts (user layout takes precedence, but preserve yaxis side)
 	$: layout = {
 		...defaultLayout,
 		...plotData.layout,
 		// Don't set title in layout if we're showing it separately
-		title: plotData.title ? '' : (plotData.layout?.title || '')
+		title: plotData.title ? '' : (plotData.layout?.title || ''),
+		// Ensure yaxis is always on the right side
+		yaxis: {
+			...defaultLayout.yaxis,
+			...plotData.layout?.yaxis,
+			side: 'right' as const
+		}
 	};
 </script>
 

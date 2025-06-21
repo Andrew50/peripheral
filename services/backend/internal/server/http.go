@@ -36,6 +36,7 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"googleCallback":          GoogleCallback,
 	"getPublicConversation":   agent.GetPublicConversation,
 	"getSecuritiesFromTicker": helpers.GetSecuritiesFromTicker,
+	"getPopularTickers":       helpers.GetPopularTickers,
 	"getConversationSnippet":  agent.GetConversationSnippet,
 }
 
