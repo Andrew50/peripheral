@@ -24,7 +24,7 @@ type ExecuteResult struct {
 	FunctionID   int64       `json:"fn_id"`
 	FunctionName string      `json:"fn"`
 	Result       interface{} `json:"res"`
-	Error        string      `json:"err,omitempty"`
+	Error        *string     `json:"err,omitempty"`
 	Args         interface{} `json:"args,omitempty"`
 }
 
@@ -198,20 +198,22 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 
 	tool, exists := e.tools[fc.Name]
 	if !exists {
+		errorStr := fmt.Sprintf("function '%s' not found", fc.Name)
 		return ExecuteResult{
 			FunctionID:   functionID,
 			FunctionName: fc.Name,
-			Error:        fmt.Sprintf("function '%s' not found", fc.Name),
+			Error:        &errorStr,
 			Args:         fc.Args,
 		}, nil
 	}
 
 	// Check if context is cancelled before executing
 	if ctx.Err() != nil {
+		errorStr := "request was cancelled"
 		return ExecuteResult{
 			FunctionID:   functionID,
 			FunctionName: fc.Name,
-			Error:        "request was cancelled",
+			Error:        &errorStr,
 			Args:         fc.Args,
 		}, nil
 	}
@@ -228,10 +230,11 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	if err != nil {
 		span.RecordError(err)
 		e.log.Warn("Error executing function", zap.String("function", fc.Name), zap.Error(err))
+		errorStr := err.Error()
 		return ExecuteResult{
 			FunctionID:   functionID,
 			FunctionName: fc.Name,
-			Error:        err.Error(),
+			Error:        &errorStr,
 			Args:         argsMap,
 		}, nil
 	}

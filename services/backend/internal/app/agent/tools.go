@@ -454,9 +454,9 @@ var (
 			Function:      wrapWithContext(helpers.GetLastPrice),
 			StatusMessage: "Getting current price of {ticker}...",
 		},
-		"getStockPriceAtTime": {
+		"getPriceAtTime": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getStockPriceAtTime",
+				Name:        "getPriceAtTime",
 				Description: "Get the price of a stock at a specific time.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
