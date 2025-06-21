@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -304,16 +305,26 @@ def get_universe_symbols(universe='sp500'):
 `
 
 func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	log.Printf("=== STRATEGY CREATION START ===")
+	log.Printf("UserID: %d", userID)
+	log.Printf("Raw args: %s", string(rawArgs))
+
 	var args CreateStrategyFromPromptArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		log.Printf("ERROR: Failed to unmarshal args: %v", err)
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
+
+	log.Printf("Parsed args - Query: %q, StrategyID: %d", args.Query, args.StrategyID)
 
 	var existingStrategy *Strategy
 	isEdit := args.StrategyID != -1
 
+	log.Printf("Is edit operation: %t", isEdit)
+
 	// Handle strategy ID - if -1, create new strategy, otherwise edit existing
 	if isEdit {
+		log.Printf("Reading existing strategy with ID: %d", args.StrategyID)
 		// Read existing strategy for editing
 		var strategyRow Strategy
 		err := conn.DB.QueryRow(context.Background(), `
@@ -337,29 +348,41 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 			&strategyRow.IsAlertActive,
 		)
 		if err != nil {
+			log.Printf("ERROR: Failed to read existing strategy: %v", err)
 			return nil, fmt.Errorf("error reading existing strategy: %v", err)
 		}
 		existingStrategy = &strategyRow
 		existingStrategy.UserID = userID
+		log.Printf("Successfully loaded existing strategy: %q", existingStrategy.Name)
+		log.Printf("Existing Python code length: %d characters", len(existingStrategy.PythonCode))
 	}
 
+	log.Printf("Getting Gemini API key...")
 	apikey, err := conn.GetGeminiKey()
 	if err != nil {
+		log.Printf("ERROR: Failed to get Gemini key: %v", err)
 		return nil, fmt.Errorf("error getting gemini key: %v", err)
 	}
+	log.Printf("Successfully retrieved Gemini API key (length: %d)", len(apikey))
 
+	log.Printf("Creating Gemini client...")
 	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
 		APIKey:  apikey,
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
+		log.Printf("ERROR: Failed to create Gemini client: %v", err)
 		return nil, fmt.Errorf("error creating gemini client: %v", err)
 	}
+	log.Printf("Successfully created Gemini client")
 
+	log.Printf("Loading system instruction...")
 	systemInstruction, err := getSystemInstruction("classifier")
 	if err != nil {
+		log.Printf("ERROR: Failed to get system instruction: %v", err)
 		return nil, fmt.Errorf("error getting system instruction: %v", err)
 	}
+	log.Printf("Successfully loaded system instruction (length: %d)", len(systemInstruction))
 
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
@@ -375,6 +398,7 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 	if strings.Contains(strings.ToLower(args.Query), "gap") &&
 		(strings.Contains(strings.ToUpper(args.Query), "ARM") ||
 			strings.Contains(strings.ToLower(args.Query), "arm ")) {
+		log.Printf("Detected ARM gap strategy, enhancing query...")
 		enhancedQuery = fmt.Sprintf(`%s
 
 IMPORTANT: This query is asking specifically for ARM (ticker: ARM) gap-up analysis. 
@@ -386,6 +410,7 @@ IMPORTANT: This query is asking specifically for ARM (ticker: ARM) gap-up analys
 
 	var fullPrompt string
 	if isEdit && existingStrategy != nil {
+		log.Printf("Building edit prompt for existing strategy...")
 		// For editing existing strategies, include current strategy content
 		fullPrompt = fmt.Sprintf(`%s
 
@@ -416,6 +441,7 @@ Generate the updated Python classifier function named 'classify_symbol(symbol)' 
 			existingStrategy.PythonCode,
 			enhancedQuery)
 	} else {
+		log.Printf("Building new strategy prompt...")
 		// For new strategies, use the original prompt format
 		fullPrompt = fmt.Sprintf(`%s
 
@@ -424,42 +450,77 @@ User Request: %s
 Please generate a Python classifier function that uses the above data accessor functions to identify the pattern the user is requesting. The function should be named 'classify_symbol(symbol)' and return a boolean indicating if the symbol matches the criteria.`, dataAccessorFunctions, enhancedQuery)
 	}
 
+	log.Printf("Full prompt length: %d characters", len(fullPrompt))
+	log.Printf("Full prompt preview (first 500 chars): %s...", fullPrompt[:min(500, len(fullPrompt))])
+
 	content := genai.Text(fullPrompt)
 	if len(content) == 0 {
+		log.Printf("ERROR: Failed to create content from prompt")
 		return nil, fmt.Errorf("failed to create content from prompt")
 	}
+	log.Printf("Successfully created Gemini content")
 
+	log.Printf("Calling Gemini API to generate content...")
 	result, err := client.Models.GenerateContent(context.Background(), "gemini-2.5-flash", content, config)
 	if err != nil {
+		log.Printf("ERROR: Gemini API call failed: %v", err)
 		return nil, fmt.Errorf("error generating content: %w", err)
 	}
+	log.Printf("Successfully received response from Gemini API")
+
+	log.Printf("Processing Gemini response...")
+	log.Printf("Number of candidates: %d", len(result.Candidates))
 
 	responseText := ""
 	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, part := range result.Candidates[0].Content.Parts {
+		log.Printf("Processing candidate 0...")
+		log.Printf("Number of parts in candidate: %d", len(result.Candidates[0].Content.Parts))
+
+		for i, part := range result.Candidates[0].Content.Parts {
+			log.Printf("Part %d - Thought: %t, Text length: %d", i, part.Thought, len(part.Text))
 			if !part.Thought && part.Text != "" {
 				responseText = part.Text
+				log.Printf("Selected part %d as response text", i)
 				break
 			}
 		}
 	}
 
 	if responseText == "" {
+		log.Printf("ERROR: Gemini returned no response text")
+		log.Printf("Full result debug: %+v", result)
 		return nil, fmt.Errorf("gemini returned no response")
 	}
 
+	log.Printf("=== GEMINI RESPONSE ===")
+	log.Printf("Response length: %d characters", len(responseText))
+	log.Printf("Full response text:\n%s", responseText)
+	log.Printf("=== END GEMINI RESPONSE ===")
+
 	// Extract Python code and description
+	log.Printf("Extracting Python code from response...")
 	pythonCode := extractPythonCode(responseText)
-	description := extractDescription(responseText)
+	log.Printf("Extracted Python code length: %d characters", len(pythonCode))
 
 	if pythonCode == "" {
+		log.Printf("ERROR: No Python code extracted from response")
+		log.Printf("Response text for debugging:\n%s", responseText)
 		return nil, fmt.Errorf("no Python code generated")
 	}
+
+	log.Printf("=== EXTRACTED PYTHON CODE ===")
+	log.Printf("%s", pythonCode)
+	log.Printf("=== END EXTRACTED PYTHON CODE ===")
+
+	log.Printf("Extracting description from response...")
+	description := extractDescription(responseText)
+	log.Printf("Extracted description: %q", description)
 
 	var strategyID int
 	var name string
 
 	if isEdit && existingStrategy != nil {
+		log.Printf("Updating existing strategy...")
 		// Update existing strategy
 		name = existingStrategy.Name // Keep existing name unless user specifically requested a name change
 
@@ -468,28 +529,66 @@ Please generate a Python classifier function that uses the above data accessor f
 			strings.Contains(strings.ToLower(args.Query), "name") ||
 			strings.Contains(strings.ToLower(args.Query), "call it") {
 			name = generateStrategyName(args.Query)
+			log.Printf("User requested name change, new name: %q", name)
 		}
 
+		log.Printf("Executing database update for strategy ID %d...", args.StrategyID)
+		log.Printf("Update values - Name: %q, Description: %q, Prompt: %q, Python code length: %d",
+			name, description, args.Query, len(pythonCode))
+
 		// Update the existing strategy in database
-		_, err = conn.DB.Exec(context.Background(), `
+		result, err := conn.DB.Exec(context.Background(), `
 			UPDATE strategies 
 			SET name = $1, description = $2, prompt = $3, pythoncode = $4, version = $5
 			WHERE strategyid = $6 AND userid = $7`,
 			name, description, args.Query, pythonCode, "1.1", args.StrategyID, userID)
 		if err != nil {
+			log.Printf("ERROR: Database update failed: %v", err)
 			return nil, fmt.Errorf("error updating strategy: %w", err)
 		}
+
+		rowsAffected := result.RowsAffected()
+		log.Printf("Database update successful, rows affected: %d", rowsAffected)
 		strategyID = args.StrategyID
 	} else {
+		log.Printf("Creating new strategy...")
 		// Create new strategy
 		name = generateStrategyName(args.Query)
+		log.Printf("Generated strategy name: %q", name)
+
+		log.Printf("Saving new strategy to database...")
+		log.Printf("Save values - Name: %q, Description: %q, Prompt: %q, Python code length: %d",
+			name, description, args.Query, len(pythonCode))
+
 		strategyID, err = saveStrategy(conn, userID, name, description, args.Query, pythonCode)
 		if err != nil {
+			log.Printf("ERROR: Failed to save strategy: %v", err)
 			return nil, fmt.Errorf("error saving strategy: %w", err)
+		}
+		log.Printf("Successfully saved new strategy with ID: %d", strategyID)
+	}
+
+	// Verify the strategy was saved correctly by reading it back
+	log.Printf("Verifying saved strategy by reading back from database...")
+	var verifyPythonCode string
+	err = conn.DB.QueryRow(context.Background(), `
+		SELECT COALESCE(pythoncode, '') FROM strategies WHERE strategyid = $1 AND userid = $2`,
+		strategyID, userID).Scan(&verifyPythonCode)
+	if err != nil {
+		log.Printf("WARNING: Failed to verify saved strategy: %v", err)
+	} else {
+		log.Printf("Verification successful - Saved Python code length: %d", len(verifyPythonCode))
+		if len(verifyPythonCode) == 0 {
+			log.Printf("CRITICAL ERROR: Python code was not saved to database!")
+		} else if verifyPythonCode != pythonCode {
+			log.Printf("WARNING: Saved Python code differs from generated code")
+			log.Printf("Generated length: %d, Saved length: %d", len(pythonCode), len(verifyPythonCode))
+		} else {
+			log.Printf("SUCCESS: Python code was correctly saved to database")
 		}
 	}
 
-	return Strategy{
+	finalStrategy := Strategy{
 		StrategyID:    strategyID,
 		UserID:        userID,
 		Name:          name,
@@ -500,7 +599,14 @@ Please generate a Python classifier function that uses the above data accessor f
 		Version:       "1.1",
 		CreatedAt:     time.Now().Format(time.RFC3339),
 		IsAlertActive: false,
-	}, nil
+	}
+
+	log.Printf("=== STRATEGY CREATION COMPLETE ===")
+	log.Printf("Final strategy - ID: %d, Name: %q, Python code length: %d",
+		finalStrategy.StrategyID, finalStrategy.Name, len(finalStrategy.PythonCode))
+	log.Printf("=== END STRATEGY CREATION ===")
+
+	return finalStrategy, nil
 }
 
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
@@ -602,44 +708,80 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 
 // Helper functions
 func extractPythonCode(response string) string {
+	log.Printf("=== EXTRACT PYTHON CODE START ===")
+	log.Printf("Response length: %d", len(response))
+
 	// Look for Python code blocks
+	log.Printf("Looking for '```python' marker...")
 	start := strings.Index(response, "```python")
 	if start == -1 {
+		log.Printf("'```python' not found, looking for generic '```' marker...")
 		start = strings.Index(response, "```")
 	}
 	if start == -1 {
+		log.Printf("ERROR: No code block markers found in response")
 		return ""
 	}
+	log.Printf("Found code block start at position: %d", start)
 
-	start = strings.Index(response[start:], "\n") + start + 1
+	// Find the start of actual code (after the newline)
+	newlinePos := strings.Index(response[start:], "\n")
+	if newlinePos == -1 {
+		log.Printf("ERROR: No newline found after code block marker")
+		return ""
+	}
+	start = newlinePos + start + 1
+	log.Printf("Code content starts at position: %d", start)
+
+	// Find the end of the code block
+	log.Printf("Looking for closing '```' marker...")
 	end := strings.Index(response[start:], "```")
 	if end == -1 {
+		log.Printf("ERROR: No closing '```' marker found")
 		return ""
 	}
+	log.Printf("Found code block end at relative position: %d", end)
 
-	return strings.TrimSpace(response[start : start+end])
+	extractedCode := strings.TrimSpace(response[start : start+end])
+	log.Printf("Extracted code length: %d", len(extractedCode))
+	log.Printf("Extracted code preview (first 300 chars): %s", extractedCode[:min(300, len(extractedCode))])
+	log.Printf("=== EXTRACT PYTHON CODE END ===")
+
+	return extractedCode
 }
 
 func extractDescription(response string) string {
+	log.Printf("=== EXTRACT DESCRIPTION START ===")
 	// Extract description from the response (before code block or after)
 	lines := strings.Split(response, "\n")
+	log.Printf("Response split into %d lines", len(lines))
+
 	var description []string
 
-	for _, line := range lines {
+	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "```") {
+			log.Printf("Skipping line %d (empty or code marker): %q", i, line)
 			continue
 		}
 		if strings.Contains(line, "def classify_symbol") {
+			log.Printf("Found function definition at line %d, stopping description extraction", i)
 			break
 		}
 		description = append(description, line)
+		log.Printf("Added line %d to description: %q", i, line)
 	}
 
 	result := strings.Join(description, " ")
+	log.Printf("Joined description length: %d", len(result))
+
 	if len(result) > 500 {
 		result = result[:500] + "..."
+		log.Printf("Truncated description to 500 characters")
 	}
+
+	log.Printf("Final description: %q", result)
+	log.Printf("=== EXTRACT DESCRIPTION END ===")
 
 	return result
 }
@@ -647,13 +789,26 @@ func extractDescription(response string) string {
 func generateStrategyName(prompt string) string {
 	words := strings.Fields(prompt)
 	if len(words) == 0 {
-		return "Custom Strategy"
+		return fmt.Sprintf("Custom Strategy %d", time.Now().Unix())
 	}
 
-	// Take first few words and capitalize
-	nameWords := words
-	if len(words) > 4 {
-		nameWords = words[:4]
+	// Take first few words and capitalize, but skip common words
+	var nameWords []string
+	skipWords := map[string]bool{
+		"create": true, "a": true, "an": true, "the": true, "strategy": true, "for": true, "when": true,
+	}
+
+	for _, word := range words {
+		if len(nameWords) >= 4 {
+			break
+		}
+		if !skipWords[strings.ToLower(word)] {
+			nameWords = append(nameWords, word)
+		}
+	}
+
+	if len(nameWords) == 0 {
+		nameWords = []string{"Custom"}
 	}
 
 	caser := cases.Title(language.English)
@@ -661,11 +816,22 @@ func generateStrategyName(prompt string) string {
 		nameWords[i] = caser.String(word)
 	}
 
-	return strings.Join(nameWords, " ") + " Strategy"
+	// Add timestamp to ensure uniqueness
+	timestamp := time.Now().Unix()
+	return fmt.Sprintf("%s Strategy %d", strings.Join(nameWords, " "), timestamp)
 }
 
 func saveStrategy(conn *data.Conn, userID int, name, description, prompt, pythonCode string) (int, error) {
+	log.Printf("=== SAVE STRATEGY START ===")
+	log.Printf("UserID: %d", userID)
+	log.Printf("Name: %q", name)
+	log.Printf("Description: %q", description)
+	log.Printf("Prompt: %q", prompt)
+	log.Printf("Python code length: %d", len(pythonCode))
+	log.Printf("Python code preview (first 200 chars): %s", pythonCode[:min(200, len(pythonCode))])
+
 	var strategyID int
+	log.Printf("Executing INSERT query...")
 	err := conn.DB.QueryRow(context.Background(), `
 		INSERT INTO strategies (name, description, prompt, pythoncode, userid, createdat, version, score, isalertactive)
 		VALUES ($1, $2, $3, $4, $5, NOW(), '1.0', 0, false) 
@@ -673,8 +839,12 @@ func saveStrategy(conn *data.Conn, userID int, name, description, prompt, python
 		name, description, prompt, pythonCode, userID).Scan(&strategyID)
 
 	if err != nil {
+		log.Printf("ERROR: Failed to insert strategy into database: %v", err)
 		return -1, fmt.Errorf("error inserting strategy into database: %w", err)
 	}
+
+	log.Printf("Successfully inserted strategy with ID: %d", strategyID)
+	log.Printf("=== SAVE STRATEGY END ===")
 
 	return strategyID, nil
 }
@@ -690,4 +860,12 @@ func getSystemInstruction(name string) (string, error) {
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_MILLISECONDS}}",
 		strconv.FormatInt(now.UnixMilli(), 10))
 	return s, nil
+}
+
+// Helper function to get minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
