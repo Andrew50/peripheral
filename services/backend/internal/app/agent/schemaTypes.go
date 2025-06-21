@@ -1,6 +1,6 @@
 package agent
 
-// 1) TEXT --------------------------------------------------------------
+/*// 1) TEXT --------------------------------------------------------------
 type ChunkText struct {
 	Type    string `json:"type"    jsonschema:"const=text,required"`
 	Content string `json:"content" jsonschema:"required"`
@@ -45,7 +45,7 @@ type ChunkPlot struct {
 	Content PlotContent `json:"content" jsonschema:"required"`
 }
 
-// ---------- the union -----------------------------------------------------
+// ---------- the union ----------------------------------------------------- */
 
 // Generic chunk: only two required keys
 type AtlantisContentChunk struct {
