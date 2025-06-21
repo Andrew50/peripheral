@@ -1303,7 +1303,7 @@
 					>
 						{#if message.isLoading}
 							<!-- Always display status text when loading, as we set an initial one -->
-							<p class="loading-status">{$functionStatusStore?.userMessage || 'Processing...'}</p> 
+							<p class="loading-status">{$functionStatusStore?.userMessage || 'Thinking...'}</p> 
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
 							<div class="edit-container">
