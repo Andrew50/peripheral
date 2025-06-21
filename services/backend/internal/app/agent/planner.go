@@ -588,7 +588,6 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	// Debug print: Show the raw JSON response from OpenAI
 	fmt.Println("\n=== OpenAI Raw JSON Response ===")
 	fmt.Println(raw)
-	fmt.Println("================================\n")
 	var finalResp FinalResponse
 	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
 		return &FinalResponse{
