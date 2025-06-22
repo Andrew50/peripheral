@@ -18,7 +18,6 @@
 	import Screener from '$lib/features/screener/screener.svelte';
 	import Strategies from '$lib/features/strategies/strategies.svelte';
 	import Settings from '$lib/features/settings/settings.svelte';
-	import News from '$lib/features/news/news.svelte';
 
 	// Replay logic
 	import {
@@ -32,7 +31,7 @@
 	import { queryInstanceInput, inputQuery } from '$lib/components/input/input.svelte';
 	import { queryChart } from '$lib/features/chart/interface';
 	import { browser } from '$app/environment';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -46,7 +45,6 @@
 		settings,
 		isPublicViewing as isPublicViewingStore
 	} from '$lib/utils/stores/stores';
-	import { writable, type Writable } from 'svelte/store';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
@@ -167,9 +165,8 @@
 		}
 	}
 
-	// Import and call connect after isPublicViewing is set
+	// Import connect 
 	import { connect } from '$lib/utils/stream/socket';
-	connect();
 
 
 	// Apply color scheme reactively based on the store
@@ -368,6 +365,14 @@
 		return () => {
 			unsubscribe();
 		};
+	});
+
+	// Defer socket connection until after initial render
+	onMount(async () => {
+		// Wait for initial render to complete
+		await tick();
+		// Now establish socket connection
+		connect();
 	});
 
 	onDestroy(() => {

@@ -15,10 +15,11 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
-var tickerFormattingRegex = regexp.MustCompile(`\$\$\$([A-Z0-9]+)-\d+\$\$\$`)
+var tickerFormattingRegex = regexp.MustCompile(`\$\$([A-Z0-9]+)-\d+\$\$`)
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
@@ -547,7 +548,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
 	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(systemPrompt, userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
 	}
@@ -556,31 +557,35 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	oaSchema := ref.Reflect(AtlantisFinalResponse{})
 
-	params := openai.ChatCompletionNewParams{
-		Model:    openAIFinalResponseModel,
-		Messages: messages,
-		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
-				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
-					Name:   "atlantis_final_response",
-					Schema: oaSchema,
-					Strict: openai.Bool(true),
-				},
+	rawSchema := ref.Reflect(AtlantisFinalResponse{})
+	b, _ := json.Marshal(rawSchema)
+	var oaSchema map[string]any
+	_ = json.Unmarshal(b, &oaSchema)
+
+	textConfig := responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "atlantis_response",
+				Schema: oaSchema,
+				Strict: openai.Bool(true),
 			},
 		},
 	}
-
-	chat, err := client.Chat.Completions.New(ctx, params)
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Model:        openAIFinalResponseModel,
+		Instructions: openai.String(systemPrompt),
+		User:         openai.String(fmt.Sprintf("user:%d", userID)),
+		Text:         textConfig,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("error generating openai final response: %w", err)
+		return nil, fmt.Errorf("error generating final response: %w", err)
 	}
-	raw := chat.Choices[0].Message.Content
+	raw := res.OutputText()
 
-	// Debug print: Show the raw JSON response from OpenAI
-	fmt.Println("\n=== OpenAI Raw JSON Response ===")
-	fmt.Println(raw)
 	var finalResp FinalResponse
 	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
 		return &FinalResponse{
@@ -588,21 +593,19 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 			TokenCounts:   TokenCounts{},
 		}, nil
 	}
-	fmt.Println("finalResp openai\n\n\n ", finalResp)
 	finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
 	finalResp.TokenCounts = TokenCounts{
-		InputTokenCount:  chat.Usage.PromptTokens,
-		OutputTokenCount: chat.Usage.CompletionTokens,
-		TotalTokenCount:  chat.Usage.TotalTokens,
+		InputTokenCount:    res.Usage.InputTokens,
+		OutputTokenCount:   res.Usage.OutputTokens,
+		ThoughtsTokenCount: res.Usage.OutputTokensDetails.ReasoningTokens,
+		TotalTokenCount:    res.Usage.TotalTokens,
 	}
 	return &finalResp, nil
 }
 
 // buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
-func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) ([]openai.ChatCompletionMessageParamUnion, error) {
-	var messages []openai.ChatCompletionMessageParamUnion
-
-	messages = append(messages, openai.DeveloperMessage(systemPrompt))
+func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) (responses.ResponseInputParam, error) {
+	var messages []responses.ResponseInputItemUnionParam
 
 	// Add conversation history as alternating user/assistant messages
 	for _, msg := range conversationHistory {
@@ -612,7 +615,14 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 		}
 
 		// Add user message
-		messages = append(messages, openai.UserMessage(msg.Query))
+		messages = append(messages, responses.ResponseInputItemUnionParam{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: responses.EasyInputMessageRoleUser,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: openai.String(msg.Query),
+				},
+			},
+		})
 
 		// Add assistant message from content chunks
 		assistantContent := ""
@@ -636,14 +646,35 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 		if assistantContent == "" {
 			assistantContent = msg.ResponseText
 		}
-		messages = append(messages, openai.AssistantMessage(assistantContent))
+		messages = append(messages, responses.ResponseInputItemUnionParam{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: responses.EasyInputMessageRoleAssistant,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: openai.String(assistantContent),
+				},
+			},
+		})
 	}
 
 	// Add current user query
-	messages = append(messages, openai.UserMessage(userQuery))
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(userQuery),
+			},
+		},
+	})
 
 	if len(thoughts) > 0 {
-		messages = append(messages, openai.SystemMessage(strings.Join(thoughts, "\n")))
+		messages = append(messages, responses.ResponseInputItemUnionParam{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: responses.EasyInputMessageRoleSystem,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: openai.String(strings.Join(thoughts, "\n")),
+				},
+			},
+		})
 	}
 	if len(executionResults) > 0 {
 		var allResults []map[string]interface{}
@@ -669,7 +700,14 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 			if err != nil {
 				combinedContent = []byte(fmt.Sprintf("Error marshaling execution results: %v", err))
 			}
-			messages = append(messages, openai.SystemMessage(string(combinedContent)))
+			messages = append(messages, responses.ResponseInputItemUnionParam{
+				OfMessage: &responses.EasyInputMessageParam{
+					Role: responses.EasyInputMessageRoleSystem,
+					Content: responses.EasyInputMessageContentUnionParam{
+						OfString: openai.String(string(combinedContent)),
+					},
+				},
+			})
 		}
 	}
 
@@ -677,7 +715,7 @@ func buildOpenAIFinalResponseMessages(systemPrompt, userQuery string, conversati
 }
 
 // <Helper functions>
-// cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
+// cleanTickerFormattingFromSuggestions removes the $$TICKER-TIMESTAMP$$ formatting from suggestions
 // and replaces it with just the ticker symbol
 func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
 	cleaned := make([]string, len(suggestions))
