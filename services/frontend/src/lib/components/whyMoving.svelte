@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { isPublicViewing } from '$lib/utils/stores/stores';
 
 	// Props
 	export let ticker: string = '';
@@ -67,7 +68,7 @@
 	}
 
 	async function fetchWhyMoving(tkr: string) {
-		if (!tkr) return;
+		if (!tkr || $isPublicViewing) return;
 		try {
 			const res = await privateRequest<any[]>('getWhyMoving', { tickers: [tkr] });
 			if (!Array.isArray(res) || res.length === 0) return;

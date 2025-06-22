@@ -8,7 +8,7 @@
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import {
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
@@ -38,10 +38,9 @@
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
 				lastFetchedSecurityId = Number(chartInstance.securityId);
-				privateRequest<Record<string, any>>(
+				publicRequest<Record<string, any>>(
 					'getTickerMenuDetails',
-					{ securityId: chartInstance.securityId },
-					true
+					{ securityId: chartInstance.securityId }
 				)
 					.then((details) => {
 						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {

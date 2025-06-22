@@ -1,7 +1,7 @@
 import type { Instance } from '$lib/utils/types/types';
 import { writable, get, type Writable } from 'svelte/store';
 import { streamInfo } from '$lib/utils/stores/stores';
-import { privateRequest } from '$lib/utils/helpers/backend';
+import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 export interface ShiftOverlay {
@@ -105,10 +105,9 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 	}
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
-		privateRequest<Record<string, any>>(
+		publicRequest<Record<string, any>>(
 			'getTickerMenuDetails',
-			{ securityId: newInstance.securityId },
-			true
+			{ securityId: newInstance.securityId }
 		)
 			.then((details) => {
 				const updatedDispatch: ChartQueryDispatch = {

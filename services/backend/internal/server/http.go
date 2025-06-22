@@ -28,14 +28,18 @@ import (
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
-	"signup":                  Signup,
-	"login":                   Login,
-	"googleLogin":             GoogleLogin,
-	"googleCallback":          GoogleCallback,
-	"getPublicConversation":   agent.GetPublicConversation,
-	"getSecuritiesFromTicker": helpers.GetSecuritiesFromTicker,
-	"getPopularTickers":       helpers.GetPopularTickers,
-	"getConversationSnippet":  agent.GetConversationSnippet,
+	"signup":                           Signup,
+	"login":                            Login,
+	"googleLogin":                      GoogleLogin,
+	"googleCallback":                   GoogleCallback,
+	"getPublicConversation":            agent.GetPublicConversation,
+	"getSecuritiesFromTicker":          helpers.GetSecuritiesFromTicker,
+	"getPopularTickers":                helpers.GetPopularTickers,
+	"getConversationSnippet":           agent.GetConversationSnippet,
+	"getChartData":                     chart.GetPublicChartData,
+	"getSecurityIDFromTickerTimestamp": helpers.GetSecurityIDFromTickerTimestamp,
+	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
+	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -52,15 +56,12 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 
 	// --- chat / conversation --------------------------------------------------
 	//"getSimilarInstances": helpers.GetSimilarInstances,
-	"getInstancesByTickers":            screensaver.GetInstancesByTickers,
-	"getCurrentSecurityID":             helpers.GetCurrentSecurityID,
-	"getSecurityIDFromTickerTimestamp": helpers.GetSecurityIDFromTickerTimestamp,
-	"getCurrentTicker":                 helpers.GetCurrentTicker,
-	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
-	"getIcons":                         helpers.GetIcons,
-	"getPrevClose":                     helpers.GetPrevClose,
-	"getExchanges":                     helpers.GetExchanges,
-	"getSecurityClassifications":       helpers.GetSecurityClassifications,
+	"getInstancesByTickers": screensaver.GetInstancesByTickers,
+	"getCurrentSecurityID":  helpers.GetCurrentSecurityID,
+	"getCurrentTicker":      helpers.GetCurrentTicker,
+	"getIcons":              helpers.GetIcons,
+	"getPrevClose":          helpers.GetPrevClose,
+	"getExchanges":          helpers.GetExchanges,
 
 	"getLatestEdgarFilings": filings.GetLatestEdgarFilings,
 	"getStockEdgarFilings":  filings.GetStockEdgarFilings,

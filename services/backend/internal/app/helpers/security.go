@@ -348,7 +348,7 @@ func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	details, err := GetTickerMenuDetails(conn, 0, rawArgs)
+	details, err := GetTickerMenuDetails(conn, rawArgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
@@ -433,7 +433,7 @@ type GetTickerMenuDetailsResults struct {
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
-func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -685,7 +685,7 @@ type GetSecurityClassificationsResults struct {
 }
 
 // GetSecurityClassifications performs operations related to GetSecurityClassifications functionality.
-func GetSecurityClassifications(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
+func GetSecurityClassifications(conn *data.Conn, _ json.RawMessage) (interface{}, error) {
 	// Query to get unique sectors, excluding NULL values and empty strings
 	sectorQuery := `
 		SELECT DISTINCT sector 
@@ -870,7 +870,7 @@ type GetSecurityIDFromTickerTimestampResults struct {
 	SecurityID int `json:"securityId"`
 }
 
-func GetSecurityIDFromTickerTimestamp(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecurityIDFromTickerTimestamp(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityIDFromTickerTimestampArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
