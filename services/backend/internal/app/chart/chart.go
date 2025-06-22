@@ -63,6 +63,11 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
+	// For public access (userID=0), disable premium features
+	if userID == 0 {
+		args.IncludeSECFilings = false
+	}
+
 	//	if debug {
 	////fmt.Printf("[DEBUG] GetChartData: SecurityID=%d, Timeframe=%s, Direction=%s\n", args.SecurityID, args.Timeframe, args.Direction)
 	//	}
@@ -430,10 +435,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 					}
 				}
 			}
-			// Integrate events just before returning for the aggregate/forward case
 			integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
-
-			// Log chart query in goroutine
 			go logChartQuery(conn, userID, args)
 
 			return GetChartDataResponse{
@@ -483,10 +485,8 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 				}
 			}
 		}
-		// Integrate events just before returning for the backward case
 		integrateChartEvents(&barDataList, conn, userID, args.SecurityID, args.IncludeSECFilings, multiplier, timespan, args.ExtendedHours, easternLocation)
 
-		// Log chart query in goroutine
 		go logChartQuery(conn, userID, args)
 
 		return GetChartDataResponse{
@@ -1185,4 +1185,11 @@ func logChartQuery(conn *data.Conn, userID int, args GetChartDataArgs) {
 		// Log error but don't fail the main request
 		fmt.Printf("Warning: Failed to log chart query: %v\n", err)
 	}
+}
+
+// GetPublicChartData provides chart data for public/unauthenticated users
+// This is a simple adapter that calls GetChartData with userID=0 to indicate public access
+func GetPublicChartData(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	// Call the existing GetChartData function with userID=0 to indicate public access
+	return GetChartData(conn, 0, rawArgs)
 }

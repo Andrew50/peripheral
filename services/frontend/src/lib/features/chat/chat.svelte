@@ -191,6 +191,9 @@
 		// Clear current messages and context items immediately
 		messagesStore.set([]);
 		contextItems.set([]);
+		
+		// Reset historyLoaded to show skeleton during conversation switch
+		historyLoaded = false;
 
 		// Make backend request and load messages in background
 		try {
@@ -1284,7 +1287,12 @@
 	{/if}
 
 	<div class="chat-messages" bind:this={messagesContainer}>
-		{#if $messagesStore.length === 0}
+		{#if isLoading && !historyLoaded}
+			<!-- Show skeleton loading for conversation history -->
+			<div class="chat-skeleton">
+				<div class="skeleton-shimmer"></div>
+			</div>
+		{:else if $messagesStore.length === 0}
 			<!-- Only show the container and header when chat is empty -->
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->

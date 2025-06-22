@@ -1,4 +1,4 @@
-	import { privateRequest } from "$lib/utils/helpers/backend";
+	import { privateRequest, publicRequest } from "$lib/utils/helpers/backend";
 	import type { Instance } from "$lib/utils/types/types";
 	import { marked } from "marked";
 	import { queryChart } from "$lib/features/chart/interface";
@@ -203,9 +203,7 @@
 					// Call the new backend function to get the securityId
 					// Define expected response shape
 					type SecurityIdResponse = { securityId?: number };
-					console.log('ticker', ticker);
-					console.log('timestampMs', timestampMs);
-					const response = await privateRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
+					const response = await publicRequest<SecurityIdResponse>('getSecurityIDFromTickerTimestamp', {
 						ticker: ticker,
 						timestampMs: timestampMs // Pass timestamp as number
 					});

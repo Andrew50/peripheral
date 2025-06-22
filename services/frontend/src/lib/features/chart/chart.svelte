@@ -5,7 +5,7 @@
 	import DrawingMenu from './drawingMenu.svelte';
 	import WhyMoving from '$lib/components/whyMoving.svelte';
 
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { chartRequest,privateRequest,publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
@@ -15,7 +15,7 @@
 		queryChart,
 		showExtendedHoursToggle
 	} from './interface';
-	import { streamInfo, settings, activeAlerts } from '$lib/utils/stores/stores';
+	import { streamInfo, settings, activeAlerts, isPublicViewing } from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
@@ -398,7 +398,7 @@
 		}
 		inst;
 		inst.extendedHours;
-		privateRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
+		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
 			securityId: inst.securityId,
 			timeframe: inst.timeframe,
 			timestamp: inst.timestamp,
@@ -467,21 +467,23 @@
 					for (const line of $drawingMenuProps.horizontalLines) {
 						chartCandleSeries.removePriceLine(line.line);
 					}
-					privateRequest<HorizontalLine[]>('getHorizontalLines', {
-						securityId: inst.securityId
-					}).then((res: HorizontalLine[]) => {
-						if (res !== null && res.length > 0) {
-							for (const line of res) {
-								addHorizontalLine(
-									line.price,
-									currentChartInstance.securityId,
-									line.id,
-									line.color || '#FFFFFF',
-									(line.lineWidth || 1) as LineWidth
-								);
+					if (!$isPublicViewing) {
+						privateRequest<HorizontalLine[]>('getHorizontalLines', {
+							securityId: inst.securityId
+						}).then((res: HorizontalLine[]) => {
+							if (res !== null && res.length > 0) {
+								for (const line of res) {
+									addHorizontalLine(
+										line.price,
+										currentChartInstance.securityId,
+										line.id,
+										line.color || '#FFFFFF',
+										(line.lineWidth || 1) as LineWidth
+									);
+								}
 							}
-						}
-					});
+						});
+					}
 				}
 				// Check if we reach end of avaliable data
 				if (inst.timestamp == 0) {
@@ -1166,7 +1168,7 @@
 			try {
 				const timeToRequestForUpdatingAggregate =
 					ESTSecondstoUTCSeconds(mostRecentBar.time as number) * 1000;
-				const [barData] = await privateRequest<BarData[]>('getChartData', {
+				const [barData] = await chartRequest<BarData[]>('getChartData', {
 					securityId: chartSecurityId,
 					timeframe: chartTimeframe,
 					timestamp: timeToRequestForUpdatingAggregate,
@@ -1940,10 +1942,10 @@
 			if (!currentChartInstance || !currentChartInstance.ticker) {
 				try {
 					type SecurityIdResponse = { securityId?: number };
-					const response = await privateRequest<SecurityIdResponse>(
+					const response = await publicRequest<SecurityIdResponse>(
 						'getSecurityIDFromTickerTimestamp',
 						{
-							ticker: 'NVDA',
+							ticker: 'SPY',
 							timestampMs: 0
 						}
 					);
@@ -1952,7 +1954,7 @@
 
 					if (nvdaSecurityId !== 0) {
 						queryChart({
-							ticker: 'NVDA',
+							ticker: 'SPY',
 							timeframe: '1d',
 							timestamp: 0,
 							securityId: nvdaSecurityId,

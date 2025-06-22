@@ -48,7 +48,20 @@
                     
                     <div class="conversation-list">
                         {#if loadingConversations}
-                            <div class="loading-conversations">Loading...</div>
+                            <div class="conversations-skeleton">
+                                {#each Array(4) as _, i}
+                                    <div class="skeleton-conversation-item">
+                                        <div class="skeleton-conversation-info">
+                                            <div class="skeleton-title">
+                                                <div class="skeleton-shimmer"></div>
+                                            </div>
+                                            <div class="skeleton-meta">
+                                                <div class="skeleton-shimmer"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
                         {:else if conversations.length === 0}
                             <div class="no-conversations">No conversations yet</div>
                         {:else}
