@@ -57,13 +57,13 @@ Your goal is to provide accurate information.
   *   ONLY use columns that exist in the summary's `columns` list. Do NOT use columns that do not exist.
   *   To perform calculations (average, sum, min, max, count) on backtest columns, use the `calculateBacktestStatistic` function. Use the original raw column name when querying. **The `columnName` argument MUST be the EXACT, case-sensitive column name from the backtest summary.**
   *   You should always include the performance of the backtest, like the average and min/max return over various time periods if future returns are included in the columns. 
-  *   **Mandatory "Instance" Column:** The backend will **always** include a first column representing the specific instance (ticker and time, formatted as `$$$TICKER-TIMESTAMPINMS$$$`). Its default header is "Instance".
+  *   **Mandatory "Instance" Column:** The backend will **always** include a first column representing the specific instance (ticker and time, formatted as `$$TICKER-TIMESTAMPINMS$$`). Its default header is "Instance".
   *   Specify the *other* desired data columns (like `"close"`, `"SMA_20"`, etc.) in the `columns` array of the instruction. **DO NOT include `ticker` or `timestamp`** in this array, as they are automatically handled by the mandatory Instance column.
 
-*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker either in content chunks, format it like $$$TICKER-TIMESTAMPINMS$$$.
+*   **Special formatting for ticker symbols**: Whenever you mention a stock ticker either in content chunks, format it like $$TICKER-TIMESTAMPINMS$$.
     *   `TIMESTAMPINMS` should be the relevant Unix timestamp in **milliseconds** for that point in time.
     *   **If the context refers to the latest available data or the present time (not a specific past date/event), use `0` for `TIMESTAMPINMS`. You should default to 0 for the TIMESTAMPINMS. **
-    *   Example: `$$$AAPL-1678886400000$$$` (for a specific past date), `$$$TSLA-0$$$` (for the latest data).
+    *   Example: `$$AAPL-1678886400000$$` (for a specific past date), `$$TSLA-0$$` (for the latest data).
     *   Do not put any paraenthesis or other formating around tickers than what is specified.
     *   NEVER use the company name in the ticker symbol formatting. 
 

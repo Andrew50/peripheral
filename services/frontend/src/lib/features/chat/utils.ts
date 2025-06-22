@@ -4,7 +4,7 @@
 	import { queryChart } from "$lib/features/chart/interface";
 
 	// Centralized ticker formatting regex pattern
-	const TICKER_FORMAT_REGEX = /\$\$\$([A-Z0-9]{1,5})-(\d+)\$\$\$/g;
+	const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9]{1,5})-(\d+)\$\$/g;
 
 	// Function to parse markdown content and make links open in new tabs
 	export function parseMarkdown(content: string): string {
@@ -27,7 +27,7 @@
 			const parsed = marked.parse(processedContent); // marked.parse will treat our buttons as HTML
 			const parsedString = typeof parsed === 'string' ? parsed : String(parsed);
 
-			// 4. Regex to find $$$TICKER-TIMESTAMPINMS$$$ patterns
+			// 4. Regex to find $$TICKER-TIMESTAMPINMS$$ patterns
 			// Captures TICKER (1), TIMESTAMPINMS (2)
 			// This runs *after* marked.parse and after simple tickers are converted.
 			const contentWithTickerButtons = parsedString.replace(
@@ -85,8 +85,8 @@
 	export function cleanHtmlContent(htmlContent: string): string {
 		if (!htmlContent) return '';
 		
-		// First, handle the original $$$ ticker patterns before they're converted to buttons
-		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
+		// First, handle the original $$ ticker patterns before they're converted to buttons
+		// Pattern: $$TICKER-TIMESTAMPINMS$$
 		let processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
 		
 		// Create a temporary DOM element to parse HTML
@@ -109,7 +109,7 @@
 	export function cleanTickerFormatting(text: string): string {
 		if (!text) return text;
 		
-		// Pattern: $$$TICKER-TIMESTAMPINMS$$$
+		// Pattern: $$TICKER-TIMESTAMPINMS$$
 		return text.replace(TICKER_FORMAT_REGEX, '$1');
 	}
 	// Generic function to recursively clean ticker formatting from any data structure

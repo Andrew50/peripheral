@@ -19,7 +19,7 @@ import (
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
-var tickerFormattingRegex = regexp.MustCompile(`\$\$\$([A-Z0-9]+)-\d+\$\$\$`)
+var tickerFormattingRegex = regexp.MustCompile(`\$\$([A-Z0-9]+)-\d+\$\$`)
 
 type DirectAnswer struct {
 	ContentChunks []ContentChunk `json:"content_chunks"`
@@ -715,7 +715,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 }
 
 // <Helper functions>
-// cleanTickerFormattingFromSuggestions removes the $$$TICKER-TIMESTAMP$$$ formatting from suggestions
+// cleanTickerFormattingFromSuggestions removes the $$TICKER-TIMESTAMP$$ formatting from suggestions
 // and replaces it with just the ticker symbol
 func cleanTickerFormattingFromSuggestions(suggestions []string) []string {
 	cleaned := make([]string, len(suggestions))

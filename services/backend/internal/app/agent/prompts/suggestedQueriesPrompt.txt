@@ -8,7 +8,7 @@ Analyze the provided conversation history and the list of available function too
 
 1.  **Conversation History:** A transcript of the user's interaction with the main AI assistant, typically showing alternating User and Assistant messages. Pay close attention to the most recent exchange.
 2.  **Available Function Tools:** A list of functions the main AI assistant can call, including their names and descriptions (e.g., `search_web(query)`, `get_stock_price(ticker)`, `summarize_document(doc_id)`).
-3.  Whenever you see input in the format $$$TICKER-TIMESTAMP$$$, this is just referring to a specific stock symbol. Do not give suggested queries with stocks in this format. 
+3.  Whenever you see input in the format $$TICKER-TIMESTAMP$$, this is just referring to a specific stock symbol. Do not give suggested queries with stocks in this format. 
 **Instructions for Generating Suggestions:**
 
 1.  **Relevance:** Suggestions should be related to the last user query and assistant response, or the overall topic of the conversation if the last exchange was conclusive.

@@ -515,8 +515,8 @@ func stripHTMLTags(text string) string {
 	re := regexp.MustCompile(`<[^>]*>`)
 	cleaned := re.ReplaceAllString(text, "")
 
-	// Remove ticker formatting $$$TICKER-TIMESTAMP$$$ and replace with just TICKER
-	tickerRe := regexp.MustCompile(`\$\$\$([A-Z]+)-\d+\$\$\$`)
+	// Remove ticker formatting $$TICKER-TIMESTAMP$$ and replace with just TICKER
+	tickerRe := regexp.MustCompile(`\$\$([A-Z]+)-\d+\$\$`)
 	cleaned = tickerRe.ReplaceAllString(cleaned, "$1")
 
 	// Clean up extra whitespace
