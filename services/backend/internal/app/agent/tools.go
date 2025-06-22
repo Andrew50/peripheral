@@ -425,12 +425,12 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The security ID of the stock.",
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol of the stock.",
 						},
 					},
-					Required: []string{"securityId"},
+					Required: []string{"ticker"},
 				},
 			},
 			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
