@@ -589,7 +589,7 @@
 				sectors: string[];
 				industries: string[];
 			};
-			privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
+			publicRequest<SecurityClassifications>('getSecurityClassifications', {}).then(
 				(classifications: SecurityClassifications) => {
 					sectors = classifications.sectors;
 					industries = classifications.industries;
