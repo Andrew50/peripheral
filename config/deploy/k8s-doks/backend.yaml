@@ -21,7 +21,7 @@ spec:
       restartPolicy: Always # Update the restart policy to "Always"
       containers:
         - name: backend
-          image: registry.digitalocean.com/nathanvosburg-atlantis/backend:latest
+          image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
           #command: ["/app/main"] # hanlded by the docker file
           ports:
@@ -98,7 +98,12 @@ spec:
                   key: JWT_SECRET
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
-              value: "http://localhost:3000/auth/google/callback"
+              value: ${GOOGLE_REDIRECT_URL}
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
           resources:
             requests:
               cpu: "300m"

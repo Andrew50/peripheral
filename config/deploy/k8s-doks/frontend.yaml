@@ -14,15 +14,10 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: registry.digitalocean.com/nathanvosburg-atlantis/frontend:latest
+          image: ${DOCKER_USERNAME}/frontend:${DOCKER_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
-            #env:
-            #- name: PUBLIC_BASE_URL
-            #value: ${PUBLIC_BASE_URL}
-            #- name: PUBLIC_RELATIVE_PATHS
-            #value: "false"
           resources:
             requests:
               cpu: 500m

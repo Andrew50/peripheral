@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: db
-          image: registry.digitalocean.com/nathanvosburg-atlantis/db:latest
+          image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
           imagePullPolicy: Always
           ports:
             - containerPort: 5432
