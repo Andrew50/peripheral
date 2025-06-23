@@ -21,7 +21,6 @@
     export let confirmDeleteConversation: (id: string) => void;
     export let cancelDeleteConversation: () => void;
     export let handleShareConversation: (event?: Event) => void;
-    export let clearConversation: () => void;
 </script>
 
 {#if isPublicViewing}
@@ -169,7 +168,7 @@
                         </svg>
                         Share
                     </button>
-                    <button class="header-btn new-chat-btn" on:click={clearConversation} disabled={isLoading}>
+                    <button class="header-btn new-chat-btn" on:click={createNewConversation} disabled={isLoading}>
                         <svg viewBox="0 0 24 24" width="14" height="14">
                             <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
                         </svg>

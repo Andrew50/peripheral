@@ -728,16 +728,6 @@
 	}
 
 
-
-
-
-
-	// Function to clear conversation history
-	async function clearConversation() {
-		// Instead of clearing the current conversation, create a new one
-		createNewConversation();
-	}
-
 	// Function to safely access table data properties
 	function isTableData(content: any): content is TableData {
 		return typeof content === 'object' && 
@@ -1240,8 +1230,7 @@
 		{deleteConversation}
 		{confirmDeleteConversation}
 		{cancelDeleteConversation}
-		{handleShareConversation}
-		{clearConversation}
+		{handleShareConversation}	
 	/>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
