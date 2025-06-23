@@ -9,7 +9,7 @@ import sys
 import traceback
 from typing import Any, Dict
 
-from src.data_provider import DataProvider
+from services.worker.src.data import DataProvider
 from src.execution_engine import PythonExecutionEngine, SecurityError
 
 

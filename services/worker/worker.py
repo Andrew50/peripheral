@@ -1,283 +1,266 @@
 #!/usr/bin/env python3
 """
-Python Strategy Worker
-Executes Python trading strategies in a sandboxed environment
+Strategy Worker
+Executes trading strategies via Redis queue for backtesting and screening
 """
 
-import asyncio
 import json
-import logging
-import os
-import sys
-import time
 import traceback
-import uuid
-from contextlib import contextmanager
-from datetime import datetime
-from io import StringIO
-from typing import Any, Dict, Optional
-
-import psutil
+import datetime
+import time
+import os
+import asyncio
 import redis
+from datetime import datetime, timedelta
+from typing import Any, Dict, List
+import logging
 
-from src.data_provider import DataProvider
-from src.execution_engine import PythonExecutionEngine
-from src.security_validator import SecurityError, SecurityValidator
+from services.worker.src.engine import DataFrameStrategyEngine
+from services.worker.src.validator import SecurityValidator, SecurityError
 
-# Configure logging - console only
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        #logging.FileHandler("/app/logs/worker.log"),
-    ],
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
 
-class PythonWorker:
-    """Python strategy execution worker"""
-
+class StrategyWorker:
+    """Redis queue-based strategy execution worker"""
+    
     def __init__(self):
         self.redis_client = self._init_redis()
-        self.execution_engine = PythonExecutionEngine()
+        self.strategy_engine = DataFrameStrategyEngine()
         self.security_validator = SecurityValidator()
-        self.data_provider = DataProvider()
-        self.worker_id = os.environ.get("HOSTNAME", str(uuid.uuid4()))
-
+        self.worker_id = os.environ.get("HOSTNAME", "worker-1")
+        
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
-        redis_host = os.environ.get("REDIS_HOST", "localhost")
+        redis_host = os.environ.get("REDIS_HOST", "cache")
         redis_port = int(os.environ.get("REDIS_PORT", "6379"))
-        redis_password = os.environ.get("REDIS_PASSWORD")
-
+        redis_password = os.environ.get("REDIS_PASSWORD", "")
+        
         return redis.Redis(
             host=redis_host,
             port=redis_port,
-            password=redis_password,
+            password=redis_password if redis_password else None,
             decode_responses=True,
-            socket_connect_timeout=60,
-            socket_timeout=60,
-            socket_keepalive=True,
-            socket_keepalive_options={},
-            health_check_interval=30,
+            socket_connect_timeout=10,
+            socket_timeout=10,
+            retry_on_timeout=True,
+            health_check_interval=30
         )
-
-    async def run(self):
-        """Main worker loop"""
-        logger.info(f"Python worker {self.worker_id} starting...")
-
+    
+    def run(self):
+        """Main queue processing loop"""
+        logger.info(f"Strategy worker {self.worker_id} starting queue processing...")
+        
         while True:
             try:
-                # Listen for execution requests with longer timeout
-                job_data = self.redis_client.blpop("python_execution_queue", timeout=60)
+                # Block and wait for tasks from Redis queue
+                task = self.redis_client.brpop('strategy_queue', timeout=60)
+                
+                if not task:
+                    # No task received, check connection and continue
+                    self._check_connection()
+                    logger.info("No tasks, waiting...")
+                    continue
+                    
+                # Parse task
+                _, task_message = task
+                task_data = json.loads(task_message)
+                task_id = task_data.get('task_id')
+                task_type = task_data.get('task_type')
+                args = task_data.get('args', {})
 
-                if job_data:
-                    _, job_json = job_data
-                    job = json.loads(job_json)
-                    await self.process_job(job)
+                logger.info(f"Processing {task_type} task {task_id}")
+                
+                # Validate task data
+                if not task_id or not task_type:
+                    logger.error(f"Invalid task data: {task_data}")
+                    continue
+                    
+                if task_type not in ['backtest', 'screening']:
+                    error_msg = f"Unknown task type: {task_type}"
+                    logger.error(error_msg)
+                    self._set_task_result(task_id, "error", {"error": error_msg})
+                    continue
 
+                try:
+                    # Set task status to running
+                    self._set_task_result(task_id, "running", {
+                        "worker_id": self.worker_id,
+                        "started_at": datetime.utcnow().isoformat()
+                    })
+                    
+                    start_time = time.time()
+                    
+                    # Execute the task
+                    if task_type == 'backtest':
+                        result = asyncio.run(self._execute_backtest(**args))
+                    elif task_type == 'screening':
+                        result = asyncio.run(self._execute_screening(**args))
+                    
+                    # Calculate execution time
+                    execution_time = time.time() - start_time
+                    
+                    # Store successful result
+                    result['execution_time_seconds'] = execution_time
+                    result['worker_id'] = self.worker_id
+                    result['completed_at'] = datetime.utcnow().isoformat()
+                    
+                    self._set_task_result(task_id, "completed", result)
+                    logger.info(f"Completed {task_type} task {task_id} in {execution_time:.2f}s")
+                    
+                except SecurityError as e:
+                    # Security validation error
+                    error_result = {
+                        "error": f"Security validation failed: {str(e)}",
+                        "completed_at": datetime.utcnow().isoformat()
+                    }
+                    self._set_task_result(task_id, "error", error_result)
+                    logger.error(f"Security error in task {task_id}: {e}")
+                    
+                except Exception as e:
+                    # General error - log and set error status
+                    error_result = {
+                        "error": str(e),
+                        "traceback": traceback.format_exc(),
+                        "completed_at": datetime.utcnow().isoformat()
+                    }
+                    self._set_task_result(task_id, "error", error_result)
+                    logger.error(f"Task execution error in {task_id}: {e}")
+                    
             except KeyboardInterrupt:
-                logger.info("Received shutdown signal")
+                logger.info("Received interrupt signal, shutting down worker...")
                 break
+                
             except Exception as e:
-                logger.error(f"Error in worker loop: {e}")
-                # Add exponential backoff to prevent rapid retry loops
-                await asyncio.sleep(5)
-
-    async def process_job(self, job: Dict[str, Any]):
-        """Process a single execution job"""
-        execution_id = job.get("execution_id")
-        logger.info(f"Processing job {execution_id}")
-
+                logger.error(f"Unexpected error in main loop: {e}")
+                time.sleep(5)  # Brief pause before continuing
+        
+        # Cleanup
+        self.redis_client.close()
+        logger.info("Worker shutdown complete")
+    
+    async def _execute_backtest(self, strategy_code: str, symbols: List[str], 
+                               start_date: str = None, end_date: str = None, **kwargs) -> Dict[str, Any]:
+        """Execute backtest task"""
+        logger.info(f"Starting backtest for {len(symbols)} symbols")
+        
+        # Validate strategy code
+        if not self.security_validator.validate(strategy_code):
+            raise SecurityError("Strategy code contains prohibited operations")
+        
+        # Parse dates
+        if start_date:
+            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        else:
+            start_date = datetime.now() - timedelta(days=365)  # Default 1 year
+            
+        if end_date:
+            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        else:
+            end_date = datetime.now()
+        
+        # Execute using DataFrame engine
+        result = await self.strategy_engine.execute_backtest(
+            strategy_code=strategy_code,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            **kwargs
+        )
+        
+        logger.info(f"Backtest completed: {len(result.get('instances', []))} instances found")
+        return result
+    
+    async def _execute_screening(self, strategy_code: str, universe: List[str], 
+                                limit: int = 100, **kwargs) -> Dict[str, Any]:
+        """Execute screening task"""
+        logger.info(f"Starting screening for {len(universe)} symbols, limit {limit}")
+        
+        # Validate strategy code
+        if not self.security_validator.validate(strategy_code):
+            raise SecurityError("Strategy code contains prohibited operations")
+        
+        # Execute using DataFrame engine
+        result = await self.strategy_engine.execute_screening(
+            strategy_code=strategy_code,
+            universe=universe,
+            limit=limit,
+            **kwargs
+        )
+        
+        logger.info(f"Screening completed: {len(result.get('ranked_results', []))} results found")
+        return result
+    
+    def _set_task_result(self, task_id: str, status: str, data: Dict[str, Any]):
+        """Set task result in Redis"""
         try:
-            # Update status to running
-            await self._update_execution_status(
-                execution_id,
-                "running",
-                {
-                    "worker_node": self.worker_id,
-                    "started_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-            # Extract job parameters
-            python_code = job["python_code"]
-            input_data = job.get("input_data", {})
-            timeout_seconds = job.get("timeout_seconds", 300)
-            memory_limit_mb = job.get("memory_limit_mb", 512)
-            libraries = job.get("libraries", [])
-            data_prep_sql = job.get("data_prep_sql")
-
-            # Validate code security
-            if not self.security_validator.validate_code(python_code):
-                raise SecurityError("Code contains prohibited operations")
-
-            # Prepare data if SQL provided
-            prepared_data = None
-            if data_prep_sql:
-                prepared_data = await self.data_provider.execute_sql(data_prep_sql)
-
-            # Execute the strategy
-            start_time = time.time()
-            result = await self._execute_with_limits(
-                python_code=python_code,
-                input_data=input_data,
-                prepared_data=prepared_data,
-                timeout_seconds=timeout_seconds,
-                memory_limit_mb=memory_limit_mb,
-                libraries=libraries,
-            )
-            execution_time_ms = int((time.time() - start_time) * 1000)
-
-            # Update status to completed
-            await self._update_execution_status(
-                execution_id,
-                "completed",
-                {
-                    "output_data": result,
-                    "execution_time_ms": execution_time_ms,
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-            logger.info(
-                f"Job {execution_id} completed successfully in {execution_time_ms}ms"
-            )
-
-        except SecurityError as e:
-            logger.error(f"Security violation in job {execution_id}: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": f"Security violation: {str(e)}",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except asyncio.TimeoutError:
-            logger.error(f"Job {execution_id} timed out")
-            await self._update_execution_status(
-                execution_id,
-                "timeout",
-                {
-                    "error_message": "Execution timed out",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except MemoryError as e:
-            logger.error(f"Job {execution_id} exceeded memory limit: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": f"Memory limit exceeded: {str(e)}",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"Job {execution_id} failed: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": str(e),
-                    "error_traceback": traceback.format_exc(),
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-    async def _execute_with_limits(
-        self,
-        python_code: str,
-        input_data: Dict[str, Any],
-        prepared_data: Optional[Dict[str, Any]],
-        timeout_seconds: int,
-        memory_limit_mb: int,
-        libraries: list,
-    ) -> Dict[str, Any]:
-        """Execute Python code with resource limits"""
-
-        # Set up execution context
-        execution_context = {
-            "input_data": input_data,
-            "prepared_data": prepared_data,
-            "libraries": libraries,
-        }
-
-        # Monitor resource usage
-        process = psutil.Process()
-        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
-
-        try:
-            # Execute with timeout
-            result = await asyncio.wait_for(
-                self.execution_engine.execute(python_code, execution_context),
-                timeout=timeout_seconds,
-            )
-
-            # Check memory usage
-            final_memory = process.memory_info().rss / 1024 / 1024  # MB
-            memory_used = final_memory - initial_memory
-
-            if memory_used > memory_limit_mb:
-                raise MemoryError(
-                    f"Memory limit exceeded: {memory_used:.1f}MB > {memory_limit_mb}MB"
-                )
-
-            # Add resource usage to result
-            result["_execution_stats"] = {
-                "memory_used_mb": memory_used,
-                "cpu_percent": process.cpu_percent(),
-            }
-
-            return result
-
-        except asyncio.TimeoutError:
-            raise
-        except Exception as e:
-            logger.error(f"Execution error: {e}")
-            raise
-
-    async def _update_execution_status(
-        self, execution_id: str, status: str, additional_data: Dict[str, Any] = None
-    ):
-        """Update execution status in database via Redis"""
-        try:
-            update_data = {
-                "execution_id": execution_id,
+            result = {
                 "status": status,
-                "worker_id": self.worker_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "data": data,
+                "updated_at": datetime.utcnow().isoformat()
             }
-
-            if additional_data:
-                update_data.update(additional_data)
-
-            # Publish update for backend to process
-            self.redis_client.publish(
-                "python_execution_updates", json.dumps(update_data)
-            )
-
+            
+            # Store result with 24 hour expiration
+            self.redis_client.setex(f"task_result:{task_id}", 86400, json.dumps(result))
+            
         except Exception as e:
-            logger.error(f"Failed to update execution status: {e}")
+            logger.error(f"Failed to set task result for {task_id}: {e}")
+    
+    def _check_connection(self):
+        """Check and restore Redis connection if needed"""
+        try:
+            self.redis_client.ping()
+        except Exception as e:
+            logger.error(f"Redis connection lost, reconnecting: {e}")
+            self.redis_client = self._init_redis()
 
 
-class MemoryError(Exception):
-    """Raised when memory limit is exceeded"""
+# Utility functions for adding tasks to queue
+def add_backtest_task(redis_client: redis.Redis, task_id: str, strategy_code: str, 
+                     symbols: List[str], start_date: str = None, end_date: str = None) -> None:
+    """Add a backtest task to the queue"""
+    task_data = {
+        "task_id": task_id,
+        "task_type": "backtest",
+        "args": {
+            "strategy_code": strategy_code,
+            "symbols": symbols,
+            "start_date": start_date,
+            "end_date": end_date
+        }
+    }
+    redis_client.lpush('strategy_queue', json.dumps(task_data))
 
-    pass
+
+def add_screening_task(redis_client: redis.Redis, task_id: str, strategy_code: str, 
+                      universe: List[str], limit: int = 100) -> None:
+    """Add a screening task to the queue"""
+    task_data = {
+        "task_id": task_id,
+        "task_type": "screening",
+        "args": {
+            "strategy_code": strategy_code,
+            "universe": universe,
+            "limit": limit
+        }
+    }
+    redis_client.lpush('strategy_queue', json.dumps(task_data))
 
 
-async def main():
-    """Main entry point"""
-    worker = PythonWorker()
-    await worker.run()
+def get_task_result(redis_client: redis.Redis, task_id: str) -> Dict[str, Any]:
+    """Get task result from Redis"""
+    result_json = redis_client.get(f"task_result:{task_id}")
+    if result_json:
+        return json.loads(result_json)
+    return None
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    worker = StrategyWorker()
+    worker.run()
