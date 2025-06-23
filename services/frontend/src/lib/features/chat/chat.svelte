@@ -412,10 +412,11 @@
 					}
 				}
 			} else {
-				// No conversation history, clear messages and reset state
 				messagesStore.set([]);
-				currentConversationId = '';
-				currentConversationTitle = 'Chat';
+				
+				if (!currentConversationId) {
+					currentConversationTitle = 'Chat';
+				}
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -1149,6 +1150,9 @@
 				return;
 			}
 
+			// Store the current conversation ID to ensure we stay in the same conversation
+			const originalConversationId = currentConversationId;
+
 			// Call backend to retry the message using the backend message ID
 			const requestPayload = {
 				conversation_id: currentConversationId,
@@ -1160,12 +1164,24 @@
 			if (response && (response as any).success) {
 				console.log('Retry response received:', response);
 				
-				// Update conversation ID first before any other operations
-				if ((response as any).conversation_id) {
-					currentConversationId = (response as any).conversation_id;
+				// Ensure we stay in the same conversation that was retried
+				const retryConversationId = (response as any).conversation_id || originalConversationId;
+				if (retryConversationId !== originalConversationId) {
+					console.warn('Backend returned different conversation ID during retry');
 				}
+				// Always use the conversation ID from the retry response to ensure consistency
+				currentConversationId = retryConversationId;
 				
 				console.log('Current messages before reload:', $messagesStore.length);
+				
+				// Only remove the user message being retried and all subsequent messages
+				// This matches what the backend will archive
+				const userMessageIndex = $messagesStore.findIndex(msg => msg.message_id === backendMessageId);
+				if (userMessageIndex !== -1) {
+					// Keep only messages before the one being retried
+					const messagesToKeep = $messagesStore.slice(0, userMessageIndex);
+					messagesStore.set(messagesToKeep);
+				}
 				
 				// Reload conversation history to reflect the archived state
 				await loadConversationHistory(false);
