@@ -154,7 +154,6 @@
 	let queuedLoad: Function | null = null;
 	let shiftDown = false;
 	const chartRequestThrottleDuration = 150;
-	const bufferInScreenSizes = 2;
 	const defaultBarsOnScreen = 100;
 	const defaultHoveredCandleData = {
 		rvol: 0,
@@ -222,9 +221,6 @@
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
 
-	// Measurement tool price lines
-	let measurementStartLine: any = null;
-	let measurementCurrentLine: any = null;
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
