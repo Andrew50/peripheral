@@ -58,166 +58,168 @@ type TokenCounts struct {
 	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
 }
 
-func replySchema() *genai.Schema {
-	return &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"content_chunks", "suggestions"},
-		Properties: map[string]*genai.Schema{
-			"content_chunks": {
-				Type:  genai.TypeArray,
-				Items: contentChunkSchema(),
+/*
+	func replySchema() *genai.Schema {
+		return &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"content_chunks", "suggestions"},
+			Properties: map[string]*genai.Schema{
+				"content_chunks": {
+					Type:  genai.TypeArray,
+					Items: contentChunkSchema(),
+				},
+				"suggestions": {
+					Type:  genai.TypeArray,
+					Items: &genai.Schema{Type: genai.TypeString},
+				},
 			},
-			"suggestions": {
-				Type:  genai.TypeArray,
-				Items: &genai.Schema{Type: genai.TypeString},
+			Title:       "AtlantisReply",
+			Description: "A valid Atlantis agent response",
+		}
+	}
+
+	func contentChunkSchema() *genai.Schema {
+		// helper: any scalar allowed in a table cell
+		scalar := &genai.Schema{
+			AnyOf: []*genai.Schema{
+				{Type: genai.TypeString},
+				{Type: genai.TypeNumber},
+				{Type: genai.TypeBoolean},
 			},
-		},
-		Title:       "AtlantisReply",
-		Description: "A valid Atlantis agent response",
-	}
-}
+		}
 
-func contentChunkSchema() *genai.Schema {
-	// helper: any scalar allowed in a table cell
-	scalar := &genai.Schema{
-		AnyOf: []*genai.Schema{
-			{Type: genai.TypeString},
-			{Type: genai.TypeNumber},
-			{Type: genai.TypeBoolean},
-		},
-	}
+		// text chunk
+		textSchema := &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"type", "content"},
+			Properties: map[string]*genai.Schema{
+				"type":    {Type: genai.TypeString, Enum: []string{"text"}},
+				"content": {Type: genai.TypeString},
+			},
+		}
 
-	// text chunk
-	textSchema := &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"type", "content"},
-		Properties: map[string]*genai.Schema{
-			"type":    {Type: genai.TypeString, Enum: []string{"text"}},
-			"content": {Type: genai.TypeString},
-		},
-	}
-
-	// table chunk
-	tableSchema := &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"type", "content"},
-		Properties: map[string]*genai.Schema{
-			"type": {Type: genai.TypeString, Enum: []string{"table"}},
-			"content": {
-				Type:     genai.TypeObject,
-				Required: []string{"headers", "rows"},
-				Properties: map[string]*genai.Schema{
-					"caption": {Type: genai.TypeString},
-					"headers": {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
-					"rows": {
-						Type: genai.TypeArray,
-						Items: &genai.Schema{
-							Type:  genai.TypeArray,
-							Items: scalar,
+		// table chunk
+		tableSchema := &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"type", "content"},
+			Properties: map[string]*genai.Schema{
+				"type": {Type: genai.TypeString, Enum: []string{"table"}},
+				"content": {
+					Type:     genai.TypeObject,
+					Required: []string{"headers", "rows"},
+					Properties: map[string]*genai.Schema{
+						"caption": {Type: genai.TypeString},
+						"headers": {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
+						"rows": {
+							Type: genai.TypeArray,
+							Items: &genai.Schema{
+								Type:  genai.TypeArray,
+								Items: scalar,
+							},
 						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	// backtest_table chunk
-	// columnMapping / columnFormat are arrays of {k,v} objects instead of maps
-	keyValSchema := &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"k", "v"},
-		Properties: map[string]*genai.Schema{
-			"k": {Type: genai.TypeString},
-			"v": {Type: genai.TypeString},
-		},
-	}
+		// backtest_table chunk
+		// columnMapping / columnFormat are arrays of {k,v} objects instead of maps
+		keyValSchema := &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"k", "v"},
+			Properties: map[string]*genai.Schema{
+				"k": {Type: genai.TypeString},
+				"v": {Type: genai.TypeString},
+			},
+		}
 
-	backtestSchema := &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"type", "content"},
-		Properties: map[string]*genai.Schema{
-			"type": {Type: genai.TypeString, Enum: []string{"backtest_table"}},
-			"content": {
-				Type:     genai.TypeObject,
-				Required: []string{"strategyId", "columns"},
-				Properties: map[string]*genai.Schema{
-					"strategyId": {Type: genai.TypeInteger},
-					"columns":    {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
-					"columnMapping": {
-						Type:  genai.TypeArray,
-						Items: keyValSchema,
-					},
-					"columnFormat": {
-						Type:  genai.TypeArray,
-						Items: keyValSchema,
+		backtestSchema := &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"type", "content"},
+			Properties: map[string]*genai.Schema{
+				"type": {Type: genai.TypeString, Enum: []string{"backtest_table"}},
+				"content": {
+					Type:     genai.TypeObject,
+					Required: []string{"strategyId", "columns"},
+					Properties: map[string]*genai.Schema{
+						"strategyId": {Type: genai.TypeInteger},
+						"columns":    {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
+						"columnMapping": {
+							Type:  genai.TypeArray,
+							Items: keyValSchema,
+						},
+						"columnFormat": {
+							Type:  genai.TypeArray,
+							Items: keyValSchema,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	// plot chunk
-	plotSchema := &genai.Schema{
-		Type:     genai.TypeObject,
-		Required: []string{"type", "content"},
-		Properties: map[string]*genai.Schema{
-			"type": {Type: genai.TypeString, Enum: []string{"plot"}},
-			"content": {
-				Type:     genai.TypeObject,
-				Required: []string{"chart_type", "data"},
-				Properties: map[string]*genai.Schema{
-					"chart_type": {
-						Type: genai.TypeString,
-						Enum: []string{"line", "bar", "scatter", "histogram", "heatmap"},
-					},
-					"title": {Type: genai.TypeString},
-					"data": {
-						Type: genai.TypeArray,
-						Items: &genai.Schema{
+		// plot chunk
+		plotSchema := &genai.Schema{
+			Type:     genai.TypeObject,
+			Required: []string{"type", "content"},
+			Properties: map[string]*genai.Schema{
+				"type": {Type: genai.TypeString, Enum: []string{"plot"}},
+				"content": {
+					Type:     genai.TypeObject,
+					Required: []string{"chart_type", "data"},
+					Properties: map[string]*genai.Schema{
+						"chart_type": {
+							Type: genai.TypeString,
+							Enum: []string{"line", "bar", "scatter", "histogram", "heatmap"},
+						},
+						"title": {Type: genai.TypeString},
+						"data": {
+							Type: genai.TypeArray,
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"x":    {Type: genai.TypeArray, Items: scalar},
+									"y":    {Type: genai.TypeArray, Items: scalar},
+									"z":    {Type: genai.TypeArray, Items: scalar}, // for heatmaps
+									"name": {Type: genai.TypeString},
+									"type": {Type: genai.TypeString},
+								},
+							},
+						},
+						"layout": {
 							Type: genai.TypeObject,
 							Properties: map[string]*genai.Schema{
-								"x":    {Type: genai.TypeArray, Items: scalar},
-								"y":    {Type: genai.TypeArray, Items: scalar},
-								"z":    {Type: genai.TypeArray, Items: scalar}, // for heatmaps
-								"name": {Type: genai.TypeString},
-								"type": {Type: genai.TypeString},
-							},
-						},
-					},
-					"layout": {
-						Type: genai.TypeObject,
-						Properties: map[string]*genai.Schema{
-							"xaxis": {
-								Type: genai.TypeObject,
-								Properties: map[string]*genai.Schema{
-									"title": {Type: genai.TypeString},
-									"type":  {Type: genai.TypeString},
-									"range": {Type: genai.TypeArray, Items: scalar},
+								"xaxis": {
+									Type: genai.TypeObject,
+									Properties: map[string]*genai.Schema{
+										"title": {Type: genai.TypeString},
+										"type":  {Type: genai.TypeString},
+										"range": {Type: genai.TypeArray, Items: scalar},
+									},
 								},
-							},
-							"yaxis": {
-								Type: genai.TypeObject,
-								Properties: map[string]*genai.Schema{
-									"title": {Type: genai.TypeString},
-									"type":  {Type: genai.TypeString},
-									"range": {Type: genai.TypeArray, Items: scalar},
+								"yaxis": {
+									Type: genai.TypeObject,
+									Properties: map[string]*genai.Schema{
+										"title": {Type: genai.TypeString},
+										"type":  {Type: genai.TypeString},
+										"range": {Type: genai.TypeArray, Items: scalar},
+									},
 								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	// final union
-	return &genai.Schema{
-		AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema, plotSchema},
+		// final union
+		return &genai.Schema{
+			AnyOf: []*genai.Schema{textSchema, tableSchema, backtestSchema, plotSchema},
+		}
 	}
-}
-
+*/
 const planningModel = "gemini-2.5-flash"
-const finalResponseModel = "gemini-2.5-flash"
+
+// const finalResponseModel = "gemini-2.5-flash"
 const openAIFinalResponseModel = "o3"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool) (interface{}, error) {
