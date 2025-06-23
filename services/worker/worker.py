@@ -55,7 +55,7 @@ class StrategyWorker:
             password=redis_password if redis_password else None,
             decode_responses=True,
             socket_connect_timeout=10,
-            socket_timeout=10,
+            socket_timeout=70,  # Must be longer than brpop timeout (60s) + buffer
             retry_on_timeout=True,
             health_check_interval=30
         )
@@ -375,7 +375,7 @@ class StrategyWorker:
                     logger.error(f"Invalid task data: {task_data}")
                     continue
                     
-                if task_type not in ['backtest', 'screening']:
+                if task_type not in ['backtest', 'screening', 'alert']:
                     error_msg = f"Unknown task type: {task_type}"
                     logger.error(error_msg)
                     self._set_task_result(task_id, "error", {"error": error_msg})
