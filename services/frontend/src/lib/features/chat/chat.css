@@ -953,7 +953,8 @@
 	}
 
 	.copy-btn,
-	.edit-btn {
+	.edit-btn,
+	.retry-btn {
 		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
@@ -966,16 +967,62 @@
 	}
 
 	.copy-btn:hover,
-	.edit-btn:hover {
+	.edit-btn:hover,
+	.retry-btn:hover {
 		--glass-bg: rgba(255, 255, 255, 0.1);
 		--glass-border: rgba(255, 255, 255, 0.3);
 		color: var(--text-primary, #fff);
 	}
 
 	.copy-btn svg,
-	.edit-btn svg {
+	.edit-btn svg,
+	.retry-btn svg {
 		width: 0.75rem;
 		height: 0.75rem;
+	}
+
+	/* Retry popup styling */
+	.retry-container {
+		position: relative;
+		display: inline-block;
+	}
+
+	.retry-popup {
+		position: absolute;
+		bottom: 100%;
+		left: 0;
+		margin-bottom: 0.5rem;
+		min-width: 120px;
+		z-index: 9999;
+		padding: 0.25rem;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	.retry-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.25rem;
+		color: var(--text-primary, #fff);
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: none;
+		white-space: nowrap;
+	}
+
+	.retry-option:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: var(--text-primary, #fff);
+	}
+
+	.retry-option svg {
+		flex-shrink: 0;
 	}
 
 	/* Copied state styling */
@@ -1259,22 +1306,7 @@
 		font-size: 0.8rem;
 	}
 
-	.retry-btn {
-		/* Glass effect now provided by global .glass classes */
-		margin: 0 auto;
-		padding: 0.5rem 1rem;
-		color: var(--text-primary, #fff);
-		font-size: 0.75rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
 
-	.retry-btn:hover {
-		--glass-bg: rgba(255, 255, 255, 0.15);
-		--glass-border: rgba(255, 255, 255, 0.3);
-		transform: translateY(-1px);
-	}
 
 	/* Public viewing styles */
 	.public-conversation-header {

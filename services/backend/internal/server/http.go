@@ -134,6 +134,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"deleteConversation":        agent.DeleteConversation,
 	"cancelPendingMessage":      agent.CancelPendingMessage,
 	"editMessage":               agent.EditMessage,
+	"retryMessage":              agent.RetryMessage,
 	"getWhyMoving":              agent.GetWhyMoving,
 	"setConversationVisibility": agent.SetConversationVisibility,
 }

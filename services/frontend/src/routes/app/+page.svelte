@@ -400,13 +400,6 @@
 			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
 			changeMenu(menuName);
 		}
-
-		if (browser) {
-			document.title =
-				menuName === 'none'
-					? 'Atlantis'
-					: `${menuName.charAt(0).toUpperCase() + menuName.slice(1)} - Atlantis`;
-		}
 	}
 
 	// Sidebar resizing
@@ -1018,7 +1011,7 @@
 			<button
 				class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
 				on:click={toggleLeftPane}
-				title="AI Query"
+				title="Query"
 			>
 				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path
