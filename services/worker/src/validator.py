@@ -47,7 +47,7 @@ class SecurityValidator:
             ast.Delete: self._check_delete_statement,
             ast.Global: self._check_global_statement,
             ast.Nonlocal: self._check_nonlocal_statement,
-            ast.Exec: self._check_exec_statement,
+            # ast.Exec removed - doesn't exist in Python 3.x
             ast.Lambda: self._check_lambda,
             ast.ListComp: self._check_comprehension,
             ast.DictComp: self._check_comprehension,
@@ -500,9 +500,10 @@ class SecurityValidator:
         """Check nonlocal statements (forbidden)"""
         raise SecurityError("Nonlocal statements are not allowed in strategies")
 
-    def _check_exec_statement(self, node: ast.Exec) -> bool:
-        """Check exec statements (forbidden)"""
-        raise SecurityError("Exec statements are not allowed")
+    def _check_exec_statement(self, node) -> bool:
+        """Check exec statements (forbidden) - not applicable in Python 3.x"""
+        # ast.Exec doesn't exist in Python 3.x, so this is not needed
+        return True
 
     def _check_lambda(self, node: ast.Lambda) -> bool:
         """Check lambda expressions (allowed but monitored)"""

@@ -60,7 +60,7 @@ class StrategyWorker:
             health_check_interval=30
         )
     
-    def _init_database(self) -> psycopg2.connection:
+    def _init_database(self):
         """Initialize database connection"""
         db_host = os.environ.get("DB_HOST", "db")
         db_port = os.environ.get("DB_PORT", "5432")
@@ -613,9 +613,10 @@ class StrategyWorker:
         return result
     
     def _set_task_result(self, task_id: str, status: str, data: Dict[str, Any]):
-        """Set task result in Redis"""
+        """Set task result in Redis and publish update"""
         try:
             result = {
+                "task_id": task_id,
                 "status": status,
                 "data": data,
                 "updated_at": datetime.utcnow().isoformat()
@@ -623,6 +624,19 @@ class StrategyWorker:
             
             # Store result with 24 hour expiration
             self.redis_client.setex(f"task_result:{task_id}", 86400, json.dumps(result))
+            
+            # Publish task update for real-time notifications
+            update_message = {
+                "task_id": task_id,
+                "status": status,
+                "result": data,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            if status == "error":
+                update_message["error_message"] = data.get("error", "Unknown error")
+            
+            self.redis_client.publish("worker_task_updates", json.dumps(update_message))
             
         except Exception as e:
             logger.error(f"Failed to set task result for {task_id}: {e}")
