@@ -18,6 +18,9 @@ echo "Temporary directory: $TMP_DIR"
 echo "Target services: ${SERVICES_ARRAY[@]}"
 echo "Using Docker user: $DOCKER_USERNAME"
 
+echo "Ensuring namespace ${K8S_NAMESPACE} exists..."
+kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
 
 # 4. Apply all YAML files from the temporary directory
 echo "Applying configurations from $TMP_DIR to namespace ${K8S_NAMESPACE}..."
