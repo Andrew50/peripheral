@@ -163,8 +163,8 @@
 				const cleanCaption = cleanHtmlContent(tableData.caption);
 				tableText += cleanCaption + '\n\n';
 			}
-			// Add headers
-			tableText += tableData.headers.join('\t') + '\n';
+			// Add headers (clean ticker formatting from headers too)
+			tableText += tableData.headers.map((header: any) => cleanHtmlContent(String(header))).join('\t') + '\n';
 			// Add rows
 			tableText += tableData.rows.map((row: any) => {
 				if (Array.isArray(row)) {
