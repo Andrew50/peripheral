@@ -271,77 +271,76 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		ResponseMIMEType: "application/json",
 	}
 	fmt.Println("\n\nprompt", prompt)
-	result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
-	if err != nil {
-		return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
-	}
-	// Concatenate the text from *all* parts to ensure we don't miss the JSON payload
-	var sb strings.Builder
-	if len(result.Candidates) <= 0 {
-		return Plan{}, fmt.Errorf("no candidates found in result")
-	}
-	candidate := result.Candidates[0]
-	if candidate.Content != nil {
-		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				fmt.Println("Thought: ", part.Text)
-				continue
-			}
-			if part.Text != "" {
-				sb.WriteString(part.Text)
-				sb.WriteString("\n")
+
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+
+		result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
+		if err != nil {
+			return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
+		}
+		var sb strings.Builder
+		if len(result.Candidates) <= 0 {
+			return Plan{}, fmt.Errorf("no candidates found in result")
+		}
+		candidate := result.Candidates[0]
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					sb.WriteString(part.Text)
+					sb.WriteString("\n")
+				}
 			}
 		}
-	}
-	resultText := strings.TrimSpace(sb.String())
-	fmt.Println("Prompt Token Count", result.UsageMetadata.PromptTokenCount)
-	fmt.Println("Candidates Token Count", result.UsageMetadata.CandidatesTokenCount)
-	fmt.Println("Thoughts Token Count", result.UsageMetadata.ThoughtsTokenCount)
-	fmt.Println("Total Token Count", result.UsageMetadata.TotalTokenCount)
-	fmt.Println("groundingMetadata", candidate.GroundingMetadata)
-	fmt.Println("citationMetadata", candidate.CitationMetadata)
-	fmt.Println("\n\n\n\n\nresultText", resultText)
+		resultText := strings.TrimSpace(sb.String())
+		fmt.Println("Prompt Token Count", result.UsageMetadata.PromptTokenCount)
+		fmt.Println("Candidates Token Count", result.UsageMetadata.CandidatesTokenCount)
+		fmt.Println("Thoughts Token Count", result.UsageMetadata.ThoughtsTokenCount)
+		fmt.Println("Total Token Count", result.UsageMetadata.TotalTokenCount)
+		fmt.Println("groundingMetadata", candidate.GroundingMetadata)
+		fmt.Println("citationMetadata", candidate.CitationMetadata)
+		fmt.Println("\n\n\n\n\nresultText", resultText)
 
-	// --- Extract JSON block --- START
-	jsonBlock := ""
-
-	// First try direct parsing of the entire resultText
-	var directAns DirectAnswer
-	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
-	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
-		hasValidContent := false
-		for _, chunk := range directAns.ContentChunks {
-			if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
-				hasValidContent = true
-				break
+		// First try direct parsing of the entire resultText
+		var directAns DirectAnswer
+		directParseErr := json.Unmarshal([]byte(resultText), &directAns)
+		if directParseErr == nil && len(directAns.ContentChunks) > 0 {
+			hasValidContent := false
+			for _, chunk := range directAns.ContentChunks {
+				if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
+					hasValidContent = true
+					break
+				}
+			}
+			if hasValidContent {
+				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
+				directAns.TokenCounts = TokenCounts{
+					InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+					OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+					ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+					TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
+				}
+				return directAns, nil
 			}
 		}
-		if hasValidContent {
-			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
-			directAns.TokenCounts = TokenCounts{
+
+		var plan Plan
+		planParseErr := json.Unmarshal([]byte(resultText), &plan)
+		if planParseErr == nil && plan.Stage != "" {
+			plan.TokenCounts = TokenCounts{
 				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
 				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
 				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
 				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 			}
-			return directAns, nil
+			return plan, nil
 		}
-	}
 
-	var plan Plan
-	planParseErr := json.Unmarshal([]byte(resultText), &plan)
-	if planParseErr == nil && plan.Stage != "" {
-		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
-			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
-			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
-			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
-		}
-		return plan, nil
-	}
-
-	// If no markdown code block found, try to extract JSON block using { } method
-	if jsonBlock == "" {
+		// If no markdown code block found, try to extract JSON block using { } method
+		jsonBlock := ""
 		jsonStartIdx := strings.Index(resultText, "{")
 
 		if jsonStartIdx != -1 {
@@ -366,51 +365,25 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 				jsonBlock = strings.TrimSpace(jsonBlock)
 			}
 		}
-	}
 
-	// Try unmarshalling the extracted block if it's not empty
-	directAns = DirectAnswer{} // Reset the struct
-	if jsonBlock != "" {
-		blockDirectParseErr := json.Unmarshal([]byte(jsonBlock), &directAns)
-		if blockDirectParseErr == nil && len(directAns.ContentChunks) > 0 {
-			hasValidContent := false
-			for _, chunk := range directAns.ContentChunks {
-				if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
-					hasValidContent = true
-					break
-				}
-			}
-			if hasValidContent {
-				directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
-				directAns.TokenCounts = TokenCounts{
+		plan = Plan{} // Reset the struct
+		// Try unmarshalling the extracted block if it's not empty
+		if jsonBlock != "" {
+			blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
+			if blockPlanParseErr == nil && plan.Stage != "" {
+				plan.TokenCounts = TokenCounts{
 					InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
 					OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
 					ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
 					TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
 				}
-				return directAns, nil
+				return plan, nil
 			}
 		}
 	}
-
-	plan = Plan{} // Reset the struct
-	// Try unmarshalling the extracted block if it's not empty
-	if jsonBlock != "" {
-		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
-		if blockPlanParseErr == nil && plan.Stage != "" {
-			plan.TokenCounts = TokenCounts{
-				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
-				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
-				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
-				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
-			}
-			return plan, nil
-		}
-	}
-
 	// If parsing failed or no JSON block found, return error
 
-	return nil, fmt.Errorf("no valid plan or direct answer found in response")
+	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
 func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
