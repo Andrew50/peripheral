@@ -2,7 +2,6 @@
 	import { onMount, tick, onDestroy } from 'svelte';
 	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { marked } from 'marked'; // Import the markdown parser
-	import { queryChart } from '$lib/features/chart/interface'; // Import queryChart
 	import type { Instance } from '$lib/utils/types/types';
 	import { browser } from '$app/environment'; // Import browser
 	import { derived, writable, get } from 'svelte/store';
@@ -45,10 +44,7 @@
 
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
-	
-	// Share modal reference
-	let shareModalRef: HTMLDivElement;
-
+	import ShareModal from './components/ShareModal.svelte';
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 	
@@ -68,11 +64,8 @@
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
 
-	// State for table sorting
-	type SortState = {
-		columnIndex: number | null;
-		direction: 'asc' | 'desc' | null;
-	};
+	import type { SortState } from './interface';
+	
 	let tableSortStates: { [key: string]: SortState } = {};
 
 	// Chat history
@@ -106,12 +99,9 @@
 	let showRetryPopup = '';
 	let retryPopupRef: HTMLDivElement;
 
-	// Share modal state
-	let showShareModal = false;
-	let shareLink = '';
-	let shareLoading = false;
-	let shareCopied = false;
-	let shareCopyTimeout: ReturnType<typeof setTimeout> | null = null;
+	// Share modal reference
+	let shareModalRef: ShareModal;
+
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -273,11 +263,6 @@
 	}
 
 	function toggleConversationDropdown() {
-		// Close share modal if it's open
-		if (showShareModal) {
-			closeShareModal();
-		}
-		
 		showConversationDropdown = !showConversationDropdown;
 		if (showConversationDropdown) {
 			loadConversations();
@@ -299,10 +284,6 @@
 		
 		if (showConversationDropdown && conversationDropdown && !conversationDropdown.contains(event.target as Node)) {
 			showConversationDropdown = false;
-		}
-		// Close share modal when clicking outside
-		if (showShareModal && shareModalRef && !shareModalRef.contains(event.target as Node)) {
-			closeShareModal();
 		}
 		// Close retry popup when clicking outside
 		if (showRetryPopup && retryPopupRef && !retryPopupRef.contains(event.target as Node)) {
@@ -461,11 +442,6 @@
 		// Clean up copy timeout
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
-		}
-
-		// Clean up share copy timeout
-		if (shareCopyTimeout) {
-			clearTimeout(shareCopyTimeout);
 		}
 
 		// Clean up typing interval
@@ -1161,77 +1137,14 @@
 
 	// Share conversation functions
 	async function handleShareConversation() {
-		// If modal is already open, close it (toggle behavior)
-		if (showShareModal) {
-			closeShareModal();
-			return;
-		}
-
-		const conversationIdToShare = currentConversationId || sharedConversationId;
-		if (!conversationIdToShare) {
-			console.error('No active conversation to share');
-			return;
-		}
-
 		// Close conversation dropdown if it's open
 		if (showConversationDropdown) {	
 			showConversationDropdown = false;
 		}
 
-		showShareModal = true;
-		shareLoading = true;
-		shareLink = '';
-		shareCopied = false;
-
-		try {
-			// If we're in public viewing mode, we know the conversation is already public
-			// so we can generate the link directly without calling the backend
-			if (isPublicViewing && sharedConversationId) {
-				shareLink = `${window.location.origin}/share/${sharedConversationId}`;
-				console.log('Generated share link for public conversation:', shareLink);
-			} else {
-				// For authenticated users, we need to make the conversation public via backend
-				const link = await generateSharedConversationLink(conversationIdToShare);
-				if (link) {
-					shareLink = link;
-				} else {
-					console.error('Failed to generate share link');
-				}
-			}
-		} catch (error) {
-			console.error('Error generating share link:', error);
-		} finally {
-			shareLoading = false;
-		}
-	}
-
-	function closeShareModal() {
-		showShareModal = false;
-		shareLink = '';
-		shareLoading = false;
-		shareCopied = false;
-		if (shareCopyTimeout) {
-			clearTimeout(shareCopyTimeout);
-			shareCopyTimeout = null;
-		}
-	}
-
-	async function copyShareLink() {
-		if (!shareLink) return;
-		
-		try {
-			await navigator.clipboard.writeText(shareLink);
-			shareCopied = true;
-			
-			if (shareCopyTimeout) {
-				clearTimeout(shareCopyTimeout);
-			}
-			shareCopyTimeout = setTimeout(() => {
-				shareCopied = false;
-				shareCopyTimeout = null;
-			}, 2000);
-		} catch (error) {
-			console.error('Failed to copy share link:', error);
+		// Open the share modal
+		if (shareModalRef) {
+			shareModalRef.openModal();
 		}
 	}
 
@@ -1301,49 +1214,29 @@
 </script>
 
 <div class="chat-container">
-	{#if !isPublicViewing}
-		<ConversationHeader 
-			bind:conversationDropdown
-			{showConversationDropdown}
-			{conversations}
-			{currentConversationId}
-			{currentConversationTitle}
-			{loadingConversations}
-			{conversationToDelete}
-			{messagesStore}
-			{isLoading}
-			{isTypingTitle}
-			{typingTitleText}
-			{toggleConversationDropdown}
-			{createNewConversation}
-			{switchToConversation}
-			{deleteConversation}
-			{confirmDeleteConversation}
-			{cancelDeleteConversation}
-			{handleShareConversation}
-			{clearConversation}
-		/>
-	{:else}
-		<!-- Simple header for public viewing -->
-		<div class="public-conversation-header">
-			<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
-			<div class="header-buttons">
-				<button 
-					class="header-btn share-btn" 
-					on:click={handleShareConversation}
-					disabled={!currentConversationId && !sharedConversationId}
-					title="Share This Conversation"
-				>
-					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-						<polyline points="16,6 12,2 8,6"/>
-						<line x1="12" y1="2" x2="12" y2="15"/>
-					</svg>
-					Share
-				</button>
-			</div>
-		</div>
-	{/if}
+	<ConversationHeader 
+		bind:conversationDropdown
+		{showConversationDropdown}
+		{conversations}
+		{currentConversationId}
+		{currentConversationTitle}
+		{loadingConversations}
+		{conversationToDelete}
+		{messagesStore}
+		{isLoading}
+		{isTypingTitle}
+		{typingTitleText}
+		{isPublicViewing}
+		{sharedConversationId}
+		{toggleConversationDropdown}
+		{createNewConversation}
+		{switchToConversation}
+		{deleteConversation}
+		{confirmDeleteConversation}
+		{cancelDeleteConversation}
+		{handleShareConversation}
+		{clearConversation}
+	/>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
 		{#if isLoading && !historyLoaded}
@@ -1699,63 +1592,11 @@
 		</div>
 	{/if}
 
-	<!-- Share Modal -->
-	{#if showShareModal}
-		<div class="share-modal-popup glass glass--rounded glass--responsive" bind:this={shareModalRef}>
-			<div class="share-modal-header">
-				<h4>Share Conversation</h4>
-				<button class="close-btn" on:click={closeShareModal} aria-label="Close">
-					<svg viewBox="0 0 24 24" width="16" height="16">
-						<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
-					</svg>
-				</button>
-			</div>
-			
-			<div class="share-modal-content">
-				{#if shareLoading}
-					<div class="share-loading">
-						<p>Generating share link...</p>
-					</div>
-				{:else if shareLink}
-					<div class="share-link-container">
-						<p class="share-description">
-							Anyone with this link can view this conversation.
-						</p>
-						
-						<div class="share-link-field">
-							<input 
-								type="text" 
-								value={shareLink} 
-								readonly 
-								class="share-link-input"
-							/>
-							<button 
-								class="copy-link-btn glass glass--small glass--responsive {shareCopied ? 'copied' : ''}"
-								on:click={copyShareLink}
-							>
-								{#if shareCopied}
-									<svg viewBox="0 0 24 24" width="14" height="14">
-										<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
-									</svg>
-									Copied!
-								{:else}
-									<svg viewBox="0 0 24 24" width="14" height="14">
-										<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
-									</svg>
-									Copy
-								{/if}
-							</button>
-						</div>
-					</div>
-				{:else}
-					<div class="share-error">
-						<p>Failed to generate share link. Please try again.</p>
-						<button class="retry-btn glass glass--small glass--responsive" on:click={handleShareConversation}>
-							Retry
-						</button>
-					</div>
-				{/if}
-			</div>
-		</div>
-	{/if	}
+	<!-- Share Modal Component -->
+	<ShareModal 
+		bind:this={shareModalRef}
+		{currentConversationId}
+		{sharedConversationId}
+		{isPublicViewing}
+	/>
 </div>
