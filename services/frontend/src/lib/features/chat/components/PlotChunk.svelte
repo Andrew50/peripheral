@@ -97,94 +97,97 @@
 			}
 		}
 
-		// Set trace type based on chart_type - always override for consistency
-		switch (plotData.chart_type) {
-			case 'line':
-				processedTrace.type = 'scatter';
-				processedTrace.mode = 'lines';
-				break;
-			case 'scatter':
-				processedTrace.type = 'scatter';
-				processedTrace.mode = 'markers';
-				break;
-			case 'bar':
-				processedTrace.type = 'bar';
-				// For dual y-axis bar charts, manually adjust bar positioning
-				if (plotData.data.some(trace => trace.yaxis === 'y2')) {
-					// Determine if this trace is on primary or secondary axis
-					const isSecondaryAxis = processedTrace.yaxis === 'y2';
-					const primaryTraces = plotData.data.filter(trace => !trace.yaxis || trace.yaxis === 'y');
-					const secondaryTraces = plotData.data.filter(trace => trace.yaxis === 'y2');
+		// Set trace type - respect individual trace types, fall back to chart_type
+		if (!processedTrace.type) {
+			switch (plotData.chart_type) {
+				case 'line':
+					processedTrace.type = 'scatter';
+					if (!processedTrace.mode) processedTrace.mode = 'lines';
+					break;
+				case 'scatter':
+					processedTrace.type = 'scatter';
+					if (!processedTrace.mode) processedTrace.mode = 'markers';
+					break;
+				case 'bar':
+					processedTrace.type = 'bar';
+					break;
+				case 'histogram':
+					processedTrace.type = 'histogram';
 					
-					if (primaryTraces.length > 0 && secondaryTraces.length > 0) {
-						// Calculate bar width and offset for grouping
-						const totalTraces = primaryTraces.length + secondaryTraces.length;
-						const barWidth = 0.8 / totalTraces; // Total width divided by number of traces
-						
-						if (isSecondaryAxis) {
-							// Secondary axis traces get offset to the right
-							const secondaryIndex = secondaryTraces.findIndex(t => t === plotData.data.find(d => d === trace));
-							processedTrace.width = barWidth;
-							processedTrace.offset = barWidth * (primaryTraces.length + secondaryIndex) - 0.4 + barWidth/2;
-						} else {
-							// Primary axis traces
-							const primaryIndex = primaryTraces.findIndex(t => t === plotData.data.find(d => d === trace));
-							processedTrace.width = barWidth;
-							processedTrace.offset = barWidth * primaryIndex - 0.4 + barWidth/2;
-						}
+					// Clean up empty arrays that might confuse Plotly
+					if (processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length === 0) {
+						delete processedTrace.y;
 					}
-				}
-				break;
-			case 'histogram':
-				processedTrace.type = 'histogram';
+					if (processedTrace.z && Array.isArray(processedTrace.z) && processedTrace.z.length === 0) {
+						delete processedTrace.z;
+					}
+					
+					// Configure automatic binning if not specified
+					if (!processedTrace.autobinx && !processedTrace.xbins && processedTrace.x && processedTrace.x.length > 0) {
+						processedTrace.autobinx = true;
+					}
+					if (!processedTrace.autobiny && !processedTrace.ybins && processedTrace.y && processedTrace.y.length > 0) {
+						processedTrace.autobiny = true;
+					}
+					// Set default number of bins if using x data
+					if (processedTrace.x && processedTrace.x.length > 0 && !processedTrace.nbinsx && !processedTrace.xbins) {
+						processedTrace.nbinsx = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.x.length))));
+					}
+					// Set default number of bins if using y data  
+					if (processedTrace.y && processedTrace.y.length > 0 && !processedTrace.nbinsy && !processedTrace.ybins) {
+						processedTrace.nbinsy = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.y.length))));
+					}
+					break;
+				case 'heatmap':
+					processedTrace.type = 'heatmap';
+					// Clean red-green colorscale without orange
+					processedTrace.colorscale = [
+						[0, '#d32f2f'],    // Dark red for most negative
+						[0.25, '#f44336'], // Medium red
+						[0.5, '#424242'],  // Dark neutral/gray
+						[0.75, '#4caf50'], // Medium green
+						[1, '#2e7d32']     // Dark green for most positive
+					];
+					// Ensure zero is always at the center (gray) so negative=red, positive=green
+					processedTrace.zmid = 0;
+					// Configure colorbar positioning for heatmaps
+					if (!processedTrace.colorbar) {
+						processedTrace.colorbar = {
+							x: -0.2, // Position colorbar further to the right
+							xanchor: 'left',
+							thickness: 12,
+							len: 0.8,
+							xpad: 10 // Add padding between plot and colorbar
+						};
+					}
+					break;
+			}
+		}
+
+		// Handle bar positioning for dual y-axis charts (only for actual bar traces)
+		if (processedTrace.type === 'bar' && plotData.data.some(trace => trace.yaxis === 'y2')) {
+			// Determine if this trace is on primary or secondary axis
+			const isSecondaryAxis = processedTrace.yaxis === 'y2';
+			const primaryBarTraces = plotData.data.filter(trace => (!trace.yaxis || trace.yaxis === 'y') && (trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')));
+			const secondaryBarTraces = plotData.data.filter(trace => trace.yaxis === 'y2' && (trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')));
+			
+			if (primaryBarTraces.length > 0 && secondaryBarTraces.length > 0) {
+				// Calculate bar width and offset for grouping
+				const totalBarTraces = primaryBarTraces.length + secondaryBarTraces.length;
+				const barWidth = 0.8 / totalBarTraces; // Total width divided by number of bar traces
 				
-				// Clean up empty arrays that might confuse Plotly
-				if (processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length === 0) {
-					delete processedTrace.y;
+				if (isSecondaryAxis) {
+					// Secondary axis bar traces get offset to the right
+					const secondaryIndex = secondaryBarTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+					processedTrace.width = barWidth;
+					processedTrace.offset = barWidth * (primaryBarTraces.length + secondaryIndex) - 0.4 + barWidth/2;
+				} else {
+					// Primary axis bar traces
+					const primaryIndex = primaryBarTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+					processedTrace.width = barWidth;
+					processedTrace.offset = barWidth * primaryIndex - 0.4 + barWidth/2;
 				}
-				if (processedTrace.z && Array.isArray(processedTrace.z) && processedTrace.z.length === 0) {
-					delete processedTrace.z;
-				}
-				
-				// Configure automatic binning if not specified
-				if (!processedTrace.autobinx && !processedTrace.xbins && processedTrace.x && processedTrace.x.length > 0) {
-					processedTrace.autobinx = true;
-				}
-				if (!processedTrace.autobiny && !processedTrace.ybins && processedTrace.y && processedTrace.y.length > 0) {
-					processedTrace.autobiny = true;
-				}
-				// Set default number of bins if using x data
-				if (processedTrace.x && processedTrace.x.length > 0 && !processedTrace.nbinsx && !processedTrace.xbins) {
-					processedTrace.nbinsx = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.x.length))));
-				}
-				// Set default number of bins if using y data  
-				if (processedTrace.y && processedTrace.y.length > 0 && !processedTrace.nbinsy && !processedTrace.ybins) {
-					processedTrace.nbinsy = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.y.length))));
-				}
-				break;
-			case 'heatmap':
-				processedTrace.type = 'heatmap';
-				// Clean red-green colorscale without orange
-				processedTrace.colorscale = [
-					[0, '#d32f2f'],    // Dark red for most negative
-					[0.25, '#f44336'], // Medium red
-					[0.5, '#424242'],  // Dark neutral/gray
-					[0.75, '#4caf50'], // Medium green
-					[1, '#2e7d32']     // Dark green for most positive
-				];
-				// Ensure zero is always at the center (gray) so negative=red, positive=green
-				processedTrace.zmid = 0;
-				// Configure colorbar positioning for heatmaps
-				if (!processedTrace.colorbar) {
-					processedTrace.colorbar = {
-						x: -0.2, // Position colorbar further to the right
-						xanchor: 'left',
-						thickness: 12,
-						len: 0.8,
-						xpad: 10 // Add padding between plot and colorbar
-					};
-				}
-				break;
+			}
 		}
 
 		return processedTrace;
@@ -215,13 +218,16 @@
 		};
 
 		if (hasSecondaryYAxis) {
+			// Check if we have any bar traces for proper barmode setting
+			const hasBarTraces = plotData.data.some(trace => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar'));
+			
 			// Configure dual y-axis layout
 			layout = {
 				...baseLayout,
 				// Adjust margins for dual y-axis
 				margin: { l: 60, r: 80, t: 10, b: 30, autoexpand: true },
-				// For dual y-axis bar charts, use overlay mode to allow manual positioning
-				barmode: plotData.chart_type === 'bar' ? 'overlay' as const : userLayoutWithoutDimensions.barmode,
+				// For charts with bar traces and dual y-axis, use overlay mode to allow manual positioning
+				barmode: hasBarTraces ? 'overlay' as const : userLayoutWithoutDimensions.barmode,
 				// Primary y-axis (left side)
 				yaxis: {
 					...defaultLayout.yaxis,
