@@ -54,7 +54,6 @@ type QueryResponse struct {
 }
 
 var defaultSystemPromptTokenCount int
-var finalResponseModelProvider = "openAI"
 
 // GetChatRequest is the main context-aware chat request handler
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
