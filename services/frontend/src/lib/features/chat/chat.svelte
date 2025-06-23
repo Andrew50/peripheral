@@ -1528,7 +1528,7 @@
 																			class:asc={currentSort.columnIndex === colIndex && currentSort.direction === 'asc'}
 																			class:desc={currentSort.columnIndex === colIndex && currentSort.direction === 'desc'}
 																		>
-																			{header}
+																			{@html parseMarkdown(typeof header === 'string' ? header : String(header))}
 																			{#if currentSort.columnIndex === colIndex}
 																				<span class="sort-indicator">
 																					{currentSort.direction === 'asc' ? '▲' : '▼'}
