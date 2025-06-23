@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 INSERT INTO schema_versions (version, description)
 VALUES (
         27,
-        'Schema version 27 with chart_queries table'
+        'Schema version 27'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'error')),
     token_count INTEGER DEFAULT 0,
     archived BOOLEAN NOT NULL DEFAULT FALSE,
+    archive_reason VARCHAR(50),
     -- Ordering within conversation
     message_order INTEGER NOT NULL,
     UNIQUE(conversation_id, message_order)
@@ -280,6 +281,10 @@ CREATE INDEX IF NOT EXISTS idx_conversation_messages_suggested_queries ON conver
 -- Index for archived messages (from migration 20)
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_archived ON conversation_messages(conversation_id, archived)
 WHERE archived = FALSE;
+-- Index for archive_reason field
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_archive_reason 
+ON conversation_messages(archive_reason) 
+WHERE archive_reason IS NOT NULL;
 -- Function to update conversation updated_at timestamp when messages are modified
 CREATE OR REPLACE FUNCTION update_conversation_updated_at() RETURNS TRIGGER AS $$ BEGIN -- Update the parent conversation's updated_at timestamp
 UPDATE conversations

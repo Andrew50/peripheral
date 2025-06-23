@@ -54,7 +54,6 @@ type QueryResponse struct {
 }
 
 var defaultSystemPromptTokenCount int
-var finalResponseModelProvider = "openAI"
 
 // GetChatRequest is the main context-aware chat request handler
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
@@ -213,33 +212,15 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			case StageFinishedExecuting:
 				// Generate final response based on active execution results
 				var finalResponse *FinalResponse
-				if finalResponseModelProvider == "gemini" {
-					finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
-					if err != nil {
-						// Mark as error instead of deleting for debugging
-						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
-							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
-						}
-						return nil, err
+
+				// Get the final response from the model
+				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
+				if err != nil {
+					// Mark as error instead of deleting for debugging
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
+						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 					}
-					finalResponse, err = GetFinalResponse(ctx, conn, finalPrompt)
-					if err != nil {
-						// Mark as error instead of deleting for debugging
-						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
-							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
-						}
-						return nil, fmt.Errorf("error generating final response: %w", err)
-					}
-				} else {
-					// Get the final response from the model (now includes suggestions)
-					finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
-					if err != nil {
-						// Mark as error instead of deleting for debugging
-						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
-							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
-						}
-						return nil, fmt.Errorf("error generating final response: %w", err)
-					}
+					return nil, fmt.Errorf("error generating final response: %w", err)
 				}
 
 				totalRequestOutputTokenCount += int(finalResponse.TokenCounts.OutputTokenCount)

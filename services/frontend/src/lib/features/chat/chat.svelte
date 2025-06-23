@@ -104,6 +104,10 @@
 	let copiedMessageId = '';
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	// Retry popup state
+	let showRetryPopup = '';
+	let retryPopupRef: HTMLDivElement;
+
 	// Share modal state
 	let showShareModal = false;
 	let shareLink = '';
@@ -202,8 +206,8 @@
 			});
 			
 			if (response) {
-				// Load the conversation messages
-				await loadConversationHistory();
+				// Load the conversation messages and scroll to bottom
+				await loadConversationHistory(true);
 			} else {
 				// If backend fails, restore previous state
 				currentConversationId = previousConversationId;
@@ -290,12 +294,21 @@
 			return;
 		}
 		
+		// Don't handle clicks on the retry button itself
+		if (target && target.closest('.retry-container')) {
+			return;
+		}
+		
 		if (showConversationDropdown && conversationDropdown && !conversationDropdown.contains(event.target as Node)) {
 			showConversationDropdown = false;
 		}
 		// Close share modal when clicking outside
 		if (showShareModal && shareModalRef && !shareModalRef.contains(event.target as Node)) {
 			closeShareModal();
+		}
+		// Close retry popup when clicking outside
+		if (showRetryPopup && retryPopupRef && !retryPopupRef.contains(event.target as Node)) {
+			closeRetryPopup();
 		}
 	}
 
@@ -392,17 +405,21 @@
 				if (shouldAutoScroll) {
 					// Position at bottom after DOM is updated
 					await tick();
-					if (messagesContainer) {
-						messagesContainer.style.scrollBehavior = 'auto';
-						messagesContainer.scrollTop = messagesContainer.scrollHeight;
-						messagesContainer.style.scrollBehavior = 'smooth';
-					}
+					// Use requestAnimationFrame to ensure scrolling happens after all rendering is complete
+					requestAnimationFrame(() => {
+						scrollToBottomImmediate();
+						// Double-check with a small delay to handle any late-rendering content
+						setTimeout(() => {
+							scrollToBottomImmediate();
+						}, 50);
+					});
 				}
 			} else {
-				// No conversation history, clear messages and reset state
 				messagesStore.set([]);
-				currentConversationId = '';
-				currentConversationTitle = 'Chat';
+				
+				if (!currentConversationId) {
+					currentConversationTitle = 'Chat';
+				}
 			}
 		} catch (error) {
 			console.error('Error loading conversation history:', error);
@@ -480,8 +497,8 @@
 		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
-		// For public shared conversations, don't auto-scroll to bottom - keep at top
-		loadConversationHistory(!isPublicViewing);
+		// Always auto-scroll to bottom when opening conversations
+		loadConversationHistory(true);
 		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
 		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
@@ -547,9 +564,19 @@
 	function scrollToBottom() {
 		setTimeout(() => {
 			if (messagesContainer) {
+				messagesContainer.style.scrollBehavior = 'smooth';
 				messagesContainer.scrollTop = messagesContainer.scrollHeight;
 			}
 		}, 100);
+	}
+
+	// Helper function for immediate scrolling to bottom (used when loading conversations)
+	function scrollToBottomImmediate() {
+		if (messagesContainer) {
+			messagesContainer.style.scrollBehavior = 'auto';
+			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+			messagesContainer.style.scrollBehavior = 'smooth';
+		}
 	}
 
 	// Function to handle clicking on a suggested query
@@ -1100,6 +1127,112 @@
 		}
 	}
 
+	function showRetryOptions(message: Message) {
+		showRetryPopup = message.message_id;
+	}
+
+	function closeRetryPopup() {
+		showRetryPopup = '';
+	}
+
+	async function retryMessage(message: Message) {
+		// Find the corresponding user message to retry
+		let userMessage: Message | undefined;
+		
+		if (message.sender === 'assistant') {
+			// If called from assistant message, find the preceding user message
+			// Assistant messages have message IDs like "user_msg_id_response"
+			const userMessageId = message.message_id.replace('_response', '');
+			userMessage = $messagesStore.find(msg => msg.message_id === userMessageId && msg.sender === 'user');
+		} else if (message.sender === 'user') {
+			// If called from user message directly
+			userMessage = message;
+		}
+		
+		if (!userMessage) {
+			console.error('Could not find user message to retry');
+			return;
+		}
+		
+		try {
+			// Use the user message ID (it should be the backend message ID)
+			const backendMessageId = userMessage.message_id;
+			
+			if (!backendMessageId) {
+				console.error('No backend message ID found for retrying');
+				return;
+			}
+
+			// Store the current conversation ID to ensure we stay in the same conversation
+			const originalConversationId = currentConversationId;
+
+			// Call backend to retry the message using the backend message ID
+			const requestPayload = {
+				conversation_id: currentConversationId,
+				message_id: backendMessageId
+			};
+
+			const response = await privateRequest('retryMessage', requestPayload);
+
+			if (response && (response as any).success) {
+				console.log('Retry response received:', response);
+				
+				// Ensure we stay in the same conversation that was retried
+				const retryConversationId = (response as any).conversation_id || originalConversationId;
+				if (retryConversationId !== originalConversationId) {
+					console.warn('Backend returned different conversation ID during retry');
+				}
+				// Always use the conversation ID from the retry response to ensure consistency
+				currentConversationId = retryConversationId;
+				
+				console.log('Current messages before reload:', $messagesStore.length);
+				
+				// Only remove the user message being retried and all subsequent messages
+				// This matches what the backend will archive
+				const userMessageIndex = $messagesStore.findIndex(msg => msg.message_id === backendMessageId);
+				if (userMessageIndex !== -1) {
+					// Keep only messages before the one being retried
+					const messagesToKeep = $messagesStore.slice(0, userMessageIndex);
+					messagesStore.set(messagesToKeep);
+				}
+				
+				// Reload conversation history to reflect the archived state
+				await loadConversationHistory(false);
+				
+				console.log('Current messages after reload:', $messagesStore.length);
+				
+				// Wait a moment for the UI to fully update
+				await tick();
+
+				// Now automatically send the original message as a new chat request
+				// Set the input value and context from the retry response
+				inputValue.set((response as any).original_query || '');
+				
+				// Set context items from the retry response, or empty array if none
+				contextItems.update(currentItems => {
+					return (response as any).context_items || [];
+				});
+
+				// Use tick to ensure input value is updated before submitting
+				await tick();
+				
+				console.log('About to submit retried message:', (response as any).original_query);
+				
+				// Submit the message using existing logic
+				handleSubmit();
+			} else {
+				console.error('Backend retry failed or success=false');
+				// Reload conversation to get current state
+				await loadConversationHistory(false);
+			}
+		} catch (error) {
+			console.error('Error retrying message:', error);
+			
+			// Reload conversation to get current state
+			await loadConversationHistory(false);
+		}
+	}
+
 	// Share conversation functions
 	async function handleShareConversation() {
 		// If modal is already open, close it (toggle behavior)
@@ -1471,6 +1604,28 @@
 											</svg>
 										{/if}
 									</button>
+									<div class="retry-container">
+										<button class="retry-btn glass glass--small glass--responsive" on:click={() => showRetryOptions(message)} title="Retry Message">
+											<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<polyline points="23 4 23 10 17 10"></polyline>
+												<polyline points="1 20 1 14 7 14"></polyline>
+												<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+											</svg>
+										</button>
+
+										{#if showRetryPopup === message.message_id}
+											<div class="retry-popup glass glass--rounded glass--responsive" bind:this={retryPopupRef}>
+												<button class="retry-option" on:click={() => { retryMessage(message); closeRetryPopup(); }}>
+													<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+														<polyline points="23 4 23 10 17 10"></polyline>
+														<polyline points="1 20 1 14 7 14"></polyline>
+														<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+													</svg>
+													Retry
+												</button>
+											</div>
+										{/if}
+									</div>
 								</div>
 							{/if}
 							{#if message.suggestedQueries && message.suggestedQueries.length > 0}
@@ -1505,7 +1660,7 @@
 									</svg>
 								{/if}
 							</button>
-							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)}>
+							<button class="edit-btn glass glass--small glass--responsive" on:click={() => startEditing(message)} title="Edit this message">
 								<svg viewBox="0 0 24 24" width="14" height="14">
 									<path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" fill="currentColor" />
 								</svg>

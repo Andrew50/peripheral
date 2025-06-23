@@ -981,9 +981,6 @@
 		margin-top: 1.5rem;
 	}
 
-	.screensaver-info {
-		margin-top: 1.5rem;
-	}
 
 	.account-actions {
 		margin-top: 2rem;
