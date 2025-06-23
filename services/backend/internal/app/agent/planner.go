@@ -386,127 +386,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
-	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting gemini key: %w", err)
-	}
-
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating gemini client: %w", err)
-	}
-	thinkingBudget := int32(10000)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{
-				{Text: systemPrompt},
-			},
-		},
-		ThinkingConfig: &genai.ThinkingConfig{
-			IncludeThoughts: true,
-			ThinkingBudget:  &thinkingBudget,
-		},
-		ResponseMIMEType: "application/json",
-		ResponseSchema:   replySchema(),
-	}
-
-	result, err := client.Models.GenerateContent(ctx, finalResponseModel, genai.Text(prompt), config)
-	if err != nil {
-		return nil, fmt.Errorf("gemini had an error generating final response: %w", err)
-	}
-
-	if len(result.Candidates) <= 0 {
-		return nil, fmt.Errorf("no candidates found in result")
-	}
-
-	// Concatenate the text from *all* parts to ensure we capture the full response
-	var frSB strings.Builder
-	candidate := result.Candidates[0]
-	if candidate.Content != nil {
-		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				frSB.WriteString(part.Text)
-				frSB.WriteString("\n")
-			}
-		}
-	}
-	resultText := strings.TrimSpace(frSB.String())
-	fmt.Println("resultText", resultText)
-	// Try to parse as JSON
-	var finalResponse FinalResponse
-
-	// First try direct unmarshaling
-	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
-		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
-		finalResponse.TokenCounts = TokenCounts{
-			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
-			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
-			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
-			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
-		}
-		return &finalResponse, nil
-	}
-
-	// Try to extract JSON from markdown code blocks first
-	var jsonBlock string
-	jsonStartIdx := strings.Index(resultText, "{")
-
-	if jsonStartIdx != -1 {
-		// Try to find the matching closing brace by counting braces
-		braceCount := 0
-		jsonEndIdx := -1
-
-		for i := jsonStartIdx; i < len(resultText); i++ {
-			if resultText[i] == '{' {
-				braceCount++
-			} else if resultText[i] == '}' {
-				braceCount--
-				if braceCount == 0 {
-					jsonEndIdx = i
-					break
-				}
-			}
-		}
-
-		if jsonEndIdx != -1 {
-			jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
-			jsonBlock = strings.TrimSpace(jsonBlock)
-		}
-	}
-
-	// Try parsing the extracted JSON block
-	if jsonBlock != "" {
-		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
-			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
-			finalResponse.TokenCounts = TokenCounts{
-				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
-				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
-				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
-				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
-			}
-			return &finalResponse, nil
-		}
-	}
-
-	// Fallback: Treat the text as a single text chunk
-	return &FinalResponse{
-		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
-		TokenCounts:   TokenCounts{},
-	}, nil
-}
-
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	apiKey := conn.OpenAIKey
 
@@ -746,5 +625,127 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	return responseText, nil
 
 }
+
+//deprecate gemini
+/*func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
+	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
+	}
+
+	apiKey, err := conn.GetGeminiKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting gemini key: %w", err)
+	}
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating gemini client: %w", err)
+	}
+	thinkingBudget := int32(10000)
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: systemPrompt},
+			},
+		},
+		ThinkingConfig: &genai.ThinkingConfig{
+			IncludeThoughts: true,
+			ThinkingBudget:  &thinkingBudget,
+		},
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   replySchema(),
+	}
+
+	result, err := client.Models.GenerateContent(ctx, finalResponseModel, genai.Text(prompt), config)
+	if err != nil {
+		return nil, fmt.Errorf("gemini had an error generating final response: %w", err)
+	}
+
+	if len(result.Candidates) <= 0 {
+		return nil, fmt.Errorf("no candidates found in result")
+	}
+
+	// Concatenate the text from *all* parts to ensure we capture the full response
+	var frSB strings.Builder
+	candidate := result.Candidates[0]
+	if candidate.Content != nil {
+		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
+			if part.Text != "" {
+				frSB.WriteString(part.Text)
+				frSB.WriteString("\n")
+			}
+		}
+	}
+	resultText := strings.TrimSpace(frSB.String())
+	fmt.Println("resultText", resultText)
+	// Try to parse as JSON
+	var finalResponse FinalResponse
+
+	// First try direct unmarshaling
+	if err := json.Unmarshal([]byte(resultText), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+		finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
+		finalResponse.TokenCounts = TokenCounts{
+			InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+			OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+			ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+			TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
+		}
+		return &finalResponse, nil
+	}
+
+	// Try to extract JSON from markdown code blocks first
+	var jsonBlock string
+	jsonStartIdx := strings.Index(resultText, "{")
+
+	if jsonStartIdx != -1 {
+		// Try to find the matching closing brace by counting braces
+		braceCount := 0
+		jsonEndIdx := -1
+
+		for i := jsonStartIdx; i < len(resultText); i++ {
+			if resultText[i] == '{' {
+				braceCount++
+			} else if resultText[i] == '}' {
+				braceCount--
+				if braceCount == 0 {
+					jsonEndIdx = i
+					break
+				}
+			}
+		}
+
+		if jsonEndIdx != -1 {
+			jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
+			jsonBlock = strings.TrimSpace(jsonBlock)
+		}
+	}
+
+	// Try parsing the extracted JSON block
+	if jsonBlock != "" {
+		if err := json.Unmarshal([]byte(jsonBlock), &finalResponse); err == nil && len(finalResponse.ContentChunks) > 0 {
+			finalResponse.Suggestions = cleanTickerFormattingFromSuggestions(finalResponse.Suggestions)
+			finalResponse.TokenCounts = TokenCounts{
+				InputTokenCount:    int64(result.UsageMetadata.PromptTokenCount),
+				OutputTokenCount:   int64(result.UsageMetadata.CandidatesTokenCount),
+				ThoughtsTokenCount: int64(result.UsageMetadata.ThoughtsTokenCount),
+				TotalTokenCount:    int64(result.UsageMetadata.TotalTokenCount),
+			}
+			return &finalResponse, nil
+		}
+	}
+
+	// Fallback: Treat the text as a single text chunk
+	return &FinalResponse{
+		ContentChunks: []ContentChunk{{Type: "text", Content: resultText}},
+		TokenCounts:   TokenCounts{},
+	}, nil
+} */
 
 // </planner.go>
