@@ -109,6 +109,31 @@
 				break;
 			case 'bar':
 				processedTrace.type = 'bar';
+				// For dual y-axis bar charts, manually adjust bar positioning
+				if (plotData.data.some(trace => trace.yaxis === 'y2')) {
+					// Determine if this trace is on primary or secondary axis
+					const isSecondaryAxis = processedTrace.yaxis === 'y2';
+					const primaryTraces = plotData.data.filter(trace => !trace.yaxis || trace.yaxis === 'y');
+					const secondaryTraces = plotData.data.filter(trace => trace.yaxis === 'y2');
+					
+					if (primaryTraces.length > 0 && secondaryTraces.length > 0) {
+						// Calculate bar width and offset for grouping
+						const totalTraces = primaryTraces.length + secondaryTraces.length;
+						const barWidth = 0.8 / totalTraces; // Total width divided by number of traces
+						
+						if (isSecondaryAxis) {
+							// Secondary axis traces get offset to the right
+							const secondaryIndex = secondaryTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+							processedTrace.width = barWidth;
+							processedTrace.offset = barWidth * (primaryTraces.length + secondaryIndex) - 0.4 + barWidth/2;
+						} else {
+							// Primary axis traces
+							const primaryIndex = primaryTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+							processedTrace.width = barWidth;
+							processedTrace.offset = barWidth * primaryIndex - 0.4 + barWidth/2;
+						}
+					}
+				}
 				break;
 			case 'histogram':
 				processedTrace.type = 'histogram';
@@ -170,25 +195,62 @@
 		.map((trace, index) => processTraceData(trace, index))
 		.filter(trace => trace !== null);
 	
+	// Check if any traces use secondary y-axis
+	$: hasSecondaryYAxis = plotData.data.some(trace => trace.yaxis === 'y2');
+	
 	// Declare layout variable
 	let layout: any;
 
-	// Merge layouts (user layout takes precedence, but preserve yaxis side)
+	// Merge layouts (user layout takes precedence, but handle dual y-axis)
 	// Destructure width and height out of plotData.layout to prevent them from overriding fillParent
 	$: {
 		const { width, height, ...userLayoutWithoutDimensions } = plotData.layout || {};
-		layout = {
+		
+		// Base layout configuration
+		const baseLayout = {
 			...defaultLayout,
 			...userLayoutWithoutDimensions,
 			// Don't set title in layout if we're showing it separately
 			title: plotData.title ? '' : (plotData.layout?.title || ''),
-			// Ensure yaxis is always on the right side
-			yaxis: {
-				...defaultLayout.yaxis,
-				...userLayoutWithoutDimensions.yaxis,
-				side: 'right' as const
-			}
 		};
+
+		if (hasSecondaryYAxis) {
+			// Configure dual y-axis layout
+			layout = {
+				...baseLayout,
+				// Adjust margins for dual y-axis
+				margin: { l: 60, r: 80, t: 10, b: 30, autoexpand: true },
+				// For dual y-axis bar charts, use overlay mode to allow manual positioning
+				barmode: plotData.chart_type === 'bar' ? 'overlay' as const : userLayoutWithoutDimensions.barmode,
+				// Primary y-axis (left side)
+				yaxis: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis,
+					side: 'left' as const,
+					title: userLayoutWithoutDimensions.yaxis?.title || ''
+				},
+				// Secondary y-axis (right side)
+				yaxis2: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis2,
+					side: 'right' as const,
+					overlaying: 'y' as const,
+					title: userLayoutWithoutDimensions.yaxis2?.title || '',
+					// Ensure grid lines don't overlap by disabling on secondary axis
+					showgrid: false
+				}
+			};
+		} else {
+			// Single y-axis layout (keep existing behavior)
+			layout = {
+				...baseLayout,
+				yaxis: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis,
+					side: 'right' as const
+				}
+			};
+		}
 	}
 </script>
 
