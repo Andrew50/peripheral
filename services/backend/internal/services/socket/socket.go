@@ -254,6 +254,12 @@ func (c *Client) readPump(conn *data.Conn) {
 			Timestamp     *int64   `json:"timestamp,omitempty"`
 			Speed         *float64 `json:"speed,omitempty"`
 			ExtendedHours *bool    `json:"extendedHours,omitempty"`
+			// Chat query fields
+			RequestID          string                   `json:"request_id,omitempty"`
+			Query              string                   `json:"query,omitempty"`
+			Context            []map[string]interface{} `json:"context,omitempty"`
+			ActiveChartContext map[string]interface{}   `json:"activeChartContext,omitempty"`
+			ConversationID     string                   `json:"conversation_id,omitempty"`
 		}
 		if err := json.Unmarshal(message, &clientMsg); err != nil {
 			////fmt.Println("Invalid message format", err)
@@ -304,6 +310,8 @@ func (c *Client) readPump(conn *data.Conn) {
 			if c.replayActive {
 				c.replayExtendedHours = *(clientMsg.ExtendedHours)
 			}
+		case "chat_query":
+			c.HandleChatQuery(clientMsg.RequestID, clientMsg.Query, clientMsg.Context, clientMsg.ActiveChartContext, clientMsg.ConversationID)
 		default:
 			////fmt.Println("Unknown Action:", clientMsg.Action)
 		}

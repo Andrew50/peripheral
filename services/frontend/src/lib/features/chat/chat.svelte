@@ -19,7 +19,7 @@
 	import { parseMarkdown, formatChipDate, formatRuntime, cleanHtmlContent, handleTickerButtonClick, cleanContentChunk, getContentChunkTextForCopy } from './utils';
 	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
-	import { functionStatusStore, titleUpdateStore, type FunctionStatusUpdate, type TitleUpdate } from '$lib/utils/stream/socket'; // Import both stores and types
+	import { functionStatusStore, titleUpdateStore, type FunctionStatusUpdate, type TitleUpdate, sendChatQuery } from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
 	import { generateSharedConversationLink } from './chatHelpers';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -64,9 +64,6 @@
 	let isLoading = false;
 	let messagesContainer: HTMLDivElement;
 	let initialSuggestions: string[] = [];
-	let pollInterval: ReturnType<typeof setInterval> | null = null;
-	let pollAttempts = 0;
-	let maxPollAttempts = 3;
 
 	// State for table expansion
 	let tableExpansionStates: { [key: string]: boolean } = {};
@@ -93,6 +90,7 @@
 
 	// Add abort controller for cancelling requests
 	let currentAbortController: AbortController | null = null;
+	let currentWebSocketCancel: (() => void) | null = null;
 	let requestCancelled = false;
 	let currentProcessingQuery = ''; // Track the query currently being processed
 
@@ -435,64 +433,6 @@
 		}
 	}
 
-	// Function to check for conversation updates (for polling)
-	async function checkForUpdates() {
-		if (isLoading) return; // Don't check if we're already loading
-		if (document.hidden) return; // Don't poll when tab is not visible
-		if (isPublicViewing) return; // Don't poll for public shared conversations
-		
-		try {
-			const response = await privateRequest('getUserConversation', {});
-			const conversation = response as ConversationData;
-			
-			if (conversation && conversation.messages && conversation.messages.length > 0) {
-				// Validate that the polled conversation matches our current conversation
-				// If conversation IDs don't match, don't process updates to prevent switching to wrong conversation
-				if (currentConversationId && conversation.conversation_id && 
-					conversation.conversation_id !== currentConversationId) {
-					console.log('Polling returned different conversation ID, skipping update to prevent chat switching');
-					return;
-				}
-				
-				let hasUpdates = false;
-				
-				// Check if there are any new completed messages or status changes
-				for (const msg of conversation.messages) {
-					const isCompleted = msg.status === 'completed';
-					
-					// Check if we have pending messages that might have been completed
-					// Use message_id for proper identification instead of content matching
-					const existingMessage = $messagesStore.find(m => m.message_id === msg.message_id && m.sender === 'user');
-					if (existingMessage && isCompleted && (!existingMessage.status || existingMessage.status === 'pending')) {
-						hasUpdates = true;
-						break;
-					}
-				}
-				
-				if (hasUpdates) {
-					// Incrementally update instead of full reload when possible
-					// Don't auto-scroll during polling updates to preserve user's reading position
-					await loadConversationHistory(false);
-				}
-			}
-			
-			// Reset poll attempts on success
-			pollAttempts = 0;
-		} catch (error) {
-			console.error('Error checking for updates:', error);
-			pollAttempts++;
-			
-			// Stop polling after max attempts to avoid spamming
-			if (pollAttempts >= maxPollAttempts) {
-				console.warn('Stopped polling due to repeated failures');
-				if (pollInterval) {
-					clearInterval(pollInterval);
-					pollInterval = null;
-				}
-			}
-		}
-	}
-
 	onMount(() => {
 		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
@@ -501,26 +441,6 @@
 		loadConversationHistory(true);
 		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
-		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
-		if (!isPublicViewing) {
-			pollInterval = setInterval(checkForUpdates, 10000);
-		}
-
-		// Resume polling when tab becomes visible and check for updates immediately
-		const handleVisibilityChange = () => {
-			if (!document.hidden) {
-				// Reset poll attempts when tab becomes visible
-				pollAttempts = 0;
-				// Restart polling if it was stopped due to errors
-				if (!pollInterval) {
-					pollInterval = setInterval(checkForUpdates, 10000);
-				}
-				// Check for updates immediately when tab becomes visible
-				checkForUpdates();
-			}
-		};
-		
-		document.addEventListener('visibilitychange', handleVisibilityChange);
 		document.addEventListener('click', handleClickOutside); // Add click outside listener
 
 		// Add delegated event listener for ticker buttons
@@ -530,7 +450,6 @@
 
 		// Cleanup listener on component destroy
 		return () => {
-			document.removeEventListener('visibilitychange', handleVisibilityChange);
 			document.removeEventListener('click', handleClickOutside); // Clean up click outside listener
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
@@ -539,11 +458,6 @@
 	});
 
 	onDestroy(() => {
-		// Clean up polling interval
-		if (pollInterval) {
-			clearInterval(pollInterval);
-		}
-		
 		// Clean up copy timeout
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
@@ -642,12 +556,17 @@
 			const currentActiveChart = $activeChartInstance; // Get current active chart instance
 			
 			try {
-				const response = await privateRequest('getQuery', {
-					query: finalQuery,
-					context: $contextItems, // Send only manually added context items
-					activeChartContext: currentActiveChart, // Send active chart separately
-					conversation_id: currentConversationId || '' // Send empty string for new chats
-				}, false, false, currentAbortController?.signal);
+				const { promise, cancel } = sendChatQuery(
+					finalQuery,
+					$contextItems, // Send only manually added context items
+					currentActiveChart, // Send active chart separately
+					currentConversationId || '' // Send empty string for new chats
+				);
+				
+				// Store the cancel function
+				currentWebSocketCancel = cancel;
+				
+				const response = await promise;
 
 				// Check if request was cancelled while awaiting
 				if (requestCancelled) {
@@ -771,6 +690,7 @@
 			}
 			isLoading = false;
 			currentAbortController = null;
+			currentWebSocketCancel = null;
 			requestCancelled = false;
 			currentProcessingQuery = ''; // Clear the processing query
 		}
@@ -798,7 +718,13 @@
 			requestCancelled = true;
 			functionStatusStore.set(null);
 			
-			// Abort the HTTP request - this will cancel the backend processing
+			// Cancel WebSocket request if active
+			if (currentWebSocketCancel) {
+				currentWebSocketCancel();
+				currentWebSocketCancel = null;
+			}
+			
+			// Abort HTTP request if active (fallback)
 			if (currentAbortController) {
 				currentAbortController.abort();
 			}

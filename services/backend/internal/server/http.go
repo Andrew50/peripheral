@@ -555,6 +555,9 @@ func HealthCheck() http.HandlerFunc {
 
 // StartServer performs operations related to StartServer functionality.
 func StartServer(conn *data.Conn) {
+	// Initialize chat handler for WebSocket
+	socket.SetChatHandler(agent.GetChatRequest)
+
 	http.HandleFunc("/public", publicHandler(conn))
 	http.HandleFunc("/private", privateHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
