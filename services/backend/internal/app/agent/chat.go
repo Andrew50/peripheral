@@ -21,9 +21,8 @@ const (
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
 }
 
 type ChatRequest struct {
