@@ -206,8 +206,8 @@
 			});
 			
 			if (response) {
-				// Load the conversation messages
-				await loadConversationHistory();
+				// Load the conversation messages and scroll to bottom
+				await loadConversationHistory(true);
 			} else {
 				// If backend fails, restore previous state
 				currentConversationId = previousConversationId;
@@ -405,11 +405,14 @@
 				if (shouldAutoScroll) {
 					// Position at bottom after DOM is updated
 					await tick();
-					if (messagesContainer) {
-						messagesContainer.style.scrollBehavior = 'auto';
-						messagesContainer.scrollTop = messagesContainer.scrollHeight;
-						messagesContainer.style.scrollBehavior = 'smooth';
-					}
+					// Use requestAnimationFrame to ensure scrolling happens after all rendering is complete
+					requestAnimationFrame(() => {
+						scrollToBottomImmediate();
+						// Double-check with a small delay to handle any late-rendering content
+						setTimeout(() => {
+							scrollToBottomImmediate();
+						}, 50);
+					});
 				}
 			} else {
 				messagesStore.set([]);
@@ -494,8 +497,8 @@
 		if (queryInput && !isPublicViewing) {
 			setTimeout(() => queryInput.focus(), 100);
 		}
-		// For public shared conversations, don't auto-scroll to bottom - keep at top
-		loadConversationHistory(!isPublicViewing);
+		// Always auto-scroll to bottom when opening conversations
+		loadConversationHistory(true);
 		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
 		// Set up periodic polling for updates (every 10 seconds) - only for authenticated users
@@ -561,9 +564,19 @@
 	function scrollToBottom() {
 		setTimeout(() => {
 			if (messagesContainer) {
+				messagesContainer.style.scrollBehavior = 'smooth';
 				messagesContainer.scrollTop = messagesContainer.scrollHeight;
 			}
 		}, 100);
+	}
+
+	// Helper function for immediate scrolling to bottom (used when loading conversations)
+	function scrollToBottomImmediate() {
+		if (messagesContainer) {
+			messagesContainer.style.scrollBehavior = 'auto';
+			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+			messagesContainer.style.scrollBehavior = 'smooth';
+		}
 	}
 
 	// Function to handle clicking on a suggested query
