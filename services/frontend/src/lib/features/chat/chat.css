@@ -990,7 +990,8 @@
 	.retry-popup {
 		position: absolute;
 		bottom: 100%;
-		left: 0;
+		left: 50%;
+		transform: translateX(-50%);
 		margin-bottom: 0.5rem;
 		min-width: 120px;
 		z-index: 9999;
@@ -1002,6 +1003,7 @@
 	.retry-option {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.5rem;
 		width: 100%;
 		padding: 0.5rem 0.75rem;
@@ -1014,6 +1016,7 @@
 		cursor: pointer;
 		transition: none;
 		white-space: nowrap;
+		text-align: center;
 	}
 
 	.retry-option:hover {
