@@ -20,7 +20,7 @@
     export let deleteConversation: (id: string, e: MouseEvent) => void;
     export let confirmDeleteConversation: (id: string) => void;
     export let cancelDeleteConversation: () => void;
-    export let handleShareConversation: () => void;
+    export let handleShareConversation: (event?: Event) => void;
     export let clearConversation: () => void;
 </script>
 

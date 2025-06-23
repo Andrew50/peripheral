@@ -1136,15 +1136,21 @@
 	}
 
 	// Share conversation functions
-	async function handleShareConversation() {
+	async function handleShareConversation(event?: Event) {
+		// Stop event propagation to prevent immediate closing
+		if (event) {
+			event.stopPropagation();
+			event.preventDefault();
+		}
+		
 		// Close conversation dropdown if it's open
 		if (showConversationDropdown) {	
 			showConversationDropdown = false;
 		}
 
-		// Open the share modal
+		// Toggle the share modal
 		if (shareModalRef) {
-			shareModalRef.openModal();
+			shareModalRef.toggleModal();
 		}
 	}
 

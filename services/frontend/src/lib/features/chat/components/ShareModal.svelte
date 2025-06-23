@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { generateSharedConversationLink } from '../chatHelpers';
+	import { browser } from '$app/environment';
+	import { onDestroy } from 'svelte';
 
 	// Props from parent
 	export let currentConversationId: string;
@@ -28,6 +30,17 @@
 		shareCopied = false;
 
 		generateShareLink(conversationIdToShare);
+	}
+
+	// Expose function to toggle modal
+	export function toggleModal() {
+		if (showModal) {
+			// Modal is open, close it
+			closeModal();
+		} else {
+			// Modal is closed, open it
+			openModal();
+		}
 	}
 
 	async function generateShareLink(conversationIdToShare: string) {
@@ -90,20 +103,26 @@
 		}
 	}
 
-	// Add/remove click outside listener
-	$: if (showModal) {
-		document.addEventListener('click', handleClickOutside);
-	} else {
-		document.removeEventListener('click', handleClickOutside);
+	// Reactive statement for event listeners
+	$: if (browser) {
+		if (showModal) {
+			// Add a small delay to prevent the opening click from immediately triggering close
+			setTimeout(() => {
+				document.addEventListener('click', handleClickOutside);
+			}, 100);
+		} else {
+			document.removeEventListener('click', handleClickOutside);
+		}
 	}
 
 	// Cleanup on destroy
-	import { onDestroy } from 'svelte';
 	onDestroy(() => {
 		if (shareCopyTimeout) {
 			clearTimeout(shareCopyTimeout);
 		}
-		document.removeEventListener('click', handleClickOutside);
+		if (browser) {
+			document.removeEventListener('click', handleClickOutside);
+		}
 	});
 </script>
 
