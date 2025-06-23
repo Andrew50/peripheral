@@ -12,12 +12,8 @@ from typing import Any, Dict, List, Optional, Union, Tuple
 import json
 import time
 
-try:
-    from .data import DataProvider
-    from .validator import SecurityValidator, SecurityError
-except ImportError:
-    from services.worker.src.data import DataProvider
-    from services.worker.src.validator import SecurityValidator, SecurityError
+from data import DataProvider
+from validator import SecurityValidator, SecurityError
 
 logger = logging.getLogger(__name__)
 
