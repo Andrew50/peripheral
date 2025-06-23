@@ -635,6 +635,26 @@
 	
 	.chunk-table {
 		overflow-x: auto;
+		margin-bottom: 0.5rem; /* Add space for toggle button */
+	}
+
+	/* Add scrollbar styling for tables */
+	.chunk-table::-webkit-scrollbar {
+		height: 6px;
+	}
+
+	.chunk-table::-webkit-scrollbar-track {
+		background: var(--ui-bg-element, #333);
+		border-radius: 3px;
+	}
+
+	.chunk-table::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border-darker, #555);
+		border-radius: 3px;
+	}
+
+	.chunk-table::-webkit-scrollbar-thumb:hover {
+		background-color: var(--ui-accent, #3a8bf7);
 	}
 
 
@@ -757,7 +777,7 @@
 		font-size: 0.7rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		margin-top: -0.5rem;
+		margin-top: 0.25rem; /* Positive margin to avoid overlap with scrollbar */
 		display: inline-block;
 		/* Ensure immediate styling to prevent flash */
 		opacity: 1;

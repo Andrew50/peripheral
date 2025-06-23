@@ -216,9 +216,13 @@
 	}
 
 	.plot-title {
-		font-weight: bold;
-		margin-bottom: 0.5rem;
-		font-size: 0.8rem;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text-primary, #fff);
+		margin-bottom: 0.75rem;
+		padding-bottom: 0.25rem;
+		border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+		line-height: 1.4;
 	}
 
 	.plot-container {
