@@ -105,6 +105,11 @@ spec:
                   name: telegram-secret
                   key: chat-id
                   optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: OPENAI_API_KEY
           resources:
             requests:
               cpu: "300m"
