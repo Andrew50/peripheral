@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # --- Environment Variable Validation ---
-#: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}"
+#: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}" 
 
 # Require these secrets:
 : "${DB_ROOT_PASSWORD:?Missing DB_ROOT_PASSWORD}"
