@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"backend/internal/data"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Test data structures
@@ -502,8 +505,9 @@ func generateMockStrategyName(query string) string {
 		words = words[:4]
 	}
 
+	titleCaser := cases.Title(language.English)
 	for i, word := range words {
-		words[i] = strings.Title(strings.ToLower(word))
+		words[i] = titleCaser.String(strings.ToLower(word))
 	}
 
 	return fmt.Sprintf("%s Strategy %d", strings.Join(words, " "), time.Now().Unix())

@@ -706,7 +706,8 @@ def strategy(data):
             }
             
             # Execute strategy
-            exec(strategy_code, safe_globals)
+            # Safe test execution with controlled globals and validated strategy code
+            exec(strategy_code, safe_globals)  # nosec B102
             strategy_func = safe_globals.get('strategy')
             
             if strategy_func and callable(strategy_func):
