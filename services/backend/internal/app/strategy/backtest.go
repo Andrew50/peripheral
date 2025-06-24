@@ -83,6 +83,11 @@ type WorkerSummary struct {
 
 // RunBacktest executes a complete strategy backtest using the new worker architecture
 func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
+	return RunBacktestWithProgress(ctx, conn, userID, rawArgs, nil)
+}
+
+// RunBacktestWithProgress executes a complete strategy backtest with optional progress callbacks
+func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage, progressCallback ProgressCallback) (any, error) {
 	var args BacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -103,7 +108,7 @@ func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.
 	}
 
 	// Call the worker's run_backtest function
-	result, err := callWorkerBacktest(ctx, conn, args.StrategyID)
+	result, err := callWorkerBacktestWithProgress(ctx, conn, args.StrategyID, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker backtest: %v", err)
 	}
@@ -131,6 +136,11 @@ func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.
 
 // callWorkerBacktest calls the worker's run_backtest function via Redis queue
 func callWorkerBacktest(ctx context.Context, conn *data.Conn, strategyID int) (*WorkerBacktestResult, error) {
+	return callWorkerBacktestWithProgress(ctx, conn, strategyID, nil)
+}
+
+// callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
+func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Generate unique task ID
 	taskID := fmt.Sprintf("backtest_%d_%d", strategyID, time.Now().UnixNano())
 
@@ -156,8 +166,8 @@ func callWorkerBacktest(ctx context.Context, conn *data.Conn, strategyID int) (*
 		return nil, fmt.Errorf("error submitting task to queue: %v", err)
 	}
 
-	// Wait for result with timeout
-	result, err := waitForBacktestResult(ctx, conn, taskID, 5*time.Minute)
+	// Wait for result with timeout and progress callbacks
+	result, err := waitForBacktestResultWithProgress(ctx, conn, taskID, 5*time.Minute, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}
@@ -165,8 +175,16 @@ func callWorkerBacktest(ctx context.Context, conn *data.Conn, strategyID int) (*
 	return result, nil
 }
 
+// ProgressCallback is a function type for sending progress updates during backtest execution
+type ProgressCallback func(message string)
+
 // waitForBacktestResult waits for a backtest result via Redis pubsub
 func waitForBacktestResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerBacktestResult, error) {
+	return waitForBacktestResultWithProgress(ctx, conn, taskID, timeout, nil)
+}
+
+// waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
+func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
 	defer pubsub.Close()
@@ -195,6 +213,18 @@ func waitForBacktestResult(ctx context.Context, conn *data.Conn, taskID string, 
 
 			if taskUpdate["task_id"] == taskID {
 				status, _ := taskUpdate["status"].(string)
+				if status == "progress" {
+					// Handle progress updates
+					stage, _ := taskUpdate["stage"].(string)
+					message, _ := taskUpdate["message"].(string)
+					log.Printf("Backtest progress [%s]: %s", stage, message)
+
+					// Call progress callback if provided
+					if progressCallback != nil {
+						progressCallback(message)
+					}
+					continue
+				}
 				if status == "completed" || status == "failed" {
 					// Convert task result to WorkerBacktestResult
 					var result WorkerBacktestResult

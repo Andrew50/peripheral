@@ -568,7 +568,9 @@ func HealthCheck() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// If you need DB ping logic, insert it here and flip OK accordingly.
-		_ = json.NewEncoder(w).Encode(status{OK: true})
+		if err := json.NewEncoder(w).Encode(status{OK: true}); err != nil {
+			http.Error(w, "Error encoding health check response", http.StatusInternalServerError)
+		}
 	}
 }
 

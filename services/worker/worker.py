@@ -436,11 +436,11 @@ class StrategyWorker:
                     
                     # Execute the task
                     if task_type == 'backtest':
-                        result = self._execute_backtest(**args)
+                        result = self._execute_backtest(task_id=task_id, **args)
                     elif task_type == 'screening':
-                        result = self._execute_screening(**args)
+                        result = self._execute_screening(task_id=task_id, **args)
                     elif task_type == 'alert':
-                        result = self._execute_alert(**args)
+                        result = self._execute_alert(task_id=task_id, **args)
                     
                     # Calculate execution time
                     execution_time = time.time() - start_time
@@ -486,7 +486,7 @@ class StrategyWorker:
             self.db_conn.close()
         logger.info("Worker shutdown complete")
     
-    def _execute_backtest(self, symbols: List[str] = None, 
+    def _execute_backtest(self, task_id: str = None, symbols: List[str] = None, 
                                start_date: str = None, end_date: str = None, 
                                securities: List[str] = None, strategy_id: str = None, **kwargs) -> Dict[str, Any]:
         """Execute backtest task"""
@@ -494,8 +494,14 @@ class StrategyWorker:
         if not strategy_id:
             raise ValueError("strategy_id is required")
             
+        if task_id:
+            self._publish_progress(task_id, "initialization", "Fetching strategy code from database...")
+        
         strategy_code = self._fetch_strategy_code(strategy_id)
         logger.info(f"Fetched strategy code from database for strategy_id: {strategy_id}")
+        
+        if task_id:
+            self._publish_progress(task_id, "validation", "Validating strategy code security...")
         
         # Validate strategy code
         if not self.security_validator.validate_code(strategy_code):
@@ -504,6 +510,9 @@ class StrategyWorker:
         # Handle symbols and securities filtering
         symbols_input = symbols or []
         securities_filter = securities or []
+        
+        if task_id:
+            self._publish_progress(task_id, "analysis", "Analyzing strategy requirements...")
         
         # Extract strategy requirements
         required_symbols = self._extract_required_symbols(strategy_code)
@@ -520,6 +529,10 @@ class StrategyWorker:
         target_symbols = list(set(symbols_input) | set(required_symbols))
         logger.info(f"Target symbols: {len(target_symbols)} (union of {len(symbols_input)} requested + {len(required_symbols)} required)")
         
+        if task_id:
+            self._publish_progress(task_id, "symbols", f"Prepared {len(target_symbols)} symbols for analysis", 
+                                 {"symbol_count": len(target_symbols), "required_symbols": len(required_symbols)})
+        
         # If securities filter is provided, validate overlap
         if securities_filter:
             if target_symbols:
@@ -535,6 +548,9 @@ class StrategyWorker:
             
         logger.info(f"Starting backtest for {len(target_symbols)} symbols (strategy_id: {strategy_id})")
         
+        if task_id:
+            self._publish_progress(task_id, "preparation", "Preparing date ranges and execution parameters...")
+        
         # Parse dates
         if start_date:
             start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -545,6 +561,11 @@ class StrategyWorker:
             end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         else:
             end_date = datetime.now()
+        
+        if task_id:
+            self._publish_progress(task_id, "execution", f"Executing backtest: {start_date.date()} to {end_date.date()}", 
+                                 {"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), 
+                                  "symbol_count": len(target_symbols)})
         
         # Execute using DataFrame engine
         result = asyncio.run(self.strategy_engine.execute_backtest(
@@ -559,9 +580,15 @@ class StrategyWorker:
         ))
         
         logger.info(f"Backtest completed: {len(result.get('instances', []))} instances found")
+        
+        if task_id:
+            instances_count = len(result.get('instances', []))
+            self._publish_progress(task_id, "completed", f"Backtest finished: {instances_count} instances found", 
+                                 {"instances_count": instances_count, "success": result.get('success', True)})
+        
         return result
     
-    def _execute_screening(self, universe: List[str] = None, 
+    def _execute_screening(self, task_id: str = None, universe: List[str] = None, 
                                 limit: int = 100, strategy_ids: List[str] = None, **kwargs) -> Dict[str, Any]:
         """Execute screening task"""
         # strategy_ids is required
@@ -613,7 +640,7 @@ class StrategyWorker:
         logger.info(f"Screening completed: {len(result.get('ranked_results', []))} results found")
         return result
 
-    def _execute_alert(self, symbols: List[str] = None, 
+    def _execute_alert(self, task_id: str = None, symbols: List[str] = None, 
                             strategy_id: str = None, **kwargs) -> Dict[str, Any]:
         """Execute alert task"""
         # strategy_id is required - always fetch from database
@@ -656,6 +683,24 @@ class StrategyWorker:
         logger.info(f"Alert completed")
         return result
     
+    def _publish_progress(self, task_id: str, stage: str, message: str, data: Dict[str, Any] = None):
+        """Publish progress updates for long-running tasks"""
+        try:
+            progress_update = {
+                "task_id": task_id,
+                "status": "progress", 
+                "stage": stage,
+                "message": message,
+                "data": data or {},
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            self.redis_client.publish("worker_task_updates", json.dumps(progress_update))
+            logger.info(f"Progress: {stage} - {message}")
+            
+        except Exception as e:
+            logger.error(f"Failed to publish progress for {task_id}: {e}")
+
     def _set_task_result(self, task_id: str, status: str, data: Dict[str, Any]):
         """Set task result in Redis and publish update"""
         try:
