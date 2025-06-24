@@ -104,6 +104,7 @@ spec:
                 secretKeyRef:
                   name: telegram-secret
                   key: chat-id
+                  optional: true
           resources:
             requests:
               cpu: "300m"
