@@ -101,8 +101,8 @@ jobs:
         echo "📈 Testing AST with Sample Data..."
         python test_ast_with_sample_data.py
         
-        echo "🎯 Testing Complex Strategies (Fixed)..."
-        python test_complex_strategies_fixed.py
+        echo "🎯 Testing Complex Strategies..."
+        python test_complex_strategies.py
         
         echo "🌐 Testing Integration Endpoints..."
         python test_integration_endpoints.py

@@ -13,6 +13,84 @@ The system is designed to force AI models to implement their own technical analy
 - **SecurityValidator**: AST-based code validation and security enforcement
 - **Worker**: Redis-based job processing and result management
 
+## ⚠️ Critical: Component Synchronization Requirements
+
+**ALL components must be kept in perfect synchronization at all times.** Any changes to strategy requirements, data structures, or validation rules must be propagated across all components immediately.
+
+### Components That Must Stay in Sync:
+
+1. **System Prompt** (`services/backend/internal/app/strategy/prompts/classifier.txt`)
+   - Defines what AI models should generate
+   - Function signatures, parameter names, return structures
+   - Available DataFrame columns and technical indicator examples
+
+2. **Security Validator** (`services/worker/src/validator.py`)
+   - Validates generated Python code for security and compliance
+   - Function signature requirements (parameter names, types)
+   - Required instance fields, allowed modules, forbidden patterns
+
+3. **Strategy Examples** (`services/worker/src/examples.py`)
+   - Reference implementations showing correct patterns
+   - Must match exact function signatures and return formats
+   - Demonstrates proper technical indicator calculations
+
+4. **DataFrame Engine** (`services/worker/src/engine.py`)
+   - Executes strategies and processes results
+   - Data loading, preprocessing, and result formatting
+   - Must handle the exact DataFrame structure defined in other components
+
+5. **Go Backend Interface** (`services/backend/internal/app/strategy/strategies.go`)
+   - Calls worker service and processes results
+   - Must understand the return format and field names
+   - Handles strategy creation, execution, and result parsing
+
+### Synchronization Requirements:
+
+**Function Signatures:**
+- Parameter name: `df` (pandas DataFrame)
+- Return type: `List[Dict]` with instances
+- No `signal` field (implicit True)
+- `timestamp` field (not `date`)
+
+**DataFrame Structure:**
+- Raw market data only (ticker, date, OHLCV, volume, fund_*)
+- NO pre-calculated technical indicators
+- Strategies must calculate their own indicators
+
+**Instance Fields:**
+- **Required**: `ticker` (string), `timestamp` (string)
+- **Optional**: `score`, `message`, custom metrics
+- **Forbidden**: `signal` (redundant)
+
+**Security Rules:**
+- Pandas and numpy allowed for data processing
+- No file I/O, network access, or system calls
+- No dangerous built-ins or introspection
+
+**Validation Patterns:**
+- Function must be named descriptively (not generic `strategy`)
+- Must import pandas (`import pandas as pd`)
+- Must sort data before calculations involving time series
+- Must use `.groupby('ticker')` for multi-symbol operations
+
+### When Making Changes:
+
+1. **Identify Impact**: Determine which components are affected
+2. **Update All**: Never update just one component - update ALL affected components
+3. **Test Integration**: Verify that generated strategies pass validation and execute correctly
+4. **Verify Examples**: Ensure all examples in `examples.py` still work
+5. **Update Documentation**: Keep README and comments current
+
+### Common Sync Issues:
+
+- ❌ Changing required fields in validator without updating system prompt
+- ❌ Adding new DataFrame columns without updating documentation
+- ❌ Modifying function signatures without updating examples
+- ❌ Changing validation rules without updating AI generation prompts
+- ❌ Adding new security restrictions without updating allowed operations
+
+**Remember: The AI generates code based on the system prompt, which must pass the validator, match the examples, and execute correctly in the engine. ALL must be perfectly aligned.**
+
 ## Available Raw Data Functions
 
 ### Price & Market Data
