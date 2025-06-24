@@ -18,7 +18,7 @@ set -Eeuo pipefail
 # Optional Telegram secrets (for monitoring alerts)
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-} 
 TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-} 
-: "${CONFIG_DIR:?Missing CONFIG_DIR}"
+: "${CONFIG_DIR:?Missing CONFIG_DIR}" 
 : "${TMP_DIR:?Missing TMP_DIR}"
 : "${INGRESS_HOST:?Error: INGRESS_HOST environment variable is required.}"
 : "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
