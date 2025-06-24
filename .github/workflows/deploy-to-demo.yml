@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-prod:
+  deploy-demo:
     uses: ./.github/workflows/deploy-demo-test.yml
     with:
       environment: 'demo'
