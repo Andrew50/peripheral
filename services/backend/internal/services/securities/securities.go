@@ -578,7 +578,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 }
 
 // validateSecurityInsertionV2 checks if a security insertion would violate database constraints
-func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, figi string, debug bool) error {
+func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, _ string, debug bool) error {
 	// Check for (securityid, minDate) constraint violation
 	if securityID != nil {
 		var count int

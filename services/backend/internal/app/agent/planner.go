@@ -222,7 +222,7 @@ const planningModel = "gemini-2.5-flash"
 // const finalResponseModel = "gemini-2.5-flash"
 const openAIFinalResponseModel = "gpt-4o"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, _ string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
