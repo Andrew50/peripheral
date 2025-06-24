@@ -172,7 +172,7 @@ def main():
     # Ask user if worker is running
     print("\n⚠️  Make sure the Python worker is running!")
     print("Start it with: python worker.py")
-    response = input("Is the worker running? (y/n): ").lower().strip()
+    response = input("Is the worker running? (y/n): ").lower().strip()  # nosec B322 - safe test input
 
     if response != "y":
         print("Please start the worker first and run this test again.")

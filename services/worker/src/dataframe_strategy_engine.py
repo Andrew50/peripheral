@@ -663,8 +663,7 @@ class NumpyStrategyEngine:
         
         try:
             # Execute strategy code in restricted environment
-            # nosec B102 - exec is necessary for strategy execution with proper sandboxing
-            exec(strategy_code, safe_globals, safe_locals)
+            exec(strategy_code, safe_globals, safe_locals)  # nosec B102 - exec necessary for strategy execution with proper sandboxing
             
             # Find strategy function (should be named 'strategy' or 'strategy_function')
             strategy_func = None
