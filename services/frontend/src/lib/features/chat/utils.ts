@@ -161,12 +161,26 @@
 
 	// Function to clean ticker formatting from content chunks (only plots)
 	export function cleanContentChunk(chunk: any): any {
-		if (!chunk || chunk.type !== 'plot') return chunk;
+		console.log('🔍 cleanContentChunk called with chunk:', chunk);
 		
-		return {
+		if (!chunk || chunk.type !== 'plot') {
+			console.log('✅ cleanContentChunk: not a plot chunk, returning unchanged');
+			return chunk;
+		}
+		
+		console.log('🔍 cleanContentChunk: processing plot chunk, original content:', chunk.content);
+		
+		const cleanedContent = cleanPlotData(chunk.content);
+		
+		console.log('🔍 cleanContentChunk: cleaned content:', cleanedContent);
+		
+		const result = {
 			...chunk,
-			content: cleanPlotData(chunk.content)
+			content: cleanedContent
 		};
+		
+		console.log('✅ cleanContentChunk: returning cleaned chunk:', result);
+		return result;
 	}
 
 	// Helper function to create text content for copying from a content chunk
