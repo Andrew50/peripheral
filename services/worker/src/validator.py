@@ -1,22 +1,22 @@
 """
 Security Validator
-Validates Python code for security issues before execution and ensures compliance with NumPy array strategy requirements.
+Validates Python code for security issues before execution and ensures compliance with DataFrame strategy requirements.
 
 The strategy engine expects functions that:
-1. Accept a single parameter: data (numpy.ndarray)
-2. Return a list of dictionaries with 'ticker' and 'date' fields
-3. Use only approved safe modules (numpy, math, datetime, etc.)
+1. Accept a single parameter: df (pandas.DataFrame)
+2. Return a list of dictionaries with 'ticker' and 'timestamp' fields
+3. Use only approved safe modules (pandas, numpy, math, datetime, etc.)
 4. Do not access dangerous system functions or attributes
 
-The data provided will be a numpy array with standardized column structure:
-- Column 0: ticker (string): Stock ticker symbol
-- Column 1: date (datetime/string): Date of the data point  
-- Column 2: open (float): Opening price
-- Column 3: high (float): High price
-- Column 4: low (float): Low price
-- Column 5: close (float): Closing price
-- Column 6: volume (int): Trading volume
-- Additional columns for fundamental data and indicators
+The data provided will be a pandas DataFrame with raw market data:
+- ticker (string): Stock ticker symbol
+- date (datetime): Date of the data point  
+- open (float): Opening price
+- high (float): High price
+- low (float): Low price
+- close (float): Close price
+- volume (int): Trading volume
+- Additional columns for fundamental data (fund_*)
 """
 
 import ast
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class SecurityValidator:
-    """Validates Python code for security issues and NumPy DataFrame strategy compliance"""
+    """Validates Python code for security issues and DataFrame strategy compliance"""
 
     def __init__(self):
         # Node type checkers
@@ -75,9 +75,9 @@ class SecurityValidator:
             "id", "hash", "repr", "ascii", "bin", "hex", "oct",
         }
         
-        # Explicitly allowed built-in functions for numpy array processing
+        # Explicitly allowed built-in functions for DataFrame processing
         self.allowed_functions = {
-            # Type conversions needed for numpy
+            # Type conversions needed for pandas
             "int", "float", "str", "bool", "list", "dict", "tuple", "set",
             # Math operations
             "abs", "round", "min", "max", "sum", "pow", "divmod",
@@ -126,9 +126,9 @@ class SecurityValidator:
             "flask", "django", "tornado", "twisted", "paramiko", "fabric",
         }
 
-        # Allowed safe modules for data science (strict whitelist)
+        # Allowed safe modules for DataFrame-based data science (strict whitelist)
         self.allowed_modules = {
-            "numpy", "np", "math", "statistics", "random",
+            "pandas", "pd", "numpy", "np", "math", "statistics", "random",
             "datetime", "time", "decimal", "fractions", "collections",
             "itertools", "functools", "operator", "copy", "json", "re",
             "string", "textwrap", "calendar", "bisect", "heapq", "array",
@@ -156,14 +156,14 @@ class SecurityValidator:
             "__subclasscheck__", "__call__", "__enter__", "__exit__",
         }
 
-        # Strategy requirements
-        self.required_instance_fields = {"ticker", "date"}
-        self.reserved_global_names = {"np", "numpy", "data", "datetime", "timedelta", "math"}
+        # Strategy requirements - updated for DataFrame approach
+        self.required_instance_fields = {"ticker", "timestamp"}
+        self.reserved_global_names = {"pd", "pandas", "np", "numpy", "df", "datetime", "timedelta", "math"}
         
-        # Data frame fields that will always be available
+        # DataFrame fields that will always be available in raw market data
         self.available_data_fields = {
             "ticker", "date", "open", "high", "low", "close", "volume",
-            "timestamp", "datetime", "time", "adj_close", "split_factor", "dividend"
+            "timestamp", "datetime", "time"
         }
 
     def validate_code(self, code: str) -> bool:
@@ -171,7 +171,7 @@ class SecurityValidator:
         Comprehensive code validation including:
         1. Syntax compilation check
         2. Security AST validation  
-        3. NumPy DataFrame strategy compliance
+        3. DataFrame strategy compliance
         4. Function signature validation
         5. Return value structure validation
         """
@@ -230,7 +230,7 @@ class SecurityValidator:
             return False
 
     def _check_strategy_compliance(self, tree: ast.AST, code: str) -> bool:
-        """Check NumPy DataFrame strategy compliance requirements"""
+        """Check DataFrame strategy compliance requirements"""
         
         # Check for required strategy function
         strategy_functions = self._find_strategy_functions(tree)
@@ -255,27 +255,27 @@ class SecurityValidator:
     def _validate_strategy_structure(self, tree: ast.AST) -> bool:
         """Validate overall strategy structure and requirements"""
         
-        # Check for numpy import
-        has_numpy_import = False
+        # Check for pandas import (required for DataFrame operations)
+        has_pandas_import = False
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
-                if self._is_numpy_import(node):
-                    has_numpy_import = True
+                if self._is_pandas_import(node):
+                    has_pandas_import = True
                     break
         
-        if not has_numpy_import:
-            raise StrategyComplianceError("Strategy must import numpy (import numpy as np)")
+        if not has_pandas_import:
+            raise StrategyComplianceError("Strategy must import pandas (import pandas as pd)")
         
         return True
 
-    def _is_numpy_import(self, node: Union[ast.Import, ast.ImportFrom]) -> bool:
-        """Check if this is a numpy import"""
+    def _is_pandas_import(self, node: Union[ast.Import, ast.ImportFrom]) -> bool:
+        """Check if this is a pandas import"""
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "numpy":
+                if alias.name == "pandas":
                     return True
         elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith("numpy"):
+            if node.module and node.module.startswith("pandas"):
                 return True
         return False
 
@@ -290,31 +290,28 @@ class SecurityValidator:
         return functions
 
     def _validate_function_signature(self, func_node: ast.FunctionDef) -> bool:
-        """Validate that function signature matches requirements: (data: np.ndarray) -> List[Dict]"""
+        """Validate that function signature matches requirements: (df: pd.DataFrame) -> List[Dict]"""
         
         # Check function has exactly one parameter
         if len(func_node.args.args) != 1:
             raise StrategyComplianceError(
-                f"Strategy function must have exactly one parameter (data: numpy.ndarray), "
+                f"Strategy function must have exactly one parameter (df: pandas.DataFrame), "
                 f"found {len(func_node.args.args)} parameters"
             )
         
         param = func_node.args.args[0]
         
-        # Parameter name should be 'data' (enforcing standard)
-        if param.arg != 'data':
-            raise StrategyComplianceError(f"Strategy function parameter must be named 'data', found '{param.arg}'")
+        # Parameter name should be 'df' (enforcing standard)
+        if param.arg != 'df':
+            raise StrategyComplianceError(f"Strategy function parameter must be named 'df', found '{param.arg}'")
         
-        # Check for type annotation (now required)
-        if not param.annotation:
-            raise StrategyComplianceError("Strategy function parameter must be type annotated as numpy.ndarray")
-        
-        # Extract annotation text to check for numpy array type
-        annotation_text = self._get_annotation_text(param.annotation)
-        if not self._is_numpy_array_annotation(annotation_text):
-            raise StrategyComplianceError(
-                "Strategy function parameter must be annotated as numpy.ndarray or np.ndarray"
-            )
+        # Type annotation is optional but if present should be DataFrame
+        if param.annotation:
+            annotation_text = self._get_annotation_text(param.annotation)
+            if annotation_text and not self._is_dataframe_annotation(annotation_text):
+                raise StrategyComplianceError(
+                    "Strategy function parameter should be annotated as pandas.DataFrame or pd.DataFrame if type annotation is provided"
+                )
         
         return True
 
@@ -334,11 +331,10 @@ class SecurityValidator:
         except:
             return ""
 
-    def _is_numpy_array_annotation(self, annotation_text: str) -> bool:
-        """Check if annotation represents a numpy array"""
+    def _is_dataframe_annotation(self, annotation_text: str) -> bool:
+        """Check if annotation represents a pandas DataFrame"""
         valid_annotations = [
-            "numpy.ndarray", "np.ndarray", "ndarray",
-            "numpy.array", "np.array"
+            "pandas.DataFrame", "pd.DataFrame", "DataFrame"
         ]
         return any(valid in annotation_text for valid in valid_annotations)
 
@@ -472,16 +468,26 @@ class SecurityValidator:
             # Block forbidden functions
             if node.func.id in self.forbidden_functions:
                 raise SecurityError(f"Forbidden function call: {node.func.id}")
-            # Allow numpy and math functions
-            if node.func.id.startswith(('np.', 'numpy.', 'math.')):
+            # Allow pandas and numpy functions
+            if node.func.id.startswith(('pd.', 'pandas.', 'np.', 'numpy.', 'math.')):
                 return True
         elif isinstance(node.func, ast.Attribute):
-            # Allow numpy array methods like .astype(), .shape, etc.
+            # Allow pandas DataFrame/Series methods
+            allowed_pandas_methods = {
+                'sort_values', 'groupby', 'rolling', 'ewm', 'shift', 'diff', 'pct_change',
+                'mean', 'std', 'min', 'max', 'sum', 'count', 'reset_index', 'dropna',
+                'notna', 'isna', 'fillna', 'copy', 'iterrows', 'transform', 'apply',
+                'head', 'tail', 'describe', 'info', 'dtypes', 'shape', 'columns',
+                'index', 'values', 'loc', 'iloc', 'at', 'iat', 'where', 'query'
+            }
+            # Allow numpy array methods
             allowed_array_methods = {
                 'astype', 'shape', 'size', 'dtype', 'ndim', 'T', 'reshape', 
                 'flatten', 'ravel', 'copy', 'mean', 'std', 'min', 'max', 'sum'
             }
-            if node.func.attr in allowed_array_methods:
+            
+            if (node.func.attr in allowed_pandas_methods or 
+                node.func.attr in allowed_array_methods):
                 return True
             # Check for dangerous method calls
             if node.func.attr in self.forbidden_functions:
@@ -567,10 +573,10 @@ class SecurityValidator:
         
         Required fields:
         - ticker (str): Stock ticker symbol
-        - date (str/int/float): Date identifier
+        - timestamp (str): Date/time identifier
         
-        The engine guarantees that the input data array will contain these fields
-        and additional market data fields like open, high, low, close, volume.
+        The engine guarantees that the input DataFrame will contain raw market data
+        with columns like ticker, date, open, high, low, close, volume, and fund_* columns.
         """
         if not instances:
             return True
@@ -599,33 +605,35 @@ class SecurityValidator:
                 if not instance['ticker'].strip():
                     raise StrategyComplianceError(f"Instance {i} 'ticker' field cannot be empty")
                     
-            if 'date' in instance:
-                if not isinstance(instance['date'], (str, int, float)):
+            if 'timestamp' in instance:
+                if not isinstance(instance['timestamp'], (str, int, float)):
                     raise StrategyComplianceError(
-                        f"Instance {i} 'date' field must be a string or number, got {type(instance['date'])}"
+                        f"Instance {i} 'timestamp' field must be a string or number, got {type(instance['timestamp'])}"
                     )
         
         return True
 
     def get_data_field_documentation(self) -> str:
-        """Return documentation about available data fields"""
+        """Return documentation about available DataFrame fields"""
         return f"""
-        Available data fields in the numpy array:
+        Available DataFrame columns (raw market data):
         {', '.join(sorted(self.available_data_fields))}
         
         Required instance fields:
         {', '.join(sorted(self.required_instance_fields))}
         
-        The data parameter is a numpy array with standardized column structure:
-        - Column 0: ticker (string)
-        - Column 1: date (string/datetime)  
-        - Column 2: open (float)
-        - Column 3: high (float)
-        - Column 4: low (float)
-        - Column 5: close (float)
-        - Column 6: volume (int)
+        The df parameter is a pandas DataFrame with raw market data columns:
+        - ticker (string): Stock symbol
+        - date (datetime): Trading date  
+        - open (float): Opening price
+        - high (float): High price
+        - low (float): Low price
+        - close (float): Closing price
+        - volume (int): Trading volume
+        - fund_* (various): Fundamental data when available
         
-        Access data using: data[row_index, column_index] (e.g., data[i, 5] for close price)
+        Access data using pandas operations: df['column_name'], df.loc[], df.iloc[], etc.
+        Calculate technical indicators within your strategy function using raw price data.
         """
 
 
@@ -635,5 +643,5 @@ class SecurityError(Exception):
 
 
 class StrategyComplianceError(Exception):
-    """Raised when code doesn't comply with NumPy DataFrame strategy requirements"""
+    """Raised when code doesn't comply with DataFrame strategy requirements"""
     pass

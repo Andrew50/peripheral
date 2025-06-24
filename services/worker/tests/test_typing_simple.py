@@ -15,18 +15,29 @@ def test_function():
     return True
 """
     
-    # Try to compile the code
+    # Try to compile and execute the code in restricted environment
     try:
-        compile(code_with_typing, "<test>", "exec")
-        print("❌ Typing imports should not be allowed but compilation succeeded")
+        compiled_code = compile(code_with_typing, "<test>", "exec")
+        
+        # Create restricted globals without typing module access
+        restricted_globals = {
+            '__builtins__': {
+                'len': len, 'range': range, 'str': str, 'int': int, 'float': float,
+                'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple
+            }
+        }
+        
+        # Try to execute - this should fail
+        exec(compiled_code, restricted_globals, {})  # nosec B102 - Safe test execution
+        print("❌ Typing imports should not be allowed but execution succeeded")
         return False
-    except ImportError:
-        print("✅ Typing imports correctly blocked at import level")
+        
+    except (ImportError, ModuleNotFoundError, NameError) as e:
+        print("✅ Typing imports correctly blocked during execution")
         return True
     except Exception as e:
-        # Compilation will succeed, but execution should fail
-        print(f"⚠️  Compilation succeeded, but execution should fail: {e}")
-        return True
+        print(f"❌ Unexpected error during typing test: {e}")
+        return False
 
 
 def test_builtin_types():
@@ -88,10 +99,8 @@ def test_execution_environment_simulation():
     else:
         print("✅ typing module correctly excluded from allowed modules")
     
-    # Test a simple strategy code without typing
+    # Test a simple strategy code without typing (math already imported)
     strategy_code = """
-import math
-
 def classify_symbol(symbol):
     # Simple gap calculation using math module
     current_price = 105.0
@@ -105,6 +114,9 @@ result = classify_symbol('TEST')
 """
     
     try:
+        # Import math module first
+        import math
+        
         # Create a restricted environment similar to execution engine
         restricted_globals = {
             '__builtins__': {
@@ -112,7 +124,7 @@ result = classify_symbol('TEST')
                 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple,
                 'abs': abs, 'round': round, 'min': min, 'max': max
             },
-            'math': __import__('math')
+            'math': math
         }
         
         compiled = compile(strategy_code, "<strategy>", "exec")
