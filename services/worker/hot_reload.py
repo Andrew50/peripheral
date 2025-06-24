@@ -7,7 +7,7 @@ Starts the worker and can restart it when files change in development
 import os
 import sys
 import time
-import subprocess
+import subprocess  # nosec B404 - subprocess needed for hot reload functionality
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -46,7 +46,20 @@ class WorkerReloadHandler(FileSystemEventHandler):
 def start_worker():
     """Start the worker process"""
     print("Starting worker...")
-    return subprocess.Popen([sys.executable, "worker.py"])
+    # Validate that we're running the expected Python executable and script
+    python_exe = sys.executable
+    worker_script = "worker.py"
+    
+    # Ensure the worker script exists and is a file
+    if not os.path.isfile(worker_script):
+        raise FileNotFoundError(f"Worker script {worker_script} not found")
+    
+    # Use secure subprocess call with validated arguments
+    return subprocess.Popen(  # nosec B603 - controlled subprocess call with validated arguments
+        [python_exe, worker_script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
 
 def main():
     """Main hot reload loop"""
@@ -57,8 +70,18 @@ def main():
     
     if not hot_reload_enabled:
         print("Hot reload disabled, starting worker normally...")
-        # Just run the worker directly
-        subprocess.run([sys.executable, "worker.py"])
+        # Validate arguments before subprocess call
+        python_exe = sys.executable
+        worker_script = "worker.py"
+        
+        if not os.path.isfile(worker_script):
+            raise FileNotFoundError(f"Worker script {worker_script} not found")
+        
+        # Use secure subprocess call with validated arguments
+        subprocess.run(  # nosec B603 - controlled subprocess call with validated arguments
+            [python_exe, worker_script],
+            check=True
+        )
         return
     
     # Start initial worker process

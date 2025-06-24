@@ -704,8 +704,8 @@ class StrategyWorker:
             logger.error(f"Database connection lost, reconnecting: {e}")
             try:
                 self.db_conn.close()
-            except:
-                pass
+            except Exception as close_error:
+                logger.warning(f"Error closing database connection: {close_error}")
             self.db_conn = self._init_database()
 
 

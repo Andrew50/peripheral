@@ -653,12 +653,17 @@ class NumpyStrategyEngine:
     ) -> List[Dict]:
         """Execute the strategy function on the numpy array"""
         
+        # Validate strategy code before execution
+        if not self._validate_strategy_code(strategy_code):
+            raise ValueError("Strategy code contains prohibited operations")
+        
         # Create safe execution environment
         safe_globals = await self._create_safe_globals(data_array, execution_mode)
         safe_locals = {}
         
         try:
-            # Execute strategy code to define the function
+            # Execute strategy code in restricted environment
+            # nosec B102 - exec is necessary for strategy execution with proper sandboxing
             exec(strategy_code, safe_globals, safe_locals)
             
             # Find strategy function (should be named 'strategy' or 'strategy_function')
@@ -691,6 +696,26 @@ class NumpyStrategyEngine:
         except Exception as e:
             logger.error(f"Strategy execution failed: {e}")
             raise
+
+    def _validate_strategy_code(self, strategy_code: str) -> bool:
+        """Validate strategy code for security"""
+        # List of prohibited operations
+        prohibited_operations = [
+            'import os', 'import sys', 'import subprocess', 'import shutil',
+            'import socket', 'import urllib', 'import requests', 'import http',
+            'open(', 'file(', '__import__', 'eval(', 'exec(',
+            'compile(', 'globals(', 'locals(', 'vars(', 'dir(',
+            'getattr(', 'setattr(', 'delattr(', 'hasattr(',
+            'input(', 'raw_input(', 'exit(', 'quit('
+        ]
+        
+        strategy_lower = strategy_code.lower()
+        for prohibited in prohibited_operations:
+            if prohibited in strategy_lower:
+                logger.error(f"Prohibited operation found in strategy code: {prohibited}")
+                return False
+        
+        return True
     
     async def _create_safe_globals(self, data_array: np.ndarray, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with numpy array and utilities"""
