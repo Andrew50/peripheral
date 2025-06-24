@@ -228,8 +228,8 @@ func testStrategyCreation(t *testing.T, conn *data.Conn, userID int, query strin
 }
 
 // Test strategy backtest execution
-func testStrategyBacktest(t *testing.T, conn *data.Conn, userID, strategyID int, strategyName string) {
-	t.Logf("🏃 Testing backtest execution for strategy %d (%s)", strategyID, strategyName)
+func testStrategyBacktest(t *testing.T, conn *data.Conn, userID, strategyID int, _ string) {
+	t.Logf("🏃 Testing backtest execution for strategy %d", strategyID)
 
 	// Create HTTP test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +282,7 @@ func testStrategyBacktest(t *testing.T, conn *data.Conn, userID, strategyID int,
 	}
 
 	// Validate backtest results
-	validateBacktestResults(t, backtestResult, strategyName)
+	validateBacktestResults(t, backtestResult, "")
 
 	t.Logf("✅ Backtest completed successfully:")
 	t.Logf("   Total Instances: %d", backtestResult.Summary.TotalInstances)
@@ -329,7 +329,7 @@ func validatePythonCode(t *testing.T, pythonCode, query string) {
 }
 
 // Validate backtest results
-func validateBacktestResults(t *testing.T, result BacktestResponse, strategyName string) {
+func validateBacktestResults(t *testing.T, result BacktestResponse, _ string) {
 	// Basic structure validation
 	if result.Summary.TotalInstances < 0 {
 		t.Errorf("❌ Invalid total instances: %d", result.Summary.TotalInstances)
