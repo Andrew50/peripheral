@@ -704,7 +704,11 @@ func sendSSEEvent(w http.ResponseWriter, eventType string, data interface{}) {
 
 func generateStreamID() string {
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	_, err := rand.Read(bytes) // #nosec G104 - rand.Read from crypto/rand is documented to always succeed
+	if err != nil {
+		// This should never happen with crypto/rand, but handle it gracefully
+		panic("failed to generate random bytes for stream ID")
+	}
 	return hex.EncodeToString(bytes)
 }
 
