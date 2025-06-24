@@ -538,6 +538,12 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
+	var model string
+	if len(executionResults) >= 3 {
+		model = "o3"
+	} else {
+		model = "o4-mini"
+	}
 
 	rawSchema := ref.Reflect(AtlantisFinalResponse{})
 	b, _ := json.Marshal(rawSchema)
@@ -557,7 +563,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Model:        openAIFinalResponseModel,
+		Model:        model,
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,

@@ -1472,7 +1472,7 @@
 								</div>
 							{/if}
 							
-							{#if message.sender === 'assistant'}
+							{#if message.sender === 'assistant' && !(message.status === 'error' || message.content.includes('Error:'))}
 								<div class="message-actions">
 									<button 
 										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
