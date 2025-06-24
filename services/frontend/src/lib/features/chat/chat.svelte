@@ -1662,7 +1662,7 @@
 	{:else}
 		<!-- Public viewing message -->
 		<div class="public-viewing-notice">
-			<p>You are viewing a shared conversation. <button class="auth-link" on:click={() => showAuthModal('conversations', 'login')}>Sign in</button> to start your own chat.</p>
+w			<p>You are viewing a shared conversation. <button class="auth-link" on:click={() => showAuthModal('conversations', 'login')}>Sign in</button> to start your own chat.</p>
 		</div>
 	{/if}
 
