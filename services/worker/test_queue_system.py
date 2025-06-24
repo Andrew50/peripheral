@@ -102,7 +102,6 @@ def gap_up_strategy(df):
             print("✗ Failed to retrieve result")
             
     else:
-        print("✗ No task retrieved from queue")
         return False
     
     # Test screening task
