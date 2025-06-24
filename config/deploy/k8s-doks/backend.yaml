@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+  annotations:
+    kubernetes.io/description: "Backend deployment - DO NOT SCALE beyond 1 replica"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Ensures no more than 1 pod exists during updates
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      restartPolicy: Always # Update the restart policy to "Always"
+      containers:
+        - name: backend
+          image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
+          imagePullPolicy: Always
+          #command: ["/app/main"] # hanlded by the docker file
+          ports:
+            - containerPort: 5058
+          readinessProbe:
+            httpGet:
+              path: /healthz      # add a trivial handler that just returns 200
+              port: 5058
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5058
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          env:
+            # Database connection
+            - name: DB_HOST
+              value: "db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+            - name: DB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+            # Redis connection
+            - name: REDIS_HOST
+              value: "cache"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PASSWORD
+            # Add Polygon API key
+            - name: GEMINI_FREE_KEYS
+              valueFrom: 
+                secretKeyRef: 
+                  name: gemini-secret
+                  key: GEMINI_FREE_KEYS
+            - name: POLYGON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: api-key
+            # Add Google OAuth credentials
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: GOOGLE_CLIENT_SECRET
+            # Add JWT secret
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
+            # Add Google redirect URL
+            - name: GOOGLE_REDIRECT_URL
+              value: ${GOOGLE_REDIRECT_URL}
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5058
+      targetPort: 5058
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  annotations:
+    kubernetes.io/description: "HPA to enforce exactly 1 replica for backend"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80 #requried even though min = max = 1
