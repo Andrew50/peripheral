@@ -234,7 +234,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 }
 
 func createToken(userID int) (string, error) {
-	expirationTime := time.Now().Add(1 * time.Hour)
+	expirationTime := time.Now().Add(6 * time.Hour)
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
