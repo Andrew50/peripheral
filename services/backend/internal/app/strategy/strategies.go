@@ -2,14 +2,11 @@ package strategy
 
 import (
 	"backend/internal/data"
-	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -66,33 +63,6 @@ type ScreeningResult struct {
 }
 
 // AlertArgs contains arguments for strategy alerts
-type AlertArgs struct {
-	StrategyID int      `json:"strategyId"`
-	Symbols    []string `json:"symbols,omitempty"`
-}
-
-// AlertResponse represents the alert monitoring results
-type AlertResponse struct {
-	Alerts           []Alert           `json:"alerts"`
-	Signals          map[string]Signal `json:"signals"`
-	SymbolsMonitored int               `json:"symbolsMonitored"`
-}
-
-type Alert struct {
-	Symbol    string                 `json:"symbol"`
-	Type      string                 `json:"type"`
-	Message   string                 `json:"message"`
-	Timestamp string                 `json:"timestamp"`
-	Priority  string                 `json:"priority,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-}
-
-type Signal struct {
-	Signal    bool                   `json:"signal"`
-	Timestamp string                 `json:"timestamp"`
-	Symbol    string                 `json:"symbol,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-}
 
 // RunScreening executes a complete strategy screening using the new worker architecture
 func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -116,7 +86,7 @@ func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	}
 
 	// Call the worker's run_screener function
-	result, err := callWorkerScreening(args.StrategyID, args.Universe, args.Limit)
+	result, err := callWorkerScreening(context.Background(), conn, args.StrategyID, args.Universe, args.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}
@@ -132,49 +102,6 @@ func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 
 	log.Printf("Complete screening finished for strategy %d: %d opportunities found",
 		args.StrategyID, len(rankedResults))
-
-	return response, nil
-}
-
-// RunAlert executes complete alert monitoring using the new worker architecture
-func RunAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	var args AlertArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
-	}
-
-	log.Printf("Starting complete alert monitoring for strategy %d using new worker architecture", args.StrategyID)
-
-	// Verify strategy exists and user has permission
-	var strategyExists bool
-	err := conn.DB.QueryRow(context.Background(), `
-		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
-		args.StrategyID, userID).Scan(&strategyExists)
-	if err != nil {
-		return nil, fmt.Errorf("error checking strategy: %v", err)
-	}
-	if !strategyExists {
-		return nil, fmt.Errorf("strategy not found or access denied")
-	}
-
-	// Call the worker's run_alert function
-	result, err := callWorkerAlert(args.StrategyID, args.Symbols)
-	if err != nil {
-		return nil, fmt.Errorf("error executing worker alert: %v", err)
-	}
-
-	// Convert worker result to AlertResponse format for API compatibility
-	alerts := convertWorkerAlerts(result.Alerts)
-	signals := convertWorkerSignals(result.Signals)
-
-	response := AlertResponse{
-		Alerts:           alerts,
-		Signals:          signals,
-		SymbolsMonitored: result.SymbolsMonitored,
-	}
-
-	log.Printf("Complete alert monitoring finished for strategy %d: %d alerts, %d signals",
-		args.StrategyID, len(alerts), len(signals))
 
 	return response, nil
 }
@@ -199,134 +126,113 @@ type WorkerRankedResult struct {
 	Data         map[string]interface{} `json:"data,omitempty"`
 }
 
-// Worker alert types
-type WorkerAlertResult struct {
-	Success          bool                    `json:"success"`
-	StrategyID       int                     `json:"strategy_id"`
-	ExecutionMode    string                  `json:"execution_mode"`
-	Alerts           []WorkerAlert           `json:"alerts"`
-	Signals          map[string]WorkerSignal `json:"signals"`
-	SymbolsMonitored int                     `json:"symbols_monitored"`
-	ExecutionTimeMs  int                     `json:"execution_time_ms"`
-	ErrorMessage     string                  `json:"error_message,omitempty"`
-}
-
-type WorkerAlert struct {
-	Symbol    string                 `json:"symbol"`
-	Type      string                 `json:"type"`
-	Message   string                 `json:"message"`
-	Timestamp string                 `json:"timestamp,omitempty"`
-	Priority  string                 `json:"priority,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-}
-
-type WorkerSignal struct {
-	Signal    bool                   `json:"signal"`
-	Timestamp string                 `json:"timestamp"`
-	Symbol    string                 `json:"symbol,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-}
-
-// callWorkerScreening calls the worker's run_screener function
-func callWorkerScreening(strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
+// callWorkerScreening calls the worker's run_screener function via Redis queue
+func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
 	// Set defaults
 	if limit == 0 {
 		limit = 100
 	}
 
-	// Prepare request payload
-	payload := map[string]interface{}{
-		"function":    "run_screener",
-		"strategy_id": strategyID,
+	// Generate unique task ID
+	taskID := fmt.Sprintf("screening_%d_%d", strategyID, time.Now().UnixNano())
+
+	// Prepare screening task payload - worker expects strategy_ids as array
+	task := map[string]interface{}{
+		"task_id":   taskID,
+		"task_type": "screening",
+		"args": map[string]interface{}{
+			"strategy_ids": []string{fmt.Sprintf("%d", strategyID)},
+		},
+		"created_at": time.Now().UTC().Format(time.RFC3339),
 	}
 
+	// Add optional parameters
 	if len(universe) > 0 {
-		payload["universe"] = universe
+		task["args"].(map[string]interface{})["universe"] = universe
 	}
 	if limit > 0 {
-		payload["limit"] = limit
+		task["args"].(map[string]interface{})["limit"] = limit
 	}
 
-	jsonPayload, err := json.Marshal(payload)
+	// Submit task to Redis queue
+	taskJSON, err := json.Marshal(task)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling payload: %v", err)
+		return nil, fmt.Errorf("error marshaling task: %v", err)
 	}
 
-	// Call worker service
-	workerURL := "http://localhost:8080/execute"
-
-	resp, err := http.Post(workerURL, "application/json", bytes.NewBuffer(jsonPayload))
+	// Push task to worker queue
+	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
 	if err != nil {
-		return nil, fmt.Errorf("error calling worker: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("worker returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("error submitting task to queue: %v", err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Wait for result with timeout
+	result, err := waitForScreeningResult(ctx, conn, taskID, 5*time.Minute)
 	if err != nil {
-		return nil, fmt.Errorf("error reading worker response: %v", err)
+		return nil, fmt.Errorf("error waiting for screening result: %v", err)
 	}
 
-	var result WorkerScreeningResult
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error unmarshaling worker response: %v", err)
-	}
-
-	if !result.Success {
-		return nil, fmt.Errorf("worker execution failed: %s", result.ErrorMessage)
-	}
-
-	return &result, nil
+	return result, nil
 }
 
-// callWorkerAlert calls the worker's run_alert function
-func callWorkerAlert(strategyID int, symbols []string) (*WorkerAlertResult, error) {
-	// Prepare request payload
-	payload := map[string]interface{}{
-		"function":    "run_alert",
-		"strategy_id": strategyID,
+// waitForScreeningResult waits for a screening result via Redis pubsub
+func waitForScreeningResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerScreeningResult, error) {
+	// Subscribe to task updates
+	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
+	defer pubsub.Close()
+
+	// Create timeout context
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ch := pubsub.Channel()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return nil, fmt.Errorf("timeout waiting for screening result")
+		case msg := <-ch:
+			if msg == nil {
+				continue
+			}
+
+			var taskUpdate map[string]interface{}
+			err := json.Unmarshal([]byte(msg.Payload), &taskUpdate)
+			if err != nil {
+				log.Printf("Failed to unmarshal task update: %v", err)
+				continue
+			}
+
+			if taskUpdate["task_id"] == taskID {
+				status, _ := taskUpdate["status"].(string)
+				if status == "completed" || status == "failed" {
+					// Convert task result to WorkerScreeningResult
+					var result WorkerScreeningResult
+					if resultData, exists := taskUpdate["result"]; exists {
+						resultJSON, err := json.Marshal(resultData)
+						if err != nil {
+							return nil, fmt.Errorf("error marshaling task result: %v", err)
+						}
+
+						err = json.Unmarshal(resultJSON, &result)
+						if err != nil {
+							return nil, fmt.Errorf("error unmarshaling screening result: %v", err)
+						}
+					}
+
+					if status == "failed" {
+						errorMsg, _ := taskUpdate["error_message"].(string)
+						result.Success = false
+						result.ErrorMessage = errorMsg
+					} else {
+						result.Success = true
+					}
+
+					return &result, nil
+				}
+			}
+		}
 	}
-
-	if len(symbols) > 0 {
-		payload["symbols"] = symbols
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling payload: %v", err)
-	}
-
-	// Call worker service
-	workerURL := "http://localhost:8080/execute"
-
-	resp, err := http.Post(workerURL, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return nil, fmt.Errorf("error calling worker: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("worker returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading worker response: %v", err)
-	}
-
-	var result WorkerAlertResult
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error unmarshaling worker response: %v", err)
-	}
-
-	if !result.Success {
-		return nil, fmt.Errorf("worker execution failed: %s", result.ErrorMessage)
-	}
-
-	return &result, nil
 }
 
 // Conversion functions
@@ -338,26 +244,6 @@ func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningR
 	}
 
 	return results
-}
-
-func convertWorkerAlerts(workerAlerts []WorkerAlert) []Alert {
-	alerts := make([]Alert, len(workerAlerts))
-
-	for i, wa := range workerAlerts {
-		alerts[i] = Alert(wa)
-	}
-
-	return alerts
-}
-
-func convertWorkerSignals(workerSignals map[string]WorkerSignal) map[string]Signal {
-	signals := make(map[string]Signal)
-
-	for symbol, ws := range workerSignals {
-		signals[symbol] = Signal(ws)
-	}
-
-	return signals
 }
 
 func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -723,6 +609,8 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("error updating alert status: %v", err)
 	}
+
+	log.Printf("Strategy %d alert status updated to: %v", args.StrategyID, args.Active)
 
 	return map[string]interface{}{
 		"success":     true,

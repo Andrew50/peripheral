@@ -418,6 +418,35 @@ var (
 			Function:      strategy.RunBacktest,
 			StatusMessage: "Running backtest...",
 		},
+		"run_screener": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "run_screener",
+				Description: "Screen the entire market universe using a specified strategy to find ranked opportunities based on the strategy's criteria.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "id of the strategy to use for screening",
+						},
+						"universe": {
+							Type:        genai.TypeArray,
+							Description: "Optional. List of ticker symbols to screen. If omitted, screens entire market universe.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+						"limit": {
+							Type:        genai.TypeInteger,
+							Description: "Optional. Maximum number of results to return (default: 100)",
+						},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function:      wrapWithContext(strategy.RunScreening),
+			StatusMessage: "Running screener...",
+		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getDailySnapshot",

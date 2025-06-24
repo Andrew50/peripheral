@@ -48,6 +48,9 @@ result = {
     
     # Test code execution simulation using safe sandbox
     try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
         from validator import SecurityValidator
         validator = SecurityValidator()
         
