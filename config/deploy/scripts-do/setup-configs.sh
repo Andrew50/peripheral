@@ -16,7 +16,7 @@ set -Eeuo pipefail
 : "${CLOUDFLARE_TUNNEL_TOKEN:?Missing CLOUDFLARE_TUNNEL_TOKEN}"
 
 # Optional Telegram secrets (for monitoring alerts)
-TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-} 
 TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
 : "${CONFIG_DIR:?Missing CONFIG_DIR}"
 : "${TMP_DIR:?Missing TMP_DIR}"
