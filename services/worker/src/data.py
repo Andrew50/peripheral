@@ -11,7 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
-import psycopg2
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
 from sqlalchemy import create_engine
 
 logger = logging.getLogger(__name__)
