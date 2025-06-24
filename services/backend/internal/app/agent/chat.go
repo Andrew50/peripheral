@@ -112,6 +112,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			firstRound = true
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
+				// Mark as error instead of deleting for debugging
+				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
+					fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
+				}
 				return nil, fmt.Errorf("error building planning prompt: %w", err)
 			}
 			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
