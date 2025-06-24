@@ -1,9 +1,7 @@
 name: Natural Language Strategy Integration Tests
 
 on:
-  # Run on push to main and PR
-  push:
-    branches: [ main, python-strats ]
+  # Run only on pull requests
   pull_request:
     branches: [ main, python-strats ]
   
