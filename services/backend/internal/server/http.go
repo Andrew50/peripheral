@@ -623,13 +623,23 @@ func streamingChatHandler(conn *data.Conn) http.HandlerFunc {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					sendSSEError(w, fmt.Sprintf("Internal error: %v", r), req.StreamID)
+					// Log the panic for debugging
+					log.Printf("Panic in streaming chat handler: %v", r)
+					// Send error response to client
+					sendSSEError(w, fmt.Sprintf("Internal server error: %v", r), req.StreamID)
 				}
 			}()
+
+			// Add additional validation before processing
+			if conn == nil {
+				sendSSEError(w, "Database connection is not available", req.StreamID)
+				return
+			}
 
 			// Process the chat request with progress updates
 			result, err := processStreamingChatRequest(ctx, conn, userID, req.Arguments, req.StreamID, w)
 			if err != nil {
+				log.Printf("Streaming chat request error: %v", err)
 				sendSSEError(w, err.Error(), req.StreamID)
 				return
 			}
@@ -714,6 +724,14 @@ func generateStreamID() string {
 
 // Modified chat request processor with progress updates
 func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage, streamID string, w http.ResponseWriter) (interface{}, error) {
+	// Add nil pointer checks
+	if conn == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+	if w == nil {
+		return nil, fmt.Errorf("response writer is nil")
+	}
+
 	// Send progress updates during processing
 	sendSSEProgress(w, "Parsing chat request...", streamID)
 
@@ -724,22 +742,24 @@ func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID in
 
 	sendSSEProgress(w, "Validating request...", streamID)
 
-	// Check Redis connectivity
+	// Check Redis connectivity with better error handling
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		return nil, fmt.Errorf("%s", message)
+		return nil, fmt.Errorf("redis connectivity failed: %s", message)
 	}
 
 	sendSSEProgress(w, "Preparing conversation context...", streamID)
 
-	// Call the existing chat processing function
-	// We'll need to modify GetChatRequest to accept progress callback
+	// Call the existing chat processing function with improved error handling
 	result, err := agent.GetChatRequestWithProgress(ctx, conn, userID, args, func(progress string) {
-		sendSSEProgress(w, progress, streamID)
+		// Add safety check for response writer before sending progress
+		if w != nil {
+			sendSSEProgress(w, progress, streamID)
+		}
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("chat processing failed: %w", err)
 	}
 
 	return result, nil

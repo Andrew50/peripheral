@@ -57,6 +57,15 @@ type ProgressCallback func(message string)
 
 // GetChatRequestWithProgress is the main context-aware chat request handler with progress updates
 func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage, progressCallback ProgressCallback) (interface{}, error) {
+	// Add nil pointer checks
+	if conn == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+	if progressCallback == nil {
+		// Provide a no-op callback if none is provided
+		progressCallback = func(_ string) {}
+	}
+
 	// Check if context is already cancelled
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -64,7 +73,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 
 	success, message := conn.TestRedisConnectivity(ctx, userID)
 	if !success {
-		return nil, fmt.Errorf("%s", message)
+		return nil, fmt.Errorf("redis connectivity check failed: %s", message)
 	}
 
 	var query ChatRequest

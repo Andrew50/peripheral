@@ -335,11 +335,28 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 
 // GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
 func (c *Conn) GetGeminiKey() (string, error) {
+	// Add nil pointer checks
+	if c == nil {
+		return "", fmt.Errorf("connection object is nil")
+	}
+	if c.GeminiPool == nil {
+		return "", fmt.Errorf("gemini pool is not initialized")
+	}
 	return c.GeminiPool.GetNextKey()
 }
 
 // TestRedisConnectivity tests the Redis connection and returns success status and error message
 func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, string) {
+	// Add nil pointer check for the connection struct itself
+	if c == nil {
+		return false, "Connection object is nil"
+	}
+
+	// Add nil pointer check for the Redis cache
+	if c.Cache == nil {
+		return false, "Redis cache client is not initialized"
+	}
+
 	testKey := fmt.Sprintf("redis_test_key:%d", userID)
 	testValue := fmt.Sprintf("test_value_%d_%d", userID, time.Now().Unix())
 

@@ -4,6 +4,8 @@ import (
 	"backend/internal/data"
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 )
 
 // ChatHandler defines the interface for handling chat requests
@@ -19,6 +21,11 @@ func SetChatHandler(handler ChatHandler) {
 
 // HandleChatQuery handles chat queries received via WebSocket
 func (c *Client) HandleChatQuery(requestID, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, conversationID string) {
+	// Add nil pointer checks
+	if c == nil {
+		return
+	}
+
 	// Find the userID for this client
 	var userID int
 	UserToClientMutex.RLock()
@@ -42,6 +49,12 @@ func (c *Client) HandleChatQuery(requestID, query string, contextItems []map[str
 		return
 	}
 
+	// Add nil pointer check for connection
+	if c.conn == nil {
+		c.SendChatResponse(requestID, false, nil, "Database connection not available")
+		return
+	}
+
 	// Create the chat request
 	chatRequest := map[string]interface{}{
 		"query":              query,
@@ -59,8 +72,16 @@ func (c *Client) HandleChatQuery(requestID, query string, contextItems []map[str
 
 	// Call the chat request function in a goroutine to avoid blocking
 	go func() {
-		// Create a context for the request
-		ctx := context.Background()
+		// Create a context for the request with timeout to prevent hanging
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		// Add recovery to prevent panics from crashing the WebSocket connection
+		defer func() {
+			if r := recover(); r != nil {
+				c.SendChatResponse(requestID, false, nil, fmt.Sprintf("Internal error: %v", r))
+			}
+		}()
 
 		// Call the chat handler function
 		result, err := chatHandler(ctx, c.conn, userID, requestBytes)
