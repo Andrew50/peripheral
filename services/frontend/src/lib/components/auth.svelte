@@ -13,7 +13,6 @@
 
 	export let loginMenu: boolean = false;
 	let email = '';
-	let username = '';
 	let password = '';
 	let errorMessage = writable('');
 	let loading = false;
@@ -34,7 +33,7 @@
 			if (loginMenu) {
 				signIn(email, password);
 			} else {
-				signUp(email, username, password);
+				signUp(email, password);
 			}
 		}
 	}
@@ -96,7 +95,7 @@
 		}
 	}
 
-	async function signUp(email: string, username: string, password: string) {
+	async function signUp(email: string, password: string) {
 		loading = true;
 		try {
 			// If this was a guest account, remove guest session cleanup
@@ -106,7 +105,7 @@
 				sessionStorage.removeItem('userId');
 			}
 
-			await publicRequest('signup', { email: email, username: username, password: password });
+			await publicRequest('signup', { email: email, password: password });
 			await signIn(email, password);
 		} catch (error) {
             console.log(error)
@@ -243,26 +242,15 @@
 								<path fill="none" d="M0 0h48v48H0z"></path>
 							</svg>
 						</div>
-						<span class="gsi-material-button-contents">Sign in with Google</span>
+						<span class="gsi-material-button-contents">Continue with Google</span>
 						<span style="display: none;">Sign in with Google</span>
 					</div>
 				</button>
 
-				<!--<button
-					class="guest-button responsive-shadow"
-					on:click={handleGuestLogin}
-					disabled={guestLoading}
-				>
-					{#if guestLoading}
-						<span class="loader"></span>
-					{:else}
-						Continue as Guest
-					{/if}
-				</button>-->
 			</div>
 
 			<div class="divider">
-				<span class="fluid-text">or continue with email</span>
+				<span class="fluid-text">or</span>
 			</div>
 
 			<form
@@ -270,38 +258,24 @@
 					if (loginMenu) {
 						signIn(email, password);
 					} else {
-						signUp(email, username, password);
+						signUp(email, password);
 					}
 				}}
 				class="auth-form"
 			>
 				<div class="form-group">
-					<label for="email">Email</label>
 					<input
 						type="email"
 						id="email"
 						bind:value={email}
 						required
 						on:keydown={handleKeydown}
-						placeholder="your.email@example.com"
+						placeholder="Email"
 						class="responsive-border"
 					/>
 				</div>
 
-				{#if !loginMenu}
-					<div class="form-group">
-						<label for="username">Display Name</label>
-						<input
-							type="text"
-							id="username"
-							bind:value={username}
-							required
-							on:keydown={handleKeydown}
-							placeholder="How others will see you"
-							class="responsive-border"
-						/>
-					</div>
-				{/if}
+
 
 				<div class="form-group">
 					<label for="password">Password</label>
