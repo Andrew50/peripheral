@@ -16,7 +16,7 @@
 		font: {
 			family: 'Inter, system-ui, sans-serif',
 			size: 12,
-			color: '#e2e8f0' // text-slate-200
+			color: '#f8fafc' // text-slate-50 (less transparent)
 		},
 		paper_bgcolor: 'transparent', // Match chat background
 		plot_bgcolor: 'transparent', // Match chat background
@@ -24,7 +24,7 @@
 		autosize: true,
 		showlegend: true,
 		legend: {
-			font: { color: '#e2e8f0' },
+			font: { color: '#f8fafc' }, // text-slate-50 (less transparent)
 			bgcolor: 'transparent',
 			borderwidth: 0,
 			orientation: 'h' as const,
@@ -33,11 +33,23 @@
 			y: -0.3,
 			yanchor: 'top' as const
 		},
+		hoverlabel: {
+			bgcolor: '#1e293b', // Solid dark background (no transparency)
+			bordercolor: '#475569',
+			borderwidth: 1,
+			font: {
+				color: '#ffffff', // Pure white text for maximum contrast
+				size: 13,
+				family: 'Inter, system-ui, sans-serif'
+			},
+			namelength: -1, // Show full trace names
+			align: 'left' as const
+		},
 		xaxis: {
 			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.5)',
-			tickfont: { color: '#cbd5e1', size: 11 }, // text-slate-300
-			titlefont: { color: '#e2e8f0' },
+			tickfont: { color: '#f1f5f9', size: 11 }, // text-slate-100 (less transparent)
+			titlefont: { color: '#f8fafc' }, // text-slate-50 (even less transparent)
 			automargin: true,
 			tickangle: -45,
 			title: {
@@ -47,8 +59,8 @@
 		yaxis: {
 			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.5)',
-			tickfont: { color: '#cbd5e1', size: 11 },
-			titlefont: { color: '#e2e8f0' },
+			tickfont: { color: '#f1f5f9', size: 11 }, // text-slate-100 (less transparent)
+			titlefont: { color: '#f8fafc' }, // text-slate-50 (even less transparent)
 			automargin: true
 		}
 	};
@@ -67,6 +79,20 @@
 
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
+		
+		// Add hover styling for trace names
+		processedTrace.hoverlabel = {
+			bgcolor: '#1e293b',
+			bordercolor: '#475569',
+			borderwidth: 1,
+			font: {
+				color: '#ffffff',
+				size: 13,
+				family: 'Inter, system-ui, sans-serif'
+			},
+			namelength: -1,
+			...processedTrace.hoverlabel // Allow override if specified
+		};
 		
 		// Filter out malformed traces for histograms
 		if (plotData.chart_type === 'histogram') {
