@@ -220,8 +220,7 @@ type TokenCounts struct {
 const planningModel = "gemini-2.5-flash"
 
 // const finalResponseModel = "gemini-2.5-flash"
-const openAIPlannerModel = "o4-mini"
-const openAIFinalResponseModel = "o3"
+const openAIFinalResponseModel = "gpt-4o"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	var systemPrompt string
@@ -389,130 +388,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// If parsing failed or no JSON block found, return error
 
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
-}
-
-func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
-	apiKey := conn.OpenAIKey
-	client := openai.NewClient(option.WithAPIKey(apiKey))
-	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
-	conversationHistory, err := GetConversationMessages(ctx, conn, conversationID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("error getting conversation history: %w", err)
-	}
-	messages, err := buildOpenAIFinalResponseMessages(prompt, conversationHistory.([]DBConversationMessage), executionResults, thoughts, false)
-	if err != nil {
-		return nil, fmt.Errorf("error building OpenAI conversation history: %w", err)
-	}
-	ref := jsonschema.Reflector{
-		AllowAdditionalProperties: false,
-		DoNotReference:            true,
-	}
-	rawSchema := ref.Reflect(PlanningOutput{})
-	b, _ := json.Marshal(rawSchema)
-	var oaSchema map[string]any
-	_ = json.Unmarshal(b, &oaSchema)
-	textConfig := responses.ResponseTextConfigParam{
-		Format: responses.ResponseFormatTextConfigUnionParam{
-			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name:   "planningOutput",
-				Schema: oaSchema,
-				Strict: openai.Bool(true),
-			},
-		},
-	}
-
-	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
-		},
-		Model:        openAIPlannerModel,
-		Instructions: openai.String(enhancedSystemPrompt),
-		User:         openai.String(fmt.Sprintf("user:%d", userID)),
-		Text:         textConfig,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error generating plan: %w", err)
-	}
-	fmt.Println("\n\nreasoning summary: ", res.Reasoning.Summary)
-	resultText := res.OutputText()
-	fmt.Println("\n GPT resultText: ", resultText)
-
-	/*var directAns DirectAnswer
-	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
-	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
-		hasValidContent := false
-		for _, chunk := range directAns.ContentChunks {
-			if chunk.Content != nil && fmt.Sprintf("%v", chunk.Content) != "" {
-				hasValidContent = true
-				break
-			}
-		}
-		if hasValidContent {
-			directAns.Suggestions = cleanTickerFormattingFromSuggestions(directAns.Suggestions)
-			directAns.TokenCounts = TokenCounts{
-				InputTokenCount:    int64(res.Usage.InputTokens),
-				OutputTokenCount:   int64(res.Usage.OutputTokens),
-				ThoughtsTokenCount: int64(res.Usage.OutputTokensDetails.ReasoningTokens),
-				TotalTokenCount:    int64(res.Usage.TotalTokens),
-			}
-			return directAns, nil
-		}
-	}*/
-
-	var plan Plan
-	planParseErr := json.Unmarshal([]byte(resultText), &plan)
-	if planParseErr == nil && plan.Stage != "" {
-		plan.TokenCounts = TokenCounts{
-			InputTokenCount:    int64(res.Usage.InputTokens),
-			OutputTokenCount:   int64(res.Usage.OutputTokens),
-			ThoughtsTokenCount: int64(res.Usage.OutputTokensDetails.ReasoningTokens),
-			TotalTokenCount:    int64(res.Usage.TotalTokens),
-		}
-		return plan, nil
-	}
-
-	// If no markdown code block found, try to extract JSON block using { } method
-	jsonBlock := ""
-	jsonStartIdx := strings.Index(resultText, "{")
-
-	if jsonStartIdx != -1 {
-		// Try to find the matching closing brace by counting braces
-		braceCount := 0
-		jsonEndIdx := -1
-
-		for i := jsonStartIdx; i < len(resultText); i++ {
-			if resultText[i] == '{' {
-				braceCount++
-			} else if resultText[i] == '}' {
-				braceCount--
-				if braceCount == 0 {
-					jsonEndIdx = i
-					break
-				}
-			}
-		}
-
-		if jsonEndIdx != -1 {
-			jsonBlock = resultText[jsonStartIdx : jsonEndIdx+1]
-			jsonBlock = strings.TrimSpace(jsonBlock)
-		}
-	}
-
-	plan = Plan{} // Reset the struct
-	// Try unmarshalling the extracted block if it's not empty
-	if jsonBlock != "" {
-		blockPlanParseErr := json.Unmarshal([]byte(jsonBlock), &plan)
-		if blockPlanParseErr == nil && plan.Stage != "" {
-			plan.TokenCounts = TokenCounts{
-				InputTokenCount:    int64(res.Usage.InputTokens),
-				OutputTokenCount:   int64(res.Usage.OutputTokens),
-				ThoughtsTokenCount: int64(res.Usage.OutputTokensDetails.ReasoningTokens),
-				TotalTokenCount:    int64(res.Usage.TotalTokens),
-			}
-			return plan, nil
-		}
-	}
-	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }
 
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
