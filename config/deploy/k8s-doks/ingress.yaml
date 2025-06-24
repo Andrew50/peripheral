@@ -27,7 +27,7 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 
 spec:
-  ingressClassName: nginx
+  ingressClassName: ingress-nginx
   rules:
     - host: ${INGRESS_HOST}
       http:
