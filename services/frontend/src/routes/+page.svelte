@@ -65,7 +65,7 @@
 			<div class="badge">COMING SOON</div>
 			
 			<h1 class="title">
-				<span class="gradient-text">Atlantis UR MOTHER</span>
+				<span class="gradient-text">Atlantis</span>
 			</h1>
 			
 			<p class="subtitle">
