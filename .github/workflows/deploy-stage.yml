@@ -36,7 +36,6 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.STAGE_DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.STAGE_REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
