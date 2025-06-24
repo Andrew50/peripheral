@@ -211,10 +211,6 @@
 	<Header />
 	<div class="auth-container">
 		<div class="auth-card responsive-shadow responsive-border content-padding">
-			<h1>{loginMenu ? 'Welcome Back' : 'Create Account'}</h1>
-			<p class="subtitle fluid-text">
-				{loginMenu ? 'Sign in to access your account' : 'Start your trading journey today'}
-			</p>
 
 			<div class="auth-buttons-container">
 				<button class="gsi-material-button responsive-shadow" on:click={handleGoogleLogin}>

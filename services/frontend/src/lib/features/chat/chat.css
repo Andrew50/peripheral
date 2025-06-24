@@ -1434,6 +1434,23 @@
 		text-decoration: underline;
 	}
 
+	.public-viewing-notice .auth-link {
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0;
+		font: inherit;
+		color: var(--accent-color, #00d4ff);
+		text-decoration: none;
+		cursor: pointer;
+		display: inline;
+		vertical-align: baseline;
+	}
+
+	.public-viewing-notice .auth-link:hover {
+		text-decoration: underline;
+	}
+
 	/* Typing effect styles */
 	.typing-cursor {
 		animation: blink 1s infinite;
