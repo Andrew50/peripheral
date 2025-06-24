@@ -744,6 +744,34 @@
 		color: var(--text-primary, #fff);
 	}
 
+	/* Ticker buttons inherit size from table headers */
+	.content-chunks th button[data-ticker],
+	.content-chunks thead button[data-ticker] {
+		font-size: inherit;
+		padding: 0.1em 0.3em;
+		margin: 0 0.1em;
+		line-height: inherit;
+		vertical-align: baseline;
+	}
+
+	/* Ticker buttons inherit size from table cells */
+	.content-chunks td button[data-ticker],
+	.content-chunks tbody button[data-ticker] {
+		font-size: inherit;
+		padding: 0.1em 0.3em;
+		margin: 0 0.1em;
+		line-height: inherit;
+		vertical-align: middle;
+	}
+
+	/* Make h1 headers match h2 formatting in chat messages */
+	.message-content h1,
+	.chunk-text h1 {
+		font-size: var(--font-3xl);
+		margin-bottom: var(--space-sm);
+		letter-spacing: normal;
+	}
+
 	/* Custom Scrollbar Styles */
 	.chat-messages::-webkit-scrollbar {
 		width: 8px;
@@ -857,6 +885,12 @@
 		line-height: 1.4;
 	}
 
+	.loading-status-container {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.loading-status {
 		color: transparent;
 		font-size: 0.8rem;
@@ -873,6 +907,34 @@
 		background-clip: text;
 		-webkit-background-clip: text;
 		animation: loading-text-highlight 2.5s infinite linear;
+		flex: 1;
+	}
+
+	.timeline-dropdown-toggle {
+		background: transparent;
+		border: none;
+		padding: 0.25rem;
+		cursor: pointer;
+		color: var(--text-secondary, #aaa);
+		transition: all 0.2s ease;
+		border-radius: 0.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.timeline-dropdown-toggle:hover {
+		color: var(--text-primary, #fff);
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	.chevron-icon {
+		transition: transform 0.2s ease;
+	}
+
+	.chevron-icon.expanded {
+		transform: rotate(180deg);
 	}
 
 	@keyframes loading-text-highlight {
@@ -990,7 +1052,8 @@
 	.retry-popup {
 		position: absolute;
 		bottom: 100%;
-		left: 0;
+		left: 50%;
+		transform: translateX(-50%);
 		margin-bottom: 0.5rem;
 		min-width: 120px;
 		z-index: 9999;
@@ -1002,6 +1065,7 @@
 	.retry-option {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.5rem;
 		width: 100%;
 		padding: 0.5rem 0.75rem;
@@ -1014,6 +1078,7 @@
 		cursor: pointer;
 		transition: none;
 		white-space: nowrap;
+		text-align: center;
 	}
 
 	.retry-option:hover {
@@ -1067,6 +1132,25 @@
 		border: 1px solid var(--accent-color, #3a8bf7) !important;
 		border-radius: 0.5rem !important;
 		padding: 1rem !important;
+	}
+
+	/* Processing timeline wrapper */
+	.processing-timeline-wrapper {
+		display: flex;
+		justify-content: center;
+		margin: 1rem 0;
+		animation: fadeInUp 0.3s ease-out;
+	}
+
+	@keyframes fadeInUp {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.edit-container {

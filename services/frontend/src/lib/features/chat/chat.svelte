@@ -20,7 +20,8 @@
 		QueryResponse,
 		TableData,
 		ContentChunk,
-		PlotData
+		PlotData,
+		TimelineEvent
 	} from './interface';
 	import {
 		parseMarkdown,
@@ -66,6 +67,7 @@
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
 	import ShareModal from './components/ShareModal.svelte';
+	import MessageTimeline from './components/MessageTimeline.svelte';
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 
@@ -123,6 +125,12 @@
 
 	// Share modal reference
 	let shareModalRef: ShareModal;
+
+	// Processing timeline state
+	let processingTimeline: TimelineEvent[] = [];
+	let isProcessingMessage = false;
+	let lastStatusMessage = '';
+	let showTimelineDropdown = false; // State for timeline dropdown visibility
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -543,8 +551,21 @@
 				content: $inputValue,
 				sender: 'user',
 				timestamp: new Date(),
-				contextItems: [...$contextItems]
+				contextItems: [...$contextItems],
+				status: 'pending'
 			};
+
+			// Initialize processing timeline
+			processingTimeline = [
+				{
+					message: 'Message sent to server',
+					timestamp: new Date()
+				}
+			];
+
+			isProcessingMessage = true;
+			lastStatusMessage = ''; // Reset last status message
+			showTimelineDropdown = false; // Reset dropdown state for new message
 
 			messagesStore.update((current) => [...current, userMessage]);
 
@@ -561,7 +582,7 @@
 			// <-- Set initial status immediately -->
 			functionStatusStore.set({
 				type: 'function_status',
-				userMessage: 'Processing request...'
+				userMessage: 'Thinking...'
 			});
 
 			// Scroll to show the user's message and loading state
@@ -656,6 +677,11 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
+				// Clear processing state
+				isProcessingMessage = false;
+				processingTimeline = [];
+				lastStatusMessage = '';
+
 				// If we didn't have a conversation ID before, we should have one now
 				// Load conversation history to get the new conversation ID
 				if (!currentConversationId) {
@@ -717,6 +743,12 @@
 					current.filter((m) => m.message_id !== loadingMessage!.message_id)
 				);
 			}
+
+			// Clear processing state immediately on error
+			isProcessingMessage = false;
+			processingTimeline = [];
+			lastStatusMessage = '';
+
 			isLoading = false;
 			currentAbortController = null;
 			currentWebSocketCancel = null;
@@ -765,6 +797,11 @@
 
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
+
+			// Clear processing state immediately on cancellation
+			isProcessingMessage = false;
+			processingTimeline = [];
+			lastStatusMessage = '';
 
 			isLoading = false;
 			currentAbortController = null;
@@ -1270,6 +1307,25 @@
 		// Clear the store after processing
 		titleUpdateStore.set(null);
 	}
+
+	// Reactive block to capture function status messages and build timeline
+	$: if ($functionStatusStore && browser && isProcessingMessage) {
+		const statusUpdate = $functionStatusStore;
+
+		// Only add if this is a new message different from the last one
+		if (statusUpdate.userMessage && statusUpdate.userMessage !== lastStatusMessage) {
+			lastStatusMessage = statusUpdate.userMessage;
+
+			// Add new timeline event with the raw message from backend
+			processingTimeline = [
+				...processingTimeline,
+				{
+					message: statusUpdate.userMessage,
+					timestamp: new Date()
+				}
+			];
+		}
+	}
 </script>
 
 <div class="chat-container">
@@ -1327,8 +1383,34 @@
 							: ''}"
 					>
 						{#if message.isLoading}
-							<!-- Always display status text when loading, as we set an initial one -->
-							<p class="loading-status">{$functionStatusStore?.userMessage || 'Thinking...'}</p>
+							<!-- Always show the current status message at top with dropdown toggle -->
+							<div class="loading-status-container">
+								<p class="loading-status">{$functionStatusStore?.userMessage || 'Thinking...'}</p>
+								{#if isProcessingMessage && processingTimeline.length > 1}
+									<button
+										class="timeline-dropdown-toggle"
+										on:click={() => (showTimelineDropdown = !showTimelineDropdown)}
+										aria-label={showTimelineDropdown ? 'Hide timeline' : 'Show timeline'}
+									>
+										<svg
+											viewBox="0 0 24 24"
+											width="14"
+											height="14"
+											class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
+										>
+											<path
+												d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"
+												fill="currentColor"
+											/>
+										</svg>
+									</button>
+								{/if}
+							</div>
+
+							<!-- Show timeline below if we have relevant timeline data and dropdown is open -->
+							{#if isProcessingMessage && processingTimeline.length > 1 && showTimelineDropdown}
+								<MessageTimeline timeline={processingTimeline} />
+							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
 							<div class="edit-container">
@@ -1378,6 +1460,7 @@
 									{/each}
 								</div>
 							{/if}
+
 							<div class="message-content">
 								{#if message.sender === 'assistant' && message.completedAt && message.timestamp}
 									<div class="message-runtime">

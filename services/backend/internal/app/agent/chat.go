@@ -112,22 +112,22 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			return nil, ctx.Err()
 		}
 		var firstRound bool
+		var result interface{}
+		var err error
 		if planningPrompt == "" {
 			firstRound = true
-			progressCallback("Building planning prompt with conversation context...")
-			var err error
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
 				// Mark as error instead of deleting for debugging
-				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build planning prompt: %v", err)); markErr != nil {
+				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
 					fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 				}
-				return nil, err
+				return nil, fmt.Errorf("error building planning prompt: %w", err)
 			}
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
+		} else {
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
 		}
-
-		progressCallback(fmt.Sprintf("Running planner (turn %d/%d)...", currentTurn, maxTurns))
-		plannerResult, err := RunPlanner(ctx, conn, planningPrompt, firstRound)
 		if err != nil {
 			// Mark as error instead of deleting for debugging
 			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {

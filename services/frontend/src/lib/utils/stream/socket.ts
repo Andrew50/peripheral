@@ -21,6 +21,8 @@ export type TitleUpdate = {
 	title: string;
 };
 
+
+
 // Define the type for chat responses from backend
 export type ChatResponse = {
 	type: 'chat_response';
@@ -35,6 +37,8 @@ export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
+
+
 
 // Store to manage pending chat requests
 const pendingChatRequests = new Map<string, {
@@ -141,6 +145,8 @@ export function connect() {
 			titleUpdateStore.set(titleUpdate);
 			return; // Handled title update
 		}
+
+
 
 		// Handle chat responses
 		if (data && data.type === 'chat_response') {

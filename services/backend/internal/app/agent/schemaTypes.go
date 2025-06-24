@@ -58,3 +58,23 @@ type AtlantisFinalResponse struct {
 	ContentChunks []AtlantisContentChunk `json:"content_chunks" jsonschema:"required"`
 	Suggestions   []string               `json:"suggestions"      jsonschema:"required"`
 }
+type PlanningOutput struct {
+	// planning-output fields
+	Stage          *string      `json:"stage,omitempty"  jsonschema:"enum=execute,enum=finished_executing,required"`
+	Rounds         []AgentRound `json:"rounds,omitempty" jsonschema:"required"`
+	Thoughts       *string      `json:"thoughts,omitempty" jsonschema:"required"`
+	DiscardResults []int        `json:"discard_results,omitempty" jsonschema:"required"`
+}
+
+// A single execution round.
+// If Parallel is true, all Calls in the round can run concurrently.
+type AgentRound struct {
+	Parallel bool        `json:"parallel" jsonschema:"required"`
+	Calls    []AgentCall `json:"calls" jsonschema:"required"`
+}
+
+// A planned function/tool invocation.
+type AgentCall struct {
+	Name string      `json:"name" jsonschema:"required"`
+	Args interface{} `json:"args,omitempty" jsonschema:"required"`
+}

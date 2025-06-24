@@ -46,7 +46,26 @@
 				'<a href="$1" target="_blank" rel="noopener noreferrer" style="color: white !important; text-decoration: none; transition: all 0.2s ease;" onmouseenter="this.style.color=\'#3b82f6\'; this.style.backgroundColor=\'rgba(59, 130, 246, 0.1)\'; this.style.borderRadius=\'4px\';" onmouseleave="this.style.color=\'white\'; this.style.backgroundColor=\'transparent\'; this.style.borderRadius=\'0\';">'
 			);
 
-			return withExternalLinks;
+			// Strip ticker buttons from headers - replace with plain ticker text
+			const withCleanHeaders = withExternalLinks.replace(
+				/<(h[1-6][^>]*)>(.*?)<\/h[1-6]>/gi,
+				(match, openingTag, content) => {
+					// Remove ticker buttons from header content and replace with just ticker text
+					const cleanContent = content.replace(
+						/<button[^>]*data-ticker="([^"]*)"[^>]*>.*?<\/button>/gi,
+						'$1'
+					);
+					return `<${openingTag}>${cleanContent}</h${openingTag.match(/h([1-6])/i)?.[1] || '1'}>`;
+				}
+			);
+
+			// Strip strikethrough formatting - replace <del> and <s> tags with plain text
+			const withoutStrikethrough = withCleanHeaders.replace(
+				/<(del|s)[^>]*>(.*?)<\/(del|s)>/gi,
+				'$2'
+			);
+
+			return withoutStrikethrough;
 		} catch (error) {
 			console.error('Error parsing markdown:', error);
 			return content; // Fallback to plain text if parsing fails
