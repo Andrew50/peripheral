@@ -196,8 +196,7 @@ class SecurityValidator:
                 return False
                 
             # Step 6: Additional pattern checks
-            if not self._check_prohibited_patterns(code):
-                return False
+            self._check_prohibited_patterns(code)
                 
             # Step 7: Validate strategy function structure
             if not self._validate_strategy_structure(tree):
@@ -208,7 +207,7 @@ class SecurityValidator:
             
         except (SyntaxError, SecurityError, StrategyComplianceError) as e:
             logger.warning(f"Code failed validation: {e}")
-            return False
+            raise
         except Exception as e:
             logger.error(f"Unexpected error during validation: {e}")
             return False
@@ -397,11 +396,30 @@ class SecurityValidator:
         ]
         
         lines = code.split('\n')
+        in_docstring = False
+        docstring_delimiter = None
+        
         for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
             
-            # Skip comments
-            if stripped.startswith('#'):
+            # Track docstring state
+            if '"""' in line:
+                if not in_docstring:
+                    in_docstring = True
+                    docstring_delimiter = '"""'
+                elif docstring_delimiter == '"""':
+                    in_docstring = False
+                    docstring_delimiter = None
+            elif "'''" in line:
+                if not in_docstring:
+                    in_docstring = True
+                    docstring_delimiter = "'''"
+                elif docstring_delimiter == "'''":
+                    in_docstring = False
+                    docstring_delimiter = None
+            
+            # Skip comments and docstrings
+            if stripped.startswith('#') or in_docstring:
                 continue
                 
             # Check each prohibited pattern

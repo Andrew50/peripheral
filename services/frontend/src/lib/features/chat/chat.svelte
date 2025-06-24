@@ -181,7 +181,11 @@
 
 		// Focus on input
 		if (queryInput) {
-			setTimeout(() => queryInput.focus(), 100);
+			setTimeout(() => {
+				if (queryInput) {
+					queryInput.focus();
+				}
+			}, 100);
 		}
 
 		// Clear initial suggestions and fetch new ones for empty chat
@@ -454,7 +458,11 @@
 
 	onMount(() => {
 		if (queryInput && !isPublicViewing) {
-			setTimeout(() => queryInput.focus(), 100);
+			setTimeout(() => {
+				if (queryInput) {
+					queryInput.focus();
+				}
+			}, 100);
 		}
 		// Always auto-scroll to bottom when opening conversations
 		loadConversationHistory(true);
