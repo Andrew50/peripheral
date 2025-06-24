@@ -28,7 +28,7 @@ spec:
             - containerPort: 5058
           readinessProbe:
             httpGet:
-              path: /healthz      # add a trivial handler that just returns 200
+              path: /healthz # add a trivial handler that just returns 200
               port: 5058
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -70,10 +70,15 @@ spec:
                   key: REDIS_PASSWORD
             # Add Polygon API key
             - name: GEMINI_FREE_KEYS
-              valueFrom: 
-                secretKeyRef: 
+              valueFrom:
+                secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: OPENAI_API_KEY
             - name: POLYGON_API_KEY
               valueFrom:
                 secretKeyRef:

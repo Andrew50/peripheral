@@ -134,10 +134,6 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	return response, nil
 }
 
-// callWorkerBacktest calls the worker's run_backtest function via Redis queue
-func callWorkerBacktest(ctx context.Context, conn *data.Conn, strategyID int) (*WorkerBacktestResult, error) {
-	return callWorkerBacktestWithProgress(ctx, conn, strategyID, nil)
-}
 
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
 func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
@@ -178,10 +174,6 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strate
 // ProgressCallback is a function type for sending progress updates during backtest execution
 type ProgressCallback func(message string)
 
-// waitForBacktestResult waits for a backtest result via Redis pubsub
-func waitForBacktestResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerBacktestResult, error) {
-	return waitForBacktestResultWithProgress(ctx, conn, taskID, timeout, nil)
-}
 
 // waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
 func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {

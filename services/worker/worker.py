@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from dataframe_strategy_engine import NumpyStrategyEngine
 from validator import SecurityValidator, SecurityError
+from strategy_generator import StrategyGenerator
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from src.strategy_data_analyzer import StrategyDataAnalyzer
@@ -49,6 +50,7 @@ class StrategyWorker:
         
         self.strategy_engine = NumpyStrategyEngine()
         self.security_validator = SecurityValidator()
+        self.strategy_generator = StrategyGenerator()
         
         logger.info(f"Strategy worker {self.worker_id} initialized")
         
@@ -419,7 +421,7 @@ class StrategyWorker:
                     logger.error(f"Invalid task data: {task_data}")
                     continue
                     
-                if task_type not in ['backtest', 'screening', 'alert']:
+                if task_type not in ['backtest', 'screening', 'alert', 'create_strategy']:
                     error_msg = f"Unknown task type: {task_type}"
                     logger.error(error_msg)
                     self._set_task_result(task_id, "error", {"error": error_msg})
@@ -441,6 +443,8 @@ class StrategyWorker:
                         result = self._execute_screening(task_id=task_id, **args)
                     elif task_type == 'alert':
                         result = self._execute_alert(task_id=task_id, **args)
+                    elif task_type == 'create_strategy':
+                        result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
                     
                     # Calculate execution time
                     execution_time = time.time() - start_time
@@ -683,6 +687,40 @@ class StrategyWorker:
         logger.info(f"Alert completed")
         return result
     
+    async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 
+                                     prompt: str = None, strategy_id: int = -1, **kwargs) -> Dict[str, Any]:
+        """Execute strategy creation task"""
+        if not user_id or not prompt:
+            raise ValueError("user_id and prompt are required for strategy creation")
+            
+        if task_id:
+            self._publish_progress(task_id, "initialization", "Starting strategy creation...")
+        
+        logger.info(f"Creating strategy for user {user_id}, prompt: {prompt[:100]}...")
+        
+        if task_id:
+            self._publish_progress(task_id, "generation", "Generating strategy code with OpenAI o3...")
+        
+        # Use the strategy generator to create the strategy
+        result = await self.strategy_generator.create_strategy_from_prompt(
+            user_id=user_id,
+            prompt=prompt,
+            strategy_id=strategy_id
+        )
+        
+        if task_id:
+            if result.get("success"):
+                strategy_data = result.get("strategy", {})
+                self._publish_progress(task_id, "completed", 
+                                     f"Strategy created successfully: {strategy_data.get('name', 'Unknown')}", 
+                                     {"strategy_id": strategy_data.get("strategyId")})
+            else:
+                self._publish_progress(task_id, "error", 
+                                     f"Strategy creation failed: {result.get('error', 'Unknown error')}")
+        
+        logger.info(f"Strategy creation completed: {result.get('success', False)}")
+        return result
+    
     def _publish_progress(self, task_id: str, stage: str, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks"""
         try:
@@ -795,6 +833,21 @@ def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
         "args": {
             "strategy_id": strategy_id,
             "symbols": symbols
+        }
+    }
+    redis_client.lpush('strategy_queue', json.dumps(task_data))
+
+
+def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: int,
+                           prompt: str, strategy_id: int = -1) -> None:
+    """Add a strategy creation task to the queue"""
+    task_data = {
+        "task_id": task_id,
+        "task_type": "create_strategy",
+        "args": {
+            "user_id": user_id,
+            "prompt": prompt,
+            "strategy_id": strategy_id
         }
     }
     redis_client.lpush('strategy_queue', json.dumps(task_data))

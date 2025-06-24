@@ -74,6 +74,11 @@ spec:
                 secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: OPENAI_API_KEY
             - name: POLYGON_API_KEY
               valueFrom:
                 secretKeyRef:
