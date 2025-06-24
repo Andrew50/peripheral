@@ -413,7 +413,7 @@ func (c *Client) close() {
 func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 	client := &Client{
 		ws:                  ws,
-		send:                make(chan []byte, 3000),
+		send:                make(chan []byte, 10000), // Increase buffer for large chat responses
 		done:                make(chan struct{}),
 		replayActive:        false,
 		replayPaused:        false,
