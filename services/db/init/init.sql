@@ -24,6 +24,29 @@ CREATE TABLE users (
     profile_picture TEXT,
     auth_type VARCHAR(20) DEFAULT 'password' -- 'password' for password-only auth, 'google' for Google-only auth, 'both' for users who can use either method
 );
+
+-- Insert system user with ID 0 for public/unauthenticated access
+-- This prevents foreign key constraint violations when logging public chart queries
+INSERT INTO users (userId, username, password, email, auth_type, settings)
+VALUES (
+    0, 
+    'public', 
+    'NO_PASSWORD', 
+    'public@atlantis.trading',
+    'system',
+    '{"description": "System user for public chart access and analytics"}'::json
+)
+ON CONFLICT (userId) DO NOTHING;
+
+-- Ensure the sequence doesn't conflict with the manually inserted ID 0
+-- Reset the sequence to start from 1 if it's currently at 0
+SELECT CASE 
+    WHEN last_value = 0 
+    THEN setval('users_userid_seq', 1, false)
+    ELSE setval('users_userid_seq', greatest(last_value, 1), true)
+END
+FROM users_userid_seq;
+
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
 CREATE TABLE securities (
