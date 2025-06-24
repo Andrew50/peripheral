@@ -91,7 +91,12 @@ When analyzing user requests, pay special attention to these common patterns:
 7. Use `.iterrows()` to iterate through filtered results
 8. Calculate any needed technical indicators within your function
 9. Sort data by ticker and date when calculating indicators that depend on previous values
-10. Optional fields that enhance the strategy:
+10. **IMPORTANT: Include indicator values in returned instances**
+    - For any technical indicators calculated (RSI, MACD, moving averages, etc.), include their values in the returned instance dictionaries
+    - Use descriptive field names like `rsi`, `macd`, `sma_20`, `ema_12`, `bollinger_upper`, etc.
+    - Round indicator values to appropriate decimal places (2-4 decimals typically)
+    - This allows downstream analysis and visualization of the indicator values that triggered the pattern
+11. Optional fields that enhance the strategy:
     - `score`: Float (0.0-1.0) indicating signal strength
     - `message`: Descriptive message about the signal
     - Other relevant metrics from the analysis
@@ -131,6 +136,9 @@ def gap_up_strategy(df):
             'timestamp': str(row['date']),
             'gap_percent': round(row['gap_pct'], 2),
             'volume_ratio': round(row['volume_ratio'], 2),
+            'volume_avg': round(row['volume_avg'], 0),
+            'open_price': row['open'],
+            'prev_close': row['prev_close'],
             'score': min(1.0, (row['gap_pct'] / 10.0) + (row['volume_ratio'] / 5.0)),
             'message': f"{row['ticker']} gapped up {row['gap_pct']:.1f}% with {row['volume_ratio']:.1f}x volume"
         })
@@ -175,6 +183,9 @@ def rsi_oversold_strategy(df):
             'rsi': round(row['rsi'], 2),
             'price': row['close'],
             'sma_50': round(row['sma_50'], 2),
+            'high': row['high'],
+            'low': row['low'],
+            'volume': row['volume'],
             'score': (30 - row['rsi']) / 30,  # Lower RSI = higher score
             'message': f"{row['ticker']} oversold with RSI {row['rsi']:.1f}"
         })
@@ -219,7 +230,10 @@ def macd_crossover_strategy(df):
             'macd': round(row['macd'], 4),
             'macd_signal': round(row['macd_signal'], 4),
             'macd_histogram': round(row['macd_histogram'], 4),
+            'ema_12': round(row['ema_12'], 2),
+            'ema_26': round(row['ema_26'], 2),
             'price': row['close'],
+            'volume': row['volume'],
             'score': min(1.0, abs(row['macd_histogram']) * 10),
             'message': f"{row['ticker']} MACD bullish crossover at ${row['close']:.2f}"
         })

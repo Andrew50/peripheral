@@ -30,11 +30,23 @@ class PythonExecutionEngine:
         self.results = {}
         
         # For security testing, we want to block dangerous code
-        dangerous_keywords = ['exec', 'eval', 'import os', 'subprocess', 'open(']
-        if any(keyword in strategy_code for keyword in dangerous_keywords):
-            raise SecurityError("Dangerous code detected")
+        import re
+        dangerous_patterns = [
+            r'\bexec\s*\(',
+            r'\beval\s*\(',
+            r'\bimport\s+os\b',
+            r'\bfrom\s+os\b',
+            r'\bsubprocess\b',
+            r'\bopen\s*\(',
+            r'__import__'
+        ]
+        
+        for pattern in dangerous_patterns:
+            if re.search(pattern, strategy_code):
+                raise SecurityError("Dangerous code detected")
         
         # Create safe execution environment
+        import math
         safe_globals = {
             '__builtins__': {
                 'len': len,
@@ -59,6 +71,7 @@ class PythonExecutionEngine:
                 'all': all,
                 'print': print,
             },
+            'math': math,
             'save_result': self._save_result,
         }
         
@@ -303,7 +316,6 @@ print(f"Safe calculation: {math_result}")
 
         legitimate_code = """
 # Legitimate trading strategy
-import math
 
 # Mock price data
 prices = [100, 102, 101, 105, 107, 106, 109]
@@ -314,16 +326,23 @@ if len(prices) >= sma_period:
     sma = sum(prices[-sma_period:]) / sma_period
     current_price = prices[-1]
     
-    # Trading logic
-    if current_price > sma:
+    # Trading logic with mathematical operations
+    price_volatility = max(prices) - min(prices)
+    normalized_price = current_price / max(prices)
+    
+    if current_price > sma and normalized_price > 0.95:
         signal = "BUY"
-    else:
+    elif current_price < sma and normalized_price < 0.90:
         signal = "SELL"
+    else:
+        signal = "HOLD"
     
     trading_strategy = {
         "signal": signal,
         "current_price": current_price,
         "sma": sma,
+        "volatility": price_volatility,
+        "normalized_price": round(normalized_price, 3),
         "strategy_executed": True
     }
 else:
@@ -336,7 +355,7 @@ else:
 
         try:
             result = await self.engine.execute(legitimate_code, {})
-
+            
             # Check that the strategy executed and produced expected results
             assert (  # nosec B101
                 "trading_strategy" in result

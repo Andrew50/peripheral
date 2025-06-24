@@ -25,22 +25,22 @@ env:
   BACKEND_URL: ${{ github.event.inputs.backend_url || 'http://localhost:8080' }}
 
 jobs:
-  # Core test matrix - no duplication
-  core-tests:
-    name: Core Tests
+  # Integration test matrix
+  integration-tests:
+    name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     strategy:
       matrix:
-        test-suite: ['go-backend', 'python-core', 'python-advanced']
+        test-suite: ['go-integration-tests', 'python-integration-tests']
 
     steps:
     - name: 🔧 Checkout code
       uses: actions/checkout@v4
 
     - name: 🐹 Setup Go
-      if: matrix.test-suite == 'go-backend'
+      if: matrix.test-suite == 'go-integration-tests'
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
@@ -48,7 +48,7 @@ jobs:
         cache-dependency-path: services/backend/go.sum
 
     - name: 🐍 Setup Python
-      if: startsWith(matrix.test-suite, 'python')
+      if: matrix.test-suite == 'python-integration-tests'
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
@@ -56,17 +56,17 @@ jobs:
         cache-dependency-path: services/worker/requirements.txt
 
     - name: 📦 Install Python dependencies
-      if: startsWith(matrix.test-suite, 'python')
+      if: matrix.test-suite == 'python-integration-tests'
       run: |
         cd services/worker
         pip install -r requirements.txt
         pip install requests pytest redis
         cd ../..
 
-    - name: 🧪 Run Go Backend Tests
-      if: matrix.test-suite == 'go-backend'
+    - name: 🧪 Run Go Integration Tests
+      if: matrix.test-suite == 'go-integration-tests'
       run: |
-        echo "🧪 Running Go Backend Tests"
+        echo "🧪 Running Go Integration Tests"
         cd services/backend
         
         # Create a minimal test that doesn't require full backend
@@ -83,15 +83,15 @@ jobs:
         
         # Print summary at the end
         echo ""
-        echo "📋 Go Backend Tests Summary"
+        echo "📋 Go Integration Tests Summary"
         echo "=================================="
         echo "✅ Backend Integration Tests Completed"
         echo "✅ Strategy Pipeline Tests Completed"
 
-    - name: 🧪 Run Python Core Tests
-      if: matrix.test-suite == 'python-core'
+    - name: 🧪 Run Python Integration Tests
+      if: matrix.test-suite == 'python-integration-tests'
       run: |
-        echo "🧪 Running Python Core Tests"
+        echo "🧪 Running Python Integration Tests"
         cd services/worker/tests
         
         # Core functionality tests
@@ -110,22 +110,7 @@ jobs:
         echo "🛡️ Testing Security Fixes..."
         python test_security_fixes.py
         
-        # Print summary at the end
-        echo ""
-        echo "📋 Python Core Tests Summary"
-        echo "=================================="
-        echo "✅ AST Parser and Data Analysis Tests Completed"
-        echo "✅ Complex Strategy Tests Completed"
-        echo "✅ Integration Endpoint Tests Completed"
-        echo "✅ Security Validation Tests Completed"
-
-    - name: 🔬 Run Python Advanced Tests
-      if: matrix.test-suite == 'python-advanced'
-      run: |
-        echo "🧪 Running Python Advanced Tests"
-        cd services/worker/tests
-        
-        # Advanced and supplementary tests
+        # Strategy execution and validation tests
         echo "📊 Testing Simple Strategy..."
         python test_simple.py
         
@@ -153,8 +138,12 @@ jobs:
         
         # Print summary at the end
         echo ""
-        echo "📋 Python Advanced Tests Summary"
+        echo "📋 Python Integration Tests Summary"
         echo "=================================="
+        echo "✅ AST Parser and Data Analysis Tests Completed"
+        echo "✅ Complex Strategy Tests Completed"
+        echo "✅ Integration Endpoint Tests Completed"
+        echo "✅ Security Validation Tests Completed"
         echo "✅ Strategy Execution Tests Completed"
         echo "✅ Security and Typing Validation Tests Completed"
         echo "✅ DataFrame Strategy Engine Tests Completed"
