@@ -40,6 +40,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
+ <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 {#if visible}
 	<div 
 		class="auth-modal-overlay"
@@ -60,8 +61,7 @@
 
 				<!-- Feature requirement header -->
 				<div class="feature-header">
-					<h2>Authentication Required</h2>
-					<p>You need to sign in to access <strong>{requiredFeature}</strong></p>
+					<h2>Login to Atlantis</h2>
 				</div>
 
 				<!-- Auth component -->

@@ -1839,7 +1839,10 @@
 		<!-- Public viewing message -->
 		<div class="public-viewing-notice">
 			<p>
-				You are viewing a shared conversation. <a href="/app">Sign in</a> to start your own chat.
+				You are viewing a shared conversation. <button
+					class="auth-link"
+					on:click={() => showAuthModal('conversations', 'login')}>Sign in</button
+				> to start your own chat.
 			</p>
 		</div>
 	{/if}
