@@ -190,21 +190,53 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 
 				// Categorize results
 				for _, execResult := range executeResults {
-					if execResult.Error != nil && *execResult.Error != "" {
-						discardedResults = append(discardedResults, execResult)
-					} else {
-						activeResults = append(activeResults, execResult)
-					}
+					// More defensive check to prevent null pointer dereference
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Printf("Panic recovered in result categorization: %v\n", r)
+								// Treat as error case if panic occurs
+								discardedResults = append(discardedResults, execResult)
+							}
+						}()
+
+						if execResult.Error != nil {
+							errorStr := *execResult.Error
+							if errorStr != "" {
+								discardedResults = append(discardedResults, execResult)
+							} else {
+								activeResults = append(activeResults, execResult)
+							}
+						} else {
+							activeResults = append(activeResults, execResult)
+						}
+					}()
 				}
 
 				// Update the planning prompt with execution results
 				planningPrompt += "\n\nExecution results:\n"
 				for _, execResult := range executeResults {
-					if execResult.Error != nil && *execResult.Error != "" {
-						planningPrompt += fmt.Sprintf("Function %s (ERROR): %s\n", execResult.FunctionName, *execResult.Error)
-					} else {
-						planningPrompt += fmt.Sprintf("Function %s: %s\n", execResult.FunctionName, execResult.Result)
-					}
+					// More defensive check to prevent null pointer dereference
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Printf("Panic recovered in planning prompt building: %v\n", r)
+								// Treat as error case if panic occurs
+								planningPrompt += fmt.Sprintf("Function %s: [ERROR: panic during processing]\n", execResult.FunctionName)
+							}
+						}()
+
+						if execResult.Error != nil {
+							errorStr := *execResult.Error
+							if errorStr != "" {
+								planningPrompt += fmt.Sprintf("Function %s (ERROR): %s\n", execResult.FunctionName, errorStr)
+							} else {
+								planningPrompt += fmt.Sprintf("Function %s: %s\n", execResult.FunctionName, execResult.Result)
+							}
+						} else {
+							planningPrompt += fmt.Sprintf("Function %s: %s\n", execResult.FunctionName, execResult.Result)
+						}
+					}()
 				}
 
 				if result.Thoughts != "" {

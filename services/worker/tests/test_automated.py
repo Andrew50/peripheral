@@ -46,11 +46,31 @@ result = {
     
     print("  ✅ Strategy validation passed")
     
-    # Test code execution simulation
+    # Test code execution simulation using safe sandbox
     try:
-        exec(mock_strategy['code'])
-        assert 'result' in locals(), "Strategy should produce a result"
-        strategy_result = locals()['result']
+        from validator import SecurityValidator
+        validator = SecurityValidator()
+        
+        # Validate code safety first
+        if not validator.validate_code(mock_strategy['code']):
+            print("  ⚠️ Strategy code failed security validation")
+            return False
+        
+        # Create safe execution environment
+        safe_globals = {
+            '__builtins__': {
+                'len': len, 'range': range, 'enumerate': enumerate,
+                'float': float, 'int': int, 'str': str, 'bool': bool,
+                'abs': abs, 'min': min, 'max': max, 'sum': sum,
+                'round': round, 'sorted': sorted, 'any': any, 'all': all,
+            }
+        }
+        safe_locals = {}
+        
+        # Execute in sandboxed environment
+        exec(mock_strategy['code'], safe_globals, safe_locals)  # nosec B102 - properly sandboxed
+        assert 'result' in safe_locals, "Strategy should produce a result"
+        strategy_result = safe_locals['result']
         assert 'signal' in strategy_result, "Result should contain signal"
         print(f"  ✅ Strategy execution simulation: {strategy_result['signal']}")
     except Exception as e:

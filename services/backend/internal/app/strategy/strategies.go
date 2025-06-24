@@ -840,7 +840,7 @@ func extractDescription(response string) string {
 func generateStrategyName(prompt string) string {
 	words := strings.Fields(prompt)
 	if len(words) == 0 {
-		return fmt.Sprintf("Custom Strategy %d", time.Now().Unix())
+		return fmt.Sprintf("Custom Strategy %d", time.Now().UnixNano())
 	}
 
 	// Take first few words and capitalize, but skip common words
@@ -867,8 +867,8 @@ func generateStrategyName(prompt string) string {
 		nameWords[i] = caser.String(word)
 	}
 
-	// Add timestamp to ensure uniqueness
-	timestamp := time.Now().Unix()
+	// Add nanosecond timestamp to ensure uniqueness even with concurrent requests
+	timestamp := time.Now().UnixNano()
 	return fmt.Sprintf("%s Strategy %d", strings.Join(nameWords, " "), timestamp)
 }
 
