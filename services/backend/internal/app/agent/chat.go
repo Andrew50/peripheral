@@ -110,9 +110,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		var err error
 		if planningPrompt == "" {
 			firstRound = true
-			result, err = RunPlanner(ctx, conn, query.Query, firstRound, conversationID, userID)
+			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
+			if err != nil {
+				return nil, fmt.Errorf("error building planning prompt: %w", err)
+			}
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
 		} else {
-			result, err = RunPlanner(ctx, conn, planningPrompt, firstRound, conversationID, userID)
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
 		}
 		if err != nil {
 			// Mark as error instead of deleting for debugging

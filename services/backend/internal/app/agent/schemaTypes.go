@@ -58,27 +58,23 @@ type AtlantisFinalResponse struct {
 	ContentChunks []AtlantisContentChunk `json:"content_chunks" jsonschema:"required"`
 	Suggestions   []string               `json:"suggestions"      jsonschema:"required"`
 }
-type AtlantisResponse struct {
-	ContentChunks []AtlantisContentChunk `json:"content_chunks"`
-	Suggestions   []string               `json:"suggestions"`
-}
 type PlanningOutput struct {
 	// planning-output fields
-	Stage          *string      `json:"stage,omitempty"  jsonschema:"enum=execute,enum=finished_executing"`
-	Rounds         []AgentRound `json:"rounds,omitempty"`
-	Thoughts       *string      `json:"thoughts,omitempty"`
-	DiscardResults []int        `json:"discard_results,omitempty"`
+	Stage          *string      `json:"stage,omitempty"  jsonschema:"enum=execute,enum=finished_executing,required"`
+	Rounds         []AgentRound `json:"rounds,omitempty" jsonschema:"required"`
+	Thoughts       *string      `json:"thoughts,omitempty" jsonschema:"required"`
+	DiscardResults []int        `json:"discard_results,omitempty" jsonschema:"required"`
 }
 
 // A single execution round.
 // If Parallel is true, all Calls in the round can run concurrently.
 type AgentRound struct {
-	Parallel bool        `json:"parallel"`
-	Calls    []AgentCall `json:"calls"`
+	Parallel bool        `json:"parallel" jsonschema:"required"`
+	Calls    []AgentCall `json:"calls" jsonschema:"required"`
 }
 
 // A planned function/tool invocation.
 type AgentCall struct {
-	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args,omitempty" jsonschema:"type=object,additionalProperties=false"`
+	Name string      `json:"name" jsonschema:"required"`
+	Args interface{} `json:"args,omitempty" jsonschema:"required"`
 }

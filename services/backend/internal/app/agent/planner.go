@@ -223,7 +223,7 @@ const planningModel = "gemini-2.5-flash"
 const openAIPlannerModel = "o4-mini"
 const openAIFinalResponseModel = "o3"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRound bool, conversationID string, userID int) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
@@ -232,21 +232,18 @@ func RunPlanner(ctx context.Context, conn *data.Conn, prompt string, initialRoun
 		if err != nil {
 			return nil, fmt.Errorf("error getting system instruction: %w", err)
 		}
-		plan, err = _gptGeneratePlan(ctx, conn, systemPrompt, prompt, conversationID, userID)
-		if err != nil {
-			return nil, fmt.Errorf("error generating plan: %w", err)
-		}
 	} else {
 		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
 		if err != nil {
 			return nil, fmt.Errorf("error getting system instruction: %w", err)
 		}
-		plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
-		if err != nil {
-			return nil, fmt.Errorf("error generating plan: %w", err)
-		}
+	}
+	plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("error generating plan: %w", err)
 	}
 	return plan, nil
+
 }
 
 func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
@@ -394,7 +391,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-func _gptGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string, conversationID string, userID int) (interface{}, error) {
+func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
@@ -402,9 +399,26 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string,
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
-	messages, err := buildOpenAIConversationHistory(prompt, conversationHistory.([]DBConversationMessage))
+	messages, err := buildOpenAIFinalResponseMessages(prompt, conversationHistory.([]DBConversationMessage), executionResults, thoughts, false)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI conversation history: %w", err)
+	}
+	ref := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	rawSchema := ref.Reflect(PlanningOutput{})
+	b, _ := json.Marshal(rawSchema)
+	var oaSchema map[string]any
+	_ = json.Unmarshal(b, &oaSchema)
+	textConfig := responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "planningOutput",
+				Schema: oaSchema,
+				Strict: openai.Bool(true),
+			},
+		},
 	}
 
 	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
@@ -414,6 +428,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string,
 		Model:        openAIPlannerModel,
 		Instructions: openai.String(enhancedSystemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
+		Text:         textConfig,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error generating plan: %w", err)
@@ -422,7 +437,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string,
 	resultText := res.OutputText()
 	fmt.Println("\n GPT resultText: ", resultText)
 
-	var directAns DirectAnswer
+	/*var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
 		hasValidContent := false
@@ -442,7 +457,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string,
 			}
 			return directAns, nil
 		}
-	}
+	}*/
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
@@ -514,7 +529,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
 	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts, true)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
 	}
@@ -633,7 +648,7 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 }
 
 // buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
-func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) (responses.ResponseInputParam, error) {
+func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string, finalRound bool) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	conversationMessages, err := buildOpenAIConversationHistory(userQuery, conversationHistory)
 	if err != nil {
@@ -654,7 +669,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 		var allResults []map[string]interface{}
 		for _, result := range executionResults {
 			// Skip results that had errors
-			if result.Error != nil {
+			if result.Error != nil && finalRound {
 				continue
 			}
 
