@@ -29,7 +29,10 @@ def classify_symbol(symbol):
         
         # Check if gap exceeds threshold (adjust threshold as needed)
         threshold = 2.0  # 2% gap up threshold
-        return gap_percent > threshold
+        if gap_percent > threshold:
+            return True
+        else:
+            return False
         
     except Exception:
         return False

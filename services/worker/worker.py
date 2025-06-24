@@ -65,7 +65,6 @@ class StrategyWorker:
             decode_responses=True,
             socket_connect_timeout=10,
             socket_timeout=70,  # Must be longer than brpop timeout (60s) + buffer
-            retry_on_timeout=True,
             health_check_interval=30
         )
     
