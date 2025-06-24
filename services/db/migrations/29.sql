@@ -8,7 +8,7 @@ BEGIN;
 INSERT INTO users (userId, username, password, email, auth_type, settings)
 VALUES (
     0, 
-    'public', 
+    'public@atlantis.trading', 
     'NO_PASSWORD', 
     'public@atlantis.trading',
     'system',

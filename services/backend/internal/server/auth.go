@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	//"log"
 	"os"
@@ -64,7 +65,6 @@ type LoginResponse struct {
 // SignupArgs represents a structure for handling SignupArgs data.
 type SignupArgs struct {
 	Email    string `json:"email"`
-	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -76,8 +76,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
 		return nil, fmt.Errorf("Signup invalid args: %v", err)
 	}
-
-	log.Printf("Creating account for email: %s, username: %s", a.Email, a.Username)
+	username := strings.ToLower(a.Email)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -112,7 +111,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 
 	// Check if username already exists
-	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE username=$1", a.Username).Scan(&count)
+	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE username=$1", username).Scan(&count)
 	if err != nil {
 		log.Printf("ERROR: Database query failed while checking username: %v", err)
 		return nil, fmt.Errorf("error checking username: %v", err)
@@ -125,7 +124,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var userID int
 	err = tx.QueryRow(ctx,
 		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
-		a.Username, a.Email, a.Password, "password").Scan(&userID)
+		username, a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
 		log.Printf("ERROR: Failed to create user: %v", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
@@ -235,7 +234,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 }
 
 func createToken(userID int) (string, error) {
-	expirationTime := time.Now().Add(1 * time.Hour)
+	expirationTime := time.Now().Add(6 * time.Hour)
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{

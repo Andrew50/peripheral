@@ -179,7 +179,7 @@
 					// Configure colorbar positioning for heatmaps
 					if (!processedTrace.colorbar) {
 						processedTrace.colorbar = {
-							x: -0.2, // Position colorbar further to the right
+							x: -0.2, // Position colorbar further to the left
 							xanchor: 'left',
 							thickness: 12,
 							len: 0.8,

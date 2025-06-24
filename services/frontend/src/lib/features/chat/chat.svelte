@@ -1068,10 +1068,17 @@
 		let userMessage: Message | undefined;
 		
 		if (message.sender === 'assistant') {
-			// If called from assistant message, find the preceding user message
-			// Assistant messages have message IDs like "user_msg_id_response"
-			const userMessageId = message.message_id.replace('_response', '');
-			userMessage = $messagesStore.find(msg => msg.message_id === userMessageId && msg.sender === 'user');
+			// For assistant messages (including errors), find the preceding user message
+			const messageIndex = $messagesStore.findIndex(msg => msg.message_id === message.message_id);
+			if (messageIndex !== -1) {
+				// Look backwards for the most recent user message
+				for (let i = messageIndex - 1; i >= 0; i--) {
+					if ($messagesStore[i].sender === 'user') {
+						userMessage = $messagesStore[i];
+						break;
+					}
+				}
+			}
 		} else if (message.sender === 'user') {
 			// If called from user message directly
 			userMessage = message;
@@ -1083,80 +1090,36 @@
 		}
 		
 		try {
-			// Use the user message ID (it should be the backend message ID)
-			const backendMessageId = userMessage.message_id;
-			
-			if (!backendMessageId) {
-				console.error('No backend message ID found for retrying');
-				return;
-			}
-
-			// Store the current conversation ID to ensure we stay in the same conversation
-			const originalConversationId = currentConversationId;
-
-			// Call backend to retry the message using the backend message ID
-			const requestPayload = {
+			// Always use backend retry API
+			const response = await privateRequest('retryMessage', {
 				conversation_id: currentConversationId,
-				message_id: backendMessageId
-			};
-
-			const response = await privateRequest('retryMessage', requestPayload);
+				message_id: userMessage.message_id
+			});
 
 			if (response && (response as any).success) {
-				console.log('Retry response received:', response);
-				
-				// Ensure we stay in the same conversation that was retried
-				const retryConversationId = (response as any).conversation_id || originalConversationId;
-				if (retryConversationId !== originalConversationId) {
-					console.warn('Backend returned different conversation ID during retry');
-				}
-				// Always use the conversation ID from the retry response to ensure consistency
-				currentConversationId = retryConversationId;
-				
-				console.log('Current messages before reload:', $messagesStore.length);
-				
-				// Only remove the user message being retried and all subsequent messages
-				// This matches what the backend will archive
-				const userMessageIndex = $messagesStore.findIndex(msg => msg.message_id === backendMessageId);
-				if (userMessageIndex !== -1) {
-					// Keep only messages before the one being retried
-					const messagesToKeep = $messagesStore.slice(0, userMessageIndex);
-					messagesStore.set(messagesToKeep);
+				// Update conversation ID if needed
+				if ((response as any).conversation_id) {
+					currentConversationId = (response as any).conversation_id;
 				}
 				
 				// Reload conversation history to reflect the archived state
 				await loadConversationHistory(false);
-				
-				console.log('Current messages after reload:', $messagesStore.length);
-				
-				// Wait a moment for the UI to fully update
 				await tick();
 
-				// Now automatically send the original message as a new chat request
 				// Set the input value and context from the retry response
 				inputValue.set((response as any).original_query || '');
-				
-				// Set context items from the retry response, or empty array if none
 				contextItems.update(currentItems => {
 					return (response as any).context_items || [];
 				});
 
-				// Use tick to ensure input value is updated before submitting
 				await tick();
-				
-				console.log('About to submit retried message:', (response as any).original_query);
-				
-				// Submit the message using existing logic
 				handleSubmit();
 			} else {
 				console.error('Backend retry failed or success=false');
-				// Reload conversation to get current state
 				await loadConversationHistory(false);
 			}
 		} catch (error) {
 			console.error('Error retrying message:', error);
-			
-			// Reload conversation to get current state
 			await loadConversationHistory(false);
 		}
 	}
@@ -1479,7 +1442,37 @@
 									<p>{@html parseMarkdown(message.content)}</p>
 								{/if}
 							</div>
-							{#if message.sender === 'assistant'}
+							
+							<!-- Error message retry button -->
+							{#if message.sender === 'assistant' && (message.status === 'error' || message.content.includes('Error:'))}
+								<div class="error-retry-section">
+									<div class="retry-container">
+										<button class="error-retry-btn glass glass--small glass--responsive" on:click={() => showRetryOptions(message)} title="Retry Message">
+											<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<polyline points="23 4 23 10 17 10"></polyline>
+												<polyline points="1 20 1 14 7 14"></polyline>
+												<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+											</svg>
+											Try again
+										</button>
+
+										{#if showRetryPopup === message.message_id}
+											<div class="retry-popup glass glass--rounded glass--responsive" bind:this={retryPopupRef}>
+												<button class="retry-option" on:click={() => { retryMessage(message); closeRetryPopup(); }}>
+													<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+														<polyline points="23 4 23 10 17 10"></polyline>
+														<polyline points="1 20 1 14 7 14"></polyline>
+														<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+													</svg>
+													Retry
+												</button>
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/if}
+							
+							{#if message.sender === 'assistant' && !(message.status === 'error' || message.content.includes('Error:'))}
 								<div class="message-actions">
 									<button 
 										class="copy-btn glass glass--small glass--responsive {copiedMessageId === message.message_id ? 'copied' : ''}" 
