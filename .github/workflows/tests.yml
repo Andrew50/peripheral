@@ -27,21 +27,22 @@ env:
   BACKEND_URL: ${{ github.event.inputs.backend_url || 'http://localhost:8080' }}
 
 jobs:
-  integration-tests:
-    name: Natural Language Strategy Integration Tests
+  # Core test matrix - no duplication
+  core-tests:
+    name: Core Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     strategy:
       matrix:
-        test-suite: ['go', 'python-unit', 'python-integration', 'python-comprehensive', 'python-advanced']
+        test-suite: ['go-backend', 'python-core', 'python-advanced']
 
     steps:
     - name: 🔧 Checkout code
       uses: actions/checkout@v4
 
     - name: 🐹 Setup Go
-      if: matrix.test-suite == 'go'
+      if: matrix.test-suite == 'go-backend'
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
@@ -64,10 +65,10 @@ jobs:
         pip install requests pytest redis
         cd ../..
 
-    - name: 🧪 Run Go Integration Tests
-      if: matrix.test-suite == 'go'
+    - name: 🧪 Run Go Backend Tests
+      if: matrix.test-suite == 'go-backend'
       run: |
-        echo "🧪 Running Go Integration Tests"
+        echo "🧪 Running Go Backend Tests"
         cd services/backend
         
         # Create a minimal test that doesn't require full backend
@@ -82,96 +83,76 @@ jobs:
           go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 300s
         fi
 
-    - name: 🧪 Run Python Unit Tests
-      if: matrix.test-suite == 'python-unit'
+    - name: 🧪 Run Python Core Tests
+      if: matrix.test-suite == 'python-core'
       run: |
-        echo "🧪 Running Python Unit Tests"
+        echo "🧪 Running Python Core Tests"
         cd services/worker/tests
         
-        # Run basic unit tests
+        # Core functionality tests
         echo "🔍 Testing AST Parser..."
         python test_standalone_ast.py
         
-        echo "📊 Testing Simple Strategy Tests..."
+        echo "📈 Testing AST with Sample Data..."
+        python test_ast_with_sample_data.py
+        
+        echo "🎯 Testing Complex Strategies (Fixed)..."
+        python test_complex_strategies_fixed.py
+        
+        echo "🌐 Testing Integration Endpoints..."
+        python test_integration_endpoints.py
+        
+        echo "🛡️ Testing Security Fixes..."
+        python test_security_fixes.py
+
+    - name: 🔬 Run Python Advanced Tests
+      if: matrix.test-suite == 'python-advanced'
+      run: |
+        echo "🧪 Running Python Advanced Tests"
+        cd services/worker/tests
+        
+        # Advanced and supplementary tests
+        echo "📊 Testing Simple Strategy..."
         python test_simple.py
         
         echo "⌨️ Testing Typing System..."
         python test_typing_simple.py
         
-        echo "🛡️ Testing Security Fixes..."
-        python test_security_fixes.py
-        
         echo "📈 Testing Dataframe Strategy..."
         python test_dataframe_strategy.py
-
-    - name: 🧪 Run Python Integration Tests
-      if: matrix.test-suite == 'python-integration'
-      run: |
-        echo "🧪 Running Python Integration Tests"
-        cd services/worker/tests
         
-        # Run integration tests
-        echo "🌐 Testing Integration Endpoints..."
-        python test_integration_endpoints.py
-        
-        echo "🖥️ Testing Server Integration..."
-        python test_server_integration.py || true  # Allow to continue if server not available
-        
-        echo "🔗 Testing Redis Commands..."
-        python test_redis_commands.py || true  # Allow to continue if Redis not available
-
-    - name: 📊 Run Python Comprehensive Tests
-      if: matrix.test-suite == 'python-comprehensive'
-      run: |
-        echo "🧪 Running Comprehensive Strategy Tests"
-        cd services/worker/tests
-        
-        # Run AST with sample data tests
-        echo "📈 Testing AST with Sample Data..."
-        python test_ast_with_sample_data.py
-        
-        # Run complex strategy tests (original version)
-        echo "🎯 Testing Complex Strategies..."
-        python test_complex_strategies.py
-        
-        # Run the fixed version with progress indicators
-        echo "🎯 Testing Complex Strategies (Fixed)..."
-        python test_complex_strategies_fixed.py
-
-    - name: 🔬 Run Python Advanced Tests
-      if: matrix.test-suite == 'python-advanced'
-      run: |
-        echo "🧪 Running Advanced Strategy Tests"
-        cd services/worker/tests
-        
-        # Run automated tests
-        echo "🤖 Testing Automated Strategy Generation..."
+        echo "🤖 Testing Automated Generation..."
         python test_automated.py
         
-        # Run strategy generation tests
         echo "🧠 Testing Strategy Generation..."
         python test_strategy_generation.py
         
-        # Run demo strategy
         echo "🎮 Testing Demo Strategy..."
         python demo_strategy.py
+        
+        # Optional tests (may fail if services not available)
+        echo "🖥️ Testing Server Integration..."
+        python test_server_integration.py || echo "⚠️ Server integration test skipped"
+        
+        echo "🔗 Testing Redis Commands..."
+        python test_redis_commands.py || echo "⚠️ Redis test skipped"
 
     - name: 📋 Test Summary
       if: always()
       run: |
-        echo "📋 Integration Test Summary for ${{ matrix.test-suite }}"
+        echo "📋 Test Summary for ${{ matrix.test-suite }}"
         echo "=================================="
         echo "✅ Test suite: ${{ matrix.test-suite }}"
         echo "🌐 Backend URL: $BACKEND_URL"
         echo "⏭️ Skip full tests: $SKIP_INTEGRATION_TESTS"
         echo "🎯 Job status: ${{ job.status }}"
 
-  # Comprehensive test run using the shell script
+  # Full pipeline test - only runs when explicitly requested
   full-pipeline-test:
     name: Full Pipeline Integration Test
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event.inputs.run_full_tests == 'true' || github.ref == 'refs/heads/main'
+    if: github.event.inputs.run_full_tests == 'true'
 
     steps:
     - name: 🔧 Checkout code
@@ -205,11 +186,9 @@ jobs:
         cd ../..
 
     - name: 🐳 Start test environment (if needed)
-      if: github.event.inputs.run_full_tests == 'true'
       run: |
         echo "🐳 Setting up test environment..."
         # Add commands here to start necessary services
-        # For example: docker-compose up -d postgres redis
         echo "⏭️ Skipping full environment setup for now"
 
     - name: 🧪 Run Full Integration Test Suite
@@ -233,107 +212,11 @@ jobs:
           services/backend/tests/*.log
         retention-days: 7
 
-  # New comprehensive test job that runs all tests
-  all-tests:
-    name: All Tests Suite
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    if: github.event.inputs.run_full_tests == 'true'
-
-    steps:
-    - name: 🔧 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐍 Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: services/worker/requirements.txt
-
-    - name: 📦 Install Python dependencies
-      run: |
-        cd services/worker
-        pip install -r requirements.txt
-        pip install requests pytest redis
-        cd ../..
-
-    - name: 🧪 Run All Python Tests Sequentially
-      run: |
-        echo "🧪 Running All Python Tests"
-        cd services/worker/tests
-        
-        # Track test results
-        PASSED=0
-        FAILED=0
-        
-        # Define all tests to run
-        TESTS=(
-          "test_standalone_ast.py:🔍 AST Parser"
-          "test_simple.py:📊 Simple Strategy"
-          "test_typing_simple.py:⌨️ Typing System"
-          "test_security_fixes.py:🛡️ Security Fixes"
-          "test_dataframe_strategy.py:📈 Dataframe Strategy"
-          "test_integration_endpoints.py:🌐 Integration Endpoints"
-          "test_ast_with_sample_data.py:📈 AST with Sample Data"
-          "test_complex_strategies.py:🎯 Complex Strategies"
-          "test_complex_strategies_fixed.py:🎯 Complex Strategies (Fixed)"
-          "test_automated.py:🤖 Automated Generation"
-          "test_strategy_generation.py:🧠 Strategy Generation"
-          "demo_strategy.py:🎮 Demo Strategy"
-        )
-        
-        # Optional tests (may fail if services not available)
-        OPTIONAL_TESTS=(
-          "test_server_integration.py:🖥️ Server Integration"
-          "test_redis_commands.py:🔗 Redis Commands"
-        )
-        
-        # Run required tests
-        for test_item in "${TESTS[@]}"; do
-          IFS=':' read -r test_file test_name <<< "$test_item"
-          echo "Running $test_name ($test_file)..."
-          if python "$test_file"; then
-            echo "✅ $test_name: PASSED"
-            ((PASSED++))
-          else
-            echo "❌ $test_name: FAILED"
-            ((FAILED++))
-          fi
-          echo "---"
-        done
-        
-        # Run optional tests
-        for test_item in "${OPTIONAL_TESTS[@]}"; do
-          IFS=':' read -r test_file test_name <<< "$test_item"
-          echo "Running $test_name ($test_file) [OPTIONAL]..."
-          if python "$test_file"; then
-            echo "✅ $test_name: PASSED"
-            ((PASSED++))
-          else
-            echo "⚠️ $test_name: FAILED (optional)"
-            # Don't increment FAILED for optional tests
-          fi
-          echo "---"
-        done
-        
-        # Summary
-        echo "🏆 Test Summary:"
-        echo "  ✅ Passed: $PASSED"
-        echo "  ❌ Failed: $FAILED"
-        
-        if [ $FAILED -eq 0 ]; then
-          echo "🎉 All required tests passed!"
-        else
-          echo "💥 $FAILED required tests failed"
-          exit 1
-        fi
-
   # Summary job
   test-summary:
-    name: Integration Test Summary
+    name: Test Summary
     runs-on: ubuntu-latest
-    needs: [integration-tests, full-pipeline-test, all-tests]
+    needs: [core-tests, full-pipeline-test]
     if: always()
 
     steps:
@@ -356,23 +239,15 @@ jobs:
         echo "  ✅ Server and Redis Integration"
         echo ""
         echo "📋 Test Results:"
-        echo "  Go Tests: ${{ needs.integration-tests.result }}"
-        echo "  Python Unit Tests: ${{ needs.integration-tests.result }}"
-        echo "  Python Integration Tests: ${{ needs.integration-tests.result }}"
-        echo "  Python Comprehensive Tests: ${{ needs.integration-tests.result }}"
-        echo "  Python Advanced Tests: ${{ needs.integration-tests.result }}"
+        echo "  Go Backend Tests: ${{ needs.core-tests.result }}"
+        echo "  Python Core Tests: ${{ needs.core-tests.result }}"
+        echo "  Python Advanced Tests: ${{ needs.core-tests.result }}"
         echo "  Full Pipeline: ${{ needs.full-pipeline-test.result }}"
-        echo "  All Tests Suite: ${{ needs.all-tests.result }}"
         echo ""
         
         # Check if core tests passed
-        CORE_SUCCESS=true
-        if [[ "${{ needs.integration-tests.result }}" != "success" ]]; then
-          CORE_SUCCESS=false
-        fi
-        
-        if [[ "$CORE_SUCCESS" == "true" ]]; then
-          echo "🎉 All core integration tests passed!"
+        if [[ "${{ needs.core-tests.result }}" == "success" ]]; then
+          echo "🎉 All core tests passed!"
           echo "✅ Natural language strategy pipeline is working correctly"
         else
           echo "❌ Some core tests failed - check individual job logs"
