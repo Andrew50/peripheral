@@ -408,7 +408,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 					return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
 				}
 				// Use safe insertion with comprehensive validation
-				err = safeInsertSecurityTickerChange(conn, ctx, ticker, figi, processingDate, nil, true, true, "ticker change")
+				err = safeInsertSecurityTickerChange(ctx, conn, ticker, figi, processingDate, nil, true, true, "ticker change")
 				if err != nil {
 					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 				}
@@ -439,7 +439,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				figi = getTickerDetailsResponse.CompositeFIGI
 			}
 			// Use safe insertion with comprehensive validation
-			err = safeInsertSecurityV2(conn, ctx, ticker, initialDate, nil, true, figi, true, "new ticker listing")
+			err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, nil, true, figi, true, "new ticker listing")
 			if err != nil {
 				return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 			}
@@ -517,7 +517,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 					figi = getTickerDetailsResponse.CompositeFIGI
 				}
 				// Use safe insertion with comprehensive validation
-				err = safeInsertSecurityV2(conn, ctx, ticker, initialDate, nil, true, figi, true, "polygon ticker listing")
+				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, nil, true, figi, true, "polygon ticker listing")
 				if err != nil {
 					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 				}
@@ -578,7 +578,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 }
 
 // validateSecurityInsertionV2 checks if a security insertion would violate database constraints
-func validateSecurityInsertionV2(conn *data.Conn, ctx context.Context, securityID *int, ticker string, minDate string, figi string, debug bool) error {
+func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, figi string, debug bool) error {
 	// Check for (securityid, minDate) constraint violation
 	if securityID != nil {
 		var count int
@@ -641,9 +641,9 @@ func validateSecurityInsertionV2(conn *data.Conn, ctx context.Context, securityI
 }
 
 // safeInsertSecurityTickerChange performs validation and insertion specifically for ticker change scenarios
-func safeInsertSecurityTickerChange(conn *data.Conn, ctx context.Context, ticker string, figi string, minDate string, maxDate interface{}, active bool, debug bool, actionDescription string) error {
+func safeInsertSecurityTickerChange(ctx context.Context, conn *data.Conn, ticker string, figi string, minDate string, maxDate interface{}, active bool, debug bool, actionDescription string) error {
 	// Pre-insertion validation
-	err := validateSecurityInsertionV2(conn, ctx, nil, ticker, minDate, figi, debug)
+	err := validateSecurityInsertionV2(ctx, conn, nil, ticker, minDate, figi, debug)
 	if err != nil {
 		if debug {
 			fmt.Printf("VALIDATION ERROR for %s (ticker=%s, minDate=%s): %v\n", actionDescription, ticker, minDate, err)
@@ -705,9 +705,9 @@ func safeInsertSecurityTickerChange(conn *data.Conn, ctx context.Context, ticker
 }
 
 // safeInsertSecurityV2 performs validation and insertion with the extended columns format
-func safeInsertSecurityV2(conn *data.Conn, ctx context.Context, ticker string, minDate string, maxDate interface{}, active bool, figi string, debug bool, actionDescription string) error {
+func safeInsertSecurityV2(ctx context.Context, conn *data.Conn, ticker string, minDate string, maxDate interface{}, active bool, figi string, debug bool, actionDescription string) error {
 	// Pre-insertion validation
-	err := validateSecurityInsertionV2(conn, ctx, nil, ticker, minDate, figi, debug)
+	err := validateSecurityInsertionV2(ctx, conn, nil, ticker, minDate, figi, debug)
 	if err != nil {
 		if debug {
 			fmt.Printf("VALIDATION ERROR for %s (ticker=%s, minDate=%s): %v\n", actionDescription, ticker, minDate, err)

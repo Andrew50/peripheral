@@ -502,7 +502,7 @@ Please generate a Python strategy function that identifies the pattern the user 
 	}
 
 	log.Printf("Full prompt length: %d characters", len(fullPrompt))
-	log.Printf("Full prompt preview (first 500 chars): %s...", fullPrompt[:min(500, len(fullPrompt))])
+	log.Printf("Full prompt preview (first 500 chars): %s...", fullPrompt[:minInt(500, len(fullPrompt))])
 
 	content := genai.Text(fullPrompt)
 	if len(content) == 0 {
@@ -795,7 +795,7 @@ func extractPythonCode(response string) string {
 
 	extractedCode := strings.TrimSpace(response[start : start+end])
 	log.Printf("Extracted code length: %d", len(extractedCode))
-	log.Printf("Extracted code preview (first 300 chars): %s", extractedCode[:min(300, len(extractedCode))])
+	log.Printf("Extracted code preview (first 300 chars): %s", extractedCode[:minInt(300, len(extractedCode))])
 	log.Printf("=== EXTRACT PYTHON CODE END ===")
 
 	return extractedCode
@@ -879,7 +879,7 @@ func saveStrategy(conn *data.Conn, userID int, name, description, prompt, python
 	log.Printf("Description: %q", description)
 	log.Printf("Prompt: %q", prompt)
 	log.Printf("Python code length: %d", len(pythonCode))
-	log.Printf("Python code preview (first 200 chars): %s", pythonCode[:min(200, len(pythonCode))])
+	log.Printf("Python code preview (first 200 chars): %s", pythonCode[:minInt(200, len(pythonCode))])
 
 	var strategyID int
 	log.Printf("Executing INSERT query...")
@@ -914,7 +914,7 @@ func getSystemInstruction(name string) (string, error) {
 }
 
 // Helper function to get minimum of two integers
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

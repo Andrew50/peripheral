@@ -297,7 +297,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 // GetChatRequest is the main context-aware chat request handler (original version)
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	// Use the progress version with a no-op callback
-	return GetChatRequestWithProgress(ctx, conn, userID, args, func(message string) {
+	return GetChatRequestWithProgress(ctx, conn, userID, args, func(_ string) {
 		// No-op callback for non-streaming requests
 	})
 }

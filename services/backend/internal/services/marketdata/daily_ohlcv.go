@@ -235,7 +235,7 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 				if !committed {
 					if rbErr := tx.Rollback(context.Background()); rbErr != nil {
 						// Log rollback error but don't block
-						// fmt.Printf("Error rolling back transaction: %v\n", rbErr)
+						_ = rbErr // Explicitly ignore the error after logging
 					}
 				}
 			}()
