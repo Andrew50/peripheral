@@ -84,7 +84,7 @@
 		right: 0;
 		bottom: 0;
 		background: rgba(0, 0, 0, 0.8);
-		backdrop-filter: blur(8px);
+		backdrop-filter: blur(1px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -98,6 +98,7 @@
 		max-height: 90vh;
 		overflow-y: auto;
 		position: relative;
+		margin: 0 auto;
 	}
 
 	.auth-modal-content {
@@ -130,7 +131,7 @@
 
 	.feature-header {
 		background: var(--ui-bg-secondary);
-		padding: 1.5rem 3rem 1.5rem 1.5rem; /* Extra padding on right for close button */
+		padding: 1.5rem; /* Symmetric padding - close button is positioned absolutely */
 		border-bottom: 1px solid var(--ui-border);
 		text-align: center;
 	}
@@ -183,7 +184,7 @@
 	/* Responsive adjustments */
 	@media (max-width: 480px) {
 		.feature-header {
-			padding: 1rem 2.5rem 1rem 1rem;
+			padding: 1rem;
 		}
 
 		.feature-header h2 {

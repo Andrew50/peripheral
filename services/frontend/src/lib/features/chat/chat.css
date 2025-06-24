@@ -229,6 +229,58 @@
 		font-size: 0.8rem;
 	}
 
+	.conversations-skeleton {
+		padding: 0.5rem 0;
+	}
+
+	.skeleton-conversation-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid var(--ui-border-darker, #2a2a2a);
+	}
+
+	.skeleton-conversation-info {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.skeleton-title {
+		height: 14px;
+		background: #2a2a2a;
+		border-radius: 4px;
+		margin-bottom: 6px;
+		position: relative;
+		overflow: hidden;
+		width: 80%;
+	}
+
+	.skeleton-meta {
+		height: 12px;
+		background: #2a2a2a;
+		border-radius: 4px;
+		position: relative;
+		overflow: hidden;
+		width: 60%;
+	}
+
+	.skeleton-title .skeleton-shimmer,
+	.skeleton-meta .skeleton-shimmer {
+		position: absolute;
+		top: 0;
+		left: -100%;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			rgba(255, 255, 255, 0.15) 50%,
+			transparent 100%
+		);
+		animation: shimmer 2s infinite ease-in-out;
+	}
+
 	/* Custom scrollbar for conversation list */
 	.conversation-list::-webkit-scrollbar {
 		width: 6px;
@@ -298,6 +350,40 @@
 		flex-direction: column;
 		gap: 1rem;
 		scroll-behavior: smooth;
+	}
+
+	.chat-skeleton {
+		flex: 1;
+		position: relative;
+		border-radius: 12px;
+		background: #1a1a1a;
+		overflow: hidden;
+		margin: 0.5rem;
+		min-height: 200px;
+	}
+
+	.skeleton-shimmer {
+		position: absolute;
+		top: 0;
+		left: -100%;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			rgba(255, 255, 255, 0.08) 50%,
+			transparent 100%
+		);
+		animation: shimmer 2s infinite ease-in-out;
+	}
+
+	@keyframes shimmer {
+		0% {
+			left: -100%;
+		}
+		100% {
+			left: 100%;
+		}
 	}
 
 	.message-wrapper {
@@ -549,6 +635,26 @@
 	
 	.chunk-table {
 		overflow-x: auto;
+		margin-bottom: 0.5rem; /* Add space for toggle button */
+	}
+
+	/* Add scrollbar styling for tables */
+	.chunk-table::-webkit-scrollbar {
+		height: 6px;
+	}
+
+	.chunk-table::-webkit-scrollbar-track {
+		background: var(--ui-bg-element, #333);
+		border-radius: 3px;
+	}
+
+	.chunk-table::-webkit-scrollbar-thumb {
+		background-color: var(--ui-border-darker, #555);
+		border-radius: 3px;
+	}
+
+	.chunk-table::-webkit-scrollbar-thumb:hover {
+		background-color: var(--ui-accent, #3a8bf7);
 	}
 
 
@@ -671,7 +777,7 @@
 		font-size: 0.7rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		margin-top: -0.5rem;
+		margin-top: 0.25rem; /* Positive margin to avoid overlap with scrollbar */
 		display: inline-block;
 		/* Ensure immediate styling to prevent flash */
 		opacity: 1;
@@ -847,7 +953,8 @@
 	}
 
 	.copy-btn,
-	.edit-btn {
+	.edit-btn,
+	.retry-btn {
 		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		align-items: center;
@@ -860,16 +967,62 @@
 	}
 
 	.copy-btn:hover,
-	.edit-btn:hover {
+	.edit-btn:hover,
+	.retry-btn:hover {
 		--glass-bg: rgba(255, 255, 255, 0.1);
 		--glass-border: rgba(255, 255, 255, 0.3);
 		color: var(--text-primary, #fff);
 	}
 
 	.copy-btn svg,
-	.edit-btn svg {
+	.edit-btn svg,
+	.retry-btn svg {
 		width: 0.75rem;
 		height: 0.75rem;
+	}
+
+	/* Retry popup styling */
+	.retry-container {
+		position: relative;
+		display: inline-block;
+	}
+
+	.retry-popup {
+		position: absolute;
+		bottom: 100%;
+		left: 0;
+		margin-bottom: 0.5rem;
+		min-width: 120px;
+		z-index: 9999;
+		padding: 0.25rem;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	.retry-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.25rem;
+		color: var(--text-primary, #fff);
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: none;
+		white-space: nowrap;
+	}
+
+	.retry-option:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: var(--text-primary, #fff);
+	}
+
+	.retry-option svg {
+		flex-shrink: 0;
 	}
 
 	/* Copied state styling */
@@ -1153,22 +1306,7 @@
 		font-size: 0.8rem;
 	}
 
-	.retry-btn {
-		/* Glass effect now provided by global .glass classes */
-		margin: 0 auto;
-		padding: 0.5rem 1rem;
-		color: var(--text-primary, #fff);
-		font-size: 0.75rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
 
-	.retry-btn:hover {
-		--glass-bg: rgba(255, 255, 255, 0.15);
-		--glass-border: rgba(255, 255, 255, 0.3);
-		transform: translateY(-1px);
-	}
 
 	/* Public viewing styles */
 	.public-conversation-header {

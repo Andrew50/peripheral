@@ -170,3 +170,8 @@ export type ConversationSummary = {
 	updated_at: string;
 	last_message_query?: string;
 };
+// State for table sorting
+export type SortState = {
+	columnIndex: number | null;
+	direction: 'asc' | 'desc' | null;
+};

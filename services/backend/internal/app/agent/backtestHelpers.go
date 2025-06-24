@@ -226,7 +226,7 @@ func GenerateBacktestTableFromInstruction(ctx context.Context, conn *data.Conn, 
 				timestampVal, tsOk := instance["timestamp"].(float64) // JSON numbers often float64
 
 				if tickerOk && tsOk {
-					row[i] = fmt.Sprintf("$$$%s-%d$$$", tickerVal, int64(timestampVal))
+					row[i] = fmt.Sprintf("$$%s-%d$$", tickerVal, int64(timestampVal))
 				}
 				continue // Move to next column
 			}

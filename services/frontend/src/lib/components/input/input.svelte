@@ -1,7 +1,7 @@
 <!-- instance.svelte -->
 <script lang="ts" context="module">
 	import '$lib/styles/global.css';
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { get, writable } from 'svelte/store';
 	import { tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
@@ -33,7 +33,7 @@
 	
 	// Only load security classifications if not in public viewing mode
 	if (browser && !get(isPublicViewing)) {
-		privateRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
+		publicRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
 			filterOptions = v;
 		}).catch((error) => {
 			console.warn('Failed to load security classifications:', error);
@@ -589,7 +589,7 @@
 				sectors: string[];
 				industries: string[];
 			};
-			privateRequest<SecurityClassifications>('getSecurityClassifications', {}, false).then(
+			publicRequest<SecurityClassifications>('getSecurityClassifications', {}).then(
 				(classifications: SecurityClassifications) => {
 					sectors = classifications.sectors;
 					industries = classifications.industries;

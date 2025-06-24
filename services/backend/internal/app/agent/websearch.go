@@ -12,6 +12,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 	"google.golang.org/genai"
 )
 
@@ -28,6 +31,47 @@ type WebSearchResult struct {
 
 // RunWebSearch performs a web search using the Gemini API
 func RunWebSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args WebSearchArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("error unmarshalling args: %w", err)
+	}
+	systemPrompt, err := getSystemInstruction("webSearchPrompt")
+	if err != nil {
+		return nil, fmt.Errorf("error getting search system instruction: %w", err)
+	}
+	return _openaiWebSearch(conn, systemPrompt, args.Query)
+}
+
+func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
+	apiKey := conn.OpenAIKey
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfString: openai.String(prompt),
+		},
+		Model:        "gpt-4.1",
+		Instructions: openai.String(systemPrompt),
+		Tools: []responses.ToolUnionParam{
+			{
+				OfWebSearchPreview: &responses.WebSearchToolParam{
+					Type:              "web_search_preview",
+					SearchContextSize: "medium",
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating response: %w", err)
+	}
+
+	return WebSearchResult{
+		ResultText: res.OutputText(),
+		Citations:  nil,
+	}, nil
+}
+
+// RunWebSearch performs a web search using the Gemini API
+func RunWebSearchGemini(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)

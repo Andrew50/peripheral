@@ -234,7 +234,7 @@ func _RunSearchHelper(conn *data.Conn, tickers []string) (string, error) {
 			return
 		}
 
-		result, err := RunWebSearch(conn, 0, json.RawMessage(argsBytes))
+		result, err := RunWebSearchGemini(conn, 0, json.RawMessage(argsBytes))
 		if err != nil {
 			webSearchErrChan <- fmt.Errorf("web search failed: %w", err)
 			return

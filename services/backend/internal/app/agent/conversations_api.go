@@ -238,8 +238,8 @@ func EditMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}
 	}
 
 	// Archive all messages after this one (preserve them for logging)
-	archiveSQL := `UPDATE conversation_messages SET archived = TRUE WHERE conversation_id = $1 AND message_order >= $2 AND archived = FALSE`
-	_, err = tx.Exec(context.Background(), archiveSQL, req.ConversationID, messageOrder)
+	archiveSQL := `UPDATE conversation_messages SET archived = TRUE, archive_reason = $1 WHERE conversation_id = $2 AND message_order >= $3 AND archived = FALSE`
+	_, err = tx.Exec(context.Background(), archiveSQL, "edited", req.ConversationID, messageOrder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to archive messages: %w", err)
 	}
@@ -515,8 +515,8 @@ func stripHTMLTags(text string) string {
 	re := regexp.MustCompile(`<[^>]*>`)
 	cleaned := re.ReplaceAllString(text, "")
 
-	// Remove ticker formatting $$$TICKER-TIMESTAMP$$$ and replace with just TICKER
-	tickerRe := regexp.MustCompile(`\$\$\$([A-Z]+)-\d+\$\$\$`)
+	// Remove ticker formatting $$TICKER-TIMESTAMP$$ and replace with just TICKER
+	tickerRe := regexp.MustCompile(`\$\$([A-Z]+)-\d+\$\$`)
 	cleaned = tickerRe.ReplaceAllString(cleaned, "$1")
 
 	// Clean up extra whitespace
@@ -524,4 +524,113 @@ func stripHTMLTags(text string) string {
 	cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
 
 	return cleaned
+}
+
+// RetryMessageRequest represents the request for retrying a message
+type RetryMessageRequest struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"` // Required: Message ID to retry
+}
+
+// RetryMessage frontend endpoint to retry a message (resend with same content)
+func RetryMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	var req RetryMessageRequest
+	if err := json.Unmarshal(args, &req); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	// Validate required fields
+	if req.ConversationID == "" {
+		return nil, fmt.Errorf("conversation_id is required")
+	}
+	if req.MessageID == "" {
+		return nil, fmt.Errorf("message_id is required")
+	}
+
+	// Start transaction for atomic retry operation
+	tx, err := conn.DB.Begin(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+
+	// Validate user owns the conversation
+	if err = VerifyConversationOwnership(conn, req.ConversationID, userID); err != nil {
+		return nil, err
+	}
+
+	// Find the message to retry
+	var messageOrder int
+	var originalQuery string
+	var contextItemsJSON []byte
+	querySQL := `SELECT message_order, query, context_items FROM conversation_messages WHERE conversation_id = $1 AND message_id = $2 AND archived = FALSE`
+	err = tx.QueryRow(context.Background(), querySQL, req.ConversationID, req.MessageID).Scan(&messageOrder, &originalQuery, &contextItemsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find message to retry: %w", err)
+	}
+
+	// Validate the message can be retried
+	var status string
+	validateSQL := `SELECT status FROM conversation_messages WHERE conversation_id = $1 AND message_order = $2 AND archived = FALSE`
+	err = tx.QueryRow(context.Background(), validateSQL, req.ConversationID, messageOrder).Scan(&status)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate message: %w", err)
+	}
+	if status == "pending" {
+		return nil, fmt.Errorf("cannot retry a message that is currently being processed")
+	}
+
+	// Archive all messages after this one (preserve them for logging with retry reason)
+	archiveSQL := `UPDATE conversation_messages SET archived = TRUE, archive_reason = $1 WHERE conversation_id = $2 AND message_order >= $3 AND archived = FALSE`
+	_, err = tx.Exec(context.Background(), archiveSQL, "retried", req.ConversationID, messageOrder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to archive messages: %w", err)
+	}
+
+	// Update conversation metadata
+	metadataSQL := `
+		UPDATE conversations 
+		SET message_count = (
+			SELECT COUNT(*) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		total_token_count = (
+			SELECT COALESCE(SUM(token_count), 0) FROM conversation_messages 
+			WHERE conversation_id = $1 AND archived = FALSE
+		),
+		updated_at = $2
+		WHERE conversation_id = $1`
+	_, err = tx.Exec(context.Background(), metadataSQL, req.ConversationID, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to update conversation metadata: %w", err)
+	}
+
+	// Parse context items from the original message
+	var contextItems []map[string]interface{}
+	if len(contextItemsJSON) > 0 {
+		if unmarshalErr := json.Unmarshal(contextItemsJSON, &contextItems); unmarshalErr != nil {
+			log.Printf("Warning: failed to parse context items: %v", unmarshalErr)
+			contextItems = []map[string]interface{}{} // Default to empty context
+		}
+	} else {
+		contextItems = []map[string]interface{}{} // Default to empty context
+	}
+
+	// Invalidate cache BEFORE committing transaction to prevent stale data
+	if err := InvalidateConversationCache(context.Background(), conn, userID, req.ConversationID); err != nil {
+		log.Printf("Warning: failed to invalidate conversation cache: %v", err)
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to commit retry transaction: %w", err)
+	}
+
+	// Return success response with original query and context items for frontend to use in regeneration
+	return map[string]interface{}{
+		"success":         true,
+		"conversation_id": req.ConversationID,
+		"original_query":  originalQuery,
+		"context_items":   contextItems,
+	}, nil
 }

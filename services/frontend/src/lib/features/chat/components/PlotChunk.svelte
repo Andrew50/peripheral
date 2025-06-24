@@ -18,9 +18,9 @@
 			size: 12,
 			color: '#e2e8f0' // text-slate-200
 		},
-		paper_bgcolor: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
-		plot_bgcolor: 'rgba(30, 41, 59, 0.5)', // slate-800 with opacity
-		margin: { l: 40, r: 20, t: 30, b: 80, autoexpand: true },
+		paper_bgcolor: 'transparent', // Match chat background
+		plot_bgcolor: 'transparent', // Match chat background
+		margin: { l: 45, r: 60, t: 10, b: 30, autoexpand: true },
 		autosize: true,
 		showlegend: true,
 		legend: {
@@ -97,50 +97,97 @@
 			}
 		}
 
-		// Set trace type based on chart_type - always override for consistency
-		switch (plotData.chart_type) {
-			case 'line':
-				processedTrace.type = 'scatter';
-				processedTrace.mode = 'lines';
-				break;
-			case 'scatter':
-				processedTrace.type = 'scatter';
-				processedTrace.mode = 'markers';
-				break;
-			case 'bar':
-				processedTrace.type = 'bar';
-				break;
-			case 'histogram':
-				processedTrace.type = 'histogram';
+		// Set trace type - respect individual trace types, fall back to chart_type
+		if (!processedTrace.type) {
+			switch (plotData.chart_type) {
+				case 'line':
+					processedTrace.type = 'scatter';
+					if (!processedTrace.mode) processedTrace.mode = 'lines';
+					break;
+				case 'scatter':
+					processedTrace.type = 'scatter';
+					if (!processedTrace.mode) processedTrace.mode = 'markers';
+					break;
+				case 'bar':
+					processedTrace.type = 'bar';
+					break;
+				case 'histogram':
+					processedTrace.type = 'histogram';
+					
+					// Clean up empty arrays that might confuse Plotly
+					if (processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length === 0) {
+						delete processedTrace.y;
+					}
+					if (processedTrace.z && Array.isArray(processedTrace.z) && processedTrace.z.length === 0) {
+						delete processedTrace.z;
+					}
+					
+					// Configure automatic binning if not specified
+					if (!processedTrace.autobinx && !processedTrace.xbins && processedTrace.x && processedTrace.x.length > 0) {
+						processedTrace.autobinx = true;
+					}
+					if (!processedTrace.autobiny && !processedTrace.ybins && processedTrace.y && processedTrace.y.length > 0) {
+						processedTrace.autobiny = true;
+					}
+					// Set default number of bins if using x data
+					if (processedTrace.x && processedTrace.x.length > 0 && !processedTrace.nbinsx && !processedTrace.xbins) {
+						processedTrace.nbinsx = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.x.length))));
+					}
+					// Set default number of bins if using y data  
+					if (processedTrace.y && processedTrace.y.length > 0 && !processedTrace.nbinsy && !processedTrace.ybins) {
+						processedTrace.nbinsy = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.y.length))));
+					}
+					break;
+				case 'heatmap':
+					processedTrace.type = 'heatmap';
+					// Clean red-green colorscale without orange
+					processedTrace.colorscale = [
+						[0, '#d32f2f'],    // Dark red for most negative
+						[0.25, '#f44336'], // Medium red
+						[0.5, '#424242'],  // Dark neutral/gray
+						[0.75, '#4caf50'], // Medium green
+						[1, '#2e7d32']     // Dark green for most positive
+					];
+					// Ensure zero is always at the center (gray) so negative=red, positive=green
+					processedTrace.zmid = 0;
+					// Configure colorbar positioning for heatmaps
+					if (!processedTrace.colorbar) {
+						processedTrace.colorbar = {
+							x: -0.2, // Position colorbar further to the right
+							xanchor: 'left',
+							thickness: 12,
+							len: 0.8,
+							xpad: 10 // Add padding between plot and colorbar
+						};
+					}
+					break;
+			}
+		}
+
+		// Handle bar positioning for dual y-axis charts (only for actual bar traces)
+		if (processedTrace.type === 'bar' && plotData.data.some(trace => trace.yaxis === 'y2')) {
+			// Determine if this trace is on primary or secondary axis
+			const isSecondaryAxis = processedTrace.yaxis === 'y2';
+			const primaryBarTraces = plotData.data.filter(trace => (!trace.yaxis || trace.yaxis === 'y') && (trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')));
+			const secondaryBarTraces = plotData.data.filter(trace => trace.yaxis === 'y2' && (trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')));
+			
+			if (primaryBarTraces.length > 0 && secondaryBarTraces.length > 0) {
+				// Calculate bar width and offset for grouping
+				const totalBarTraces = primaryBarTraces.length + secondaryBarTraces.length;
+				const barWidth = 0.8 / totalBarTraces; // Total width divided by number of bar traces
 				
-				// Clean up empty arrays that might confuse Plotly
-				if (processedTrace.y && Array.isArray(processedTrace.y) && processedTrace.y.length === 0) {
-					delete processedTrace.y;
+				if (isSecondaryAxis) {
+					// Secondary axis bar traces get offset to the right
+					const secondaryIndex = secondaryBarTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+					processedTrace.width = barWidth;
+					processedTrace.offset = barWidth * (primaryBarTraces.length + secondaryIndex) - 0.4 + barWidth/2;
+				} else {
+					// Primary axis bar traces
+					const primaryIndex = primaryBarTraces.findIndex(t => t === plotData.data.find(d => d === trace));
+					processedTrace.width = barWidth;
+					processedTrace.offset = barWidth * primaryIndex - 0.4 + barWidth/2;
 				}
-				if (processedTrace.z && Array.isArray(processedTrace.z) && processedTrace.z.length === 0) {
-					delete processedTrace.z;
-				}
-				
-				// Configure automatic binning if not specified
-				if (!processedTrace.autobinx && !processedTrace.xbins && processedTrace.x && processedTrace.x.length > 0) {
-					processedTrace.autobinx = true;
-				}
-				if (!processedTrace.autobiny && !processedTrace.ybins && processedTrace.y && processedTrace.y.length > 0) {
-					processedTrace.autobiny = true;
-				}
-				// Set default number of bins if using x data
-				if (processedTrace.x && processedTrace.x.length > 0 && !processedTrace.nbinsx && !processedTrace.xbins) {
-					processedTrace.nbinsx = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.x.length))));
-				}
-				// Set default number of bins if using y data  
-				if (processedTrace.y && processedTrace.y.length > 0 && !processedTrace.nbinsy && !processedTrace.ybins) {
-					processedTrace.nbinsy = Math.min(30, Math.max(10, Math.floor(Math.sqrt(processedTrace.y.length))));
-				}
-				break;
-			case 'heatmap':
-				processedTrace.type = 'heatmap';
-				processedTrace.colorscale = 'Viridis';
-				break;
+			}
 		}
 
 		return processedTrace;
@@ -151,23 +198,69 @@
 		.map((trace, index) => processTraceData(trace, index))
 		.filter(trace => trace !== null);
 	
+	// Check if any traces use secondary y-axis
+	$: hasSecondaryYAxis = plotData.data.some(trace => trace.yaxis === 'y2');
+	
+	// Declare layout variable
+	let layout: any;
 
-	// Merge layouts (user layout takes precedence, but preserve yaxis side)
-	$: layout = {
-		...defaultLayout,
-		...plotData.layout,
-		// Don't set title in layout if we're showing it separately
-		title: plotData.title ? '' : (plotData.layout?.title || ''),
-		// Ensure yaxis is always on the right side
-		yaxis: {
-			...defaultLayout.yaxis,
-			...plotData.layout?.yaxis,
-			side: 'right' as const
+	// Merge layouts (user layout takes precedence, but handle dual y-axis)
+	// Destructure width and height out of plotData.layout to prevent them from overriding fillParent
+	$: {
+		const { width, height, ...userLayoutWithoutDimensions } = plotData.layout || {};
+		
+		// Base layout configuration
+		const baseLayout = {
+			...defaultLayout,
+			...userLayoutWithoutDimensions,
+			// Don't set title in layout if we're showing it separately
+			title: plotData.title ? '' : (plotData.layout?.title || ''),
+		};
+
+		if (hasSecondaryYAxis) {
+			// Check if we have any bar traces for proper barmode setting
+			const hasBarTraces = plotData.data.some(trace => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar'));
+			
+			// Configure dual y-axis layout
+			layout = {
+				...baseLayout,
+				// Adjust margins for dual y-axis
+				margin: { l: 60, r: 80, t: 10, b: 30, autoexpand: true },
+				// For charts with bar traces and dual y-axis, use overlay mode to allow manual positioning
+				barmode: hasBarTraces ? 'overlay' as const : userLayoutWithoutDimensions.barmode,
+				// Primary y-axis (left side)
+				yaxis: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis,
+					side: 'left' as const,
+					title: userLayoutWithoutDimensions.yaxis?.title || ''
+				},
+				// Secondary y-axis (right side)
+				yaxis2: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis2,
+					side: 'right' as const,
+					overlaying: 'y' as const,
+					title: userLayoutWithoutDimensions.yaxis2?.title || '',
+					// Ensure grid lines don't overlap by disabling on secondary axis
+					showgrid: false
+				}
+			};
+		} else {
+			// Single y-axis layout (keep existing behavior)
+			layout = {
+				...baseLayout,
+				yaxis: {
+					...defaultLayout.yaxis,
+					...userLayoutWithoutDimensions.yaxis,
+					side: 'right' as const
+				}
+			};
 		}
-	};
+	}
 </script>
 
-<div class="plot-chunk-wrapper glass glass--rounded glass--responsive">
+<div class="chunk-plot-container">
 	{#if plotData.title}
 		<div class="plot-title">
 			{plotData.title}
@@ -186,28 +279,24 @@
 </div>
 
 <style>
-	.plot-chunk-wrapper {
-		margin: 1rem -1rem;
-		overflow: hidden;
-		width: calc(100% + 2rem);
-		max-width: none;
+	.chunk-plot-container {
+		margin-bottom: 1rem;
 	}
 
 	.plot-title {
-		padding: 1rem 1rem 0.5rem 1rem;
+		font-size: 1rem;
 		font-weight: 600;
-		font-size: 1.1rem;
-		color: #e2e8f0;
-		border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-		margin-bottom: 0.5rem;
+		color: var(--text-primary, #fff);
+		margin-bottom: 0.75rem;
+		padding-bottom: 0.25rem;
+		border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+		line-height: 1.4;
 	}
 
 	.plot-container {
-		flex: 1 1 0;   /* or min-width:0; */
-		min-height: 500px;
-		height: 100%;
+		min-height: 350px;
+		height: 350px;
 		width: 100%;
-		padding: .25rem;
 		overflow: hidden;
 	}
 

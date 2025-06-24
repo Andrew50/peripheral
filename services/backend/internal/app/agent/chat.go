@@ -19,9 +19,8 @@ const (
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
-	Name   string          `json:"name"`
-	CallID string          `json:"call_id,omitempty"`
-	Args   json.RawMessage `json:"args,omitempty"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
 }
 
 type ChatRequest struct {
@@ -207,17 +206,10 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			case StageFinishedExecuting:
 				progressCallback("Generating final response...")
 				// Generate final response based on active execution results
-				finalPrompt, err := BuildFinalResponsePromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
-				if err != nil {
-					// Mark as error instead of deleting for debugging
-					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build final response prompt: %v", err)); markErr != nil {
-						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
-					}
-					return nil, err
-				}
+				var finalResponse *FinalResponse
 
-				// Get the final response from the model (now includes suggestions)
-				finalResponse, err := GetFinalResponse(ctx, conn, finalPrompt)
+				// Get the final response from the model
+				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {

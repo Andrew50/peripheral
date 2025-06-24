@@ -91,6 +91,36 @@ export async function uploadRequest<T>(
     return response.json() as Promise<T>;
 }
 
+// Smart chart request function that automatically chooses public or private endpoint based on auth
+export async function chartRequest<T>(
+    func: string,
+    args: Record<string, unknown>,
+    verbose = false,
+    keepalive = false,
+    signal?: AbortSignal
+): Promise<T> {
+    // Skip API calls during SSR to prevent crashes
+    if (typeof window === 'undefined') {
+        return {} as T; // Return empty data during SSR
+    }
+
+    // Check if user is authenticated
+    let authToken;
+    try {
+        authToken = sessionStorage.getItem('authToken');
+    } catch {
+        // If we can't access sessionStorage, treat as unauthenticated
+        authToken = null;
+    }
+    if (authToken) {
+        // User is authenticated - use private endpoint with full features
+        return privateRequest<T>(func, args, verbose, keepalive, signal);
+    } else {
+        // User is not authenticated - use public endpoint with limited features
+        return publicRequest<T>(func, args);
+    }
+}
+
 export async function privateRequest<T>(
     func: string,
     args: Record<string, unknown>,

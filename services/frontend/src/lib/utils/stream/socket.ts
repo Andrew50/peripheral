@@ -21,11 +21,26 @@ export type TitleUpdate = {
 	title: string;
 };
 
+// Define the type for chat responses from backend
+export type ChatResponse = {
+	type: 'chat_response';
+	request_id: string;
+	success: boolean;
+	data?: any;
+	error?: string;
+};
+
 // Store to hold the current function status message
 export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
+
+// Store to manage pending chat requests
+const pendingChatRequests = new Map<string, {
+	resolve: (value: any) => void;
+	reject: (error: Error) => void;
+}>();
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -80,6 +95,13 @@ export function connect() {
 	}
 	socket.addEventListener('close', () => {
 		connectionStatus.set('disconnected');
+		
+		// Reject all pending chat requests
+		pendingChatRequests.forEach((request, requestId) => {
+			request.reject(new Error('WebSocket connection closed'));
+		});
+		pendingChatRequests.clear();
+		
 		if (shouldReconnect) {
 			reconnect();
 		}
@@ -118,6 +140,23 @@ export function connect() {
 			const titleUpdate = data as TitleUpdate;
 			titleUpdateStore.set(titleUpdate);
 			return; // Handled title update
+		}
+
+		// Handle chat responses
+		if (data && data.type === 'chat_response') {
+			const chatResponse = data as ChatResponse;
+			const pendingRequest = pendingChatRequests.get(chatResponse.request_id);
+			
+			if (pendingRequest) {
+				pendingChatRequests.delete(chatResponse.request_id);
+				
+				if (chatResponse.success) {
+					pendingRequest.resolve(chatResponse.data);
+				} else {
+					pendingRequest.reject(new Error(chatResponse.error || 'Chat request failed'));
+				}
+			}
+			return; // Handled chat response
 		}
 
 		// Handle other message types (based on channel)
@@ -233,28 +272,63 @@ export function unsubscribeSECFilings() {
 	pendingSubscriptions.delete('sec-filings');
 }
 
+// Send chat query via WebSocket
+export function sendChatQuery(
+	query: string,
+	context: any[] = [],
+	activeChartContext: any = null,
+	conversationId: string = ''
+): { promise: Promise<any>; cancel: () => void } {
+	let requestId: string;
+	
+	const promise = new Promise((resolve, reject) => {
+		if (socket?.readyState !== WebSocket.OPEN) {
+			reject(new Error('WebSocket is not connected'));
+			return;
+		}
 
+		// Generate unique request ID
+		requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-/*export function getInitialValue(channelName: string, callback: StreamCallback) {
-	console.warn("getInitialValue", channelName)
-	return
-	const [securityId, streamType] = channelName.split("-")
-	let func
-	switch (streamType) {
-		case "close": func = "getClose"; break;
-		case "quote": func = "getQuote"; break;
-		case "all": func = "getTrade"; break;
-		case "fast_trades": func = "getTrade"; break;//these might have to change to not get
-		case "slow_trades": func = "getTrade"; break;
-		case "fast_quotes": func = "getQuote"; break;
-		case "slow_quotes": func = "getQuote"; break;
-		default: throw new Error("frontend: 19f-0")
-	}
-	//privateRequest(func,{securityId:securityId,timestamp:get(streamInfo).timestamp}).then((data: StreamData) => callback(data)); // might need to fixed
+		// Store the promise resolvers
+		pendingChatRequests.set(requestId, { resolve, reject });
+
+		// Create the chat query message
+		const chatQuery = {
+			action: 'chat_query',
+			request_id: requestId,
+			query: query,
+			context: context,
+			activeChartContext: activeChartContext,
+			conversation_id: conversationId
+		};
+
+		try {
+			socket.send(JSON.stringify(chatQuery));
+		} catch (error) {
+			// Clean up on send failure
+			pendingChatRequests.delete(requestId);
+			reject(error);
+		}
+	});
+
+	const cancel = () => {
+		if (requestId) {
+			cancelChatQuery(requestId);
+		}
+	};
+
+	return { promise, cancel };
 }
-*/
 
-// /socket.ts
+// Cancel a chat query by request ID
+export function cancelChatQuery(requestId: string) {
+	const pendingRequest = pendingChatRequests.get(requestId);
+	if (pendingRequest) {
+		pendingChatRequests.delete(requestId);
+		pendingRequest.reject(new Error('Chat request cancelled'));
+	}
+}
 
 // Add browser window close handler
 if (browser) {

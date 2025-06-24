@@ -348,7 +348,7 @@ func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	details, err := GetTickerMenuDetails(conn, 0, rawArgs)
+	details, err := GetTickerMenuDetails(conn, rawArgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
@@ -433,7 +433,7 @@ type GetTickerMenuDetailsResults struct {
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
-func GetTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetTickerDetailsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -685,7 +685,7 @@ type GetSecurityClassificationsResults struct {
 }
 
 // GetSecurityClassifications performs operations related to GetSecurityClassifications functionality.
-func GetSecurityClassifications(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, error) {
+func GetSecurityClassifications(conn *data.Conn, _ json.RawMessage) (interface{}, error) {
 	// Query to get unique sectors, excluding NULL values and empty strings
 	sectorQuery := `
 		SELECT DISTINCT sector 
@@ -870,7 +870,7 @@ type GetSecurityIDFromTickerTimestampResults struct {
 	SecurityID int `json:"securityId"`
 }
 
-func GetSecurityIDFromTickerTimestamp(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func GetSecurityIDFromTickerTimestamp(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetSecurityIDFromTickerTimestampArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -889,10 +889,10 @@ func GetSecurityIDFromTickerTimestamp(conn *data.Conn, _ int, rawArgs json.RawMe
 }
 
 type GetTickerDailySnapshotArgs struct {
-	SecurityID int `json:"securityId"`
+	Ticker string `json:"ticker"`
 }
 type GetTickerDailySnapshotResults struct {
-	Ticker             string  `json:"ticker"`
+	Ticker             string  `json:"ticker,omitempty"`
 	LastBid            float64 `json:"lastBid,omitempty"`
 	LastAsk            float64 `json:"lastAsk,omitempty"`
 	LastTradePrice     float64 `json:"lastTradePrice"`
@@ -914,11 +914,7 @@ func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (in
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	ticker, err := postgres.GetTicker(conn, args.SecurityID, time.Now())
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting ticker: %v", err)
-	}
+	ticker := args.Ticker
 
 	res, err := polygon.GetPolygonTickerSnapshot(context.Background(), conn.Polygon, ticker)
 	if err != nil {
@@ -926,22 +922,17 @@ func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (in
 	}
 	snapshot := res.Snapshot
 	var results GetTickerDailySnapshotResults
-	results.LastBid = snapshot.LastQuote.BidPrice
-	results.LastAsk = snapshot.LastQuote.AskPrice
 	results.LastTradePrice = snapshot.LastTrade.Price
 	currPrice := snapshot.Day.Close
 	lastClose := snapshot.PrevDay.Close
 	results.TodayChange = math.Round((currPrice-lastClose)*100) / 100
 	results.TodayChangePercent = math.Round(((currPrice-lastClose)/lastClose)*100*100) / 100
-	results.Timestamp = int64(time.Time(snapshot.Updated).Unix())
 	results.Volume = snapshot.Day.Volume
-	results.Vwap = snapshot.Day.VolumeWeightedAverage
 	results.TodayOpen = snapshot.Day.Open
 	results.TodayHigh = snapshot.Day.High
 	results.TodayLow = snapshot.Day.Low
 	results.TodayClose = snapshot.Day.Close
 	results.PreviousClose = lastClose
-	results.Ticker = ticker
 	////fmt.Println(results)
 	return results, nil
 }

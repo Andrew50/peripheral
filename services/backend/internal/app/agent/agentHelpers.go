@@ -8,19 +8,19 @@ import (
 	"time"
 )
 
-type DateToMSItem struct {
+type DateToSecondsItem struct {
 	Date   string `json:"date"`
 	Hour   int    `json:"hour,omitempty"`
 	Minute int    `json:"minute,omitempty"`
 	Second int    `json:"second,omitempty"`
 }
 
-type DateToMSArgs struct {
-	Dates []DateToMSItem `json:"dates"`
+type DateToSecondsArgs struct {
+	Dates []DateToSecondsItem `json:"dates"`
 }
 
-func DateToMS(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
-	var args DateToMSArgs
+func DateToSeconds(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+	var args DateToSecondsArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func DateToMS(_ *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error)
 
 		ts := time.Date(base.Year(), base.Month(), base.Day(),
 			dateItem.Hour, dateItem.Minute, dateItem.Second,
-			0, loc).UnixMilli()
+			0, loc).Unix()
 
 		results[i] = ts
 	}
