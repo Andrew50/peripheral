@@ -143,6 +143,12 @@ export type ConversationData = {
 	timestamp: string | Date;
 };
 
+// Simplified timeline event - just use the raw messages from backend
+export type TimelineEvent = {
+	message: string;   // The actual status message from backend
+	timestamp: Date;
+};
+
 // Message type for chat history
 export type Message = {
 	message_id: string;                     // Use backend message_id directly
