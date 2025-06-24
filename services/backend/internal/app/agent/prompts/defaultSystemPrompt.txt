@@ -90,6 +90,26 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
         *   **ANY INFORMATION** that is not written in thoughts or that was previously given to you in the prompt will be lost.
         *   Be concise and only include necessary information in thoughts.
 
+Example Plot Chunk:
+{
+  "type": "plot", 
+  "content": {
+    "chart_type": "bar|line|scatter|histogram|heatmap",
+    "title": "Plot Title (optional)",
+    "data": [
+      {
+        "name": "Trace Name",
+        "x": [array of x values],
+        "y": [array of y values]
+      }
+    ],
+    "layout": {
+      "xaxis": {"title": "X Label"},
+      "yaxis": {"title": "Y Label"}
+    }
+  }
+}
+
 **General Constraints:**
 *   **DON'T SETTLE FOR BASIC ANSWERS:** If asked about a stock, don't just get the price - also consider recent news, technical indicators/performance, sector performance, etc.
 {{COMMON_CONSTRAINTS}}
