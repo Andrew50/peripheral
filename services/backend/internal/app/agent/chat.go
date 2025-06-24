@@ -112,8 +112,8 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			return nil, ctx.Err()
 		}
 		var firstRound bool
-		var result interface{}
 		var err error
+		var result interface{}
 		if planningPrompt == "" {
 			firstRound = true
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
@@ -137,7 +137,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 		}
 
 		// Type assert the result to either Plan or DirectAnswer
-		switch result := plannerResult.(type) {
+		switch result := result.(type) {
 		case Plan:
 			totalRequestOutputTokenCount += int(result.TokenCounts.OutputTokenCount)
 			totalRequestInputTokenCount += int(result.TokenCounts.InputTokenCount)
@@ -181,7 +181,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 
 				// Categorize results
 				for _, execResult := range executeResults {
-					if execResult.Error != "" {
+					if execResult.Error != nil && *execResult.Error != "" {
 						discardedResults = append(discardedResults, execResult)
 					} else {
 						activeResults = append(activeResults, execResult)
@@ -191,8 +191,8 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 				// Update the planning prompt with execution results
 				planningPrompt += "\n\nExecution results:\n"
 				for _, execResult := range executeResults {
-					if execResult.Error != "" {
-						planningPrompt += fmt.Sprintf("Function %s (ERROR): %s\n", execResult.FunctionName, execResult.Error)
+					if execResult.Error != nil && *execResult.Error != "" {
+						planningPrompt += fmt.Sprintf("Function %s (ERROR): %s\n", execResult.FunctionName, *execResult.Error)
 					} else {
 						planningPrompt += fmt.Sprintf("Function %s: %s\n", execResult.FunctionName, execResult.Result)
 					}
@@ -279,7 +279,7 @@ func GetChatRequestWithProgress(ctx context.Context, conn *data.Conn, userID int
 			}, nil
 
 		default:
-			return nil, fmt.Errorf("unexpected planner result type: %T", plannerResult)
+			return nil, fmt.Errorf("unexpected planner result type: %T", result)
 		}
 
 		maxTurns--
