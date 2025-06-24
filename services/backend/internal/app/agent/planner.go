@@ -220,7 +220,7 @@ type TokenCounts struct {
 const planningModel = "gemini-2.5-flash"
 
 // const finalResponseModel = "gemini-2.5-flash"
-const openAIPlannerModel = "o4-mini"
+// const openAIPlannerModel = "o4-mini"
 const openAIFinalResponseModel = "o3"
 
 func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
@@ -391,7 +391,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+/*func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
@@ -437,7 +437,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 	resultText := res.OutputText()
 	fmt.Println("\n GPT resultText: ", resultText)
 
-	/*var directAns DirectAnswer
+	var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
 		hasValidContent := false
@@ -457,7 +457,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 			}
 			return directAns, nil
 		}
-	}*/
+	}
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
@@ -513,7 +513,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 		}
 	}
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
-}
+}*/
 
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	apiKey := conn.OpenAIKey
