@@ -1,6 +1,6 @@
-<!-- account.svelte -->
+<!-- auth.svelte -->
 <script lang="ts">
-	import { publicRequest, privateRequest, base_url } from '$lib/utils/helpers/backend';
+	import { publicRequest } from '$lib/utils/helpers/backend';
 	import '$lib/styles/global.css';
 	import { browser } from '$app/environment';
 
@@ -12,11 +12,11 @@
 	const dispatch = createEventDispatcher();
 
 	export let loginMenu: boolean = false;
+	export let modalMode: boolean = false;
 	let email = '';
 	let password = '';
 	let errorMessage = writable('');
 	let loading = false;
-	let guestLoading = false;
 
 	// Update error message display
 	let errorMessageText = '';
@@ -24,9 +24,13 @@
 		errorMessageText = value;
 	});
 
-	// Add error handling for missing assets
-	let googleIconUrl = '/google-icon.svg';
-	let googleIconError = false;
+	// Clear error message and reset form when switching between login/signup
+	$: if (loginMenu !== undefined) {
+		errorMessage.set('');
+		// Optionally clear form fields when switching modes
+		// email = '';
+		// password = '';
+	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
@@ -38,8 +42,12 @@
 		}
 	}
 
-	function handleGoogleIconError() {
-		googleIconError = true;
+	function handleToggleMode(event: Event) {
+		if (modalMode) {
+			event.preventDefault();
+			dispatch('toggleMode');
+		}
+		// If not in modal mode, let the default link behavior happen
 	}
 
 	interface Login {
@@ -52,22 +60,8 @@
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
-			// Block guest credentials when called directly from the login form
-			// This prevents users from manually entering guest credentials in the login form
-			// but still allows the guest login button to work via handleGuestLogin
-			const isDirectFormSubmission = !guestLoading;
-			if (isDirectFormSubmission && email === 'user' && password === 'pass') {
-				throw new Error('Please use the "Continue as Guest" button to access the guest account');
-			}
-
 			const r = await publicRequest<Login>('login', { email: email, password: password });
 			if (browser) {
-				// Remove any existing guest session cleanup event listener
-				window.removeEventListener('beforeunload', cleanupGuestAccount);
-
-				// Clear any guest session flags
-				sessionStorage.removeItem('isGuestSession');
-
 				// Set the regular session data
 				sessionStorage.setItem('authToken', r.token);
 				sessionStorage.setItem('profilePic', r.profilePic);
@@ -98,13 +92,6 @@
 	async function signUp(email: string, password: string) {
 		loading = true;
 		try {
-			// If this was a guest account, remove guest session cleanup
-			if (browser) {
-				window.removeEventListener('beforeunload', cleanupGuestAccount);
-				sessionStorage.removeItem('isGuestSession');
-				sessionStorage.removeItem('userId');
-			}
-
 			await publicRequest('signup', { email: email, password: password });
 			await signIn(email, password);
 		} catch (error) {
@@ -145,113 +132,12 @@
 			errorMessage.set('Failed to initialize Google login');
 		}
 	}
-
-	/*async function handleGuestLogin() {
-		guestLoading = true;
-		try {
-			// Use the dedicated guestLogin endpoint instead of the regular login
-			const r = await publicRequest<Login>('guestLogin', {});
-
-			if (browser) {
-				sessionStorage.setItem('authToken', r.token);
-				sessionStorage.setItem('profilePic', r.profilePic || '');
-				sessionStorage.setItem('username', r.username);
-				// Mark this as a guest session to handle cleanup on page close
-				sessionStorage.setItem('isGuestSession', 'true');
-
-				// Set up event listener for page unload to delete the guest account
-				window.addEventListener('beforeunload', cleanupGuestAccount);
-			}
-			goto('/app');
-		} catch (error) {
-			if (error instanceof Error) {
-				errorMessage.set(error.message);
-			} else {
-				errorMessage.set('Guest login failed. Please try again.');
-			}
-		} finally {
-			guestLoading = false;
-		}
-	}*/
-
-	// Function to clean up guest account when page is closed
-	async function cleanupGuestAccount() {
-		try {
-			// Check if this is a guest session
-			const isGuest = sessionStorage.getItem('isGuestSession') === 'true';
-
-			if (isGuest) {
-				try {
-					// Use privateRequest with the keepalive option for page unload events
-					// This ensures the request completes even when the page is unloading
-					privateRequest(
-						'deleteAccount',
-						{ confirmation: 'DELETE' },
-						false, // verbose
-						true // keepalive
-					);
-				} catch (e) {
-					console.error('Error sending account deletion request:', e);
-				}
-
-				// Clear session storage
-				sessionStorage.removeItem('authToken');
-				sessionStorage.removeItem('profilePic');
-				sessionStorage.removeItem('username');
-				sessionStorage.removeItem('isGuestSession');
-			}
-		} catch (error) {
-			console.error('Error cleaning up guest account:', error);
-		}
-	}
 </script>
 
 <div class="page-wrapper">
 	<Header />
 	<div class="auth-container">
-		<div class="auth-card responsive-shadow responsive-border content-padding">
-
-			<div class="auth-buttons-container">
-				<button class="gsi-material-button responsive-shadow" on:click={handleGoogleLogin}>
-					<div class="gsi-material-button-state"></div>
-					<div class="gsi-material-button-content-wrapper">
-						<div class="gsi-material-button-icon">
-							<svg
-								version="1.1"
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 48 48"
-								xmlns:xlink="http://www.w3.org/1999/xlink"
-								style="display: block;"
-							>
-								<path
-									fill="#EA4335"
-									d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-								></path>
-								<path
-									fill="#4285F4"
-									d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-								></path>
-								<path
-									fill="#FBBC05"
-									d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-								></path>
-								<path
-									fill="#34A853"
-									d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-								></path>
-								<path fill="none" d="M0 0h48v48H0z"></path>
-							</svg>
-						</div>
-						<span class="gsi-material-button-contents">Continue with Google</span>
-						<span style="display: none;">Sign in with Google</span>
-					</div>
-				</button>
-
-			</div>
-
-			<div class="divider">
-				<span class="fluid-text">or</span>
-			</div>
+		<div class="auth-card">
 
 			<form
 				on:submit|preventDefault={() => {
@@ -264,6 +150,43 @@
 				class="auth-form"
 			>
 				<div class="form-group">
+					<button class="gsi-material-button" on:click={handleGoogleLogin} type="button">
+						<div class="gsi-material-button-state"></div>
+						<div class="gsi-material-button-content-wrapper">
+							<div class="gsi-material-button-icon">
+								<svg
+									version="1.1"
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 48 48"
+									xmlns:xlink="http://www.w3.org/1999/xlink"
+									style="display: block;"
+								>
+									<path
+										fill="#EA4335"
+										d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+									></path>
+									<path
+										fill="#4285F4"
+										d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+									></path>
+									<path
+										fill="#FBBC05"
+										d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+									></path>
+									<path
+										fill="#34A853"
+										d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+									></path>
+									<path fill="none" d="M0 0h48v48H0z"></path>
+								</svg>
+							</div>
+							<span class="gsi-material-button-contents">Continue with Google</span>
+							<span style="display: none;">Sign in with Google</span>
+						</div>
+					</button>
+				</div>
+
+				<div class="form-group">
 					<input
 						type="email"
 						id="email"
@@ -271,47 +194,45 @@
 						required
 						on:keydown={handleKeydown}
 						placeholder="Email"
-						class="responsive-border"
 					/>
 				</div>
 
-
-
 				<div class="form-group">
-					<label for="password">Password</label>
 					<input
 						type="password"
 						id="password"
 						bind:value={password}
 						required
 						on:keydown={handleKeydown}
-						class="responsive-border"
+						placeholder="Password"
 					/>
 				</div>
 
 				{#if errorMessageText}
-					<p class="error fluid-text">{errorMessageText}</p>
+					<p class="error">{errorMessageText}</p>
 				{/if}
 
-				<button type="submit" class="submit-button responsive-shadow" disabled={loading}>
-					{#if loading}
-						<span class="loader"></span>
-					{:else}
-						{loginMenu ? 'Sign In' : 'Create Account'}
-					{/if}
-				</button>
+				<div class="form-group">
+					<button type="submit" class="submit-button" disabled={loading}>
+						{#if loading}
+							<span class="loader"></span>
+						{:else}
+							{loginMenu ? 'Sign In' : 'Create Account'}
+						{/if}
+					</button>
+				</div>
 			</form>
 
 			<!-- Only show the toggle when appropriate -->
 			{#if loginMenu}
-				<p class="toggle-auth fluid-text">
+				<p class="toggle-auth">
 					Don't have an account?
-					<a href="/signup">Sign Up</a>
+					<a href="/signup" on:click={handleToggleMode}>Sign Up</a>
 				</p>
 			{:else}
-				<p class="toggle-auth fluid-text">
+				<p class="toggle-auth">
 					Already have an account?
-					<a href="/login">Sign In</a>
+					<a href="/login" on:click={handleToggleMode}>Sign In</a>
 				</p>
 			{/if}
 		</div>
@@ -348,114 +269,122 @@
 		width: 100%;
 		margin: auto;
 		max-width: 450px;
-	}
-
-	.auth-buttons-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		width: 100%;
-		gap: clamp(1rem, 2vh, 1.5rem);
-		margin-bottom: clamp(1rem, 2vh, 1.5rem);
-	}
-
-	h1 {
-		color: var(--text-primary);
-		text-align: center;
-		margin-bottom: clamp(0.25rem, 1vh, 0.5rem);
-		font-size: 1.5rem;
-		font-weight: 600;
-		text-transform: none;
-		letter-spacing: normal;
-	}
-
-	.subtitle {
-		color: var(--text-secondary);
-		text-align: center;
-		margin-bottom: clamp(1.5rem, 3vh, 2rem);
-		font-size: 0.9rem;
+		padding: clamp(1.5rem, 4vw, 2.5rem);
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.1);
 	}
 
 	.auth-form {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(1rem, 2vh, 1.25rem);
+		gap: 1rem;
+		width: 100%;
+		align-items: stretch;
+		margin: 0;
+		padding: 0;
 	}
 
 	.form-group {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(0.25rem, 0.5vh, 0.4rem);
+		gap: 0.5rem;
+		width: 100%;
+		align-items: stretch;
 	}
 
 	label {
 		color: var(--text-primary);
-		font-size: 0.8rem;
+		font-size: 0.875rem;
 		font-weight: 500;
+		font-family: 'Inter', sans-serif;
+		margin-bottom: 0.25rem;
 	}
 
 	input {
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-element-darker);
-		color: var(--text-primary);
-		padding: clamp(0.6rem, 1.2vh, 0.75rem);
-		border-radius: clamp(4px, 0.5vw, 6px);
-		font-size: 0.875rem;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.05);
+		color: #ffffff;
+		padding: 0 1rem;
+		border-radius: 8px;
+		font-size: 0.95rem;
+		font-family: 'Inter', sans-serif;
+		height: 48px;
+		width: 100%;
+		box-sizing: border-box;
+		transition: all 0.2s ease;
+		margin: 0;
+		display: block;
+	}
+
+	input::placeholder {
+		color: rgba(255, 255, 255, 0.5);
 	}
 
 	input:focus {
 		outline: none;
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px var(--accent-color-faded);
+		border-color: #3b82f6;
+		background: rgba(255, 255, 255, 0.08);
+		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 	}
 
 	.submit-button {
-		background: var(--accent-color);
-		color: var(--text-on-accent, white);
-		padding: clamp(0.75rem, 1.5vh, 0.9rem);
+		background: #3b82f6;
+		color: #ffffff;
+		padding: 0;
 		border: none;
-		border-radius: clamp(4px, 0.5vw, 6px);
+		border-radius: 8px;
 		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		transition: background-color 0.2s ease;
+		font-family: 'Inter', sans-serif;
+		height: 48px;
+		width: 100%;
+		box-sizing: border-box;
+		font-size: 0.95rem;
+		margin: 0;
+		display: block;
 	}
 
 	.submit-button:hover:not(:disabled) {
-		background: var(--accent-color-hover, #2563eb);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+		background: #2563eb;
+	}
+
+	.submit-button:active {
+		background: #1d4ed8;
 	}
 
 	.submit-button:disabled {
-		background: var(--accent-color-disabled, #3b82f6);
+		background: #3b82f6;
 		opacity: 0.6;
 		cursor: not-allowed;
 	}
 
 	.error {
-		color: var(--error-color, #ef4444);
+		color: #ef4444;
 		text-align: center;
-		font-size: 0.8rem;
+		font-size: 0.875rem;
+		font-family: 'Inter', sans-serif;
+		margin: 0.5rem 0;
 	}
 
 	.toggle-auth {
 		text-align: center;
-		color: var(--text-secondary);
-		margin-top: clamp(1.5rem, 3vh, 2rem);
-		font-size: 0.85rem;
+		color: rgba(255, 255, 255, 0.7);
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.1);
+		font-size: 0.875rem;
+		font-family: 'Inter', sans-serif;
 	}
 
 	.toggle-auth a {
-		color: var(--accent-color);
-		font-weight: 500;
+		color: #3b82f6;
+		font-weight: 600;
 		text-decoration: none;
 		transition: color 0.2s ease;
 	}
 
 	.toggle-auth a:hover {
-		color: var(--accent-color-hover, #2563eb);
+		color: #2563eb;
 		text-decoration: underline;
 	}
 
@@ -464,64 +393,56 @@
 		-webkit-user-select: none;
 		-ms-user-select: none;
 		-webkit-appearance: none;
-		background-color: var(--ui-bg-element-darker, #131314);
+		background: rgba(255, 255, 255, 0.05);
 		background-image: none;
-		border: 1px solid var(--ui-border, #747775);
-		-webkit-border-radius: 4px;
-		border-radius: clamp(4px, 0.5vw, 6px);
-		-webkit-box-sizing: border-box;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 8px;
 		box-sizing: border-box;
-		color: var(--text-primary, #e3e3e3);
+		color: #ffffff;
 		cursor: pointer;
-		font-family: 'Roboto', arial, sans-serif;
-		height: clamp(36px, 5vh, 40px);
-		letter-spacing: 0.25px;
+		font-family: 'Inter', sans-serif;
+		height: 48px;
+		letter-spacing: normal;
 		outline: none;
 		overflow: hidden;
-		padding: 0 clamp(8px, 1vw, 12px);
+		padding: 0;
 		position: relative;
 		text-align: center;
-		-webkit-transition:
-			background-color 0.218s,
-			border-color 0.218s,
-			box-shadow 0.218s;
-		transition:
-			background-color 0.218s,
-			border-color 0.218s,
-			box-shadow 0.218s;
+		transition: all 0.2s ease;
 		vertical-align: middle;
 		white-space: nowrap;
 		width: 100%;
-		max-width: 300px;
-		min-width: min-content;
+		max-width: none;
+		min-width: auto;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin: 0;
 	}
 
 	.gsi-material-button .gsi-material-button-icon {
-		height: clamp(16px, 2vw, 20px);
-		margin-right: clamp(8px, 1vw, 12px);
-		min-width: clamp(16px, 2vw, 20px);
-		width: clamp(16px, 2vw, 20px);
+		height: 20px;
+		margin-right: 8px;
+		min-width: 20px;
+		width: 20px;
 	}
 
 	.gsi-material-button .gsi-material-button-content-wrapper {
-		-webkit-align-items: center;
 		align-items: center;
 		display: flex;
-		-webkit-flex-direction: row;
 		flex-direction: row;
-		-webkit-flex-wrap: nowrap;
 		flex-wrap: nowrap;
 		height: 100%;
-		justify-content: space-between;
+		justify-content: center;
 		position: relative;
-		width: 100%;
+		width: auto;
 	}
 
 	.gsi-material-button .gsi-material-button-contents {
-		-webkit-flex-grow: 1;
-		flex-grow: 1;
-		font-family: 'Roboto', arial, sans-serif;
+		flex-grow: 0;
+		font-family: 'Inter', sans-serif;
 		font-weight: 500;
+		font-size: 0.95rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		vertical-align: top;
@@ -563,40 +484,13 @@
 	}
 
 	.gsi-material-button:not(:disabled):hover {
-		background-color: var(--ui-bg-element-hover);
-		border-color: var(--ui-border-hover);
-		-webkit-box-shadow:
-			0 1px 2px 0 rgba(0, 0, 0, 0.1),
-			0 1px 3px 1px rgba(0, 0, 0, 0.08);
-		box-shadow:
-			0 1px 2px 0 rgba(0, 0, 0, 0.1),
-			0 1px 3px 1px rgba(0, 0, 0, 0.08);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.2);
 	}
 
 	.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
 		background-color: var(--text-primary);
 		opacity: 0.08;
-	}
-
-	.divider {
-		display: flex;
-		align-items: center;
-		text-align: center;
-		margin: clamp(1rem, 2vh, 1.5rem) 0;
-	}
-
-	.divider::before,
-	.divider::after {
-		content: '';
-		flex: 1;
-		border-bottom: 1px solid var(--ui-border);
-	}
-
-	.divider span {
-		padding: 0 clamp(0.5rem, 1vw, 1rem);
-		color: var(--text-secondary);
-		font-size: 0.75rem;
-		text-transform: uppercase;
 	}
 
 	.loader {
@@ -615,6 +509,34 @@
 		}
 		100% {
 			transform: rotate(360deg);
+		}
+	}
+
+	/* Mobile responsiveness */
+	@media (max-width: 480px) {
+		.auth-container {
+			padding: 1rem;
+			padding-top: calc(60px + 1rem);
+		}
+
+		.auth-card {
+			padding: 1.5rem;
+			border-radius: 8px;
+		}
+
+		.gsi-material-button .gsi-material-button-contents {
+			font-size: 0.9rem;
+		}
+
+		input,
+		.submit-button {
+			height: 44px;
+			font-size: 0.9rem;
+		}
+
+		.toggle-auth {
+			margin-top: 1rem;
+			padding-top: 1rem;
 		}
 	}
 </style>
