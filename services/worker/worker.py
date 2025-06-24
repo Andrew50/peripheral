@@ -21,8 +21,11 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from engine import DataFrameStrategyEngine
+from dataframe_strategy_engine import NumpyStrategyEngine
 from validator import SecurityValidator, SecurityError
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from src.strategy_data_analyzer import StrategyDataAnalyzer
 
 # Configure logging
 logging.basicConfig(
@@ -37,11 +40,17 @@ class StrategyWorker:
     """Redis queue-based strategy execution worker"""
     
     def __init__(self):
+        self.worker_id = f"worker_{threading.get_ident()}"
         self.redis_client = self._init_redis()
-        self.db_connection = self._init_database()
-        self.strategy_engine = DataFrameStrategyEngine()
+        self.db_conn = self._init_database()
+        
+        # Import the new data analyzer
+        self.data_analyzer = StrategyDataAnalyzer()
+        
+        self.strategy_engine = NumpyStrategyEngine()
         self.security_validator = SecurityValidator()
-        self.worker_id = os.environ.get("HOSTNAME", "worker-1")
+        
+        logger.info(f"Strategy worker {self.worker_id} initialized")
         
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
@@ -86,7 +95,7 @@ class StrategyWorker:
     def _fetch_strategy_code(self, strategy_id: str) -> str:
         """Fetch strategy code from database by strategy_id"""
         try:
-            with self.db_connection.cursor() as cursor:
+            with self.db_conn.cursor() as cursor:
                 # Fetch from consolidated strategies table
                 cursor.execute(
                     "SELECT pythonCode FROM strategies WHERE strategyId = %s AND is_active = true",
@@ -324,13 +333,50 @@ class StrategyWorker:
         
         return date_info
     
-    def analyze_strategy_code(self, strategy_code: str) -> Dict[str, Any]:
-        """Analyze strategy code and return all extracted information - useful for debugging"""
-        return {
-            'symbols': self._extract_required_symbols(strategy_code),
-            'timeframes': self._extract_timeframes(strategy_code),
-            'date_info': self._extract_dates(strategy_code)
-        }
+    def analyze_strategy_code(self, strategy_code: str, mode: str = 'backtest') -> Dict[str, Any]:
+        """
+        Comprehensive strategy analysis using new AST analyzer
+        Returns mode-specific data requirements and optimization strategies
+        """
+        try:
+            # Use the new comprehensive data analyzer
+            analysis_result = self.data_analyzer.analyze_data_requirements(strategy_code, mode)
+            
+            # Add legacy compatibility fields
+            legacy_analysis = {
+                'symbols': self._extract_required_symbols(strategy_code),
+                'timeframes': self._extract_timeframes(strategy_code),
+                'date_info': self._extract_dates(strategy_code)
+            }
+            
+            # Merge with new analysis
+            analysis_result['legacy_compatibility'] = legacy_analysis
+            
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"Strategy analysis failed: {e}")
+            # Fallback to legacy analysis
+            return {
+                'data_requirements': {
+                    'columns': ['open', 'high', 'low', 'close', 'volume'],
+                    'fundamentals': ['pe_ratio', 'market_cap', 'sector'],
+                    'periods': 30 if mode != 'screener' else 1,
+                    'timeframe': '1d'
+                },
+                'strategy_complexity': 'unknown',
+                'loading_strategy': 'full_dataframe_context',
+                'legacy_compatibility': {
+                    'symbols': self._extract_required_symbols(strategy_code),
+                    'timeframes': self._extract_timeframes(strategy_code),
+                    'date_info': self._extract_dates(strategy_code)
+                },
+                'analysis_metadata': {
+                    'fallback_used': True,
+                    'error': str(e),
+                    'analyzed_at': datetime.utcnow().isoformat()
+                }
+            }
     
     def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
         """Fetch multiple strategy codes from database"""
@@ -438,8 +484,8 @@ class StrategyWorker:
         
         # Cleanup
         self.redis_client.close()
-        if self.db_connection:
-            self.db_connection.close()
+        if self.db_conn:
+            self.db_conn.close()
         logger.info("Worker shutdown complete")
     
     def _execute_backtest(self, symbols: List[str] = None, 
@@ -652,15 +698,15 @@ class StrategyWorker:
         
         # Check Database connection
         try:
-            with self.db_connection.cursor() as cursor:
+            with self.db_conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
         except Exception as e:
             logger.error(f"Database connection lost, reconnecting: {e}")
             try:
-                self.db_connection.close()
+                self.db_conn.close()
             except:
                 pass
-            self.db_connection = self._init_database()
+            self.db_conn = self._init_database()
 
 
 # Utility functions for adding tasks to queue

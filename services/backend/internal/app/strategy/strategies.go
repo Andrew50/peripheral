@@ -740,19 +740,17 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 		enhancedQuery = fmt.Sprintf(`%s
 
 IMPORTANT: This query is asking specifically for ARM (ticker: ARM) gap-up analysis. 
-- Create a classifier that checks if the ARM symbol specifically gaps up by the specified percentage
+- Create a strategy function that checks if the ARM symbol specifically gaps up by the specified percentage
 - A gap up means: current day's opening price > previous day's closing price by the specified percentage
 - Use the formula: gap_percent = ((current_open - previous_close) / previous_close) * 100
-- Make sure to handle the ARM symbol specifically in your classifier`, args.Query)
+- Filter the data to only process ARM rows and return instances where the gap criteria is met`, args.Query)
 	}
 
 	var fullPrompt string
 	if isEdit && existingStrategy != nil {
 		log.Printf("Building edit prompt for existing strategy...")
 		// For editing existing strategies, include current strategy content
-		fullPrompt = fmt.Sprintf(`%s
-
-EDITING EXISTING STRATEGY:
+		fullPrompt = fmt.Sprintf(`EDITING EXISTING STRATEGY:
 
 Current Strategy Name: %s
 Current Description: %s
@@ -771,8 +769,7 @@ Please modify the existing strategy based on the user's edit request. You can:
 3. Add new functionality while preserving existing behavior where appropriate
 4. Fix any bugs or improve performance if requested
 
-Generate the updated Python classifier function named 'classify_symbol(symbol)' that incorporates the requested changes.`,
-			dataAccessorFunctions,
+Generate the updated Python strategy function named 'strategy(data)' that incorporates the requested changes.`,
 			existingStrategy.Name,
 			existingStrategy.Description,
 			existingStrategy.Prompt,
@@ -781,11 +778,9 @@ Generate the updated Python classifier function named 'classify_symbol(symbol)' 
 	} else {
 		log.Printf("Building new strategy prompt...")
 		// For new strategies, use the original prompt format
-		fullPrompt = fmt.Sprintf(`%s
+		fullPrompt = fmt.Sprintf(`User Request: %s
 
-User Request: %s
-
-Please generate a Python classifier function that uses the above data accessor functions to identify the pattern the user is requesting. The function should be named 'classify_symbol(symbol)' and return a boolean indicating if the symbol matches the criteria.`, dataAccessorFunctions, enhancedQuery)
+Please generate a Python strategy function that identifies the pattern the user is requesting. The function should be named 'strategy(data)' where data is a numpy array containing market data, and should return a list of instances where the pattern was found.`, enhancedQuery)
 	}
 
 	log.Printf("Full prompt length: %d characters", len(fullPrompt))

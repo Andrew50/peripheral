@@ -1,6 +1,6 @@
 """
 Security Validator
-Validates Python code for security issues before execution and ensures compliance with NumPy DataFrame strategy requirements.
+Validates Python code for security issues before execution and ensures compliance with NumPy array strategy requirements.
 
 The strategy engine expects functions that:
 1. Accept a single parameter: data (numpy.ndarray)
@@ -8,12 +8,15 @@ The strategy engine expects functions that:
 3. Use only approved safe modules (numpy, math, datetime, etc.)
 4. Do not access dangerous system functions or attributes
 
-The data provided will be a structured numpy array with fields including:
-- ticker (string): Stock ticker symbol
-- date (datetime/string): Date of the data point
-- open, high, low, close (float): OHLC price data
-- volume (int): Trading volume
-- And potentially other market data fields
+The data provided will be a numpy array with standardized column structure:
+- Column 0: ticker (string): Stock ticker symbol
+- Column 1: date (datetime/string): Date of the data point  
+- Column 2: open (float): Opening price
+- Column 3: high (float): High price
+- Column 4: low (float): Low price
+- Column 5: close (float): Closing price
+- Column 6: volume (int): Trading volume
+- Additional columns for fundamental data and indicators
 """
 
 import ast
@@ -55,7 +58,7 @@ class SecurityValidator:
             ast.GeneratorExp: self._check_comprehension,
         }
 
-        # Forbidden built-in functions (comprehensive list)
+        # Forbidden built-in functions (only truly dangerous ones)
         self.forbidden_functions = {
             # Code execution
             "exec", "eval", "compile", "__import__", "breakpoint",
@@ -65,15 +68,26 @@ class SecurityValidator:
             "globals", "locals", "vars", "dir", "delattr", "setattr", "hasattr", "getattr",
             # System control
             "exit", "quit", "help", "copyright", "credits", "license",
-            # Memory and object manipulation
-            "memoryview", "bytearray", "bytes", "callable", "classmethod", "staticmethod",
-            "property", "super", "type", "isinstance", "issubclass", "iter", "next",
+            # Memory and object manipulation that could be dangerous
+            "memoryview", "bytearray", "callable", "classmethod", "staticmethod",
+            "property", "super", "isinstance", "issubclass", "iter", "next",
             # Dangerous built-ins
-            "id", "hash", "repr", "ascii", "bin", "hex", "oct", "format",
-            "sorted", "reversed", "enumerate", "zip", "map", "filter", "reduce",
-            "any", "all", "sum", "min", "max", "pow", "round", "divmod",
-            # Type constructors that could be dangerous
-            "complex", "frozenset", "slice", "range", "object",
+            "id", "hash", "repr", "ascii", "bin", "hex", "oct",
+        }
+        
+        # Explicitly allowed built-in functions for numpy array processing
+        self.allowed_functions = {
+            # Type conversions needed for numpy
+            "int", "float", "str", "bool", "list", "dict", "tuple", "set",
+            # Math operations
+            "abs", "round", "min", "max", "sum", "pow", "divmod",
+            # Iteration and collections
+            "len", "range", "enumerate", "zip", "sorted", "reversed",
+            "any", "all", "map", "filter",
+            # Type checking
+            "type", "bytes",
+            # Object creation
+            "slice", "complex", "frozenset", "object", "format"
         }
 
         # Forbidden modules (exhaustive security list)
@@ -118,6 +132,7 @@ class SecurityValidator:
             "datetime", "time", "decimal", "fractions", "collections",
             "itertools", "functools", "operator", "copy", "json", "re",
             "string", "textwrap", "calendar", "bisect", "heapq", "array",
+            "typing",  # For type annotations like List[Dict]
         }
 
         # Forbidden attributes (comprehensive dunder and internal attributes)
@@ -372,7 +387,8 @@ class SecurityValidator:
             (r'file\s*\(', "file() function is forbidden"),
             # Input/Output
             (r'input\s*\(', "input() function is forbidden"),
-            (r'print\s*\(', "print() function is forbidden"),
+            # Note: Allow print in comments, only block actual print calls
+            (r'^[^#]*print\s*\(', "print() function is forbidden (comments are allowed)"),
             # System access patterns
             (r'import\s+os\b', "Importing os module is forbidden"),
             (r'import\s+sys\b', "Importing sys module is forbidden"),
@@ -432,9 +448,23 @@ class SecurityValidator:
     def _check_function_call(self, node: ast.Call) -> bool:
         """Check function calls for forbidden functions"""
         if isinstance(node.func, ast.Name):
+            # Allow explicitly allowed functions
+            if node.func.id in self.allowed_functions:
+                return True
+            # Block forbidden functions
             if node.func.id in self.forbidden_functions:
                 raise SecurityError(f"Forbidden function call: {node.func.id}")
+            # Allow numpy and math functions
+            if node.func.id.startswith(('np.', 'numpy.', 'math.')):
+                return True
         elif isinstance(node.func, ast.Attribute):
+            # Allow numpy array methods like .astype(), .shape, etc.
+            allowed_array_methods = {
+                'astype', 'shape', 'size', 'dtype', 'ndim', 'T', 'reshape', 
+                'flatten', 'ravel', 'copy', 'mean', 'std', 'min', 'max', 'sum'
+            }
+            if node.func.attr in allowed_array_methods:
+                return True
             # Check for dangerous method calls
             if node.func.attr in self.forbidden_functions:
                 raise SecurityError(f"Forbidden method call: {node.func.attr}")
@@ -568,8 +598,16 @@ class SecurityValidator:
         Required instance fields:
         {', '.join(sorted(self.required_instance_fields))}
         
-        The data parameter is a structured numpy array containing market data.
-        Access fields using: data['field_name'] (e.g., data['close'], data['volume'])
+        The data parameter is a numpy array with standardized column structure:
+        - Column 0: ticker (string)
+        - Column 1: date (string/datetime)  
+        - Column 2: open (float)
+        - Column 3: high (float)
+        - Column 4: low (float)
+        - Column 5: close (float)
+        - Column 6: volume (int)
+        
+        Access data using: data[row_index, column_index] (e.g., data[i, 5] for close price)
         """
 
 

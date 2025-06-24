@@ -1,6 +1,7 @@
 """
-DataFrame Strategy Engine
-Executes Python strategies that take DataFrames as input and return instances (ticker + date + metrics)
+Numpy Strategy Engine
+Executes Python strategies that take numpy arrays as input and return instances (ticker + date + metrics)
+Updated from DataFrame-based to numpy array-based execution.
 """
 
 import asyncio
@@ -14,23 +15,45 @@ import time
 
 from data import DataProvider
 from validator import SecurityValidator, SecurityError
+from strategy_data_analyzer import StrategyDataAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class DataFrameStrategyEngine:
+class NumpyStrategyEngine:
     """
-    Executes strategies that take DataFrames and return instances
+    Executes strategies that take numpy arrays and return instances
     
     Strategy signature:
-    def strategy_function(df: pd.DataFrame) -> List[Dict]:
-        # df contains all required data (OHLCV, fundamentals, etc.)
+    def strategy(data: np.ndarray) -> List[Dict]:
+        # data contains market data as numpy array with columns:
+        # [ticker, date, open, high, low, close, volume, ...]
         # Returns list of instances: [{'ticker': 'AAPL', 'date': '2024-01-01', 'signal': True, ...}]
     """
     
     def __init__(self):
         self.data_provider = DataProvider()
         self.validator = SecurityValidator()
+        self.data_analyzer = StrategyDataAnalyzer()
+        
+        # Column mapping for numpy arrays
+        self.column_mapping = {
+            0: 'ticker',
+            1: 'date',
+            2: 'open', 
+            3: 'high',
+            4: 'low',
+            5: 'close',
+            6: 'volume',
+            7: 'adj_close',
+            # Fundamental data at higher indices
+            8: 'fund_pe_ratio',
+            9: 'fund_pb_ratio',
+            10: 'fund_market_cap',
+            11: 'fund_sector',
+            12: 'fund_industry',
+            13: 'fund_dividend_yield'
+        }
         
     async def execute_backtest(
         self, 
@@ -41,7 +64,7 @@ class DataFrameStrategyEngine:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Execute DataFrame-based strategy for backtesting
+        Execute numpy-based strategy for backtesting
         
         Args:
             strategy_code: Python code defining the strategy function
@@ -52,7 +75,7 @@ class DataFrameStrategyEngine:
         Returns:
             Dict with instances, summary, and performance metrics
         """
-        logger.info(f"Starting DataFrame backtest: {len(symbols)} symbols, {start_date.date()} to {end_date.date()}")
+        logger.info(f"Starting numpy backtest: {len(symbols)} symbols, {start_date.date()} to {end_date.date()}")
         
         start_time = time.time()
         
@@ -61,15 +84,26 @@ class DataFrameStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Load data into DataFrame
-            df = await self._load_backtest_data(symbols, start_date, end_date)
-            logger.info(f"Loaded DataFrame with shape: {df.shape}")
+            # Analyze data requirements for backtest mode
+            data_analysis = self.data_analyzer.analyze_data_requirements(strategy_code, mode='backtest')
+            requirements = data_analysis['data_requirements']
+            loading_strategy = data_analysis['loading_strategy']
+            
+            logger.info(f"Data requirements analysis: {requirements['mode_optimization']}, "
+                       f"strategy: {loading_strategy}, "
+                       f"estimated rows: {requirements.get('estimated_rows', 'unknown')}")
+            
+            # Load data as numpy array using optimized strategy
+            data_array = await self._load_optimized_data(
+                symbols, start_date, end_date, requirements, loading_strategy, 'backtest'
+            )
+            logger.info(f"Loaded numpy array with shape: {data_array.shape}")
             
             # Execute strategy
-            instances = await self._execute_strategy(strategy_code, df, execution_mode='backtest')
+            instances = await self._execute_strategy(strategy_code, data_array, execution_mode='backtest')
             
             # Calculate performance metrics
-            performance_metrics = self._calculate_performance_metrics(instances, df)
+            performance_metrics = self._calculate_performance_metrics(instances, data_array)
             
             execution_time = (time.time() - start_time) * 1000
             
@@ -82,10 +116,11 @@ class DataFrameStrategyEngine:
                     'positive_signals': len([i for i in instances if i.get('signal', False)]),
                     'date_range': [start_date.isoformat(), end_date.isoformat()],
                     'symbols_processed': len(symbols),
-                    'data_shape': df.shape
+                    'data_shape': list(data_array.shape)
                 },
                 'performance_metrics': performance_metrics,
-                'execution_time_ms': execution_time
+                'execution_time_ms': execution_time,
+                'data_analysis': data_analysis
             }
             
             logger.info(f"Backtest completed: {len(instances)} instances in {execution_time:.1f}ms")
@@ -110,7 +145,7 @@ class DataFrameStrategyEngine:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Execute DataFrame-based strategy for screening
+        Execute numpy-based strategy for screening with optimization
         
         Args:
             strategy_code: Python code defining the strategy function  
@@ -120,7 +155,7 @@ class DataFrameStrategyEngine:
         Returns:
             Dict with ranked results and scores
         """
-        logger.info(f"Starting DataFrame screening: {len(universe)} symbols, limit {limit}")
+        logger.info(f"Starting numpy screening: {len(universe)} symbols, limit {limit}")
         
         start_time = time.time()
         
@@ -129,14 +164,26 @@ class DataFrameStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Load recent data for screening (last 30 days by default)
+            # Analyze data requirements for screener mode - CRITICAL OPTIMIZATION
+            data_analysis = self.data_analyzer.analyze_data_requirements(strategy_code, mode='screener')
+            requirements = data_analysis['data_requirements']
+            loading_strategy = data_analysis['loading_strategy']
+            
+            logger.info(f"Screener optimization: {requirements['mode_optimization']}, "
+                       f"strategy: {loading_strategy}, "
+                       f"periods: {requirements.get('periods', 1)}")
+            
+            # Load minimal data for screening (major optimization for over-fetching)
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
-            df = await self._load_screening_data(universe, start_date, end_date)
-            logger.info(f"Loaded screening DataFrame with shape: {df.shape}")
+            start_date = end_date - timedelta(days=requirements.get('periods', 1))
+            
+            data_array = await self._load_optimized_data(
+                universe, start_date, end_date, requirements, loading_strategy, 'screener'
+            )
+            logger.info(f"Loaded screening numpy array with shape: {data_array.shape}")
             
             # Execute strategy
-            instances = await self._execute_strategy(strategy_code, df, execution_mode='screening')
+            instances = await self._execute_strategy(strategy_code, data_array, execution_mode='screening')
             
             # Rank and limit results
             ranked_results = self._rank_screening_results(instances, limit)
@@ -149,8 +196,9 @@ class DataFrameStrategyEngine:
                 'ranked_results': ranked_results,
                 'universe_size': len(universe),
                 'results_returned': len(ranked_results),
-                'data_shape': df.shape,
-                'execution_time_ms': execution_time
+                'data_shape': list(data_array.shape),
+                'execution_time_ms': execution_time,
+                'data_analysis': data_analysis
             }
             
             logger.info(f"Screening completed: {len(ranked_results)} results in {execution_time:.1f}ms")
@@ -174,7 +222,7 @@ class DataFrameStrategyEngine:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Execute DataFrame-based strategy for real-time alerts
+        Execute numpy-based strategy for real-time alerts with optimization
         
         Args:
             strategy_code: Python code defining the strategy function
@@ -183,7 +231,7 @@ class DataFrameStrategyEngine:
         Returns:
             Dict with alerts and signals
         """
-        logger.info(f"Starting DataFrame real-time scan: {len(symbols)} symbols")
+        logger.info(f"Starting numpy real-time scan: {len(symbols)} symbols")
         
         start_time = time.time()
         
@@ -192,14 +240,27 @@ class DataFrameStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
+            # Analyze data requirements for alert mode
+            data_analysis = self.data_analyzer.analyze_data_requirements(strategy_code, mode='alert')
+            requirements = data_analysis['data_requirements']
+            loading_strategy = data_analysis['loading_strategy']
+            
+            logger.info(f"Alert optimization: {requirements['mode_optimization']}, "
+                       f"strategy: {loading_strategy}, "
+                       f"periods: {requirements.get('periods', 5)}")
+            
             # Load recent data for real-time analysis
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=5)  # Last 5 days for context
-            df = await self._load_realtime_data(symbols, start_date, end_date)
-            logger.info(f"Loaded real-time DataFrame with shape: {df.shape}")
+            periods = requirements.get('periods', 5)
+            start_date = end_date - timedelta(days=periods)
+            
+            data_array = await self._load_optimized_data(
+                symbols, start_date, end_date, requirements, loading_strategy, 'alert'
+            )
+            logger.info(f"Loaded real-time numpy array with shape: {data_array.shape}")
             
             # Execute strategy
-            instances = await self._execute_strategy(strategy_code, df, execution_mode='realtime')
+            instances = await self._execute_strategy(strategy_code, data_array, execution_mode='realtime')
             
             # Convert instances to alerts
             alerts = self._convert_instances_to_alerts(instances)
@@ -210,10 +271,11 @@ class DataFrameStrategyEngine:
                 'success': True,
                 'execution_mode': 'realtime',
                 'alerts': alerts,
-                'signals': {inst['ticker']: inst for inst in instances if inst.get('signal', False)},
-                'symbols_processed': len(symbols),
-                'data_shape': df.shape,
-                'execution_time_ms': execution_time
+                'symbols_monitored': len(symbols),
+                'alerts_generated': len(alerts),
+                'data_shape': list(data_array.shape),
+                'execution_time_ms': execution_time,
+                'data_analysis': data_analysis
             }
             
             logger.info(f"Real-time scan completed: {len(alerts)} alerts in {execution_time:.1f}ms")
@@ -226,9 +288,179 @@ class DataFrameStrategyEngine:
                 'execution_mode': 'realtime',
                 'error_message': str(e),
                 'alerts': [],
-                'signals': {}
+                'symbols_monitored': len(symbols),
+                'alerts_generated': 0
             }
+
+    async def _load_optimized_data(
+        self, 
+        symbols: List[str], 
+        start_date: datetime, 
+        end_date: datetime,
+        requirements: Dict[str, Any],
+        loading_strategy: str,
+        execution_mode: str
+    ) -> np.ndarray:
+        """
+        Load data as numpy array using batched approach for all strategies
+        Number of batches determined by arbitrary function (currently always 1)
+        """
+        logger.info(f"Loading data as numpy array with batched strategy (original strategy: {loading_strategy})")
+        
+        # Determine number of batches using arbitrary function
+        num_batches = self._determine_batch_count(symbols, requirements, execution_mode)
+        logger.info(f"Using {num_batches} batch(es) for {len(symbols)} symbols")
+        
+        # Always use batched loading for numpy arrays
+        return await self._load_batched_numpy_array_flexible(
+            symbols, start_date, end_date, requirements, num_batches
+        )
     
+    def _determine_batch_count(
+        self, 
+        symbols: List[str], 
+        requirements: Dict[str, Any], 
+        execution_mode: str
+    ) -> int:
+        """
+        Arbitrary function to determine number of batches
+        Currently always returns 1 as requested
+        
+        Args:
+            symbols: List of symbols to process
+            requirements: Data requirements from AST analysis
+            execution_mode: 'screener', 'backtest', or 'alert'
+            
+        Returns:
+            Number of batches to use (currently always 1)
+        """
+        # For now, always use 1 batch as requested
+        return 1
+        
+        # Future implementation could consider:
+        # - Symbol count: len(symbols)
+        # - Memory requirements: requirements.get('estimated_rows', 0)
+        # - Execution mode complexity
+        # - Available system resources
+        # 
+        # Example logic (commented out):
+        # if len(symbols) > 1000:
+        #     return min(10, len(symbols) // 100)
+        # elif len(symbols) > 100:
+        #     return min(5, len(symbols) // 50)
+        # else:
+        #     return 1
+    
+    async def _load_batched_numpy_array_flexible(
+        self, 
+        symbols: List[str], 
+        start_date: datetime, 
+        end_date: datetime,
+        requirements: Dict[str, Any],
+        num_batches: int
+    ) -> np.ndarray:
+        """
+        Load data in specified number of batches with flexible optimization
+        """
+        logger.info(f"Loading {len(symbols)} symbols in {num_batches} batches")
+        
+        if num_batches == 1:
+            return await self._load_single_batch_processing(symbols, start_date, end_date, requirements)
+        else:
+            return await self._load_multi_batch_processing(symbols, start_date, end_date, requirements, num_batches)
+    
+    async def _load_single_batch_processing(
+        self, 
+        symbols: List[str], 
+        start_date: datetime,
+        end_date: datetime,
+        requirements: Dict[str, Any]
+    ) -> np.ndarray:
+        """
+        Optimized loading for single batch (all symbols at once)
+        """
+        logger.info(f"Single batch processing: {len(symbols)} symbols")
+        
+        # Load data for all symbols
+        dataframes = []
+        
+        for symbol in symbols:
+            try:
+                df = await self.data_provider.get_market_data(
+                    symbol, 
+                    start_date, 
+                    end_date,
+                    columns=requirements.get('columns', ['open', 'high', 'low', 'close', 'volume'])
+                )
+                
+                if not df.empty:
+                    # Add ticker column
+                    df['ticker'] = symbol
+                    # Reorder columns to match mapping
+                    ordered_columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume']
+                    if 'fundamentals' in requirements and requirements['fundamentals']:
+                        ordered_columns.extend(requirements['fundamentals'])
+                    
+                    # Keep only available columns
+                    available_columns = [col for col in ordered_columns if col in df.columns or col == 'ticker']
+                    df = df[available_columns]
+                    dataframes.append(df)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to load data for {symbol}: {e}")
+                continue
+        
+        if not dataframes:
+            return np.array([])
+        
+        # Combine all dataframes
+        combined_df = pd.concat(dataframes, ignore_index=True)
+        
+        # Convert to numpy array
+        logger.info(f"Single batch loaded: {combined_df.shape[0]} rows, {combined_df.shape[1]} columns")
+        return combined_df.values
+    
+    async def _load_multi_batch_processing(
+        self, 
+        symbols: List[str], 
+        start_date: datetime,
+        end_date: datetime,
+        requirements: Dict[str, Any],
+        num_batches: int
+    ) -> np.ndarray:
+        """
+        Load data using multiple batches for large symbol sets
+        """
+        batch_size = max(1, len(symbols) // num_batches)
+        all_dataframes = []
+        
+        for i in range(0, len(symbols), batch_size):
+            batch_symbols = symbols[i:i + batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1}/{num_batches}: {len(batch_symbols)} symbols")
+            
+            batch_data = await self._load_single_batch_processing(
+                batch_symbols, start_date, end_date, requirements
+            )
+            
+            if batch_data.size > 0:
+                # Convert numpy array back to DataFrame for concatenation
+                columns = ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume']
+                if 'fundamentals' in requirements and requirements['fundamentals']:
+                    columns.extend(requirements['fundamentals'])
+                
+                # Trim columns to match actual data shape
+                columns = columns[:batch_data.shape[1]]
+                batch_df = pd.DataFrame(batch_data, columns=columns)
+                all_dataframes.append(batch_df)
+        
+        if not all_dataframes:
+            return np.array([])
+        
+        # Combine all batches
+        final_df = pd.concat(all_dataframes, ignore_index=True)
+        logger.info(f"Multi-batch loading complete: {final_df.shape[0]} rows, {final_df.shape[1]} columns")
+        return final_df.values
+
     async def _load_backtest_data(
         self, 
         symbols: List[str], 
@@ -416,193 +648,184 @@ class DataFrameStrategyEngine:
     async def _execute_strategy(
         self, 
         strategy_code: str, 
-        df: pd.DataFrame, 
+        data_array: np.ndarray, 
         execution_mode: str
     ) -> List[Dict]:
-        """Execute the strategy function on the DataFrame"""
+        """Execute the strategy function on the numpy array"""
         
         # Create safe execution environment
-        safe_globals = await self._create_safe_globals(df, execution_mode)
+        safe_globals = await self._create_safe_globals(data_array, execution_mode)
         safe_locals = {}
         
         try:
-            # Compile and execute strategy code
-            compiled_code = compile(strategy_code, "<strategy>", "exec")
-            exec(compiled_code, safe_globals, safe_locals)  # nosec B102
+            # Execute strategy code to define the function
+            exec(strategy_code, safe_globals, safe_locals)
             
-            # Look for strategy function
+            # Find strategy function (should be named 'strategy' or 'strategy_function')
             strategy_func = None
             for name, obj in safe_locals.items():
-                if callable(obj) and not name.startswith('_'):
+                if callable(obj) and (name == 'strategy' or name == 'strategy_function'):
                     strategy_func = obj
                     break
             
             if not strategy_func:
-                raise ValueError("No callable strategy function found in code")
+                raise ValueError("No strategy function found. Function should be named 'strategy' or 'strategy_function'")
             
             # Execute strategy function
-            logger.info(f"Executing strategy function on DataFrame with shape {df.shape}")
-            instances = strategy_func(df)
+            logger.info(f"Executing strategy function on numpy array with shape {data_array.shape}")
+            instances = strategy_func(data_array)
             
             # Validate and clean instances
             if not isinstance(instances, list):
-                raise ValueError("Strategy function must return a list of instances")
+                raise ValueError(f"Strategy function must return a list, got {type(instances)}")
             
-            # Ensure all instances have required fields
-            cleaned_instances = []
+            # Filter out None instances and validate structure
+            valid_instances = []
             for instance in instances:
-                if isinstance(instance, dict):
-                    # Ensure required fields exist
-                    if 'ticker' not in instance:
-                        continue
-                    if 'date' not in instance:
-                        instance['date'] = datetime.now().date().isoformat()
-                    
-                    cleaned_instances.append(instance)
+                if instance is not None and isinstance(instance, dict):
+                    valid_instances.append(instance)
             
-            logger.info(f"Strategy returned {len(cleaned_instances)} instances")
-            return cleaned_instances
+            logger.info(f"Strategy execution complete: {len(valid_instances)} valid instances generated")
+            return valid_instances
             
         except Exception as e:
             logger.error(f"Strategy execution failed: {e}")
             raise
     
-    async def _create_safe_globals(self, df: pd.DataFrame, execution_mode: str) -> Dict[str, Any]:
-        """Create safe execution environment with DataFrame and utilities"""
+    async def _create_safe_globals(self, data_array: np.ndarray, execution_mode: str) -> Dict[str, Any]:
+        """Create safe execution environment with numpy array and utilities"""
         
         safe_globals = {
-            '__builtins__': {
-                'len': len,
-                'range': range,
-                'enumerate': enumerate,
-                'zip': zip,
-                'list': list,
-                'dict': dict,
-                'tuple': tuple,
-                'set': set,
-                'str': str,
-                'int': int,
-                'float': float,
-                'bool': bool,
-                'abs': abs,
-                'min': min,
-                'max': max,
-                'sum': sum,
-                'round': round,
-                'sorted': sorted,
-                'any': any,
-                'all': all,
-            },
-            # Data science libraries
+            # Standard imports
             'pd': pd,
-            'np': np,
-            'pandas': pd,
             'numpy': np,
             
-            # DataFrame with all data
-            'df': df,
+            # numpy array with all data
+            'data': data_array,
             
             # Utility functions
-            'datetime': datetime,
-            'timedelta': timedelta,
+            'len': len,
+            'range': range,
+            'enumerate': enumerate,
+            'float': float,
+            'int': int,
+            'str': str,
+            'abs': abs,
+            'max': max,
+            'min': min,
+            'round': round,
+            'sum': sum,
             
-            # Logging
-            'log': lambda msg: logger.info(f"Strategy: {msg}"),
+            # Column mapping for easier access
+            'TICKER_COL': 0,
+            'DATE_COL': 1,
+            'OPEN_COL': 2,
+            'HIGH_COL': 3,
+            'LOW_COL': 4,
+            'CLOSE_COL': 5,
+            'VOLUME_COL': 6,
+            
+            # Execution mode info
+            'execution_mode': execution_mode,
+            
+            # Helper function to create instances
+            'create_instance': lambda ticker, date, **kwargs: {
+                'ticker': ticker,
+                'date': date,
+                **kwargs
+            }
         }
         
+        # Add datetime utilities for backtest mode
+        if execution_mode == 'backtest':
+            safe_globals.update({
+                'datetime': datetime,
+                'timedelta': timedelta
+            })
+        
         return safe_globals
-    
-    def _calculate_performance_metrics(self, instances: List[Dict], df: pd.DataFrame) -> Dict[str, Any]:
+
+    def _calculate_performance_metrics(self, instances: List[Dict], data_array: np.ndarray) -> Dict[str, Any]:
         """Calculate performance metrics from backtest instances"""
         
         if not instances:
-            return {}
+            return {
+                'total_signals': 0,
+                'success_rate': 0.0,
+                'average_return': 0.0,
+                'max_drawdown': 0.0,
+                'sharpe_ratio': 0.0
+            }
         
-        # Basic statistics
+        # Basic metrics
+        total_signals = len([i for i in instances if i.get('signal', False)])
         total_instances = len(instances)
-        positive_signals = len([i for i in instances if i.get('signal', False)])
         
-        # Get unique symbols and dates
-        unique_symbols = len(set(i['ticker'] for i in instances))
-        unique_dates = len(set(i['date'] for i in instances))
+        # Calculate returns if available
+        returns = [i.get('return', 0.0) for i in instances if 'return' in i]
+        avg_return = np.mean(returns) if returns else 0.0
         
-        # Calculate signal rate
-        signal_rate = positive_signals / total_instances if total_instances > 0 else 0
+        # Calculate success rate (positive returns / total signals)
+        positive_returns = len([r for r in returns if r > 0])
+        success_rate = positive_returns / max(total_signals, 1)
         
-        metrics = {
+        # Simple Sharpe ratio approximation
+        sharpe_ratio = 0.0
+        if returns and np.std(returns) > 0:
+            sharpe_ratio = (avg_return * 252) / (np.std(returns) * np.sqrt(252))
+        
+        return {
             'total_instances': total_instances,
-            'positive_signals': positive_signals,
-            'signal_rate': round(signal_rate, 4),
-            'unique_symbols': unique_symbols,
-            'unique_dates': unique_dates,
-            'avg_instances_per_symbol': round(total_instances / unique_symbols, 2) if unique_symbols > 0 else 0,
-            'avg_instances_per_date': round(total_instances / unique_dates, 2) if unique_dates > 0 else 0
+            'total_signals': total_signals,
+            'success_rate': success_rate,
+            'average_return': avg_return,
+            'max_drawdown': 0.0,  # Would need more complex calculation
+            'sharpe_ratio': sharpe_ratio,
+            'data_points_analyzed': data_array.shape[0] if data_array.size > 0 else 0
         }
-        
-        # Add custom metrics if present in instances
-        numeric_fields = []
-        for instance in instances:
-            for key, value in instance.items():
-                if key not in ['ticker', 'date', 'signal'] and isinstance(value, (int, float)):
-                    if key not in numeric_fields:
-                        numeric_fields.append(key)
-        
-        for field in numeric_fields:
-            values = [i.get(field) for i in instances if field in i and isinstance(i[field], (int, float))]
-            if values:
-                metrics[f'{field}_mean'] = round(np.mean(values), 4)
-                metrics[f'{field}_std'] = round(np.std(values), 4)
-                metrics[f'{field}_min'] = round(min(values), 4)
-                metrics[f'{field}_max'] = round(max(values), 4)
-        
-        return metrics
-    
+
     def _rank_screening_results(self, instances: List[Dict], limit: int) -> List[Dict]:
         """Rank screening results by score or signal strength"""
         
-        if not instances:
-            return []
-        
-        # Sort by score if available, otherwise by signal
-        def sort_key(instance):
+        # Sort by score (descending) or signal strength
+        def get_sort_key(instance):
             if 'score' in instance:
                 return instance['score']
             elif 'signal_strength' in instance:
                 return instance['signal_strength']
             elif 'signal' in instance:
-                return 1 if instance['signal'] else 0
+                return 1.0 if instance['signal'] else 0.0
             else:
-                return 0
+                return 0.0
         
-        sorted_instances = sorted(instances, key=sort_key, reverse=True)
+        sorted_instances = sorted(instances, key=get_sort_key, reverse=True)
+        
+        # Return top results up to limit
         return sorted_instances[:limit]
-    
+
     def _convert_instances_to_alerts(self, instances: List[Dict]) -> List[Dict]:
-        """Convert instances to alert format for real-time mode"""
+        """Convert strategy instances to alert format"""
         
         alerts = []
+        
         for instance in instances:
+            # Only create alerts for positive signals
             if instance.get('signal', False):
                 alert = {
-                    'symbol': instance['ticker'],
-                    'type': 'strategy_signal',
-                    'message': f"{instance['ticker']} triggered strategy signal",
+                    'ticker': instance.get('ticker', 'UNKNOWN'),
                     'timestamp': datetime.now().isoformat(),
+                    'alert_type': 'strategy_signal',
+                    'message': instance.get('message', 'Strategy signal triggered'),
+                    'signal_strength': instance.get('signal_strength', 1.0),
                     'data': instance
                 }
-                
-                # Add custom message if provided
-                if 'message' in instance:
-                    alert['message'] = instance['message']
-                
-                # Add priority based on score/strength
-                if 'score' in instance:
-                    alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
-                elif 'signal_strength' in instance:
-                    alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
-                else:
-                    alert['priority'] = 'medium'
-                
                 alerts.append(alert)
         
-        return alerts 
+        return alerts
+
+    def generate_mode_specific_requirements(self, usage_context: Dict[str, Any], mode: str) -> Dict[str, Any]:
+        """
+        Pass 3: Generate optimized requirements based on execution mode
+        """
+        optimizer = self.data_analyzer.mode_optimizers.get(mode, self.data_analyzer._optimize_for_backtest)
+        return optimizer(usage_context) 
