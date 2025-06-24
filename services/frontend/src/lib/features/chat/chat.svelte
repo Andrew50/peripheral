@@ -515,7 +515,7 @@
 			// <-- Set initial status immediately -->
 			functionStatusStore.set({
 				type: 'function_status',
-				userMessage: 'Thinking'
+				userMessage: 'Thinking...'
 			});
 
 			// Scroll to show the user's message and loading state

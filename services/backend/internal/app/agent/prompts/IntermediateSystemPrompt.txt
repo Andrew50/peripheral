@@ -48,13 +48,13 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
         *   **Plan Future Actions:** Outline what you intend to do in subsequent turns based on expected results
         *   **ANY INFORMATION** that isn't in here, the previous information you were given, or execution rounds will be lost.
         *   Be concise and only include necessary information in thoughts.
-    *   `discard_results` (optional): An array of result IDs (integers) to discard from context in future planning iterations. Use this to remove execution results that are no longer needed to avoid context bloat. Guidelines for discarding:
-        *   **Discard intermediate results** once you have the final information you need (e.g., discard search results after finding the specific data you were looking for)
+    *   `discard_results` (optional): An array of result IDs (integers) to discard from context in future planning iterations. Guidelines for discarding:
         *   **Keep results that will be referenced** in your final response to the user
         *   **Discard outdated information** when you have more recent data
         *   **Discard large datasets** once you've extracted the key insights
+        *   Discard function calls with errors
         *   Example: `"discard_results": [1, 3, 5]` to remove results with IDs 1, 3, and 5
-        *   IF STAGE = FINISHED_EXECUTING, DO NOT DISCARD ANY RESULTS!
+        *   **IF STAGE = FINISHED_EXECUTING, do not discard any results.**
 
 **Continuing Planning (Multi-Turn):**
 *   **Your Task for This New Turn:**
