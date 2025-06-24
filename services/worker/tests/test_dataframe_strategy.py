@@ -11,7 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # Add src to path for imports
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Mock the DataFrameStrategyEngine for testing without database dependencies
 class MockDataFrameStrategyEngine:
@@ -43,7 +43,7 @@ class MockDataFrameStrategyEngine:
             'execution_time_ms': 150.0
         }
 
-from dataframe_strategy_examples import DATAFRAME_STRATEGIES
+from examples import DATAFRAME_STRATEGIES
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

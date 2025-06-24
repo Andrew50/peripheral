@@ -1,4 +1,4 @@
-name: Natural Language Strategy Integration Tests
+name: Integration Tests
 
 on:
   # Run only on pull requests
@@ -80,6 +80,13 @@ jobs:
           echo "🚀 Running full integration tests"
           go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 300s
         fi
+        
+        # Print summary at the end
+        echo ""
+        echo "📋 Go Backend Tests Summary"
+        echo "=================================="
+        echo "✅ Backend Integration Tests Completed"
+        echo "✅ Strategy Pipeline Tests Completed"
 
     - name: 🧪 Run Python Core Tests
       if: matrix.test-suite == 'python-core'
@@ -102,6 +109,15 @@ jobs:
         
         echo "🛡️ Testing Security Fixes..."
         python test_security_fixes.py
+        
+        # Print summary at the end
+        echo ""
+        echo "📋 Python Core Tests Summary"
+        echo "=================================="
+        echo "✅ AST Parser and Data Analysis Tests Completed"
+        echo "✅ Complex Strategy Tests Completed"
+        echo "✅ Integration Endpoint Tests Completed"
+        echo "✅ Security Validation Tests Completed"
 
     - name: 🔬 Run Python Advanced Tests
       if: matrix.test-suite == 'python-advanced'
@@ -134,16 +150,15 @@ jobs:
         
         echo "🔗 Testing Redis Commands..."
         python test_redis_commands.py || echo "⚠️ Redis test skipped"
-
-    - name: 📋 Test Summary
-      if: always()
-      run: |
-        echo "📋 Test Summary for ${{ matrix.test-suite }}"
+        
+        # Print summary at the end
+        echo ""
+        echo "📋 Python Advanced Tests Summary"
         echo "=================================="
-        echo "✅ Test suite: ${{ matrix.test-suite }}"
-        echo "🌐 Backend URL: $BACKEND_URL"
-        echo "⏭️ Skip full tests: $SKIP_INTEGRATION_TESTS"
-        echo "🎯 Job status: ${{ job.status }}"
+        echo "✅ Strategy Execution Tests Completed"
+        echo "✅ Security and Typing Validation Tests Completed"
+        echo "✅ DataFrame Strategy Engine Tests Completed"
+        echo "✅ Demo and Integration Tests Completed"
 
   # Full pipeline test - only runs when explicitly requested
   full-pipeline-test:
@@ -210,44 +225,3 @@ jobs:
           services/backend/tests/*.log
         retention-days: 7
 
-  # Summary job
-  test-summary:
-    name: Test Summary
-    runs-on: ubuntu-latest
-    needs: [core-tests, full-pipeline-test]
-    if: always()
-
-    steps:
-    - name: 📊 Generate Test Summary
-      run: |
-        echo "🏆 Natural Language Strategy Integration Test Summary"
-        echo "===================================================="
-        echo ""
-        echo "🎯 Test Coverage:"
-        echo "  ✅ Natural Language Strategy Creation"
-        echo "  ✅ AI-powered Code Generation"  
-        echo "  ✅ AST Parser and Data Analysis"
-        echo "  ✅ Strategy Execution and Backtesting"
-        echo "  ✅ API Endpoint Integration"
-        echo "  ✅ Multi-timeframe Strategy Support"
-        echo "  ✅ Complex Strategy Scenarios"
-        echo "  ✅ Security and Typing Validation"
-        echo "  ✅ Dataframe Strategy Engine"
-        echo "  ✅ Automated Strategy Generation"
-        echo "  ✅ Server and Redis Integration"
-        echo ""
-        echo "📋 Test Results:"
-        echo "  Go Backend Tests: ${{ needs.core-tests.result }}"
-        echo "  Python Core Tests: ${{ needs.core-tests.result }}"
-        echo "  Python Advanced Tests: ${{ needs.core-tests.result }}"
-        echo "  Full Pipeline: ${{ needs.full-pipeline-test.result }}"
-        echo ""
-        
-        # Check if core tests passed
-        if [[ "${{ needs.core-tests.result }}" == "success" ]]; then
-          echo "🎉 All core tests passed!"
-          echo "✅ Natural language strategy pipeline is working correctly"
-        else
-          echo "❌ Some core tests failed - check individual job logs"
-          exit 1
-        fi 

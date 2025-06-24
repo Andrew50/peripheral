@@ -404,7 +404,6 @@ class StrategyWorker:
                 if not task:
                     # No task received, check connection and continue
                     self._check_connection()
-                    logger.info("No tasks, waiting...")
                     continue
                     
                 # Parse task
