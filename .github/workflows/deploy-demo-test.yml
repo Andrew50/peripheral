@@ -40,6 +40,8 @@ on:
         required: true
       POLYGON_API_KEY:
         required: true
+      OPENAI_API_KEY:
+        required: true
       GEMINI_FREE_KEYS:
         required: true
       GOOGLE_CLIENT_ID:
