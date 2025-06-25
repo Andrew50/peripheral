@@ -753,12 +753,7 @@ func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID in
 	sendSSEProgress(w, "Preparing conversation context...", streamID)
 
 	// Call the existing chat processing function with improved error handling
-	result, err := agent.GetChatRequestWithProgress(ctx, conn, userID, args, func(progress string) {
-		// Add safety check for response writer before sending progress
-		if w != nil {
-			sendSSEProgress(w, progress, streamID)
-		}
-	})
+	result, err := agent.GetChatRequest(ctx, conn, userID, args)
 
 	if err != nil {
 		return nil, fmt.Errorf("chat processing failed: %w", err)
