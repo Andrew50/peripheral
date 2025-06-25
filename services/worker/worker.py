@@ -80,8 +80,8 @@ class StrategyWorker:
             port=redis_port,
             password=redis_password if redis_password else None,
             decode_responses=True,
-            socket_connect_timeout=10,
-            socket_timeout=70,  # Must be longer than brpop timeout (60s) + buffer
+            socket_connect_timeout=5,
+            socket_timeout=15,  # Shorter timeout for faster responsiveness
             health_check_interval=30
         )
         
@@ -454,7 +454,7 @@ class StrategyWorker:
         
         # Track last queue status log time
         last_status_log = time.time()
-        status_log_interval = 300  # Log queue status every 5 minutes
+        status_log_interval = 600  # Log queue status every 10 minutes when idle
         
         # Track statistics
         tasks_processed = 0
@@ -463,51 +463,33 @@ class StrategyWorker:
         
         while True:
             try:
-                # Log queue check
-                logger.debug(f"🔄 Checking queues... (Tasks processed: {tasks_processed})")
-                
-                # Check priority queue first (for strategy creation/editing)
-                # Priority queue: strategy_queue_priority (checked first)
-                # Normal queue: strategy_queue (checked second)
-                
-                task = None
-                queue_type = "normal"
-                
-                # Try priority queue first with a short timeout
-                logger.debug("🔥 Checking PRIORITY queue (strategy_queue_priority)...")
-                priority_task = self.redis_client.brpop('strategy_queue_priority', timeout=1)
-                if priority_task:
-                    task = priority_task
-                    queue_type = "priority"
-                    priority_tasks_processed += 1
-                    logger.info(f"🌟 Found task in PRIORITY queue! (Total priority tasks: {priority_tasks_processed})")
-                else:
-                    logger.debug("🔥 No tasks in priority queue, checking normal queue...")
-                    # If no priority task, check normal queue with longer timeout
-                    normal_task = self.redis_client.brpop('strategy_queue', timeout=60)
-                    if normal_task:
-                        task = normal_task
-                        queue_type = "normal"
-                        normal_tasks_processed += 1
-                        logger.info(f"📄 Found task in normal queue (Total normal tasks: {normal_tasks_processed})")
+                # Use Redis BRPOP with multiple queues for efficient, atomic queue checking
+                # Priority queue is checked first automatically by Redis
+                task = self.redis_client.brpop(['strategy_queue_priority', 'strategy_queue'], timeout=10)
                 
                 if not task:
-                    # No task received, check connection and continue
-                    logger.debug("⏳ No tasks found in either queue, checking connections...")
+                    # No task received within timeout
                     self._check_connection()
                     
                     # Periodically log queue status when idle
                     current_time = time.time()
                     if current_time - last_status_log > status_log_interval:
-                        logger.info(f"📊 Worker {self.worker_id} idle - logging queue status...")
                         self.log_queue_status()
                         last_status_log = current_time
                     
                     continue
+                
+                # Determine queue type from Redis response
+                queue_name, task_message = task
+                if queue_name == 'strategy_queue_priority':
+                    queue_type = "priority"
+                    priority_tasks_processed += 1
+                else:
+                    queue_type = "normal"
+                    normal_tasks_processed += 1
                     
                 # Parse task
-                _, task_message = task
-                logger.info(f"📦 Received task message: {task_message[:200]}...")
+                logger.info(f"📦 Received {queue_type} task (Total: P:{priority_tasks_processed}/N:{normal_tasks_processed})")
                 
                 try:
                     task_data = json.loads(task_message)
@@ -948,25 +930,16 @@ class StrategyWorker:
             logger.error(f"📄 Full traceback: {traceback.format_exc()}")
     
     def _check_connection(self):
-        """Check and restore Redis and Database connections if needed"""
-        # Check Redis connection
+        """Lightweight connection check - only when necessary"""
+        # Quick Redis ping - this is very fast
         try:
             self.redis_client.ping()
         except Exception as e:
             logger.error(f"Redis connection lost, reconnecting: {e}")
             self.redis_client = self._init_redis()
         
-        # Check Database connection
-        try:
-            with self.db_conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-        except Exception as e:
-            logger.error(f"Database connection lost, reconnecting: {e}")
-            try:
-                self.db_conn.close()
-            except Exception as close_error:
-                logger.warning(f"Error closing database connection: {close_error}")
-            self.db_conn = self._init_database()
+        # Skip DB check during normal operation to reduce overhead
+        # DB connection will be checked when actually needed during task execution
 
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get current queue statistics"""

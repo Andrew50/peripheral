@@ -13,6 +13,8 @@ services:
       - ../../services/backend/:/app
     networks:
       - compose_network
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword
@@ -117,6 +119,8 @@ services:
     restart: unless-stopped
     volumes:
       - ../../services/worker:/app
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword

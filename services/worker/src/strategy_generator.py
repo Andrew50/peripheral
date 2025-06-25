@@ -201,12 +201,9 @@ Generate a strategy function that detects this pattern in market data."""
             if attempt > 0:
                 user_prompt += f"\n\nNote: Focus on code safety and proper error handling."
             
-            # Try multiple models in order of preference
+            # Use only o3 model as requested
             models_to_try = [
-                ("o1-mini", 1500),           # Reasoning model, preferred
-                ("gpt-4o-mini", 1500),       # Fast and efficient
-                ("gpt-4o", 1500),            # More capable but expensive
-                ("gpt-3.5-turbo", 1200),     # Fallback option
+                ("o3", None),                # o3 model only
             ]
             
             last_error = None
@@ -215,8 +212,8 @@ Generate a strategy function that detects this pattern in market data."""
                 try:
                     logger.info(f"Attempting generation with model: {model_name}")
                     
-                    # Adjust parameters for o1 models (they don't support temperature/max_tokens the same way)
-                    if model_name.startswith("o1"):
+                    # Adjust parameters for o3 models (similar to o1, they don't support temperature/max_tokens the same way)
+                    if model_name.startswith("o3") or model_name.startswith("o1"):
                         response = self.openai_client.chat.completions.create(
                             model=model_name,
                             messages=[
