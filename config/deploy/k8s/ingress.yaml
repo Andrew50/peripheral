@@ -3,8 +3,6 @@ kind: Ingress
 metadata:
   name: app-ingress
   annotations:
-    kubernetes.io/ingress.class: "ingress-nginx"
-
     # Timeouts - Increased for chat responses
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1200"  # Increased from 600 to 1200
@@ -95,8 +93,6 @@ kind: Ingress
 metadata:
   name: websocket-ingress
   annotations:
-    kubernetes.io/ingress.class: "ingress-nginx"
-    
     # WebSocket optimized timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"     # 1 hour for long-running connections
