@@ -95,14 +95,8 @@ jobs:
         cd services/worker/tests
         
         # Core functionality tests
-        echo "🔍 Testing AST Parser..."
-        python test_standalone_ast.py
-        
-        echo "📈 Testing AST with Sample Data..."
-        python test_ast_with_sample_data.py
-        
-        echo "🎯 Testing Complex Strategies..."
-        python test_complex_strategies.py
+        echo "🎯 Testing Accessor Strategy System..."
+        python test_accessor_strategy.py
         
         echo "🌐 Testing Integration Endpoints..."
         python test_integration_endpoints.py
@@ -116,9 +110,6 @@ jobs:
         
         echo "⌨️ Testing Typing System..."
         python test_typing_simple.py
-        
-        echo "📈 Testing Dataframe Strategy..."
-        python test_dataframe_strategy.py
         
         echo "🤖 Testing Automated Generation..."
         python test_automated.py
@@ -140,13 +131,12 @@ jobs:
         echo ""
         echo "📋 Python Integration Tests Summary"
         echo "=================================="
-        echo "✅ AST Parser and Data Analysis Tests Completed"
-        echo "✅ Complex Strategy Tests Completed"
+        echo "✅ Accessor Strategy System Tests Completed"
         echo "✅ Integration Endpoint Tests Completed"
         echo "✅ Security Validation Tests Completed"
         echo "✅ Strategy Execution Tests Completed"
         echo "✅ Security and Typing Validation Tests Completed"
-        echo "✅ DataFrame Strategy Engine Tests Completed"
+        echo "✅ Strategy Generation Tests Completed"
         echo "✅ Demo and Integration Tests Completed"
 
   # Full pipeline test - only runs when explicitly requested

@@ -7,96 +7,106 @@ def test_strategy_code_patterns():
     """Test patterns that should/shouldn't appear in generated strategy code"""
     print("🧪 Testing strategy code patterns...")
     
-    # Example of code that SHOULD be generated (without typing)
-    good_strategy_code = """
-def classify_symbol(symbol):
-    '''
-    Identifies when a symbol gaps up by more than the specified threshold.
-    Gap up = current open > previous close by the specified percentage.
-    '''
-    try:
-        # Get recent price data (last 5 days to ensure we have data)
-        price_data = get_price_data(symbol, timeframe='1d', days=5)
-        if not price_data or not price_data.get('open') or len(price_data['open']) < 2:
-            return False
-        
-        # Get current and previous close prices
-        current_open = price_data['open'][-1]    # Most recent open
-        previous_close = price_data['close'][-2]  # Previous day's close
-        
-        # Calculate gap percentage
-        gap_percent = ((current_open - previous_close) / previous_close) * 100
-        
-        # Check if gap exceeds threshold (adjust threshold as needed)
-        threshold = 2.0  # 2% gap up threshold
-        if gap_percent > threshold:
-            return True
-        else:
-            return False
-        
-    except Exception:
-        return False
-"""
+    # Test data - examples of generated code
+    valid_code_examples = [
+        '''
+def strategy():
+    """Find gap-up stocks using NEW ACCESSOR PATTERN"""
+    instances = []
     
-    # Example of code that SHOULD NOT be generated (with typing)
-    bad_strategy_code = """
-from typing import List, Dict, Tuple, Union, Optional
-
-def classify_symbol(symbol: str) -> bool:
-    '''
-    Identifies when a symbol gaps up by more than the specified threshold.
-    '''
-    try:
-        price_data: Dict = get_price_data(symbol, timeframe='1d', days=5)
-        if not price_data or not price_data.get('open') or len(price_data['open']) < 2:
-            return False
-        
-        current_open: float = price_data['open'][-1]
-        previous_close: float = price_data['close'][-2]
-        
-        gap_percent: float = ((current_open - previous_close) / previous_close) * 100
-        threshold: float = 2.0
-        
-        return gap_percent > threshold
-        
-    except Exception:
-        return False
-"""
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "open", "close"], 
+        min_bars=2
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+    
+    # Gap calculation logic here
+    # ...
+    
+    return instances
+''',
+        '''
+def strategy():
+    """Momentum strategy using NEW ACCESSOR PATTERN"""
+    instances = []
+    
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "close", "volume"], 
+        min_bars=20
+    )
+    
+    # Get general data for sector filtering
+    general_data = get_general_data(columns=["sector", "industry"])
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Strategy logic here
+    return instances
+'''
+    ]
+    
+    # Invalid examples that should be rejected
+    invalid_code_examples = [
+        '''
+def strategy(data):  # ❌ Has parameters
+    return []
+''',
+        '''
+def classify_symbol(symbol):  # ❌ Old pattern
+    return True
+''',
+        '''
+def custom_function():  # ❌ Wrong function name
+    return []
+'''
+    ]
     
     # Test patterns
     patterns_to_avoid = [
-        "from typing import",
-        "import typing",
-        ": List[",
-        ": Dict[",
-        ": Tuple[",
-        ": Union[",
-        ": Optional[",
-        "-> Dict",
-        "-> List",
-        "-> Optional",
-        "-> Union"
+        "def strategy(data):",  # ❌ Old pattern with parameters
+        "def classify_symbol(",  # ❌ Old function name
+        "run_batch_backtest",    # ❌ Old batch patterns
+        "def run_screening(",    # ❌ Old batch patterns
+        "price_data = get_price_data(symbol",  # ❌ Old data access
+        ": List[Dict]",          # ❌ Type annotations
+        ": str",                 # ❌ Type annotations
+        "-> bool:",              # ❌ Return type annotations
+        "from typing import",    # ❌ Typing imports
     ]
     
     patterns_that_are_ok = [
-        "def classify_symbol(symbol):",
-        "price_data.get('open')",
-        "len(price_data['open'])",
-        "return False",
-        "return True",
-        "# Get",
-        "# Calculate"
+        "def strategy():",       # ✅ New pattern signature
+        "get_bar_data(",        # ✅ New accessor functions
+        "get_general_data(",    # ✅ New accessor functions
+        "return instances",     # ✅ Returns instances list
+        "instances = []",       # ✅ Instance list initialization
     ]
     
     print("  Checking good strategy code...")
     for pattern in patterns_to_avoid:
-        if pattern in good_strategy_code:
-            print(f"    ❌ Found bad pattern in good code: {pattern}")
-            return False
+        found_in_any_good_code = False
+        for code in valid_code_examples:
+            if pattern in code:
+                print(f"    ❌ Found bad pattern in good code: {pattern}")
+                return False
     
+    # Check that at least one good code example contains each required pattern
     for pattern in patterns_that_are_ok:
-        if pattern not in good_strategy_code:
-            print(f"    ❌ Missing good pattern in good code: {pattern}")
+        found_in_any_good_code = False
+        for code in valid_code_examples:
+            if pattern in code:
+                found_in_any_good_code = True
+                break
+        if not found_in_any_good_code:
+            print(f"    ❌ Missing required pattern in all good code examples: {pattern}")
             return False
     
     print("  ✅ Good strategy code passes all checks")
@@ -104,8 +114,9 @@ def classify_symbol(symbol: str) -> bool:
     print("  Checking bad strategy code detection...")
     bad_patterns_found = 0
     for pattern in patterns_to_avoid:
-        if pattern in bad_strategy_code:
-            bad_patterns_found += 1
+        for code in invalid_code_examples:
+            if pattern in code:
+                bad_patterns_found += 1
     
     if bad_patterns_found == 0:
         print("    ❌ Bad strategy code should contain bad patterns")
@@ -120,20 +131,19 @@ def test_function_signature_patterns():
     """Test that function signatures follow the correct pattern"""
     print("\n🧪 Testing function signature patterns...")
     
-    # Correct signatures (what we want)
+    # Correct signatures (what we want - NEW ACCESSOR PATTERN)
     correct_signatures = [
-        "def classify_symbol(symbol):",
-        "def get_price_data(symbol, timeframe='1d', days=30):",
-        "def get_historical_data(symbol, timeframe='1d', periods=100):",
-        "def scan_universe(filters=None, sort_by=None, limit=100):"
+        "def strategy():",
+        "def get_bar_data(timeframe='1d', columns=[], min_bars=1):",
+        "def get_general_data(columns=[]):"
     ]
     
-    # Incorrect signatures (what we want to avoid)
+    # Incorrect signatures (what we want to avoid - OLD PATTERNS)
     incorrect_signatures = [
-        "def classify_symbol(symbol: str) -> bool:",
-        "def get_price_data(symbol: str, timeframe: str = '1d', days: int = 30) -> Dict:",
-        "def get_historical_data(symbol: str, timeframe: str = '1d') -> Dict:",
-        "def scan_universe(filters: Dict = None, sort_by: str = None) -> Dict:"
+        "def strategy(data):",
+        "def classify_symbol(symbol):",
+        "def strategy(symbol: str) -> List[Dict]:",
+        "def classify_symbol(symbol: str) -> bool:"
     ]
     
     print("  Testing correct signatures...")
@@ -149,11 +159,13 @@ def test_function_signature_patterns():
     print("  ✅ All correct signatures are clean")
     
     print("  Testing incorrect signatures...")
-    for sig in incorrect_signatures:
-        # These should contain typing annotations (for detection)
-        if ": " not in sig and " -> " not in sig:
-            print(f"    ❌ Incorrect signature missing type annotations: {sig}")
-            return False
+    # These signatures should be detectable as incorrect by our validation
+    # We're just confirming they represent the old patterns we want to reject
+    old_pattern_signatures = [sig for sig in incorrect_signatures if "classify_symbol" in sig or "def strategy(data)" in sig]
+    
+    if len(old_pattern_signatures) < 2:
+        print("    ❌ Not enough old pattern signatures for testing")
+        return False
     
     print("  ✅ All incorrect signatures properly detected")
     

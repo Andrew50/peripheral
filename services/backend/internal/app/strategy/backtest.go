@@ -73,12 +73,33 @@ type WorkerInstance struct {
 
 // WorkerSummary represents worker summary statistics
 type WorkerSummary struct {
-	TotalInstances            int      `json:"total_instances"`
-	PositiveSignals           int      `json:"positive_signals"`
-	DateRange                 []string `json:"date_range"`
-	SymbolsProcessed          int      `json:"symbols_processed"`
-	ExecutionType             string   `json:"execution_type,omitempty"`
-	SuccessfulClassifications int      `json:"successful_classifications,omitempty"`
+	TotalInstances            int            `json:"total_instances"`
+	PositiveSignals           int            `json:"positive_signals"`
+	DateRange                 DateRangeField `json:"date_range"`
+	SymbolsProcessed          int            `json:"symbols_processed"`
+	ExecutionType             string         `json:"execution_type,omitempty"`
+	SuccessfulClassifications int            `json:"successful_classifications,omitempty"`
+}
+
+// DateRangeField can handle both string and []string from JSON
+type DateRangeField []string
+
+func (d *DateRangeField) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as []string first
+	var stringSlice []string
+	if err := json.Unmarshal(data, &stringSlice); err == nil {
+		*d = DateRangeField(stringSlice)
+		return nil
+	}
+
+	// If that fails, try as string and convert to slice
+	var singleString string
+	if err := json.Unmarshal(data, &singleString); err == nil {
+		*d = DateRangeField([]string{singleString})
+		return nil
+	}
+
+	return fmt.Errorf("date_range must be either string or []string")
 }
 
 // RunBacktest executes a complete strategy backtest using the new worker architecture
@@ -134,7 +155,6 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	return response, nil
 }
 
-
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
 func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Generate unique task ID
@@ -173,7 +193,6 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strate
 
 // ProgressCallback is a function type for sending progress updates during backtest execution
 type ProgressCallback func(message string)
-
 
 // waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
 func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
@@ -280,7 +299,7 @@ func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummar
 	return BacktestSummary{
 		TotalInstances:   summary.TotalInstances,
 		PositiveSignals:  summary.PositiveSignals,
-		DateRange:        summary.DateRange,
+		DateRange:        []string(summary.DateRange),
 		SymbolsProcessed: summary.SymbolsProcessed,
 		Columns:          []string{"ticker", "timestamp", "classification", "entry_price"},
 		ColumnSamples:    map[string][]any{},

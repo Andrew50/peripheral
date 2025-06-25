@@ -927,8 +927,9 @@
 					</div>
 					<div
 						class="resize-handle right"
-						role="separator"
+						role="button"
 						aria-orientation="vertical"
+						aria-label="Resize left panel"
 						on:mousedown={startLeftResize}
 						on:touchstart={startLeftResize}
 						on:keydown={handleKeyboardLeftResize}
@@ -969,8 +970,9 @@
 							{#if bottomWindows.length > 0}
 								<div
 									class="bottom-resize-handle"
-									role="separator"
+									role="button"
 									aria-orientation="horizontal"
+									aria-label="Resize bottom panel"
 									on:mousedown={startBottomResize}
 									on:keydown={handleKeyboardBottomResize}
 									tabindex="0"
@@ -984,8 +986,9 @@
 						<div class="sidebar" style="width: {$menuWidth}px;">
 							<div
 								class="resize-handle"
-								role="separator"
+								role="button"
 								aria-orientation="vertical"
+								aria-label="Resize sidebar"
 								on:mousedown={startResize}
 								on:touchstart={startResize}
 								on:keydown={handleKeyboardResize}
@@ -1005,8 +1008,9 @@
 
 								<div
 									class="sidebar-resize-handle"
-									role="separator"
+									role="button"
 									aria-orientation="horizontal"
+									aria-label="Resize ticker panel"
 									on:mousedown={startSidebarResize}
 									on:touchstart|preventDefault={startSidebarResize}
 									on:keydown={handleKeyboardSidebarResize}

@@ -21,12 +21,12 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from dataframe_strategy_engine import NumpyStrategyEngine
-from validator import SecurityValidator, SecurityError
-from strategy_generator import StrategyGenerator
+from src.accessor_strategy_engine import AccessorStrategyEngine
+from src.validator import SecurityValidator, SecurityError
+from src.strategy_generator import StrategyGenerator
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from src.strategy_data_analyzer import StrategyDataAnalyzer
+from src.data_accessors import DataAccessorProvider
 
 # Configure logging
 logging.basicConfig(
@@ -54,11 +54,11 @@ class StrategyWorker:
         self.db_conn = self._init_database()
         logger.info("✅ Database connection established")
         
-        # Import the new data analyzer
+        # Import the new data accessor
         logger.info("📊 Initializing components...")
-        self.data_analyzer = StrategyDataAnalyzer()
+        self.data_accessor = DataAccessorProvider()
         
-        self.strategy_engine = NumpyStrategyEngine()
+        self.strategy_engine = AccessorStrategyEngine()
         self.security_validator = SecurityValidator()
         self.strategy_generator = StrategyGenerator()
         
@@ -390,41 +390,36 @@ class StrategyWorker:
     
     def analyze_strategy_code(self, strategy_code: str, mode: str = 'backtest') -> Dict[str, Any]:
         """
-        Comprehensive strategy analysis using new AST analyzer
-        Returns mode-specific data requirements and optimization strategies
+        Basic strategy analysis for new accessor-based system
+        Returns simplified analysis since data fetching is now explicit in strategies
         """
         try:
-            # Use the new comprehensive data analyzer
-            analysis_result = self.data_analyzer.analyze_data_requirements(strategy_code, mode)
+            # Simple analysis for accessor-based strategies
+            # Most analysis is no longer needed since strategies explicitly request data
             
-            # Add legacy compatibility fields
-            legacy_analysis = {
+            basic_analysis = {
                 'symbols': self._extract_required_symbols(strategy_code),
                 'timeframes': self._extract_timeframes(strategy_code),
                 'date_info': self._extract_dates(strategy_code)
             }
             
-            # Merge with new analysis
-            analysis_result['legacy_compatibility'] = legacy_analysis
-            
-            return analysis_result
+            return {
+                'strategy_type': 'accessor_based',
+                'analysis': basic_analysis,
+                'analysis_metadata': {
+                    'analyzed_at': datetime.utcnow().isoformat(),
+                    'mode': mode
+                }
+            }
             
         except Exception as e:
             logger.error(f"Strategy analysis failed: {e}")
-            # Fallback to legacy analysis
             return {
-                'data_requirements': {
-                    'columns': ['open', 'high', 'low', 'close', 'volume'],
-                    'fundamentals': ['pe_ratio', 'market_cap', 'sector'],
-                    'periods': 30 if mode != 'screener' else 1,
-                    'timeframe': '1d'
-                },
-                'strategy_complexity': 'unknown',
-                'loading_strategy': 'full_dataframe_context',
-                'legacy_compatibility': {
-                    'symbols': self._extract_required_symbols(strategy_code),
-                    'timeframes': self._extract_timeframes(strategy_code),
-                    'date_info': self._extract_dates(strategy_code)
+                'strategy_type': 'accessor_based',
+                'analysis': {
+                    'symbols': [],
+                    'timeframes': ['1d'],
+                    'date_info': {}
                 },
                 'analysis_metadata': {
                     'fallback_used': True,
@@ -531,11 +526,11 @@ class StrategyWorker:
                     # Execute the task
                     logger.info(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
                     if task_type == 'backtest':
-                        result = self._execute_backtest(task_id=task_id, **args)
+                        result = asyncio.run(self._execute_backtest(task_id=task_id, **args))
                     elif task_type == 'screening':
-                        result = self._execute_screening(task_id=task_id, **args)
+                        result = asyncio.run(self._execute_screening(task_id=task_id, **args))
                     elif task_type == 'alert':
-                        result = self._execute_alert(task_id=task_id, **args)
+                        result = asyncio.run(self._execute_alert(task_id=task_id, **args))
                     elif task_type == 'create_strategy':
                         logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
                         result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
@@ -594,11 +589,10 @@ class StrategyWorker:
             self.db_conn.close()
         logger.info("🏁 Worker shutdown complete")
     
-    def _execute_backtest(self, task_id: str = None, symbols: List[str] = None, 
+    async def _execute_backtest(self, task_id: str = None, symbols: List[str] = None, 
                                start_date: str = None, end_date: str = None, 
                                securities: List[str] = None, strategy_id: str = None, **kwargs) -> Dict[str, Any]:
-        """Execute backtest task"""
-        # strategy_id is required - always fetch from database
+        """Execute backtest task using new accessor strategy engine"""
         if not strategy_id:
             raise ValueError("strategy_id is required")
             
@@ -619,41 +613,21 @@ class StrategyWorker:
         symbols_input = symbols or []
         securities_filter = securities or []
         
-        if task_id:
-            self._publish_progress(task_id, "analysis", "Analyzing strategy requirements...")
-        
-        # Extract strategy requirements
-        required_symbols = self._extract_required_symbols(strategy_code)
-        timeframes = self._extract_timeframes(strategy_code)
-        date_info = self._extract_dates(strategy_code)
-        
-        logger.info(f"Strategy analysis:")
-        logger.info(f"  - Required symbols: {len(required_symbols)} {required_symbols[:5]}{'...' if len(required_symbols) > 5 else ''}")
-        logger.info(f"  - Timeframes: {timeframes}")
-        logger.info(f"  - Lookback days: {date_info['lookback_days']}")
-        logger.info(f"  - Suggested padding: {date_info['suggested_padding_days']} days")
-        
-        # Union required symbols with requested symbols
-        target_symbols = list(set(symbols_input) | set(required_symbols))
-        logger.info(f"Target symbols: {len(target_symbols)} (union of {len(symbols_input)} requested + {len(required_symbols)} required)")
+        # Determine target symbols (strategies will fetch their own data via accessors)
+        if securities_filter:
+            target_symbols = securities_filter
+            logger.info(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
+        elif symbols_input:
+            target_symbols = symbols_input
+            logger.info(f"Using provided symbols: {len(target_symbols)} symbols")
+        else:
+            target_symbols = []  # Let strategy determine its own symbols
+            logger.info("No symbols specified - strategy will determine requirements")
         
         if task_id:
             self._publish_progress(task_id, "symbols", f"Prepared {len(target_symbols)} symbols for analysis", 
-                                 {"symbol_count": len(target_symbols), "required_symbols": len(required_symbols)})
+                                 {"symbol_count": len(target_symbols)})
         
-        # If securities filter is provided, validate overlap
-        if securities_filter:
-            if target_symbols:
-                overlap = set(target_symbols) & set(securities_filter)
-                if not overlap:
-                    raise ValueError(f"No overlap between requested symbols {target_symbols} and securities filter {securities_filter}")
-                target_symbols = list(overlap)
-                logger.info(f"Filtered symbols to {len(target_symbols)} based on securities list")
-            else:
-                # Use securities filter as the target symbols
-                target_symbols = securities_filter
-                logger.info(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
-            
         logger.info(f"Starting backtest for {len(target_symbols)} symbols (strategy_id: {strategy_id})")
         
         if task_id:
@@ -675,17 +649,14 @@ class StrategyWorker:
                                  {"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), 
                                   "symbol_count": len(target_symbols)})
         
-        # Execute using DataFrame engine
-        result = asyncio.run(self.strategy_engine.execute_backtest(
+        # Execute using accessor strategy engine
+        result = await self.strategy_engine.execute_backtest(
             strategy_code=strategy_code,
             symbols=target_symbols,
             start_date=start_date,
             end_date=end_date,
-            strategy_id=strategy_id,
-            timeframes=timeframes,
-            date_info=date_info,
             **kwargs
-        ))
+        )
         
         logger.info(f"Backtest completed: {len(result.get('instances', []))} instances found")
         
@@ -696,10 +667,9 @@ class StrategyWorker:
         
         return result
     
-    def _execute_screening(self, task_id: str = None, universe: List[str] = None, 
+    async def _execute_screening(self, task_id: str = None, universe: List[str] = None, 
                                 limit: int = 100, strategy_ids: List[str] = None, **kwargs) -> Dict[str, Any]:
-        """Execute screening task"""
-        # strategy_ids is required
+        """Execute screening task using new accessor strategy engine"""
         if not strategy_ids:
             raise ValueError("strategy_ids is required")
             
@@ -707,7 +677,7 @@ class StrategyWorker:
         logger.info(f"Fetched {len(strategy_codes)} strategy codes from database")
         
         # For now, use the first strategy code for screening
-        # TODO: Implement multi-strategy screening
+        # TODO: Implement multi-strategy screening in the future
         if strategy_codes:
             strategy_code = list(strategy_codes.values())[0]
         else:
@@ -717,41 +687,24 @@ class StrategyWorker:
         if not self.security_validator.validate_code(strategy_code):
             raise SecurityError("Strategy code contains prohibited operations")
         
-        # Extract strategy requirements
-        required_symbols = self._extract_required_symbols(strategy_code)
-        timeframes = self._extract_timeframes(strategy_code)
-        date_info = self._extract_dates(strategy_code)
-        
-        logger.info(f"Strategy analysis:")
-        logger.info(f"  - Required symbols: {len(required_symbols)} {required_symbols[:5]}{'...' if len(required_symbols) > 5 else ''}")
-        logger.info(f"  - Timeframes: {timeframes}")
-        logger.info(f"  - Lookback days: {date_info['lookback_days']}")
-        
-        # Union required symbols with provided universe
-        universe_input = universe or []
-        target_universe = list(set(universe_input) | set(required_symbols))
-        logger.info(f"Target universe: {len(target_universe)} symbols (union of {len(universe_input)} provided + {len(required_symbols)} required)")
-            
+        # Use provided universe or let strategy determine requirements
+        target_universe = universe or []
         logger.info(f"Starting screening for {len(target_universe)} symbols, limit {limit} (strategy_ids: {strategy_ids})")
         
-        # Execute using DataFrame engine
-        result = asyncio.run(self.strategy_engine.execute_screening(
+        # Execute using accessor strategy engine
+        result = await self.strategy_engine.execute_screening(
             strategy_code=strategy_code,
             universe=target_universe,
             limit=limit,
-            strategy_ids=strategy_ids,
-            timeframes=timeframes,
-            date_info=date_info,
             **kwargs
-        ))
+        )
         
         logger.info(f"Screening completed: {len(result.get('ranked_results', []))} results found")
         return result
 
-    def _execute_alert(self, task_id: str = None, symbols: List[str] = None, 
-                            strategy_id: str = None, **kwargs) -> Dict[str, Any]:
-        """Execute alert task"""
-        # strategy_id is required - always fetch from database
+    async def _execute_alert(self, task_id: str = None, symbols: List[str] = None, 
+                        strategy_id: str = None, **kwargs) -> Dict[str, Any]:
+        """Execute alert task using new accessor strategy engine"""
         if not strategy_id:
             raise ValueError("strategy_id is required")
             
@@ -762,33 +715,18 @@ class StrategyWorker:
         if not self.security_validator.validate_code(strategy_code):
             raise SecurityError("Strategy code contains prohibited operations")
         
-        # Extract strategy requirements
-        required_symbols = self._extract_required_symbols(strategy_code)
-        timeframes = self._extract_timeframes(strategy_code)
-        date_info = self._extract_dates(strategy_code)
-        
-        logger.info(f"Strategy analysis:")
-        logger.info(f"  - Required symbols: {len(required_symbols)} {required_symbols[:5]}{'...' if len(required_symbols) > 5 else ''}")
-        logger.info(f"  - Timeframes: {timeframes}")
-        logger.info(f"  - Lookback days: {date_info['lookback_days']}")
-        
-        # Union required symbols with requested symbols
-        symbols_input = symbols or []
-        target_symbols = list(set(symbols_input) | set(required_symbols))
-        logger.info(f"Target symbols: {len(target_symbols)} (union of {len(symbols_input)} requested + {len(required_symbols)} required)")
-            
+        # Use provided symbols or empty list (strategies will determine their own requirements)
+        target_symbols = symbols or []
         logger.info(f"Starting alert for {len(target_symbols)} symbols (strategy_id: {strategy_id})")
         
-        # Execute using DataFrame engine
-        result = asyncio.run(self.strategy_engine.execute_realtime(
+        # Execute using accessor strategy engine
+        result = await self.strategy_engine.execute_alert(
             strategy_code=strategy_code,
             symbols=target_symbols,
-            timeframes=timeframes,
-            date_info=date_info,
             **kwargs
-        ))
+        )
         
-        logger.info(f"Alert completed")
+        logger.info(f"Alert completed: {result.get('success', False)}")
         return result
     
     async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 

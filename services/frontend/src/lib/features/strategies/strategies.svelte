@@ -48,7 +48,8 @@
 		creating.set(true);
 		try {
 			const result = await privateRequest<Strategy>('createStrategyFromPrompt', {
-				prompt: newPrompt.trim()
+				query: newPrompt.trim(),
+				strategyId: -1 // -1 for new strategy
 			});
 
 			// Add the new strategy to the list
@@ -208,8 +209,8 @@ Examples:
 		padding: 1rem;
 		max-width: 1200px;
 		margin: 0 auto;
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-			sans-serif;
+		font-family:
+			-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 	}
 
 	.header {
