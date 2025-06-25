@@ -10,7 +10,10 @@ import (
 
 func main() {
 	// Set environment variable to run in container
-	os.Setenv("IN_CONTAINER", "true")
+	if err := os.Setenv("IN_CONTAINER", "true"); err != nil {
+		fmt.Printf("Failed to set environment variable: %v\n", err)
+		os.Exit(1)
+	}
 
 	fmt.Println("Connecting to database...")
 
