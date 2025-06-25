@@ -6,8 +6,7 @@ import (
 	"backend/internal/services/socket"
 	"context"
 	"fmt"
-
-	//"log"
+	"log"
 	"sync"
 	"time"
 )
@@ -165,19 +164,19 @@ func initAlerts(conn *data.Conn) error {
 		return fmt.Errorf("iterating alert rows: %w", err)
 	}
 
-	// Manually create an algo alert for testing
-	algoAlert := Alert{
-		AlertID:    999999, // Use a high number to avoid conflicts
-		UserID:     1,      // Set to an existing user ID
-		AlertType:  "algo",
-		SecurityID: nil, // Not needed for algo alerts
-		Price:      nil, // Not needed for algo alerts
-		Direction:  nil, // Not needed for algo alerts
-		SetupID:    nil, // Not needed for algo alerts
-		Ticker:     nil, // Not needed for algo alerts
+	// Add a strategy alert that processes all active strategy alerts
+	strategyAlert := Alert{
+		AlertID:    999998, // Use a high number to avoid conflicts
+		UserID:     0,      // System alert, not user-specific
+		AlertType:  "strategy",
+		SecurityID: nil, // Not needed for strategy alerts
+		Price:      nil, // Not needed for strategy alerts
+		Direction:  nil, // Not needed for strategy alerts
+		SetupID:    nil, // Not needed for strategy alerts
+		Ticker:     nil, // Not needed for strategy alerts
 	}
-	alerts.Store(algoAlert.AlertID, algoAlert)
-	////fmt.Println("Added manual algo alert for testing")
+	alerts.Store(strategyAlert.AlertID, strategyAlert)
+	log.Printf("Added strategy alert processor")
 
 	// Validate alert securities exist in data map
 	var alertErrors []error

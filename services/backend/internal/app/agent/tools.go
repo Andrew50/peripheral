@@ -396,7 +396,7 @@ var (
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators. Can optionally calculate future returns for specified N-day windows.",
+				Description: "Execute a comprehensive historical backtest of a Python trading strategy. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Execution typically takes 30-90 seconds for full market analysis. Use for strategy validation, performance analysis, and generating detailed historical results with optional forward return calculations.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -417,6 +417,35 @@ var (
 			},
 			Function:      strategy.RunBacktest,
 			StatusMessage: "Running backtest...",
+		},
+		"run_screener": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "run_screener",
+				Description: "Screen current market opportunities using a Python trading strategy. Processes live market data to identify and rank securities matching strategy criteria. Strategies access real-time OHLCV data, technical indicators, fundamental metrics, and market conditions. Execution takes 15-45 seconds for full market screening. Use for finding current trading opportunities, generating ranked watchlists, and identifying securities matching specific criteria right now.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "id of the strategy to use for screening",
+						},
+						"universe": {
+							Type:        genai.TypeArray,
+							Description: "Optional. List of ticker symbols to screen. If omitted, screens entire market universe.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+						"limit": {
+							Type:        genai.TypeInteger,
+							Description: "Optional. Maximum number of results to return (default: 100)",
+						},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function:      wrapWithContext(strategy.RunScreening),
+			StatusMessage: "Running screener...",
 		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -580,8 +609,7 @@ var (
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name: "getStrategyFromNaturalLanguage",
-				Description: "IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Create (or overwrite) a strategy from a natural‑language description. " +
-					"Pass strategyId = -1 to create a new strategy.",
+				Description: "Create or edit a Python trading strategy from natural language description using AI code generation. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting, screening, and real-time alerts. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{

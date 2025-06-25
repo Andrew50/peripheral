@@ -40,7 +40,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodOffset: 90
+      terminationGracePeriodSeconds: 90
 
 ---
 apiVersion: v1

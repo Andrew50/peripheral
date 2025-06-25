@@ -26,7 +26,7 @@ COPY src/ ./src/
 COPY worker.py .
 
 # Create directories for data and results
-RUN mkdir -p /app/data /app/results /app/logs
+RUN mkdir -p /app/data /app/results
 
 # Set environment variables
 ENV PYTHONPATH=/app

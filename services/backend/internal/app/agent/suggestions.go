@@ -263,14 +263,14 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	// --- Parse Response ---
 	llmResponseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, p := range result.Candidates[0].Content.Parts {
-			if p.Thought {
-				continue
-			}
-			if p.Text != "" {
-				llmResponseText = p.Text
-				break
+	if len(result.Candidates) > 0 {
+		candidate := result.Candidates[0]
+		if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
+			for _, p := range candidate.Content.Parts {
+				if p != nil && !p.Thought && p.Text != "" {
+					llmResponseText = p.Text
+					break
+				}
 			}
 		}
 	}

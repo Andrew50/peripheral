@@ -2,7 +2,9 @@ package securities
 
 import (
 	"backend/internal/data/polygon"
+	"backend/internal/data/utils"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,7 +18,31 @@ import (
 	//lint:ignore U1000 external package
 	"github.com/jackc/pgx/v4"
 	_ "github.com/lib/pq" // Register postgres driver
+	_polygon "github.com/polygon-io/client-go/rest"
+	"github.com/polygon-io/client-go/rest/models"
 )
+
+// dataExists checks if market data exists for a ticker in a given date range.
+func dataExists(client *_polygon.Client, ticker string, fromDate string, toDate string) bool {
+	timespan := models.Timespan("day")
+	fromMillis, err := utils.MillisFromDatetimeString(fromDate)
+	if err != nil {
+		return false
+	}
+	toMillis, err := utils.MillisFromDatetimeString(toDate)
+	if err != nil {
+		return false
+	}
+	params := models.ListAggsParams{
+		Ticker:     ticker,
+		Multiplier: 1,
+		Timespan:   timespan,
+		From:       fromMillis,
+		To:         toMillis,
+	}
+	iter := client.ListAggs(context.Background(), &params)
+	return iter.Next()
+}
 
 // SecurityDetail represents a structure for handling SecurityDetail data.
 
@@ -381,7 +407,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				if err != nil {
 					return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
 				}
-				_, err = conn.DB.Exec(ctx, `INSERT INTO securities (ticker, figi, minDate, maxDate, active) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (ticker, minDate) DO NOTHING`, ticker, figi, processingDate, nil, true)
+				// Use safe insertion with comprehensive validation
+				err = safeInsertSecurityTickerChange(ctx, conn, ticker, figi, processingDate, nil, true, true, "ticker change")
 				if err != nil {
 					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 				}
@@ -411,7 +438,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			} else {
 				figi = getTickerDetailsResponse.CompositeFIGI
 			}
-			_, err = conn.DB.Exec(ctx, `INSERT INTO securities (ticker, minDate, maxDate, active, figi) VALUES ($1, $2, NULL, $3, $4) ON CONFLICT (ticker, minDate) DO NOTHING`, ticker, initialDate, true, figi)
+			// Use safe insertion with comprehensive validation
+			err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, nil, true, figi, true, "new ticker listing")
 			if err != nil {
 				return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 			}
@@ -488,7 +516,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				} else {
 					figi = getTickerDetailsResponse.CompositeFIGI
 				}
-				_, err = conn.DB.Exec(ctx, `INSERT INTO securities (ticker, minDate, maxDate, active, figi) VALUES ($1, $2, NULL, $3, $4) ON CONFLICT (ticker, minDate) DO NOTHING`, ticker, initialDate, true, figi)
+				// Use safe insertion with comprehensive validation
+				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, nil, true, figi, true, "polygon ticker listing")
 				if err != nil {
 					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
 				}
@@ -545,5 +574,196 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 		}
 	}
 
+	return nil
+}
+
+// validateSecurityInsertionV2 checks if a security insertion would violate database constraints
+func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, _ string, debug bool) error {
+	// Check for (securityid, minDate) constraint violation
+	if securityID != nil {
+		var count int
+		err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE securityid = $1 AND minDate = $2", *securityID, minDate).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check securityid+minDate constraint: %v", err)
+		}
+		if count > 0 {
+			if debug {
+				fmt.Printf("VALIDATION FAILED: securityid=%d with minDate=%s already exists\n", *securityID, minDate)
+			}
+			return fmt.Errorf("constraint violation: securityid=%d with minDate=%s already exists", *securityID, minDate)
+		}
+	}
+
+	// Check for (ticker, minDate) constraint violation
+	var count int
+	err := conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE ticker = $1 AND minDate = $2", ticker, minDate).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check ticker+minDate constraint: %v", err)
+	}
+	if count > 0 {
+		if debug {
+			fmt.Printf("VALIDATION FAILED: ticker=%s with minDate=%s already exists\n", ticker, minDate)
+		}
+		return fmt.Errorf("constraint violation: ticker=%s with minDate=%s already exists", ticker, minDate)
+	}
+
+	// Check for overlapping records that could cause issues with auto-incrementing securityid
+	if securityID == nil {
+		var nextID int
+		var existingCount int
+
+		// Get the next auto-increment value that would be used
+		err = conn.DB.QueryRow(ctx, "SELECT nextval(pg_get_serial_sequence('securities', 'securityid'))").Scan(&nextID)
+		if err != nil {
+			return fmt.Errorf("failed to get next securityid: %v", err)
+		}
+
+		// Reset the sequence since we only wanted to peek at the value
+		_, err = conn.DB.Exec(ctx, "SELECT setval(pg_get_serial_sequence('securities', 'securityid'), $1, false)", nextID)
+		if err != nil {
+			return fmt.Errorf("failed to reset sequence: %v", err)
+		}
+
+		// Check if this next ID would conflict with existing records for the same minDate
+		err = conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE securityid = $1 AND minDate = $2", nextID, minDate).Scan(&existingCount)
+		if err != nil {
+			return fmt.Errorf("failed to check auto-increment collision: %v", err)
+		}
+		if existingCount > 0 {
+			if debug {
+				fmt.Printf("VALIDATION FAILED: auto-increment securityid=%d would conflict with existing record for minDate=%s\n", nextID, minDate)
+			}
+			return fmt.Errorf("constraint violation: auto-increment securityid=%d would conflict with existing record for minDate=%s", nextID, minDate)
+		}
+	}
+
+	return nil
+}
+
+// safeInsertSecurityTickerChange performs validation and insertion specifically for ticker change scenarios
+func safeInsertSecurityTickerChange(ctx context.Context, conn *data.Conn, ticker string, figi string, minDate string, maxDate interface{}, active bool, debug bool, actionDescription string) error {
+	// Pre-insertion validation
+	err := validateSecurityInsertionV2(ctx, conn, nil, ticker, minDate, figi, debug)
+	if err != nil {
+		if debug {
+			fmt.Printf("VALIDATION ERROR for %s (ticker=%s, minDate=%s): %v\n", actionDescription, ticker, minDate, err)
+		}
+		return err
+	}
+
+	// Check if insertion would be redundant (already exists)
+	var existingCount int
+	err = conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE ticker = $1 AND minDate = $2", ticker, minDate).Scan(&existingCount)
+	if err != nil {
+		return fmt.Errorf("failed to check existing record: %v", err)
+	}
+	if existingCount > 0 {
+		if debug {
+			fmt.Printf("SKIPPING %s: Record already exists for ticker=%s, minDate=%s\n", actionDescription, ticker, minDate)
+		}
+		return nil // Not an error, just already exists
+	}
+
+	// Perform the insertion with ON CONFLICT to handle race conditions
+	_, err = conn.DB.Exec(ctx, `INSERT INTO securities (ticker, figi, minDate, maxDate, active) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (ticker, minDate) DO NOTHING`, ticker, figi, minDate, maxDate, active)
+	if err != nil {
+		if debug {
+			fmt.Printf("INSERTION ERROR for %s: %v\n", actionDescription, err)
+			fmt.Printf("DIAGNOSTIC INFO for failed insertion:\n")
+			fmt.Printf("  - Ticker: %s\n", ticker)
+			fmt.Printf("  - FIGI: %s\n", figi)
+			fmt.Printf("  - MinDate: %s\n", minDate)
+			fmt.Printf("  - MaxDate: %v\n", maxDate)
+			fmt.Printf("  - Active: %v\n", active)
+
+			// Check what exists in the database around this time
+			rows, diagErr := conn.DB.Query(ctx,
+				"SELECT securityid, ticker, figi, minDate, maxDate FROM securities WHERE ticker = $1 OR minDate = $2 ORDER BY minDate DESC LIMIT 5",
+				ticker, minDate)
+			if diagErr == nil {
+				fmt.Printf("  - Related records in database:\n")
+				for rows.Next() {
+					var secID int
+					var dbTicker, dbFigi string
+					var dbMinDate, dbMaxDate sql.NullTime
+					if scanErr := rows.Scan(&secID, &dbTicker, &dbFigi, &dbMinDate, &dbMaxDate); scanErr == nil {
+						fmt.Printf("    - ID: %d, Ticker: %s, FIGI: %s, MinDate: %v, MaxDate: %v\n",
+							secID, dbTicker, dbFigi, dbMinDate, dbMaxDate)
+					}
+				}
+				rows.Close()
+			}
+		}
+		return fmt.Errorf("failed to insert %s: %w", actionDescription, err)
+	}
+
+	// Successful insertion
+	if debug {
+		fmt.Printf("SUCCESS: %s completed for ticker=%s, minDate=%s\n", actionDescription, ticker, minDate)
+	}
+	return nil
+}
+
+// safeInsertSecurityV2 performs validation and insertion with the extended columns format
+func safeInsertSecurityV2(ctx context.Context, conn *data.Conn, ticker string, minDate string, maxDate interface{}, active bool, figi string, debug bool, actionDescription string) error {
+	// Pre-insertion validation
+	err := validateSecurityInsertionV2(ctx, conn, nil, ticker, minDate, figi, debug)
+	if err != nil {
+		if debug {
+			fmt.Printf("VALIDATION ERROR for %s (ticker=%s, minDate=%s): %v\n", actionDescription, ticker, minDate, err)
+		}
+		return err
+	}
+
+	// Check if insertion would be redundant (already exists)
+	var existingCount int
+	err = conn.DB.QueryRow(ctx, "SELECT COUNT(*) FROM securities WHERE ticker = $1 AND minDate = $2", ticker, minDate).Scan(&existingCount)
+	if err != nil {
+		return fmt.Errorf("failed to check existing record: %v", err)
+	}
+	if existingCount > 0 {
+		if debug {
+			fmt.Printf("SKIPPING %s: Record already exists for ticker=%s, minDate=%s\n", actionDescription, ticker, minDate)
+		}
+		return nil // Not an error, just already exists
+	}
+
+	// Perform the insertion with ON CONFLICT to handle race conditions
+	_, err = conn.DB.Exec(ctx, `INSERT INTO securities (ticker, minDate, maxDate, active, figi) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (ticker, minDate) DO NOTHING`, ticker, minDate, maxDate, active, figi)
+	if err != nil {
+		if debug {
+			fmt.Printf("INSERTION ERROR for %s: %v\n", actionDescription, err)
+			fmt.Printf("DIAGNOSTIC INFO for failed insertion:\n")
+			fmt.Printf("  - Ticker: %s\n", ticker)
+			fmt.Printf("  - MinDate: %s\n", minDate)
+			fmt.Printf("  - MaxDate: %v\n", maxDate)
+			fmt.Printf("  - Active: %v\n", active)
+			fmt.Printf("  - FIGI: %s\n", figi)
+
+			// Check what exists in the database around this time
+			rows, diagErr := conn.DB.Query(ctx,
+				"SELECT securityid, ticker, figi, minDate, maxDate FROM securities WHERE ticker = $1 OR minDate = $2 ORDER BY minDate DESC LIMIT 5",
+				ticker, minDate)
+			if diagErr == nil {
+				fmt.Printf("  - Related records in database:\n")
+				for rows.Next() {
+					var secID int
+					var dbTicker, dbFigi string
+					var dbMinDate, dbMaxDate sql.NullTime
+					if scanErr := rows.Scan(&secID, &dbTicker, &dbFigi, &dbMinDate, &dbMaxDate); scanErr == nil {
+						fmt.Printf("    - ID: %d, Ticker: %s, FIGI: %s, MinDate: %v, MaxDate: %v\n",
+							secID, dbTicker, dbFigi, dbMinDate, dbMaxDate)
+					}
+				}
+				rows.Close()
+			}
+		}
+		return fmt.Errorf("failed to insert %s: %w", actionDescription, err)
+	}
+
+	// Successful insertion
+	if debug {
+		fmt.Printf("SUCCESS: %s completed for ticker=%s, minDate=%s\n", actionDescription, ticker, minDate)
+	}
 	return nil
 }
