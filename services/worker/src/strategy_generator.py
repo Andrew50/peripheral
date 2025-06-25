@@ -419,12 +419,14 @@ Generate a strategy function that detects this pattern in market data."""
         if not clean_words:
             clean_words = ['Custom']
         
-        # No timestamp for cleaner names
-        return f"{' '.join(clean_words)} Strategy"
+        # Generate base name and add timestamp to ensure uniqueness
+        base_name = f"{' '.join(clean_words)} Strategy"
+        timestamp_suffix = datetime.now().strftime("%m%d%H%M")
+        return f"{base_name} {timestamp_suffix}"
     
     async def _save_strategy(self, user_id: int, name: str, description: str, prompt: str, 
                            python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
-        """Save strategy to database"""
+        """Save strategy to database with duplicate name handling"""
         try:
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
@@ -448,7 +450,21 @@ Generate a strategy function that detects this pattern in market data."""
                              createdat, updated_at, isalertactive
                 """, (name, description, prompt, python_code, strategy_id, user_id))
             else:
-                # Create new strategy
+                # Create new strategy with duplicate name handling
+                # First check if name already exists and modify if needed
+                original_name = name
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM strategies 
+                    WHERE userid = %s AND name = %s
+                """, (user_id, name))
+                count_result = cursor.fetchone()
+                
+                if count_result and count_result['count'] > 0:
+                    # Name exists, add timestamp suffix
+                    timestamp_suffix = datetime.now().strftime("%m%d_%H%M%S")
+                    name = f"{original_name} ({timestamp_suffix})"
+                    logger.info(f"Strategy name conflict detected, using: {name}")
+                
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
                                           createdat, updated_at, isalertactive, score, version)
