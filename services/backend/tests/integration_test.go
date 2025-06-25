@@ -567,7 +567,7 @@ func createTestUser(_ *testing.T, _ *data.Conn) int {
 	return 999999 // Large ID to avoid conflicts
 }
 
-func cleanupTestUser(t *testing.T, conn *data.Conn, userID int) {
+func cleanupTestUser(_ *testing.T, _ *data.Conn, _ int) {
 	// Clean up any test data created for this user
 	// This would delete strategies, backtest results, etc.
 	// For now, we'll skip cleanup since we're using mock data
