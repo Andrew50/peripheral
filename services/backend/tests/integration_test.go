@@ -561,7 +561,7 @@ func generateMockPythonCode(query string) string {
 }
 
 // Test helper functions
-func createTestUser(t *testing.T, conn *data.Conn) int {
+func createTestUser(_ *testing.T, _ *data.Conn) int {
 	// For testing purposes, use a fixed test user ID
 	// In a real test environment, you might create an actual test user
 	return 999999 // Large ID to avoid conflicts
