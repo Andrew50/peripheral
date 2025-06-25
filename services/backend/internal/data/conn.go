@@ -70,79 +70,116 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	var dbConn *pgxpool.Pool
 	var err error
 
-	// Add timeout for database connection attempts
-	dbConnectTimeout := time.Now().Add(90 * time.Second) // 90 second timeout
-	for time.Now().Before(dbConnectTimeout) {
-		// Create a connection pool configuration
-		poolConfig, err := pgxpool.ParseConfig(dbURL)
-		if err != nil {
-			time.Sleep(5 * time.Second)
-			continue
-		}
+	// Add timeout for database connection attempts using context
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 
-		// Configure connection pool with better defaults
-		poolConfig.MaxConns = 25                                // Increase max connections
-		poolConfig.MinConns = 5                                 // Increase minimum connections
-		poolConfig.MaxConnLifetime = 1 * time.Hour              // Maximum lifetime of a connection
-		poolConfig.MaxConnIdleTime = 30 * time.Minute           // Maximum idle time for a connection
-		poolConfig.HealthCheckPeriod = 30 * time.Second         // More frequent health checks
-		poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // Increase connection timeout
+	done := make(chan bool)
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// Create a connection pool configuration
+				poolConfig, parseErr := pgxpool.ParseConfig(dbURL)
+				if parseErr != nil {
+					time.Sleep(1 * time.Second)
+					continue
+				}
 
-		// Create the connection pool with our custom configuration
-		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
-		if err != nil {
-			//log.Printf("waiting for db %v\n", err)
-			time.Sleep(5 * time.Second)
-		} else {
-			break
+				// Configure connection pool with better defaults
+				poolConfig.MaxConns = 25                               // Increase max connections
+				poolConfig.MinConns = 5                                // Increase minimum connections
+				poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
+				poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
+				poolConfig.HealthCheckPeriod = 30 * time.Second        // More frequent health checks
+				poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Shorter connection timeout
+
+				// Create the connection pool with our custom configuration
+				dbConn, err = pgxpool.ConnectConfig(ctx, poolConfig)
+				if err != nil {
+					time.Sleep(1 * time.Second)
+					continue
+				} else {
+					return
+				}
+			}
 		}
+	}()
+
+	select {
+	case <-done:
+		// Connection successful
+	case <-ctx.Done():
+		// Timeout occurred
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Last error: %v", dbURL, err))
 	}
 
-	// If database connection failed after timeout, panic with informative error
+	// If database connection still failed, panic with informative error
 	if dbConn == nil {
-		panic(fmt.Sprintf("Failed to connect to database after 30 seconds. URL: %s, Error: %v", dbURL, err))
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Error: %v", dbURL, err))
 	}
 
 	var cache *redis.Client
 
-	// Add timeout for Redis connection attempts
-	redisConnectTimeout := time.Now().Add(30 * time.Second) // 30 second timeout
-	for time.Now().Before(redisConnectTimeout) {
-		// Use Redis password if provided
-		opts := &redis.Options{
-			Addr: cacheURL,
-			// Add connection pool settings
-			PoolSize:     20,               // Increased from 10
-			MinIdleConns: 10,               // Increased from 5
-			PoolTimeout:  60 * time.Second, // Increased from 30
-			// Add timeouts
-			ReadTimeout:  30 * time.Second, // Increased from 10
-			WriteTimeout: 30 * time.Second, // Increased from 10
-			// Add retry settings
-			MaxRetries:      5,
-			MinRetryBackoff: 1 * time.Second,
-			MaxRetryBackoff: 10 * time.Second,
-			// Add dial timeout
-			DialTimeout: 15 * time.Second,
-		}
-		if redisPassword != "" {
-			opts.Password = redisPassword
-		}
+	// Add timeout for Redis connection attempts using context
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer redisCancel()
 
-		cache = redis.NewClient(opts)
-		err = cache.Ping(context.Background()).Err()
-		if err != nil {
-			//if strings.Contains(err.Error(), "the database system is starting up") {
-			//log.Println("waiting for cache")
-			time.Sleep(5 * time.Second)
-		} else {
-			break
+	redisDone := make(chan bool)
+	go func() {
+		defer close(redisDone)
+		for {
+			select {
+			case <-redisCtx.Done():
+				return
+			default:
+				// Use Redis password if provided
+				opts := &redis.Options{
+					Addr: cacheURL,
+					// Add connection pool settings
+					PoolSize:     20,               // Increased from 10
+					MinIdleConns: 10,               // Increased from 5
+					PoolTimeout:  60 * time.Second, // Increased from 30
+					// Add timeouts
+					ReadTimeout:  30 * time.Second, // Increased from 10
+					WriteTimeout: 30 * time.Second, // Increased from 10
+					// Add retry settings
+					MaxRetries:      5,
+					MinRetryBackoff: 1 * time.Second,
+					MaxRetryBackoff: 10 * time.Second,
+					// Add dial timeout
+					DialTimeout: 5 * time.Second, // Shorter dial timeout
+				}
+				if redisPassword != "" {
+					opts.Password = redisPassword
+				}
+
+				cache = redis.NewClient(opts)
+				err = cache.Ping(redisCtx).Err()
+				if err != nil {
+					time.Sleep(1 * time.Second)
+					continue
+				} else {
+					return
+				}
+			}
 		}
+	}()
+
+	select {
+	case <-redisDone:
+		// Connection successful
+	case <-redisCtx.Done():
+		// Timeout occurred
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Last error: %v", cacheURL, err))
 	}
 
-	// If Redis connection failed after timeout, panic with informative error
+	// If Redis connection still failed, panic with informative error
 	if cache == nil || cache.Ping(context.Background()).Err() != nil {
-		panic(fmt.Sprintf("Failed to connect to Redis after 30 seconds. URL: %s, Error: %v", cacheURL, err))
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Error: %v", cacheURL, err))
 	}
 
 	// Configure the HTTP client with better timeout settings
