@@ -222,6 +222,20 @@
 	let lastAutoInputTime = 0;
 	const AUTO_INPUT_DEBOUNCE_MS = 100; // Prevent auto-input triggers within 100ms of each other
 
+	// Define the overscroll prevention handler with a stable reference
+	const preventOverscroll = (e: TouchEvent) => {
+		// Check if we're at the top or bottom of the page
+		const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+		const isAtTop = scrollTop === 0;
+		const isAtBottom = scrollTop + clientHeight >= scrollHeight;
+		
+		// If at top or bottom and trying to scroll further, prevent default
+		if ((isAtTop && e.touches[0].clientY > e.touches[0].clientY) || 
+			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+			e.preventDefault();
+		}
+	};
+
 	// Define the keydown handler with a stable reference outside of onMount
 	const keydownHandler = (event: KeyboardEvent) => {
 		// Check if input component is already active or recently triggered
@@ -350,6 +364,10 @@
 
 			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
+			
+			// Add touch event listeners for additional overscroll prevention
+			document.addEventListener('touchstart', preventOverscroll, { passive: false });
+			document.addEventListener('touchmove', preventOverscroll, { passive: false });
 		}
 
 		// Handle authentication based on public viewing mode (already determined above)
@@ -389,13 +407,14 @@
 	});
 
 	onDestroy(() => {
-
-
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
 			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
+			// Remove overscroll prevention listeners
+			document.removeEventListener('touchstart', preventOverscroll);
+			document.removeEventListener('touchmove', preventOverscroll);
 			stopSidebarResize();
 			stopLeftResize();
 		}
@@ -1042,12 +1061,12 @@
 			>
 				Strategies
 			</button>
-			<button
+			<!-- <button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>
+			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">
