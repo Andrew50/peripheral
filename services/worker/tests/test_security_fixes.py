@@ -9,12 +9,13 @@ import sys
 import traceback
 import sys
 import os
+import traceback
 from typing import Any, Dict
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from data import DataProvider
+# DataProvider import removed - using MockDataProvider for testing
 from accessor_strategy_engine import AccessorStrategyEngine
 from validator import SecurityError
 
