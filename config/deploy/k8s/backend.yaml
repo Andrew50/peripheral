@@ -74,6 +74,11 @@ spec:
                 secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: OPENAI_API_KEY
             - name: POLYGON_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -105,11 +110,13 @@ spec:
                 secretKeyRef:
                   name: telegram-secret
                   key: bot-token
+                  optional: true
             - name: TELEGRAM_CHAT_ID
               valueFrom:
                 secretKeyRef:
                   name: telegram-secret
                   key: chat-id
+                  optional: true
           resources:
             requests:
               cpu: "1000m"

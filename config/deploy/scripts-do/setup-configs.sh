@@ -9,6 +9,7 @@ set -Eeuo pipefail
 : "${REDIS_PASSWORD:?Missing REDIS_PASSWORD}"
 : "${POLYGON_API_KEY:?Missing POLYGON_API_KEY}"
 : "${GEMINI_FREE_KEYS:?Missing GEMINI_FREE_KEYS}"
+: "${OPENAI_API_KEY:?Missing OPENAI_API_KEY}"
 : "${GOOGLE_CLIENT_ID:?Missing GOOGLE_CLIENT_ID}"
 : "${GOOGLE_CLIENT_SECRET:?Missing GOOGLE_CLIENT_SECRET}"
 : "${OPENAI_API_KEY:?Missing OPENAI_API_KEY}"
@@ -29,6 +30,7 @@ DB_B64=$(echo -n "$DB_ROOT_PASSWORD" | base64 -w 0)
 REDIS_B64=$(echo -n "$REDIS_PASSWORD" | base64 -w 0)
 POLYGON_B64=$(echo -n "$POLYGON_API_KEY" | base64 -w 0)
 GEMINI_B64=$(echo -n "$GEMINI_FREE_KEYS" | base64 -w 0)
+OPENAI_B64=$(echo -n "$OPENAI_API_KEY" | base64 -w 0)
 GOOGLE_ID_B64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 -w 0)
 GOOGLE_SECRET_B64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 -w 0)
 OPENAI_B64=$(echo -n "$OPENAI_API_KEY" | base64 -w 0)

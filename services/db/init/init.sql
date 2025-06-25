@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        28,
-        'Schema version 28'
+        30,
+        'Schema version 30'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -71,6 +71,7 @@ CREATE TABLE securities (
     maxDate timestamp,
     cik bigint,
     total_shares bigint,
+    ticker_norm text GENERATED ALWAYS AS (upper(replace(ticker, '.', ''))) STORED,
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -79,6 +80,7 @@ CREATE TABLE securities (
 CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
 CREATE INDEX trgm_idx_securities_name ON securities USING gin (name gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
+CREATE INDEX idx_securities_active ON securities (securityId) WHERE maxDate IS NULL;
 CREATE TABLE watchlists (
     watchlistId serial primary key,
     userId int references users(userId) on delete cascade,

@@ -221,9 +221,9 @@ const planningModel = "gemini-2.5-flash"
 
 // const finalResponseModel = "gemini-2.5-flash"
 // const openAIPlannerModel = "o4-mini"
-const openAIFinalResponseModel = "o3"
+// const openAIFinalResponseModel = "o3"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
@@ -823,14 +823,16 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	// Concatenate the text from *all* parts to ensure we capture the full response
 	var frSB strings.Builder
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				frSB.WriteString(part.Text)
-				frSB.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					frSB.WriteString(part.Text)
+					frSB.WriteString("\n")
+				}
 			}
 		}
 	}

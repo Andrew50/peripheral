@@ -80,11 +80,12 @@
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
-
+	
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
+	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
@@ -195,7 +196,19 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			// Responsive max sidebar widths
+			let maxRightSidebarWidth = 600;
+			if (window.innerWidth <= 800) {
+				maxRightSidebarWidth = Math.min(250, window.innerWidth * 0.4);
+			} else if (window.innerWidth <= 1000) {
+				maxRightSidebarWidth = Math.min(300, window.innerWidth * 0.35);
+			} else if (window.innerWidth <= 1200) {
+				maxRightSidebarWidth = Math.min(350, window.innerWidth * 0.3);
+			} else if (window.innerWidth <= 1400) {
+				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
+			}
+			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
+			
 			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
@@ -208,6 +221,20 @@
 	// Track the last auto-input trigger to prevent rapid successive calls
 	let lastAutoInputTime = 0;
 	const AUTO_INPUT_DEBOUNCE_MS = 100; // Prevent auto-input triggers within 100ms of each other
+
+	// Define the overscroll prevention handler with a stable reference
+	const preventOverscroll = (e: TouchEvent) => {
+		// Check if we're at the top or bottom of the page
+		const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+		const isAtTop = scrollTop === 0;
+		const isAtBottom = scrollTop + clientHeight >= scrollHeight;
+		
+		// If at top or bottom and trying to scroll further, prevent default
+		if ((isAtTop && e.touches[0].clientY > e.touches[0].clientY) || 
+			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+			e.preventDefault();
+		}
+	};
 
 	// Define the keydown handler with a stable reference outside of onMount
 	const keydownHandler = (event: KeyboardEvent) => {
@@ -337,6 +364,10 @@
 
 			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
+			
+			// Add touch event listeners for additional overscroll prevention
+			document.addEventListener('touchstart', preventOverscroll, { passive: false });
+			document.addEventListener('touchmove', preventOverscroll, { passive: false });
 		}
 
 		// Handle authentication based on public viewing mode (already determined above)
@@ -376,13 +407,14 @@
 	});
 
 	onDestroy(() => {
-
-
 		// Clean up all activity listeners
 		if (browser && document) {
 			window.removeEventListener('resize', updateChartWidth);
 			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
+			// Remove overscroll prevention listeners
+			document.removeEventListener('touchstart', preventOverscroll);
+			document.removeEventListener('touchmove', preventOverscroll);
 			stopSidebarResize();
 			stopLeftResize();
 		}
@@ -405,8 +437,6 @@
 	// Sidebar resizing
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
-	let maxWidth = 600; // Restored to 600px maximum
-	let leftMinWidth = 600; // Minimum width for chat left menu
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -807,10 +837,12 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
+		// Limit chat to minimum 15% and maximum 40% of screen width
+		const minLeftSidebarWidth = window.innerWidth * 0.15;
+		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - 45);
 
 		// Enforce minimum and maximum width without auto-closing
-		leftMenuWidth = Math.max(leftMinWidth, Math.min(newWidth, maxLeftSidebarWidth));
+		leftMenuWidth = Math.max(minLeftSidebarWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
 		updateChartWidth();
 	}
@@ -829,7 +861,8 @@
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
-			leftMenuWidth = leftMinWidth;
+			// Set to 15% of screen width when opening
+			leftMenuWidth = window.innerWidth * 0.30;
 		}
 		updateChartWidth();
 	}
@@ -874,7 +907,6 @@
 	<AuthModal
 		visible={$authModalStore.visible}
 		defaultMode={$authModalStore.mode}
-		requiredFeature={$authModalStore.requiredFeature}
 		on:success={() => {
 			hideAuthModal();
 			// Optional: refresh page or update auth state
@@ -1029,12 +1061,12 @@
 			>
 				Strategies
 			</button>
-			<button
+			<!-- <button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button>
+			</button> -->
 		</div>
 
 		<div class="bottom-bar-right">

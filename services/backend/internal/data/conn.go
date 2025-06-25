@@ -78,12 +78,12 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 
 		// Configure connection pool with better defaults
-		poolConfig.MaxConns = 20                               // Set max connections to 20 (default is 4)
-		poolConfig.MinConns = 3                                // Keep at least 5 connections in the pool
-		poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
-		poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
-		poolConfig.HealthCheckPeriod = 1 * time.Minute         // How often to check connection health
-		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Connection timeout
+		poolConfig.MaxConns = 25                                // Increase max connections
+		poolConfig.MinConns = 5                                 // Increase minimum connections
+		poolConfig.MaxConnLifetime = 1 * time.Hour              // Maximum lifetime of a connection
+		poolConfig.MaxConnIdleTime = 30 * time.Minute           // Maximum idle time for a connection
+		poolConfig.HealthCheckPeriod = 30 * time.Second         // More frequent health checks
+		poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // Increase connection timeout
 
 		// Create the connection pool with our custom configuration
 		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
@@ -335,11 +335,28 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 
 // GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
 func (c *Conn) GetGeminiKey() (string, error) {
+	// Add nil pointer checks
+	if c == nil {
+		return "", fmt.Errorf("connection object is nil")
+	}
+	if c.GeminiPool == nil {
+		return "", fmt.Errorf("gemini pool is not initialized")
+	}
 	return c.GeminiPool.GetNextKey()
 }
 
 // TestRedisConnectivity tests the Redis connection and returns success status and error message
 func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, string) {
+	// Add nil pointer check for the connection struct itself
+	if c == nil {
+		return false, "Connection object is nil"
+	}
+
+	// Add nil pointer check for the Redis cache
+	if c.Cache == nil {
+		return false, "Redis cache client is not initialized"
+	}
+
 	testKey := fmt.Sprintf("redis_test_key:%d", userID)
 	testValue := fmt.Sprintf("test_value_%d_%d", userID, time.Now().Unix())
 
