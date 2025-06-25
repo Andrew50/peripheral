@@ -266,8 +266,8 @@ class DataFrameStrategyEngine:
                     fundamental_data = await self.data_provider.get_fundamental_data(symbol)
                     symbol_df = self._add_fundamental_data(symbol_df, fundamental_data)
                     
-                    # Add technical indicators
-                    symbol_df = self._add_technical_indicators(symbol_df)
+                    # Add technical indicators - REMOVED: No longer auto-generating technical indicators
+                    # symbol_df = self._add_technical_indicators(symbol_df)
                     
                     # Filter to date range
                     symbol_df = symbol_df[
@@ -351,66 +351,9 @@ class DataFrameStrategyEngine:
         return df
     
     def _add_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add common technical indicators to DataFrame"""
-        
-        if len(df) < 20:  # Need minimum data for indicators
-            return df
-        
-        df = df.copy()
-        
-        # Price-based indicators
-        df['returns'] = df['close'].pct_change()
-        df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
-        
-        # Moving averages
-        df['sma_5'] = df['close'].rolling(5).mean()
-        df['sma_10'] = df['close'].rolling(10).mean()
-        df['sma_20'] = df['close'].rolling(20).mean()
-        df['sma_50'] = df['close'].rolling(50).mean()
-        
-        # Exponential moving averages
-        df['ema_12'] = df['close'].ewm(span=12).mean()
-        df['ema_26'] = df['close'].ewm(span=26).mean()
-        
-        # MACD
-        df['macd'] = df['ema_12'] - df['ema_26']
-        df['macd_signal'] = df['macd'].ewm(span=9).mean()
-        df['macd_histogram'] = df['macd'] - df['macd_signal']
-        
-        # RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
-        
-        # Bollinger Bands
-        df['bb_middle'] = df['close'].rolling(20).mean()
-        bb_std = df['close'].rolling(20).std()
-        df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
-        df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
-        df['bb_width'] = df['bb_upper'] - df['bb_lower']
-        df['bb_position'] = (df['close'] - df['bb_lower']) / df['bb_width']
-        
-        # Volume indicators
-        df['volume_sma'] = df['volume'].rolling(20).mean()
-        df['volume_ratio'] = df['volume'] / df['volume_sma']
-        
-        # Price gaps
-        df['gap'] = (df['open'] - df['close'].shift(1)) / df['close'].shift(1)
-        df['gap_pct'] = df['gap'] * 100
-        
-        # True Range and ATR
-        df['tr1'] = df['high'] - df['low']
-        df['tr2'] = abs(df['high'] - df['close'].shift(1))
-        df['tr3'] = abs(df['low'] - df['close'].shift(1))
-        df['true_range'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
-        df['atr'] = df['true_range'].rolling(14).mean()
-        df = df.drop(['tr1', 'tr2', 'tr3'], axis=1)
-        
-        # Price position within daily range
-        df['price_position'] = (df['close'] - df['low']) / (df['high'] - df['low'])
-        
+        """Technical indicators are no longer auto-generated - strategies must calculate their own"""
+        # REMOVED: Automatic technical indicator generation
+        # Strategies should implement their own technical indicators using raw price data
         return df
     
     async def _execute_strategy(

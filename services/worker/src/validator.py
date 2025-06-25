@@ -257,16 +257,23 @@ class SecurityValidator:
     def _validate_strategy_structure(self, tree: ast.AST) -> bool:
         """Validate overall strategy structure and requirements"""
         
-        # Check for pandas import (required for DataFrame operations)
-        has_pandas_import = False
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                if self._is_pandas_import(node):
-                    has_pandas_import = True
-                    break
-        
-        if not has_pandas_import:
-            raise StrategyComplianceError("Strategy must import pandas (import pandas as pd)")
+        # Check what type of strategy this is (DataFrame vs numpy array)
+        strategy_functions = self._find_strategy_functions(tree)
+        if strategy_functions:
+            func = strategy_functions[0]
+            param = func.args.args[0] if func.args.args else None
+            
+            # If using 'df' parameter, require pandas import
+            if param and param.arg == 'df':
+                has_pandas_import = False
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        if self._is_pandas_import(node):
+                            has_pandas_import = True
+                            break
+                
+                if not has_pandas_import:
+                    raise StrategyComplianceError("Strategy using 'df' parameter must import pandas (import pandas as pd)")
         
         return True
 
@@ -303,16 +310,16 @@ class SecurityValidator:
         
         param = func_node.args.args[0]
         
-        # Parameter name should be 'df' (enforcing standard)
-        if param.arg != 'df':
-            raise StrategyComplianceError(f"Strategy function parameter must be named 'df', found '{param.arg}'")
+        # Parameter name should be 'df' or 'data' (supporting both patterns)
+        if param.arg not in ['df', 'data']:
+            raise StrategyComplianceError(f"Strategy function parameter must be named 'df' or 'data', found '{param.arg}'")
         
-        # Type annotation is optional but if present should be DataFrame
+        # Type annotation is optional but if present should be DataFrame or ndarray
         if param.annotation:
             annotation_text = self._get_annotation_text(param.annotation)
-            if annotation_text and not self._is_dataframe_annotation(annotation_text):
+            if annotation_text and not (self._is_dataframe_annotation(annotation_text) or self._is_ndarray_annotation(annotation_text)):
                 raise StrategyComplianceError(
-                    "Strategy function parameter should be annotated as pandas.DataFrame or pd.DataFrame if type annotation is provided"
+                    "Strategy function parameter should be annotated as pandas.DataFrame, pd.DataFrame, numpy.ndarray, or np.ndarray if type annotation is provided"
                 )
         
         return True
@@ -337,6 +344,13 @@ class SecurityValidator:
         """Check if annotation represents a pandas DataFrame"""
         valid_annotations = [
             "pandas.DataFrame", "pd.DataFrame", "DataFrame"
+        ]
+        return any(valid in annotation_text for valid in valid_annotations)
+    
+    def _is_ndarray_annotation(self, annotation_text: str) -> bool:
+        """Check if annotation represents a numpy ndarray"""
+        valid_annotations = [
+            "numpy.ndarray", "np.ndarray", "ndarray"
         ]
         return any(valid in annotation_text for valid in valid_annotations)
 
@@ -384,8 +398,7 @@ class SecurityValidator:
             (r'file\s*\(', "file() function is forbidden"),
             # Input/Output
             (r'input\s*\(', "input() function is forbidden"),
-            # Note: Allow print in comments, only block actual print calls
-            (r'^[^#]*print\s*\(', "print() function is forbidden (comments are allowed)"),
+            # Note: print() is now allowed as it's in allowed_functions list
             # System access patterns
             (r'import\s+os\b', "Importing os module is forbidden"),
             (r'import\s+sys\b', "Importing sys module is forbidden"),
@@ -634,8 +647,11 @@ class SecurityValidator:
         - volume (int): Trading volume
         - fund_* (various): Fundamental data when available
         
+        IMPORTANT: No technical indicators are pre-calculated.
+        Calculate your own technical indicators (SMA, RSI, MACD, etc.) within your strategy 
+        function using raw price data and pandas operations.
+        
         Access data using pandas operations: df['column_name'], df.loc[], df.iloc[], etc.
-        Calculate technical indicators within your strategy function using raw price data.
         """
 
 
