@@ -76,38 +76,47 @@ class ServerIntegrationTester:
         """Test gold gap analysis through worker queue"""
         
         strategy_code = """
-def strategy(data):
+def strategy():
     instances = []
     
-    for i in range(data.shape[0]):
-        ticker = data[i, 0]
-        date = data[i, 1]
-        open_price = float(data[i, 2])
-        close_price = float(data[i, 5])
-        
-        if ticker not in ['GLD', 'GOLD', 'IAU']:
-            continue
-            
-        # Find previous close
-        prev_close = None
-        for j in range(i-1, -1, -1):
-            if data[j, 0] == ticker:
-                prev_close = float(data[j, 5])
-                break
-        
-        if prev_close is None:
-            continue
-            
-        gap_percent = ((open_price - prev_close) / prev_close) * 100
-        
-        if gap_percent > 3.0:
-            instances.append({
-                'ticker': ticker,
-                'date': str(date),
-                'signal': True,
-                'gap_percent': gap_percent,
-                'message': f'{ticker} gapped up {gap_percent:.2f}%'
-            })
+    # Get recent bar data for gold ETFs
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "open", "close"],
+        min_bars=30
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for easier processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df_sorted = df.sort_values(['ticker', 'date']).copy()
+    
+    # Filter for gold ETFs only
+    gold_tickers = ['GLD', 'GOLD', 'IAU']
+    df_gold = df_sorted[df_sorted['ticker'].isin(gold_tickers)]
+    
+    # Calculate gap percentage
+    df_gold['prev_close'] = df_gold.groupby('ticker')['close'].shift(1)
+    df_gold['gap_pct'] = ((df_gold['open'] - df_gold['prev_close']) / df_gold['prev_close']) * 100
+    
+    # Filter for gaps > 3%
+    df_filtered = df_gold[
+        df_gold['gap_pct'].notna() & 
+        (df_gold['gap_pct'] > 3.0)
+    ]
+    
+    for _, row in df_filtered.iterrows():
+        instances.append({
+            'ticker': row['ticker'],
+            'date': str(row['date']),
+            'signal': True,
+            'gap_percent': round(row['gap_pct'], 2),
+            'message': f"{row['ticker']} gapped up {row['gap_pct']:.2f}%"
+        })
     
     return instances
 """
@@ -123,57 +132,61 @@ def strategy(data):
         """Test sector analysis through worker queue"""
         
         strategy_code = """
-def strategy(data):
+def strategy():
     instances = []
     
-    sector_performance = {}
-    ticker_sectors = {}
+    # Get bar data and sector information
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "open", "close"],
+        min_bars=30
+    )
     
-    # Calculate sector performance
-    for i in range(data.shape[0]):
-        ticker = data[i, 0]
-        sector = 'Technology'
-        close_price = float(data[i, 5])
-        
-        ticker_sectors[ticker] = sector
-        if sector not in sector_performance:
-            sector_performance[sector] = {'prices': []}
-        sector_performance[sector]['prices'].append(close_price)
+    general_data = get_general_data(columns=["sector"])
     
-    # Find gaps in strong sectors
-    for i in range(data.shape[0]):
-        ticker = data[i, 0]
-        date = data[i, 1] 
-        open_price = float(data[i, 2])
-        
-        sector = ticker_sectors.get(ticker, 'Unknown')
-        if sector != 'Technology':
-            continue
-            
-        # Simulate strong sector (>100% yearly return)
-        sector_return = 120.0  # Simulated
-        
-        prev_close = None
-        for j in range(i-1, -1, -1):
-            if data[j, 0] == ticker:
-                prev_close = float(data[j, 5])
-                break
-        
-        if prev_close is None:
-            continue
-            
-        gap_percent = ((open_price - prev_close) / prev_close) * 100
-        
-        if gap_percent > 5.0:
-            instances.append({
-                'ticker': ticker,
-                'date': str(date),
-                'signal': True,
-                'gap_percent': gap_percent,
-                'sector': sector,
-                'sector_return': sector_return,
-                'message': f'{ticker} ({sector}) gapped up {gap_percent:.2f}%'
-            })
+    if len(bar_data) == 0:
+        return instances
+    
+    import pandas as pd
+    
+    # Convert to DataFrame
+    df_bars = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+    df_general = pd.DataFrame(general_data, columns=["ticker", "sector"])
+    
+    # Merge with sector data
+    df = df_bars.merge(df_general, on='ticker', how='left')
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df = df.sort_values(['ticker', 'date']).copy()
+    
+    # Filter for technology stocks only
+    df_tech = df[df['sector'] == 'Technology']
+    
+    if len(df_tech) == 0:
+        return instances
+    
+    # Calculate gap percentage
+    df_tech['prev_close'] = df_tech.groupby('ticker')['close'].shift(1)
+    df_tech['gap_pct'] = ((df_tech['open'] - df_tech['prev_close']) / df_tech['prev_close']) * 100
+    
+    # Filter for gaps > 5%
+    df_filtered = df_tech[
+        df_tech['gap_pct'].notna() & 
+        (df_tech['gap_pct'] > 5.0)
+    ]
+    
+    # Simulate strong sector performance
+    sector_return = 120.0
+    
+    for _, row in df_filtered.iterrows():
+        instances.append({
+            'ticker': row['ticker'],
+            'date': str(row['date']),
+            'signal': True,
+            'gap_percent': round(row['gap_pct'], 2),
+            'sector': row['sector'],
+            'sector_return': sector_return,
+            'message': f"{row['ticker']} ({row['sector']}) gapped up {row['gap_pct']:.2f}%"
+        })
     
     return instances
 """
@@ -189,71 +202,62 @@ def strategy(data):
         """Test technical indicator analysis through worker queue"""
         
         strategy_code = """
-def strategy(data):
+def strategy():
     instances = []
     
-    ticker_data = {}
+    # Get bar data with required columns
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "high", "low", "close"],
+        min_bars=30
+    )
     
-    # Group by ticker
-    for i in range(data.shape[0]):
-        ticker = data[i, 0]
-        date = data[i, 1]
-        high = float(data[i, 3])
-        low = float(data[i, 4])
-        close = float(data[i, 5])
-        
-        if ticker not in ticker_data:
-            ticker_data[ticker] = []
-        
-        ticker_data[ticker].append({
-            'date': date,
-            'high': high,
-            'low': low,
-            'close': close,
-            'daily_range': high - low
+    if len(bar_data) == 0:
+        return instances
+    
+    import pandas as pd
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "high", "low", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df = df.sort_values(['ticker', 'date']).copy()
+    
+    # Calculate daily range
+    df['daily_range'] = df['high'] - df['low']
+    
+    # Calculate previous close for daily returns
+    df['prev_close'] = df.groupby('ticker')['close'].shift(1)
+    df['daily_return'] = ((df['close'] - df['prev_close']) / df['prev_close']) * 100
+    
+    # Calculate rolling 14-day ADR (Average Daily Range)
+    df['adr_14'] = df.groupby('ticker')['daily_range'].rolling(window=14, min_periods=14).mean().reset_index(0, drop=True)
+    
+    # Calculate simple MACD approximation (12-day EMA - 26-day EMA)
+    df['ema_12'] = df.groupby('ticker')['close'].rolling(window=12, min_periods=12).mean().reset_index(0, drop=True)
+    df['ema_26'] = df.groupby('ticker')['close'].rolling(window=26, min_periods=26).mean().reset_index(0, drop=True)
+    df['macd'] = df['ema_12'] - df['ema_26']
+    
+    # Calculate threshold: ADR * 3 + MACD
+    df['threshold'] = (df['adr_14'] * 3) + df['macd']
+    
+    # Filter for valid data and condition: daily_return > threshold
+    df_filtered = df[
+        df['daily_return'].notna() & 
+        df['threshold'].notna() & 
+        (df['daily_return'] > df['threshold'])
+    ]
+    
+    for _, row in df_filtered.iterrows():
+        instances.append({
+            'ticker': row['ticker'],
+            'date': str(row['date']),
+            'signal': True,
+            'daily_return': round(row['daily_return'], 2),
+            'adr': round(row['adr_14'], 4),
+            'macd': round(row['macd'], 4),
+            'threshold': round(row['threshold'], 4),
+            'message': f"{row['ticker']} return {row['daily_return']:.2f}% > threshold {row['threshold']:.2f}%"
         })
-    
-    # Calculate indicators
-    for ticker, data_list in ticker_data.items():
-        if len(data_list) < 20:
-            continue
-            
-        data_list.sort(key=lambda x: x['date'])
-        
-        for i in range(14, len(data_list)):
-            # Calculate ADR (14-day average daily range)
-            recent_ranges = [data_list[j]['daily_range'] for j in range(i-13, i+1)]
-            adr = sum(recent_ranges) / len(recent_ranges)
-            
-            # Simple MACD approximation
-            if i >= 25:
-                closes = [data_list[j]['close'] for j in range(i-11, i+1)]
-                ema_12 = sum(closes) / len(closes)
-                
-                closes_26 = [data_list[j]['close'] for j in range(i-25, i+1)]
-                ema_26 = sum(closes_26) / len(closes_26)
-                
-                macd = ema_12 - ema_26
-                
-                # Calculate daily return
-                current_close = data_list[i]['close']
-                prev_close = data_list[i-1]['close']
-                daily_return = ((current_close - prev_close) / prev_close) * 100
-                
-                # Check condition: return > (ADR * 3 + MACD)
-                threshold = (adr * 3) + macd
-                
-                if daily_return > threshold:
-                    instances.append({
-                        'ticker': ticker,
-                        'date': str(data_list[i]['date']),
-                        'signal': True,
-                        'daily_return': daily_return,
-                        'adr': adr,
-                        'macd': macd,
-                        'threshold': threshold,
-                        'message': f'{ticker} return {daily_return:.2f}% > threshold {threshold:.2f}%'
-                    })
     
     return instances
 """

@@ -44,34 +44,78 @@ def test_builtin_types():
     """Test that built-in types work correctly"""
     print("\n🧪 Testing built-in types...")
     
+    # Mock get_bar_data function for testing
+    def mock_get_bar_data(timeframe="1d", columns=None, min_bars=1):
+        """Mock get_bar_data function for testing"""
+        if columns is None:
+            columns = ["ticker", "timestamp", "close"]
+        
+        # Generate mock data
+        mock_data = []
+        tickers = ["AAPL", "GOOGL", "MSFT"]
+        
+        for ticker in tickers:
+            for i in range(min_bars):
+                timestamp = 1700000000 + (i * 86400)  # Mock timestamps
+                row = []
+                for col in columns:
+                    if col == "ticker":
+                        row.append(ticker)
+                    elif col == "timestamp":
+                        row.append(timestamp)
+                    elif col == "close":
+                        row.append(100.0 + i)  # Mock prices
+                    else:
+                        row.append(0)
+                mock_data.append(row)
+        
+        return mock_data
+    
     code_with_builtins = """
-# Using built-in types instead of typing
-def classify_symbol(symbol):
+# Using built-in types instead of typing - NEW ACCESSOR PATTERN
+def strategy():
+    instances = []  # list instead of List
     data = {}  # dict instead of Dict
-    prices = []  # list instead of List
-    name = str(symbol)  # str is fine
     
-    # Simple logic
-    prices.append(100.0)
-    data['symbol'] = name
+    # Get bar data using accessor functions
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "close"], 
+        min_bars=1
+    )
     
-    return len(prices) > 0
+    # Simple logic without pandas dependency
+    if len(bar_data) > 0:
+        for row in bar_data:
+            if len(row) >= 3:
+                instances.append({
+                    'ticker': row[0],
+                    'timestamp': str(row[1]),
+                    'signal': True,
+                    'price': float(row[2])
+                })
+    
+    return instances
 
-result = classify_symbol('TEST')
+result = strategy()
 """
     
     try:
         # Compile and execute
         compiled_code = compile(code_with_builtins, "<test>", "exec")
-        exec_globals = {'__builtins__': __builtins__}
+        exec_globals = {
+            '__builtins__': __builtins__,
+            'get_bar_data': mock_get_bar_data  # Add the mock function
+        }
         exec_locals = {}
         exec(compiled_code, exec_globals, exec_locals)  # nosec B102 - Safe test execution
         
-        if exec_locals.get('result') is True:
+        result = exec_locals.get('result')
+        if result is not None and isinstance(result, list) and len(result) > 0:
             print("✅ Built-in types work correctly")
             return True
         else:
-            print("❌ Built-in types test failed")
+            print("❌ Built-in types test failed - expected non-empty list result")
             return False
             
     except Exception as e:
@@ -99,18 +143,36 @@ def test_execution_environment_simulation():
     else:
         print("✅ typing module correctly excluded from allowed modules")
     
-    # Test a simple strategy code without typing (math already imported)
+    # Test a simple strategy code without typing using NEW ACCESSOR PATTERN
     strategy_code = """
-def classify_symbol(symbol):
-    # Simple gap calculation using math module
-    current_price = 105.0
-    previous_price = 100.0
+def strategy():
+    # Simple gap calculation using math module - NEW ACCESSOR PATTERN
+    instances = []
     
-    gap_percent = ((current_price - previous_price) / previous_price) * 100
+    # Mock bar data for testing (in real system, would use get_bar_data)
+    bar_data = [
+        ['AAPL', 1640995200, 100.0, 105.0],  # ticker, timestamp, prev_close, current_open
+        ['MSFT', 1640995200, 200.0, 210.0]
+    ]
     
-    return gap_percent > 2.0
+    for row in bar_data:
+        ticker = row[0]
+        previous_price = row[2]
+        current_price = row[3]
+        
+        gap_percent = ((current_price - previous_price) / previous_price) * 100
+        
+        if gap_percent > 2.0:
+            instances.append({
+                'ticker': ticker,
+                'timestamp': '2024-01-01',
+                'signal': True,
+                'gap_percent': gap_percent
+            })
+    
+    return instances
 
-result = classify_symbol('TEST')
+result = strategy()
 """
     
     try:
@@ -131,11 +193,12 @@ result = classify_symbol('TEST')
         exec_locals = {}
         exec(compiled, restricted_globals, exec_locals)  # nosec B102 - Safe test execution
         
-        if exec_locals.get('result') is True:
+        result = exec_locals.get('result')
+        if result is not None and isinstance(result, list) and len(result) > 0:
             print("✅ Execution environment simulation successful")
             return True
         else:
-            print("❌ Execution environment simulation failed")
+            print("❌ Execution environment simulation failed - expected non-empty list")
             return False
             
     except Exception as e:
