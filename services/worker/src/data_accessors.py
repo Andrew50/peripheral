@@ -305,25 +305,16 @@ class DataAccessorProvider:
             # Build the query
             if security_ids is None or len(security_ids) == 0:
                 # Get all active securities
+                select_clause = ', '.join(safe_columns)
                 # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
-                query = f"""
-                SELECT {', '.join(safe_columns)}
-                FROM securities 
-                WHERE active = true AND maxdate IS NULL
-                ORDER BY securityid
-                """
+                query = f"SELECT {select_clause} FROM securities WHERE active = true AND maxdate IS NULL ORDER BY securityid"  # nosec B608
                 params = []
             else:
                 # Filter by specific security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
+                select_clause = ', '.join(safe_columns)
                 # nosec B608: Safe - columns validated against allowlist, placeholders are just '%s' strings, all values parameterized  
-                query = f"""
-                SELECT {', '.join(safe_columns)}
-                FROM securities 
-                WHERE securityid IN ({placeholders})
-                AND maxdate IS NULL
-                ORDER BY securityid
-                """
+                query = f"SELECT {select_clause} FROM securities WHERE securityid IN ({placeholders}) AND maxdate IS NULL ORDER BY securityid"  # nosec B608
                 params = security_ids
             
             conn = self.get_connection()

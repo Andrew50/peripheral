@@ -69,7 +69,10 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	var dbConn *pgxpool.Pool
 	var err error
-	for {
+
+	// Add timeout for database connection attempts
+	dbConnectTimeout := time.Now().Add(90 * time.Second) // 90 second timeout
+	for time.Now().Before(dbConnectTimeout) {
 		// Create a connection pool configuration
 		poolConfig, err := pgxpool.ParseConfig(dbURL)
 		if err != nil {
@@ -95,8 +98,16 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		}
 	}
 
+	// If database connection failed after timeout, panic with informative error
+	if dbConn == nil {
+		panic(fmt.Sprintf("Failed to connect to database after 30 seconds. URL: %s, Error: %v", dbURL, err))
+	}
+
 	var cache *redis.Client
-	for {
+
+	// Add timeout for Redis connection attempts
+	redisConnectTimeout := time.Now().Add(30 * time.Second) // 30 second timeout
+	for time.Now().Before(redisConnectTimeout) {
 		// Use Redis password if provided
 		opts := &redis.Options{
 			Addr: cacheURL,
@@ -127,6 +138,11 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		} else {
 			break
 		}
+	}
+
+	// If Redis connection failed after timeout, panic with informative error
+	if cache == nil || cache.Ping(context.Background()).Err() != nil {
+		panic(fmt.Sprintf("Failed to connect to Redis after 30 seconds. URL: %s, Error: %v", cacheURL, err))
 	}
 
 	// Configure the HTTP client with better timeout settings
