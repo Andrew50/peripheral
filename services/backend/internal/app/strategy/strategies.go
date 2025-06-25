@@ -289,6 +289,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 			"strategy_id": strategyID,
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
+		"priority":   "high", // Mark strategy creation as high priority
 	}
 
 	// Submit task to Redis queue
@@ -297,13 +298,13 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 		return nil, fmt.Errorf("error marshaling task: %v", err)
 	}
 
-	// Push task to worker queue
-	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
+	// Push task to PRIORITY worker queue for strategy creation/editing
+	err = conn.Cache.RPush(ctx, "strategy_queue_priority", string(taskJSON)).Err()
 	if err != nil {
-		return nil, fmt.Errorf("error submitting task to queue: %v", err)
+		return nil, fmt.Errorf("error submitting task to priority queue: %v", err)
 	}
 
-	log.Printf("Submitted strategy creation task %s to worker queue", taskID)
+	log.Printf("Submitted strategy creation task %s to PRIORITY worker queue", taskID)
 
 	// Wait for result with timeout
 	result, err := waitForCreateStrategyResult(ctx, conn, taskID, 3*time.Minute)

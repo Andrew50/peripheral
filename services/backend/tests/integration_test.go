@@ -409,11 +409,14 @@ func handlePrivateRequest(w http.ResponseWriter, r *http.Request, conn *data.Con
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // Mock handlers (for testing without full backend complexity)
-func handleCreateStrategy(conn *data.Conn, userID int, argsBytes []byte) (interface{}, error) {
+func handleCreateStrategy(_ *data.Conn, userID int, argsBytes []byte) (interface{}, error) {
 	// For testing purposes, return a mock strategy
 	// In a real test, this would call the actual strategy.CreateStrategyFromPrompt
 
@@ -444,7 +447,7 @@ func handleCreateStrategy(conn *data.Conn, userID int, argsBytes []byte) (interf
 	return strategy, nil
 }
 
-func handleRunBacktest(conn *data.Conn, userID int, argsBytes []byte) (interface{}, error) {
+func handleRunBacktest(_ *data.Conn, userID int, argsBytes []byte) (interface{}, error) {
 	// For testing purposes, return a mock backtest result
 	// In a real test, this would call the actual strategy.RunBacktest
 

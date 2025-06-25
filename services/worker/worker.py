@@ -394,17 +394,45 @@ class StrategyWorker:
         return strategy_codes
     
     def run(self):
-        """Main queue processing loop"""
+        """Main queue processing loop with priority queue support"""
         logger.info(f"Strategy worker {self.worker_id} starting queue processing...")
+        
+        # Track last queue status log time
+        last_status_log = time.time()
+        status_log_interval = 300  # Log queue status every 5 minutes
         
         while True:
             try:
-                # Block and wait for tasks from Redis queue
-                task = self.redis_client.brpop('strategy_queue', timeout=60)
+                # Check priority queue first (for strategy creation/editing)
+                # Priority queue: strategy_queue_priority (checked first)
+                # Normal queue: strategy_queue (checked second)
+                
+                task = None
+                queue_type = "normal"
+                
+                # Try priority queue first with a short timeout
+                priority_task = self.redis_client.brpop('strategy_queue_priority', timeout=1)
+                if priority_task:
+                    task = priority_task
+                    queue_type = "priority"
+                    logger.info("Processing task from PRIORITY queue")
+                else:
+                    # If no priority task, check normal queue with longer timeout
+                    normal_task = self.redis_client.brpop('strategy_queue', timeout=60)
+                    if normal_task:
+                        task = normal_task
+                        queue_type = "normal"
                 
                 if not task:
                     # No task received, check connection and continue
                     self._check_connection()
+                    
+                    # Periodically log queue status when idle
+                    current_time = time.time()
+                    if current_time - last_status_log > status_log_interval:
+                        self.log_queue_status()
+                        last_status_log = current_time
+                    
                     continue
                     
                 # Parse task
@@ -414,7 +442,7 @@ class StrategyWorker:
                 task_type = task_data.get('task_type')
                 args = task_data.get('args', {})
 
-                logger.info(f"Processing {task_type} task {task_id}")
+                logger.info(f"Processing {task_type} task {task_id} from {queue_type} queue")
                 
                 # Validate task data
                 if not task_id or not task_type:
@@ -431,6 +459,7 @@ class StrategyWorker:
                     # Set task status to running
                     self._set_task_result(task_id, "running", {
                         "worker_id": self.worker_id,
+                        "queue_type": queue_type,
                         "started_at": datetime.utcnow().isoformat()
                     })
                     
@@ -452,15 +481,17 @@ class StrategyWorker:
                     # Store successful result
                     result['execution_time_seconds'] = execution_time
                     result['worker_id'] = self.worker_id
+                    result['queue_type'] = queue_type
                     result['completed_at'] = datetime.utcnow().isoformat()
                     
                     self._set_task_result(task_id, "completed", result)
-                    logger.info(f"Completed {task_type} task {task_id} in {execution_time:.2f}s")
+                    logger.info(f"Completed {task_type} task {task_id} from {queue_type} queue in {execution_time:.2f}s")
                     
                 except SecurityError as e:
                     # Security validation error
                     error_result = {
                         "error": f"Security validation failed: {str(e)}",
+                        "queue_type": queue_type,
                         "completed_at": datetime.utcnow().isoformat()
                     }
                     self._set_task_result(task_id, "error", error_result)
@@ -471,6 +502,7 @@ class StrategyWorker:
                     error_result = {
                         "error": str(e),
                         "traceback": traceback.format_exc(),
+                        "queue_type": queue_type,
                         "completed_at": datetime.utcnow().isoformat()
                     }
                     self._set_task_result(task_id, "error", error_result)
@@ -789,6 +821,42 @@ class StrategyWorker:
                 logger.warning(f"Error closing database connection: {close_error}")
             self.db_conn = self._init_database()
 
+    def get_queue_stats(self) -> Dict[str, Any]:
+        """Get current queue statistics"""
+        try:
+            priority_length = self.redis_client.llen('strategy_queue_priority')
+            normal_length = self.redis_client.llen('strategy_queue')
+            
+            stats = {
+                "priority_queue_length": priority_length,
+                "normal_queue_length": normal_length,
+                "total_pending_tasks": priority_length + normal_length,
+                "worker_id": self.worker_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            logger.info(f"Queue stats: Priority={priority_length}, Normal={normal_length}, Total={priority_length + normal_length}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Failed to get queue statistics: {e}")
+            return {
+                "error": str(e),
+                "worker_id": self.worker_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+    def log_queue_status(self):
+        """Log current queue status for monitoring"""
+        stats = self.get_queue_stats()
+        if "error" not in stats:
+            logger.info(f"[QUEUE STATUS] Worker {self.worker_id}: "
+                       f"Priority Queue: {stats['priority_queue_length']} tasks, "
+                       f"Normal Queue: {stats['normal_queue_length']} tasks, "
+                       f"Total: {stats['total_pending_tasks']} tasks")
+        else:
+            logger.error(f"[QUEUE STATUS] Failed to get queue status: {stats['error']}")
+
 
 # Utility functions for adding tasks to queue
 def add_backtest_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
@@ -804,8 +872,10 @@ def add_backtest_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
             "start_date": start_date,
             "end_date": end_date,
             "securities": securities
-        }
+        },
+        "created_at": datetime.utcnow().isoformat()
     }
+    # Backtest tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
 
 
@@ -819,8 +889,10 @@ def add_screening_task(redis_client: redis.Redis, task_id: str, strategy_ids: Li
             "strategy_ids": strategy_ids,
             "universe": universe,
             "limit": limit
-        }
+        },
+        "created_at": datetime.utcnow().isoformat()
     }
+    # Screening tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
 
 
@@ -833,14 +905,16 @@ def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
         "args": {
             "strategy_id": strategy_id,
             "symbols": symbols
-        }
+        },
+        "created_at": datetime.utcnow().isoformat()
     }
+    # Alert tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
 
 
 def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: int,
                            prompt: str, strategy_id: int = -1) -> None:
-    """Add a strategy creation task to the queue"""
+    """Add a strategy creation task to the PRIORITY queue"""
     task_data = {
         "task_id": task_id,
         "task_type": "create_strategy",
@@ -848,9 +922,34 @@ def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: i
             "user_id": user_id,
             "prompt": prompt,
             "strategy_id": strategy_id
-        }
+        },
+        "created_at": datetime.utcnow().isoformat(),
+        "priority": "high"  # Mark as high priority
     }
-    redis_client.lpush('strategy_queue', json.dumps(task_data))
+    # Strategy creation/editing tasks go to PRIORITY queue
+    redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
+    logger.info(f"Added strategy creation task {task_id} to PRIORITY queue")
+
+
+def add_task_with_priority(redis_client: redis.Redis, task_id: str, task_type: str, 
+                          args: Dict[str, Any], priority: str = "normal") -> None:
+    """Add a task to the appropriate queue based on priority level"""
+    task_data = {
+        "task_id": task_id,
+        "task_type": task_type,
+        "args": args,
+        "created_at": datetime.utcnow().isoformat(),
+        "priority": priority
+    }
+    
+    if priority == "high" or task_type == "create_strategy":
+        # High priority tasks (including all strategy creation/editing)
+        redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
+        logger.info(f"Added {task_type} task {task_id} to PRIORITY queue")
+    else:
+        # Normal priority tasks
+        redis_client.lpush('strategy_queue', json.dumps(task_data))
+        logger.info(f"Added {task_type} task {task_id} to normal queue")
 
 
 def get_task_result(redis_client: redis.Redis, task_id: str) -> Dict[str, Any]:
@@ -859,6 +958,37 @@ def get_task_result(redis_client: redis.Redis, task_id: str) -> Dict[str, Any]:
     if result_json:
         return json.loads(result_json)
     return None
+
+
+# Utility functions for queue management
+def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:
+    """Get comprehensive queue statistics"""
+    try:
+        stats = {
+            "priority_queue_length": redis_client.llen('strategy_queue_priority'),
+            "normal_queue_length": redis_client.llen('strategy_queue'),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        stats["total_pending_tasks"] = stats["priority_queue_length"] + stats["normal_queue_length"]
+        
+        return stats
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+def clear_queue(redis_client: redis.Redis, queue_name: str) -> int:
+    """Clear a specific queue and return the number of tasks removed"""
+    try:
+        removed_count = redis_client.delete(queue_name)
+        logger.info(f"Cleared {removed_count} tasks from queue: {queue_name}")
+        return removed_count
+    except Exception as e:
+        logger.error(f"Failed to clear queue {queue_name}: {e}")
+        return 0
 
 
 if __name__ == "__main__":
