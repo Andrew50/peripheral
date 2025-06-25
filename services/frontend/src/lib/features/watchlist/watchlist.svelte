@@ -432,7 +432,7 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 6px 12px;
+		padding: 6px 12px 6px 4px; /* Reduced left padding to align with container */
 	}
 
 	.watchlist-selector select {
