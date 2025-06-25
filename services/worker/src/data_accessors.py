@@ -55,7 +55,8 @@ class DataAccessorProvider:
         }
 
     def get_bar_data(self, timeframe: str = "1d", tickers: List[str] = None, 
-                     columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
+                     columns: List[str] = None, min_bars: int = 1, 
+                     filters: Dict[str, any] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
@@ -64,6 +65,14 @@ class DataAccessorProvider:
             tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
             columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
             
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -120,22 +129,68 @@ class DataAccessorProvider:
                 date_params = []
             
             # Handle security filtering
-            if tickers is None or len(tickers) == 0:
-                # Get all active securities (don't use context symbols automatically)
-                security_filter = "s.active = true AND s.maxdate IS NULL"
-                security_params = []
+            security_filter_parts = []
+            security_params = []
+            
+            # Base filter for active securities
+            security_filter_parts.append("s.maxdate IS NULL")
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    security_filter_parts.append("s.sector = %s")
+                    security_params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    security_filter_parts.append("s.industry = %s")
+                    security_params.append(filters['industry'])
+                
+                #if 'market' in filters:
+                #    security_filter_parts.append("s.market = %s")
+                #    security_params.append(filters['market'])
+                
+                if 'primary_exchange' in filters:
+                    security_filter_parts.append("s.primary_exchange = %s")
+                    security_params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    security_filter_parts.append("s.locale = %s")
+                    security_params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    security_filter_parts.append("s.market_cap >= %s")
+                    security_params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    security_filter_parts.append("s.market_cap <= %s")
+                    security_params.append(filters['market_cap_max'])
+                
+                if 'active' in filters:
+                    security_filter_parts.append("s.active = %s")
+                    security_params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    security_filter_parts.append("s.active = true")
             else:
-                # Convert ticker symbols to security IDs
+                # Default to active if no filters provided
+                security_filter_parts.append("s.active = true")
+            
+            # Handle ticker-specific filtering
+            if tickers is not None and len(tickers) > 0:
+                # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs")
-                security_ids = self._get_security_ids_from_tickers(tickers)
+                security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
                     return np.array([])
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                security_filter = f"s.securityid IN ({placeholders})"
-                security_params = security_ids
+                security_filter_parts.append(f"s.securityid IN ({placeholders})")
+                security_params.extend(security_ids)
+            
+            # Combine all filter parts
+            security_filter = " AND ".join(security_filter_parts)
             
             # Build column selection
             select_columns = []
@@ -266,19 +321,68 @@ class DataAccessorProvider:
         }
         return timeframe_map.get(timeframe, timedelta(days=1))
     
-    def _get_security_ids_from_tickers(self, tickers: List[str]) -> List[int]:
-        """Convert ticker symbols to security IDs"""
+    def _get_security_ids_from_tickers(self, tickers: List[str], filters: Dict[str, any] = None) -> List[int]:
+        """Convert ticker symbols to security IDs with optional filtering"""
         try:
             if not tickers:
                 return []
             
+            # Build filter conditions
+            filter_parts = ["maxdate IS NULL"]
+            params = []
+            
+            # Add ticker filter
             placeholders = ','.join(['%s'] * len(tickers))
-            # nosec B608: Safe - placeholders are just '%s' strings, tickers validated as list of strings, all values parameterized
-            query = f"SELECT securityid FROM securities WHERE ticker IN ({placeholders}) AND active = true AND maxdate IS NULL"  # nosec B608
+            filter_parts.append(f"ticker IN ({placeholders})")
+            params.extend(tickers)
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                #if 'market' in filters:
+                #    filter_parts.append("market = %s")
+                #    params.append(filters['market'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+                
+                if 'active' in filters:
+                    filter_parts.append("active = %s")
+                    params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    filter_parts.append("active = true")
+            else:
+                # Default to active if no filters provided
+                filter_parts.append("active = true")
+            
+            where_clause = " AND ".join(filter_parts)
+            # nosec B608: Safe - query built from validated components, all values parameterized
+            query = f"SELECT securityid FROM securities WHERE {where_clause}"  # nosec B608
             
             conn = self.get_connection()
             cursor = conn.cursor()
-            cursor.execute(query, tickers)
+            cursor.execute(query, params)
             results = cursor.fetchall()
             cursor.close()
             conn.close()
@@ -289,17 +393,27 @@ class DataAccessorProvider:
             logger.error(f"Error converting tickers to security IDs: {e}")
             return []
 
-    def get_general_data(self, tickers: List[str] = None, columns: List[str] = None) -> pd.DataFrame:
+    def get_general_data(self, tickers: List[str] = None, columns: List[str] = None, 
+                         filters: Dict[str, any] = None) -> pd.DataFrame:
+                    #- market: str (e.g., 'stocks', 'crypto')
         """
         Get general security information as pandas DataFrame
         
         Args:
             tickers: List of ticker symbols to fetch (None = all active securities)
             columns: Desired columns (None = all available)
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
             
         Returns:
-            pandas.DataFrame with columns: ticker, name, sector, industry, market, primary_exchange, 
-                                         locale, active, description, cik
+            pandas.DataFrame with columns: ticker, name, sector, industry, primary_exchange, 
+                                         locale, active, description, cik, market_cap, etc.
         """
         try:
             # Default columns if not specified - include ticker by default
@@ -325,27 +439,65 @@ class DataAccessorProvider:
             if "ticker" not in internal_columns and "ticker" in allowed_columns:
                 internal_columns.append("ticker")
                 
-            # Build the query
-            if tickers is None or len(tickers) == 0:
-                # Get all active securities
-                select_clause = ', '.join(internal_columns)
-                # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
-                query = f"SELECT {select_clause} FROM securities WHERE active = true AND maxdate IS NULL ORDER BY securityid"  # nosec B608
-                params = []
+            # Build the query with filters
+            filter_parts = ["maxdate IS NULL"]
+            params = []
+            
+            # Apply filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+                
+                if 'active' in filters:
+                    filter_parts.append("active = %s")
+                    params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    filter_parts.append("active = true")
             else:
-                # Convert ticker symbols to security IDs
+                # Default to active if no filters provided
+                filter_parts.append("active = true")
+            
+            # Handle ticker-specific filtering
+            if tickers is not None and len(tickers) > 0:
+                # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
-                security_ids = self._get_security_ids_from_tickers(tickers)
+                security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
                     return pd.DataFrame()
                 
-                # Filter by specific security IDs
+                # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                select_clause = ', '.join(internal_columns)
-                # nosec B608: Safe - columns validated against allowlist, placeholders are just '%s' strings, all values parameterized  
-                query = f"SELECT {select_clause} FROM securities WHERE securityid IN ({placeholders}) AND maxdate IS NULL ORDER BY securityid"  # nosec B608
-                params = security_ids
+                filter_parts.append(f"securityid IN ({placeholders})")
+                params.extend(security_ids)
+            
+            # Build final query
+            where_clause = " AND ".join(filter_parts)
+            select_clause = ', '.join(internal_columns)
+            # nosec B608: Safe - columns validated against allowlist, all values parameterized
+            query = f"SELECT {select_clause} FROM securities WHERE {where_clause} ORDER BY securityid"  # nosec B608
             
             conn = self.get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -391,16 +543,24 @@ def get_data_accessor() -> DataAccessorProvider:
     return _data_accessor
 
 def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
-                 columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
+                 columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None) -> np.ndarray:
     """
     Global function for strategy access to bar data
     
     Args:
-        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.')
         tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
         security_ids: List of security IDs to fetch (deprecated, use tickers instead)
         columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
         min_bars: Minimum number of bars required per security
+        filters: Dict of filtering criteria for securities table fields:
+                - sector: str (e.g., 'Technology', 'Healthcare')
+                - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                - locale: str (e.g., 'us', 'ca')
+                - market_cap_min: float (minimum market cap)
+                - market_cap_max: float (maximum market cap)
+                - active: bool (default True if not specified)
         
     Returns:
         numpy.ndarray with requested bar data
@@ -418,9 +578,10 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
         # Use security_ids directly (backward compatibility)
         final_security_ids = security_ids
     
-    return accessor.get_bar_data(timeframe, final_security_ids, columns, min_bars)
+    return accessor.get_bar_data(timeframe, final_security_ids, columns, min_bars, filters)
 
-def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None) -> pd.DataFrame:
+def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None, 
+                     filters: Dict[str, any] = None) -> pd.DataFrame:
     """
     Global function for strategy access to general security data
     
@@ -428,6 +589,14 @@ def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, 
         tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
         security_ids: List of security IDs to fetch (deprecated, use tickers instead)
         columns: Desired columns (None = all available)
+        filters: Dict of filtering criteria for securities table fields:
+                - sector: str (e.g., 'Technology', 'Healthcare')
+                - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                - locale: str (e.g., 'us', 'ca')
+                - market_cap_min: float (minimum market cap)
+                - market_cap_max: float (maximum market cap)
+                - active: bool (default True if not specified)
         
     Returns:
         pandas.DataFrame with general security information

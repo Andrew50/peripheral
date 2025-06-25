@@ -320,11 +320,11 @@ class AccessorStrategyEngine:
         """Create safe execution environment with data accessor functions"""
         
         # Create bound methods that use this engine's data accessor
-        def bound_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1):
-            return self.data_accessor.get_bar_data(timeframe, tickers, columns, min_bars)
+        def bound_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1, filters=None):
+            return self.data_accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters)
         
-        def bound_get_general_data(tickers=None, columns=None):
-            return self.data_accessor.get_general_data(tickers, columns)
+        def bound_get_general_data(tickers=None, columns=None, filters=None):
+            return self.data_accessor.get_general_data(tickers, columns, filters)
         
         safe_globals = {
             # Standard imports
