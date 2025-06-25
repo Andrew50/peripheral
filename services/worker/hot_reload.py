@@ -55,10 +55,12 @@ def start_worker():
         raise FileNotFoundError(f"Worker script {worker_script} not found")
     
     # Use secure subprocess call with validated arguments
+    # Don't capture stdout/stderr so logs are visible
     return subprocess.Popen(  # nosec B603 - controlled subprocess call with validated arguments
         [python_exe, worker_script],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        # Remove stdout and stderr capture to allow logs to show
+        # stdout=subprocess.PIPE,
+        # stderr=subprocess.PIPE
     )
 
 def main():

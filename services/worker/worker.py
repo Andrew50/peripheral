@@ -42,17 +42,30 @@ class StrategyWorker:
     
     def __init__(self):
         self.worker_id = f"worker_{threading.get_ident()}"
+        logger.info(f"🚀 Initializing Strategy Worker {self.worker_id}")
+        
+        # Initialize Redis connection
+        logger.info("📡 Connecting to Redis...")
         self.redis_client = self._init_redis()
+        logger.info("✅ Redis connection established")
+        
+        # Initialize Database connection  
+        logger.info("🗄️ Connecting to Database...")
         self.db_conn = self._init_database()
+        logger.info("✅ Database connection established")
         
         # Import the new data analyzer
+        logger.info("📊 Initializing components...")
         self.data_analyzer = StrategyDataAnalyzer()
         
         self.strategy_engine = NumpyStrategyEngine()
         self.security_validator = SecurityValidator()
         self.strategy_generator = StrategyGenerator()
         
-        logger.info(f"Strategy worker {self.worker_id} initialized")
+        logger.info(f"✅ Strategy worker {self.worker_id} initialized successfully")
+        
+        # Log initial queue status
+        self.log_queue_status()
         
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
@@ -60,7 +73,9 @@ class StrategyWorker:
         redis_port = int(os.environ.get("REDIS_PORT", "6379"))
         redis_password = os.environ.get("REDIS_PASSWORD", "")
         
-        return redis.Redis(
+        logger.info(f"🔗 Connecting to Redis at {redis_host}:{redis_port}")
+        
+        client = redis.Redis(
             host=redis_host,
             port=redis_port,
             password=redis_password if redis_password else None,
@@ -69,6 +84,45 @@ class StrategyWorker:
             socket_timeout=70,  # Must be longer than brpop timeout (60s) + buffer
             health_check_interval=30
         )
+        
+        # Test connection
+        try:
+            client.ping()
+            logger.info(f"✅ Redis connection successful")
+            
+            # Test queue access
+            self._test_queue_access(client)
+            
+        except Exception as e:
+            logger.error(f"❌ Redis connection failed: {e}")
+            raise
+        
+        return client
+
+    def _test_queue_access(self, redis_client: redis.Redis):
+        """Test access to both priority and normal queues"""
+        try:
+            logger.info("🧪 Testing queue access...")
+            
+            # Test priority queue
+            priority_length = redis_client.llen('strategy_queue_priority')
+            logger.info(f"   🔥 Priority queue length: {priority_length}")
+            
+            # Test normal queue
+            normal_length = redis_client.llen('strategy_queue')
+            logger.info(f"   📄 Normal queue length: {normal_length}")
+            
+            # Test publish capability
+            test_channel = "worker_test_channel"
+            test_message = {"test": "message", "timestamp": datetime.utcnow().isoformat()}
+            subscribers = redis_client.publish(test_channel, json.dumps(test_message))
+            logger.info(f"   📡 Publish test - subscribers: {subscribers}")
+            
+            logger.info("✅ Queue access test completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Queue access test failed: {e}")
+            raise
     
     def _init_database(self):
         """Initialize database connection"""
@@ -395,14 +449,23 @@ class StrategyWorker:
     
     def run(self):
         """Main queue processing loop with priority queue support"""
-        logger.info(f"Strategy worker {self.worker_id} starting queue processing...")
+        logger.info(f"🎯 Strategy worker {self.worker_id} starting queue processing...")
+        logger.info("🔍 Queue Processing Order: 1) Priority Queue (strategy_queue_priority), 2) Normal Queue (strategy_queue)")
         
         # Track last queue status log time
         last_status_log = time.time()
         status_log_interval = 300  # Log queue status every 5 minutes
         
+        # Track statistics
+        tasks_processed = 0
+        priority_tasks_processed = 0
+        normal_tasks_processed = 0
+        
         while True:
             try:
+                # Log queue check
+                logger.debug(f"🔄 Checking queues... (Tasks processed: {tasks_processed})")
+                
                 # Check priority queue first (for strategy creation/editing)
                 # Priority queue: strategy_queue_priority (checked first)
                 # Normal queue: strategy_queue (checked second)
@@ -411,25 +474,32 @@ class StrategyWorker:
                 queue_type = "normal"
                 
                 # Try priority queue first with a short timeout
+                logger.debug("🔥 Checking PRIORITY queue (strategy_queue_priority)...")
                 priority_task = self.redis_client.brpop('strategy_queue_priority', timeout=1)
                 if priority_task:
                     task = priority_task
                     queue_type = "priority"
-                    logger.info("Processing task from PRIORITY queue")
+                    priority_tasks_processed += 1
+                    logger.info(f"🌟 Found task in PRIORITY queue! (Total priority tasks: {priority_tasks_processed})")
                 else:
+                    logger.debug("🔥 No tasks in priority queue, checking normal queue...")
                     # If no priority task, check normal queue with longer timeout
                     normal_task = self.redis_client.brpop('strategy_queue', timeout=60)
                     if normal_task:
                         task = normal_task
                         queue_type = "normal"
+                        normal_tasks_processed += 1
+                        logger.info(f"📄 Found task in normal queue (Total normal tasks: {normal_tasks_processed})")
                 
                 if not task:
                     # No task received, check connection and continue
+                    logger.debug("⏳ No tasks found in either queue, checking connections...")
                     self._check_connection()
                     
                     # Periodically log queue status when idle
                     current_time = time.time()
                     if current_time - last_status_log > status_log_interval:
+                        logger.info(f"📊 Worker {self.worker_id} idle - logging queue status...")
                         self.log_queue_status()
                         last_status_log = current_time
                     
@@ -437,35 +507,47 @@ class StrategyWorker:
                     
                 # Parse task
                 _, task_message = task
-                task_data = json.loads(task_message)
+                logger.info(f"📦 Received task message: {task_message[:200]}...")
+                
+                try:
+                    task_data = json.loads(task_message)
+                except json.JSONDecodeError as e:
+                    logger.error(f"❌ Failed to parse task JSON: {e}")
+                    continue
+                    
                 task_id = task_data.get('task_id')
                 task_type = task_data.get('task_type')
                 args = task_data.get('args', {})
+                priority = task_data.get('priority', 'normal')
 
-                logger.info(f"Processing {task_type} task {task_id} from {queue_type} queue")
+                logger.info(f"🎯 Processing {task_type} task {task_id} from {queue_type} queue (Priority: {priority})")
+                tasks_processed += 1
                 
                 # Validate task data
                 if not task_id or not task_type:
-                    logger.error(f"Invalid task data: {task_data}")
+                    logger.error(f"❌ Invalid task data - missing task_id or task_type: {task_data}")
                     continue
                     
                 if task_type not in ['backtest', 'screening', 'alert', 'create_strategy']:
                     error_msg = f"Unknown task type: {task_type}"
-                    logger.error(error_msg)
+                    logger.error(f"❌ {error_msg}")
                     self._set_task_result(task_id, "error", {"error": error_msg})
                     continue
 
                 try:
                     # Set task status to running
+                    logger.info(f"▶️ Starting execution of {task_type} task {task_id}")
                     self._set_task_result(task_id, "running", {
                         "worker_id": self.worker_id,
                         "queue_type": queue_type,
+                        "priority": priority,
                         "started_at": datetime.utcnow().isoformat()
                     })
                     
                     start_time = time.time()
                     
                     # Execute the task
+                    logger.info(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
                     if task_type == 'backtest':
                         result = self._execute_backtest(task_id=task_id, **args)
                     elif task_type == 'screening':
@@ -473,6 +555,7 @@ class StrategyWorker:
                     elif task_type == 'alert':
                         result = self._execute_alert(task_id=task_id, **args)
                     elif task_type == 'create_strategy':
+                        logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
                         result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
                     
                     # Calculate execution time
@@ -482,20 +565,22 @@ class StrategyWorker:
                     result['execution_time_seconds'] = execution_time
                     result['worker_id'] = self.worker_id
                     result['queue_type'] = queue_type
+                    result['priority'] = priority
                     result['completed_at'] = datetime.utcnow().isoformat()
                     
                     self._set_task_result(task_id, "completed", result)
-                    logger.info(f"Completed {task_type} task {task_id} from {queue_type} queue in {execution_time:.2f}s")
+                    logger.info(f"✅ Completed {task_type} task {task_id} from {queue_type} queue in {execution_time:.2f}s")
                     
                 except SecurityError as e:
                     # Security validation error
                     error_result = {
                         "error": f"Security validation failed: {str(e)}",
                         "queue_type": queue_type,
+                        "priority": priority,
                         "completed_at": datetime.utcnow().isoformat()
                     }
                     self._set_task_result(task_id, "error", error_result)
-                    logger.error(f"Security error in task {task_id}: {e}")
+                    logger.error(f"🚨 Security error in task {task_id}: {e}")
                     
                 except Exception as e:
                     # General error - log and set error status
@@ -503,24 +588,29 @@ class StrategyWorker:
                         "error": str(e),
                         "traceback": traceback.format_exc(),
                         "queue_type": queue_type,
+                        "priority": priority,
                         "completed_at": datetime.utcnow().isoformat()
                     }
                     self._set_task_result(task_id, "error", error_result)
-                    logger.error(f"Task execution error in {task_id}: {e}")
+                    logger.error(f"❌ Task execution error in {task_id}: {e}")
+                    logger.error(f"📄 Full traceback: {traceback.format_exc()}")
                     
             except KeyboardInterrupt:
-                logger.info("Received interrupt signal, shutting down worker...")
+                logger.info("🛑 Received interrupt signal, shutting down worker...")
                 break
                 
             except Exception as e:
-                logger.error(f"Unexpected error in main loop: {e}")
+                logger.error(f"💥 Unexpected error in main loop: {e}")
+                logger.error(f"📄 Full traceback: {traceback.format_exc()}")
                 time.sleep(5)  # Brief pause before continuing
         
         # Cleanup
+        logger.info(f"🧹 Cleaning up worker {self.worker_id}...")
+        logger.info(f"📊 Final stats - Total: {tasks_processed}, Priority: {priority_tasks_processed}, Normal: {normal_tasks_processed}")
         self.redis_client.close()
         if self.db_conn:
             self.db_conn.close()
-        logger.info("Worker shutdown complete")
+        logger.info("🏁 Worker shutdown complete")
     
     def _execute_backtest(self, task_id: str = None, symbols: List[str] = None, 
                                start_date: str = None, end_date: str = None, 
@@ -721,37 +811,57 @@ class StrategyWorker:
     
     async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 
                                      prompt: str = None, strategy_id: int = -1, **kwargs) -> Dict[str, Any]:
-        """Execute strategy creation task"""
-        if not user_id or not prompt:
-            raise ValueError("user_id and prompt are required for strategy creation")
+        """Execute strategy creation task with detailed logging"""
+        logger.info(f"🧠 STRATEGY CREATION START - Task: {task_id}")
+        logger.info(f"   👤 User ID: {user_id}")
+        logger.info(f"   📝 Prompt: {prompt}")
+        logger.info(f"   🆔 Strategy ID: {strategy_id} ({'Edit' if strategy_id != -1 else 'New'})")
+        
+        try:
+            # Call the strategy generator
+            logger.info(f"🚀 Calling StrategyGenerator.create_strategy_from_prompt...")
+            result = await self.strategy_generator.create_strategy_from_prompt(
+                user_id=user_id,
+                prompt=prompt,
+                strategy_id=strategy_id
+            )
             
-        if task_id:
-            self._publish_progress(task_id, "initialization", "Starting strategy creation...")
-        
-        logger.info(f"Creating strategy for user {user_id}, prompt: {prompt[:100]}...")
-        
-        if task_id:
-            self._publish_progress(task_id, "generation", "Generating strategy code with OpenAI o3...")
-        
-        # Use the strategy generator to create the strategy
-        result = await self.strategy_generator.create_strategy_from_prompt(
-            user_id=user_id,
-            prompt=prompt,
-            strategy_id=strategy_id
-        )
-        
-        if task_id:
-            if result.get("success"):
-                strategy_data = result.get("strategy", {})
-                self._publish_progress(task_id, "completed", 
-                                     f"Strategy created successfully: {strategy_data.get('name', 'Unknown')}", 
-                                     {"strategy_id": strategy_data.get("strategyId")})
-            else:
-                self._publish_progress(task_id, "error", 
-                                     f"Strategy creation failed: {result.get('error', 'Unknown error')}")
-        
-        logger.info(f"Strategy creation completed: {result.get('success', False)}")
-        return result
+            if task_id:
+                if result.get("success"):
+                    strategy_data = result.get("strategy", {})
+                    logger.info(f"✅ Strategy creation SUCCESS for task {task_id}")
+                    logger.info(f"   📊 Strategy Name: {strategy_data.get('name', 'Unknown')}")
+                    logger.info(f"   🆔 Strategy ID: {strategy_data.get('strategyId', 'Unknown')}")
+                    logger.info(f"   ✅ Validation Passed: {result.get('validation_passed', False)}")
+                    
+                    self._publish_progress(task_id, "completed", 
+                                         f"Strategy created successfully: {strategy_data.get('name', 'Unknown')}", 
+                                         {"strategy_id": strategy_data.get("strategyId")})
+                else:
+                    error_msg = result.get('error', 'Unknown error')
+                    logger.error(f"❌ Strategy creation FAILED for task {task_id}")
+                    logger.error(f"   🚨 Error: {error_msg}")
+                    
+                    self._publish_progress(task_id, "error", 
+                                         f"Strategy creation failed: {error_msg}")
+            
+            logger.info(f"🏁 Strategy creation completed for task {task_id}: Success={result.get('success', False)}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"💥 CRITICAL ERROR in strategy creation task {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+            
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            
+            if task_id:
+                self._publish_progress(task_id, "error", f"Critical error: {str(e)}")
+            
+            return error_result
     
     def _publish_progress(self, task_id: str, stage: str, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks"""
@@ -765,11 +875,25 @@ class StrategyWorker:
                 "updated_at": datetime.utcnow().isoformat()
             }
             
-            self.redis_client.publish("worker_task_updates", json.dumps(progress_update))
-            logger.info(f"Progress: {stage} - {message}")
+            # Publish to Redis
+            channel = "worker_task_updates"
+            message_json = json.dumps(progress_update)
+            
+            logger.info(f"📡 Publishing progress update for {task_id}: {stage} - {message}")
+            logger.debug(f"   📤 Channel: {channel}")
+            logger.debug(f"   📄 Message: {message_json}")
+            
+            result = self.redis_client.publish(channel, message_json)
+            logger.debug(f"   👥 Subscribers notified: {result}")
+            
+            if result == 0:
+                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+            else:
+                logger.debug(f"✅ Progress update published successfully to {result} subscribers")
             
         except Exception as e:
-            logger.error(f"Failed to publish progress for {task_id}: {e}")
+            logger.error(f"❌ Failed to publish progress for {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
 
     def _set_task_result(self, task_id: str, status: str, data: Dict[str, Any]):
         """Set task result in Redis and publish update"""
@@ -782,7 +906,15 @@ class StrategyWorker:
             }
             
             # Store result with 24 hour expiration
-            self.redis_client.setex(f"task_result:{task_id}", 86400, json.dumps(result))
+            result_key = f"task_result:{task_id}"
+            result_json = json.dumps(result)
+            
+            logger.info(f"💾 Setting task result for {task_id}: {status}")
+            logger.debug(f"   🔑 Key: {result_key}")
+            logger.debug(f"   📄 Data: {result_json[:200]}...")
+            
+            self.redis_client.setex(result_key, 86400, result_json)
+            logger.debug(f"✅ Task result stored successfully")
             
             # Publish task update for real-time notifications
             update_message = {
@@ -795,10 +927,25 @@ class StrategyWorker:
             if status == "error":
                 update_message["error_message"] = data.get("error", "Unknown error")
             
-            self.redis_client.publish("worker_task_updates", json.dumps(update_message))
+            # Publish to Redis
+            channel = "worker_task_updates"
+            update_json = json.dumps(update_message)
+            
+            logger.info(f"📡 Publishing task update for {task_id}: {status}")
+            logger.debug(f"   📤 Channel: {channel}")
+            logger.debug(f"   📄 Update: {update_json[:200]}...")
+            
+            subscribers = self.redis_client.publish(channel, update_json)
+            logger.debug(f"   👥 Subscribers notified: {subscribers}")
+            
+            if subscribers == 0:
+                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+            else:
+                logger.debug(f"✅ Task update published successfully to {subscribers} subscribers")
             
         except Exception as e:
-            logger.error(f"Failed to set task result for {task_id}: {e}")
+            logger.error(f"❌ Failed to set task result for {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
     
     def _check_connection(self):
         """Check and restore Redis and Database connections if needed"""
@@ -992,5 +1139,37 @@ def clear_queue(redis_client: redis.Redis, queue_name: str) -> int:
 
 
 if __name__ == "__main__":
-    worker = StrategyWorker()
-    worker.run()
+    # Print startup banner
+    print("=" * 80)
+    print("🚀 ATLANTIS STRATEGY WORKER STARTING UP")
+    print("=" * 80)
+    print(f"📅 Startup Time: {datetime.utcnow().isoformat()}")
+    print(f"🐍 Python Version: {sys.version}")
+    print(f"🏷️  Worker Process ID: {os.getpid()}")
+    print("=" * 80)
+    
+    logger.info("🎬 WORKER STARTUP INITIATED")
+    logger.info("🔧 Priority Queue System: ENABLED")
+    logger.info("📋 Supported Task Types: backtest, screening, alert, create_strategy")
+    
+    try:
+        # Initialize and start worker
+        logger.info("🏗️ Initializing worker...")
+        worker = StrategyWorker()
+        
+        logger.info("🎯 Starting main processing loop...")
+        worker.run()
+        
+    except KeyboardInterrupt:
+        logger.info("🛑 Received keyboard interrupt - shutting down gracefully")
+        print("\n🛑 Worker shutdown requested by user")
+        
+    except Exception as e:
+        logger.error(f"💥 FATAL ERROR during worker startup: {e}")
+        logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+        print(f"\n💥 FATAL ERROR: {e}")
+        raise
+        
+    finally:
+        logger.info("🏁 Worker process ending")
+        print("🏁 Worker process ended")
