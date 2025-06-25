@@ -49,4 +49,12 @@ body {
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+    /* Prevent overscroll/bounce effects */
+    overscroll-behavior: none;
+    /* Prevent pull-to-refresh on mobile */
+    overscroll-behavior-y: none;
+    /* Ensure fixed positioning */
+    position: fixed;
+    top: 0;
+    left: 0;
 }

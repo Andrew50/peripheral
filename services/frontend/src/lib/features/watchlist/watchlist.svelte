@@ -337,7 +337,7 @@
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-				<div class="watchlist-selector glass glass--rounded glass--medium">
+				<div class="watchlist-selector">
 		<select
 			class="default-select"
 			id="watchlists"
@@ -360,20 +360,10 @@
 						{/if}
 					</optgroup>
 				</select>
-				{#if !showWatchlistInput}
-					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
-					<!--<button
-						class="utility-button new-watchlist-button glass glass--small glass--light"
-						title="New Watchlist"
-						on:click={() => selectWatchlist('new')}
-					>
-						<span>+</span>
-					</button>-->
-				{/if}
 			</div>
 
 			{#if showWatchlistInput}
-				<div class="new-watchlist-container glass glass--rounded glass--medium">
+				<div class="new-watchlist-container">
 					<input
 						class="input"
 						bind:this={newNameInput}
@@ -388,40 +378,47 @@
 						placeholder="New Watchlist Name"
 					/>
 					<div class="new-watchlist-buttons">
-						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}>✓</button>
-						<button class="utility-button glass glass--small glass--light" on:click={closeNewWatchlistWindow}>✕</button>
+						<button class="utility-button" on:click={newWatchlist}>✓</button>
+						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
 					</div>
 				</div>
 			{/if}
 		{/if}
 	</div>
 
-	<!-- Shortcut buttons between controls and list -->
-	<div class="shortcut-container glass glass--rounded glass--light">
-		{#if Array.isArray($watchlists)}
-			{#each $watchlists as watchlist}
-				<button
-					class="shortcut-button glass glass--small glass--light {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
-					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
-					title={watchlist.watchlistName}
-				>
-					{#if watchlist.watchlistName.toLowerCase() === 'flag'}
-						<span class="flag-shortcut-icon">
-							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M5 5v14"></path>
-								<path d="M19 5l-6 4 6 4-6 4"></path>
-							</svg>
-						</span>
-					{:else}
-						{getWatchlistInitial(watchlist.watchlistName)}
-					{/if}
-				</button>
-			{/each}
+	<!-- Shortcut buttons -->
+	<div class="shortcut-container">
+		<div class="watchlist-shortcuts">
+			{#if Array.isArray($watchlists)}
+				{#each $watchlists as watchlist}
+					<button
+						class="shortcut-button {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+						on:click={() => selectWatchlist(String(watchlist.watchlistId))}
+						title={watchlist.watchlistName}
+					>
+						{#if watchlist.watchlistName.toLowerCase() === 'flag'}
+							<span class="flag-shortcut-icon">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M5 5v14"></path>
+									<path d="M19 5l-6 4 6 4-6 4"></path>
+								</svg>
+							</span>
+						{:else}
+							{getWatchlistInitial(watchlist.watchlistName)}
+						{/if}
+					</button>
+				{/each}
+			{/if}
+		</div>
+		
+		<!-- Add button on the same line -->
+		{#if !showWatchlistInput}
+			<button class="add-item-button shortcut-button" title="Add Symbol" on:click={addInstance}>+</button>
 		{/if}
 	</div>
-
+	
 	<!-- Wrap List component for scrolling -->
-	<div class="list-scroll-container glass glass--rounded glass--medium">
+	<div class="list-scroll-container">
 		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
@@ -435,78 +432,60 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 12px;
+		padding: 6px 12px;
 	}
 
 	.watchlist-selector select {
-		flex: 1;
-		min-width: 200px;
-		background: rgba(0, 0, 0, 0.3);
+		flex: 0 1 auto;
+		min-width: fit-content;
+		max-width: clamp(150px, 25vw, 200px);
+		width: auto;
+		background: transparent;
 		color: #ffffff;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
-		padding: 8px 32px 8px 12px;
-		font-size: 14px;
+		border: none;
+		border-radius: clamp(6px, 1vw, 8px);
+		padding: clamp(6px, 1vw, 8px) clamp(20px, 3vw, 24px) clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
+		font-size: clamp(0.7rem, 0.5rem + 0.5vw, 0.875rem);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
 		appearance: none;
 		-webkit-appearance: none;
 		-moz-appearance: none;
 		background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
 		background-repeat: no-repeat;
-		background-position: right 8px center;
-		background-size: 16px;
+		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
+		background-size: clamp(10px, 1.5vw, 14px);
 	}
 
 	.watchlist-selector select:hover {
-		border-color: rgba(255, 255, 255, 0.4);
+		background: rgba(255, 255, 255, 0.15) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
+		background-size: clamp(10px, 1.5vw, 14px);
 	}
 
-	.watchlist-selector select:focus {
-		border-color: rgba(255, 255, 255, 0.6);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+	.watchlist-selector select:focus,
+	.watchlist-selector select:focus-visible {
+		background: rgba(255, 255, 255, 0.15) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
+		background-size: clamp(10px, 1.5vw, 14px);
 		outline: none;
 	}
 
-	.watchlist-selector .utility-button {
-		color: #ffffff;
-		width: 36px;
-		height: 36px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 18px;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-	}
-
-	.watchlist-selector .utility-button:hover {
-		background: rgba(255, 255, 255, 0.1);
-		border-color: rgba(255, 255, 255, 0.4);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-	}
-
-	.watchlist-selector .new-watchlist-button {
-		font-size: 14px;
-		position: relative;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.watchlist-selector .new-watchlist-button .list-icon {
-		font-size: 12px;
-		position: absolute;
-		right: 4px;
-		bottom: 2px;
+	.watchlist-selector select:not(:focus):not(:hover) {
+		background: transparent url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background-repeat: no-repeat;
+		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
+		background-size: clamp(10px, 1.5vw, 14px);
 	}
 
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
 		animation: slideDown 0.2s ease-out;
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
 	}
 
 	@keyframes slideDown {
@@ -562,48 +541,81 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
 	}
 
 	.new-watchlist-buttons .utility-button:hover {
 		background: rgba(255, 255, 255, 0.1);
 		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
 	.shortcut-container {
 		display: flex;
-		gap: 6px;
+		justify-content: space-between;
+		align-items: center;
 		padding: 12px;
+		width: 100%;
+	}
+
+	.watchlist-shortcuts {
+		display: flex;
+		gap: 6px;
 		flex-wrap: wrap;
 	}
 
 	.shortcut-button {
-		padding: 8px 12px;
+		padding: 0;
 		color: #ffffff;
-		font-size: 14px;
+		font-size: 0.65rem;
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		transition: all 0.2s ease;
-		min-width: 36px;
-		height: 36px;
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		min-height: 24px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 50%;
 	}
 
 	.shortcut-button:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.9);
 		border-color: rgba(255, 255, 255, 0.4);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		color: #000;
 	}
 
 	.shortcut-button.active {
 		background: rgba(255, 255, 255, 0.2);
 		color: #ffffff;
 		border-color: rgba(255, 255, 255, 0.6);
-		box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
+	}
+
+	.add-item-button {
+		color: #ffffff;
+		width: clamp(28px, 4vw, 32px);
+		height: clamp(28px, 4vw, 32px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: clamp(1rem, 0.7rem + 0.6vw, 1.2rem);
+		font-weight: 300;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		background: transparent;
+		border: none;
+		border-radius: 6px;
+		transition: none;
+	}
+
+	.add-item-button:hover {
+		background: rgba(255, 255, 255, 0.2);
+		color: #ffffff;
 	}
 
 	.feature-container {
@@ -614,7 +626,7 @@
 		background: transparent;
 		border-radius: 0;
 		overflow: visible;
-		padding: 12px;
+		padding: clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 1rem);
 	}
 
 	.controls-container {
@@ -663,6 +675,9 @@
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
 		padding: 4px;
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
 	}
 
 	/* Custom scrollbar for WebKit browsers */
@@ -693,8 +708,8 @@
 		justify-content: center;
 	}
 	.flag-shortcut-icon svg {
-		width: 14px;
-		height: 14px;
+		width: 10px;
+		height: 10px;
 		color: #4a80f0;
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
