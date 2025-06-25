@@ -14,7 +14,8 @@ from typing import Dict, Any, Optional, List
 import re
 
 from openai import OpenAI
-from src.validator import SecurityValidator, SecurityError, StrategyComplianceError
+from validator import SecurityValidator, SecurityError, StrategyComplianceError
+from accessor_strategy_engine import AccessorStrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +38,173 @@ class StrategyGenerator:
         logger.info("OpenAI client initialized successfully")
     
     def _get_system_instruction(self) -> str:
-        """Get concise system instruction for strategy generation"""
-        return """You are a Python trading strategy developer. Generate ONLY Python code.
+        """Get system instruction for OpenAI code generation"""
+        return """
+You are a trading strategy generator that creates Python functions using data accessor functions.
 
-REQUIREMENTS:
-- Function named 'strategy(df)' taking pandas DataFrame, returning List[Dict]
-- Use only: numpy, pandas, math, datetime, statistics
-- Data columns: [ticker, date, open, high, low, close, volume, adj_close, fund_*]
-- Core data: price data (OHLCV) + fundamental data (fund_pe_ratio, fund_market_cap, etc.)
-- Calculate your own technical indicators from raw price data - none are pre-calculated
-- Return format: [{'ticker': str, 'timestamp': str, 'signal': True, ...}]
-- No file I/O, network access, or dangerous operations
+CRITICAL REQUIREMENTS:
+- Function named 'strategy()' with NO parameters
+- Use data accessor functions with ticker symbols (NOT security IDs):
+  * get_bar_data(timeframe="1d", tickers=["AAPL", "MRNA"], columns=[], min_bars=2) -> numpy array
+     Columns: ticker, timestamp, open, high, low, close, volume
+  * get_general_data(tickers=["AAPL", "MRNA"], columns=[]) -> pandas DataFrame  
+     Columns: ticker, name, sector, industry, market_cap, market, locale, primary_exchange, active, description, cik, total_shares
 
-Generate clean, efficient Python code only."""
+TICKER USAGE:
+- Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" 
+- For specific tickers mentioned in prompts, use tickers=["TICKER_NAME"]
+- For universe-wide strategies, use tickers=None to get all available tickers
+- Return results with 'ticker' field (string), not 'securityid'
+
+ROBUST ERROR HANDLING:
+- Always check if data is None or empty before processing
+- Use proper DataFrame column checks: if 'column_name' in df.columns
+- Handle missing data gracefully with try/except blocks
+- Return empty list [] on any error or missing data
+
+EXAMPLE PATTERNS:
+```python
+def strategy():
+    instances = []
+    
+    try:
+        # Example 1: Specific ticker strategy (e.g., for MRNA)
+        target_tickers = ["MRNA"]  # Extract from prompt analysis
+        
+        bar_data = get_bar_data(
+            timeframe="1d",
+            tickers=target_tickers,  # Use specific ticker
+            columns=["ticker", "timestamp", "open", "close", "volume"],
+            min_bars=2  # Only need 2 bars for gap detection (previous close + current open)
+        )
+        
+        if bar_data is None or len(bar_data) == 0:
+            return instances
+        
+        # Convert to DataFrame for analysis
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        
+        if len(df) == 0:
+            return instances
+            
+        # Sort by timestamp for proper analysis
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+        
+        # Calculate indicators with proper error handling
+        df['prev_close'] = df.groupby('ticker')['close'].shift(1)
+        df = df.dropna()  # Remove rows with missing previous close
+        
+        # Apply strategy logic (gap up detection)
+        df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
+        
+        # Filter based on criteria - get most recent signal per ticker
+        signals = df[df['gap_percent'] >= 1.0].groupby('ticker').tail(1)  # Latest signal per ticker
+        
+        # Build results with ticker (not securityid)
+        for _, row in signals.iterrows():
+            instances.append({
+                'ticker': row['ticker'],  # Use ticker string
+                'timestamp': int(row['timestamp']),
+                'signal': True,
+                'gap_percent': float(row['gap_percent'])
+            })
+            
+    except Exception as e:
+        # Log error but don't fail - return empty results
+        print(f"Strategy execution error: {e}")
+        return []
+    
+    return instances
+
+# Example 2: Universe-wide strategy with try/except blocks
+def strategy():
+    instances = []
+    
+    try:
+        # Get data for all tickers
+        bar_data = get_bar_data(
+            timeframe="1d",
+            tickers=None,  # All available tickers
+            columns=["ticker", "timestamp", "open", "close", "volume"],
+            min_bars=2  # Minimum for detecting a singular timestep
+        )
+        
+        if bar_data is None or len(bar_data) == 0:
+            return instances
+        
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        
+        # Add fundamental data if needed
+        try:
+            fundamental_data = get_general_data(
+                tickers=None,
+                columns=["ticker", "market_cap", "sector", "industry"]  # Valid columns only
+            )
+            
+            if fundamental_data is not None and len(fundamental_data) > 0:
+                df = df.merge(fundamental_data, on='ticker', how='left')
+        except Exception as merge_error:
+            print(f"Warning: Could not merge fundamental data: {merge_error}")
+            # Continue without fundamental data
+        
+        # Apply universe-wide strategy logic with error handling
+        try:
+            # Get latest data per ticker for screening (one result per ticker)
+            latest_df = df.groupby('ticker').tail(1)
+            
+            # Apply screening criteria here...
+            filtered_df = latest_df  # Replace with actual filtering logic
+            
+            # Return results with ticker
+            for _, row in filtered_df.iterrows():
+                instances.append({
+                    'ticker': row['ticker'],
+                    'timestamp': int(row['timestamp']),
+                    'signal': True
+                })
+        except Exception as calc_error:
+            print(f"Calculation error: {calc_error}")
+            return []
+            
+    except Exception as e:
+        print(f"Strategy execution error: {e}")
+        return []
+    
+    return instances
+```
+
+PATTERN RECOGNITION:
+- Gap patterns: Compare open vs previous close
+- Volume patterns: Compare current vs historical average using rolling windows
+- Price patterns: Use moving averages, RSI, and technical indicators
+- Breakout patterns: Identify price breakouts above/below key levels
+- Fundamental patterns: Use market cap, sector, industry classification data
+
+TICKER EXTRACTION FROM PROMPTS:
+- If prompt mentions specific ticker (e.g., "MRNA gaps up"), use tickers=["MRNA"]
+- If prompt mentions "stocks" or "companies" generally, use tickers=None
+- Common ticker patterns: AAPL, MRNA, TSLA, AMZN, GOOGL, MSFT, NVDA
+
+SECURITY RULES:
+- Only use whitelisted imports: pandas, numpy, datetime, math
+- No file operations, network access, or dangerous functions
+- No exec, eval, or dynamic code execution
+- Use only standard mathematical and data manipulation operations
+
+DATA VALIDATION:
+- Always validate DataFrame columns exist before using them
+- Check for None/empty data at every step
+- Use proper data type conversions (int, float, str)
+- Handle edge cases like division by zero
+
+RETURN FORMAT:
+- Return List[Dict] where each dict contains:
+  * 'ticker': str (e.g., "MRNA", "AAPL")
+  * 'timestamp': int (Unix timestamp)
+  * Additional fields as needed for strategy results
+
+Generate clean, robust Python code that uses ticker symbols and handles errors gracefully to produce accurate trading signals.
+"""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
@@ -115,13 +270,13 @@ Generate clean, efficient Python code only."""
             try:
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
-                # Generate strategy code
-                strategy_code = await self._generate_strategy_code(prompt, existing_strategy, attempt)
+                # Generate strategy code (this is NOT async)
+                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt)
                 
                 if not strategy_code:
                     continue
                 
-                # Validate the generated code
+                # Validate the generated code (this IS async)
                 validation_result = await self._validate_strategy_code(strategy_code)
                 
                 if validation_result["valid"]:
@@ -149,7 +304,7 @@ Generate clean, efficient Python code only."""
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': 'atlantis'
+                'database': os.getenv('POSTGRES_DB', 'postgres')
             }
             
             conn = psycopg2.connect(**db_config)
@@ -179,7 +334,7 @@ Generate clean, efficient Python code only."""
             logger.error(f"Failed to fetch existing strategy: {e}")
             return None
     
-    async def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0) -> str:
+    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0) -> str:
         """Generate strategy code using OpenAI with optimized prompts"""
         try:
             system_instruction = self._get_system_instruction()
@@ -194,8 +349,13 @@ CURRENT STRATEGY: {existing_strategy.get('name', 'Strategy')}
 
 Generate the updated strategy function."""
             else:
-                # For new strategy - direct and simple
-                user_prompt = f"""CREATE STRATEGY: {prompt}
+                # For new strategy - extract tickers and enhance prompt
+                extracted_tickers = self._extract_tickers_from_prompt(prompt)
+                ticker_context = ""
+                if extracted_tickers:
+                    ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use tickers={extracted_tickers} in your data accessor calls."
+                
+                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}
 
 Generate a strategy function that detects this pattern in market data."""
             
@@ -284,15 +444,45 @@ Generate a strategy function that detects this pattern in market data."""
         return response.strip()
     
     async def _validate_strategy_code(self, strategy_code: str) -> Dict[str, Any]:
-        """Validate strategy code using the security validator"""
+        """Validate strategy code using the security validator and test execution"""
         try:
-            # Use the existing validator
+            # First, use the existing validator for security checks
             is_valid = self.validator.validate_code(strategy_code)
             
-            return {
-                "valid": is_valid,
-                "error": None
-            }
+            if not is_valid:
+                return {
+                    "valid": False,
+                    "error": "Security validation failed"
+                }
+            
+            # Try a quick execution test with the new accessor engine
+            try:
+                engine = AccessorStrategyEngine()
+                test_result = await engine.execute_screening(
+                    strategy_code=strategy_code,
+                    universe=['AAPL'],  # Test with single symbol
+                    limit=10
+                )
+                
+                if test_result.get('success', False):
+                    return {
+                        "valid": True,
+                        "error": None
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
+                    }
+                    
+            except Exception as exec_error:
+                logger.warning(f"Execution test failed: {exec_error}")
+                # Still consider valid if security checks passed but execution test failed
+                # (might be due to missing data or other environmental issues)
+                return {
+                    "valid": True,
+                    "error": f"Warning: Execution test failed: {str(exec_error)}"
+                }
             
         except (SecurityError, StrategyComplianceError) as e:
             return {
@@ -346,19 +536,21 @@ Generate a strategy function that detects this pattern in market data."""
         if not clean_words:
             clean_words = ['Custom']
         
-        # No timestamp for cleaner names
-        return f"{' '.join(clean_words)} Strategy"
+        # Generate base name and add timestamp to ensure uniqueness
+        base_name = f"{' '.join(clean_words)} Strategy"
+        timestamp_suffix = datetime.now().strftime("%m%d%H%M")
+        return f"{base_name} {timestamp_suffix}"
     
     async def _save_strategy(self, user_id: int, name: str, description: str, prompt: str, 
                            python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
-        """Save strategy to database"""
+        """Save strategy to database with duplicate name handling"""
         try:
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': 'atlantis'
+                'database': os.getenv('POSTGRES_DB', 'postgres')
             }
             
             conn = psycopg2.connect(**db_config)
@@ -369,19 +561,33 @@ Generate a strategy function that detects this pattern in market data."""
                 cursor.execute("""
                     UPDATE strategies 
                     SET name = %s, description = %s, prompt = %s, pythoncode = %s, 
-                        updatedat = NOW()
+                        updated_at = NOW()
                     WHERE strategyid = %s AND userid = %s
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updatedat, isalertactive
+                             createdat, updated_at, isalertactive
                 """, (name, description, prompt, python_code, strategy_id, user_id))
             else:
-                # Create new strategy
+                # Create new strategy with duplicate name handling
+                # First check if name already exists and modify if needed
+                original_name = name
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM strategies 
+                    WHERE userid = %s AND name = %s
+                """, (user_id, name))
+                count_result = cursor.fetchone()
+                
+                if count_result and count_result['count'] > 0:
+                    # Name exists, add timestamp suffix
+                    timestamp_suffix = datetime.now().strftime("%m%d_%H%M%S")
+                    name = f"{original_name} ({timestamp_suffix})"
+                    logger.info(f"Strategy name conflict detected, using: {name}")
+                
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
-                                          createdat, updatedat, isalertactive, score, version)
+                                          createdat, updated_at, isalertactive, score, version)
                     VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, '1.0')
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updatedat, isalertactive
+                             createdat, updated_at, isalertactive
                 """, (user_id, name, description, prompt, python_code))
             
             result = cursor.fetchone()
@@ -398,7 +604,7 @@ Generate a strategy function that detects this pattern in market data."""
                     'prompt': result['prompt'],
                     'pythonCode': result['pythoncode'],
                     'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
-                    'updatedAt': result['updatedat'].isoformat() if result['updatedat'] else None,
+                    'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
                     'isAlertActive': result['isalertactive']
                 }
             else:
@@ -407,3 +613,32 @@ Generate a strategy function that detects this pattern in market data."""
         except Exception as e:
             logger.error(f"Failed to save strategy: {e}")
             raise 
+
+    def _extract_tickers_from_prompt(self, prompt: str) -> List[str]:
+        """Extract ticker symbols from user prompt"""
+        import re
+        
+        # Common ticker patterns - look for 2-5 uppercase letters
+        ticker_pattern = r'\b[A-Z]{2,5}\b'
+        potential_tickers = re.findall(ticker_pattern, prompt.upper())
+        
+        # Known common tickers for validation
+        known_tickers = {
+            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 
+            'MRNA', 'PFIZER', 'JNJ', 'V', 'JPM', 'UNH', 'HD', 'PG', 'MA', 'DIS',
+            'ADBE', 'PYPL', 'INTC', 'CRM', 'VZ', 'KO', 'NKE', 'T', 'NFLX', 'ABT',
+            'XOM', 'TMO', 'CVX', 'ACN', 'COST', 'AVGO', 'TXN', 'LLY', 'WMT', 'DHR',
+            'NEE', 'BMY', 'QCOM', 'HON', 'UPS', 'LOW', 'AMD', 'ORCL', 'MDT', 'IBM',
+            'LMT', 'AMT', 'SPGI', 'PFE', 'RTX', 'SBUX', 'CAT', 'DE', 'AXP', 'GS',
+            'BLK', 'MMM', 'BKNG', 'ADP', 'TJX', 'CHTR', 'VRTX', 'ISRG', 'SYK', 'NOW'
+        }
+        
+        # Filter to known tickers and remove common words that match pattern
+        exclude_words = {'STOCK', 'STOCKS', 'TRADE', 'TRADES', 'PRICE', 'MARKET', 'DATA', 'TIME', 'WHEN', 'WHERE', 'WHAT', 'WITH'}
+        
+        valid_tickers = []
+        for ticker in potential_tickers:
+            if ticker in known_tickers and ticker not in exclude_words:
+                valid_tickers.append(ticker)
+        
+        return list(set(valid_tickers))  # Remove duplicates

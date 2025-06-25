@@ -5,7 +5,12 @@
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist, isPublicViewing } from '$lib/utils/stores/stores';
+	import {
+		flagWatchlistId,
+		watchlists,
+		flagWatchlist,
+		isPublicViewing
+	} from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -95,7 +100,11 @@
 
 		// Subscribe to watchlists store to select initial watchlist when list arrives
 		const unsubscribeWatchlists = watchlists.subscribe((list) => {
-			if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
+			if (
+				Array.isArray(list) &&
+				list.length > 0 &&
+				(currentWatchlistId === undefined || isNaN(currentWatchlistId))
+			) {
 				selectWatchlist(String(list[0].watchlistId));
 			}
 		});
@@ -111,29 +120,31 @@
 			return;
 		}
 
-		const inst = { ticker: ''};
-		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
-			const aList = get(activeList);
-			const empty = !Array.isArray(aList);
-			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
-				privateRequest<number>('newWatchlistItem', {
-					watchlistId: currentWatchlistId,
-					securityId: i.securityId
-				}).then((watchlistItemId: number) => {
-					activeList.update((v: WatchlistItem[]) => {
-						i.watchlistItemId = watchlistItemId;
-						if (empty) {
-							return [i];
-						} else {
-							return [...v, i];
-						}
+		const inst = { ticker: '' };
+		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then(
+			(i: WatchlistItem) => {
+				const aList = get(activeList);
+				const empty = !Array.isArray(aList);
+				if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
+					privateRequest<number>('newWatchlistItem', {
+						watchlistId: currentWatchlistId,
+						securityId: i.securityId
+					}).then((watchlistItemId: number) => {
+						activeList.update((v: WatchlistItem[]) => {
+							i.watchlistItemId = watchlistItemId;
+							if (empty) {
+								return [i];
+							} else {
+								return [...v, i];
+							}
+						});
 					});
-				});
+				}
+				setTimeout(() => {
+					addInstance();
+				}, 1);
 			}
-			setTimeout(() => {
-				addInstance();
-			}, 1);
-		});
+		);
 	}
 
 	function newWatchlist() {
@@ -251,26 +262,26 @@
 			activeList = flagWatchlist; // Point to the global store
 
 			// Fetch items and update the GLOBAL flagWatchlist store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-				(v: WatchlistItem[]) => {
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+				.then((v: WatchlistItem[]) => {
 					flagWatchlist.set(v || []); // Update the global store
-				}
-			).catch(err => {
-				flagWatchlist.set([]); // Set global store empty on error
-			});
+				})
+				.catch((err) => {
+					flagWatchlist.set([]); // Set global store empty on error
+				});
 		} else {
 			// For regular watchlists, create a new local writable store
-			activeList = writable<WatchlistItem[]>([]); 
+			activeList = writable<WatchlistItem[]>([]);
 			currentWatchlistId = watchlistId;
 
 			// Fetch items and update the LOCAL activeList store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-				(v: WatchlistItem[]) => {
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+				.then((v: WatchlistItem[]) => {
 					activeList.set(v || []); // Update the local store
-				}
-			).catch(err => {
-				activeList.set([]); // Set local store empty on error
-			});
+				})
+				.catch((err) => {
+					activeList.set([]); // Set local store empty on error
+				});
 		}
 	}
 
@@ -330,26 +341,23 @@
 		currentWatchlistId = parseInt(value, 10);
 		selectWatchlist(value);
 	}
-
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-				<div class="watchlist-selector">
-		<select
-			class="default-select"
-			id="watchlists"
-			value={currentWatchlistId?.toString()}
-			on:change={handleWatchlistChange}
-		>
+			<div class="watchlist-selector">
+				<select
+					class="default-select"
+					id="watchlists"
+					value={currentWatchlistId?.toString()}
+					on:change={handleWatchlistChange}
+				>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
-								{watchlist.watchlistName === 'flag'
-									? 'Flag (Protected)'
-									: watchlist.watchlistName}
+								{watchlist.watchlistName === 'flag' ? 'Flag (Protected)' : watchlist.watchlistName}
 							</option>
 						{/each}
 					</optgroup>
@@ -398,7 +406,15 @@
 					>
 						{#if watchlist.watchlistName.toLowerCase() === 'flag'}
 							<span class="flag-shortcut-icon">
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
 									<path d="M5 5v14"></path>
 									<path d="M19 5l-6 4 6 4-6 4"></path>
 								</svg>
@@ -410,13 +426,15 @@
 				{/each}
 			{/if}
 		</div>
-		
+
 		<!-- Add button on the same line -->
 		{#if !showWatchlistInput}
-			<button class="add-item-button shortcut-button" title="Add Symbol" on:click={addInstance}>+</button>
+			<button class="add-item-button shortcut-button" title="Add Symbol" on:click={addInstance}
+				>+</button
+			>
 		{/if}
 	</div>
-	
+
 	<!-- Wrap List component for scrolling -->
 	<div class="list-scroll-container">
 		<WatchlistList
@@ -444,7 +462,8 @@
 		color: #ffffff;
 		border: none;
 		border-radius: clamp(6px, 1vw, 8px);
-		padding: clamp(6px, 1vw, 8px) clamp(20px, 3vw, 24px) clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
+		padding: clamp(6px, 1vw, 8px) clamp(20px, 3vw, 24px) clamp(6px, 1vw, 8px)
+			clamp(8px, 1.5vw, 12px);
 		font-size: clamp(0.7rem, 0.5rem + 0.5vw, 0.875rem);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		appearance: none;
@@ -457,7 +476,8 @@
 	}
 
 	.watchlist-selector select:hover {
-		background: rgba(255, 255, 255, 0.15) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background: rgba(255, 255, 255, 0.15)
+			url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
 		background-repeat: no-repeat;
 		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
 		background-size: clamp(10px, 1.5vw, 14px);
@@ -465,7 +485,8 @@
 
 	.watchlist-selector select:focus,
 	.watchlist-selector select:focus-visible {
-		background: rgba(255, 255, 255, 0.15) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background: rgba(255, 255, 255, 0.15)
+			url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
 		background-repeat: no-repeat;
 		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
 		background-size: clamp(10px, 1.5vw, 14px);
@@ -473,7 +494,8 @@
 	}
 
 	.watchlist-selector select:not(:focus):not(:hover) {
-		background: transparent url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+		background: transparent
+			url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
 		background-repeat: no-repeat;
 		background-position: calc(100% - clamp(4px, 0.8vw, 6px)) center;
 		background-size: clamp(10px, 1.5vw, 14px);

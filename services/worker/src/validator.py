@@ -1,22 +1,17 @@
 """
 Security Validator
-Validates Python code for security issues before execution and ensures compliance with DataFrame strategy requirements.
+Validates Python code for security issues before execution and ensures compliance with data accessor strategy requirements.
 
 The strategy engine expects functions that:
-1. Accept a single parameter: df (pandas.DataFrame)
+1. Accept no parameters (use get_bar_data() and get_general_data() instead)
 2. Return a list of dictionaries with 'ticker' and 'timestamp' fields
 3. Use only approved safe modules (pandas, numpy, math, datetime, etc.)
-4. Do not access dangerous system functions or attributes
+4. Use get_bar_data() and get_general_data() functions to fetch required data
+5. Do not access dangerous system functions or attributes
 
-The data provided will be a pandas DataFrame with raw market data:
-- ticker (string): Stock ticker symbol
-- date (datetime): Date of the data point  
-- open (float): Opening price
-- high (float): High price
-- low (float): Low price
-- close (float): Close price
-- volume (int): Trading volume
-- Additional columns for fundamental data (fund_*)
+Available data accessor functions:
+- get_bar_data(timeframe, security_ids, columns, min_bars): Returns numpy array with OHLCV data
+- get_general_data(security_ids, columns): Returns pandas DataFrame with security metadata
 """
 
 import ast
@@ -75,7 +70,7 @@ class SecurityValidator:
             "id", "hash", "repr", "ascii", "bin", "hex", "oct",
         }
         
-        # Explicitly allowed built-in functions for DataFrame processing
+        # Explicitly allowed built-in functions for strategy processing
         self.allowed_functions = {
             # Type conversions needed for pandas
             "int", "float", "str", "bool", "list", "dict", "tuple", "set",
@@ -89,7 +84,9 @@ class SecurityValidator:
             # Object creation
             "slice", "complex", "frozenset", "object", "format",
             # Safe console output
-            "print"
+            "print",
+            # Data accessor functions
+            "get_bar_data", "get_general_data"
         }
 
         # Forbidden modules (exhaustive security list)
@@ -158,15 +155,13 @@ class SecurityValidator:
             "__subclasscheck__", "__call__", "__enter__", "__exit__",
         }
 
-        # Strategy requirements - updated for DataFrame approach
+        # Strategy requirements - updated for data accessor approach
         self.required_instance_fields = {"ticker", "timestamp"}
-        self.reserved_global_names = {"pd", "pandas", "np", "numpy", "df", "datetime", "timedelta", "math"}
+        self.reserved_global_names = {"pd", "pandas", "np", "numpy", "datetime", "timedelta", "math", 
+                                     "get_bar_data", "get_general_data"}
         
-        # DataFrame fields that will always be available in raw market data
-        self.available_data_fields = {
-            "ticker", "date", "open", "high", "low", "close", "volume",
-            "timestamp", "datetime", "time"
-        }
+        # Data accessor function names
+        self.data_accessor_functions = {"get_bar_data", "get_general_data"}
 
     def validate_code(self, code: str) -> bool:
         """
@@ -255,23 +250,42 @@ class SecurityValidator:
         return True
 
     def _validate_strategy_structure(self, tree: ast.AST) -> bool:
-        """Validate overall strategy structure and requirements"""
+        """Validate overall strategy structure meets requirements"""
         
-        # Check what type of strategy this is (DataFrame vs numpy array)
-        strategy_functions = self._find_strategy_functions(tree)
-        if strategy_functions:
-            func = strategy_functions[0]
-            param = func.args.args[0] if func.args.args else None
+        functions = self._find_strategy_functions(tree)
+        
+        if not functions:
+            raise StrategyComplianceError("No valid strategy functions found. Function must be named 'strategy'")
+        
+        strategy_functions = []
+        for func in functions:
+            # EXPLICIT REJECTION of old patterns
+            if func.name == 'classify_symbol':
+                raise StrategyComplianceError(
+                    "Old pattern function 'classify_symbol' is no longer supported. "
+                    "Use 'strategy()' with get_bar_data() and get_general_data() instead."
+                )
             
-            # If using 'df' parameter, pandas import is provided by the engine
-            # The execution engine provides 'pd' in safe_globals, so no explicit import is needed
-            if param and param.arg == 'df':
-                # Engine provides pandas as 'pd' in globals, so this is fine
-                logger.info("Strategy uses DataFrame parameter - pandas will be provided by execution engine")
-                
-            # For 'data' parameter (numpy array), numpy is also provided by engine
-            if param and param.arg == 'data':
-                logger.info("Strategy uses numpy array parameter - numpy will be provided by execution engine")
+            if func.name.startswith('run_'):
+                raise StrategyComplianceError(
+                    f"Function '{func.name}' uses old batch pattern. "
+                    "Use 'strategy()' with accessor functions instead."
+                )
+            
+            # ONLY ACCEPT 'strategy' function name
+            if func.name == 'strategy':
+                strategy_functions.append(func)
+        
+        if not strategy_functions:
+            raise StrategyComplianceError(
+                "Strategy function must be named 'strategy'. "
+                "Old patterns like 'classify_symbol' are no longer supported."
+            )
+        
+        # Validate each strategy function
+        for func in strategy_functions:
+            self._validate_function_signature(func)
+            self._validate_function_body(func)
         
         return True
 
@@ -297,28 +311,14 @@ class SecurityValidator:
         return functions
 
     def _validate_function_signature(self, func_node: ast.FunctionDef) -> bool:
-        """Validate that function signature matches requirements: (df: pd.DataFrame) -> List[Dict]"""
+        """Validate that function signature matches requirements: () -> List[Dict]"""
         
-        # Check function has exactly one parameter
-        if len(func_node.args.args) != 1:
+        # Check function has no parameters (new data accessor approach)
+        if len(func_node.args.args) != 0:
             raise StrategyComplianceError(
-                f"Strategy function must have exactly one parameter (df: pandas.DataFrame), "
+                f"Strategy function must have no parameters (use get_bar_data() and get_general_data() instead), "
                 f"found {len(func_node.args.args)} parameters"
             )
-        
-        param = func_node.args.args[0]
-        
-        # Parameter name should be 'df' or 'data' (supporting both patterns)
-        if param.arg not in ['df', 'data']:
-            raise StrategyComplianceError(f"Strategy function parameter must be named 'df' or 'data', found '{param.arg}'")
-        
-        # Type annotation is optional but if present should be DataFrame or ndarray
-        if param.annotation:
-            annotation_text = self._get_annotation_text(param.annotation)
-            if annotation_text and not (self._is_dataframe_annotation(annotation_text) or self._is_ndarray_annotation(annotation_text)):
-                raise StrategyComplianceError(
-                    "Strategy function parameter should be annotated as pandas.DataFrame, pd.DataFrame, numpy.ndarray, or np.ndarray if type annotation is provided"
-                )
         
         return True
 

@@ -44,12 +44,10 @@
 		// 		watchlists = response || [];
 		// 	}
 		// );
-
 		// DEPRECATED: Initialize custom tickers string if available
 		// if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
 		// 	customTickers = tempSettings.screensaverTickers.join(',');
 		// }
-
 		// Apply the current color scheme on mount using the store value
 		// if ($settings.colorScheme && browser) {
 		// 	const scheme = colorSchemes[$settings.colorScheme];
@@ -421,8 +419,8 @@
 						</div>
 					</div>
 				</div>
-			<!-- DEPRECATED: Screensaver settings section -->
-			<!-- {:else if activeTab === 'screensaver'}
+				<!-- DEPRECATED: Screensaver settings section -->
+				<!-- {:else if activeTab === 'screensaver'}
 				<div class="settings-section">
 					<h3>Screensaver Settings</h3>
 
@@ -900,11 +898,6 @@
 		grid-column: 1 / -1;
 	}
 
-	.setting-item.wide input {
-		width: 70%;
-		max-width: 500px;
-	}
-
 	label {
 		font-size: 0.9375rem;
 		color: var(--f2);
@@ -980,7 +973,6 @@
 		border: 1px solid rgba(59, 130, 246, 0.1);
 		margin-top: 1.5rem;
 	}
-
 
 	.account-actions {
 		margin-top: 2rem;

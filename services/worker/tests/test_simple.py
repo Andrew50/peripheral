@@ -11,7 +11,7 @@ import sys
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from engine import DataFrameStrategyEngine
+from accessor_strategy_engine import AccessorStrategyEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

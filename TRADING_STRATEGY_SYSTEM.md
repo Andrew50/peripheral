@@ -61,34 +61,51 @@ Users describe strategies in plain English:
 ```
 
 ### 2. AI Code Generation
-The system uses **Gemini 2.5 Flash** to convert descriptions to Python code:
+The system uses **Gemini 2.5 Flash** to convert descriptions to Python code using the **NEW ACCESSOR PATTERN**:
 
 ```python
-def classify_symbol(symbol):
-    """Generated strategy for gap-up detection"""
-    try:
-        # Get current and previous day data
-        price_data = get_price_data(symbol, timeframe='1d', days=2)
-        if not price_data.get('close') or len(price_data['close']) < 2:
-            return False
-        
-        current_open = price_data['open'][-1]
-        prev_close = price_data['close'][-2]
-        
-        # Calculate gap percentage
-        gap_percent = ((current_open - prev_close) / prev_close) * 100
-        
-        # Check volume spike
-        volume_data = price_data['volume']
-        avg_volume = sum(volume_data[-5:-1]) / 4  # 4-day average
-        current_volume = volume_data[-1]
-        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 0
-        
-        # Gap up criteria: >3% gap with >1.5x volume
-        return gap_percent > 3.0 and volume_ratio > 1.5
-        
-    except Exception:
-        return False
+def strategy():
+    """Generated strategy for gap-up detection using NEW ACCESSOR PATTERN"""
+    instances = []
+    
+    # Get recent bar data using accessor function
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "open", "close", "volume"],
+        min_bars=2
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df = df.sort_values(['ticker', 'date']).copy()
+    
+    # Calculate gaps for all tickers
+    df['prev_close'] = df.groupby('ticker')['close'].shift(1)
+    df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
+    
+    # Calculate volume ratio
+    df['avg_volume_4d'] = df.groupby('ticker')['volume'].rolling(4).mean().reset_index(0, drop=True).shift(1)
+    df['volume_ratio'] = df['volume'] / df['avg_volume_4d']
+    
+    # Filter for gap up with volume criteria
+    gap_ups = df[(df['gap_percent'] > 3.0) & (df['volume_ratio'] > 1.5)].dropna()
+    
+    for _, row in gap_ups.iterrows():
+        instances.append({
+            'ticker': row['ticker'],
+            'timestamp': str(row['date']),
+            'signal': True,
+            'gap_percent': round(row['gap_percent'], 2),
+            'volume_ratio': round(row['volume_ratio'], 2),
+            'message': f"{row['ticker']} gapped up {row['gap_percent']:.2f}% with {row['volume_ratio']:.1f}x volume"
+        })
+    
+    return instances
 ```
 
 ### 3. Complete Execution Modes
@@ -212,83 +229,115 @@ scan_universe(filters={'min_market_cap': 1000000000}, limit=100)
 
 #### Multi-Factor Value Strategy
 ```python
-def run_batch_backtest(start_date, end_date, symbols):
-    """Complete value investing backtest"""
+def strategy():
+    """Complete value investing strategy using NEW ACCESSOR PATTERN"""
     instances = []
     
-    # Screen entire universe for value criteria
-    for symbol in symbols:
-        fundamentals = get_fundamental_data(symbol)
-        price_data = get_price_data(symbol, timeframe='1d', days=1)
-        
-        if not fundamentals or not price_data.get('close'):
-            continue
-            
-        # Value metrics
-        pe_ratio = fundamentals.get('pe_ratio', float('inf'))
-        pb_ratio = fundamentals.get('pb_ratio', float('inf'))
-        market_cap = fundamentals.get('market_cap', 0)
-        debt_to_equity = fundamentals.get('debt_to_equity', float('inf'))
-        
-        # Value criteria
-        if (pe_ratio < 15 and pb_ratio < 1.5 and 
-            market_cap > 1000000000 and debt_to_equity < 0.5):
-            
-            instances.append({
-                'ticker': symbol,
-                'timestamp': int(datetime.utcnow().timestamp() * 1000),
-                'classification': True,
-                'entry_price': price_data['close'][-1],
-                'pe_ratio': pe_ratio,
-                'expected_return': (20 - pe_ratio) * 0.02
-            })
+    # Get current bar data for all securities
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "close"],
+        min_bars=1
+    )
     
-    return {
-        'instances': instances,
-        'performance_metrics': {
-            'total_picks': len(instances),
-            'avg_pe': sum(i['pe_ratio'] for i in instances) / len(instances)
-        }
-    }
+    # Get fundamental data for all securities
+    fundamentals = get_general_data(columns=["pe_ratio", "pb_ratio", "market_cap", "debt_to_equity"])
+    
+    if len(bar_data) == 0 or fundamentals.empty:
+        return instances
+    
+    # Convert to DataFrame for processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+    
+    # Merge with fundamentals
+    df = df.merge(fundamentals, left_on='ticker', right_index=True, how='inner')
+    
+    # Value criteria filtering
+    value_stocks = df[
+        (df['pe_ratio'] < 15) & 
+        (df['pb_ratio'] < 1.5) & 
+        (df['market_cap'] > 1000000000) & 
+        (df['debt_to_equity'] < 0.5)
+    ].dropna()
+    
+    for _, row in value_stocks.iterrows():
+        instances.append({
+            'ticker': row['ticker'],
+            'timestamp': str(pd.to_datetime(row['timestamp'], unit='s').date()),
+            'signal': True,
+            'entry_price': row['close'],
+            'pe_ratio': row['pe_ratio'],
+            'expected_return': (20 - row['pe_ratio']) * 0.02,
+            'message': f"{row['ticker']} value opportunity: PE {row['pe_ratio']:.1f}"
+        })
+    
+    return instances
 ```
 
 #### Momentum Screening Strategy
 ```python
-def run_screening(universe, limit):
-    """Complete momentum screening"""
-    scored_symbols = []
+def strategy():
+    """Complete momentum screening using NEW ACCESSOR PATTERN"""
+    instances = []
     
-    for symbol in universe:
-        price_data = get_price_data(symbol, timeframe='1d', days=30)
-        if not price_data.get('close') or len(price_data['close']) < 20:
+    # Get historical bar data for momentum calculation
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "close", "volume"],
+        min_bars=30
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df = df.sort_values(['ticker', 'date']).copy()
+    
+    # Group by ticker for momentum calculations
+    results = []
+    for ticker, group in df.groupby('ticker'):
+        if len(group) < 21:  # Need at least 21 days for 20-day return
             continue
         
-        # Momentum calculations
-        prices = price_data['close']
-        volumes = price_data['volume']
+        group = group.sort_values('date').reset_index(drop=True)
         
-        returns_5d = (prices[-1] / prices[-6]) - 1
-        returns_20d = (prices[-1] / prices[-21]) - 1
+        # Momentum calculations
+        current_price = group['close'].iloc[-1]
+        price_5d_ago = group['close'].iloc[-6] if len(group) >= 6 else None
+        price_20d_ago = group['close'].iloc[-21] if len(group) >= 21 else None
+        
+        if price_5d_ago is None or price_20d_ago is None:
+            continue
+        
+        returns_5d = (current_price / price_5d_ago) - 1
+        returns_20d = (current_price / price_20d_ago) - 1
         
         # Volume analysis
-        avg_volume = sum(volumes[-10:]) / 10
-        volume_ratio = volumes[-1] / avg_volume
+        recent_volumes = group['volume'].tail(10)
+        avg_volume = recent_volumes.mean()
+        current_volume = group['volume'].iloc[-1]
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 0
         
         # Combined momentum score
         momentum_score = (returns_5d * 2) + returns_20d + (volume_ratio * 0.1)
         
         if momentum_score > 0.05:
-            scored_symbols.append({
-                'symbol': symbol,
+            instances.append({
+                'ticker': ticker,
+                'timestamp': str(group['date'].iloc[-1]),
+                'signal': True,
                 'score': momentum_score,
                 'returns_5d': returns_5d,
                 'returns_20d': returns_20d,
-                'volume_ratio': volume_ratio
+                'volume_ratio': volume_ratio,
+                'message': f"{ticker} momentum score: {momentum_score:.3f}"
             })
     
-    # Sort and return top results
-    scored_symbols.sort(key=lambda x: x['score'], reverse=True)
-    return {'ranked_results': scored_symbols[:limit]}
+    return instances
 ```
 
 ## 🔒 Security Implementation
