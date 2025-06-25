@@ -15,7 +15,7 @@ __pycache__/
 # Virtual environments
 .env
 .venv
-
+worker/worker.log
 services/prod/config/redis-secret.yaml
 services/prod/config/db-secret.yaml
 services/prod/config/cloudflare-secret.yaml

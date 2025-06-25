@@ -250,74 +250,36 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 	}
 
 	// Clean and prepare the search query
-	query := strings.ToUpper(strings.TrimSpace(args.Ticker))
-
+	tickerQuery := strings.ToUpper(strings.TrimSpace(args.Ticker))
 	// Modified query to properly handle name and icon and prioritize active securities
 	sqlQuery := `
-	WITH ranked_results AS (
-		WITH normalized AS (
-			SELECT 
-				securityId, 
-				ticker,
-				NULLIF(name, '') as name,
-				NULLIF(icon, '') as icon, 
-				maxDate,
-				UPPER(ticker) as ticker_upper,
-				UPPER(COALESCE(name, '')) as name_upper,
-				REPLACE(UPPER(ticker), '.', '') as ticker_norm,
-				REPLACE(UPPER(COALESCE(name, '')), '.', '') as name_norm
-			FROM securities s
-			WHERE maxDate IS NULL
-		)
-		SELECT DISTINCT ON (ticker) 
-			securityId, 
-			ticker,
-			name,
-			icon, 
-			maxDate,
-			CASE 
-				WHEN ticker_upper = UPPER($1) OR ticker_norm = REPLACE(UPPER($1), '.', '') THEN 1
-				WHEN name_upper = UPPER($1) OR name_norm = REPLACE(UPPER($1), '.', '') THEN 2
-				WHEN ticker_upper LIKE UPPER($1) || '%' OR ticker_norm LIKE REPLACE(UPPER($1), '.', '') || '%' THEN 3
-				WHEN name_upper LIKE UPPER($1) || '%' OR name_norm LIKE REPLACE(UPPER($1), '.', '') || '%' THEN 4
-				WHEN ticker_upper LIKE '%' || UPPER($1) || '%' OR ticker_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' THEN 5
-				WHEN name_upper LIKE '%' || UPPER($1) || '%' OR name_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' THEN 6
-				ELSE 7
-			END as match_type,
-			GREATEST(
-				similarity(ticker_upper, UPPER($1)),
-				similarity(ticker_norm, REPLACE(UPPER($1), '.', '')),
-				COALESCE(similarity(name_upper, UPPER($1)), 0),
-				COALESCE(similarity(name_norm, REPLACE(UPPER($1), '.', '')), 0)
-			) as sim_score
-		FROM normalized
-		WHERE (
-			ticker_upper = UPPER($1) OR
-			ticker_norm = REPLACE(UPPER($1), '.', '') OR
-			ticker_upper LIKE UPPER($1) || '%' OR 
-			ticker_norm LIKE REPLACE(UPPER($1), '.', '') || '%' OR
-			ticker_upper LIKE '%' || UPPER($1) || '%' OR
-			ticker_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' OR
-			similarity(ticker_upper, UPPER($1)) > 0.3 OR
-			similarity(ticker_norm, REPLACE(UPPER($1), '.', '')) > 0.3 OR
-			name_upper = UPPER($1) OR
-			name_norm = REPLACE(UPPER($1), '.', '') OR
-			name_upper LIKE UPPER($1) || '%' OR 
-			name_norm LIKE REPLACE(UPPER($1), '.', '') || '%' OR
-			name_upper LIKE '%' || UPPER($1) || '%' OR
-			name_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' OR
-			similarity(name_upper, UPPER($1)) > 0.3 OR
-			similarity(name_norm, REPLACE(UPPER($1), '.', '')) > 0.3
-		)
-		ORDER BY ticker, maxDate DESC NULLS FIRST
-	)
-	SELECT securityId, ticker, name, icon, maxDate
-	FROM ranked_results
-	ORDER BY match_type, sim_score DESC
-	LIMIT 10
-	`
+		SELECT  s.securityId,
+				s.ticker,
+				s.name,
+				s.icon,
+				s.maxDate
+		FROM    securities s
+		WHERE   s.maxDate IS NULL                      -- active symbols only
+		AND (                                         -- any match criteria
+				s.ticker_norm= $1
+			OR s.ticker_norm LIKE $1 || '%'
+			OR UPPER(s.name) LIKE $1 || '%'
+			OR UPPER(s.name) = $1
+			OR s.ticker_norm %  $1
+			OR UPPER(s.name) %  $1
+			)
+		ORDER BY
+				(s.ticker_norm = $1)                          DESC,
+				(UPPER(s.name) = $1)                          DESC,
+				(UPPER(s.name) LIKE $1 || '%')                DESC,
+				(s.ticker_norm LIKE $1 || '%')                DESC,
+				GREATEST(
+					similarity(s.ticker_norm,$1),
+					similarity(UPPER(s.name),$1)
+				)                                             DESC
+		LIMIT 10`
 
-	rows, err := conn.DB.Query(context.Background(), sqlQuery, query)
+	rows, err := conn.DB.Query(context.Background(), sqlQuery, tickerQuery)
 	if err != nil {
 		return nil, err
 	}

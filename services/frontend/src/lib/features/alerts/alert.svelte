@@ -41,40 +41,48 @@
 </script>
 
 <!-- ───── UI ─────────────────────────────────────────────────────────────────── -->
-<div class="alert-creator">
-	<h3>Create New Price Alert</h3>
-	<p class="description">Set alerts based on price levels.</p>
-	<button class="create-btn" on:click={createPriceAlert}>Create Alert</button>
+<div class="alerts-container">
+	<div class="alert-creator">
+		<h3>Create New Price Alert</h3>
+		<p class="description">Set alerts based on price levels.</p>
+		<button class="create-btn" on:click={createPriceAlert}>Create Alert</button>
+	</div>
+
+	<!-- Active Alerts -->
+	<h3>Active Alerts</h3>
+	<List
+		on:contextmenu={(event)=>{event.preventDefault()}}
+		list={extendedActiveAlerts}
+		columns={['Ticker', 'Alert Price']}
+		parentDelete={handleDeleteAlert}
+	/>
+
+	<!-- Inactive Alerts -->
+	<h3>Inactive Alerts</h3>
+	<List
+		on:contextmenu={(event)=>{event.preventDefault()}}
+		list={extendedInactiveAlerts}
+		columns={['Ticker', 'Alert Price']}
+		parentDelete={handleDeleteAlert}
+	/>
+
+	<!-- Alert Logs -->
+	<h3>Alert History</h3>
+	<List
+		on:contextmenu={(event)=>{event.preventDefault()}}
+		list={extendedAlertLogs}
+		columns={['Ticker', 'Timestamp']}
+		parentDelete={handleDeleteAlertLog}
+	/>
 </div>
 
-<!-- Active Alerts -->
-<h3>Active Alerts</h3>
-<List
-	on:contextmenu={(event)=>{event.preventDefault()}}
-	list={extendedActiveAlerts}
-	columns={['Ticker', 'Alert Price']}
-	parentDelete={handleDeleteAlert}
-/>
-
-<!-- Inactive Alerts -->
-<h3>Inactive Alerts</h3>
-<List
-	on:contextmenu={(event)=>{event.preventDefault()}}
-	list={extendedInactiveAlerts}
-	columns={['Ticker', 'Alert Price']}
-	parentDelete={handleDeleteAlert}
-/>
-
-<!-- Alert Logs -->
-<h3>Alert History</h3>
-<List
-	on:contextmenu={(event)=>{event.preventDefault()}}
-	list={extendedAlertLogs}
-	columns={['Ticker', 'Timestamp']}
-	parentDelete={handleDeleteAlertLog}
-/>
-
 <style>
+	.alerts-container {
+		padding: clamp(0.5rem, 1vw, 1rem);
+		height: 100%;
+		overflow-y: auto;
+	}
+
 	.alert-creator {
 		background: var(--ui-bg-secondary);
 		border-radius: 8px;

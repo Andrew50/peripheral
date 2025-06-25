@@ -519,7 +519,7 @@
 
 <style>
 	.selected {
-		outline: 2px solid var(--ui-accent);
+		outline: 2px solid #cfd0d2;
 	}
 
 	tr {
@@ -552,10 +552,10 @@
 
 	th,
 	td {
-		padding: 8px 12px;
+		padding: clamp(4px, 0.8vw, 8px) clamp(6px, 1.2vw, 12px);
 		text-align: left;
 		background: transparent;
-		font-size: 13px;
+		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8125rem);
 	}
 
 	/* Header cells keep original styling */
@@ -595,8 +595,8 @@
 	}
 
 	.sortable:hover {
-		color: #4a9eff;
-		border-bottom: 1px solid #4a9eff;
+		color: #cfd0d2;
+		border-bottom: 1px solid #aeafb0;
 	}
 
 	.th-content {
@@ -697,12 +697,12 @@
 	}
 
 	.ticker-icon {
-		width: 22px;
-		height: 22px;
+		width: clamp(16px, 2.5vw, 22px);
+		height: clamp(16px, 2.5vw, 22px);
 		border-radius: 50%; /* Make icons circular */
 		object-fit: cover; /* Ensure icon covers the area nicely */
 		background-color: var(--ui-bg-element); /* BG for unloaded images */
-		margin-right: 4px; /* Space between icon and text */
+		margin-right: clamp(2px, 0.5vw, 4px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
@@ -710,15 +710,15 @@
 		display: inline-flex; /* Use inline-flex for alignment */
 		align-items: center;
 		justify-content: center;
-		width: 22px;
-		height: 22px;
+		width: clamp(16px, 2.5vw, 22px);
+		height: clamp(16px, 2.5vw, 22px);
 		border-radius: 50%;
 		background-color: var(--ui-border); /* Use border color for background */
 		color: var(--text-primary); /* Use primary text color */
-		font-size: 10px;
+		font-size: clamp(0.5rem, 0.3rem + 0.3vw, 0.625rem);
 		font-weight: 500;
 		user-select: none; /* Prevent text selection */
-		margin-right: 4px; /* Space between icon and text */
+		margin-right: clamp(2px, 0.5vw, 4px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
@@ -790,7 +790,7 @@
 	/* Assuming .selected class is used for row selection */
 	tr:hover th:last-child,
 	tr:hover td:last-child {
-		background-color: rgba(255, 255, 255, 0.08);
+		background-color: rgba(50, 50, 50, 0.6);
 	}
 
 	/* Table header with glass effect */
@@ -802,21 +802,18 @@
 	/* Table rows with subtle glass effect */
 	tbody tr {
 		background: rgba(255, 255, 255, 0.02);
-		transition: all 0.2s ease;
 		border-radius: 6px;
 		margin: 1px 0;
 	}
 
 	tbody tr:hover {
-		background: rgba(255, 255, 255, 0.08);
-		backdrop-filter: blur(4px);
+		background: rgba(50, 50, 50, 0.6);
 		border-radius: 6px;
 	}
 
 	/* Selected row enhancement */
 	tbody tr.selected {
-		background: rgba(255, 255, 255, 0.12);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		outline: 2px solid #cfd0d2;
 		border-radius: 6px;
 	}
 
