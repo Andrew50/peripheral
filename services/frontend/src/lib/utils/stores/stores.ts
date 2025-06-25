@@ -132,6 +132,9 @@ function initStoresWithAuth() {
                     };
                 });
                 strategies.set(v);
+            }).catch((error) => {
+                console.warn('Failed to load strategies:', error);
+                strategies.set([]);
             });
 
             // Add alert initialization
@@ -145,10 +148,17 @@ function initStoresWithAuth() {
                 inactiveAlerts.set(inactive);
                 const active = v.filter((alert: Alert) => alert.active === true);
                 activeAlerts.set(active);
+            }).catch((error) => {
+                console.warn('Failed to load alerts:', error);
+                inactiveAlerts.set([]);
+                activeAlerts.set([]);
             });
 
             privateRequest<AlertLog[]>('getAlertLogs', {}).then((v: AlertLog[]) => {
                 alertLogs.set(v || []);
+            }).catch((error) => {
+                console.warn('Failed to load alert logs:', error);
+                alertLogs.set([]);
             });
 
             privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {

@@ -172,9 +172,9 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 		return nil, fmt.Errorf("no candidates found in result")
 	}
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
+			if part != nil && part.Text != "" {
 				resultText = part.Text
 				break
 			}

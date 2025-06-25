@@ -88,6 +88,21 @@ func (e *Executor) Execute(ctx context.Context, functionCalls []FunctionCall, pa
 	for i, fc := range functionCalls {
 		i, fc := i, fc // Capture loop variables
 		g.Go(func() error {
+			// Add panic recovery for each goroutine
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Panic recovered in executor goroutine: %v\n", r)
+					// Create an error result for the panic case
+					errorStr := fmt.Sprintf("panic occurred during execution: %v", r)
+					results[i] = ExecuteResult{
+						FunctionID:   atomic.AddInt64(&e.functionCounter, 1),
+						FunctionName: fc.Name,
+						Error:        &errorStr,
+						Args:         fc.Args,
+					}
+				}
+			}()
+
 			// Acquire semaphore
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -179,6 +194,21 @@ func (e *Executor) executeBatch(ctx context.Context, indices []int, results []Ex
 	for _, idx := range indices {
 		idx := idx // Capture loop variable
 		g.Go(func() error {
+			// Add panic recovery for each goroutine
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Panic recovered in executor batch goroutine: %v\n", r)
+					// Create an error result for the panic case
+					errorStr := fmt.Sprintf("panic occurred during batch execution: %v", r)
+					results[idx] = ExecuteResult{
+						FunctionID:   atomic.AddInt64(&e.functionCounter, 1),
+						FunctionName: functionCalls[idx].Name,
+						Error:        &errorStr,
+						Args:         functionCalls[idx].Args,
+					}
+				}
+			}()
+
 			sem <- struct{}{}
 			defer func() { <-sem }()
 

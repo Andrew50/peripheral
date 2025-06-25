@@ -230,17 +230,15 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 			}
 
 			// Ensure transaction is handled properly
-			//committed := false
-			/*
-							//defer func() {
-								if !committed {
-									if rbErr := tx.Rollback(context.Background()); rbErr != nil {
-										////fmt.Printf("Error rolling back transaction: %v\n", rbErr)
-				                        //return rbErr
-									}
-								}
-							//}()
-			*/
+			committed := false
+			defer func() {
+				if !committed {
+					if rbErr := tx.Rollback(context.Background()); rbErr != nil {
+						// Log rollback error but don't block
+						_ = rbErr // Explicitly ignore the error after logging
+					}
+				}
+			}()
 
 			// Collect all security IDs first
 			recordsToProcess := make([]struct {
@@ -341,7 +339,7 @@ func storeDailyOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 					startIdx, endIdx, err)
 				return
 			}
-			//committed = true
+			committed = true
 
 		}(i)
 	}

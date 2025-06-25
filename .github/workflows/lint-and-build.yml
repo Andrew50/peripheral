@@ -195,7 +195,7 @@ jobs:
             echo "has_worker_changes=true" >> $GITHUB_OUTPUT
           fi
 
-  lint-and-build-backend:
+  backend-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
@@ -270,7 +270,7 @@ jobs:
         with:
           version: latest # Or specify the version pre-baked in your container
           working-directory: services/backend
-          args: --timeout=3m --config=.golangci.yml --out-format=colored-line-number --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --allow-parallel-runners --go=1.24 --path-prefix=services/backend
+          args: --timeout=3m --config=.golangci.yml --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --allow-parallel-runners --go=1.24 --path-prefix=services/backend
           # skip-cache, skip-pkg-cache, skip-build-cache are removed to enable internal caching
           only-new-issues: true # Keep this if desired
         env:
@@ -304,7 +304,7 @@ jobs:
             echo "❌ Backend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
-  lint-and-build-frontend:
+  frontend-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
@@ -412,7 +412,7 @@ jobs:
             echo "❌ Frontend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
-  lint-and-security-worker:
+  worker-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
     runs-on: ubuntu-latest
