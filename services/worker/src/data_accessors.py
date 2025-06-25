@@ -278,13 +278,13 @@ class DataAccessorProvider:
             columns: Desired columns (None = all available)
             
         Returns:
-            pandas.DataFrame with columns: name, sector, industry, market, primary_exchange, 
+            pandas.DataFrame with columns: ticker, name, sector, industry, market, primary_exchange, 
                                          locale, active, description, cik
         """
         try:
-            # Default columns if not specified
+            # Default columns if not specified - include ticker by default
             if columns is None:
-                columns = ["name", "sector", "industry", "market", "primary_exchange", 
+                columns = ["ticker", "name", "sector", "industry", "market", "primary_exchange", 
                           "locale", "active", "description", "cik"]
             
             # Validate columns against allowed set
@@ -298,21 +298,34 @@ class DataAccessorProvider:
             if not safe_columns:
                 return pd.DataFrame()
             
-            # Always include securityid for indexing
-            if "securityid" not in safe_columns:
-                safe_columns = ["securityid"] + safe_columns
+            # Always include securityid for internal processing, but include ticker for user access
+            internal_columns = safe_columns.copy()
+            if "securityid" not in internal_columns:
+                internal_columns = ["securityid"] + internal_columns
+            if "ticker" not in internal_columns and "ticker" in allowed_columns:
+                internal_columns.append("ticker")
                 
             # Build the query
             if security_ids is None or len(security_ids) == 0:
                 # Get all active securities
-                select_clause = ', '.join(safe_columns)
+                select_clause = ', '.join(internal_columns)
                 # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
                 query = f"SELECT {select_clause} FROM securities WHERE active = true AND maxdate IS NULL ORDER BY securityid"  # nosec B608
                 params = []
             else:
+                # Handle ticker symbols in security_ids parameter (convert if strings detected)
+                if isinstance(security_ids, list) and len(security_ids) > 0:
+                    if isinstance(security_ids[0], str):
+                        # Convert ticker symbols to security IDs
+                        logger.info(f"Converting ticker symbols {security_ids} to security IDs for general data")
+                        security_ids = self._get_security_ids_from_tickers(security_ids)
+                        if not security_ids:
+                            logger.warning("No security IDs found for provided tickers")
+                            return pd.DataFrame()
+                
                 # Filter by specific security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                select_clause = ', '.join(safe_columns)
+                select_clause = ', '.join(internal_columns)
                 # nosec B608: Safe - columns validated against allowlist, placeholders are just '%s' strings, all values parameterized  
                 query = f"SELECT {select_clause} FROM securities WHERE securityid IN ({placeholders}) AND maxdate IS NULL ORDER BY securityid"  # nosec B608
                 params = security_ids
@@ -332,8 +345,15 @@ class DataAccessorProvider:
             # Convert to DataFrame
             df = pd.DataFrame(results)
             
-            # Set securityid as index if it was included
-            if "securityid" in df.columns:
+            # Filter to only requested columns for the final result
+            final_columns = [col for col in safe_columns if col in df.columns]
+            if final_columns:
+                df = df[final_columns]
+            
+            # Use ticker as index if available and securityid was not explicitly requested
+            if "ticker" in df.columns and "securityid" not in safe_columns:
+                df.set_index("ticker", inplace=True)
+            elif "securityid" in df.columns:
                 df.set_index("securityid", inplace=True)
             
             return df
@@ -353,33 +373,59 @@ def get_data_accessor() -> DataAccessorProvider:
         _data_accessor = DataAccessorProvider()
     return _data_accessor
 
-def get_bar_data(timeframe: str = "1d", security_ids: List[int] = None, 
+def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
                  columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
     """
     Global function for strategy access to bar data
     
     Args:
         timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-        security_ids: List of security IDs to fetch (empty = all active securities)
-        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume, adj_close)
+        tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
+        security_ids: List of security IDs to fetch (deprecated, use tickers instead)
+        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
         min_bars: Minimum number of bars required per security
         
     Returns:
         numpy.ndarray with requested bar data
     """
     accessor = get_data_accessor()
-    return accessor.get_bar_data(timeframe, security_ids, columns, min_bars)
+    
+    # Handle tickers parameter (preferred) or fall back to security_ids
+    if tickers is not None:
+        # Convert tickers to security_ids if provided
+        if len(tickers) == 0:
+            final_security_ids = []
+        else:
+            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
+    else:
+        # Use security_ids directly (backward compatibility)
+        final_security_ids = security_ids
+    
+    return accessor.get_bar_data(timeframe, final_security_ids, columns, min_bars)
 
-def get_general_data(security_ids: List[int] = None, columns: List[str] = None) -> pd.DataFrame:
+def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None) -> pd.DataFrame:
     """
     Global function for strategy access to general security data
     
     Args:
-        security_ids: List of security IDs to fetch (None = all active securities)
+        tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
+        security_ids: List of security IDs to fetch (deprecated, use tickers instead)
         columns: Desired columns (None = all available)
         
     Returns:
         pandas.DataFrame with general security information
     """
     accessor = get_data_accessor()
-    return accessor.get_general_data(security_ids, columns) 
+    
+    # Handle tickers parameter (preferred) or fall back to security_ids
+    if tickers is not None:
+        # Convert tickers to security_ids if provided
+        if len(tickers) == 0:
+            final_security_ids = []
+        else:
+            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
+    else:
+        # Use security_ids directly (backward compatibility)
+        final_security_ids = security_ids
+    
+    return accessor.get_general_data(final_security_ids, columns) 
