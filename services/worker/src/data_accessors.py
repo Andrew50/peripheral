@@ -157,6 +157,7 @@ class DataAccessorProvider:
             # Build the complete query
             if context['mode'] == 'backtest':
                 # For backtest: get all data in range, don't limit per security
+                # nosec B608: Safe - table_name from controlled dict, columns validated against allowlist, all params parameterized
                 query = f"""
                 SELECT {', '.join(select_columns)}
                 FROM {table_name} o
@@ -179,6 +180,7 @@ class DataAccessorProvider:
                     else:
                         final_columns.append(col)
                 
+                # nosec B608: Safe - table_name from controlled dict, columns validated against allowlist, all params parameterized
                 query = f"""
                 WITH ranked_data AS (
                     SELECT {', '.join(select_columns)},
@@ -248,6 +250,7 @@ class DataAccessorProvider:
                 return []
             
             placeholders = ','.join(['%s'] * len(tickers))
+            # nosec B608: Safe - placeholders are just '%s' strings, tickers validated as list of strings, all values parameterized
             query = f"""
             SELECT securityid 
             FROM securities 
@@ -303,6 +306,7 @@ class DataAccessorProvider:
             # Build the query
             if security_ids is None or len(security_ids) == 0:
                 # Get all active securities
+                # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
                 query = f"""
                 SELECT {', '.join(safe_columns)}
                 FROM securities 
@@ -313,6 +317,7 @@ class DataAccessorProvider:
             else:
                 # Filter by specific security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
+                # nosec B608: Safe - columns validated against allowlist, placeholders are just '%s' strings, all values parameterized  
                 query = f"""
                 SELECT {', '.join(safe_columns)}
                 FROM securities 

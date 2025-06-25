@@ -44,6 +44,33 @@ def test_builtin_types():
     """Test that built-in types work correctly"""
     print("\n🧪 Testing built-in types...")
     
+    # Mock get_bar_data function for testing
+    def mock_get_bar_data(timeframe="1d", columns=None, min_bars=1):
+        """Mock get_bar_data function for testing"""
+        if columns is None:
+            columns = ["ticker", "timestamp", "close"]
+        
+        # Generate mock data
+        mock_data = []
+        tickers = ["AAPL", "GOOGL", "MSFT"]
+        
+        for ticker in tickers:
+            for i in range(min_bars):
+                timestamp = 1700000000 + (i * 86400)  # Mock timestamps
+                row = []
+                for col in columns:
+                    if col == "ticker":
+                        row.append(ticker)
+                    elif col == "timestamp":
+                        row.append(timestamp)
+                    elif col == "close":
+                        row.append(100.0 + i)  # Mock prices
+                    else:
+                        row.append(0)
+                mock_data.append(row)
+        
+        return mock_data
+    
     code_with_builtins = """
 # Using built-in types instead of typing - NEW ACCESSOR PATTERN
 def strategy():
@@ -78,7 +105,10 @@ result = strategy()
     try:
         # Compile and execute
         compiled_code = compile(code_with_builtins, "<test>", "exec")
-        exec_globals = {'__builtins__': __builtins__}
+        exec_globals = {
+            '__builtins__': __builtins__,
+            'get_bar_data': mock_get_bar_data  # Add the mock function
+        }
         exec_locals = {}
         exec(compiled_code, exec_globals, exec_locals)  # nosec B102 - Safe test execution
         

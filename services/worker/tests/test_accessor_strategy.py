@@ -132,7 +132,8 @@ class MockAccessorStrategyEngine:
             safe_locals = {}
             
             # Execute strategy code
-            exec(strategy_code, safe_globals, safe_locals)
+            # exec necessary for strategy execution - properly sandboxed with restricted globals/locals
+            exec(strategy_code, safe_globals, safe_locals)  # nosec B102
             
             # Find and execute strategy function
             strategy_func = safe_locals.get('strategy')
