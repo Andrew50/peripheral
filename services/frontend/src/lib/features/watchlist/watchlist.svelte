@@ -479,40 +479,6 @@
 		background-size: clamp(10px, 1.5vw, 14px);
 	}
 
-	.watchlist-selector .utility-button {
-		color: #ffffff;
-		width: clamp(28px, 4vw, 32px);
-		height: clamp(28px, 4vw, 32px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: clamp(1rem, 0.7rem + 0.6vw, 1.2rem);
-		font-weight: 300;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		background: transparent;
-		border: none;
-		border-radius: 6px;
-	}
-
-	.watchlist-selector .utility-button:hover {
-		background: rgba(255, 255, 255, 0.15);
-	}
-
-	.watchlist-selector .new-watchlist-button {
-		font-size: 14px;
-		position: relative;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.watchlist-selector .new-watchlist-button .list-icon {
-		font-size: 12px;
-		position: absolute;
-		right: 4px;
-		bottom: 2px;
-	}
-
 	.new-watchlist-container {
 		margin-top: 12px;
 		padding: 16px;
@@ -620,9 +586,9 @@
 	}
 
 	.shortcut-button:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.9);
 		border-color: rgba(255, 255, 255, 0.4);
-		transform: translateY(-1px);
+		color: #000;
 	}
 
 	.shortcut-button.active {
@@ -644,10 +610,12 @@
 		background: transparent;
 		border: none;
 		border-radius: 6px;
+		transition: none;
 	}
 
 	.add-item-button:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgba(255, 255, 255, 0.2);
+		color: #ffffff;
 	}
 
 	.feature-container {
