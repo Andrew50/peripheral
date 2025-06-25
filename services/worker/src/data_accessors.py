@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
@@ -212,7 +213,13 @@ class DataAccessorProvider:
                 for col in safe_columns:
                     # Handle aliased columns properly
                     col_key = col.split(' as ')[-1].split('.')[-1]
-                    ordered_row.append(row[col_key])
+                    value = row[col_key]
+                    
+                    # Convert Decimal to float to avoid type mismatch issues in strategy calculations
+                    if isinstance(value, Decimal):
+                        value = float(value)
+                    
+                    ordered_row.append(value)
                 ordered_results.append(ordered_row)
             
             return np.array(ordered_results, dtype=object)
