@@ -18,7 +18,7 @@ import (
 	polygon "github.com/polygon-io/client-go/rest"
 )
 
-// Conn represents a structure for handling Conn data.
+// Conn encapsulates database connections and API clients
 type Conn struct {
 	//Cache *redis.Client
 	DB              *pgxpool.Pool
@@ -32,7 +32,16 @@ type Conn struct {
 	OpenAIKey       string
 }
 
-var conn *Conn
+// Result structs for thread-safe communication
+type dbConnResult struct {
+	conn *pgxpool.Pool
+	err  error
+}
+
+type redisConnResult struct {
+	client *redis.Client
+	err    error
+}
 
 // InitConn performs operations related to InitConn functionality.
 func InitConn(inContainer bool) (*Conn, func()) {
@@ -67,24 +76,25 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		cacheURL = fmt.Sprintf("localhost:%s", redisPort)
 	}
 
-	var dbConn *pgxpool.Pool
-	var err error
-
 	// Add timeout for database connection attempts using context
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	done := make(chan bool)
+	// Use channels for thread-safe communication
+	dbResult := make(chan dbConnResult, 1)
 	go func() {
-		defer close(done)
+		defer close(dbResult)
+		var lastErr error
 		for {
 			select {
 			case <-ctx.Done():
+				dbResult <- dbConnResult{conn: nil, err: lastErr}
 				return
 			default:
 				// Create a connection pool configuration
 				poolConfig, parseErr := pgxpool.ParseConfig(dbURL)
 				if parseErr != nil {
+					lastErr = parseErr
 					time.Sleep(1 * time.Second)
 					continue
 				}
@@ -98,42 +108,40 @@ func InitConn(inContainer bool) (*Conn, func()) {
 				poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Shorter connection timeout
 
 				// Create the connection pool with our custom configuration
-				dbConn, err = pgxpool.ConnectConfig(ctx, poolConfig)
+				dbConn, err := pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {
+					lastErr = err
 					time.Sleep(1 * time.Second)
 					continue
 				} else {
+					dbResult <- dbConnResult{conn: dbConn, err: nil}
 					return
 				}
 			}
 		}
 	}()
 
-	select {
-	case <-done:
-		// Connection successful
-	case <-ctx.Done():
-		// Timeout occurred
-		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Last error: %v", dbURL, err))
+	// Wait for database connection result
+	dbRes := <-dbResult
+	if dbRes.err != nil {
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Last error: %v", dbURL, dbRes.err))
 	}
-
-	// If database connection still failed, panic with informative error
-	if dbConn == nil {
-		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Error: %v", dbURL, err))
+	if dbRes.conn == nil {
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Error: connection is nil", dbURL))
 	}
-
-	var cache *redis.Client
 
 	// Add timeout for Redis connection attempts using context
 	redisCtx, redisCancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer redisCancel()
 
-	redisDone := make(chan bool)
+	redisResult := make(chan redisConnResult, 1)
 	go func() {
-		defer close(redisDone)
+		defer close(redisResult)
+		var lastErr error
 		for {
 			select {
 			case <-redisCtx.Done():
+				redisResult <- redisConnResult{client: nil, err: lastErr}
 				return
 			default:
 				// Use Redis password if provided
@@ -157,29 +165,27 @@ func InitConn(inContainer bool) (*Conn, func()) {
 					opts.Password = redisPassword
 				}
 
-				cache = redis.NewClient(opts)
-				err = cache.Ping(redisCtx).Err()
+				cache := redis.NewClient(opts)
+				err := cache.Ping(redisCtx).Err()
 				if err != nil {
+					lastErr = err
 					time.Sleep(1 * time.Second)
 					continue
 				} else {
+					redisResult <- redisConnResult{client: cache, err: nil}
 					return
 				}
 			}
 		}
 	}()
 
-	select {
-	case <-redisDone:
-		// Connection successful
-	case <-redisCtx.Done():
-		// Timeout occurred
-		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Last error: %v", cacheURL, err))
+	// Wait for Redis connection result
+	redisRes := <-redisResult
+	if redisRes.err != nil {
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Last error: %v", cacheURL, redisRes.err))
 	}
-
-	// If Redis connection still failed, panic with informative error
-	if cache == nil || cache.Ping(context.Background()).Err() != nil {
-		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Error: %v", cacheURL, err))
+	if redisRes.client == nil || redisRes.client.Ping(context.Background()).Err() != nil {
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Error: connection is nil or ping failed", cacheURL))
 	}
 
 	// Configure the HTTP client with better timeout settings
@@ -205,9 +211,10 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Initialize Gemini API key pool
 	geminiPool := initGeminiKeyPool()
 
-	conn = &Conn{
-		DB:              dbConn,
-		Cache:           cache,
+	// Create local connection object (no global variable)
+	localConn := &Conn{
+		DB:              dbRes.conn,
+		Cache:           redisRes.client,
 		Polygon:         polygonClient,
 		PolygonKey:      polygonKey,
 		GeminiPool:      geminiPool,
@@ -219,14 +226,18 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	cleanup := func() {
 		// Close the database connection
-		conn.DB.Close()
+		if localConn.DB != nil {
+			localConn.DB.Close()
+		}
 
 		// Close the Redis cache connection
-		if err := conn.Cache.Close(); err != nil {
-			log.Printf("Error closing Redis cache connection: %v", err)
+		if localConn.Cache != nil {
+			if err := localConn.Cache.Close(); err != nil {
+				log.Printf("Error closing Redis cache connection: %v", err)
+			}
 		}
 	}
-	return conn, cleanup
+	return localConn, cleanup
 }
 
 // Helper function to get environment variables with fallback
