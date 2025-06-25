@@ -54,19 +54,19 @@ class DataAccessorProvider:
             'end_date': end_date
         }
 
-    def get_bar_data(self, timeframe: str = "1d", security_ids: List[int] = None, 
+    def get_bar_data(self, timeframe: str = "1d", tickers: List[str] = None, 
                      columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
         Args:
             timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-            security_ids: List of security IDs to fetch (None = all active securities, explicit list recommended)
-            columns: Desired columns (None = all: securityid, timestamp, open, high, low, close, volume)
+            tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
+            columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required
             
         Returns:
-            numpy.ndarray with columns: securityid, timestamp, open, high, low, close, volume
+            numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
         """
         try:
             # Validate inputs
@@ -122,22 +122,19 @@ class DataAccessorProvider:
                 date_params = [datetime.now() - lookback_duration]
             
             # Handle security filtering
-            if security_ids is None or len(security_ids) == 0:
+            if tickers is None or len(tickers) == 0:
                 # Get all active securities (don't use context symbols automatically)
                 security_filter = "s.active = true AND s.maxdate IS NULL"
                 security_params = []
             else:
-                # Check if security_ids contains strings (ticker symbols) instead of integers
-                if isinstance(security_ids, list) and len(security_ids) > 0:
-                    if isinstance(security_ids[0], str):
-                        # Convert ticker symbols to security IDs
-                        logger.info(f"Converting ticker symbols {security_ids} to security IDs")
-                        security_ids = self._get_security_ids_from_tickers(security_ids)
-                        if not security_ids:
-                            logger.warning("No security IDs found for provided tickers")
-                            return np.array([])
+                # Convert ticker symbols to security IDs
+                logger.info(f"Converting ticker symbols {tickers} to security IDs")
+                security_ids = self._get_security_ids_from_tickers(tickers)
+                if not security_ids:
+                    logger.warning("No security IDs found for provided tickers")
+                    return np.array([])
                 
-                # Use provided security IDs
+                # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
                 security_filter = f"s.securityid IN ({placeholders})"
                 security_params = security_ids
@@ -269,12 +266,12 @@ class DataAccessorProvider:
             logger.error(f"Error converting tickers to security IDs: {e}")
             return []
 
-    def get_general_data(self, security_ids: List[int] = None, columns: List[str] = None) -> pd.DataFrame:
+    def get_general_data(self, tickers: List[str] = None, columns: List[str] = None) -> pd.DataFrame:
         """
         Get general security information as pandas DataFrame
         
         Args:
-            security_ids: List of security IDs to fetch (None = all active securities)
+            tickers: List of ticker symbols to fetch (None = all active securities)
             columns: Desired columns (None = all available)
             
         Returns:
@@ -306,22 +303,19 @@ class DataAccessorProvider:
                 internal_columns.append("ticker")
                 
             # Build the query
-            if security_ids is None or len(security_ids) == 0:
+            if tickers is None or len(tickers) == 0:
                 # Get all active securities
                 select_clause = ', '.join(internal_columns)
                 # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
                 query = f"SELECT {select_clause} FROM securities WHERE active = true AND maxdate IS NULL ORDER BY securityid"  # nosec B608
                 params = []
             else:
-                # Handle ticker symbols in security_ids parameter (convert if strings detected)
-                if isinstance(security_ids, list) and len(security_ids) > 0:
-                    if isinstance(security_ids[0], str):
-                        # Convert ticker symbols to security IDs
-                        logger.info(f"Converting ticker symbols {security_ids} to security IDs for general data")
-                        security_ids = self._get_security_ids_from_tickers(security_ids)
-                        if not security_ids:
-                            logger.warning("No security IDs found for provided tickers")
-                            return pd.DataFrame()
+                # Convert ticker symbols to security IDs
+                logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
+                security_ids = self._get_security_ids_from_tickers(tickers)
+                if not security_ids:
+                    logger.warning("No security IDs found for provided tickers")
+                    return pd.DataFrame()
                 
                 # Filter by specific security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
