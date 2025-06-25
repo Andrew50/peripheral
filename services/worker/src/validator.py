@@ -263,17 +263,15 @@ class SecurityValidator:
             func = strategy_functions[0]
             param = func.args.args[0] if func.args.args else None
             
-            # If using 'df' parameter, require pandas import
+            # If using 'df' parameter, pandas import is provided by the engine
+            # The execution engine provides 'pd' in safe_globals, so no explicit import is needed
             if param and param.arg == 'df':
-                has_pandas_import = False
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.Import, ast.ImportFrom)):
-                        if self._is_pandas_import(node):
-                            has_pandas_import = True
-                            break
+                # Engine provides pandas as 'pd' in globals, so this is fine
+                logger.info("Strategy uses DataFrame parameter - pandas will be provided by execution engine")
                 
-                if not has_pandas_import:
-                    raise StrategyComplianceError("Strategy using 'df' parameter must import pandas (import pandas as pd)")
+            # For 'data' parameter (numpy array), numpy is also provided by engine
+            if param and param.arg == 'data':
+                logger.info("Strategy uses numpy array parameter - numpy will be provided by execution engine")
         
         return True
 
