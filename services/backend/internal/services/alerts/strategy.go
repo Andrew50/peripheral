@@ -17,7 +17,7 @@ type StrategyAlert struct {
 }
 
 // processStrategyAlert submits active strategy alerts to the worker queue
-func processStrategyAlert(conn *data.Conn, alert Alert) error {
+func processStrategyAlert(conn *data.Conn, _ Alert) error {
 	// Get all active strategy alerts from the database
 	strategies, err := getActiveStrategyAlerts(conn)
 	if err != nil {
