@@ -1393,6 +1393,10 @@
 			},
 			leftPriceScale: {
 				borderColor: 'black'
+			},
+			kineticScroll: {
+				mouse: false,
+				touch: false
 			}
 		};
 		const chartContainer = document.getElementById(`chart_container-${chartId}`);
