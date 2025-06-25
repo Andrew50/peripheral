@@ -41,9 +41,11 @@ class StrategyGenerator:
         return """You are a Python trading strategy developer. Generate ONLY Python code.
 
 REQUIREMENTS:
-- Function named 'strategy(data)' taking numpy array, returning List[Dict]
+- Function named 'strategy(df)' taking pandas DataFrame, returning List[Dict]
 - Use only: numpy, pandas, math, datetime, statistics
 - Data columns: [ticker, date, open, high, low, close, volume, adj_close, fund_*]
+- Core data: price data (OHLCV) + fundamental data (fund_pe_ratio, fund_market_cap, etc.)
+- Calculate your own technical indicators from raw price data - none are pre-calculated
 - Return format: [{'ticker': str, 'timestamp': str, 'signal': True, ...}]
 - No file I/O, network access, or dangerous operations
 

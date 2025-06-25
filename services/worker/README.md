@@ -118,7 +118,21 @@ The system is designed to force AI models to implement their own technical analy
 
 ## Technical Indicator Implementation
 
-**Important**: The system does NOT provide pre-calculated technical indicators. AI-generated strategies must implement their own calculations using raw data.
+**Important**: The system does NOT provide pre-calculated technical indicators. 
+AI-generated strategies must implement their own calculations using raw OHLCV data.
+
+This design provides several benefits:
+- **Educational**: AI learns to implement technical analysis from first principles
+- **Flexibility**: Custom indicators and novel calculations possible
+- **Performance**: Optimized calculations for specific use cases
+- **Transparency**: Clear understanding of calculation methods
+- **Innovation**: Encourages development of new indicators
+
+### Available Raw Data
+Strategies receive only raw market data:
+- Basic OHLCV data: `open`, `high`, `low`, `close`, `volume`, `adj_close`
+- Fundamental data: `fund_pe_ratio`, `fund_market_cap`, `fund_sector`, etc.
+- No pre-calculated technical indicators
 
 ### Example: RSI Implementation
 
