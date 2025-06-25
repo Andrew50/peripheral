@@ -17,22 +17,13 @@
 			}
 		});
 	});
-
-	// Handle focus management
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Tab') {
-			event.preventDefault(); // Prevent default tab behavior
-		}
-	}
 </script>
 
 <div
 	class="chart-container"
 	bind:this={containerRef}
-	tabindex="0"
 	role="application"
 	aria-label="Chart Container"
-	on:keydown={handleKeyDown}
 >
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">

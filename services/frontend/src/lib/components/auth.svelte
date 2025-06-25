@@ -67,10 +67,10 @@
 				sessionStorage.setItem('profilePic', r.profilePic);
 				sessionStorage.setItem('username', r.username);
 			}
-			
+
 			// Dispatch success event for modal usage
 			dispatch('authSuccess', { type: 'login', user: r });
-			
+
 			goto('/app');
 		} catch (error) {
 			let displayError = 'Login failed. Please try again.';
@@ -95,7 +95,7 @@
 			await publicRequest('signup', { email: email, password: password });
 			await signIn(email, password);
 		} catch (error) {
-            console.log(error)
+			console.log(error);
 			let displayError = 'Failed to create account. Please try again.';
 			if (typeof error === 'string') {
 				// Extract the core message sent from the backend
@@ -138,7 +138,6 @@
 	<Header />
 	<div class="auth-container">
 		<div class="auth-card">
-
 			<form
 				on:submit|preventDefault={() => {
 					if (loginMenu) {
@@ -270,7 +269,9 @@
 		margin: auto;
 		max-width: 450px;
 		padding: clamp(1.5rem, 4vw, 2.5rem);
-		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.1);
+		box-shadow:
+			0 10px 25px rgba(0, 0, 0, 0.2),
+			0 4px 10px rgba(0, 0, 0, 0.1);
 	}
 
 	.auth-form {
@@ -289,14 +290,6 @@
 		gap: 0.5rem;
 		width: 100%;
 		align-items: stretch;
-	}
-
-	label {
-		color: var(--text-primary);
-		font-size: 0.875rem;
-		font-weight: 500;
-		font-family: 'Inter', sans-serif;
-		margin-bottom: 0.25rem;
 	}
 
 	input {

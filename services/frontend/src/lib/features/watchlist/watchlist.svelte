@@ -5,7 +5,12 @@
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
-	import { flagWatchlistId, watchlists, flagWatchlist, isPublicViewing } from '$lib/utils/stores/stores';
+	import {
+		flagWatchlistId,
+		watchlists,
+		flagWatchlist,
+		isPublicViewing
+	} from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -95,7 +100,11 @@
 
 		// Subscribe to watchlists store to select initial watchlist when list arrives
 		const unsubscribeWatchlists = watchlists.subscribe((list) => {
-			if (Array.isArray(list) && list.length > 0 && (currentWatchlistId === undefined || isNaN(currentWatchlistId))) {
+			if (
+				Array.isArray(list) &&
+				list.length > 0 &&
+				(currentWatchlistId === undefined || isNaN(currentWatchlistId))
+			) {
 				selectWatchlist(String(list[0].watchlistId));
 			}
 		});
@@ -111,29 +120,31 @@
 			return;
 		}
 
-		const inst = { ticker: ''};
-		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then((i: WatchlistItem) => {
-			const aList = get(activeList);
-			const empty = !Array.isArray(aList);
-			if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
-				privateRequest<number>('newWatchlistItem', {
-					watchlistId: currentWatchlistId,
-					securityId: i.securityId
-				}).then((watchlistItemId: number) => {
-					activeList.update((v: WatchlistItem[]) => {
-						i.watchlistItemId = watchlistItemId;
-						if (empty) {
-							return [i];
-						} else {
-							return [...v, i];
-						}
+		const inst = { ticker: '' };
+		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then(
+			(i: WatchlistItem) => {
+				const aList = get(activeList);
+				const empty = !Array.isArray(aList);
+				if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
+					privateRequest<number>('newWatchlistItem', {
+						watchlistId: currentWatchlistId,
+						securityId: i.securityId
+					}).then((watchlistItemId: number) => {
+						activeList.update((v: WatchlistItem[]) => {
+							i.watchlistItemId = watchlistItemId;
+							if (empty) {
+								return [i];
+							} else {
+								return [...v, i];
+							}
+						});
 					});
-				});
+				}
+				setTimeout(() => {
+					addInstance();
+				}, 1);
 			}
-			setTimeout(() => {
-				addInstance();
-			}, 1);
-		});
+		);
 	}
 
 	function newWatchlist() {
@@ -251,26 +262,26 @@
 			activeList = flagWatchlist; // Point to the global store
 
 			// Fetch items and update the GLOBAL flagWatchlist store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-				(v: WatchlistItem[]) => {
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+				.then((v: WatchlistItem[]) => {
 					flagWatchlist.set(v || []); // Update the global store
-				}
-			).catch(err => {
-				flagWatchlist.set([]); // Set global store empty on error
-			});
+				})
+				.catch((err) => {
+					flagWatchlist.set([]); // Set global store empty on error
+				});
 		} else {
 			// For regular watchlists, create a new local writable store
-			activeList = writable<WatchlistItem[]>([]); 
+			activeList = writable<WatchlistItem[]>([]);
 			currentWatchlistId = watchlistId;
 
 			// Fetch items and update the LOCAL activeList store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId }).then(
-				(v: WatchlistItem[]) => {
+			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+				.then((v: WatchlistItem[]) => {
 					activeList.set(v || []); // Update the local store
-				}
-			).catch(err => {
-				activeList.set([]); // Set local store empty on error
-			});
+				})
+				.catch((err) => {
+					activeList.set([]); // Set local store empty on error
+				});
 		}
 	}
 
@@ -330,26 +341,23 @@
 		currentWatchlistId = parseInt(value, 10);
 		selectWatchlist(value);
 	}
-
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
 	<!-- Controls container first -->
 	<div class="controls-container">
 		{#if Array.isArray($watchlists)}
-				<div class="watchlist-selector glass glass--rounded glass--medium">
-		<select
-			class="default-select"
-			id="watchlists"
-			value={currentWatchlistId?.toString()}
-			on:change={handleWatchlistChange}
-		>
+			<div class="watchlist-selector glass glass--rounded glass--medium">
+				<select
+					class="default-select"
+					id="watchlists"
+					value={currentWatchlistId?.toString()}
+					on:change={handleWatchlistChange}
+				>
 					<optgroup label="My Watchlists">
 						{#each $watchlists as watchlist}
 							<option value={watchlist.watchlistId.toString()}>
-								{watchlist.watchlistName === 'flag'
-									? 'Flag (Protected)'
-									: watchlist.watchlistName}
+								{watchlist.watchlistName === 'flag' ? 'Flag (Protected)' : watchlist.watchlistName}
 							</option>
 						{/each}
 					</optgroup>
@@ -361,7 +369,11 @@
 					</optgroup>
 				</select>
 				{#if !showWatchlistInput}
-					<button class="utility-button glass glass--small glass--light" title="Add Symbol" on:click={addInstance}>+</button>
+					<button
+						class="utility-button glass glass--small glass--light"
+						title="Add Symbol"
+						on:click={addInstance}>+</button
+					>
 					<!--<button
 						class="utility-button new-watchlist-button glass glass--small glass--light"
 						title="New Watchlist"
@@ -388,8 +400,13 @@
 						placeholder="New Watchlist Name"
 					/>
 					<div class="new-watchlist-buttons">
-						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}>✓</button>
-						<button class="utility-button glass glass--small glass--light" on:click={closeNewWatchlistWindow}>✕</button>
+						<button class="utility-button glass glass--small glass--light" on:click={newWatchlist}
+							>✓</button
+						>
+						<button
+							class="utility-button glass glass--small glass--light"
+							on:click={closeNewWatchlistWindow}>✕</button
+						>
 					</div>
 				</div>
 			{/if}
@@ -401,13 +418,24 @@
 		{#if Array.isArray($watchlists)}
 			{#each $watchlists as watchlist}
 				<button
-					class="shortcut-button glass glass--small glass--light {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+					class="shortcut-button glass glass--small glass--light {currentWatchlistId ===
+					watchlist.watchlistId
+						? 'active'
+						: ''}"
 					on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					title={watchlist.watchlistName}
 				>
 					{#if watchlist.watchlistName.toLowerCase() === 'flag'}
 						<span class="flag-shortcut-icon">
-							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
 								<path d="M5 5v14"></path>
 								<path d="M19 5l-6 4 6 4-6 4"></path>
 							</svg>
@@ -486,21 +514,6 @@
 		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateY(-1px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-	}
-
-	.watchlist-selector .new-watchlist-button {
-		font-size: 14px;
-		position: relative;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.watchlist-selector .new-watchlist-button .list-icon {
-		font-size: 12px;
-		position: absolute;
-		right: 4px;
-		bottom: 2px;
 	}
 
 	.new-watchlist-container {

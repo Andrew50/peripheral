@@ -15,7 +15,7 @@ from typing import Any, Dict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from data import DataProvider
-from engine import DataFrameStrategyEngine
+from accessor_strategy_engine import AccessorStrategyEngine
 from validator import SecurityError
 
 

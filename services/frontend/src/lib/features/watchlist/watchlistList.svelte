@@ -59,7 +59,7 @@
 		return columnName
 			.replace(/_/g, ' ') // Replace underscores with spaces
 			.split(' ') // Split into words
-			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
 			.join(' '); // Join back with spaces
 	}
 
@@ -216,7 +216,9 @@
 				if (sortColumn === 'Ticker') {
 					const tickerA = String(a.ticker ?? '').toLowerCase();
 					const tickerB = String(b.ticker ?? '').toLowerCase();
-					return sortDirection === 'asc' ? tickerA.localeCompare(tickerB) : tickerB.localeCompare(tickerA);
+					return sortDirection === 'asc'
+						? tickerA.localeCompare(tickerB)
+						: tickerB.localeCompare(tickerA);
 				}
 
 				// For other columns, use the *original* sortColumn as the data key directly
@@ -240,7 +242,6 @@
 			return sorted;
 		});
 	}
-
 
 	onMount(() => {
 		try {
@@ -354,9 +355,6 @@
 		clearTimeout(longPressTimer);
 	}
 
-
-
-
 	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	// Use original column name 'Ticker'
 	$: if (columns?.includes('Ticker') && $list?.length > 0) {
@@ -368,10 +366,12 @@
 		if (img && ticker) {
 			// Update the cache so we don't retry loading the bad icon
 			iconCache.set(ticker, BLACK_PIXEL);
-					// Force the specific item in the list to use the black pixel
-		list.update((items: WatchlistItem[]) =>
-			items.map((item: WatchlistItem) => (item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item))
-		);
+			// Force the specific item in the list to use the black pixel
+			list.update((items: WatchlistItem[]) =>
+				items.map((item: WatchlistItem) =>
+					item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item
+				)
+			);
 		}
 	}
 
@@ -399,7 +399,6 @@
 				return 'price'; // Sensible fallback
 		}
 	}
-
 </script>
 
 <div class="table-container">
@@ -408,25 +407,28 @@
 	{:else if loadError}
 		<div class="error glass glass--small glass--medium">
 			<p>Failed to load data: {loadError}</p>
-			<button class="glass glass--small glass--light" on:click={() => window.location.reload()}>Retry</button>
+			<button class="glass glass--small glass--light" on:click={() => window.location.reload()}
+				>Retry</button
+			>
 		</div>
 	{:else}
 		<table class="default-table glass glass--rounded glass--medium" class:sorting={isSorting}>
 			<thead>
 				<tr class="default-tr">
-					<th class="default-th"></th> {#each columns as col} 
+					<th class="default-th"></th>
+					{#each columns as col}
 						<th
 							class="default-th"
 							data-type={col.toLowerCase().replace(/\s+/g, '-')}
 							class:sortable={col !== ''}
 							class:sorting={sortColumn === col}
-							class:sort-asc={sortColumn === col && sortDirection === 'asc'} 
+							class:sort-asc={sortColumn === col && sortDirection === 'asc'}
 							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
-							on:click={() => handleSort(col)} 
+							on:click={() => handleSort(col)}
 						>
 							<div class="th-content">
 								<span>{displayNames[col] || formatColumnHeader(col)}</span>
-								{#if sortColumn === col} 
+								{#if sortColumn === col}
 									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
 								{/if}
 							</div>
@@ -439,7 +441,7 @@
 				<tbody>
 					{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
 						<tr
-							class="default-tr {rowClass(watch)}" 
+							class="default-tr {rowClass(watch)}"
 							on:mousedown={(event) => clickHandler(event, watch, i)}
 							on:touchstart={(event) => handleTouchStart(event, watch, i)}
 							on:touchend={handleTouchEnd}
@@ -452,15 +454,23 @@
 							<td class="default-td">
 								{#if isFlagged(watch, $flagWatchlist)}
 									<span class="flag-icon">
-										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
 											<path d="M5 5v14"></path>
 											<path d="M19 5l-6 4 6 4-6 4"></path>
 										</svg>
 									</span>
 								{/if}
 							</td>
-							{#each columns as col} 
-								{#if col === 'Ticker'} 
+							{#each columns as col}
+								{#if col === 'Ticker'}
 									<td class="default-td">
 										{#if watch.icon && watch.icon !== BLACK_PIXEL}
 											<img
@@ -474,9 +484,9 @@
 												{watch.ticker.charAt(0).toUpperCase()}
 											</span>
 										{/if}
-                                        <span class="ticker-name">{watch.ticker}</span> 
+										<span class="ticker-name">{watch.ticker}</span>
 									</td>
-								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)} 
+								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
 									<td class="default-td">
 										<StreamCellV2
 											on:contextmenu={(event) => {
@@ -484,7 +494,7 @@
 												event.stopPropagation();
 											}}
 											instance={watch}
-											type={getStreamCellType(col)} 
+											type={getStreamCellType(col)}
 										/>
 									</td>
 								{/if}
@@ -631,14 +641,9 @@
 		color: var(--ui-accent);
 	}
 
-
-
 	tr {
 		transition: background-color 0.2s;
 	}
-
-
-
 
 	.table-container {
 		width: 100%;
@@ -656,8 +661,6 @@
 	tr:hover .delete-button {
 		opacity: 1;
 	}
-
-
 
 	.loading,
 	.error,
@@ -691,11 +694,6 @@
 
 	.negative {
 		color: var(--negative);
-	}
-
-	h4 {
-		margin: 20px 0 10px 0;
-		color: var(--text-secondary);
 	}
 
 	.ticker-icon {
@@ -749,7 +747,8 @@
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
 	/* Sticky Last column (Delete Button) */
-	th:last-child, td:last-child {
+	th:last-child,
+	td:last-child {
 		position: sticky;
 		right: 0px; /* Stick to the very edge */
 		z-index: 1; /* Above non-sticky cells */
@@ -760,10 +759,10 @@
 		text-align: center;
 		vertical-align: middle;
 	}
-    th:last-child {
-        z-index: 3; /* Above tbody cells and sort overlay */
-        background-color: transparent; /* Transparent for glass effect */
-     }
+	th:last-child {
+		z-index: 3; /* Above tbody cells and sort overlay */
+		background-color: transparent; /* Transparent for glass effect */
+	}
 
 	.delete-button {
 		opacity: 0;
@@ -774,26 +773,25 @@
 		color: var(--negative);
 		font-size: 1.2em;
 		padding: 4px;
-        line-height: 1;
-        display: inline-flex; /* Helps center */
-        align-items: center;
-        justify-content: center;
+		line-height: 1;
+		display: inline-flex; /* Helps center */
+		align-items: center;
+		justify-content: center;
 	}
-    .delete-button:hover {
-        color: var(--negative-hover, red); /* Darker red on hover */
-    }
+	.delete-button:hover {
+		color: var(--negative-hover, red); /* Darker red on hover */
+	}
 
 	tr:hover .delete-button {
 		opacity: 1;
 	}
 
 	/* Adjust background for sticky columns on hover/select */
-    /* Assuming .selected class is used for row selection */
-    tr:hover th:last-child, tr:hover td:last-child {
-        background-color: rgba(255, 255, 255, 0.08);
-    }
-
-
+	/* Assuming .selected class is used for row selection */
+	tr:hover th:last-child,
+	tr:hover td:last-child {
+		background-color: rgba(255, 255, 255, 0.08);
+	}
 
 	/* Table header with glass effect */
 	thead tr {
@@ -823,8 +821,8 @@
 	}
 
 	/* Table cells with enhanced readability */
-	td, th {
+	td,
+	th {
 		backdrop-filter: inherit;
 	}
 </style>
-

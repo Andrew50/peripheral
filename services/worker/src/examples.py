@@ -1,15 +1,28 @@
 """
-DataFrame Strategy Examples
-Examples of strategies that take DataFrames with raw data and calculate their own indicators
+Data Accessor Strategy Examples
+Examples of strategies that use get_bar_data() and get_general_data() functions
 """
 
 # Example 1: Gap Up Strategy with Volume Confirmation
 GAP_UP_STRATEGY = '''
-def gap_up_strategy(df):
+def strategy():
     """Find stocks that gap up more than 3% with volume confirmation"""
     instances = []
     
-    # Sort by ticker and date for proper calculations
+    # Get recent bar data with required columns only
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "open", "close", "volume"], 
+        min_bars=25  # Need 20 for volume average + recent data
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for easier processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
     df_sorted = df.sort_values(['ticker', 'date']).copy()
     
     # Calculate gap percentage
@@ -43,11 +56,24 @@ def gap_up_strategy(df):
 
 # Example 2: RSI Oversold Strategy with Trend Filter
 RSI_OVERSOLD_STRATEGY = '''
-def rsi_oversold_strategy(df):
+def strategy():
     """Find oversold stocks with RSI < 30 and above 50-day SMA"""
     instances = []
     
-    # Sort by ticker and date
+    # Get sufficient historical data for RSI and SMA calculations
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "close"], 
+        min_bars=70  # Need 50 for SMA + 14 for RSI + buffer
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for easier processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
     df_sorted = df.sort_values(['ticker', 'date']).copy()
     
     # Calculate RSI
@@ -87,11 +113,24 @@ def rsi_oversold_strategy(df):
 
 # Example 3: MACD Bullish Crossover Strategy
 MACD_CROSSOVER_STRATEGY = '''
-def macd_crossover_strategy(df):
+def strategy():
     """MACD bullish crossover strategy with custom calculation"""
     instances = []
     
-    # Sort by ticker and date
+    # Get historical data for MACD calculations
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "close"], 
+        min_bars=50  # Need 26 for slow EMA + buffer for signals
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for easier processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
     df_sorted = df.sort_values(['ticker', 'date']).copy()
     
     # Calculate MACD components
@@ -132,11 +171,24 @@ def macd_crossover_strategy(df):
 
 # Example 4: Bollinger Band Squeeze Strategy
 BOLLINGER_SQUEEZE_STRATEGY = '''
-def bollinger_squeeze_strategy(df):
+def strategy():
     """Find stocks with tight Bollinger Bands indicating potential breakout"""
     instances = []
     
-    # Sort by ticker and date
+    # Get historical data for Bollinger Band calculations
+    bar_data = get_bar_data(
+        timeframe="1d", 
+        columns=["ticker", "timestamp", "close"], 
+        min_bars=30  # Need 20 for BB calculation + buffer
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for easier processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
     df_sorted = df.sort_values(['ticker', 'date']).copy()
     
     # Calculate Bollinger Bands
@@ -186,7 +238,7 @@ def bollinger_squeeze_strategy(df):
 '''
 
 # All strategies dictionary for easy access
-DATAFRAME_STRATEGIES = {
+ACCESSOR_STRATEGIES = {
     'gap_up': GAP_UP_STRATEGY,
     'rsi_oversold': RSI_OVERSOLD_STRATEGY,
     'macd_crossover': MACD_CROSSOVER_STRATEGY,

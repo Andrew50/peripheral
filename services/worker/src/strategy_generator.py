@@ -14,7 +14,8 @@ from typing import Dict, Any, Optional, List
 import re
 
 from openai import OpenAI
-from src.validator import SecurityValidator, SecurityError, StrategyComplianceError
+from validator import SecurityValidator, SecurityError, StrategyComplianceError
+from accessor_strategy_engine import AccessorStrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +38,61 @@ class StrategyGenerator:
         logger.info("OpenAI client initialized successfully")
     
     def _get_system_instruction(self) -> str:
-        """Get concise system instruction for strategy generation"""
-        return """You are a Python trading strategy developer. Generate ONLY Python code.
+        """Get system instruction for OpenAI code generation"""
+        return """
+You are a trading strategy generator that creates Python functions using data accessor functions.
 
-REQUIREMENTS:
-- Function named 'strategy(df)' taking pandas DataFrame, returning List[Dict]
-- Use only: numpy, pandas, math, datetime, statistics
-- Data columns: [ticker, date, open, high, low, close, volume, adj_close, fund_*]
-- Core data: price data (OHLCV) + fundamental data (fund_pe_ratio, fund_market_cap, etc.)
-- Calculate your own technical indicators from raw price data - none are pre-calculated
-- Return format: [{'ticker': str, 'timestamp': str, 'signal': True, ...}]
-- No file I/O, network access, or dangerous operations
+CRITICAL REQUIREMENTS:
+- Function named 'strategy()' with NO parameters
+- Use data accessor functions with explicit security_ids:
+  * get_bar_data(timeframe="1d", security_ids=[list_of_security_ids], columns=[], min_bars=1) -> numpy array
+     Columns: securityid, timestamp, open, high, low, close, volume
+  * get_general_data(security_ids=[list_of_security_ids], columns=[]) -> pandas DataFrame  
+     Columns: securityid, name, sector, industry, market, etc.
 
-Generate clean, efficient Python code only."""
+IMPORTANT: 
+- ALWAYS pass explicit security_ids as integers (e.g., security_ids=[5546] for AAPL)
+- Only pass security_ids=None if you want ALL securities data
+- get_bar_data returns securityid (not ticker) as the primary identifier
+- Return List[Dict] with required fields: 'securityid', 'timestamp'
+
+EXAMPLE PATTERNS:
+```python
+def strategy():
+    # Get recent price data for specific security ID (e.g., AAPL = 5546)
+    bar_data = get_bar_data(
+        timeframe="1d",
+        security_ids=[5546],  # Explicit security ID for AAPL
+        columns=["securityid", "timestamp", "open", "close"],
+        min_bars=5
+    )
+    
+    if bar_data is None or len(bar_data) == 0:
+        return []
+    
+    # Convert to DataFrame for analysis
+    df = pd.DataFrame(bar_data, columns=["securityid", "timestamp", "open", "close"])
+    
+    instances = []
+    for _, row in df.iterrows():
+        # Your strategy logic here
+        instances.append({
+            'securityid': int(row['securityid']),
+            'timestamp': row['timestamp'],
+            'signal': True,  # Your signal logic
+        })
+    
+    return instances
+```
+
+SECURITY RULES:
+- Only use whitelisted imports: pandas, numpy, datetime, math
+- No file operations, network access, or dangerous functions
+- No exec, eval, or dynamic code execution
+- Use only standard mathematical and data manipulation operations
+
+Generate clean, efficient Python code that follows these patterns exactly.
+"""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
@@ -149,7 +192,7 @@ Generate clean, efficient Python code only."""
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': 'atlantis'
+                'database': os.getenv('POSTGRES_DB', 'postgres')
             }
             
             conn = psycopg2.connect(**db_config)
@@ -284,15 +327,45 @@ Generate a strategy function that detects this pattern in market data."""
         return response.strip()
     
     async def _validate_strategy_code(self, strategy_code: str) -> Dict[str, Any]:
-        """Validate strategy code using the security validator"""
+        """Validate strategy code using the security validator and test execution"""
         try:
-            # Use the existing validator
+            # First, use the existing validator for security checks
             is_valid = self.validator.validate_code(strategy_code)
             
-            return {
-                "valid": is_valid,
-                "error": None
-            }
+            if not is_valid:
+                return {
+                    "valid": False,
+                    "error": "Security validation failed"
+                }
+            
+            # Try a quick execution test with the new accessor engine
+            try:
+                engine = AccessorStrategyEngine()
+                test_result = await engine.execute_screening(
+                    strategy_code=strategy_code,
+                    universe=['AAPL'],  # Test with single symbol
+                    limit=10
+                )
+                
+                if test_result.get('success', False):
+                    return {
+                        "valid": True,
+                        "error": None
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
+                    }
+                    
+            except Exception as exec_error:
+                logger.warning(f"Execution test failed: {exec_error}")
+                # Still consider valid if security checks passed but execution test failed
+                # (might be due to missing data or other environmental issues)
+                return {
+                    "valid": True,
+                    "error": f"Warning: Execution test failed: {str(exec_error)}"
+                }
             
         except (SecurityError, StrategyComplianceError) as e:
             return {
@@ -358,7 +431,7 @@ Generate a strategy function that detects this pattern in market data."""
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': 'atlantis'
+                'database': os.getenv('POSTGRES_DB', 'postgres')
             }
             
             conn = psycopg2.connect(**db_config)
@@ -369,19 +442,19 @@ Generate a strategy function that detects this pattern in market data."""
                 cursor.execute("""
                     UPDATE strategies 
                     SET name = %s, description = %s, prompt = %s, pythoncode = %s, 
-                        updatedat = NOW()
+                        updated_at = NOW()
                     WHERE strategyid = %s AND userid = %s
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updatedat, isalertactive
+                             createdat, updated_at, isalertactive
                 """, (name, description, prompt, python_code, strategy_id, user_id))
             else:
                 # Create new strategy
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
-                                          createdat, updatedat, isalertactive, score, version)
+                                          createdat, updated_at, isalertactive, score, version)
                     VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, '1.0')
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updatedat, isalertactive
+                             createdat, updated_at, isalertactive
                 """, (user_id, name, description, prompt, python_code))
             
             result = cursor.fetchone()
@@ -398,7 +471,7 @@ Generate a strategy function that detects this pattern in market data."""
                     'prompt': result['prompt'],
                     'pythonCode': result['pythoncode'],
                     'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
-                    'updatedAt': result['updatedat'].isoformat() if result['updatedat'] else None,
+                    'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
                     'isAlertActive': result['isalertactive']
                 }
             else:

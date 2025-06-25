@@ -138,45 +138,69 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 ### Step 3: Code Generation
 Gemini AI generates Python code based on the system instruction:
 
-**System Instruction (`classifier.txt`):**
+**System Instruction (NEW ACCESSOR PATTERN ONLY):**
 ```text
-You are an expert Python developer and quantitative analyst. Your task is to write Python classifier functions that identify specific patterns in financial markets.
+You are a Python trading strategy developer. Generate ONLY Python code using the NEW ACCESSOR PATTERN.
 
-You must create a Python function called `classify_symbol(symbol)` that returns `True` if the symbol matches the pattern, `False` otherwise.
+CRITICAL: ONLY USE THE NEW ACCESSOR PATTERN
+- Function signature: def strategy(): (NO PARAMETERS)
+- Use data accessor functions to fetch data inside the function
 
-Available Data Functions:
-- get_price_data(symbol, timeframe='1d', days=30)
-- get_fundamental_data(symbol)
-- get_security_info(symbol)
-- scan_universe(filters, sort_by, limit)
-[... and many more]
+DATA ACCESS SYSTEM:
+- get_bar_data(timeframe="1d", columns=[], min_bars=1) -> numpy array
+- get_general_data(columns=[]) -> pandas DataFrame
+
+REQUIREMENTS:
+- Return format: [{'ticker': str, 'timestamp': str, 'signal': True, ...}]
 ```
 
-**Generated Code Example:**
+**Generated Code Example (NEW PATTERN):**
 ```python
-def classify_symbol(symbol):
+def strategy():
     """
-    Identifies when a symbol gaps up by more than the specified threshold.
-    Gap up = current open > previous close by the specified percentage.
+    ARM gap-up detection using new accessor pattern.
     """
-    try:
-        # Get recent price data
-        price_data = get_price_data(symbol, timeframe='1d', days=5)
-        if not price_data or not price_data.get('open') or len(price_data['open']) < 2:
-            return False
-        
-        # Get current and previous prices
-        current_open = price_data['open'][-1]
-        previous_close = price_data['close'][-2]
-        
-        # Calculate gap percentage
-        gap_percent = ((current_open - previous_close) / previous_close) * 100
-        
-        # Check threshold
-        return gap_percent > 3.0  # 3% gap up threshold
-        
-    except Exception:
-        return False
+    instances = []
+    
+    # Get recent bar data using accessor function
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "open", "close"],
+        min_bars=2
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Convert to DataFrame for processing
+    import pandas as pd
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+    df = df.sort_values(['ticker', 'date']).copy()
+    
+    # Filter for ARM only
+    df_arm = df[df['ticker'] == 'ARM']
+    
+    if len(df_arm) < 2:
+        return instances
+    
+    # Calculate gap percentage
+    df_arm['prev_close'] = df_arm['close'].shift(1)
+    df_arm['gap_pct'] = ((df_arm['open'] - df_arm['prev_close']) / df_arm['prev_close']) * 100
+    
+    # Filter for gaps >= 2%
+    gaps = df_arm[df_arm['gap_pct'] >= 2.0]
+    
+    for _, row in gaps.iterrows():
+        instances.append({
+            'ticker': 'ARM',
+            'timestamp': str(row['date']),
+            'signal': True,
+            'gap_percent': round(row['gap_pct'], 2),
+            'message': f"ARM gapped up {row['gap_pct']:.2f}%"
+        })
+    
+    return instances
 ```
 
 ### Step 4: Validation & Security
