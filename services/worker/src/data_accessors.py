@@ -102,24 +102,22 @@ class DataAccessorProvider:
             # Determine date range based on execution context
             context = self.execution_context
             
-            if context['mode'] == 'backtest':
-                # For backtest: get data from (start_date - min_bars) to end_date
-                if context['start_date'] and context['end_date']:
-                    # Calculate how far back to go for min_bars
-                    timeframe_delta = self._get_timeframe_delta(timeframe)
-                    start_with_buffer = context['start_date'] - (timeframe_delta * min_bars)
-                    date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
-                    date_params = [start_with_buffer, context['end_date']]
-                else:
-                    # Fallback if dates not provided
-                    date_filter = "o.timestamp >= NOW() - INTERVAL '1 year'"
-                    date_params = []
-            else:
-                # For screening/alerts: get most recent min_bars only
+            if context['start_date'] and context['end_date']:
+                # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
+                timeframe_delta = self._get_timeframe_delta(timeframe)
+                start_with_buffer = context['start_date'] - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
+                date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
+                date_params = [start_with_buffer, context['end_date']]
+            elif context['mode'] == 'screening':
+                # Screening mode without specific dates: get most recent min_bars only
                 timeframe_delta = self._get_timeframe_delta(timeframe)
                 lookback_duration = timeframe_delta * min_bars * 2  # Extra buffer for data availability
                 date_filter = "o.timestamp >= %s"
                 date_params = [datetime.now() - lookback_duration]
+            else:
+                # No specific date range: get ALL available data
+                date_filter = "TRUE"  # No date restriction
+                date_params = []
             
             # Handle security filtering
             if tickers is None or len(tickers) == 0:
@@ -152,12 +150,18 @@ class DataAccessorProvider:
                     select_columns.append(f"o.{col}")
             
             # Build the complete query
-            if context['mode'] == 'backtest':
-                # For backtest: get all data in range, don't limit per security
+            if context['mode'] == 'backtest' or (not context['start_date'] and not context['end_date'] and context['mode'] != 'screening'):
+                # For backtest mode or when no specific dates and not screening: get all data in range, don't limit per security
                 # Build parameterized query components
                 select_clause = ', '.join(select_columns)
                 from_clause = f"{table_name} o JOIN securities s ON o.securityid = s.securityid"
-                where_clause = f"{security_filter} AND {date_filter}"
+                
+                # Build WHERE clause - handle case where there might be no date filter
+                if date_params:
+                    where_clause = f"{security_filter} AND {date_filter}"
+                else:
+                    where_clause = security_filter
+                    
                 order_clause = "s.securityid, o.timestamp ASC"
                 
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
@@ -180,8 +184,27 @@ class DataAccessorProvider:
                 # Build parameterized CTE query components
                 select_clause = ', '.join(select_columns)
                 from_clause = f"{table_name} o JOIN securities s ON o.securityid = s.securityid"
-                where_clause = f"{security_filter} AND {date_filter}"
+                
+                # Build WHERE clause - handle case where there might be no date filter
+                if date_params:
+                    where_clause = f"{security_filter} AND {date_filter}"
+                else:
+                    where_clause = security_filter
+                    
                 final_select_clause = ', '.join(final_columns)
+                
+                # Determine ORDER BY columns - only use columns that are in the final result
+                order_by_columns = []
+                if "securityid" in final_columns:
+                    order_by_columns.append("securityid")
+                if "timestamp" in final_columns:
+                    order_by_columns.append("timestamp ASC")
+                
+                # Default ordering if no order columns available
+                if not order_by_columns:
+                    order_by_clause = "1"  # Order by first column
+                else:
+                    order_by_clause = ", ".join(order_by_columns)
                 
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
                 query = f"""WITH ranked_data AS (
@@ -193,7 +216,7 @@ class DataAccessorProvider:
                 SELECT {final_select_clause}
                 FROM ranked_data 
                 WHERE rn <= %s
-                ORDER BY securityid, timestamp ASC"""  # nosec B608
+                ORDER BY {order_by_clause}"""  # nosec B608
                 params = security_params + date_params + [min_bars]
             
             conn = self.get_connection()
