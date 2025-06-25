@@ -196,7 +196,19 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const maxRightSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px
+			// Responsive max sidebar widths
+			let maxRightSidebarWidth = 600;
+			if (window.innerWidth <= 800) {
+				maxRightSidebarWidth = Math.min(250, window.innerWidth * 0.4);
+			} else if (window.innerWidth <= 1000) {
+				maxRightSidebarWidth = Math.min(300, window.innerWidth * 0.35);
+			} else if (window.innerWidth <= 1200) {
+				maxRightSidebarWidth = Math.min(350, window.innerWidth * 0.3);
+			} else if (window.innerWidth <= 1400) {
+				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
+			}
+			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
+			
 			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
@@ -406,8 +418,6 @@
 	// Sidebar resizing
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
-	let maxWidth = 600; // Restored to 600px maximum
-	let leftMinWidth = 600; // Minimum width for chat left menu
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -808,10 +818,12 @@
 
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
+		// Limit chat to minimum 15% and maximum 40% of screen width
+		const minLeftSidebarWidth = window.innerWidth * 0.15;
+		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - 45);
 
 		// Enforce minimum and maximum width without auto-closing
-		leftMenuWidth = Math.max(leftMinWidth, Math.min(newWidth, maxLeftSidebarWidth));
+		leftMenuWidth = Math.max(minLeftSidebarWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
 		updateChartWidth();
 	}
@@ -830,7 +842,8 @@
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
-			leftMenuWidth = leftMinWidth;
+			// Set to 15% of screen width when opening
+			leftMenuWidth = window.innerWidth * 0.30;
 		}
 		updateChartWidth();
 	}
@@ -875,7 +888,6 @@
 	<AuthModal
 		visible={$authModalStore.visible}
 		defaultMode={$authModalStore.mode}
-		requiredFeature={$authModalStore.requiredFeature}
 		on:success={() => {
 			hideAuthModal();
 			// Optional: refresh page or update auth state

@@ -45,7 +45,7 @@ export interface ColorScheme {
 // Default color scheme (current colors)
 export const defaultScheme: ColorScheme = {
     name: 'Default',
-    c1: '#2d3139',
+    c1: '#2e2e2e',
     c2: '#1a1c21',
     c3: '#3b82f6',
     c4: '#374151',
