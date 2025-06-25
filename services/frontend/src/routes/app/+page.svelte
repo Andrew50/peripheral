@@ -80,11 +80,12 @@
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
-
+	
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
-	const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
+	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
+	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
