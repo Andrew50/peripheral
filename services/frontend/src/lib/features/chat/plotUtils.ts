@@ -80,7 +80,7 @@ export function validatePlotData(plotData: PlotData): string[] {
  */
 export function plotDataToText(plotData: PlotData): string {
 	let text = '';
-	
+
 	if (plotData.title) {
 		text += `${plotData.title}\n\n`;
 	}
@@ -98,7 +98,8 @@ export function plotDataToText(plotData: PlotData): string {
 		if (trace.x && trace.y) {
 			// For x,y plots
 			const length = Math.min(trace.x.length, trace.y.length);
-			for (let i = 0; i < Math.min(length, 10); i++) { // Limit to first 10 points
+			for (let i = 0; i < Math.min(length, 10); i++) {
+				// Limit to first 10 points
 				text += `  ${trace.x[i]}, ${trace.y[i]}\n`;
 			}
 			if (length > 10) {

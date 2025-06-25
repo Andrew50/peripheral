@@ -5,7 +5,7 @@
 	import DrawingMenu from './drawingMenu.svelte';
 	import WhyMoving from '$lib/components/whyMoving.svelte';
 
-	import { chartRequest,privateRequest,publicRequest } from '$lib/utils/helpers/backend';
+	import { chartRequest, privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
@@ -220,7 +220,6 @@
 
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
-
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially

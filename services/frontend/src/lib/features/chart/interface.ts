@@ -105,10 +105,9 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 	}
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
-		publicRequest<Record<string, any>>(
-			'getTickerMenuDetails',
-			{ securityId: newInstance.securityId }
-		)
+		publicRequest<Record<string, any>>('getTickerMenuDetails', {
+			securityId: newInstance.securityId
+		})
 			.then((details) => {
 				const updatedDispatch: ChartQueryDispatch = {
 					...queryDispatch,
@@ -133,7 +132,7 @@ export interface BarData {
 	low: number;
 	close: number;
 	volume: number;
-	events?: Array<{timestamp: number, type: string, value: string}>;
+	events?: Array<{ timestamp: number; type: string; value: string }>;
 }
 
 export interface CustomData<Time extends UTCTimestamp> extends Omit<BarData, 'time'> {

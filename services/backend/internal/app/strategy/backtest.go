@@ -271,16 +271,44 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 	results := make([]BacktestResult, len(instances))
 
 	for i, instance := range instances {
+		// Convert timestamp properly - handle different timestamp formats
+		timestamp := instance.Timestamp
+
+		// If timestamp looks like it might be in wrong format, try to fix it
+		// Check if it's a reasonable Unix timestamp (between 1970 and 2100)
+		if timestamp > 0 && timestamp < 4000000000000 { // Less than year 2100 in milliseconds
+			if timestamp < 1000000000000 { // If less than year 2001 in milliseconds, assume it's in seconds
+				timestamp = timestamp * 1000
+			}
+			// If it looks like a very small number, might be days since epoch - try different conversion
+			if timestamp < 100000 { // Less than ~1.2 days in seconds, likely wrong
+				// Could be days since epoch, convert to milliseconds
+				timestamp = timestamp * 24 * 60 * 60 * 1000
+			}
+		}
+
+		// Extract entry price from strategy results or use EntryPrice field
+		entryPrice := instance.EntryPrice
+		if entryPrice == 0 && instance.StrategyResults != nil {
+			if price, ok := instance.StrategyResults["entry_price"].(float64); ok {
+				entryPrice = price
+			} else if price, ok := instance.StrategyResults["open"].(float64); ok {
+				entryPrice = price
+			} else if price, ok := instance.StrategyResults["close"].(float64); ok {
+				entryPrice = price
+			}
+		}
+
 		results[i] = BacktestResult{
 			Ticker:          instance.Ticker,
 			SecurityID:      0, // Will be populated if needed
-			Timestamp:       instance.Timestamp,
-			Open:            instance.EntryPrice,
-			High:            instance.EntryPrice,
-			Low:             instance.EntryPrice,
-			Close:           instance.EntryPrice,
+			Timestamp:       timestamp,
+			Open:            entryPrice,
+			High:            entryPrice,
+			Low:             entryPrice,
+			Close:           entryPrice,
 			Volume:          0,
-			Classification:  instance.Classification,
+			Classification:  true, // Since instance was returned, it met criteria
 			FutureReturns:   map[string]float64{},
 			StrategyResults: instance.StrategyResults,
 		}

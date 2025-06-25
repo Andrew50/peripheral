@@ -1,42 +1,46 @@
 <script lang="ts">
-    import { queryInstanceInput } from '$lib/components/input/input.svelte';
-    import { queryChart } from '$lib/features/chart/interface';
-    import type { Instance } from '$lib/utils/types/types';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { queryChart } from '$lib/features/chart/interface';
+	import type { Instance } from '$lib/utils/types/types';
 
-    export let instance: Instance;
+	export let instance: Instance;
 
-    const commonTimeframes = ['1', '1h', '1d', '1w'];
-    // Helper computed value to check if current timeframe is custom
+	const commonTimeframes = ['1', '1h', '1d', '1w'];
+	// Helper computed value to check if current timeframe is custom
 	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
 
-    // --- New Handlers for Buttons ---
-    function handleTickerClick(event: MouseEvent | TouchEvent) {
-        event.preventDefault();
-        event.stopPropagation(); // Prevent legend collapse toggle
-        queryInstanceInput([], ['ticker'], instance, 'ticker').then((v: Instance) => {
-            if (v) queryChart(v, true);
-        }).catch((error) => {
-            // Handle cancellation silently
-            if (error.message !== 'User cancelled input') {
-                console.error('Error in ticker input:', error);
-            }
-        });
-	}
-    function handleTickerKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' || event.key === ' ') {
-			event.preventDefault();
-			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance, 'ticker').then((v: Instance) => {
+	// --- New Handlers for Buttons ---
+	function handleTickerClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation(); // Prevent legend collapse toggle
+		queryInstanceInput([], ['ticker'], instance, 'ticker')
+			.then((v: Instance) => {
 				if (v) queryChart(v, true);
-			}).catch((error) => {
+			})
+			.catch((error) => {
 				// Handle cancellation silently
 				if (error.message !== 'User cancelled input') {
 					console.error('Error in ticker input:', error);
 				}
 			});
+	}
+	function handleTickerKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			event.stopPropagation(); // Prevent legend collapse toggle
+			queryInstanceInput('any', ['ticker'], instance, 'ticker')
+				.then((v: Instance) => {
+					if (v) queryChart(v, true);
+				})
+				.catch((error) => {
+					// Handle cancellation silently
+					if (error.message !== 'User cancelled input') {
+						console.error('Error in ticker input:', error);
+					}
+				});
 		}
 	}
-    function handleSessionClick(event: MouseEvent | TouchEvent) {
+	function handleSessionClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation(); // Prevent legend collapse toggle
 		if (instance) {
@@ -44,20 +48,22 @@
 			queryChart(updatedInstance, true);
 		}
 	}
-    // Function to handle clicking the "..." timeframe button
+	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
 		// Start with empty input but force timeframe type
-		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe').then((v: Instance) => {
-			if (v) queryChart(v, true);
-		}).catch((error) => {
-			// Handle cancellation silently
-			if (error.message !== 'User cancelled input') {
-				console.error('Error in timeframe input:', error);
-			}
-		});
+		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe')
+			.then((v: Instance) => {
+				if (v) queryChart(v, true);
+			})
+			.catch((error) => {
+				// Handle cancellation silently
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in timeframe input:', error);
+				}
+			});
 	}
 
-    // Function to handle selecting a preset timeframe button
+	// Function to handle selecting a preset timeframe button
 	function selectTimeframe(newTimeframe: string) {
 		if (instance && instance.timeframe !== newTimeframe) {
 			const updatedInstance = { ...instance, timeframe: newTimeframe };
@@ -67,63 +73,69 @@
 </script>
 
 <div class="top-bar">
-		<button
-			class="symbol metadata-button"
-			on:click={handleTickerClick}
-			on:keydown={handleTickerKeydown}
-			aria-label="Change ticker"
-		>
-			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
-				<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-			</svg>
-			{instance?.ticker || 'NaN'}
-		</button>
-        
-        <!-- Divider -->
-        <div class="divider"></div>
-        
-        <!-- Add common timeframe buttons -->
-        {#each commonTimeframes as tf}
-            <button
-                class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
-                on:click={() => selectTimeframe(tf)}
-                aria-label="Set timeframe to {tf}"
-                aria-pressed={instance?.timeframe === tf}
-            >
-                {tf}
-            </button>
-        {/each}
-        <!-- Button to open custom timeframe input -->
-        <button
-            class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
-            on:click={handleCustomTimeframeClick}
-            aria-label="Select custom timeframe"
-            aria-pressed={isCustomTimeframe ? 'true' : 'false'}
-        >
-            {#if isCustomTimeframe}
-                {instance.timeframe}
-            {:else}
-                ...
-            {/if}
-        </button>
-        
-        <!-- Divider -->
-        <div class="divider"></div>
+	<button
+		class="symbol metadata-button"
+		on:click={handleTickerClick}
+		on:keydown={handleTickerKeydown}
+		aria-label="Change ticker"
+	>
+		<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+			<path
+				d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+		{instance?.ticker || 'NaN'}
+	</button>
 
-        <button
-                class="session-type metadata-button"
-                on:click={handleSessionClick}
-                aria-label="Toggle session type"
-            >
-            {instance?.extendedHours ? 'Extended' : 'Regular'}
-        </button>
+	<!-- Divider -->
+	<div class="divider"></div>
+
+	<!-- Add common timeframe buttons -->
+	{#each commonTimeframes as tf}
+		<button
+			class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
+			on:click={() => selectTimeframe(tf)}
+			aria-label="Set timeframe to {tf}"
+			aria-pressed={instance?.timeframe === tf}
+		>
+			{tf}
+		</button>
+	{/each}
+	<!-- Button to open custom timeframe input -->
+	<button
+		class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+		on:click={handleCustomTimeframeClick}
+		aria-label="Select custom timeframe"
+		aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+	>
+		{#if isCustomTimeframe}
+			{instance.timeframe}
+		{:else}
+			...
+		{/if}
+	</button>
+
+	<!-- Divider -->
+	<div class="divider"></div>
+
+	<button
+		class="session-type metadata-button"
+		on:click={handleSessionClick}
+		aria-label="Toggle session type"
+	>
+		{instance?.extendedHours ? 'Extended' : 'Regular'}
+	</button>
 </div>
 
 <style>
 	.top-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0F0F0F;
+		background-color: #0f0f0f;
 		display: flex;
 		justify-content: flex-start;
 		align-items: center;
@@ -138,7 +150,6 @@
 		left: 0;
 		right: 0;
 	}
-
 
 	/* Base styles for metadata buttons */
 	.metadata-button {
@@ -242,4 +253,4 @@
 		margin: 0 6px;
 		flex-shrink: 0;
 	}
-</style> 
+</style>

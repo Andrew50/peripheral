@@ -56,6 +56,19 @@ TICKER USAGE:
 - For universe-wide strategies, use tickers=None to get all available tickers
 - Return results with 'ticker' field (string), not 'securityid'
 
+CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
+- DO NOT use .tail(1) or .head(1) to limit results per ticker
+- Return every occurrence that meets your criteria across the entire dataset
+- The execution engine will handle filtering for different modes (backtest, screening, alerts)
+- Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
+
+CRITICAL: INSTANCE STRUCTURE
+- DO NOT include 'signal': True field - if returned, it inherently met criteria
+- Include relevant price data: 'open', 'close', 'entry_price' when available
+- Use proper timestamp format: int(row['timestamp']) for Unix timestamp
+- Include meaningful data like gap_percent, volume_ratio, etc.
+- REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
+
 ROBUST ERROR HANDLING:
 - Always check if data is None or empty before processing
 - Use proper DataFrame column checks: if 'column_name' in df.columns
@@ -68,14 +81,14 @@ def strategy():
     instances = []
     
     try:
-        # Example 1: Specific ticker strategy (e.g., for MRNA)
+        # Example 1: Specific ticker strategy (e.g., for MRNA gaps)
         target_tickers = ["MRNA"]  # Extract from prompt analysis
         
         bar_data = get_bar_data(
             timeframe="1d",
-            tickers=target_tickers,  # Use specific ticker
+            tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "close", "volume"],
-            min_bars=2  # Only need 2 bars for gap detection (previous close + current open)
+            min_bars=2
         )
         
         if bar_data is None or len(bar_data) == 0:
@@ -97,74 +110,60 @@ def strategy():
         # Apply strategy logic (gap up detection)
         df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
         
-        # Filter based on criteria - get most recent signal per ticker
-        signals = df[df['gap_percent'] >= 1.0].groupby('ticker').tail(1)  # Latest signal per ticker
+        # CORRECT: Return ALL instances that meet criteria (no .tail(1))
+        signals = df[df['gap_percent'] >= 1.0]  # All gaps >= 1%
         
         # Build results with ticker (not securityid)
         for _, row in signals.iterrows():
             instances.append({
-                'ticker': row['ticker'],  # Use ticker string
+                'ticker': row['ticker'],
                 'timestamp': int(row['timestamp']),
-                'signal': True,
-                'gap_percent': float(row['gap_percent'])
+                'gap_percent': float(row['gap_percent']),
+                'entry_price': float(row['open']),  # Use opening price as entry
+                'prev_close': float(row['prev_close']),
+                'score': min(1.0, row['gap_percent'] / 10.0)  # Score based on gap strength
             })
             
     except Exception as e:
-        # Log error but don't fail - return empty results
         print(f"Strategy execution error: {e}")
         return []
     
     return instances
 
-# Example 2: Universe-wide strategy with try/except blocks
+# Example 2: Volume breakout - return ALL breakouts, not just latest
 def strategy():
     instances = []
     
     try:
-        # Get data for all tickers
         bar_data = get_bar_data(
             timeframe="1d",
-            tickers=None,  # All available tickers
-            columns=["ticker", "timestamp", "open", "close", "volume"],
-            min_bars=2  # Minimum for detecting a singular timestep
+            tickers=None,  # All tickers
+            columns=["ticker", "timestamp", "volume"],
+            min_bars=20  # Need history for volume average
         )
         
         if bar_data is None or len(bar_data) == 0:
             return instances
         
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "volume"])
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
         
-        # Add fundamental data if needed
-        try:
-            fundamental_data = get_general_data(
-                tickers=None,
-                columns=["ticker", "market_cap", "sector", "industry"]  # Valid columns only
-            )
-            
-            if fundamental_data is not None and len(fundamental_data) > 0:
-                df = df.merge(fundamental_data, on='ticker', how='left')
-        except Exception as merge_error:
-            print(f"Warning: Could not merge fundamental data: {merge_error}")
-            # Continue without fundamental data
+        # Calculate 20-day volume average
+        df['volume_avg_20'] = df.groupby('ticker')['volume'].rolling(20).mean().reset_index(0, drop=True)
+        df['volume_ratio'] = df['volume'] / df['volume_avg_20']
         
-        # Apply universe-wide strategy logic with error handling
-        try:
-            # Get latest data per ticker for screening (one result per ticker)
-            latest_df = df.groupby('ticker').tail(1)
-            
-            # Apply screening criteria here...
-            filtered_df = latest_df  # Replace with actual filtering logic
-            
-            # Return results with ticker
-            for _, row in filtered_df.iterrows():
-                instances.append({
-                    'ticker': row['ticker'],
-                    'timestamp': int(row['timestamp']),
-                    'signal': True
-                })
-        except Exception as calc_error:
-            print(f"Calculation error: {calc_error}")
-            return []
+        # CORRECT: Find ALL volume breakouts (no .tail(1))
+        breakouts = df[df['volume_ratio'] >= 2.0]  # Volume 2x average
+        
+        for _, row in breakouts.iterrows():
+            instances.append({
+                'ticker': row['ticker'],
+                'timestamp': int(row['timestamp']),
+                'volume_ratio': float(row['volume_ratio']),
+                'entry_price': float(row.get('close', 0)),  # Use close as entry price
+                'volume': int(row['volume']),
+                'score': min(1.0, (row['volume_ratio'] - 2.0) / 3.0)  # Higher ratio = higher score
+            })
             
     except Exception as e:
         print(f"Strategy execution error: {e}")
@@ -173,12 +172,29 @@ def strategy():
     return instances
 ```
 
+COMMON MISTAKES TO AVOID:
+❌ signals = df[condition].groupby('ticker').tail(1)  # WRONG - limits to 1 per ticker
+❌ latest_df = df.groupby('ticker').last()  # WRONG - only latest data
+❌ df.drop_duplicates(subset=['ticker'])  # WRONG - removes valid signals
+❌ 'signal': True  # WRONG - unnecessary field, if returned it met criteria
+❌ No 'score' field  # WRONG - score is required for ranking
+
+✅ signals = df[condition]  # CORRECT - returns all matching instances
+✅ signals = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
+✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
+✅ 'score': min(1.0, signal_strength / max_strength)  # CORRECT - normalized score
+
 PATTERN RECOGNITION:
-- Gap patterns: Compare open vs previous close
-- Volume patterns: Compare current vs historical average using rolling windows
-- Price patterns: Use moving averages, RSI, and technical indicators
-- Breakout patterns: Identify price breakouts above/below key levels
-- Fundamental patterns: Use market cap, sector, industry classification data
+- Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
+  Score: min(1.0, gap_percent / 10.0) - higher gap = higher score
+- Volume patterns: Compare current vs historical average - return ALL volume spikes
+  Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
+- Price patterns: Use moving averages, RSI - return ALL signal occurrences
+  Score: Based on signal strength (RSI distance from 50, etc.)
+- Breakout patterns: Identify price breakouts - return ALL breakouts
+  Score: min(1.0, breakout_strength / max_expected)
+- Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
+  Score: Based on fundamental strength (P/E ratio, growth, etc.)
 
 TICKER EXTRACTION FROM PROMPTS:
 - If prompt mentions specific ticker (e.g., "MRNA gaps up"), use tickers=["MRNA"]
@@ -201,9 +217,12 @@ RETURN FORMAT:
 - Return List[Dict] where each dict contains:
   * 'ticker': str (e.g., "MRNA", "AAPL")
   * 'timestamp': int (Unix timestamp)
-  * Additional fields as needed for strategy results
+  * 'entry_price': float (price at signal time - open, close, etc.)
+  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger signal)
+  * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc.)
+- DO NOT include 'signal': True - it's redundant
 
-Generate clean, robust Python code that uses ticker symbols and handles errors gracefully to produce accurate trading signals.
+Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering.
 """
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
@@ -335,7 +354,13 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
             return None
     
     def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0) -> str:
-        """Generate strategy code using OpenAI with optimized prompts"""
+        """
+        Generate strategy code using OpenAI with optimized prompts
+        
+        IMPORTANT: The system instruction emphasizes returning ALL matching instances,
+        not just the latest per ticker. This prevents the .tail(1) bug that was
+        limiting backtest results to only one instance per symbol.
+        """
         try:
             system_instruction = self._get_system_instruction()
             

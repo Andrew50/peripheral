@@ -57,8 +57,6 @@
 		release();
 		currentSecurityId = null;
 	});
-
-
 </script>
 
 <div class="quote-container glass glass--small glass--medium">
@@ -85,7 +83,18 @@
 
 <style>
 	.quote-container {
-		font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue, sans-serif;
+		font-family:
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			Segoe UI,
+			Roboto,
+			Oxygen,
+			Ubuntu,
+			Cantarell,
+			Open Sans,
+			Helvetica Neue,
+			sans-serif;
 		font-size: 14px;
 		color: var(--text-primary, white);
 		width: 100%;

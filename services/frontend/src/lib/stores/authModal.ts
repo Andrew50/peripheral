@@ -24,7 +24,7 @@ export function showAuthModal(requiredFeature: string, mode: 'login' | 'signup' 
 }
 
 export function hideAuthModal() {
-	authModalStore.update(state => ({
+	authModalStore.update((state) => ({
 		...state,
 		visible: false
 	}));
@@ -33,11 +33,11 @@ export function hideAuthModal() {
 // Function to check if user is authenticated
 export function requireAuth(featureName: string): boolean {
 	const token = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') : null;
-	
+
 	if (!token) {
 		showAuthModal(featureName);
 		return false;
 	}
-	
+
 	return true;
-} 
+}

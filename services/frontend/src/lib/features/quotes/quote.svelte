@@ -38,10 +38,9 @@
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
 				lastFetchedSecurityId = Number(chartInstance.securityId);
-				publicRequest<Record<string, any>>(
-					'getTickerMenuDetails',
-					{ securityId: chartInstance.securityId }
-				)
+				publicRequest<Record<string, any>>('getTickerMenuDetails', {
+					securityId: chartInstance.securityId
+				})
 					.then((details) => {
 						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {
 							currentDetails = details;
@@ -219,7 +218,7 @@
 			{/if}
 			<div class="ticker-wrapper">
 				<div class="ticker">{$instance.ticker || '--'}</div>
-				{#if ($instance?.active === false || currentDetails?.active === false)}
+				{#if $instance?.active === false || currentDetails?.active === false}
 					<div class="warning-triangle-container">
 						<div class="warning-triangle"></div>
 						<div class="tooltip">Delisted</div>
@@ -286,7 +285,7 @@
 			<div class="detail-item">
 				<span class="label">Exchange:</span>
 				<span class="value"
-					>{ getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange) }</span
+					>{getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange)}</span
 				>
 			</div>
 			<div class="detail-item">
@@ -474,7 +473,9 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 		opacity: 0;
 		visibility: hidden;
-		transition: opacity 0.2s ease, visibility 0.2s ease;
+		transition:
+			opacity 0.2s ease,
+			visibility 0.2s ease;
 		margin-bottom: 4px;
 		z-index: 1000;
 	}
@@ -522,7 +523,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.05);
 		transition: all 0.2s ease;
 	}
-	
+
 	.metric-item:hover {
 		background: rgba(255, 255, 255, 0.04);
 		border-color: rgba(255, 255, 255, 0.1);
@@ -673,58 +674,58 @@
 			gap: clamp(4px, 1vw, 6px);
 			padding: clamp(8px, 1.5vw, 10px);
 		}
-		
+
 		.metric-item {
 			padding: clamp(4px, 1vw, 6px) clamp(3px, 0.8vw, 4px);
 		}
-		
+
 		.metric-item .label {
 			font-size: clamp(0.55rem, 0.3rem + 0.3vw, 0.7rem);
 		}
-		
+
 		.quote-details {
 			grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 			gap: clamp(4px, 1vw, 6px) clamp(6px, 1.5vw, 10px);
 			padding: clamp(8px, 1.5vw, 10px);
 		}
-		
+
 		.detail-item {
 			font-size: clamp(0.6rem, 0.4rem + 0.4vw, 0.8rem);
 		}
 	}
-	
+
 	@media (max-width: 1200px) {
 		.quote-key-metrics {
 			grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
 			gap: clamp(3px, 0.8vw, 5px);
 		}
-		
+
 		.quote-details {
 			grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
 		}
 	}
-	
+
 	@media (max-width: 1000px) {
 		.quote-key-metrics {
 			grid-template-columns: repeat(3, 1fr);
 		}
-		
+
 		.quote-details {
 			grid-template-columns: 1fr;
 		}
 	}
-	
+
 	@media (max-width: 800px) {
 		.quote-key-metrics {
 			grid-template-columns: repeat(2, 1fr);
 		}
 	}
-	
+
 	@media (max-width: 400px) {
 		.quote-key-metrics {
 			grid-template-columns: repeat(2, 1fr);
 		}
-		
+
 		.quote-details {
 			grid-template-columns: 1fr;
 		}

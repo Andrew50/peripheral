@@ -32,11 +32,11 @@
 	}
 
 	/* ───── Cast stores for <List> component ────────────────────────────────── */
-	$: extendedActiveAlerts   = activeAlerts   as unknown as Writable<ExtendedInstance[]>;
+	$: extendedActiveAlerts = activeAlerts as unknown as Writable<ExtendedInstance[]>;
 	$: extendedInactiveAlerts = inactiveAlerts as unknown as Writable<ExtendedInstance[]>;
-	$: extendedAlertLogs      = alertLogs      as unknown as Writable<ExtendedInstance[]>;
+	$: extendedAlertLogs = alertLogs as unknown as Writable<ExtendedInstance[]>;
 
-	const handleDeleteAlert    = (item: ExtendedInstance) => deleteAlert(item as Alert);
+	const handleDeleteAlert = (item: ExtendedInstance) => deleteAlert(item as Alert);
 	const handleDeleteAlertLog = (item: ExtendedInstance) => deleteAlertLog(item as AlertLog);
 </script>
 
@@ -51,7 +51,9 @@
 	<!-- Active Alerts -->
 	<h3>Active Alerts</h3>
 	<List
-		on:contextmenu={(event)=>{event.preventDefault()}}
+		on:contextmenu={(event) => {
+			event.preventDefault();
+		}}
 		list={extendedActiveAlerts}
 		columns={['Ticker', 'Alert Price']}
 		parentDelete={handleDeleteAlert}
@@ -60,7 +62,9 @@
 	<!-- Inactive Alerts -->
 	<h3>Inactive Alerts</h3>
 	<List
-		on:contextmenu={(event)=>{event.preventDefault()}}
+		on:contextmenu={(event) => {
+			event.preventDefault();
+		}}
 		list={extendedInactiveAlerts}
 		columns={['Ticker', 'Alert Price']}
 		parentDelete={handleDeleteAlert}
@@ -69,7 +73,9 @@
 	<!-- Alert Logs -->
 	<h3>Alert History</h3>
 	<List
-		on:contextmenu={(event)=>{event.preventDefault()}}
+		on:contextmenu={(event) => {
+			event.preventDefault();
+		}}
 		list={extendedAlertLogs}
 		columns={['Ticker', 'Timestamp']}
 		parentDelete={handleDeleteAlertLog}
@@ -111,4 +117,3 @@
 		background: var(--accent-primary-dark);
 	}
 </style>
-

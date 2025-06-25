@@ -1,5 +1,5 @@
-import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings } from './socket'
-import type { SubscriptionRequest, StreamCallback } from './socket'
+import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings } from './socket';
+import type { SubscriptionRequest, StreamCallback } from './socket';
 
 import { DateTime } from 'luxon';
 import { eventChart } from '$lib/features/chart/interface';
@@ -18,13 +18,15 @@ import type { StreamData, ChannelType, TimeType } from './socket';
 import { latestValue } from './socket';
 export function releaseStream(channelName: string, callback: StreamCallback) {
 	let callbacks = activeChannels.get(channelName);
-	if (!callbacks) { return; }
+	if (!callbacks) {
+		return;
+	}
 	callbacks = callbacks.filter((v) => v !== callback);
 	if (callbacks.length === 0) {
-			activeChannels.delete(channelName);
-			latestValue.delete(channelName);
-			unsubscribe(channelName);
-		} else {
+		activeChannels.delete(channelName);
+		latestValue.delete(channelName);
+		unsubscribe(channelName);
+	} else {
 		activeChannels.set(channelName, callbacks);
 	}
 }
@@ -34,12 +36,12 @@ export function addStream<T extends StreamData>(
 	channelType: ChannelType,
 	callback: (v: T) => void
 ): Function {
-	if (!instance.securityId) return () => { };
+	if (!instance.securityId) return () => {};
 	const channelName = `${instance.securityId}-${channelType}`;
 	const callbacks = activeChannels.get(channelName);
 	const add = () => {
-		const list = activeChannels.get(channelName); 
-		if(!list?.includes(callback as StreamCallback)) list?.push(callback as StreamCallback);
+		const list = activeChannels.get(channelName);
+		if (!list?.includes(callback as StreamCallback)) list?.push(callback as StreamCallback);
 	};
 	// If callbacks exist, this channel is already active
 	if (callbacks) {
@@ -137,7 +139,11 @@ export function stopReplay() {
 		});
 
 		// Notify charts to update
-		chartEventDispatcher.set({ event: 'realtime', chartId: 'all' as unknown as number, data: null });
+		chartEventDispatcher.set({
+			event: 'realtime',
+			chartId: 'all' as unknown as number,
+			data: null
+		});
 	}
 }
 export function changeSpeed(speed: number) {
@@ -171,7 +177,6 @@ export function setExtended(extendedHours: boolean) {
 	streamInfo.update((r: ReplayInfo) => ({ ...r, extendedHours: extendedHours }));
 }
 
-
 // Function to subscribe to global SEC filings feed
 export function addGlobalSECFilingsStream(callback: StreamCallback): Function {
 	const channelName = 'sec-filings';
@@ -199,4 +204,3 @@ export function releaseGlobalSECFilingsStream(callback: StreamCallback) {
 	releaseStream(channelName, callback);
 }
 // /streamInterface.ts
-

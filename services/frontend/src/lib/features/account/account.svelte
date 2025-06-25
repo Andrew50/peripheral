@@ -324,7 +324,15 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={['timestamp', 'Ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL', 'tradeDurationMillis']}
+				columns={[
+					'timestamp',
+					'Ticker',
+					'trade_direction',
+					'status',
+					'openQuantity',
+					'closedPnL',
+					'tradeDurationMillis'
+				]}
 				displayNames={{
 					timestamp: 'Time',
 					Ticker: 'Ticker',
@@ -703,7 +711,7 @@
 		box-sizing: border-box; /* Keep for safety, though redundant */
 		/* Adjust padding for specific input types if needed */
 		padding-left: 8px; /* Add back some left padding for inputs */
-		padding-right: 8px;/* Add back some right padding for inputs */
+		padding-right: 8px; /* Add back some right padding for inputs */
 		text-align: left; /* Ensure input text isn't centered */
 	}
 

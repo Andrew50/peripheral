@@ -101,8 +101,6 @@
 		}, 50);
 	}
 
-
-
 	// Watch for content changes that might affect size
 	$: if (hoveredCandleData || instance || width) {
 		debouncedCheckOverflow();
@@ -137,39 +135,42 @@
 	});
 </script>
 
-<div
-	bind:this={legendElement}
-	tabindex="-1"
-	class="legend {isOverflowing ? 'compact' : ''}"
->
-
+<div bind:this={legendElement} tabindex="-1" class="legend {isOverflowing ? 'compact' : ''}">
 	{#if showPriceGrid}
-			<!-- OHLC Row -->
-			<div class="ohlc-row">
-				<span class="label">O</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.open.toFixed(2)}</span>
-				<span class="label">H</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.high.toFixed(2)}</span>
-				<span class="label">L</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.low.toFixed(2)}</span>
-				<span class="label">C</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.close.toFixed(2)}</span>
-			</div>
-		{/if}
+		<!-- OHLC Row -->
+		<div class="ohlc-row">
+			<span class="label">O</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.open.toFixed(2)}</span
+			>
+			<span class="label">H</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.high.toFixed(2)}</span
+			>
+			<span class="label">L</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.low.toFixed(2)}</span
+			>
+			<span class="label">C</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.close.toFixed(2)}</span
+			>
+		</div>
+	{/if}
 
-		{#if showMetricsGrid}
-			<!-- Metrics Row -->
-			<div class="metrics-row">
-				<span class="label">CHG</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
-				</span>
-				<span class="label">VOL</span>
-				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
-				<span class="label">ADR</span>
-				<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
-			</div>
-		{/if}
+	{#if showMetricsGrid}
+		<!-- Metrics Row -->
+		<div class="metrics-row">
+			<span class="label">CHG</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+				{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
+			</span>
+			<span class="label">VOL</span>
+			<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
+			<span class="label">ADR</span>
+			<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -194,7 +195,6 @@
 	.legend.compact {
 		width: auto;
 	}
-
 
 	.ohlc-row {
 		display: grid;
@@ -244,5 +244,4 @@
 			min-width: 260px;
 		}
 	}
-
 </style>

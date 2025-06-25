@@ -215,7 +215,7 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'alert',
                 'alerts': alerts,
-                'signals': {inst['ticker']: inst for inst in instances if inst.get('signal', False)},
+                'signals': {inst['ticker']: inst for inst in instances},  # All instances are signals
                 'symbols_processed': len(symbols),
                 'execution_time_ms': execution_time
             }
@@ -236,24 +236,24 @@ class AccessorStrategyEngine:
         
         alerts = []
         for instance in instances:
-            if instance.get('signal', False):
-                alert = {
-                    'symbol': instance['ticker'],
-                    'type': 'strategy_signal',
-                    'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
-                    'timestamp': datetime.now().isoformat(),
-                    'data': instance
-                }
-                
-                # Add priority based on score/strength
-                if 'score' in instance:
-                    alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
-                elif 'signal_strength' in instance:
-                    alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
-                else:
-                    alert['priority'] = 'medium'
-                
-                alerts.append(alert)
+            # Since all instances are signals (they met criteria), convert all to alerts
+            alert = {
+                'symbol': instance['ticker'],
+                'type': 'strategy_signal',
+                'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
+                'timestamp': datetime.now().isoformat(),
+                'data': instance
+            }
+            
+            # Add priority based on score/strength
+            if 'score' in instance:
+                alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
+            elif 'signal_strength' in instance:
+                alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
+            else:
+                alert['priority'] = 'medium'
+            
+            alerts.append(alert)
         
         return alerts
 
@@ -383,14 +383,13 @@ class AccessorStrategyEngine:
     def _rank_screening_results(self, instances: List[Dict], limit: int) -> List[Dict]:
         """Rank screening results by score or other criteria"""
         
-        # Sort by score if available, otherwise by timestamp
+        # Sort by score if available, otherwise by timestamp descending (most recent first)
         def sort_key(instance):
             if 'score' in instance:
                 return instance['score']
-            elif 'signal' in instance and instance['signal']:
-                return 1.0
             else:
-                return 0.0
+                # Use timestamp for sorting if no score - more recent = higher priority
+                return instance.get('timestamp', 0)
         
         sorted_instances = sorted(instances, key=sort_key, reverse=True)
         
@@ -410,11 +409,12 @@ class AccessorStrategyEngine:
         
         # Basic statistics
         total_instances = len(instances)
-        positive_signals = len([i for i in instances if i.get('signal', False)])
+        # Since all returned instances are positive signals (they met criteria), count all
+        positive_signals = total_instances  # All instances are positive signals
         unique_tickers = len(set(i['ticker'] for i in instances))
         
-        # Calculate signal rate
-        signal_rate = positive_signals / total_instances if total_instances > 0 else 0
+        # Calculate signal rate (always 1.0 since all returned instances are signals)
+        signal_rate = 1.0
         
         # Calculate average score if available
         scores = [i.get('score', 0) for i in instances if 'score' in i and isinstance(i['score'], (int, float))]
@@ -432,7 +432,7 @@ class AccessorStrategyEngine:
         numeric_fields = []
         for instance in instances:
             for key, value in instance.items():
-                if key not in ['ticker', 'timestamp', 'signal'] and isinstance(value, (int, float)):
+                if key not in ['ticker', 'timestamp'] and isinstance(value, (int, float)):
                     if key not in numeric_fields:
                         numeric_fields.append(key)
         

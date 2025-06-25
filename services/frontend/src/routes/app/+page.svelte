@@ -80,7 +80,7 @@
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
-	
+
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
@@ -166,9 +166,8 @@
 		}
 	}
 
-	// Import connect 
+	// Import connect
 	import { connect } from '$lib/utils/stream/socket';
-
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -208,7 +207,7 @@
 				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
 			}
 			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
-			
+
 			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
@@ -228,10 +227,12 @@
 		const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
 		const isAtTop = scrollTop === 0;
 		const isAtBottom = scrollTop + clientHeight >= scrollHeight;
-		
+
 		// If at top or bottom and trying to scroll further, prevent default
-		if ((isAtTop && e.touches[0].clientY > e.touches[0].clientY) || 
-			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+		if (
+			(isAtTop && e.touches[0].clientY > e.touches[0].clientY) ||
+			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)
+		) {
 			e.preventDefault();
 		}
 	};
@@ -242,11 +243,13 @@
 		const currentInputStatus = get(inputQuery).status;
 		const inputWindowExists = document.getElementById('input-window') !== null;
 		const now = Date.now();
-		
+
 		// Don't trigger if input is active, input window exists, or we recently triggered auto-input
-		if (currentInputStatus !== 'inactive' || 
-			inputWindowExists || 
-			(now - lastAutoInputTime) < AUTO_INPUT_DEBOUNCE_MS) {
+		if (
+			currentInputStatus !== 'inactive' ||
+			inputWindowExists ||
+			now - lastAutoInputTime < AUTO_INPUT_DEBOUNCE_MS
+		) {
 			return;
 		}
 
@@ -266,7 +269,7 @@
 		if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
 			// Update last trigger time
 			lastAutoInputTime = now;
-			
+
 			// Prevent the event from propagating to avoid double capture
 			event.preventDefault();
 			event.stopPropagation();
@@ -279,18 +282,16 @@
 				inputString: initialKey
 			} as any;
 
-			queryInstanceInput(
-				'any',
-				['ticker', 'timeframe'],
-				instanceWithInput
-			).then((updatedInstance) => {
-				queryChart(updatedInstance, true);
-			}).catch((error) => {
-				// Handle cancellation silently
-				if (error.message !== 'User cancelled input') {
-					console.error('Error in auto-input capture:', error);
-				}
-			});
+			queryInstanceInput('any', ['ticker', 'timeframe'], instanceWithInput)
+				.then((updatedInstance) => {
+					queryChart(updatedInstance, true);
+				})
+				.catch((error) => {
+					// Handle cancellation silently
+					if (error.message !== 'User cancelled input') {
+						console.error('Error in auto-input capture:', error);
+					}
+				});
 
 			// Focus the chart container after input activation
 			const chartContainer = document.getElementById(`chart_container-0`);
@@ -364,7 +365,7 @@
 
 			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
-			
+
 			// Add touch event listeners for additional overscroll prevention
 			document.addEventListener('touchstart', preventOverscroll, { passive: false });
 			document.addEventListener('touchmove', preventOverscroll, { passive: false });
@@ -376,7 +377,7 @@
 			privateRequest<string>('verifyAuth', {}).catch(() => {
 				goto('/login');
 			});
-		} 
+		}
 
 		initStores();
 
@@ -779,7 +780,6 @@
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
-
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
 		// Increment key to force re-render when profile data changes
@@ -862,7 +862,7 @@
 			leftMenuWidth = 0;
 		} else {
 			// Set to 15% of screen width when opening
-			leftMenuWidth = window.innerWidth * 0.30;
+			leftMenuWidth = window.innerWidth * 0.3;
 		}
 		updateChartWidth();
 	}
@@ -925,9 +925,10 @@
 							<Query {isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
+					<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 					<div
 						class="resize-handle right"
-						role="button"
+						role="separator"
 						aria-orientation="vertical"
 						aria-label="Resize left panel"
 						on:mousedown={startLeftResize}
@@ -968,9 +969,10 @@
 								</div>
 							{/each}
 							{#if bottomWindows.length > 0}
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 								<div
 									class="bottom-resize-handle"
-									role="button"
+									role="separator"
 									aria-orientation="horizontal"
 									aria-label="Resize bottom panel"
 									on:mousedown={startBottomResize}
@@ -984,9 +986,10 @@
 					<!-- Sidebar -->
 					{#if $menuWidth > 0}
 						<div class="sidebar" style="width: {$menuWidth}px;">
+							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 							<div
 								class="resize-handle"
-								role="button"
+								role="separator"
 								aria-orientation="vertical"
 								aria-label="Resize sidebar"
 								on:mousedown={startResize}
@@ -1006,9 +1009,10 @@
 									{/if}
 								</div>
 
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 								<div
 									class="sidebar-resize-handle"
-									role="button"
+									role="separator"
 									aria-orientation="horizontal"
 									aria-label="Resize ticker panel"
 									on:mousedown={startSidebarResize}
@@ -1166,7 +1170,7 @@
 				{:else}
 					Loading Time...
 				{/if}
-			</span>	
+			</span>
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}

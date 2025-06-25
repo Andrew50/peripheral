@@ -9,13 +9,13 @@
 	//import { newStudy } from '$lib/features/study.svelte';
 	import { get, writable } from 'svelte/store';
 	import { setSample } from '$lib/features/strategies/interface';
-//	import { querySimilarInstances } from '$lib/features/similar/interface';
+	//	import { querySimilarInstances } from '$lib/features/similar/interface';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 	import { queryStrategy } from '$lib/components/strategiesPopup.svelte';
 	import { startReplay } from '$lib/utils/stream/interface';
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	//import { getLLMSummary } from '$lib/features/summary.svelte';
-    import {addInstanceToChat} from '$lib/features/chat/interface';
+	import { addInstanceToChat } from '$lib/features/chat/interface';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
@@ -208,7 +208,9 @@
 			{#if $rightClickQuery.source === 'chart'}
 				<div class="separator"></div>
 				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
-					>Set Alert on {$rightClickQuery.instance.ticker} at {$rightClickQuery.instance.price?.toFixed(2)}</button
+					>Set Alert on {$rightClickQuery.instance.ticker} at {$rightClickQuery.instance.price?.toFixed(
+						2
+					)}</button
 				>
 				<button
 					class="wide-button"
@@ -235,9 +237,9 @@
 			<!--<button class="wide-button" on:click={() => getLLMSummary($rightClickQuery.instance)}>
 				Get LLM Summary for {$rightClickQuery.instance.ticker}
 			</button>-->
-            <button class="wide-button" on:click={() => addInstanceToChat($rightClickQuery.instance)}>
-                Add to Chat
-            </button>
+			<button class="wide-button" on:click={() => addInstanceToChat($rightClickQuery.instance)}>
+				Add to Chat
+			</button>
 		</div>
 
 		<!--{#if $entryOpen}
