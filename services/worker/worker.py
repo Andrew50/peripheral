@@ -1148,16 +1148,25 @@ if __name__ == "__main__":
     print(f"🏷️  Worker Process ID: {os.getpid()}")
     print("=" * 80)
     
+    # Force flush to ensure we see the startup message
+    sys.stdout.flush()
+    
     logger.info("🎬 WORKER STARTUP INITIATED")
     logger.info("🔧 Priority Queue System: ENABLED")
     logger.info("📋 Supported Task Types: backtest, screening, alert, create_strategy")
     
     try:
         # Initialize and start worker
+        print("🏗️ Initializing worker...")
+        sys.stdout.flush()
         logger.info("🏗️ Initializing worker...")
+        
         worker = StrategyWorker()
         
+        print("✅ Worker initialized successfully!")
+        sys.stdout.flush()
         logger.info("🎯 Starting main processing loop...")
+        
         worker.run()
         
     except KeyboardInterrupt:
@@ -1165,11 +1174,15 @@ if __name__ == "__main__":
         print("\n🛑 Worker shutdown requested by user")
         
     except Exception as e:
-        logger.error(f"💥 FATAL ERROR during worker startup: {e}")
+        error_msg = f"💥 FATAL ERROR during worker startup: {e}"
+        logger.error(error_msg)
         logger.error(f"📄 Full traceback: {traceback.format_exc()}")
-        print(f"\n💥 FATAL ERROR: {e}")
+        print(error_msg)
+        print(f"📄 Full traceback: {traceback.format_exc()}")
+        sys.stdout.flush()
         raise
         
     finally:
         logger.info("🏁 Worker process ending")
         print("🏁 Worker process ended")
+        sys.stdout.flush()
