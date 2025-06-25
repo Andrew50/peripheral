@@ -8,7 +8,18 @@
 	// Props
 	export let visible: boolean = false;
 	export let defaultMode: 'login' | 'signup' = 'login';
-	export let requiredFeature: string = 'this feature'; // e.g., "watchlists", "strategies", etc.
+
+	// Internal state to track current mode
+	let currentMode: 'login' | 'signup' = defaultMode;
+
+	// Reset mode when modal becomes visible
+	$: if (visible) {
+		currentMode = defaultMode;
+	}
+
+	function toggleMode() {
+		currentMode = currentMode === 'login' ? 'signup' : 'login';
+	}
 
 	function closeModal() {
 		dispatch('close');
@@ -31,15 +42,25 @@
 		dispatch('success');
 		closeModal();
 		
-		// Refresh the page to update auth state
 		if (typeof window !== 'undefined') {
-			window.location.reload();
+			// Check if we're currently on a shared page
+			const urlParams = new URLSearchParams(window.location.search);
+			const shareParam = urlParams.get('share');
+			
+			if (shareParam) {
+				// If on a shared page, redirect to regular app without share parameter
+				window.location.href = '/app';
+			} else {
+				// Otherwise, refresh the page to update auth state
+				window.location.reload();
+			}
 		}
 	}
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
+ <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 {#if visible}
 	<div 
 		class="auth-modal-overlay"
@@ -60,15 +81,18 @@
 
 				<!-- Feature requirement header -->
 				<div class="feature-header">
-					<h2>Authentication Required</h2>
-					<p>You need to sign in to access <strong>{requiredFeature}</strong></p>
+					<h2 id="auth-modal-title">
+						{currentMode === 'login' ? 'Login to Atlantis' : 'Sign Up for Atlantis'}
+					</h2>
 				</div>
 
 				<!-- Auth component -->
 				<div class="auth-wrapper">
 					<Auth 
-						loginMenu={defaultMode === 'login'} 
+						loginMenu={currentMode === 'login'} 
+						modalMode={true}
 						on:authSuccess={handleAuthSuccess}
+						on:toggleMode={toggleMode}
 					/>
 				</div>
 			</div>
@@ -83,74 +107,117 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: rgba(0, 0, 0, 0.8);
-		backdrop-filter: blur(1px);
+		background: rgba(0, 0, 0, 0.75);
+		backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 10000;
-		padding: 1rem;
+		padding: 1.5rem;
+		animation: fadeIn 0.2s ease-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes slideUp {
+		from {
+			opacity: 0;
+			transform: translateY(20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.auth-modal-container {
 		width: 100%;
-		max-width: 500px;
+		max-width: 380px;
 		max-height: 90vh;
 		overflow-y: auto;
 		position: relative;
 		margin: 0 auto;
+		animation: slideUp 0.3s ease-out;
 	}
 
 	.auth-modal-content {
-		background: var(--ui-bg-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 12px;
+		background: #0f0f0f;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 16px;
 		position: relative;
 		width: 100%;
 		overflow: hidden;
+		box-shadow: 
+			0 20px 25px -5px rgba(0, 0, 0, 0.3),
+			0 10px 10px -5px rgba(0, 0, 0, 0.2);
 	}
 
 	.close-button {
 		position: absolute;
 		top: 1rem;
 		right: 1rem;
-		background: rgba(0, 0, 0, 0.5);
+		background: rgba(255, 255, 255, 0.05);
 		border: none;
-		color: white;
+		color: rgba(255, 255, 255, 0.4);
 		cursor: pointer;
 		padding: 0.5rem;
-		border-radius: 6px;
+		border-radius: 50%;
 		transition: all 0.2s ease;
 		z-index: 1001;
 		backdrop-filter: blur(4px);
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		opacity: 0.7;
 	}
 
 	.close-button:hover {
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.8);
+		opacity: 1;
+		transform: scale(1.02);
 	}
 
 	.feature-header {
-		background: var(--ui-bg-secondary);
-		padding: 1.5rem; /* Symmetric padding - close button is positioned absolutely */
-		border-bottom: 1px solid var(--ui-border);
+		background: linear-gradient(135deg, var(--ui-bg-secondary) 0%, var(--ui-bg-primary) 100%);
+		padding: 2rem 2rem 1.5rem 2rem;
 		text-align: center;
+		position: relative;
+	}
+
+	.feature-header::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 60px;
+		height: 1px;
+		background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
 	}
 
 	.feature-header h2 {
-		color: var(--text-primary);
-		font-size: 1.25rem;
-		font-weight: 600;
-		margin: 0 0 0.5rem 0;
-	}
-
-	.feature-header p {
-		color: var(--text-secondary);
-		font-size: 0.9rem;
+		color: #ffffff;
+		font-size: 1.5rem;
+		font-weight: 700;
 		margin: 0;
+		letter-spacing: -0.02em;
+		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+		font-family: 'Inter', sans-serif;
+		transition: all 0.2s ease;
 	}
 
-	.feature-header strong {
-		color: var(--accent-color);
+	.auth-wrapper {
+		transition: opacity 0.2s ease;
 	}
 
 	/* Override some auth.svelte styles to fit better in modal */
@@ -169,6 +236,7 @@
 	}
 
 	.auth-wrapper :global(.auth-card) {
+		padding: 2rem;
 		border: none;
 		border-radius: 0;
 		background: transparent;
@@ -181,18 +249,29 @@
 		display: none;
 	}
 
+	/* Minimal overrides - base styles are now standardized */
+	.auth-wrapper :global(.error) {
+		color: #ef4444;
+		font-family: 'Inter', sans-serif;
+	}
+
 	/* Responsive adjustments */
 	@media (max-width: 480px) {
-		.feature-header {
+		.auth-modal-overlay {
 			padding: 1rem;
 		}
 
-		.feature-header h2 {
-			font-size: 1.1rem;
+		.feature-header {
+			padding: 1.5rem 1.5rem 1rem 1.5rem;
 		}
 
-		.feature-header p {
-			font-size: 0.85rem;
+		.feature-header h2 {
+			font-size: 1.25rem;
+		}
+
+
+		.auth-wrapper :global(.auth-card) {
+			padding: 1.5rem;
 		}
 	}
 </style> 
