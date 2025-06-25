@@ -1151,6 +1151,24 @@ if __name__ == "__main__":
     # Force flush to ensure we see the startup message
     sys.stdout.flush()
     
+    # Check environment variables
+    print("🔧 Environment Check:")
+    env_vars = [
+        "DB_HOST", "DB_USER", "DB_PASSWORD", "POSTGRES_DB",
+        "REDIS_HOST", "REDIS_PORT", "OPENAI_API_KEY"
+    ]
+    
+    for var in env_vars:
+        value = os.getenv(var, "NOT_SET")
+        if var in ["DB_PASSWORD", "OPENAI_API_KEY"]:
+            # Don't show sensitive values
+            display_value = "***SET***" if value != "NOT_SET" else "NOT_SET"
+        else:
+            display_value = value
+        print(f"   {var}: {display_value}")
+    
+    sys.stdout.flush()
+    
     logger.info("🎬 WORKER STARTUP INITIATED")
     logger.info("🔧 Priority Queue System: ENABLED")
     logger.info("📋 Supported Task Types: backtest, screening, alert, create_strategy")
