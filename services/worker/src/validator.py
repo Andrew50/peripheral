@@ -63,7 +63,7 @@ class SecurityValidator:
             # Code execution
             "exec", "eval", "compile", "__import__", "breakpoint",
             # File and system access
-            "open", "file", "input", "raw_input", "print",
+            "open", "file", "input", "raw_input",
             # Introspection and manipulation
             "globals", "locals", "vars", "dir", "delattr", "setattr", "hasattr", "getattr",
             # System control
@@ -87,7 +87,9 @@ class SecurityValidator:
             # Type checking
             "type", "bytes",
             # Object creation
-            "slice", "complex", "frozenset", "object", "format"
+            "slice", "complex", "frozenset", "object", "format",
+            # Safe console output
+            "print"
         }
 
         # Forbidden modules (exhaustive security list)
