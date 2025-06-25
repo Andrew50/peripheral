@@ -468,13 +468,13 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Retrieves the last price (regular or extended hours)for a specified security ticker symbol.",
+				Description: "Retrieves the last price (regular or extended hours)for a specified ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for.",
+							Description: "The ticker symbol to get the last price for, e.g. 'AAPL'.",
 						},
 					},
 					Required: []string{"ticker"},
