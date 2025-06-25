@@ -157,14 +157,14 @@ class DataAccessorProvider:
             # Build the complete query
             if context['mode'] == 'backtest':
                 # For backtest: get all data in range, don't limit per security
-                # nosec B608: Safe - table_name from controlled dict, columns validated against allowlist, all params parameterized
-                query = f"""
-                SELECT {', '.join(select_columns)}
-                FROM {table_name} o
-                JOIN securities s ON o.securityid = s.securityid
-                WHERE {security_filter} AND {date_filter}
-                ORDER BY s.securityid, o.timestamp ASC
-                """
+                # Build parameterized query components
+                select_clause = ', '.join(select_columns)
+                from_clause = f"{table_name} o JOIN securities s ON o.securityid = s.securityid"
+                where_clause = f"{security_filter} AND {date_filter}"
+                order_clause = "s.securityid, o.timestamp ASC"
+                
+                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                query = f"SELECT {select_clause} FROM {from_clause} WHERE {where_clause} ORDER BY {order_clause}"  # nosec B608
                 params = security_params + date_params
             else:
                 # For screening/alerts: limit to min_bars per security, most recent first
@@ -180,20 +180,23 @@ class DataAccessorProvider:
                     else:
                         final_columns.append(col)
                 
-                # nosec B608: Safe - table_name from controlled dict, columns validated against allowlist, all params parameterized
-                query = f"""
-                WITH ranked_data AS (
-                    SELECT {', '.join(select_columns)},
+                # Build parameterized CTE query components
+                select_clause = ', '.join(select_columns)
+                from_clause = f"{table_name} o JOIN securities s ON o.securityid = s.securityid"
+                where_clause = f"{security_filter} AND {date_filter}"
+                final_select_clause = ', '.join(final_columns)
+                
+                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                query = f"""WITH ranked_data AS (
+                    SELECT {select_clause},
                            ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
-                    FROM {table_name} o
-                    JOIN securities s ON o.securityid = s.securityid
-                    WHERE {security_filter} AND {date_filter}
+                    FROM {from_clause}
+                    WHERE {where_clause}
                 )
-                SELECT {', '.join(final_columns)}
+                SELECT {final_select_clause}
                 FROM ranked_data 
                 WHERE rn <= %s
-                ORDER BY securityid, timestamp ASC
-                """
+                ORDER BY securityid, timestamp ASC"""  # nosec B608
                 params = security_params + date_params + [min_bars]
             
             conn = self.get_connection()
@@ -251,11 +254,7 @@ class DataAccessorProvider:
             
             placeholders = ','.join(['%s'] * len(tickers))
             # nosec B608: Safe - placeholders are just '%s' strings, tickers validated as list of strings, all values parameterized
-            query = f"""
-            SELECT securityid 
-            FROM securities 
-            WHERE ticker IN ({placeholders}) AND active = true AND maxdate IS NULL
-            """
+            query = f"SELECT securityid FROM securities WHERE ticker IN ({placeholders}) AND active = true AND maxdate IS NULL"  # nosec B608
             
             conn = self.get_connection()
             cursor = conn.cursor()

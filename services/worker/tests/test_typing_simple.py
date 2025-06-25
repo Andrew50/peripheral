@@ -84,18 +84,16 @@ def strategy():
         min_bars=1
     )
     
-    # Simple logic
+    # Simple logic without pandas dependency
     if len(bar_data) > 0:
-        import pandas as pd
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
-        
-        for _, row in df.iterrows():
-            instances.append({
-                'ticker': row['ticker'],
-                'timestamp': str(row['timestamp']),
-                'signal': True,
-                'price': float(row['close'])
-            })
+        for row in bar_data:
+            if len(row) >= 3:
+                instances.append({
+                    'ticker': row[0],
+                    'timestamp': str(row[1]),
+                    'signal': True,
+                    'price': float(row[2])
+                })
     
     return instances
 
@@ -113,11 +111,11 @@ result = strategy()
         exec(compiled_code, exec_globals, exec_locals)  # nosec B102 - Safe test execution
         
         result = exec_locals.get('result')
-        if result is not None and isinstance(result, list):
+        if result is not None and isinstance(result, list) and len(result) > 0:
             print("✅ Built-in types work correctly")
             return True
         else:
-            print("❌ Built-in types test failed - expected list result")
+            print("❌ Built-in types test failed - expected non-empty list result")
             return False
             
     except Exception as e:
