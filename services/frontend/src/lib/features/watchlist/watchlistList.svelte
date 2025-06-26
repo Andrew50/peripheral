@@ -527,16 +527,6 @@
 </div>
 
 <style>
-	.selected {
-		outline: 2px solid #cfd0d2;
-	}
-
-
-	.list-container {
-		width: 100%;
-		overflow-x: auto;
-	}
-
 	.table-container {
 		width: 100%;
 		overflow: hidden;
@@ -648,15 +638,6 @@
 	}
 
 
-	.table-container {
-		width: 100%;
-		overflow: hidden;
-		max-width: 100%;
-		padding: 0;
-		margin: 0;
-	}
-
-
 	tr:hover .delete-button {
 		opacity: 1;
 	}
@@ -687,13 +668,7 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
-	.positive {
-		color: var(--positive);
-	}
 
-	.negative {
-		color: var(--negative);
-	}
 
 	.ticker-icon {
 		width: clamp(16px, 2.5vw, 22px);
@@ -727,10 +702,7 @@
 		vertical-align: middle;
 	}
 
-	/* Style for different trade types */
-	.long {
-		color: var(--color-positive);
-	}
+
 
 	/* Professional flag icon styling */
 	.flag-icon {
@@ -800,12 +772,6 @@
 	tbody tr.selected {
 		outline: 2px solid #cfd0d2;
 		border-radius: 6px;
-	}
-
-	/* Table cells */
-	td,
-	th {
-		background: transparent;
 	}
 
 	
