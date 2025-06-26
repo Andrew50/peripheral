@@ -180,7 +180,7 @@
 		padding: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		color: #ffffff;
-		z-index: 1100;
+		z-index: 5;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
