@@ -429,7 +429,10 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
+			// Only set width if sidebar is currently closed, otherwise preserve current width
+			if ($menuWidth === 0) {
+				menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
+			}
 			changeMenu(menuName);
 		}
 	}
