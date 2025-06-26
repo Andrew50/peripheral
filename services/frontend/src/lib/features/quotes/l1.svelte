@@ -61,7 +61,7 @@
 
 </script>
 
-<div class="quote-container glass glass--small glass--medium">
+<div class="quote-container">
 	<!-- Bid section on the left -->
 	<div class="bid">
 		<div class="price">

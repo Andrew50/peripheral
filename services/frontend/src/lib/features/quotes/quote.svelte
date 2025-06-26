@@ -277,13 +277,12 @@
 	<div class="content">
 				<!-- Header Section -->
 		<div class="quote-header">
-					<div class="ticker-row">
-			<div class="icon-circle">
-				{#if ($instance?.icon || currentDetails?.icon)}
+			<div class="logo-container">
+				{#if ($instance?.logo || currentDetails?.logo)}
 					<img
-						src={$instance?.icon || currentDetails?.icon}
-						alt="{$instance?.name || currentDetails?.name || 'Company'} icon"
-						class="company-logo"
+						src={$instance?.logo || currentDetails?.logo}
+						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
+						class="company-logo-rect"
 					/>
 				{:else}
 					<span class="ticker-letter">
@@ -291,46 +290,71 @@
 					</span>
 				{/if}
 			</div>
-			<div class="ticker-wrapper">
-				<div class="ticker">{$instance.ticker || '--'}</div>
-				{#if ($instance?.active === false || currentDetails?.active === false)}
-					<div class="warning-triangle-container">
-						<div class="warning-triangle"></div>
-						<div class="tooltip">Delisted</div>
+			<div class="ticker-row">
+				<div class="icon-circle">
+					{#if ($instance?.icon || currentDetails?.icon)}
+						<img
+							src={$instance?.icon || currentDetails?.icon}
+							alt="{$instance?.name || currentDetails?.name || 'Company'} icon"
+							class="company-logo"
+						/>
+					{:else}
+						<span class="ticker-letter">
+							{($instance?.ticker || currentDetails?.ticker || '?').charAt(0)}
+						</span>
+					{/if}
+				</div>
+				<div class="ticker-wrapper">
+					<div class="ticker-line">
+						<div class="ticker">{$instance.ticker || '--'}</div>
+						{#if $instance?.primary_exchange || currentDetails?.primary_exchange}
+							<div class="exchange">{getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange)}</div>
+						{/if}
 					</div>
-				{/if}
+					{#if ($instance?.active === false || currentDetails?.active === false)}
+						<div class="warning-triangle-container">
+							<div class="warning-triangle"></div>
+							<div class="tooltip">Delisted</div>
+						</div>
+					{/if}
+				</div>
+				<button 
+					class="add-to-watchlist-button" 
+					on:click|stopPropagation={addToWatchlist}
+					title="Add to Watchlist"
+				>
+					+
+				</button>
 			</div>
-			<button 
-				class="add-to-watchlist-button" 
-				on:click|stopPropagation={addToWatchlist}
-				title="Add to Watchlist"
-			>
-				+
-			</button>
-		</div>
-				<div class="company-info">
-				<div class="name">{cleanCompanyName($instance?.name || currentDetails?.name || 'N/A')}</div>
-				<div class="sector-industry">{($instance?.sector || currentDetails?.sector || 'N/A').trim()} | {($instance?.industry || currentDetails?.industry || 'N/A').trim()}</div>
+			<div class="company-info">
+				<div class="name">{cleanCompanyName($instance?.name || currentDetails?.name || '')}</div>
+				<div class="sector-industry">
+					{($instance?.sector || currentDetails?.sector || '').trim()}
+					{#if ($instance?.industry || currentDetails?.industry || '').trim()}
+						| {($instance?.industry || currentDetails?.industry || '').trim()}
+					{/if}
+				</div>
 			</div>
 		</div>
 
 		<!-- Key Metrics Section -->
 		<div class="quote-key-metrics">
-			<div class="metric-item">
-				<span class="label">Price</span>
-				<StreamCell instance={$instance} type="price" />
+			<div class="main-price-row">
+				<div class="price-large">
+					<StreamCell instance={$instance} type="price" disableFlash={true} />
+				</div>
+				<div class="change-absolute">
+					<StreamCell instance={$instance} type="change" disableFlash={true} />
+				</div>
+				<div class="change-percent">
+					<StreamCell instance={$instance} type="change %" disableFlash={true} />
+				</div>
 			</div>
-			<div class="metric-item">
-				<span class="label">Change %</span>
-				<StreamCell instance={$instance} type="change %" />
-			</div>
-			<div class="metric-item">
-				<span class="label">Change</span>
-				<StreamCell instance={$instance} type="change" />
-			</div>
-			<div class="metric-item">
-				<span class="label">Ext %</span>
-				<StreamCell instance={$instance} type="change % extended" />
+			<div class="extended-hours-row">
+				<span class="ext-label">Extended Hours:</span>
+				<div class="ext-change">
+					<StreamCell instance={$instance} type="change % extended" disableFlash={true} />
+				</div>
 			</div>
 		</div>
 
@@ -352,7 +376,7 @@
 				<span class="label">Market Cap:</span>
 				<span class="value">
 					{#if $instance?.totalShares || currentDetails?.totalShares}
-						<StreamCell instance={$instance} type="market cap" />
+						<StreamCell instance={$instance} type="market cap" disableFlash={true} />
 					{:else}
 						N/A
 					{/if}
@@ -360,17 +384,7 @@
 			</div>
 
 			<div class="detail-item">
-				<span class="label">Exchange:</span>
-				<span class="value"
-					>{ getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange) }</span
-				>
-			</div>
-			<div class="detail-item">
-				<span class="label">Market:</span>
-				<span class="value">{$instance?.market || currentDetails?.market || 'N/A'}</span>
-			</div>
-			<div class="detail-item">
-				<span class="label">Shares Out:</span>
+				<span class="label">Shares Outstanding:</span>
 				<span class="value">
 					{#if $instance?.share_class_shares_outstanding || currentDetails?.share_class_shares_outstanding}
 						{(
@@ -442,7 +456,7 @@
 	.quote-header {
 		display: flex;
 		flex-direction: column;
-		align-items: flex-start;
+		align-items: center;
 		gap: 4px;
 		margin: 0;
 		padding: 0;
@@ -454,10 +468,10 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		margin-top: 20px;
 		margin-left: 8px;
 		margin-right: 8px;
 		width: calc(100% - 16px);
+		align-self: stretch;
 	}
 
 	.icon-circle {
@@ -471,6 +485,26 @@
 		background: var(--ui-bg-secondary);
 		border: 1px solid var(--ui-border);
 		overflow: hidden;
+	}
+
+	.logo-container {
+		width: 140px;
+		height: 36px;
+		border-radius: 2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		background: transparent;
+		overflow: hidden;
+		margin: 0px auto;
+	}
+
+	.company-logo-rect {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+		border-radius: 2px;
 	}
 
 	.company-logo {
@@ -496,12 +530,28 @@
 		min-width: 0;
 	}
 
+	.ticker-line {
+		display: flex;
+		align-items: baseline;
+		gap: 12px;
+		flex: 1;
+		min-width: 0;
+	}
+
 	.ticker {
 		font-size: 1.4em;
 		font-weight: 700;
 		color: var(--text-primary);
 		text-transform: uppercase;
 		line-height: 1.1;
+	}
+
+	.exchange {
+		font-size: 0.75em;
+		font-weight: 500;
+		color: var(--text-secondary);
+		line-height: 1.1;
+		opacity: 0.8;
 	}
 
 	.warning-triangle-container {
@@ -594,6 +644,7 @@
 		width: 100%;
 		margin-left: 0px;
 		margin-top: 12px;
+		align-self: stretch;
 	}
 
 	.name {
@@ -621,62 +672,66 @@
 
 	/* Key Metrics */
 	.quote-key-metrics {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
-		gap: clamp(6px, 1.2vw, 8px);
+		display: flex;
+		flex-direction: column;
+		gap: clamp(2px, 0.3vw, 3px);
 		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
+		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) 8px;
 	}
 
-	.metric-item {
-		padding: clamp(6px, 1vw, 8px) clamp(4px, 0.8vw, 6px);
-		text-align: center;
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.05);
-		transition: all 0.2s ease;
-	}
-	
-	.metric-item:hover {
-		background: rgba(255, 255, 255, 0.04);
-		border-color: rgba(255, 255, 255, 0.1);
+	.main-price-row {
+		display: flex;
+		align-items: baseline;
+		gap: clamp(6px, 1vw, 8px);
+		flex-wrap: wrap;
+		margin-left: -6px;
 	}
 
-	.metric-item .label {
-		font-size: clamp(0.6rem, 0.4rem + 0.3vw, 0.7rem);
+	.price-large {
+		font-size: clamp(1.2rem, 2vw, 1.6rem);
+		font-weight: 400;
+		color: var(--text-primary);
+		line-height: 1;
+	}
+
+	.change-absolute,
+	.change-percent {
+		font-size: clamp(0.8rem, 1.2vw, 1rem);
+		font-weight: 600;
+		line-height: 1;
+	}
+
+	.extended-hours-row {
+		display: flex;
+		align-items: baseline;
+		gap: clamp(3px, 0.5vw, 4px);
+	}
+
+	.ext-label {
+		font-size: clamp(0.6rem, 0.8vw, 0.7rem);
 		color: var(--text-secondary);
-		display: block;
-		margin-bottom: clamp(2px, 0.5vw, 4px);
-		text-transform: uppercase;
 		font-weight: 500;
 	}
 
-	.metric-item :global(.value) {
-		font-size: clamp(0.8rem, 0.6rem + 0.4vw, 0.95rem);
+	.ext-change {
+		font-size: clamp(0.6rem, 0.8vw, 0.7rem);
 		font-weight: 600;
-		display: block;
-		line-height: 1.1;
+		line-height: 1;
 	}
 
 	/* Market Data */
 	.quote-market-data {
 		margin-bottom: clamp(10px, 2vw, 16px);
 		padding: clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	/* Details */
 	.quote-details {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-		gap: clamp(6px, 1.2vw, 8px) clamp(8px, 1.5vw, 12px);
+		display: flex;
+		flex-direction: column;
+		gap: clamp(2px, 0.5vw, 4px);
 		margin-bottom: clamp(10px, 2vw, 16px);
 		padding: clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.detail-item {
@@ -688,14 +743,14 @@
 	}
 
 	.detail-item .label {
-		color: var(--text-secondary);
+		color: #ffffff;
 		margin-right: 8px;
 		white-space: nowrap;
 		font-weight: 500;
 	}
 
 	.detail-item .value {
-		color: var(--text-primary);
+		color: #ffffff;
 		text-align: right;
 		font-weight: 500;
 	}
@@ -704,9 +759,6 @@
 	.countdown-section {
 		margin-top: clamp(8px, 1.5vw, 12px);
 		padding: clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.countdown-container {
@@ -714,9 +766,6 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.05);
 	}
 
 	.countdown-label {
@@ -732,20 +781,14 @@
 		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8rem);
 		color: var(--text-primary);
 		padding: clamp(3px, 0.5vw, 4px) clamp(6px, 1vw, 8px);
-		background: rgba(255, 255, 255, 0.05);
-		border-radius: 4px;
 		min-width: clamp(50px, 8vw, 60px);
 		text-align: center;
-		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
 	/* Description */
 	.description {
 		margin-top: clamp(10px, 2vw, 16px);
 		padding: clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.description .label {
@@ -766,22 +809,25 @@
 	/* Responsive adjustments */
 	@media (max-width: 1400px) {
 		.quote-key-metrics {
-			grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-			gap: clamp(4px, 1vw, 6px);
-			padding: clamp(8px, 1.5vw, 10px);
+			gap: clamp(1px, 0.2vw, 2px);
+			padding: clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) 8px;
 		}
 		
-		.metric-item {
-			padding: clamp(4px, 1vw, 6px) clamp(3px, 0.8vw, 4px);
+		.main-price-row {
+			gap: clamp(4px, 0.8vw, 6px);
 		}
 		
-		.metric-item .label {
-			font-size: clamp(0.55rem, 0.3rem + 0.3vw, 0.7rem);
+		.price-large {
+			font-size: clamp(1.1rem, 1.8vw, 1.4rem);
+		}
+		
+		.change-absolute,
+		.change-percent {
+			font-size: clamp(0.75rem, 1.1vw, 0.9rem);
 		}
 		
 		.quote-details {
-			grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-			gap: clamp(4px, 1vw, 6px) clamp(6px, 1.5vw, 10px);
+			gap: clamp(1px, 0.3vw, 3px);
 			padding: clamp(8px, 1.5vw, 10px);
 		}
 		
@@ -790,40 +836,35 @@
 		}
 	}
 	
-	@media (max-width: 1200px) {
-		.quote-key-metrics {
-			grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
-			gap: clamp(3px, 0.8vw, 5px);
-		}
-		
-		.quote-details {
-			grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-		}
-	}
-	
 	@media (max-width: 1000px) {
-		.quote-key-metrics {
-			grid-template-columns: repeat(3, 1fr);
+		.main-price-row {
+			gap: clamp(3px, 0.6vw, 5px);
 		}
 		
-		.quote-details {
-			grid-template-columns: 1fr;
+		.price-large {
+			font-size: clamp(1rem, 1.6vw, 1.3rem);
+		}
+		
+		.change-absolute,
+		.change-percent {
+			font-size: clamp(0.7rem, 1vw, 0.85rem);
 		}
 	}
 	
-	@media (max-width: 800px) {
-		.quote-key-metrics {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	
-	@media (max-width: 400px) {
-		.quote-key-metrics {
-			grid-template-columns: repeat(2, 1fr);
+	@media (max-width: 600px) {
+		.main-price-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: clamp(2px, 0.4vw, 3px);
 		}
 		
-		.quote-details {
-			grid-template-columns: 1fr;
+		.price-large {
+			font-size: clamp(0.9rem, 1.5vw, 1.2rem);
+		}
+		
+		.change-absolute,
+		.change-percent {
+			font-size: clamp(0.65rem, 0.9vw, 0.8rem);
 		}
 	}
 </style>
