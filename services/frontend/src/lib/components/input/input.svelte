@@ -119,26 +119,28 @@
 			}, 0);
 		}
 
-		// Perform validation asynchronously
-		validateInput(inputString.toUpperCase(), inputType)
-			.then((validationResp) => {
-				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					inputQuery.update((v: InputQuery) => ({
-						...v,
-						...validationResp
-					}));
-					loadedSecurityResultRequest = thisSecurityResultRequest;
+		// Perform validation asynchronously in next event loop tick to avoid blocking UI
+		setTimeout(() => {
+			validateInput(inputString.toUpperCase(), inputType)
+				.then((validationResp) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							...validationResp
+						}));
+						loadedSecurityResultRequest = thisSecurityResultRequest;
 
-					// Reset loading state after validation completes
-					if (inputType === 'ticker') {
-						isLoadingSecurities = false;
+						// Reset loading state after validation completes
+						if (inputType === 'ticker') {
+							isLoadingSecurities = false;
+						}
 					}
-				}
-			})
-			.catch((error) => {
-				console.error('Validation error:', error);
-				isLoadingSecurities = false;
-			});
+				})
+				.catch((error) => {
+					console.error('Validation error:', error);
+					isLoadingSecurities = false;
+				});
+		}, 0);
 	}
 
 	// Modified queryInstanceInput: if called while another query is active,
@@ -426,14 +428,16 @@
 			highlightedIndex = -1;
 		}
 		
-		// Update the input string in the store
+		// Update the input string in the store immediately for responsive UI
 		inputQuery.update((v) => ({
 			...v,
 			inputString: newValue
 		}));
 		
-		// Determine input type based on new value
-		determineInputType(newValue);
+		// Make the API call non-blocking to avoid UI delays
+		setTimeout(() => {
+			determineInputType(newValue);
+		}, 0);
 	}
 
 	// Handle special keys (Enter, Tab, Escape, Arrow keys)
