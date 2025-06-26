@@ -272,7 +272,7 @@ func initGeminiKeyPool() *GeminiKeyPool {
 	}
 
 	// Get paid key from environment variable
-	paidKey := getEnv("GEMINI_API_KEY", "")
+	paidKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
 
 	// Paid key has a higher limit, though it varies by plan
 	paidRateLimit := 1000

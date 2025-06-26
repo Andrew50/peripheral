@@ -552,8 +552,6 @@ func requestIncompleteBar(
 		timestampStart = currentDayStart + (elapsed/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		// Daily or above
-		// Calculate the start of the current day but we don't need to store it in a variable
-		timestampStart = GetReferenceStartTime(timestampEnd, false, easternLocation)
 		switch timespan {
 		case "day":
 			timestampStart = GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
@@ -870,7 +868,7 @@ func fetchAggData(
 		agg := it.Item()
 		ts := time.Time(agg.Timestamp).In(easternLocation)
 
-		if !extendedHours {
+		if !extendedHours && timespan != "day" {
 			if !utils.IsTimestampRegularHours(ts) {
 				continue
 			}

@@ -503,6 +503,10 @@
 									on:click={(event) => {
 										deleteRow(event, watch);
 									}}
+									on:mousedown={(event) => {
+										event.stopPropagation();
+										event.preventDefault();
+									}}
 									title="Remove from watchlist"
 								>
 									<svg

@@ -119,26 +119,28 @@
 			}, 0);
 		}
 
-		// Perform validation asynchronously
-		validateInput(inputString.toUpperCase(), inputType)
-			.then((validationResp) => {
-				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					inputQuery.update((v: InputQuery) => ({
-						...v,
-						...validationResp
-					}));
-					loadedSecurityResultRequest = thisSecurityResultRequest;
+		// Perform validation asynchronously in next event loop tick to avoid blocking UI
+		setTimeout(() => {
+			validateInput(inputString.toUpperCase(), inputType)
+				.then((validationResp) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							...validationResp
+						}));
+						loadedSecurityResultRequest = thisSecurityResultRequest;
 
-					// Reset loading state after validation completes
-					if (inputType === 'ticker') {
-						isLoadingSecurities = false;
+						// Reset loading state after validation completes
+						if (inputType === 'ticker') {
+							isLoadingSecurities = false;
+						}
 					}
-				}
-			})
-			.catch((error) => {
-				console.error('Validation error:', error);
-				isLoadingSecurities = false;
-			});
+				})
+				.catch((error) => {
+					console.error('Validation error:', error);
+					isLoadingSecurities = false;
+				});
+		}, 0);
 	}
 
 	// Modified queryInstanceInput: if called while another query is active,
@@ -426,14 +428,16 @@
 			highlightedIndex = -1;
 		}
 		
-		// Update the input string in the store
+		// Update the input string in the store immediately for responsive UI
 		inputQuery.update((v) => ({
 			...v,
 			inputString: newValue
 		}));
 		
-		// Determine input type based on new value
-		determineInputType(newValue);
+		// Make the API call non-blocking to avoid UI delays
+		setTimeout(() => {
+			determineInputType(newValue);
+		}, 0);
 	}
 
 	// Handle special keys (Enter, Tab, Escape, Arrow keys)
@@ -708,17 +712,21 @@
 											}
 										}}
 									>
-										<div class="security-icon-flex">
-											{#if sec.icon}
-												<img
-													src={sec.icon.startsWith('data:')
-														? sec.icon
-														: `data:image/jpeg;base64,${sec.icon}`}
-													alt="Security Icon"
-													on:error={() => {}}
-												/>
-											{/if}
-										</div>
+																	<div class="security-icon-flex">
+								{#if sec.icon}
+									<img
+										src={sec.icon.startsWith('data:')
+											? sec.icon
+											: `data:image/jpeg;base64,${sec.icon}`}
+										alt="Security Icon"
+										on:error={() => {}}
+									/>
+								{:else if sec.ticker}
+									<span class="default-ticker-icon">
+										{sec.ticker.charAt(0).toUpperCase()}
+									</span>
+								{/if}
+							</div>
 										<div class="security-info-flex">
 											<span class="ticker-flex">{sec.ticker}</span>
 											<span class="name-flex">{sec.name}</span>
@@ -990,6 +998,22 @@
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
+		border-radius: 50%;
+	}
+
+	.default-ticker-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		font-size: 0.625rem;
+		font-weight: 600;
+		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.security-info-flex {
