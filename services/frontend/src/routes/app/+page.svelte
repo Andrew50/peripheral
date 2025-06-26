@@ -757,9 +757,10 @@
 			currentY = event.touches[0].clientY;
 		}
 
-		// Account for the bottom bar height (40px) and adjust for the drag handle position
-		const bottomBarHeight = 40;
-		const newHeight = window.innerHeight - currentY - bottomBarHeight;
+		// Account for the top bar height (40px) and adjust for the drag handle position
+		// Since quote is now on top, we calculate height from the top
+		const topBarHeight = 40;
+		const newHeight = currentY - topBarHeight;
 
 		// Clamp the height between min and max values
 		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
@@ -995,7 +996,23 @@
 								tabindex="0"
 							/>
 							<div class="sidebar-content">
-								<!-- Main sidebar content -->
+								<!-- Quote section now on top -->
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
+
+								<div
+									class="sidebar-resize-handle"
+									role="button"
+									aria-orientation="horizontal"
+									aria-label="Resize watchlist panel"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<!-- Main sidebar content now on bottom -->
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist />
@@ -1004,21 +1021,6 @@
 										<!--{:else if $activeMenu === 'news'}
 										<News />-->
 									{/if}
-								</div>
-
-								<div
-									class="sidebar-resize-handle"
-									role="button"
-									aria-orientation="horizontal"
-									aria-label="Resize ticker panel"
-									on:mousedown={startSidebarResize}
-									on:touchstart|preventDefault={startSidebarResize}
-									on:keydown={handleKeyboardSidebarResize}
-									tabindex="0"
-								></div>
-
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
-									<Quote />
 								</div>
 							</div>
 						</div>

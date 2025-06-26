@@ -61,7 +61,7 @@
 
 </script>
 
-<div class="quote-container glass glass--small glass--medium">
+<div class="quote-container">
 	<!-- Bid section on the left -->
 	<div class="bid">
 		<div class="price">
@@ -85,14 +85,15 @@
 
 <style>
 	.quote-container {
-		font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue, sans-serif;
-		font-size: 14px;
+		font-family: 'Inter', sans-serif;
+		font-size: 12px;
 		color: var(--text-primary, white);
 		width: 100%;
 		margin: 0 auto;
-		padding: 10px;
+		padding: 2px 8px 2px 0;
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
+		gap: 12px;
 	}
 
 	.bid,
@@ -102,8 +103,8 @@
 		align-items: center;
 		font-weight: 500;
 		transition: all 0.15s ease;
-		border-radius: 6px;
-		padding: 4px 10px;
+		border-radius: 4px;
+		padding: 2px 6px;
 		cursor: default;
 	}
 
@@ -115,13 +116,13 @@
 	}
 
 	.price {
-		margin-right: 5px;
+		margin-right: 3px;
 		font-weight: 600;
-		letter-spacing: 0.2px;
+		letter-spacing: 0.1px;
 	}
 
 	.size {
-		margin-left: 5px;
+		margin-left: 3px;
 		opacity: 0.9;
 	}
 
@@ -131,7 +132,7 @@
 	}
 
 	.value {
-		font-family: var(--font-mono, monospace);
+		font-family: inherit;
 		color: var(--text-primary, white);
 	}
 
