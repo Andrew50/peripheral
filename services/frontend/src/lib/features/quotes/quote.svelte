@@ -17,6 +17,8 @@
 		timeframeToSeconds
 	} from '$lib/utils/helpers/timestamp';
 	import { getExchangeName } from '$lib/utils/helpers/exchanges';
+	import { showAuthModal } from '$lib/stores/authModal';
+	import { isPublicViewing, watchlists, flagWatchlistId, flagWatchlist, currentWatchlistId, currentWatchlistItems } from '$lib/utils/stores/stores';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLButtonElement;
@@ -69,9 +71,6 @@
 		}
 	}
 
-	function toggleTimeAndSales() {
-		showTimeAndSales = !showTimeAndSales;
-	}
 
 	function handleClick(event?: MouseEvent | TouchEvent) {
 		if ($activeChartInstance) {
@@ -161,23 +160,108 @@
 	}
 
 	onMount(() => {
-		document.addEventListener('mousemove', handleMouseMove);
-		document.addEventListener('mouseup', handleMouseUp);
 		countdownInterval = setInterval(calculateCountdown, 1000);
 
+		// Initialize with flagWatchlistId if available
+		if (flagWatchlistId !== undefined) {
+			currentWatchlistId.set(flagWatchlistId);
+		}
+
+		// Subscribe to watchlists to set initial watchlist if none selected
+		const unsubscribeWatchlists = watchlists.subscribe((list) => {
+			const currentValue = get(currentWatchlistId);
+			if (
+				Array.isArray(list) &&
+				list.length > 0 &&
+				(currentValue === undefined || isNaN(currentValue))
+			) {
+				currentWatchlistId.set(list[0].watchlistId);
+			}
+		});
+
 		return () => {
-			document.removeEventListener('mousemove', handleMouseMove);
-			document.removeEventListener('mouseup', handleMouseUp);
 			clearInterval(countdownInterval);
+			unsubscribeWatchlists();
 		};
 	});
 
-	function handleMouseMove(e: MouseEvent | TouchEvent) {
-		// This function is now empty as the height-related variables and functions are removed
+
+	function cleanCompanyName(name: string): string {
+		if (!name || name === 'N/A') return name;
+		
+		// Remove common stock class designations
+		return name
+			.replace(/\s+(Class\s+[A-Z]+\s+)?Common\s+Stock$/i, '')
+			.replace(/\s+Class\s+[A-Z]+\s+Shares?$/i, '')
+			.replace(/\s+Class\s+[A-Z]+$/i, '')
+			.replace(/\s+Common\s+Shares?$/i, '')
+			.replace(/\s+Ordinary\s+Shares?$/i, '')
+			.trim();
 	}
 
-	function handleMouseUp() {
-		// This function is now empty as the height-related variables and functions are removed
+	function addToWatchlist() {
+		if (get(isPublicViewing)) {
+			showAuthModal('watchlists', 'signup');
+			return;
+		}
+
+		const currentInstance = get(instance);
+		if (!currentInstance?.securityId || !currentInstance?.ticker) {
+			return;
+		}
+
+		const watchlistsValue = get(watchlists);
+		if (!Array.isArray(watchlistsValue) || watchlistsValue.length === 0) {
+			alert('No watchlists available. Please create a watchlist first.');
+			return;
+		}
+
+		// Use currently selected watchlist or fall back to first available
+		const currentWatchlistIdValue = get(currentWatchlistId);
+		const watchlistId = currentWatchlistIdValue || watchlistsValue[0]?.watchlistId;
+		
+		privateRequest<number>('newWatchlistItem', {
+			watchlistId: watchlistId,
+			securityId: currentInstance.securityId
+		}).then((watchlistItemId: number) => {
+			const targetWatchlist = watchlistsValue.find(w => w.watchlistId === watchlistId);
+			console.log(`Added ${currentInstance.ticker} to ${targetWatchlist?.watchlistName || 'watchlist'}`);
+			
+			// Update the appropriate store with the new item (same logic as watchlist component)
+			const newItem = {
+				...currentInstance,
+				watchlistItemId: watchlistItemId
+			};
+
+			// Update the appropriate global stores
+			if (watchlistId === flagWatchlistId) {
+				// Update the global flagWatchlist store
+				flagWatchlist.update((items) => {
+					const currentItems = Array.isArray(items) ? items : [];
+					// Check if item already exists to avoid duplicates
+					if (!currentItems.find(item => item.ticker === newItem.ticker)) {
+						return [...currentItems, newItem];
+					}
+					return currentItems;
+				});
+			}
+			
+			// Also update currentWatchlistItems if this is the currently selected watchlist
+			const currentWatchlistIdValue = get(currentWatchlistId);
+			if (watchlistId === currentWatchlistIdValue) {
+				currentWatchlistItems.update((items) => {
+					const currentItems = Array.isArray(items) ? items : [];
+					// Check if item already exists to avoid duplicates
+					if (!currentItems.find(item => item.ticker === newItem.ticker)) {
+						return [...currentItems, newItem];
+					}
+					return currentItems;
+				});
+			}
+			
+		}).catch((error) => {
+			console.error('Error adding to watchlist:', error);
+		});
 	}
 
 
@@ -216,9 +300,17 @@
 					</div>
 				{/if}
 			</div>
+			<button 
+				class="add-to-watchlist-button" 
+				on:click|stopPropagation={addToWatchlist}
+				title="Add to Watchlist"
+			>
+				+
+			</button>
 		</div>
-			<div class="company-info">
-				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
+				<div class="company-info">
+				<div class="name">{cleanCompanyName($instance?.name || currentDetails?.name || 'N/A')}</div>
+				<div class="sector-industry">{($instance?.sector || currentDetails?.sector || 'N/A').trim()} | {($instance?.industry || currentDetails?.industry || 'N/A').trim()}</div>
 			</div>
 		</div>
 
@@ -266,14 +358,7 @@
 					{/if}
 				</span>
 			</div>
-			<div class="detail-item">
-				<span class="label">Sector:</span>
-				<span class="value">{$instance?.sector || currentDetails?.sector || 'N/A'}</span>
-			</div>
-			<div class="detail-item">
-				<span class="label">Industry:</span>
-				<span class="value">{$instance?.industry || currentDetails?.industry || 'N/A'}</span>
-			</div>
+
 			<div class="detail-item">
 				<span class="label">Exchange:</span>
 				<span class="value"
@@ -371,6 +456,8 @@
 		gap: 6px;
 		margin-top: 20px;
 		margin-left: 8px;
+		margin-right: 8px;
+		width: calc(100% - 16px);
 	}
 
 	.icon-circle {
@@ -405,7 +492,8 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		flex-shrink: 0;
+		flex: 1;
+		min-width: 0;
 	}
 
 	.ticker {
@@ -475,22 +563,60 @@
 		visibility: visible;
 	}
 
+	.add-to-watchlist-button {
+		color: #ffffff;
+		width: clamp(28px, 4vw, 32px);
+		height: clamp(28px, 4vw, 32px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: clamp(1rem, 0.7rem + 0.6vw, 1.2rem);
+		font-weight: 300;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		background: transparent;
+		border: none;
+		border-radius: 6px;
+		transition: all 0.2s ease;
+		cursor: pointer;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
+
+	.add-to-watchlist-button:hover {
+		background: rgba(255, 255, 255, 0.2);
+		color: #ffffff;
+		transform: scale(1.05);
+	}
+
 	.company-info {
 		display: flex;
 		flex-direction: column;
-		min-width: 0;
-		margin-left: 8px;
+		width: 100%;
+		margin-left: 0px;
 		margin-top: 12px;
 	}
 
 	.name {
-		font-size: 0.85em;
+		font-size: 1.1em;
+		color: var(--text-primary);
+		line-height: 1.2;
+		font-weight: 600;
+		padding: 0;
+		margin-left: 8px;
+		word-break: break-word;
+		text-align: left;
+	}
+
+	.sector-industry {
+		font-size: 0.75em;
 		color: var(--text-secondary);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		line-height: 1.2;
 		font-weight: 500;
+		margin: 4px 0 0 0;
+		margin-left: 8px;
+		padding: 0;
+		word-break: break-word;
+		text-align: left;
 	}
 
 	/* Key Metrics */

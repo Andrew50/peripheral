@@ -9,7 +9,9 @@
 		flagWatchlistId,
 		watchlists,
 		flagWatchlist,
-		isPublicViewing
+		isPublicViewing,
+		currentWatchlistId as globalCurrentWatchlistId,
+		currentWatchlistItems
 	} from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
@@ -19,13 +21,38 @@
 		watchlistItemId?: number;
 	}
 
-	let activeList: Writable<WatchlistItem[]> = writable([]);
+
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
 	let previousWatchlistId: number;
 	let container: HTMLDivElement;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
+
+	// Helper function to update both stores when adding items
+	function updateWatchlistStores(newItem: WatchlistItem, targetWatchlistId: number) {
+		// Always update currentWatchlistItems (what the UI shows)
+		currentWatchlistItems.update((v: WatchlistItem[]) => {
+			const currentItems = Array.isArray(v) ? v : [];
+			// Check if item already exists to avoid duplicates
+			if (!currentItems.find(item => item.securityId === newItem.securityId || item.ticker === newItem.ticker)) {
+				return [...currentItems, newItem];
+			}
+			return currentItems;
+		});
+		
+		// Also update flagWatchlist if this is the flag watchlist
+		if (targetWatchlistId === flagWatchlistId) {
+			flagWatchlist.update((v: WatchlistItem[]) => {
+				const currentItems = Array.isArray(v) ? v : [];
+				// Check if item already exists to avoid duplicates
+				if (!currentItems.find(item => item.securityId === newItem.securityId || item.ticker === newItem.ticker)) {
+					return [...currentItems, newItem];
+				}
+				return currentItems;
+			});
+		}
+	}
 
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
@@ -114,34 +141,75 @@
 		};
 	});
 
-	function addInstance() {
+	export function addInstanceToWatchlist(securityId?: number) {
 		if (get(isPublicViewing)) {
 			showAuthModal('watchlists', 'signup');
 			return;
 		}
 
+		// If securityId is provided, skip the query input and directly add to watchlist
+		if (securityId) {
+			const targetWatchlistId = currentWatchlistId;
+			
+			// Check if the security is already in the current list
+			const aList = get(currentWatchlistItems);
+			const empty = !Array.isArray(aList);
+			
+			if (!empty && aList.find((l: WatchlistItem) => l.securityId === securityId)) {
+				console.log('Security already in watchlist');
+				return;
+			}
+
+			privateRequest<number>('newWatchlistItem', {
+				watchlistId: targetWatchlistId,
+				securityId: securityId
+			}).then((watchlistItemId: number) => {
+				// We need to get the security details to display properly
+				privateRequest<WatchlistItem>('getSecurityDetails', { securityId: securityId }).then((securityDetails: WatchlistItem) => {
+					const newItem = { 
+						...securityDetails, 
+						watchlistItemId: watchlistItemId,
+						securityId: securityId
+					};
+					
+					updateWatchlistStores(newItem, targetWatchlistId);
+					console.log(`Added ${securityDetails.ticker || 'security'} to watchlist`);
+				}).catch((error) => {
+					console.error('Error fetching security details:', error);
+					// Fallback: add with minimal info
+					const newItem = { 
+						securityId: securityId,
+						watchlistItemId: watchlistItemId,
+						ticker: `Security-${securityId}` // Fallback ticker
+					} as WatchlistItem;
+					
+					updateWatchlistStores(newItem, targetWatchlistId);
+				});
+			}).catch((error) => {
+				console.error('Error adding to watchlist:', error);
+			});
+			return;
+		}
+
+		// Original behavior when no securityId is provided
 		const inst = { ticker: '' };
 		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then(
 			(i: WatchlistItem) => {
-				const aList = get(activeList);
+				const targetWatchlistId = currentWatchlistId;
+				const aList = get(currentWatchlistItems);
 				const empty = !Array.isArray(aList);
+				
 				if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
 					privateRequest<number>('newWatchlistItem', {
-						watchlistId: currentWatchlistId,
+						watchlistId: targetWatchlistId,
 						securityId: i.securityId
 					}).then((watchlistItemId: number) => {
-						activeList.update((v: WatchlistItem[]) => {
-							i.watchlistItemId = watchlistItemId;
-							if (empty) {
-								return [i];
-							} else {
-								return [...v, i];
-							}
-						});
+						i.watchlistItemId = watchlistItemId;
+						updateWatchlistStores(i, targetWatchlistId);
 					});
 				}
 				setTimeout(() => {
-					addInstance();
+					addInstanceToWatchlist();
 				}, 1);
 			}
 		);
@@ -185,9 +253,17 @@
 		}
 		privateRequest<void>('deleteWatchlistItem', { watchlistItemId: item.watchlistItemId }).then(
 			() => {
-				activeList.update((items) => {
+				// Update currentWatchlistItems (what the UI shows)
+				currentWatchlistItems.update((items) => {
 					return items.filter((i) => i.watchlistItemId !== item.watchlistItemId);
 				});
+				
+				// Also update flagWatchlist if this is the flag watchlist
+				if (currentWatchlistId === flagWatchlistId) {
+					flagWatchlist.update((items) => {
+						return items.filter((i) => i.watchlistItemId !== item.watchlistItemId);
+					});
+				}
 			}
 		);
 	}
@@ -256,33 +332,28 @@
 		newWatchlistName = '';
 		const watchlistId = parseInt(watchlistIdString);
 		currentWatchlistId = watchlistId;
+		
+		// Update the global store so other components know which watchlist is selected
+		globalCurrentWatchlistId.set(watchlistId);
 
-		// Decide whether to use the global flagWatchlist store or a local one
-		if (watchlistId === flagWatchlistId) {
-			activeList = flagWatchlist; // Point to the global store
+		// Set the current watchlist ID
+		currentWatchlistId = watchlistId;
 
-			// Fetch items and update the GLOBAL flagWatchlist store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
-				.then((v: WatchlistItem[]) => {
-					flagWatchlist.set(v || []); // Update the global store
-				})
-				.catch((err) => {
-					flagWatchlist.set([]); // Set global store empty on error
-				});
-		} else {
-			// For regular watchlists, create a new local writable store
-			activeList = writable<WatchlistItem[]>([]);
-			currentWatchlistId = watchlistId;
-
-			// Fetch items and update the LOCAL activeList store
-			privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
-				.then((v: WatchlistItem[]) => {
-					activeList.set(v || []); // Update the local store
-				})
-				.catch((err) => {
-					activeList.set([]); // Set local store empty on error
-				});
-		}
+		// Fetch items and update the global store
+		privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+			.then((v: WatchlistItem[]) => {
+				currentWatchlistItems.set(v || []);
+				// Also update flagWatchlist if this is the flag watchlist
+				if (watchlistId === flagWatchlistId) {
+					flagWatchlist.set(v || []);
+				}
+			})
+			.catch((err) => {
+				currentWatchlistItems.set([]);
+				if (watchlistId === flagWatchlistId) {
+					flagWatchlist.set([]);
+				}
+			});
 	}
 
 	function deleteWatchlist(id: number) {
@@ -339,6 +410,7 @@
 		// For regular watchlist selections
 		previousWatchlistId = parseInt(value, 10);
 		currentWatchlistId = parseInt(value, 10);
+		globalCurrentWatchlistId.set(parseInt(value, 10));
 		selectWatchlist(value);
 	}
 </script>
@@ -436,7 +508,7 @@
 
 		<!-- Add button on the same line -->
 		{#if !showWatchlistInput}
-			<button class="add-item-button shortcut-button" title="Add Symbol" on:click={addInstance}
+			<button class="add-item-button shortcut-button" title="Add Symbol" on:click={() => addInstanceToWatchlist()}
 				>+</button
 			>
 		{/if}
@@ -447,7 +519,7 @@
 		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
-			list={activeList}
+			list={currentWatchlistItems}
 		/>
 	</div>
 </div>
