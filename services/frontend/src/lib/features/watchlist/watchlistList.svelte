@@ -548,7 +548,7 @@
 	table {
 		width: 100%;
 		border-collapse: separate;
-		border-spacing: 0 2px;
+		border-spacing: 0 clamp(1px, 0.2vw, 2px);
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
@@ -558,10 +558,10 @@
 
 	th,
 	td {
-		padding: clamp(4px, 0.8vw, 8px) clamp(6px, 1.2vw, 12px);
+		padding: clamp(1px, 0.15vw, 2px) clamp(6px, 1.2vw, 12px);
 		text-align: left;
 		background: transparent;
-		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8125rem);
+		font-size: clamp(0.75rem, 0.875rem, 1rem);
 	}
 
 	/* Header cells keep original styling */
@@ -750,7 +750,7 @@
 	td:last-child {
 		width: 30px;
 		max-width: 30px;
-		padding: clamp(4px, 0.8vw, 8px) 0;
+		padding: clamp(2px, 0.4vw, 4px) 0;
 		text-align: center;
 		vertical-align: middle;
 	}
