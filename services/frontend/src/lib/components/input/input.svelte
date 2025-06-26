@@ -712,17 +712,21 @@
 											}
 										}}
 									>
-										<div class="security-icon-flex">
-											{#if sec.icon}
-												<img
-													src={sec.icon.startsWith('data:')
-														? sec.icon
-														: `data:image/jpeg;base64,${sec.icon}`}
-													alt="Security Icon"
-													on:error={() => {}}
-												/>
-											{/if}
-										</div>
+																	<div class="security-icon-flex">
+								{#if sec.icon}
+									<img
+										src={sec.icon.startsWith('data:')
+											? sec.icon
+											: `data:image/jpeg;base64,${sec.icon}`}
+										alt="Security Icon"
+										on:error={() => {}}
+									/>
+								{:else if sec.ticker}
+									<span class="default-ticker-icon">
+										{sec.ticker.charAt(0).toUpperCase()}
+									</span>
+								{/if}
+							</div>
 										<div class="security-info-flex">
 											<span class="ticker-flex">{sec.ticker}</span>
 											<span class="name-flex">{sec.name}</span>
@@ -994,6 +998,22 @@
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
+		border-radius: 50%;
+	}
+
+	.default-ticker-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		font-size: 0.625rem;
+		font-weight: 600;
+		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.security-info-flex {
