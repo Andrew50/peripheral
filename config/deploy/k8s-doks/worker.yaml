@@ -38,7 +38,7 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openai-secret
+                  name: openai-api-key
                   key: OPENAI_API_KEY
             # Redis connection
             - name: REDIS_HOST
