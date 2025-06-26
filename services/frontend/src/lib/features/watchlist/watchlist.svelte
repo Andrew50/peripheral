@@ -16,6 +16,7 @@
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
+	import { addInstanceToWatchlist as addToWatchlist } from './watchlistUtils';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -141,78 +142,8 @@
 		};
 	});
 
-	export function addInstanceToWatchlist(securityId?: number) {
-		if (get(isPublicViewing)) {
-			showAuthModal('watchlists', 'signup');
-			return;
-		}
-
-		// If securityId is provided, skip the query input and directly add to watchlist
-		if (securityId) {
-			const targetWatchlistId = currentWatchlistId;
-			
-			// Check if the security is already in the current list
-			const aList = get(currentWatchlistItems);
-			const empty = !Array.isArray(aList);
-			
-			if (!empty && aList.find((l: WatchlistItem) => l.securityId === securityId)) {
-				console.log('Security already in watchlist');
-				return;
-			}
-
-			privateRequest<number>('newWatchlistItem', {
-				watchlistId: targetWatchlistId,
-				securityId: securityId
-			}).then((watchlistItemId: number) => {
-				// We need to get the security details to display properly
-				privateRequest<WatchlistItem>('getSecurityDetails', { securityId: securityId }).then((securityDetails: WatchlistItem) => {
-					const newItem = { 
-						...securityDetails, 
-						watchlistItemId: watchlistItemId,
-						securityId: securityId
-					};
-					
-					updateWatchlistStores(newItem, targetWatchlistId);
-					console.log(`Added ${securityDetails.ticker || 'security'} to watchlist`);
-				}).catch((error) => {
-					console.error('Error fetching security details:', error);
-					// Fallback: add with minimal info
-					const newItem = { 
-						securityId: securityId,
-						watchlistItemId: watchlistItemId,
-						ticker: `Security-${securityId}` // Fallback ticker
-					} as WatchlistItem;
-					
-					updateWatchlistStores(newItem, targetWatchlistId);
-				});
-			}).catch((error) => {
-				console.error('Error adding to watchlist:', error);
-			});
-			return;
-		}
-
-		// Original behavior when no securityId is provided
-		const inst = { ticker: '' };
-		queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist').then(
-			(i: WatchlistItem) => {
-				const targetWatchlistId = currentWatchlistId;
-				const aList = get(currentWatchlistItems);
-				const empty = !Array.isArray(aList);
-				
-				if (empty || !aList.find((l: WatchlistItem) => l.ticker === i.ticker)) {
-					privateRequest<number>('newWatchlistItem', {
-						watchlistId: targetWatchlistId,
-						securityId: i.securityId
-					}).then((watchlistItemId: number) => {
-						i.watchlistItemId = watchlistItemId;
-						updateWatchlistStores(i, targetWatchlistId);
-					});
-				}
-				setTimeout(() => {
-					addInstanceToWatchlist();
-				}, 1);
-			}
-		);
+	function addInstanceToWatchlist(securityId?: number) {
+		addToWatchlist(currentWatchlistId, securityId);
 	}
 
 	function newWatchlist() {

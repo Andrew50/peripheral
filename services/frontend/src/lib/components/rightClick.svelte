@@ -16,6 +16,7 @@
 	import { addHorizontalLine } from '$lib/features/chart/drawingMenu.svelte';
 	//import { getLLMSummary } from '$lib/features/summary.svelte';
     import {addInstanceToChat} from '$lib/features/chat/interface';
+	import { addInstanceToWatchlist } from '$lib/features/watchlist/watchlistUtils';
 	interface RightClickQuery {
 		x?: number;
 		y?: number;
@@ -69,7 +70,7 @@
 </script>
 
 <script lang="ts">
-	import { entryOpen } from '$lib/utils/stores/stores';
+	import { entryOpen, currentWatchlistId } from '$lib/utils/stores/stores';
 	import { browser } from '$app/environment';
 	import { onMount, tick } from 'svelte';
 	let rightClickMenu: HTMLElement;
@@ -202,9 +203,9 @@
 		</div>
 
 		<div class="section content-padding">
-			<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
+			<!--<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
 				>Begin Replay</button
-			>
+			>-->
 			{#if $rightClickQuery.source === 'chart'}
 				<div class="separator"></div>
 				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
@@ -218,14 +219,13 @@
 							Number($rightClickQuery.instance.securityId || 0)
 						)}>Add Horizontal Line at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
+				<button class="wide-button" on:click={() => addInstanceToWatchlist(Number($currentWatchlistId), Number($rightClickQuery.instance.securityId), $rightClickQuery.instance.ticker)}>
+					Add {$rightClickQuery.instance.ticker} to Watchlist
+				</button>
 			{/if}
 		</div>
 
 		<div class="section content-padding">
-			<!--<button class="wide-button" on:click={() => newStudy(get(rightClickQuery).instance)}>
-				Add to Study
-			</button>-->
-			<!--<button class="wide-button" on:click={(event) => sSample(event)}> Add to Sample </button>-->
 			<!--<button
 				class="wide-button"
 				on:click={(event) => querySimilarInstances($rightClickQuery.instance)}
@@ -239,14 +239,6 @@
                 Add to Chat
             </button>
 		</div>
-
-		<!--{#if $entryOpen}
-			<div class="section content-padding">
-				<button class="wide-button" on:click={() => embedInstance(get(rightClickQuery).instance)}>
-					Embed
-				</button>
-			</div>
-		{/if}-->
 
 		{#if $rightClickQuery.source === 'embedded'}
 			<div class="section content-padding">
