@@ -259,10 +259,6 @@
 						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
 						class="company-logo-rect"
 					/>
-				{:else}
-					<span class="ticker-letter">
-						{($instance?.ticker || currentDetails?.ticker || '?').charAt(0)}
-					</span>
 				{/if}
 			</div>
 			<div class="ticker-row">
@@ -382,10 +378,10 @@
 		</div>
 
 		<!-- Description Section -->
-		{#if $activeChartInstance?.description}
+		{#if $instance?.description || currentDetails?.description}
 			<div class="description">
 				<span class="label">Description:</span>
-				<p class="value description-text">{$activeChartInstance?.description}</p>
+				<p class="value description-text">{$instance?.description || currentDetails?.description}</p>
 			</div>
 		{/if}
 	</div>
