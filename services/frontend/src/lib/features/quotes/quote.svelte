@@ -2,9 +2,8 @@
 	import L1 from './l1.svelte';
 	import TimeAndSales from './timeAndSales.svelte';
 	import { get, writable, type Writable } from 'svelte/store';
-	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import type { Instance } from '$lib/utils/types/types';
-	import { activeChartInstance, queryChart } from '$lib/features/chart/interface';
+	import { activeChartInstance } from '$lib/features/chart/interface';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
@@ -21,7 +20,7 @@
 	import { isPublicViewing, watchlists, flagWatchlistId, flagWatchlist, currentWatchlistId, currentWatchlistItems } from '$lib/utils/stores/stores';
 
 	let instance: Writable<Instance> = writable({});
-	let container: HTMLButtonElement;
+	let container: HTMLDivElement;
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
@@ -59,28 +58,7 @@
 		}
 	});
 
-	function handleKey(event: KeyboardEvent) {
-		// Example: if user presses tab or alphanumeric, prompt ticker change
-		if (event.key == 'Tab' || /^[a-zA-Z0-9]$/.test(event.key)) {
-			const current = get(instance);
-			queryInstanceInput(['ticker'], ['ticker'], current)
-				.then((updated: Instance) => {
-					instance.set(updated);
-				})
-				.catch(() => {});
-		}
-	}
 
-
-	function handleClick(event?: MouseEvent | TouchEvent) {
-		if ($activeChartInstance) {
-			queryChart($activeChartInstance);
-		}
-	}
-
-	$: if (container) {
-		container.addEventListener('keydown', handleKey);
-	}
 
 	function formatTime(seconds: number): string {
 		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
@@ -267,12 +245,9 @@
 
 </script>
 
-<button
+<div
 	class="ticker-info-container"
 	bind:this={container}
-	aria-label="Ticker Information"
-	on:click={handleClick}
-	on:touchstart={handleClick}
 >
 	<div class="content">
 				<!-- Header Section -->
@@ -414,7 +389,7 @@
 			</div>
 		{/if}
 	</div>
-</button>
+</div>
 
 <style>
 	.ticker-info-container {
@@ -425,10 +400,10 @@
 		padding: 0;
 		margin: 0;
 		text-align: left;
-		border: none;
-		cursor: pointer;
 		display: flex;
 		flex-direction: column;
+		outline: none;
+		border: none;
 	}
 
 	.content {
@@ -721,8 +696,8 @@
 
 	/* Market Data */
 	.quote-market-data {
-		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
+		margin-bottom: clamp(4px, 1vw, 8px);
+		padding: clamp(2px, 0.5vw, 4px) clamp(8px, 1.5vw, 12px) clamp(2px, 0.5vw, 4px) clamp(4px, 0.8vw, 6px);
 	}
 
 	/* Details */
@@ -731,7 +706,7 @@
 		flex-direction: column;
 		gap: clamp(2px, 0.5vw, 4px);
 		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
+		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(4px, 0.8vw, 6px);
 	}
 
 	.detail-item {
