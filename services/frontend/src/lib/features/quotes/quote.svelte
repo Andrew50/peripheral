@@ -25,15 +25,10 @@
 	let lastFetchedSecurityId: number | null = null;
 	let countdown = writable('--');
 	let countdownInterval: ReturnType<typeof setInterval>;
-	let logoLoadError = false;
-
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
 		if (chartInstance?.ticker) {
 			instance.set(chartInstance);
-
-			// Reset logo error state when instance changes
-			logoLoadError = false;
 
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
@@ -185,10 +180,7 @@
 		// This function is now empty as the height-related variables and functions are removed
 	}
 
-	function handleLogoError() {
-		logoLoadError = true;
-		// Remove console.error for failed logo loading
-	}
+
 </script>
 
 <button
@@ -199,24 +191,22 @@
 	on:touchstart={handleClick}
 >
 	<div class="content">
-		<!-- Header Section -->
+				<!-- Header Section -->
 		<div class="quote-header">
-			{#if ($instance?.logo || currentDetails?.logo) && !logoLoadError}
-				<div class="logo-container">
+					<div class="ticker-row">
+			<div class="icon-circle">
+				{#if ($instance?.icon || currentDetails?.icon)}
 					<img
-						src={$instance?.logo || currentDetails?.logo}
-						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
+						src={$instance?.icon || currentDetails?.icon}
+						alt="{$instance?.name || currentDetails?.name || 'Company'} icon"
 						class="company-logo"
-						on:error={handleLogoError}
 					/>
-				</div>
-			{:else if $instance?.ticker || currentDetails?.ticker}
-				<div class="logo-container fallback-logo">
-					<div class="ticker-logo">
-						{($instance?.ticker || currentDetails?.ticker || '').charAt(0)}
-					</div>
-				</div>
-			{/if}
+				{:else}
+					<span class="ticker-letter">
+						{($instance?.ticker || currentDetails?.ticker || '?').charAt(0)}
+					</span>
+				{/if}
+			</div>
 			<div class="ticker-wrapper">
 				<div class="ticker">{$instance.ticker || '--'}</div>
 				{#if ($instance?.active === false || currentDetails?.active === false)}
@@ -226,6 +216,7 @@
 					</div>
 				{/if}
 			</div>
+		</div>
 			<div class="company-info">
 				<div class="name">{$instance?.name || currentDetails?.name || 'N/A'}</div>
 			</div>
@@ -342,7 +333,7 @@
 	}
 
 	.content {
-		padding: clamp(0.5rem, 1vw, 1rem);
+		padding: 0 clamp(0.2rem, 0.4vw, 0.4rem) clamp(0.5rem, 1vw, 1rem) clamp(0.2rem, 0.4vw, 0.4rem);
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: var(--ui-border) transparent;
@@ -365,53 +356,49 @@
 	/* Header */
 	.quote-header {
 		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		gap: 10px;
-		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		margin: 0;
+		padding: 0;
+		background: transparent;
+		border: none;
 	}
 
-	.logo-container {
-		flex-shrink: 0;
+	.ticker-row {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		background: white;
-		padding: 4px;
-		border-radius: 4px;
+		gap: 6px;
+		margin-top: 20px;
+		margin-left: 8px;
+	}
+
+	.icon-circle {
 		width: 32px;
 		height: 32px;
-	}
-
-	.company-logo {
-		max-height: 100%;
-		max-width: 100%;
-		object-fit: contain;
-		display: block;
-	}
-
-	.fallback-logo {
-		background: var(--ui-bg-secondary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-	}
-
-	.ticker-logo {
-		width: 100%;
-		height: 100%;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		flex-shrink: 0;
+		background: var(--ui-bg-secondary);
+		border: 1px solid var(--ui-border);
+		overflow: hidden;
+	}
+
+	.company-logo {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: 50%;
+	}
+
+	.ticker-letter {
 		font-size: 14px;
-		font-weight: bold;
+		font-weight: 700;
 		text-transform: uppercase;
-		background: var(--ui-bg-primary);
 		color: var(--text-primary);
+		user-select: none;
 	}
 
 	.ticker-wrapper {
@@ -492,7 +479,8 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		flex-grow: 1;
+		margin-left: 8px;
+		margin-top: 12px;
 	}
 
 	.name {
@@ -552,23 +540,6 @@
 		border-radius: 8px;
 		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
-
-	/*.time-sales-button {
-		background: var(--ui-bg-primary);
-		color: var(--text-primary);
-		border: 1px solid var(--ui-border);
-		border-radius: 4px;
-		padding: 6px 10px;
-		font-size: 0.8em;
-		cursor: pointer;
-		transition: background-color 0.15s ease;
-		margin: 8px 0;
-		width: 100%;
-		font-weight: 500;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}*/
 
 	/* Details */
 	.quote-details {
