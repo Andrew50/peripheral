@@ -162,7 +162,7 @@
 			<div class="metrics-row">
 				<span class="label">CHG</span>
 				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
+					{$hoveredCandleData.chg >= 0 ? '+' : ''}{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct >= 0 ? '+' : ''}{$hoveredCandleData.chgprct.toFixed(2)}%)
 				</span>
 				<span class="label">VOL</span>
 				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>

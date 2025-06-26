@@ -22,6 +22,8 @@ export interface Algo {
 
 export const strategies: Writable<Strategy[]> = writable([]);
 export const watchlists: Writable<Watchlist[]> = writable([]);
+export const currentWatchlistId: Writable<number | undefined> = writable(undefined);
+export const currentWatchlistItems: Writable<Instance[]> = writable([]);
 export const activeAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const inactiveAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const alertLogs: Writable<AlertLog[] | undefined> = writable(undefined);
@@ -81,15 +83,6 @@ export const defaultSettings: Settings = {
     filterTaS: true,
     divideTaS: false,
     showFilings: true,
-    // DEPRECATED: Screensaver default settings
-    // enableScreensaver: true,
-    // Default screensaver settings
-    // screensaverTimeframes: ['1w', '1d', '1h', '1'],
-    // screensaverSpeed: 5,
-    // screensaverTimeout: 5 * 60, // 5 minutes in seconds
-    // screensaverDataSource: 'gainers-losers',
-    // screensaverWatchlistId: undefined,
-    // screensaverTickers: [],
     colorScheme: 'default'
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
