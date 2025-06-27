@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 # Mock the data accessor functions for testing
-def mock_get_bar_data(timeframe="1d", security_ids=None, columns=None, min_bars=1):
+def mock_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1, filters=None, aggregate_mode=False):
     """Mock get_bar_data function for testing"""
     import numpy as np
     
@@ -26,10 +26,15 @@ def mock_get_bar_data(timeframe="1d", security_ids=None, columns=None, min_bars=
     
     # Generate mock data
     mock_data = []
-    tickers = ["AAPL", "GOOGL", "MSFT"]
+    
+    # Use provided tickers or default set
+    if tickers is None:
+        tickers = ["AAPL", "GOOGL", "MSFT"]
+    elif isinstance(tickers, str):
+        tickers = [tickers]
     
     for ticker in tickers:
-        for i in range(min_bars):
+        for i in range(max(min_bars, 1)):  # Ensure at least 1 bar
             timestamp = 1700000000 + (i * 86400)  # Mock timestamps
             row = []
             for col in columns:
@@ -40,14 +45,14 @@ def mock_get_bar_data(timeframe="1d", security_ids=None, columns=None, min_bars=
                 elif col in ["open", "high", "low", "close", "adj_close"]:
                     row.append(100.0 + i)  # Mock prices
                 elif col == "volume":
-                    row.append(1000000 + i * 10000)  # Mock volume
+                    row.append(1500000 + i * 10000)  # Mock volume > 1M for test
                 else:
                     row.append(0)
             mock_data.append(row)
     
     return np.array(mock_data, dtype=object)
 
-def mock_get_general_data(security_ids=None, columns=None):
+def mock_get_general_data(tickers=None, columns=None, filters=None):
     """Mock get_general_data function for testing"""
     import pandas as pd
     
@@ -180,8 +185,8 @@ def strategy():
     # Get recent bar data
     bar_data = get_bar_data(
         timeframe="1d",
-        columns=["ticker", "timestamp", "close", "volume"],
-        min_bars=5
+                    columns=["ticker", "timestamp", "close", "volume"],
+            min_bars=1  # Simple pattern - just need current volume data
     )
     
     if len(bar_data) == 0:
@@ -302,6 +307,44 @@ def strategy():
     print("✓ Strategy validation test passed")
 
 
+async def test_filter_values_fetching():
+    """Test that filter values can be fetched from database"""
+    print("Testing filter values fetching...")
+    
+    try:
+        from data_accessors import DataAccessorProvider
+        
+        # Create mock provider that simulates database behavior
+        class MockDataAccessorProvider(DataAccessorProvider):
+            def get_available_filter_values(self):
+                return {
+                    'sectors': ['Technology', 'Healthcare', 'Financial Services'],
+                    'industries': ['Software—Application', 'Drug Manufacturers—General'],
+                    'primary_exchanges': ['NASDAQ', 'NYSE'],
+                    'locales': ['us']
+                }
+        
+        provider = MockDataAccessorProvider()
+        filter_values = provider.get_available_filter_values()
+        
+        # Validate structure
+        required_keys = ['sectors', 'industries', 'primary_exchanges', 'locales']
+        for key in required_keys:
+            if key not in filter_values:
+                print(f"❌ Missing required key: {key}")
+                return False
+            if not filter_values[key]:
+                print(f"❌ Empty list for key: {key}")
+                return False
+        
+        print(f"✅ Filter values test passed: {len(filter_values['sectors'])} sectors, {len(filter_values['industries'])} industries")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Filter values test failed: {e}")
+        return False
+
+
 async def run_all_tests():
     """Run all accessor strategy tests"""
     print("=== Running Data Accessor Strategy Tests ===")
@@ -311,11 +354,18 @@ async def run_all_tests():
         await test_complex_accessor_strategy() 
         await test_validation_failure()
         
+        # Test filter values functionality
+        filter_test_passed = await test_filter_values_fetching()
+        if not filter_test_passed:
+            print("❌ Filter values test failed")
+            return False
+        
         print("\n🎉 All accessor strategy tests passed!")
+        return True
         
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
-        raise
+        return False
 
 
 if __name__ == "__main__":

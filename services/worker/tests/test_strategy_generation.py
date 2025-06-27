@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-Test to verify that generated strategy code doesn't use typing imports
+Test to verify that generated strategy code doesn't use typing imports and follows new patterns
 """
+
+import sys
+import os
+
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 def test_strategy_code_patterns():
     """Test patterns that should/shouldn't appear in generated strategy code"""
@@ -216,6 +222,109 @@ def test_docstring_patterns():
     return True
 
 
+def test_strategy_generator_filter_values():
+    """Test that strategy generator can fetch filter values"""
+    print("\n🧪 Testing strategy generator filter value fetching...")
+    
+    # Mock the DataAccessorProvider to avoid database dependency in tests
+    class MockDataAccessorProvider:
+        def get_available_filter_values(self):
+            return {
+                'sectors': ['Technology', 'Healthcare', 'Financial Services'],
+                'industries': ['Software—Application', 'Drug Manufacturers—General', 'Banks—Regional'],
+                'primary_exchanges': ['NASDAQ', 'NYSE'],
+                'locales': ['us']
+            }
+    
+    # Mock the import
+    import data_accessors
+    original_provider = getattr(data_accessors, 'DataAccessorProvider', None)
+    data_accessors.DataAccessorProvider = MockDataAccessorProvider
+    
+    try:
+        from strategy_generator import StrategyGenerator
+        sg = StrategyGenerator()
+        
+        # Test that it can get filter values
+        filter_values = sg._get_current_filter_values()
+        
+        # Verify the structure
+        required_keys = ['sectors', 'industries', 'primary_exchanges', 'locales']
+        for key in required_keys:
+            if key not in filter_values:
+                print(f"    ❌ Missing required key: {key}")
+                return False
+            if not filter_values[key]:
+                print(f"    ❌ Empty list for key: {key}")
+                return False
+        
+        print(f"  ✅ Successfully fetched filter values: {len(filter_values['sectors'])} sectors, {len(filter_values['industries'])} industries")
+        
+        # Test that system instruction includes these values
+        system_instruction = sg._get_system_instruction()
+        
+        # Check that the filter values appear in the system instruction
+        if 'Technology' not in system_instruction:
+            print("    ❌ Filter values not properly included in system instruction")
+            return False
+        
+        if 'min_bars cannot exceed 10,000' not in system_instruction:
+            print("    ❌ Missing min_bars limit documentation")
+            return False
+        
+        print("  ✅ System instruction properly includes filter values and limits")
+        
+        return True
+        
+    except Exception as e:
+        print(f"    ❌ Strategy generator test failed: {e}")
+        return False
+        
+    finally:
+        # Restore original provider
+        if original_provider:
+            data_accessors.DataAccessorProvider = original_provider
+
+
+def test_database_requirement():
+    """Test that strategy generator requires database connection"""
+    print("\n🧪 Testing database requirement...")
+    
+    # Mock failing database connection
+    class FailingDataAccessorProvider:
+        def get_available_filter_values(self):
+            raise ConnectionError("Database connection failed")
+    
+    import data_accessors
+    original_provider = getattr(data_accessors, 'DataAccessorProvider', None)
+    data_accessors.DataAccessorProvider = FailingDataAccessorProvider
+    
+    try:
+        from strategy_generator import StrategyGenerator
+        sg = StrategyGenerator()
+        
+        # This should raise an error
+        try:
+            sg._get_current_filter_values()
+            print("    ❌ Expected RuntimeError but none was raised")
+            return False
+        except RuntimeError as e:
+            if "Strategy generation requires database connection" in str(e):
+                print("  ✅ Properly requires database connection")
+                return True
+            else:
+                print(f"    ❌ Wrong error message: {e}")
+                return False
+        except Exception as e:
+            print(f"    ❌ Wrong exception type: {type(e)} - {e}")
+            return False
+        
+    finally:
+        # Restore original provider
+        if original_provider:
+            data_accessors.DataAccessorProvider = original_provider
+
+
 def main():
     """Run all tests"""
     print("🚀 Testing strategy generation patterns...")
@@ -235,13 +344,23 @@ def main():
     test3_passed = test_docstring_patterns()
     success = success and test3_passed
     
+    # Test 4: Strategy generator filter values
+    test4_passed = test_strategy_generator_filter_values()
+    success = success and test4_passed
+    
+    # Test 5: Database requirement
+    test5_passed = test_database_requirement()
+    success = success and test5_passed
+    
     print("\n" + "=" * 60)
     if success:
         print("🎉 All pattern tests passed!")
         print("   ✅ Strategy code patterns are correct")
         print("   ✅ Function signatures avoid typing annotations")
         print("   ✅ Docstrings use built-in type language")
-        print("\n💡 The fixes should prevent typing import issues!")
+        print("   ✅ Filter values are properly fetched from database")
+        print("   ✅ Database connection is required for strategy generation")
+        print("\n💡 The fixes should prevent typing import issues and ensure exact filter values!")
     else:
         print("❌ Some pattern tests failed.")
     

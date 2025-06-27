@@ -11,6 +11,7 @@ import time
 import os
 import asyncio
 import redis
+import signal
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 import logging
@@ -42,7 +43,11 @@ class StrategyWorker:
     
     def __init__(self):
         self.worker_id = f"worker_{threading.get_ident()}"
+        self.shutdown_requested = False
         logger.info(f"🚀 Initializing Strategy Worker {self.worker_id}")
+        
+        # Set up signal handlers for graceful shutdown
+        self._setup_signal_handlers()
         
         # Initialize Redis connection
         logger.info("📡 Connecting to Redis...")
@@ -66,6 +71,31 @@ class StrategyWorker:
         
         # Log initial queue status
         self.log_queue_status()
+    
+    def _setup_signal_handlers(self):
+        """Set up signal handlers for graceful shutdown and crash detection"""
+        def signal_handler(signum, frame):
+            signal_name = signal.Signals(signum).name
+            logger.error(f"🚨 Received signal {signal_name} ({signum}) - initiating graceful shutdown")
+            self.shutdown_requested = True
+            
+            # Log the current stack trace to help debug
+            logger.error(f"📄 Signal received at:")
+            for line in traceback.format_stack(frame):
+                logger.error(f"   {line.strip()}")
+        
+        # Handle common termination signals
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        # Handle segmentation fault (if possible)
+        try:
+            signal.signal(signal.SIGSEGV, signal_handler)
+        except (OSError, ValueError):
+            # SIGSEGV might not be available on all platforms
+            pass
+        
+        logger.info("✅ Signal handlers set up for graceful shutdown")
         
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
@@ -447,17 +477,27 @@ class StrategyWorker:
         logger.info(f"🎯 Strategy worker {self.worker_id} starting queue processing...")
         logger.info("🔍 Queue Processing Order: 1) Priority Queue (strategy_queue_priority), 2) Normal Queue (strategy_queue)")
         
-        # Track last queue status log time
+        # Set start time for uptime tracking
+        self._start_time = time.time()
+        
+        # Track last queue status log time and heartbeat time
         last_status_log = time.time()
+        last_heartbeat = time.time()
         status_log_interval = 600  # Log queue status every 10 minutes when idle
+        heartbeat_interval = 60    # Send heartbeat every minute
         
         # Track statistics
         tasks_processed = 0
         priority_tasks_processed = 0
         normal_tasks_processed = 0
         
-        while True:
+        while not self.shutdown_requested:
             try:
+                # Check for shutdown signal
+                if self.shutdown_requested:
+                    logger.info("🛑 Shutdown requested, exiting main loop")
+                    break
+                
                 # Use Redis BRPOP with multiple queues for efficient, atomic queue checking
                 # Priority queue is checked first automatically by Redis
                 task = self.redis_client.brpop(['strategy_queue_priority', 'strategy_queue'], timeout=10)
@@ -466,11 +506,20 @@ class StrategyWorker:
                     # No task received within timeout
                     self._check_connection()
                     
-                    # Periodically log queue status when idle
+                    # Check for shutdown again after connection check
+                    if self.shutdown_requested:
+                        logger.info("🛑 Shutdown requested during idle period")
+                        break
+                    
+                    # Periodically log queue status when idle and send heartbeat
                     current_time = time.time()
                     if current_time - last_status_log > status_log_interval:
                         self.log_queue_status()
                         last_status_log = current_time
+                    
+                    if current_time - last_heartbeat > heartbeat_interval:
+                        self._publish_heartbeat()
+                        last_heartbeat = current_time
                     
                     continue
                 
@@ -523,17 +572,38 @@ class StrategyWorker:
                     
                     start_time = time.time()
                     
-                    # Execute the task
+                    # Execute the task with comprehensive error handling
                     logger.info(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
-                    if task_type == 'backtest':
-                        result = asyncio.run(self._execute_backtest(task_id=task_id, **args))
-                    elif task_type == 'screening':
-                        result = asyncio.run(self._execute_screening(task_id=task_id, **args))
-                    elif task_type == 'alert':
-                        result = asyncio.run(self._execute_alert(task_id=task_id, **args))
-                    elif task_type == 'create_strategy':
-                        logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
-                        result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
+                    
+                    result = None
+                    try:
+                        if task_type == 'backtest':
+                            result = asyncio.run(self._execute_backtest(task_id=task_id, **args))
+                        elif task_type == 'screening':
+                            result = asyncio.run(self._execute_screening(task_id=task_id, **args))
+                        elif task_type == 'alert':
+                            result = asyncio.run(self._execute_alert(task_id=task_id, **args))
+                        elif task_type == 'create_strategy':
+                            logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
+                            result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
+                    except asyncio.TimeoutError as timeout_error:
+                        logger.error(f"⏰ Task {task_id} timed out: {timeout_error}")
+                        raise Exception(f"Task execution timed out: {str(timeout_error)}")
+                    except MemoryError as memory_error:
+                        logger.error(f"💾 Task {task_id} ran out of memory: {memory_error}")
+                        raise Exception(f"Task execution failed due to memory constraints: {str(memory_error)}")
+                    except Exception as exec_error:
+                        logger.error(f"💥 Task {task_id} execution failed: {exec_error}")
+                        logger.error(f"📄 Execution traceback: {traceback.format_exc()}")
+                        raise exec_error
+                    
+                    # Validate result
+                    if result is None:
+                        raise Exception(f"Task {task_type} returned None result")
+                    
+                    if not isinstance(result, dict):
+                        logger.warning(f"⚠️ Task {task_id} returned non-dict result: {type(result)}")
+                        result = {"result": result, "warning": "Non-dict result wrapped"}
                     
                     # Calculate execution time
                     execution_time = time.time() - start_time
@@ -731,20 +801,44 @@ class StrategyWorker:
     
     async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 
                                      prompt: str = None, strategy_id: int = -1, **kwargs) -> Dict[str, Any]:
-        """Execute strategy creation task with detailed logging"""
+        """Execute strategy creation task with detailed logging and comprehensive error handling"""
         logger.info(f"🧠 STRATEGY CREATION START - Task: {task_id}")
         logger.info(f"   👤 User ID: {user_id}")
         logger.info(f"   📝 Prompt: {prompt}")
         logger.info(f"   🆔 Strategy ID: {strategy_id} ({'Edit' if strategy_id != -1 else 'New'})")
         
         try:
-            # Call the strategy generator
+            # Validate input parameters
+            if not user_id:
+                raise ValueError("user_id is required for strategy creation")
+            if not prompt or not prompt.strip():
+                raise ValueError("prompt is required for strategy creation")
+            
+            logger.info(f"✅ Input validation passed")
+            
+            # Publish progress update
+            if task_id:
+                self._publish_progress(task_id, "initializing", "Starting strategy creation process...")
+            
+            # Call the strategy generator with comprehensive error handling
             logger.info(f"🚀 Calling StrategyGenerator.create_strategy_from_prompt...")
-            result = await self.strategy_generator.create_strategy_from_prompt(
-                user_id=user_id,
-                prompt=prompt,
-                strategy_id=strategy_id
-            )
+            
+            # Add timeout to prevent hanging
+            try:
+                result = await asyncio.wait_for(
+                    self.strategy_generator.create_strategy_from_prompt(
+                        user_id=user_id,
+                        prompt=prompt,
+                        strategy_id=strategy_id
+                    ),
+                    timeout=300.0  # 5 minute timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ Strategy creation timed out after 300 seconds for task {task_id}")
+                raise Exception("Strategy creation timed out after 5 minutes")
+            
+            logger.info(f"📥 Strategy generator returned result type: {type(result)}")
+            logger.info(f"📊 Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
             
             if task_id:
                 if result.get("success"):
@@ -768,18 +862,76 @@ class StrategyWorker:
             logger.info(f"🏁 Strategy creation completed for task {task_id}: Success={result.get('success', False)}")
             return result
             
-        except Exception as e:
-            logger.error(f"💥 CRITICAL ERROR in strategy creation task {task_id}: {e}")
+        except asyncio.TimeoutError as e:
+            logger.error(f"⏰ TIMEOUT in strategy creation task {task_id}: {e}")
             logger.error(f"📄 Full traceback: {traceback.format_exc()}")
             
             error_result = {
                 "success": False,
-                "error": str(e),
+                "error": "Strategy creation timed out after 5 minutes",
+                "error_type": "timeout",
                 "traceback": traceback.format_exc()
             }
             
             if task_id:
-                self._publish_progress(task_id, "error", f"Critical error: {str(e)}")
+                self._publish_progress(task_id, "error", "Strategy creation timed out")
+            
+            return error_result
+            
+        except ValueError as e:
+            logger.error(f"🚨 VALIDATION ERROR in strategy creation task {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+            
+            error_result = {
+                "success": False,
+                "error": f"Input validation failed: {str(e)}",
+                "error_type": "validation",
+                "traceback": traceback.format_exc()
+            }
+            
+            if task_id:
+                self._publish_progress(task_id, "error", f"Input validation failed: {str(e)}")
+            
+            return error_result
+            
+        except MemoryError as e:
+            logger.error(f"💾 MEMORY ERROR in strategy creation task {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+            
+            error_result = {
+                "success": False,
+                "error": "Strategy creation failed due to memory constraints",
+                "error_type": "memory",
+                "traceback": traceback.format_exc()
+            }
+            
+            if task_id:
+                self._publish_progress(task_id, "error", "Memory error during strategy creation")
+            
+            return error_result
+            
+        except Exception as e:
+            logger.error(f"💥 CRITICAL ERROR in strategy creation task {task_id}: {e}")
+            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+            
+            # Try to get more detailed error information
+            error_type = type(e).__name__
+            error_msg = str(e)
+            
+            logger.error(f"🔍 Error details:")
+            logger.error(f"   Type: {error_type}")
+            logger.error(f"   Message: {error_msg}")
+            logger.error(f"   Args: {getattr(e, 'args', 'N/A')}")
+            
+            error_result = {
+                "success": False,
+                "error": error_msg,
+                "error_type": error_type,
+                "traceback": traceback.format_exc()
+            }
+            
+            if task_id:
+                self._publish_progress(task_id, "error", f"Critical error: {error_msg}")
             
             return error_result
     
@@ -814,6 +966,27 @@ class StrategyWorker:
         except Exception as e:
             logger.error(f"❌ Failed to publish progress for {task_id}: {e}")
             logger.error(f"📄 Full traceback: {traceback.format_exc()}")
+    
+    def _publish_heartbeat(self):
+        """Publish worker heartbeat for monitoring"""
+        try:
+            heartbeat = {
+                "worker_id": self.worker_id,
+                "status": "alive",
+                "timestamp": datetime.utcnow().isoformat(),
+                "uptime_seconds": time.time() - getattr(self, '_start_time', time.time())
+            }
+            
+            # Publish heartbeat to Redis
+            channel = "worker_heartbeat"
+            heartbeat_json = json.dumps(heartbeat)
+            
+            self.redis_client.publish(channel, heartbeat_json)
+            logger.debug(f"💓 Published heartbeat for worker {self.worker_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to publish heartbeat: {e}")
+            # Don't log full traceback for heartbeat failures to avoid spam
 
     def _set_task_result(self, task_id: str, status: str, data: Dict[str, Any]):
         """Set task result in Redis and publish update"""

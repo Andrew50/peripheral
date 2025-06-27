@@ -12,14 +12,78 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 from decimal import Decimal
+import psycopg2
+import threading
+from contextlib import contextmanager
+import time
 try:
-    import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
 
 logger = logging.getLogger(__name__)
 
+
+# Add connection pool management
+class ConnectionPoolManager:
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            self.pool = None
+            self.max_connections = 10  # Limit per worker
+            self.connection_timeout = 30
+            self.retry_attempts = 3
+            self.retry_delay = 1
+            self._initialized = True
+    
+    @contextmanager
+    def get_connection(self):
+        """Get database connection with retry logic and timeout"""
+        connection = None
+        for attempt in range(self.retry_attempts):
+            try:
+                connection = psycopg2.connect(
+                    host=os.getenv('DB_HOST', 'localhost'),
+                    port=os.getenv('DB_PORT', '5432'),
+                    user=os.getenv('DB_USER', 'postgres'),
+                    password=os.getenv('DB_PASSWORD', ''),
+                    database=os.getenv('POSTGRES_DB', 'postgres'),
+                    connect_timeout=self.connection_timeout,
+                    application_name=f'worker_{os.getpid()}'
+                )
+                yield connection
+                break
+            except psycopg2.OperationalError as e:
+                if "recovery mode" in str(e) and attempt < self.retry_attempts - 1:
+                    logging.warning(f"Database in recovery mode, retrying in {self.retry_delay}s (attempt {attempt + 1}/{self.retry_attempts})")
+                    time.sleep(self.retry_delay)
+                    self.retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
+                if attempt < self.retry_attempts - 1:
+                    time.sleep(self.retry_delay)
+                    continue
+                else:
+                    raise
+            finally:
+                if connection:
+                    connection.close()
+
+# Global connection pool instance
+connection_pool = ConnectionPoolManager()
 
 class DataAccessorProvider:
     """Provides optimized data accessor functions for strategy execution"""
@@ -41,8 +105,9 @@ class DataAccessorProvider:
         }
         
     def get_connection(self):
-        """Get database connection"""
-        return psycopg2.connect(**self.db_config)
+        """Get database connection using pooled connection with retry logic"""
+        # Use the global connection pool instead of direct connection
+        return connection_pool.get_connection()
     
     def set_execution_context(self, mode: str, symbols: List[str] = None, 
                              start_date: datetime = None, end_date: datetime = None):
@@ -56,7 +121,242 @@ class DataAccessorProvider:
 
     def get_bar_data(self, timeframe: str = "1d", tickers: List[str] = None, 
                      columns: List[str] = None, min_bars: int = 1, 
-                     filters: Dict[str, any] = None) -> np.ndarray:
+                     filters: Dict[str, any] = None, aggregate_mode: bool = False) -> np.ndarray:
+        """
+        Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
+        
+        Args:
+            timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+            tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
+            columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+            min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
+            aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
+            
+        Returns:
+            numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
+        """
+        try:
+            # Validate inputs
+            if min_bars < 1:
+                min_bars = 1
+            if min_bars > 10000:  # Prevent excessive data requests
+                min_bars = 10000
+            
+            # Check if we need to use batching
+            should_batch = self._should_use_batching(tickers, aggregate_mode)
+            
+            if should_batch:
+                logger.info(f"🔄 Using batched data fetching for large dataset")
+                return self._get_bar_data_batched(timeframe, tickers, columns, min_bars, filters)
+            else:
+                # Use original method for smaller datasets or when aggregate_mode is True
+                return self._get_bar_data_single(timeframe, tickers, columns, min_bars, filters)
+                
+        except Exception as e:
+            logger.error(f"Error in get_bar_data: {e}")
+            return np.array([])
+    
+    def _should_use_batching(self, tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
+        """Determine if batching should be used based on the request parameters"""
+        # Never batch if aggregate_mode is explicitly enabled
+        if aggregate_mode:
+            logger.info("🔍 Aggregate mode enabled - disabling batching to provide all data at once")
+            return False
+        
+        # Always batch when tickers=None (all securities)
+        if tickers is None:
+            logger.info("🔄 Batching enabled: fetching all securities")
+            return True
+        
+        # Batch when ticker list is large
+        if len(tickers) > 1000:
+            logger.info(f"🔄 Batching enabled: {len(tickers)} tickers > 1000 limit")
+            return True
+        
+        return False
+    
+    def _get_bar_data_batched(self, timeframe: str = "1d", tickers: List[str] = None, 
+                            columns: List[str] = None, min_bars: int = 1, 
+                            filters: Dict[str, any] = None) -> np.ndarray:
+        """Get bar data using batching approach for large datasets"""
+        try:
+            batch_size = 1000
+            all_results = []
+            
+            # Get the universe of tickers to process
+            if tickers is None:
+                # Get all active tickers
+                logger.info("🌍 Fetching universe of all active tickers for batching")
+                universe_tickers = self._get_all_active_tickers(filters)
+                if not universe_tickers:
+                    logger.warning("No active tickers found in universe")
+                    return np.array([])
+                logger.info(f"📊 Found {len(universe_tickers)} active tickers in universe")
+            else:
+                universe_tickers = tickers
+                logger.info(f"📊 Processing {len(universe_tickers)} specified tickers")
+            
+            # Process in batches
+            total_batches = (len(universe_tickers) + batch_size - 1) // batch_size
+            logger.info(f"🔄 Processing {total_batches} batches of up to {batch_size} tickers each")
+            
+            for i in range(0, len(universe_tickers), batch_size):
+                batch_num = i // batch_size + 1
+                batch_tickers = universe_tickers[i:i + batch_size]
+                
+                logger.info(f"📦 Processing batch {batch_num}/{total_batches}: {len(batch_tickers)} tickers")
+                
+                try:
+                    # Get data for this batch using the single method
+                    batch_result = self._get_bar_data_single(
+                        timeframe=timeframe,
+                        tickers=batch_tickers,
+                        columns=columns,
+                        min_bars=min_bars,
+                        filters=filters
+                    )
+                    
+                    if batch_result is not None and len(batch_result) > 0:
+                        all_results.append(batch_result)
+                        logger.debug(f"✅ Batch {batch_num} returned {len(batch_result)} rows")
+                    else:
+                        logger.debug(f"⚠️ Batch {batch_num} returned no data")
+                        
+                except Exception as batch_error:
+                    logger.error(f"❌ Error in batch {batch_num}: {batch_error}")
+                    # Continue with next batch instead of failing completely
+                    continue
+            
+            # Combine all batch results
+            if all_results:
+                combined_result = np.vstack(all_results)
+                logger.info(f"✅ Batching complete: {len(combined_result)} total rows from {len(all_results)} batches")
+                return combined_result
+            else:
+                logger.warning("No data returned from any batch")
+                return np.array([])
+                
+        except Exception as e:
+            logger.error(f"Error in batched data fetching: {e}")
+            return np.array([])
+    
+    def _get_all_active_tickers(self, filters: Dict[str, any] = None) -> List[str]:
+        """Get list of all active tickers with optional filtering"""
+        try:
+            # Build filter conditions for active securities
+            filter_parts = ["maxdate IS NULL", "active = true"]
+            params = []
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+            
+            where_clause = " AND ".join(filter_parts)
+            query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"
+            
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            
+            return [row[0] for row in results if row[0]]  # Filter out None tickers
+            
+        except Exception as e:
+            logger.error(f"Error fetching active tickers: {e}")
+            return []
+    
+    def get_available_filter_values(self) -> Dict[str, List[str]]:
+        """Get all available values for filter fields from the database"""
+        try:
+            with connection_pool.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                filter_values = {}
+                
+                # Get distinct sectors
+                cursor.execute("""
+                    SELECT DISTINCT sector 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL 
+                    ORDER BY sector
+                """)
+                filter_values['sectors'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct industries
+                cursor.execute("""
+                    SELECT DISTINCT industry 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL 
+                    ORDER BY industry
+                """)
+                filter_values['industries'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct primary exchanges
+                cursor.execute("""
+                    SELECT DISTINCT primary_exchange 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL 
+                    ORDER BY primary_exchange
+                """)
+                filter_values['primary_exchanges'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct locales
+                cursor.execute("""
+                    SELECT DISTINCT locale 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND locale IS NOT NULL 
+                    ORDER BY locale
+                """)
+                filter_values['locales'] = [row[0] for row in cursor.fetchall()]
+                
+                cursor.close()
+                
+                return filter_values
+                
+        except Exception as e:
+            logger.error(f"Error fetching filter values: {e}")
+            return {
+                'sectors': [],
+                'industries': [],
+                'primary_exchanges': [],
+                'locales': []
+            }
+    
+    def _get_bar_data_single(self, timeframe: str = "1d", tickers: List[str] = None, 
+                           columns: List[str] = None, min_bars: int = 1, 
+                           filters: Dict[str, any] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
@@ -118,11 +418,13 @@ class DataAccessorProvider:
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_with_buffer, context['end_date']]
             elif context['mode'] == 'screening':
-                # Screening mode without specific dates: get most recent min_bars only
-                timeframe_delta = self._get_timeframe_delta(timeframe)
-                lookback_duration = timeframe_delta * min_bars * 2  # Extra buffer for data availability
-                date_filter = "o.timestamp >= %s"
-                date_params = [datetime.now() - lookback_duration]
+                # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
+                # This is much more efficient than date filtering because:
+                # 1. Gets exactly min_bars per security (no more, no less)
+                # 2. No unnecessary date calculations or buffers
+                # 3. Database optimizer handles getting most recent records efficiently
+                date_filter = "TRUE"  # No date restriction, rely on ROW_NUMBER LIMIT
+                date_params = []
             else:
                 # No specific date range: get ALL available data
                 date_filter = "TRUE"  # No date restriction
@@ -248,30 +550,75 @@ class DataAccessorProvider:
                     
                 final_select_clause = ', '.join(final_columns)
                 
-                # Determine ORDER BY columns - only use columns that are in the final result
-                order_by_columns = []
-                if "securityid" in final_columns:
-                    order_by_columns.append("securityid")
-                if "timestamp" in final_columns:
-                    order_by_columns.append("timestamp ASC")
-                
-                # Default ordering if no order columns available
-                if not order_by_columns:
-                    order_by_clause = "1"  # Order by first column
+                # Optimize ordering for screening mode - prioritize most recent data
+                if context['mode'] == 'screening':
+                    # For screening, order by most recent timestamp first within each security
+                    # This ensures we get the absolute latest data for screening decisions
+                    order_by_columns = []
+                    if "securityid" in final_columns:
+                        order_by_columns.append("securityid")
+                    if "timestamp" in final_columns:
+                        order_by_columns.append("timestamp DESC")  # Most recent first for screening
+                    
+                    # Default ordering if no order columns available
+                    if not order_by_columns:
+                        order_by_clause = "1"  # Order by first column
+                    else:
+                        order_by_clause = ", ".join(order_by_columns)
+                        
+                    # For screening mode with small min_bars, add additional optimization
+                    if min_bars <= 10:
+                        # Use optimized query that focuses on index efficiency for recent data
+                        # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                        query = f"""WITH ranked_data AS (
+                            SELECT {select_clause},
+                                   ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                            FROM {from_clause}
+                            WHERE {where_clause}
+                        )
+                        SELECT {final_select_clause}
+                        FROM ranked_data 
+                        WHERE rn <= %s
+                        ORDER BY {order_by_clause}"""  # nosec B608
+                    else:
+                        # For larger min_bars, use standard approach but still prioritize recent data
+                        # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                        query = f"""WITH ranked_data AS (
+                            SELECT {select_clause},
+                                   ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                            FROM {from_clause}
+                            WHERE {where_clause}
+                        )
+                        SELECT {final_select_clause}
+                        FROM ranked_data 
+                        WHERE rn <= %s
+                        ORDER BY {order_by_clause}"""  # nosec B608
                 else:
-                    order_by_clause = ", ".join(order_by_columns)
+                    # Non-screening mode: use existing logic
+                    order_by_columns = []
+                    if "securityid" in final_columns:
+                        order_by_columns.append("securityid")
+                    if "timestamp" in final_columns:
+                        order_by_columns.append("timestamp ASC")
+                    
+                    # Default ordering if no order columns available
+                    if not order_by_columns:
+                        order_by_clause = "1"  # Order by first column
+                    else:
+                        order_by_clause = ", ".join(order_by_columns)
+                    
+                    # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                    query = f"""WITH ranked_data AS (
+                        SELECT {select_clause},
+                               ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                        FROM {from_clause}
+                        WHERE {where_clause}
+                    )
+                    SELECT {final_select_clause}
+                    FROM ranked_data 
+                    WHERE rn <= %s
+                    ORDER BY {order_by_clause}"""  # nosec B608
                 
-                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                query = f"""WITH ranked_data AS (
-                    SELECT {select_clause},
-                           ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
-                    FROM {from_clause}
-                    WHERE {where_clause}
-                )
-                SELECT {final_select_clause}
-                FROM ranked_data 
-                WHERE rn <= %s
-                ORDER BY {order_by_clause}"""  # nosec B608
                 params = security_params + date_params + [min_bars]
             
             conn = self.get_connection()
@@ -543,9 +890,10 @@ def get_data_accessor() -> DataAccessorProvider:
     return _data_accessor
 
 def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
-                 columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None) -> np.ndarray:
+                 columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
+                 aggregate_mode: bool = False) -> np.ndarray:
     """
-    Global function for strategy access to bar data
+    Global function for strategy access to bar data with intelligent batching
     
     Args:
         timeframe: Data timeframe ('1d', '1h', '5m', etc.')
@@ -561,24 +909,15 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
                 - market_cap_min: float (minimum market cap)
                 - market_cap_max: float (maximum market cap)
                 - active: bool (default True if not specified)
+        aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
         
     Returns:
         numpy.ndarray with requested bar data
     """
     accessor = get_data_accessor()
     
-    # Handle tickers parameter (preferred) or fall back to security_ids
-    if tickers is not None:
-        # Convert tickers to security_ids if provided
-        if len(tickers) == 0:
-            final_security_ids = []
-        else:
-            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
-    else:
-        # Use security_ids directly (backward compatibility)
-        final_security_ids = security_ids
-    
-    return accessor.get_bar_data(timeframe, final_security_ids, columns, min_bars, filters)
+    # Use tickers directly (new preferred approach)
+    return accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode)
 
 def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None, 
                      filters: Dict[str, any] = None) -> pd.DataFrame:
