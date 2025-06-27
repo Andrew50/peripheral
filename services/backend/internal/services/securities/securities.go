@@ -429,19 +429,29 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			}
 
 			events := res[0].Events
-			initialDate := time.Time(events[len(events)-1].Date).Format("2006-01-02")
-			//fmt.Printf("🟢 Initial date: %s\n", initialDate)
-			getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, processingDate)
-			var figi string
-			if err != nil {
-				figi = ""
-			} else {
-				figi = getTickerDetailsResponse.CompositeFIGI
-			}
-			// Use safe insertion with comprehensive validation
-			err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, nil, true, figi, true, "new ticker listing")
-			if err != nil {
-				return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
+			// this is sorted by date, so the most historical one is last
+			var maxDateToInsert interface{}
+			var isActive bool
+			// this handles ticker changes
+			for eventIndex, event := range events {
+				if eventIndex == 0 {
+					maxDateToInsert = nil
+				}
+				initialDate := time.Time(event.Date).Format("2006-01-02")
+				getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
+				var figi string
+				if err != nil {
+					figi = ""
+				} else {
+					figi = getTickerDetailsResponse.CompositeFIGI
+				}
+				// Use safe insertion with comprehensive validation
+				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
+				if err != nil {
+					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
+				}
+				maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
+				isActive = false
 			}
 			processedTickers[ticker] = struct{}{}
 			continue
