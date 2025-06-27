@@ -19,6 +19,16 @@ spec:
         app: backend
     spec:
       restartPolicy: Always # Update the restart policy to "Always"
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - db
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
