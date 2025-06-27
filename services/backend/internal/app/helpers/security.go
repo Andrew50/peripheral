@@ -240,7 +240,7 @@ type GetUserLastTickersResults struct {
 
 func GetUserLastTickers(conn *data.Conn, userId int, _ json.RawMessage) (interface{}, error) {
 	fmt.Printf("\n\nuserId: %v\n\n", userId)
-	// Get the 5 most recent queried tickers for a user (distinct securities)
+	// Get the 3 most recent queried tickers for a user (distinct securities)
 	query := `
 	WITH recent_queries AS (
 		SELECT 
@@ -250,7 +250,7 @@ func GetUserLastTickers(conn *data.Conn, userId int, _ json.RawMessage) (interfa
 		WHERE user_id = $1
 		GROUP BY securityid
 		ORDER BY last_queried DESC
-		LIMIT 5
+		LIMIT 3
 	)
 	SELECT 
 		s.securityid,

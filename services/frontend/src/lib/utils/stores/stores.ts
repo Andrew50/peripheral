@@ -55,7 +55,7 @@ export function updateUserLastTickers(selectedTicker: any) {
         // Remove the ticker if it already exists
         const filtered = tickers.filter(t => t.ticker !== selectedTicker.ticker);
         // Add the selected ticker to the top
-        return [selectedTicker, ...filtered.slice(0, 4)]; // Keep only top 5
+        return [selectedTicker, ...filtered.slice(0, 2)]; // Keep only top 3
     });
 }
 
