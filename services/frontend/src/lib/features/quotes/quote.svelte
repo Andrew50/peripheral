@@ -12,8 +12,7 @@
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
-		getReferenceStartTimeForDateMilliseconds,
-		timeframeToSeconds
+		getReferenceStartTimeForDateMilliseconds
 	} from '$lib/utils/helpers/timestamp';
 	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -31,8 +30,6 @@
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
-	let countdown = writable('--');
-	let countdownInterval: ReturnType<typeof setInterval>;
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
 		if (chartInstance?.ticker) {
@@ -64,86 +61,7 @@
 		}
 	});
 
-	function formatTime(seconds: number): string {
-		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
-		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
-		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
-		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
-		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
-		const minutes = Math.floor((seconds % (60 * 60)) / 60);
-		const secs = Math.floor(seconds % 60);
-
-		if (years > 0) return `${years}y ${months}m`;
-		if (months > 0) return `${months}m ${weeks}w`;
-		if (weeks > 0) return `${weeks}w ${days}d`;
-		if (days > 0) return `${days}d ${hours}h`;
-		if (hours > 0) return `${hours}h ${minutes}m`;
-		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
-		return `${secs < 10 ? '0' : ''}${secs}s`;
-	}
-
-	function calculateCountdown() {
-		const currentInst = get(instance);
-		if (!currentInst?.timeframe) {
-			countdown.set('--');
-			return;
-		}
-
-		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
-		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe);
-
-		let nextBarClose =
-			currentTimeInSeconds -
-			(currentTimeInSeconds % chartTimeframeInSeconds) +
-			chartTimeframeInSeconds;
-
-		// For daily timeframes, adjust to market close (4:00 PM EST)
-		if (currentInst.timeframe.includes('d')) {
-			const currentDate = new Date(currentTimeInSeconds * 1000);
-			const estOptions = { timeZone: 'America/New_York' };
-			const formatter = new Intl.DateTimeFormat('en-US', {
-				...estOptions,
-				year: 'numeric',
-				month: 'numeric',
-				day: 'numeric'
-			});
-
-			const [month, day, year] = formatter.format(currentDate).split('/');
-
-			const marketCloseDate = new Date(
-				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
-			);
-
-			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
-
-			if (currentTimeInSeconds >= nextBarClose) {
-				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
-
-				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
-				if (dayOfWeek === 0) {
-					// Sunday
-					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
-				} else if (dayOfWeek === 6) {
-					// Saturday
-					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
-				}
-
-				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
-			}
-		}
-
-		const remainingTime = nextBarClose - currentTimeInSeconds;
-
-		if (remainingTime > 0) {
-			countdown.set(formatTime(remainingTime));
-		} else {
-			countdown.set('Bar Closed');
-		}
-	}
-
 	onMount(() => {
-		countdownInterval = setInterval(calculateCountdown, 1000);
-
 		// Initialize with flagWatchlistId if available
 		if (flagWatchlistId !== undefined) {
 			currentWatchlistId.set(flagWatchlistId);
@@ -162,7 +80,6 @@
 		});
 
 		return () => {
-			clearInterval(countdownInterval);
 			unsubscribeWatchlists();
 		};
 	});
@@ -360,14 +277,6 @@
 						N/A
 					{/if}
 				</span>
-			</div>
-		</div>
-
-		<!-- Countdown Section -->
-		<div class="countdown-section">
-			<div class="countdown-container">
-				<span class="countdown-label">Next Bar Close:</span>
-				<span class="countdown-value">{$countdown}</span>
 			</div>
 		</div>
 
@@ -705,36 +614,6 @@
 		color: #ffffff;
 		text-align: right;
 		font-weight: 500;
-	}
-
-	/* Countdown */
-	.countdown-section {
-		margin-top: clamp(4px, 1vw, 8px);
-		padding: clamp(6px, 1vw, 8px);
-	}
-
-	.countdown-container {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
-	}
-
-	.countdown-label {
-		color: var(--text-secondary);
-		font-size: 0.75em;
-		font-weight: 500;
-		text-transform: uppercase;
-	}
-
-	.countdown-value {
-		font-family: var(--font-primary);
-		font-weight: 600;
-		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8rem);
-		color: var(--text-primary);
-		padding: clamp(3px, 0.5vw, 4px) clamp(6px, 1vw, 8px);
-		min-width: clamp(50px, 8vw, 60px);
-		text-align: center;
 	}
 
 	/* Description */

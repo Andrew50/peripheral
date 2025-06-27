@@ -10,6 +10,8 @@
 	export let instance: Instance;
 
 	const commonTimeframes = ['1', '1h', '1d', '1w'];
+	let countdown = writable('--');
+	let countdownInterval: ReturnType<typeof setInterval>;
 	// Helper computed value to check if current timeframe is custom
 	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
 
@@ -81,97 +83,205 @@
 		const event = new CustomEvent('calendar-click');
 		document.dispatchEvent(event);
 	}
+
+	function formatTime(seconds: number): string {
+		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
+		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
+		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
+		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
+		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+		const minutes = Math.floor((seconds % (60 * 60)) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (years > 0) return `${years}y ${months}m`;
+		if (months > 0) return `${months}m ${weeks}w`;
+		if (weeks > 0) return `${weeks}w ${days}d`;
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+		return `${secs < 10 ? '0' : ''}${secs}s`;
+	}
+
+	function calculateCountdown() {
+		if (!instance?.timeframe) {
+			countdown.set('--');
+			return;
+		}
+
+		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
+		const chartTimeframeInSeconds = timeframeToSeconds(instance.timeframe);
+
+		let nextBarClose =
+			currentTimeInSeconds -
+			(currentTimeInSeconds % chartTimeframeInSeconds) +
+			chartTimeframeInSeconds;
+
+		// For daily timeframes, adjust to market close (4:00 PM EST)
+		if (instance.timeframe.includes('d')) {
+			const currentDate = new Date(currentTimeInSeconds * 1000);
+			const estOptions = { timeZone: 'America/New_York' };
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				...estOptions,
+				year: 'numeric',
+				month: 'numeric',
+				day: 'numeric'
+			});
+
+			const [month, day, year] = formatter.format(currentDate).split('/');
+
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
+			);
+
+			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+
+			if (currentTimeInSeconds >= nextBarClose) {
+				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
+
+				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
+				if (dayOfWeek === 0) {
+					// Sunday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
+				} else if (dayOfWeek === 6) {
+					// Saturday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
+				}
+
+				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+			}
+		}
+
+		const remainingTime = nextBarClose - currentTimeInSeconds;
+
+		if (remainingTime > 0) {
+			countdown.set(formatTime(remainingTime));
+		} else {
+			countdown.set('Bar Closed');
+		}
+	}
+
+	onMount(() => {
+		countdownInterval = setInterval(calculateCountdown, 1000);
+		calculateCountdown(); // Initial calculation
+	});
+
+	onDestroy(() => {
+		if (countdownInterval) {
+			clearInterval(countdownInterval);
+		}
+	});
 </script>
 
 <div class="top-bar">
-	<!-- Company Logo -->
-	{#if instance?.logo}
-		<div class="logo-container">
-			<img
-				src={instance.logo}
-				alt="{instance?.name || 'Company'} logo"
-				class="company-logo-topbar"
-			/>
-		</div>
-	{/if}
-
-	<button
-		class="symbol metadata-button"
-		on:click={handleTickerClick}
-		on:keydown={handleTickerKeydown}
-		aria-label="Change ticker"
-	>
-		<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
-			<path
-				d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-		{instance?.ticker || 'NaN'}
-	</button>
-
-	<!-- Divider -->
-	<div class="divider"></div>
-
-	<!-- Add common timeframe buttons -->
-	{#each commonTimeframes as tf}
-		<button
-			class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
-			on:click={() => selectTimeframe(tf)}
-			aria-label="Set timeframe to {tf}"
-			aria-pressed={instance?.timeframe === tf}
-		>
-			{tf}
-		</button>
-	{/each}
-	<!-- Button to open custom timeframe input -->
-	<button
-		class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
-		on:click={handleCustomTimeframeClick}
-		aria-label="Select custom timeframe"
-		aria-pressed={isCustomTimeframe ? 'true' : 'false'}
-	>
-		{#if isCustomTimeframe}
-			{instance.timeframe}
-		{:else}
-			...
+	<!-- Left side content -->
+	<div class="top-bar-left">
+		<!-- Company Logo -->
+		{#if instance?.logo}
+			<div class="logo-container">
+				<img
+					src={instance.logo}
+					alt="{instance?.name || 'Company'} logo"
+					class="company-logo-topbar"
+				/>
+			</div>
 		{/if}
-	</button>
 
-	<!-- Divider -->
-	<div class="divider"></div>
+		<button
+			class="symbol metadata-button"
+			on:click={handleTickerClick}
+			on:keydown={handleTickerKeydown}
+			aria-label="Change ticker"
+		>
+			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+				<path
+					d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+			{instance?.ticker || 'NaN'}
+		</button>
 
-	<button
-		class="session-type metadata-button"
-		on:click={handleSessionClick}
-		aria-label="Toggle session type"
-	>
-		{instance?.extendedHours ? 'Extended' : 'Regular'}
-	</button>
+		<!-- Divider -->
+		<div class="divider"></div>
 
-	<!-- Divider -->
-	<div class="divider"></div>
+		<!-- Add common timeframe buttons -->
+		{#each commonTimeframes as tf}
+			<button
+				class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
+				on:click={() => selectTimeframe(tf)}
+				aria-label="Set timeframe to {tf}"
+				aria-pressed={instance?.timeframe === tf}
+			>
+				{tf}
+			</button>
+		{/each}
+		<!-- Button to open custom timeframe input -->
+		<button
+			class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+			on:click={handleCustomTimeframeClick}
+			aria-label="Select custom timeframe"
+			aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+		>
+			{#if isCustomTimeframe}
+				{instance.timeframe}
+			{:else}
+				...
+			{/if}
+		</button>
 
-	<!-- Calendar button for timestamp selection -->
-	<button
-		class="calendar-button metadata-button"
-		on:click={handleCalendarClick}
-		title="Go to Date"
-		aria-label="Go to Date"
-	>
-		<svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<path
-				d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-				stroke="currentColor"
-				stroke-width="1.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-	</button>
+		<!-- Divider -->
+		<div class="divider"></div>
+
+		<button
+			class="session-type metadata-button"
+			on:click={handleSessionClick}
+			aria-label="Toggle session type"
+		>
+			{instance?.extendedHours ? 'Extended' : 'Regular'}
+		</button>
+
+		<!-- Divider -->
+		<div class="divider"></div>
+
+		<!-- Calendar button for timestamp selection -->
+		<button
+			class="calendar-button metadata-button"
+			on:click={handleCalendarClick}
+			title="Go to Date"
+			aria-label="Go to Date"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				width="16"
+				height="16"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+			>
+				<path
+					d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+					stroke="currentColor"
+					stroke-width="1.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+		</button>
+
+		<!-- Divider -->
+		<div class="divider"></div>
+
+		<!-- Countdown -->
+		<div class="countdown-container">
+			<span class="countdown-label">Next Bar Close:</span>
+			<span class="countdown-value">{$countdown}</span>
+		</div>
+	</div>
+
+	<!-- Right side - Empty (countdown moved to left side) -->
+	<div class="top-bar-right"></div>
 </div>
 
 <style>
@@ -180,10 +290,9 @@
 		min-height: 40px;
 		background-color: #0f0f0f;
 		display: flex;
-		justify-content: flex-start;
+		justify-content: space-between;
 		align-items: center;
 		padding: 0 10px;
-		gap: 4px;
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 10;
@@ -192,6 +301,18 @@
 		top: 0;
 		left: 0;
 		right: 0;
+	}
+
+	.top-bar-left {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.top-bar-right {
+		display: flex;
+		align-items: center;
+		margin-right: 49px; /* Account for the sidebar button area + divider */
 	}
 
 	/* Base styles for metadata buttons */
@@ -331,6 +452,45 @@
 
 	.calendar-button:hover svg {
 		opacity: 1;
+	}
+
+	/* Countdown styles */
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		border: none;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		line-height: 18px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: none;
+	}
+
+	.countdown-container:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.countdown-label {
+		color: inherit;
+		font-size: inherit;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.countdown-value {
+		font-family: inherit;
+		font-weight: 600;
+		font-size: inherit;
+		color: inherit;
+		min-width: 45px;
+		text-align: center;
 	}
 
 	/* Divider styles */

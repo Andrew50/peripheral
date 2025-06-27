@@ -282,7 +282,8 @@ class DataAccessorProvider:
                     params.append(filters['market_cap_max'])
             
             where_clause = " AND ".join(filter_parts)
-            query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"
+            # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
+            query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"  # nosec B608
             
             conn = self.get_connection()
             cursor = conn.cursor()
