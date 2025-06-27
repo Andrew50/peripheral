@@ -239,7 +239,6 @@ type GetUserLastTickersResults struct {
 }
 
 func GetUserLastTickers(conn *data.Conn, userId int, _ json.RawMessage) (interface{}, error) {
-	fmt.Printf("\n\nuserId: %v\n\n", userId)
 	// Get the 3 most recent queried tickers for a user (distinct securities)
 	query := `
 	WITH recent_queries AS (
@@ -284,7 +283,6 @@ func GetUserLastTickers(conn *data.Conn, userId int, _ json.RawMessage) (interfa
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over user last tickers: %v", err)
 	}
-	fmt.Printf("\n\nresults: %v\n\n", results)
 	return results, nil
 }
 
