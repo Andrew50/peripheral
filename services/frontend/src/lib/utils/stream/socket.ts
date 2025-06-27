@@ -174,26 +174,41 @@ export function connect() {
 				handleTimestampUpdate(data.timestamp);
 			} else {
 				// Also feed data to the new streamHub system
-				if (channelName.includes('-slow-regular') && data.price !== undefined) {
+				if ((channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) && data.price !== undefined) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						enqueueTick({
+						const tickData: any = {
 							securityid: securityId,
 							price: data.price,
 							data: data
-						});
+						};
+						
+						// If this is extended hours data, mark it for extended calculation
+						if (channelName.includes('-slow-extended')) {
+							tickData.isExtended = true;
+						}
+						
+						enqueueTick(tickData);
 					}
 				}
 				
-				// Handle close data for the hub
-				if (channelName.includes('-close-regular') && data.price !== undefined) {
+				// Handle close data for the hub (both regular and extended)
+				if ((channelName.includes('-close-regular') || channelName.includes('-close-extended')) && data.price !== undefined) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						enqueueTick({
+						const tickData: any = {
 							securityid: securityId,
-							prevClose: data.price,
 							data: data
-						});
+						};
+						
+						// Set appropriate reference price field based on channel type
+						if (channelName.includes('-close-regular')) {
+							tickData.prevClose = data.price;
+						} else if (channelName.includes('-close-extended')) {
+							tickData.extendedClose = data.price;
+						}
+						
+						enqueueTick(tickData);
 					}
 				}
 				latestValue.set(channelName, data);

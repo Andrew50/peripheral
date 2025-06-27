@@ -62,6 +62,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getCurrentSecurityID":  helpers.GetCurrentSecurityID,
 	"getCurrentTicker":      helpers.GetCurrentTicker,
 	"getIcons":              helpers.GetIcons,
+	"getUserLastTickers":    helpers.GetUserLastTickers,
 	"getPrevClose":          helpers.GetPrevClose,
 	"getExchanges":          helpers.GetExchanges,
 
