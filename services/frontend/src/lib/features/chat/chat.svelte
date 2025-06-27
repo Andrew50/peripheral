@@ -472,8 +472,8 @@
 				}
 			}, 100);
 		}
-		// Always auto-scroll to bottom when opening conversations
-		loadConversationHistory(true);
+		// Auto-scroll to bottom for authenticated users, start at top for shared chats
+		loadConversationHistory(!isPublicViewing);
 		loadConversations(); // Load conversations on mount (will be skipped for public viewing)
 
 		document.addEventListener('click', handleClickOutside); // Add click outside listener
