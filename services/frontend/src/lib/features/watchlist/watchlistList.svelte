@@ -403,16 +403,14 @@
 
 <div class="table-container">
 	{#if isLoading}
-		<div class="loading glass glass--small glass--light">Loading...</div>
+		<div class="loading">Loading...</div>
 	{:else if loadError}
-		<div class="error glass glass--small glass--medium">
+		<div class="error">
 			<p>Failed to load data: {loadError}</p>
-			<button class="glass glass--small glass--light" on:click={() => window.location.reload()}
-				>Retry</button
-			>
+			<button on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table glass glass--rounded glass--medium" class:sorting={isSorting}>
+		<table class="default-table" class:sorting={isSorting}>
 			<thead>
 				<tr class="default-tr">
 					<th class="default-th"></th>
@@ -505,8 +503,23 @@
 									on:click={(event) => {
 										deleteRow(event, watch);
 									}}
+									on:mousedown={(event) => {
+										event.stopPropagation();
+										event.preventDefault();
+									}}
+									title="Remove from watchlist"
 								>
-									✕
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 20 20"
+										fill="currentColor"
+										width="12"
+										height="12"
+									>
+										<path
+											d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
+										/>
+									</svg>
 								</button>
 							</td>
 						</tr>
@@ -518,19 +531,6 @@
 </div>
 
 <style>
-	.selected {
-		outline: 2px solid #cfd0d2;
-	}
-
-	tr {
-		transition: outline 0.2s ease;
-	}
-
-	.list-container {
-		width: 100%;
-		overflow-x: auto;
-	}
-
 	.table-container {
 		width: 100%;
 		overflow: hidden;
@@ -542,7 +542,7 @@
 	table {
 		width: 100%;
 		border-collapse: separate;
-		border-spacing: 0 2px;
+		border-spacing: 0 clamp(1px, 0.2vw, 2px);
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
@@ -552,10 +552,10 @@
 
 	th,
 	td {
-		padding: clamp(4px, 0.8vw, 8px) clamp(6px, 1.2vw, 12px);
+		padding: clamp(1px, 0.15vw, 2px) clamp(6px, 1.2vw, 12px);
 		text-align: left;
 		background: transparent;
-		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8125rem);
+		font-size: clamp(0.75rem, 0.875rem, 1rem);
 	}
 
 	/* Header cells keep original styling */
@@ -641,22 +641,6 @@
 		color: var(--ui-accent);
 	}
 
-	tr {
-		transition: background-color 0.2s;
-	}
-
-	.table-container {
-		width: 100%;
-		overflow: hidden;
-		max-width: 100%;
-		padding: 0;
-		margin: 0;
-	}
-
-	.delete-button {
-		opacity: 0;
-		transition: opacity 0.2s ease;
-	}
 
 	tr:hover .delete-button {
 		opacity: 1;
@@ -688,13 +672,7 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
-	.positive {
-		color: var(--positive);
-	}
 
-	.negative {
-		color: var(--negative);
-	}
 
 	.ticker-icon {
 		width: clamp(16px, 2.5vw, 22px);
@@ -728,10 +706,7 @@
 		vertical-align: middle;
 	}
 
-	/* Style for different trade types */
-	.long {
-		color: var(--color-positive);
-	}
+
 
 	/* Professional flag icon styling */
 	.flag-icon {
@@ -746,68 +721,54 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
-	/* Sticky Last column (Delete Button) */
+	/* Regular Last column (Delete Button) */
 	th:last-child,
 	td:last-child {
-		position: sticky;
-		right: 0px; /* Stick to the very edge */
-		z-index: 1; /* Above non-sticky cells */
-		background-color: transparent; /* Transparent for glass effect */
-		width: 30px; /* Minimal width for button */
+		width: 30px;
 		max-width: 30px;
-		padding: 0;
+		padding: clamp(2px, 0.4vw, 4px) 0;
 		text-align: center;
 		vertical-align: middle;
 	}
-	th:last-child {
-		z-index: 3; /* Above tbody cells and sort overlay */
-		background-color: transparent; /* Transparent for glass effect */
-	}
+	
+
 
 	.delete-button {
 		opacity: 0;
-		transition: opacity 0.2s ease;
+		transition: none;
 		cursor: pointer;
 		border: none;
 		background: none;
-		color: var(--negative);
-		font-size: 1.2em;
+		color: var(--text-secondary);
+		font-size: 0.75em;
 		padding: 4px;
 		line-height: 1;
-		display: inline-flex; /* Helps center */
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		width: 20px;
+		height: 20px;
 	}
+	
 	.delete-button:hover {
-		color: var(--negative-hover, red); /* Darker red on hover */
+		background: rgba(255, 255, 255, 0.1);
+		color: var(--text-secondary);
 	}
 
-	tr:hover .delete-button {
-		opacity: 1;
-	}
-
-	/* Adjust background for sticky columns on hover/select */
-	/* Assuming .selected class is used for row selection */
-	tr:hover th:last-child,
-	tr:hover td:last-child {
-		background-color: rgba(50, 50, 50, 0.6);
-	}
-
-	/* Table header with glass effect */
+	/* Table header */
 	thead tr {
-		background: rgba(0, 0, 0, 0.3);
-		backdrop-filter: blur(8px);
+		background: var(--ui-bg-element);
 	}
 
-	/* Table rows with subtle glass effect */
+	/* Table rows */
 	tbody tr {
-		background: rgba(255, 255, 255, 0.02);
+		background: var(--ui-bg-primary);
 		border-radius: 6px;
 		margin: 1px 0;
 	}
 
 	tbody tr:hover {
-		background: rgba(50, 50, 50, 0.6);
+		background: var(--ui-bg-hover);
 		border-radius: 6px;
 	}
 
@@ -817,9 +778,5 @@
 		border-radius: 6px;
 	}
 
-	/* Table cells with enhanced readability */
-	td,
-	th {
-		backdrop-filter: inherit;
-	}
+	
 </style>

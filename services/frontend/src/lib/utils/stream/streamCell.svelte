@@ -7,6 +7,7 @@
 
 	export let instance: Instance;
 	export let type: 'price' | 'change' | 'change %' | 'change % extended' | 'market cap' = 'change';
+	export let disableFlash: boolean = false;
 
 	let releaseSlow: Function = () => {};
 	let releaseClose: Function = () => {};
@@ -62,6 +63,10 @@
 		!$changeStore.change.includes('-') &&
 		!isPlaceholder &&
 		$changeStore.change !== '';
+
+	// Static color logic for when flash is disabled (exclude market cap)
+	$: isStaticGreen = disableFlash && hasPriceAndPrevClose && diff > 0 && type !== 'market cap';
+	$: isStaticRed = disableFlash && hasPriceAndPrevClose && diff < 0 && type !== 'market cap';
 
 	function setupStreams() {
 		// Only setup streams if security ID changed
@@ -155,7 +160,7 @@
 						updateSlices(v.price);
 						lastPrice = v.price;
 
-						if (dir) firePulse(dir);
+						if (dir && !disableFlash) firePulse(dir);
 					}
 					return {
 						...s,
@@ -200,9 +205,11 @@
 </script>
 
 <div
-	class:red={isRedForChange || isRedForChangePercent}
+	class:red={isRedForChange || isRedForChangePercent || isStaticRed}
 	class:white={isWhiteForChange}
-	class:green={isGreenForChange || isGreenForChangePercent}
+	class:green={isGreenForChange || isGreenForChangePercent || isStaticGreen}
+	class:price-type={type === 'price'}
+	class:disable-flash-mode={disableFlash}
 	class="price-cell {pulseClass}"
 >
 	{#if type === 'price'}
@@ -219,11 +226,18 @@
 			</span>
 		{/if}
 	{:else if type === 'change'}
-		{$changeStore.price != null && $changeStore.prevClose != null
-			? ($changeStore.price - $changeStore.prevClose).toFixed(2)
-			: ''}
+		{#if $changeStore.price != null && $changeStore.prevClose != null}
+			{@const changeValue = ($changeStore.price - $changeStore.prevClose).toFixed(2)}
+			{changeValue >= 0 ? '+' + changeValue : changeValue}
+		{:else}
+			{''}
+		{/if}
 	{:else if type === 'change %' || type === 'change % extended'}
-		{$changeStore.change}
+		{#if $changeStore.change && !$changeStore.change.includes('-') && $changeStore.change !== ''}
+			{'+' + $changeStore.change}
+		{:else}
+			{$changeStore.change}
+		{/if}
 	{:else if type === 'market cap'}
 		{formatMarketCap($changeStore.price, $changeStore.shares)}
 	{:else}
@@ -278,5 +292,30 @@
 	/* basic cell padding so the flash fills the whole box */
 	.price-cell {
 		padding: 0 4px;
+	}
+
+	/* Override flash animations and colors specifically for price type when flash is disabled */
+	@keyframes flashWhitePrice {
+		0% {
+			color: #ffffff;
+		}
+		100% {
+			color: #ffffff;
+		}
+	}
+
+	/* Only apply white overrides when flash is NOT disabled */
+	.price-type:not(.disable-flash-mode).flash-up {
+		animation: flashWhitePrice 0.5s ease-out forwards;
+	}
+	.price-type:not(.disable-flash-mode).flash-down {
+		animation: flashWhitePrice 0.5s ease-out forwards;
+	}
+
+	.price-type:not(.disable-flash-mode) .diff.up {
+		color: #ffffff;
+	}
+	.price-type:not(.disable-flash-mode) .diff.down {
+		color: #ffffff;
 	}
 </style>

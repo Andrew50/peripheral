@@ -46,15 +46,15 @@
 
 	function startDismissTimer() {
 		clearTimers();
-		progress = 100;
+		progress = 0;
 
 		// Update progress every 100ms for smooth animation
 		const updateInterval = 100;
-		const progressDecrement = (100 * updateInterval) / dismissTimeMs;
+		const progressIncrement = (100 * updateInterval) / dismissTimeMs;
 
 		progressInterval = setInterval(() => {
-			progress = Math.max(0, progress - progressDecrement);
-			if (progress <= 0) {
+			progress = Math.min(100, progress + progressIncrement);
+			if (progress >= 100) {
 				clearTimers();
 				close();
 			}

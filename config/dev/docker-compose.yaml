@@ -21,6 +21,7 @@ services:
       - DB_HOST=db
       - POSTGRES_DB=postgres
       - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
       - POLYGON_API_KEY=${POLYGON_API_KEY}
       - X_API_KEY=${X_API_KEY}

@@ -17,8 +17,7 @@
 	function setRegular() {
 		if (instance && instance.extendedHours) {
 			const updatedInstance = { ...instance, extendedHours: false };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350); // Start fade-out slightly before slide completes
@@ -27,14 +26,17 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600); // Total time: slide (300ms) + fade (250ms) + buffer (50ms)
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		}
 	}
 
 	function setExtended() {
 		if (instance && !instance.extendedHours) {
 			const updatedInstance = { ...instance, extendedHours: true };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350); // Start fade-out slightly before slide completes
@@ -43,6 +45,10 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600); // Total time: slide (300ms) + fade (250ms) + buffer (50ms)
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		}
 	}
 
@@ -53,8 +59,7 @@
 		if (event.key === 'Tab' || event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			const updatedInstance = { ...instance, extendedHours: !instance.extendedHours };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350);
@@ -63,6 +68,10 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600);
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			dispatch('close');

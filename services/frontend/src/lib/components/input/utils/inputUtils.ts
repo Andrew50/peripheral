@@ -3,6 +3,8 @@ import { allKeys, type InstanceAttributes } from './inputTypes';
 export { capitalize, formatTimeframe, detectInputTypeSync };
 import { type Instance } from '$lib/utils/types/types';
 import { parse } from 'date-fns';
+import { get } from 'svelte/store';
+import { userLastTickers } from '$lib/utils/stores/stores';
 let isLoadingSecurities = false;
 
 function capitalize(str: string, lower = false): string {
@@ -68,7 +70,8 @@ function detectInputTypeSync(
 
 export async function validateInput(
 	inputString: string,
-	inputType: string
+	inputType: string,
+	onSecuritiesUpdate?: (securities: Instance[]) => void
 ): Promise<{
 	inputValid: boolean;
 	securities: Instance[];
@@ -82,11 +85,35 @@ export async function validateInput(
 
 			let securities: Instance[];
 
-			// If input string is empty, get popular tickers
+			// If input string is empty, show user's recent tickers above popular tickers
 			if (!inputString || inputString.trim() === '') {
-				securities = await publicRequest<Instance[]>('getPopularTickers', {});
+				const cachedTickers = get(userLastTickers);
+				const recentSecurities = (cachedTickers || []).slice(0, 2);
+
+				// Show recent tickers immediately if available
+				if (recentSecurities.length > 0 && onSecuritiesUpdate) {
+					onSecuritiesUpdate(recentSecurities);
+				}
+
+				// Fetch popular tickers and combine with recent ones
+				const popularTickers = await publicRequest<Instance[]>('getPopularTickers', {});
+
+				// Combine recent tickers (first) with popular tickers, avoiding duplicates
+				const combined = [...recentSecurities];
+				if (Array.isArray(popularTickers)) {
+					for (const popular of popularTickers) {
+						if (!combined.some(cached => cached.ticker === popular.ticker)) {
+							combined.push(popular);
+						}
+					}
+				}
+
+				return {
+					inputValid: true,
+					securities: combined
+				};
 			} else {
-				// Otherwise, search for tickers matching the input
+				// Otherwise, search for tickers matching the input (original behavior)
 				securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
 					ticker: inputString
 				});

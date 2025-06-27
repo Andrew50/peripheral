@@ -14,6 +14,7 @@
 		detectInputTypeSync,
 		validateInput
 	} from '$lib/components/input/utils/inputUtils';
+	import { userLastTickers, updateUserLastTickers } from '$lib/utils/stores/stores';
 
 	/**
 	 * Focus Management Strategy:
@@ -130,26 +131,41 @@
 			}, 0);
 		}
 
-		// Perform validation asynchronously
-		validateInput(inputString.toUpperCase(), inputType)
-			.then((validationResp) => {
-				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					inputQuery.update((v: InputQuery) => ({
-						...v,
-						...validationResp
-					}));
-					loadedSecurityResultRequest = thisSecurityResultRequest;
-
-					// Reset loading state after validation completes
-					if (inputType === 'ticker') {
-						isLoadingSecurities = false;
+		// Perform validation asynchronously in next event loop tick to avoid blocking UI
+		setTimeout(() => {
+			validateInput(
+				inputString.toUpperCase(),
+				inputType,
+				// Callback for immediate updates (recent tickers)
+				(securities: any[]) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							securities,
+							inputValid: true
+						}));
 					}
 				}
-			})
-			.catch((error) => {
-				console.error('Validation error:', error);
-				isLoadingSecurities = false;
-			});
+			)
+				.then((validationResp) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							...validationResp
+						}));
+						loadedSecurityResultRequest = thisSecurityResultRequest;
+
+						// Reset loading state after validation completes
+						if (inputType === 'ticker') {
+							isLoadingSecurities = false;
+						}
+					}
+				})
+				.catch((error) => {
+					console.error('Validation error:', error);
+					isLoadingSecurities = false;
+				});
+		}, 0);
 	}
 
 	// Modified queryInstanceInput: if called while another query is active,
@@ -357,10 +373,34 @@
 			// Get the latest state after waiting
 			iQ = $inputQuery;
 
-			// Check if securities are available
-			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+			let selectedSecurity;
+
+			// Handle recent tickers vs search results
+			if (iQ.inputString === '' || !iQ.inputString) {
+				// When no input, we're showing recent + popular tickers
+				const recentTickers = $userLastTickers.slice(0, 2);
+				const allSecurities = iQ.securities || [];
+				const popularTickers = allSecurities.filter(
+					(sec) => !recentTickers.some((recent) => recent.ticker === sec.ticker)
+				);
+
+				if (tickerIndex < recentTickers.length) {
+					selectedSecurity = recentTickers[tickerIndex];
+				} else {
+					selectedSecurity = popularTickers[tickerIndex - recentTickers.length];
+				}
+			} else {
+				// When searching, use the search results
+				if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+					selectedSecurity = iQ.securities[tickerIndex];
+				}
+			}
+
+			if (selectedSecurity) {
 				// Apply the selected security to the instance
-				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
+				iQ.instance = { ...iQ.instance, ...selectedSecurity };
+				// Save to recent tickers
+				updateUserLastTickers(selectedSecurity);
 			} else {
 				// If no securities, at least set the ticker from input string
 				iQ.instance.ticker = iQ.inputString.toUpperCase();
@@ -437,14 +477,16 @@
 			highlightedIndex = -1;
 		}
 
-		// Update the input string in the store
+		// Update the input string in the store immediately for responsive UI
 		inputQuery.update((v) => ({
 			...v,
 			inputString: newValue
 		}));
 
-		// Determine input type based on new value
-		determineInputType(newValue);
+		// Make the API call non-blocking to avoid UI delays
+		setTimeout(() => {
+			determineInputType(newValue);
+		}, 0);
 	}
 
 	// Handle special keys (Enter, Tab, Escape, Arrow keys)
@@ -698,16 +740,119 @@
 						<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
 					</div>
 					<div class="search-divider"></div>
-					{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-						{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
-							<div class="popular-section-header">
-								<span class="popular-text">Popular</span>
-							</div>
-						{:else}
-							<div class="securities-section-header">
-								<span class="securities-text">Securities</span>
-							</div>
-						{/if}
+					{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
+						<!-- Show Recent and Popular sections when no input -->
+						{@const recentTickers = $userLastTickers.slice(0, 2)}
+						{@const allSecurities = $inputQuery.securities || []}
+						{@const popularTickers = allSecurities.filter(
+							(sec) => !recentTickers.some((recent) => recent.ticker === sec.ticker)
+						)}
+
+						<!-- Combined scrollable container for both sections -->
+						<div class="securities-list-flex securities-scrollable">
+							{#if recentTickers.length > 0}
+								<div class="recent-section-header">
+									<span class="recent-text">Recent</span>
+								</div>
+								{#each recentTickers as sec, i}
+									<div
+										class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
+										on:click={async () => {
+											const updatedQuery = await enterInput($inputQuery, i);
+											inputQuery.set(updatedQuery);
+										}}
+										on:mouseenter={() => {
+											highlightedIndex = i;
+										}}
+										on:mouseleave={() => {
+											// Keep the highlight on the current item, don't reset
+										}}
+										role="button"
+										tabindex="0"
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.currentTarget.click();
+											}
+										}}
+									>
+										<div class="security-icon-flex">
+											{#if sec.icon}
+												<img
+													src={sec.icon.startsWith('data:')
+														? sec.icon
+														: `data:image/jpeg;base64,${sec.icon}`}
+													alt="Security Icon"
+													on:error={() => {}}
+												/>
+											{:else if sec.ticker}
+												<span class="default-ticker-icon">
+													{sec.ticker.charAt(0).toUpperCase()}
+												</span>
+											{/if}
+										</div>
+										<div class="security-info-flex">
+											<span class="ticker-flex">{sec.ticker}</span>
+											<span class="name-flex">{sec.name}</span>
+										</div>
+									</div>
+								{/each}
+							{/if}
+
+							{#if popularTickers.length > 0}
+								<div class="popular-section-header">
+									<span class="popular-text">Popular</span>
+								</div>
+								{#each popularTickers as sec, i}
+									{@const adjustedIndex = i + recentTickers.length}
+									<div
+										class="security-item-flex {adjustedIndex === highlightedIndex
+											? 'highlighted'
+											: ''}"
+										on:click={async () => {
+											const updatedQuery = await enterInput($inputQuery, adjustedIndex);
+											inputQuery.set(updatedQuery);
+										}}
+										on:mouseenter={() => {
+											highlightedIndex = adjustedIndex;
+										}}
+										on:mouseleave={() => {
+											// Keep the highlight on the current item, don't reset
+										}}
+										role="button"
+										tabindex="0"
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.currentTarget.click();
+											}
+										}}
+									>
+										<div class="security-icon-flex">
+											{#if sec.icon}
+												<img
+													src={sec.icon.startsWith('data:')
+														? sec.icon
+														: `data:image/jpeg;base64,${sec.icon}`}
+													alt="Security Icon"
+													on:error={() => {}}
+												/>
+											{:else if sec.ticker}
+												<span class="default-ticker-icon">
+													{sec.ticker.charAt(0).toUpperCase()}
+												</span>
+											{/if}
+										</div>
+										<div class="security-info-flex">
+											<span class="ticker-flex">{sec.ticker}</span>
+											<span class="name-flex">{sec.name}</span>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+						<div class="securities-section-header">
+							<span class="securities-text">Securities</span>
+						</div>
 						<div class="securities-list-flex securities-scrollable">
 							{#each $inputQuery.securities as sec, i}
 								<div
@@ -739,6 +884,10 @@
 												alt="Security Icon"
 												on:error={() => {}}
 											/>
+										{:else if sec.ticker}
+											<span class="default-ticker-icon">
+												{sec.ticker.charAt(0).toUpperCase()}
+											</span>
 										{/if}
 									</div>
 									<div class="security-info-flex">
@@ -1026,6 +1175,22 @@
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
+		border-radius: 50%;
+	}
+
+	.default-ticker-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		font-size: 0.625rem;
+		font-weight: 600;
+		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.security-info-flex {
@@ -1085,13 +1250,19 @@
 	}
 
 	.popular-section-header,
-	.securities-section-header {
+	.securities-section-header,
+	.recent-section-header {
 		padding: 0.25rem 0.75rem 0.125rem 0.75rem;
 		margin-bottom: 0.125rem;
 	}
 
+	.popular-section-header {
+		margin-top: 0.5rem;
+	}
+
 	.popular-text,
-	.securities-text {
+	.securities-text,
+	.recent-text {
 		color: rgba(255, 255, 255, 0.6);
 		font-size: 0.75rem;
 		font-weight: 400;

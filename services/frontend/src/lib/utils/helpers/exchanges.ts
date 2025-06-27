@@ -6,25 +6,13 @@ export const exchangeMicToName: Record<string, string> = {
 	BATS: 'CBOE',
 	IEXG: 'IEX',
 	EDGX: 'CBOE',
-	EDGA: 'CBOE'
-	// Add other common exchanges as needed
+	EDGA: 'CBOE',
 
-	// US Options (Example - adjust if needed)
-	// 'OPRA': 'OPRA', // Consolidated Tape
-	// 'AMXO': 'NYSE American Options',
-	// 'BOXO': 'BOX Options',
-	// 'CBOE': 'Cboe Options',
-	// ... more option exchanges
-
-	// Other markets (Examples)
-	// 'XTSX': 'TSX Venture Exchange',
-	// 'XTSE': 'Toronto Stock Exchange',
-	// 'XLON': 'London Stock Exchange',
 };
 
 export function getExchangeName(micCode: string | null | undefined): string {
 	if (!micCode) {
 		return 'N/A';
 	}
-	return exchangeMicToName[micCode.toUpperCase()] || micCode; // Return code if not found
-}
+	return exchangeMicToName[micCode] || micCode; // Return code if not found
+} 

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -272,33 +271,11 @@ func initGeminiKeyPool() *GeminiKeyPool {
 		LastUsedIdx: -1,
 	}
 
-	// Get keys from environment variables
-	// Format expected: GEMINI_FREE_KEYS=key1,key2,key3 and GEMINI_PAID_KEY=paidkey
-	freeKeysStr := getEnv("GEMINI_FREE_KEYS", "")
-	paidKey := getEnv("GEMINI_PAID_KEY", "")
+	// Get paid key from environment variable
+	paidKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
 
-	// Default rate limit for free keys (Gemini typically allows 60 requests per minute for free tier)
-	freeRateLimit := 15
 	// Paid key has a higher limit, though it varies by plan
 	paidRateLimit := 1000
-
-	// Parse and add free keys
-	if freeKeysStr != "" {
-		// Split the comma-separated string
-		freeKeys := strings.Split(freeKeysStr, ",")
-		for _, key := range freeKeys {
-			key = strings.TrimSpace(key)
-			if key != "" {
-				pool.Keys = append(pool.Keys, &GeminiKeyInfo{
-					Key:            key,
-					IsPaid:         false,
-					RequestCount:   0,
-					LastReset:      time.Now(),
-					RateLimitTotal: freeRateLimit,
-				})
-			}
-		}
-	}
 
 	// Add paid key if provided
 	if paidKey != "" {
@@ -341,7 +318,7 @@ func (p *GeminiKeyPool) resetCounts() {
 	}
 }
 
-// GetNextKey returns the next available API key based on the rotation strategy
+// GetNextKey returns the paid API key if available and under rate limit
 func (p *GeminiKeyPool) GetNextKey() (string, error) {
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()
@@ -350,51 +327,20 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 		return "", fmt.Errorf("no API keys available in the pool")
 	}
 
-	// First try to find a non-paid key under the rate limit
-	for i := 0; i < len(p.Keys); i++ {
-		// Round-robin selection, starting after the last used index
-		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
-		keyInfo := p.Keys[idx]
+	// Since we only have the paid key, just use it
+	keyInfo := p.Keys[0]
 
-		// Skip paid keys in the first pass
-		if keyInfo.IsPaid {
-			continue
-		}
+	keyInfo.Mutex.Lock()
+	defer keyInfo.Mutex.Unlock()
 
-		keyInfo.Mutex.Lock()
-		// Check if this key is under its rate limit
-		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
-			keyInfo.RequestCount++
-			p.LastUsedIdx = idx
-			keyInfo.Mutex.Unlock()
-			return keyInfo.Key, nil
-		}
-		keyInfo.Mutex.Unlock()
+	// Check if this key is under its rate limit
+	if keyInfo.RequestCount < keyInfo.RateLimitTotal {
+		keyInfo.RequestCount++
+		return keyInfo.Key, nil
 	}
 
-	// If all free keys are at their limit, try the paid key
-	for i := 0; i < len(p.Keys); i++ {
-		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
-		keyInfo := p.Keys[idx]
-
-		// Now only consider paid keys
-		if !keyInfo.IsPaid {
-			continue
-		}
-
-		keyInfo.Mutex.Lock()
-		// Check if this paid key is under its rate limit
-		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
-			keyInfo.RequestCount++
-			p.LastUsedIdx = idx
-			keyInfo.Mutex.Unlock()
-			return keyInfo.Key, nil
-		}
-		keyInfo.Mutex.Unlock()
-	}
-
-	// If we get here, all keys (including paid ones) are at their rate limit
-	return "", fmt.Errorf("all API keys have reached their rate limits")
+	// If we get here, the paid key has reached its rate limit
+	return "", fmt.Errorf("API key has reached its rate limit")
 }
 
 // GetGeminiKey is a convenience method on Conn to get the next available Gemini API key

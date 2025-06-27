@@ -968,8 +968,8 @@
 						handleScroll: true,
 						handleScale: true,
 						kineticScroll: {
-							mouse: true,
-							touch: true
+							mouse: false,
+							touch: false
 						}
 					});
 					document.removeEventListener('mousemove', shiftOverlayTrack);
@@ -1012,8 +1012,8 @@
 					handleScroll: true,
 					handleScale: true,
 					kineticScroll: {
-						mouse: true,
-						touch: true
+						mouse: false,
+						touch: false
 					}
 				});
 
@@ -1371,7 +1371,7 @@
 				textColor: 'white',
 				background: {
 					type: ColorType.Solid,
-					color: 'black'
+					color: '#0f0f0f'
 				}
 			},
 			grid: {
@@ -1392,6 +1392,10 @@
 			},
 			leftPriceScale: {
 				borderColor: 'black'
+			},
+			kineticScroll: {
+				mouse: false,
+				touch: false
 			}
 		};
 		const chartContainer = document.getElementById(`chart_container-${chartId}`);

@@ -194,12 +194,15 @@
 		gap: 4px;
 	}
 
-	.search-icon {
-		opacity: 0.6;
+	.top-bar .search-icon {
+		opacity: 0.8;
 		transition: opacity 0.2s ease;
+		position: static;
+		padding: 0;
+		left: auto;
 	}
 
-	.symbol.metadata-button:hover .search-icon {
+	.top-bar .symbol.metadata-button:hover .search-icon {
 		opacity: 1;
 	}
 

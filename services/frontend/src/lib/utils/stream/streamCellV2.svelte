@@ -123,6 +123,8 @@
 		{data?.formatted || ''}
 	{:else if type === 'market cap'}
 		{formatMarketCap(data?.marketCap)}
+	{:else if type === 'chgExt'}
+		{data?.formatted || ''}
 	{:else}
 		{data?.formatted || data?.price || ''}
 	{/if}

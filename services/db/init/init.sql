@@ -100,8 +100,23 @@ create table strategies (
     strategyId serial primary key,
     userId int references users(userId) on delete cascade,
     name varchar(100) not null,
+    description TEXT,
+    prompt TEXT,
+    pythoncode TEXT,
     spec JSON,
     alertActive bool not null default false,
+    isalertactive BOOLEAN DEFAULT FALSE,
+    score INTEGER DEFAULT 0,
+    version VARCHAR(20) DEFAULT '1.0',
+    createdat TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    libraries JSONB DEFAULT '[]'::jsonb,
+    data_prep_sql TEXT,
+    execution_mode VARCHAR(20) DEFAULT 'python' CHECK (execution_mode IN ('python', 'hybrid', 'notebook')),
+    timeout_seconds INTEGER DEFAULT 300,
+    memory_limit_mb INTEGER DEFAULT 512,
+    cpu_limit_cores DECIMAL(3, 2) DEFAULT 1.0,
+    is_active BOOLEAN DEFAULT true,
     unique (userId, name)
 );
 CREATE INDEX idxStrategiesByUserId ON strategies(strategyId);

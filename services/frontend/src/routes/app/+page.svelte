@@ -430,7 +430,10 @@
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
-			menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
+			// Only set width if sidebar is currently closed, otherwise preserve current width
+			if ($menuWidth === 0) {
+				menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
+			}
 			changeMenu(menuName);
 		}
 	}
@@ -758,9 +761,10 @@
 			currentY = event.touches[0].clientY;
 		}
 
-		// Account for the bottom bar height (40px) and adjust for the drag handle position
-		const bottomBarHeight = 40;
-		const newHeight = window.innerHeight - currentY - bottomBarHeight;
+		// Account for the top bar height (40px) and adjust for the drag handle position
+		// Since quote is now on top, we calculate height from the top
+		const topBarHeight = 40;
+		const newHeight = currentY - topBarHeight;
 
 		// Clamp the height between min and max values
 		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
@@ -998,7 +1002,24 @@
 								tabindex="0"
 							/>
 							<div class="sidebar-content">
-								<!-- Main sidebar content -->
+								<!-- Quote section now on top -->
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
+
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									aria-label="Resize watchlist panel"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<!-- Main sidebar content now on bottom -->
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist />
@@ -1007,22 +1028,6 @@
 										<!--{:else if $activeMenu === 'news'}
 										<News />-->
 									{/if}
-								</div>
-
-								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-								<div
-									class="sidebar-resize-handle"
-									role="separator"
-									aria-orientation="horizontal"
-									aria-label="Resize ticker panel"
-									on:mousedown={startSidebarResize}
-									on:touchstart|preventDefault={startSidebarResize}
-									on:keydown={handleKeyboardSidebarResize}
-									tabindex="0"
-								></div>
-
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
-									<Quote />
 								</div>
 							</div>
 						</div>

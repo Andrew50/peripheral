@@ -22,6 +22,8 @@ export interface Algo {
 
 export const strategies: Writable<Strategy[]> = writable([]);
 export const watchlists: Writable<Watchlist[]> = writable([]);
+export const currentWatchlistId: Writable<number | undefined> = writable(undefined);
+export const currentWatchlistItems: Writable<Instance[]> = writable([]);
 export const activeAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const inactiveAlerts: Writable<Alert[] | undefined> = writable(undefined);
 export const alertLogs: Writable<AlertLog[] | undefined> = writable(undefined);
@@ -43,6 +45,19 @@ export const systemClockOffset = 0;
 export const dispatchMenuChange = writable('');
 export const algos: Writable<Algo[]> = writable([]);
 export const isPublicViewing = writable(false);
+
+// Store for user's last used tickers
+export const userLastTickers: Writable<any[]> = writable([]);
+
+// Function to update user's last tickers when a ticker is selected
+export function updateUserLastTickers(selectedTicker: any) {
+	userLastTickers.update(tickers => {
+		// Remove the ticker if it already exists
+		const filtered = tickers.filter(t => t.ticker !== selectedTicker.ticker);
+		// Add the selected ticker to the top
+		return [selectedTicker, ...filtered.slice(0, 2)]; // Keep only top 3
+	});
+}
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
@@ -81,15 +96,6 @@ export const defaultSettings: Settings = {
 	filterTaS: true,
 	divideTaS: false,
 	showFilings: true,
-	// DEPRECATED: Screensaver default settings
-	// enableScreensaver: true,
-	// Default screensaver settings
-	// screensaverTimeframes: ['1w', '1d', '1h', '1'],
-	// screensaverSpeed: 5,
-	// screensaverTimeout: 5 * 60, // 5 minutes in seconds
-	// screensaverDataSource: 'gainers-losers',
-	// screensaverWatchlistId: undefined,
-	// screensaverTickers: [],
 	colorScheme: 'default'
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
@@ -169,30 +175,34 @@ function initStoresWithAuth() {
 					alertLogs.set([]);
 				});
 
-			privateRequest<Watchlist[]>('getWatchlists', {})
-				.then((list: Watchlist[]) => {
-					watchlists.set(list || []);
-					const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
-					if (flagWatch === undefined) {
-						privateRequest<number>('newWatchlist', { watchlistName: 'flag' })
-							.then((newId: number) => {
-								flagWatchlistId = newId;
-								watchlists.update((currentList) => {
-									const newList = currentList || [];
-									return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
-								});
-							})
-							.catch((err) => {
-								console.error('Error creating flag watchlist:', err);
-							});
-					} else {
-						flagWatchlistId = flagWatch.watchlistId;
-					}
-				})
-				.catch((err) => {
-					console.error('Error fetching watchlists:', err);
-					watchlists.set([]);
-				});
+			privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {
+				watchlists.set(list || []);
+				const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
+				if (flagWatch === undefined) {
+					privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
+						flagWatchlistId = newId;
+						watchlists.update(currentList => {
+							const newList = currentList || [];
+							return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
+						});
+					}).catch(err => {
+						console.error("Error creating flag watchlist:", err);
+					});
+				} else {
+					flagWatchlistId = flagWatch.watchlistId;
+				}
+			}).catch(err => {
+				console.error("Error fetching watchlists:", err);
+				watchlists.set([]);
+			});
+
+			// Load user's last tickers
+			privateRequest<any[]>('getUserLastTickers', {}).then((tickers: any[]) => {
+				userLastTickers.set(tickers || []);
+			}).catch((error) => {
+				console.warn('Failed to load user last tickers:', error);
+				userLastTickers.set([]);
+			});
 		});
 	} catch (error) {
 		console.warn('Failed to check public viewing mode, proceeding with auth initialization');
