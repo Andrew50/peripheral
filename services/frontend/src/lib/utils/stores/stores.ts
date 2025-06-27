@@ -46,6 +46,19 @@ export const dispatchMenuChange = writable('');
 export const algos: Writable<Algo[]> = writable([]);
 export const isPublicViewing = writable(false);
 
+// Store for user's last used tickers
+export const userLastTickers: Writable<any[]> = writable([]);
+
+// Function to update user's last tickers when a ticker is selected
+export function updateUserLastTickers(selectedTicker: any) {
+    userLastTickers.update(tickers => {
+        // Remove the ticker if it already exists
+        const filtered = tickers.filter(t => t.ticker !== selectedTicker.ticker);
+        // Add the selected ticker to the top
+        return [selectedTicker, ...filtered.slice(0, 2)]; // Keep only top 3
+    });
+}
+
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
 const DEFAULT_MENU_WIDTH = 450;
@@ -173,6 +186,14 @@ function initStoresWithAuth() {
             }).catch(err => {
                 console.error("Error fetching watchlists:", err);
                 watchlists.set([]);
+            });
+
+            // Load user's last tickers
+            privateRequest<any[]>('getUserLastTickers', {}).then((tickers: any[]) => {
+                userLastTickers.set(tickers || []);
+            }).catch((error) => {
+                console.warn('Failed to load user last tickers:', error);
+                userLastTickers.set([]);
             });
         });
     } catch (error) {

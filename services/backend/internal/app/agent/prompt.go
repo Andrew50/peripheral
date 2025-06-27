@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -319,6 +320,9 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 	sb.WriteString(query)
 	sb.WriteString("\n</UserQuery>\n")
 
+	sb.WriteString("The current timestamp in seconds is: ")
+	sb.WriteString(fmt.Sprint(time.Now().Unix()))
+	sb.WriteString("\n")
 	return sb.String(), nil
 }
 
