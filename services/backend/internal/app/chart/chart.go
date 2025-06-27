@@ -139,7 +139,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1
-                 ORDER BY minDate DESC NULLS FIRST`
+                 ORDER BY maxDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
