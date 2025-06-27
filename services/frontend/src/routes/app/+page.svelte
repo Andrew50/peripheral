@@ -369,6 +369,11 @@
 			// Add touch event listeners for additional overscroll prevention
 			document.addEventListener('touchstart', preventOverscroll, { passive: false });
 			document.addEventListener('touchmove', preventOverscroll, { passive: false });
+
+			// Listen for calendar events from TopBar
+			document.addEventListener('calendar-click', () => {
+				calendarVisible = true;
+			});
 		}
 
 		// Handle authentication based on public viewing mode (already determined above)
@@ -761,10 +766,10 @@
 			currentY = event.touches[0].clientY;
 		}
 
-		// Account for the top bar height (40px) and adjust for the drag handle position
-		// Since quote is now on top, we calculate height from the top
-		const topBarHeight = 40;
-		const newHeight = currentY - topBarHeight;
+		// Account for the bottom bar height (40px) and calculate height from the bottom
+		// Since quote is now on bottom, we calculate height from the bottom up
+		const bottomBarHeight = 40;
+		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
 		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
@@ -1002,24 +1007,7 @@
 								tabindex="0"
 							/>
 							<div class="sidebar-content">
-								<!-- Quote section now on top -->
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
-									<Quote />
-								</div>
-
-								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-								<div
-									class="sidebar-resize-handle"
-									role="separator"
-									aria-orientation="horizontal"
-									aria-label="Resize watchlist panel"
-									on:mousedown={startSidebarResize}
-									on:touchstart|preventDefault={startSidebarResize}
-									on:keydown={handleKeyboardSidebarResize}
-									tabindex="0"
-								></div>
-
-								<!-- Main sidebar content now on bottom -->
+								<!-- Main sidebar content now on top -->
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist />
@@ -1029,11 +1017,33 @@
 										<News />-->
 									{/if}
 								</div>
+
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									aria-label="Resize quote panel"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<!-- Quote section now on bottom -->
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
 					{/if}
 				</div>
 			</div>
+		</div>
+
+		<!-- Corner logo at the very top-right -->
+		<div class="corner-logo-container">
+			<img src="/favicon.png" alt="Atlantis" class="corner-atlantis-logo" />
 		</div>
 
 		<!-- Sidebar toggle buttons -->
@@ -1083,20 +1093,10 @@
 		</div>
 
 		<div class="bottom-bar-right">
-			<!-- Calendar button for timestamp selection -->
-			<button class="toggle-button calendar-button" on:click={handleCalendar} title="Go to Date">
-				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path
-						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-			</button>
+			<!-- Calendar button moved to top bar -->
 
-			<!-- Combined replay button -->
+			<!-- Replay buttons commented out -->
+			<!-- 
 			<button
 				class="toggle-button replay-button {!$streamInfo.replayActive || $streamInfo.replayPaused
 					? 'play'
@@ -1129,7 +1129,6 @@
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
 					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg>
-					<!-- Stop Icon -->
 				</button>
 				<button
 					class="toggle-button replay-button reset"
@@ -1141,7 +1140,6 @@
 							d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z"
 						/></svg
 					>
-					<!-- Reset Icon (e.g., refresh) -->
 				</button>
 				<button
 					class="toggle-button replay-button next-day"
@@ -1153,7 +1151,6 @@
 							d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z"
 						/></svg
 					>
-					<!-- Next Day Icon (e.g., skip next track) -->
 				</button>
 
 				<label class="speed-label">
@@ -1168,6 +1165,7 @@
 					/>
 				</label>
 			{/if}
+			-->
 
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}

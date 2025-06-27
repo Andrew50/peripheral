@@ -253,15 +253,6 @@
 	<div class="content">
 		<!-- Header Section -->
 		<div class="quote-header">
-			<div class="logo-container">
-				{#if $instance?.logo || currentDetails?.logo}
-					<img
-						src={$instance?.logo || currentDetails?.logo}
-						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
-						class="company-logo-rect"
-					/>
-				{/if}
-			</div>
 			<div class="ticker-row">
 				<div class="icon-circle">
 					{#if $instance?.icon || currentDetails?.icon}
@@ -446,6 +437,7 @@
 		gap: 6px;
 		margin-left: 8px;
 		margin-right: 8px;
+		margin-top: 16px;
 		width: calc(100% - 16px);
 		align-self: stretch;
 	}
@@ -461,26 +453,6 @@
 		background: var(--ui-bg-secondary);
 		border: 1px solid var(--ui-border);
 		overflow: hidden;
-	}
-
-	.logo-container {
-		width: 140px;
-		height: 36px;
-		border-radius: 2px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		background: transparent;
-		overflow: hidden;
-		margin: 0px auto;
-	}
-
-	.company-logo-rect {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		border-radius: 2px;
 	}
 
 	.company-logo {
@@ -709,7 +681,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2px, 0.5vw, 4px);
-		margin-bottom: clamp(10px, 2vw, 16px);
+		margin-bottom: clamp(4px, 1vw, 8px);
 		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px)
 			clamp(4px, 0.8vw, 6px);
 	}
@@ -737,8 +709,8 @@
 
 	/* Countdown */
 	.countdown-section {
-		margin-top: clamp(8px, 1.5vw, 12px);
-		padding: clamp(8px, 1.5vw, 12px);
+		margin-top: clamp(4px, 1vw, 8px);
+		padding: clamp(6px, 1vw, 8px);
 	}
 
 	.countdown-container {
@@ -767,8 +739,8 @@
 
 	/* Description */
 	.description {
-		margin-top: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
+		margin-top: clamp(4px, 1vw, 8px);
+		padding: clamp(6px, 1vw, 8px);
 	}
 
 	.description .label {
