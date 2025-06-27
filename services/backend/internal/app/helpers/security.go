@@ -19,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+const contextWithTimeout = 5 * time.Second
+
 // GetCurrentTickerArgs represents a structure for handling GetCurrentTickerArgs data.
 type GetCurrentTickerArgs struct {
 	SecurityID int `json:"securityId"`
@@ -225,6 +227,64 @@ func GetPopularTickers(conn *data.Conn, _ json.RawMessage) (interface{}, error) 
 		return nil, fmt.Errorf("error iterating over popular tickers: %v", err)
 	}
 
+	return results, nil
+}
+
+type GetUserLastTickersResults struct {
+	SecurityID int    `json:"securityId"`
+	Ticker     string `json:"ticker"`
+	Timestamp  int64  `json:"timestamp"`
+	Icon       string `json:"icon"`
+	Name       string `json:"name"`
+}
+
+func GetUserLastTickers(conn *data.Conn, userId int, _ json.RawMessage) (interface{}, error) {
+	fmt.Printf("\n\nuserId: %v\n\n", userId)
+	// Get the 5 most recent queried tickers for a user (distinct securities)
+	query := `
+	WITH recent_queries AS (
+		SELECT 
+			securityid,
+			MAX(created_at) as last_queried
+		FROM chart_queries 
+		WHERE user_id = $1
+		GROUP BY securityid
+		ORDER BY last_queried DESC
+		LIMIT 5
+	)
+	SELECT 
+		s.securityid,
+		s.ticker,
+		COALESCE(s.icon, '') as icon,
+		COALESCE(s.name, '') as name
+	FROM recent_queries rq
+	JOIN securities s ON rq.securityid = s.securityid
+	WHERE s.maxDate IS NULL  -- only active securities
+	ORDER BY rq.last_queried DESC`
+
+	ctx, cancel := context.WithTimeout(context.Background(), contextWithTimeout)
+	defer cancel()
+	rows, err := conn.DB.Query(ctx, query, userId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user last tickers: %v", err)
+	}
+	defer rows.Close()
+
+	var results []GetUserLastTickersResults
+	for rows.Next() {
+		var result GetUserLastTickersResults
+		if err := rows.Scan(&result.SecurityID, &result.Ticker, &result.Icon, &result.Name); err != nil {
+			return nil, fmt.Errorf("failed to scan user last ticker: %v", err)
+		}
+		// Set timestamp to 0 since we're filtering by timestamp = 0
+		result.Timestamp = 0
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over user last tickers: %v", err)
+	}
+	fmt.Printf("\n\nresults: %v\n\n", results)
 	return results, nil
 }
 
