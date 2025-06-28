@@ -285,12 +285,11 @@ class DataAccessorProvider:
             # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
             query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"  # nosec B608
             
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                cursor.close()
             
             return [row[0] for row in results if row[0]]  # Filter out None tickers
             
@@ -842,14 +841,13 @@ class DataAccessorProvider:
                 
                 params = security_params + date_params + [min_bars]
             
-            conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                
+                cursor.close()
             
             if not results:
                 return np.array([])
@@ -948,12 +946,11 @@ class DataAccessorProvider:
             # nosec B608: Safe - query built from validated components, all values parameterized
             query = f"SELECT securityid FROM securities WHERE {where_clause}"  # nosec B608
             
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                cursor.close()
             
             return [row[0] for row in results]
             
@@ -1067,14 +1064,13 @@ class DataAccessorProvider:
             # nosec B608: Safe - columns validated against allowlist, all values parameterized
             query = f"SELECT {select_clause} FROM securities WHERE {where_clause} ORDER BY securityid"  # nosec B608
             
-            conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                
+                cursor.close()
             
             if not results:
                 return pd.DataFrame()
