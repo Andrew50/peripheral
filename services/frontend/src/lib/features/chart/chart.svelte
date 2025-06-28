@@ -198,6 +198,7 @@
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
+	let lastFetchedSecurityId: number | null = null;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
 	// Type guards moved to a higher scope
@@ -245,6 +246,28 @@
 	} | null = null;
 
 	let sessionHighlighting: SessionHighlighting;
+
+	// Function to fetch detailed ticker information including logo
+	function fetchTickerDetails(securityId: number) {
+		if (lastFetchedSecurityId === securityId) return;
+
+		lastFetchedSecurityId = securityId;
+		publicRequest<Record<string, any>>('getTickerMenuDetails', {
+			securityId: securityId
+		})
+			.then((details) => {
+				if (lastFetchedSecurityId === securityId) {
+					// Update currentChartInstance with the detailed information
+					currentChartInstance = {
+						...currentChartInstance,
+						...details
+					};
+				}
+			})
+			.catch((error) => {
+				console.error('Chart component: Error fetching ticker details:', error);
+			});
+	}
 
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
@@ -1291,6 +1314,11 @@
 			...updatedReq
 		};
 
+		// Fetch detailed ticker information including logo
+		if (updatedReq.securityId) {
+			fetchTickerDetails(updatedReq.securityId);
+		}
+
 		// Determine if viewing live data based on timestamp
 		isViewingLiveData = updatedReq.timestamp === 0;
 		// Clear quote lines if not viewing live data initially
@@ -2022,22 +2050,32 @@
 
 	// Function to calculate optimal position for event-info popup
 	function calculateEventInfoPosition(containerWidth: number) {
-		const legendWidth = 280; // Approximate legend width
-		const popupWidth = 220; // event-info width
-		const margin = 20; // Margin from edges
+		// Try to get the actual legend element and its dimensions
+		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
+		let legendWidth = 300; // Conservative default width
+		let legendRight = 300; // Default right edge position
 
-		// Preferred position: to the right of legend
-		let leftPosition = legendWidth + margin;
+		if (legendElement) {
+			const legendRect = legendElement.getBoundingClientRect();
+			const chartContainer = document.querySelector(`#chart_container-${chartId}`);
+			const chartRect = chartContainer?.getBoundingClientRect();
+
+			if (chartRect) {
+				// Calculate legend's right edge relative to chart container
+				legendRight = legendRect.right - chartRect.left;
+			}
+		}
+
+		const popupWidth = 220; // event-info width
+		const margin = 15; // Margin from legend and edges
+
+		// Position to the right of the legend
+		let leftPosition = legendRight + margin;
 
 		// Check if it would overflow the right side
 		if (leftPosition + popupWidth + margin > containerWidth) {
 			// Position it as far right as possible without overflow
-			leftPosition = containerWidth - popupWidth - margin;
-
-			// If still doesn't fit (very narrow screen), position at legend level
-			if (leftPosition < legendWidth) {
-				leftPosition = margin; // Position at left edge with margin
-			}
+			leftPosition = Math.max(containerWidth - popupWidth - margin, legendRight + 5);
 		}
 
 		return {
@@ -2136,13 +2174,20 @@
 	{/if}
 
 	<!-- Company Logo positioned at bottom right where axes meet -->
-	{#if currentChartInstance?.logo}
+	{#if currentChartInstance?.logo || currentChartInstance?.icon}
 		<div class="chart-logo-container">
 			<img
-				src={currentChartInstance.logo}
+				src={currentChartInstance.logo || currentChartInstance.icon}
 				alt="{currentChartInstance?.name || 'Company'} logo"
 				class="chart-company-logo"
 			/>
+		</div>
+	{:else if currentChartInstance?.ticker}
+		<!-- Debug fallback: show ticker letter if no logo/icon available -->
+		<div class="chart-logo-container">
+			<div class="chart-ticker-fallback">
+				{currentChartInstance.ticker.charAt(0)}
+			</div>
 		</div>
 	{/if}
 </div>
@@ -2398,12 +2443,13 @@
 	/* Chart logo styles positioned at bottom right where axes meet */
 	.chart-logo-container {
 		position: absolute;
-		bottom: 20px;
-		right: 20px;
-		z-index: 100;
+		bottom: 2px;
+		right: 2px;
+		z-index: 1000; /* High z-index to appear above chart canvas */
 		pointer-events: none;
-		opacity: 0.7;
+		opacity: 0.85;
 		transition: opacity 0.2s ease;
+		padding: 2px;
 	}
 
 	.chart-logo-container:hover {
@@ -2411,14 +2457,28 @@
 	}
 
 	.chart-company-logo {
-		height: 20px;
-		max-width: 60px;
+		height: 18px;
+		max-width: 50px;
 		object-fit: contain;
-		filter: brightness(0.8) contrast(0.9);
+		filter: brightness(0.9) contrast(0.95);
 		transition: filter 0.2s ease;
+		display: block;
 	}
 
 	.chart-company-logo:hover {
 		filter: brightness(1) contrast(1);
+	}
+
+	/* Fallback ticker display for debugging */
+	.chart-ticker-fallback {
+		width: 20px;
+		height: 18px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 10px;
+		font-weight: bold;
+		font-family: monospace;
 	}
 </style>

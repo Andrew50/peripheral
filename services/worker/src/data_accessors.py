@@ -640,7 +640,8 @@ class DataAccessorProvider:
             elif context['mode'] == 'validation':
                 # Validation mode: Ultra-minimal data for fast validation
                 # Force minimal bars and recent data only
-                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)
+                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
                 date_params = []
                 # Override min_bars to be minimal for validation
                 min_bars = min(min_bars, 2)  # Never more than 2 bars for validation
