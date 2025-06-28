@@ -162,6 +162,27 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
+			Name:           "Update1MinuteOHLCV",
+			Function:       marketdata.Update1MinuteOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 0}}, // Run at 10:00 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "Update1HourOHLCV",
+			Function:       marketdata.Update1HourOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 15}}, // Run at 10:15 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "Update1WeekOHLCV",
+			Function:       marketdata.Update1WeekOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 30}}, // Run at 10:30 PM
+			RunOnInit:      true,
+			SkipOnWeekends: false, // Weekly data needs weekend updates
+		},
+		{
 			Name:           "InitAggregates",
 			Function:       initAggregates,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open

@@ -107,6 +107,19 @@ CRITICAL REQUIREMENTS:
 - Use data accessor functions with ticker symbols (NOT security IDs):
   * get_bar_data(timeframe="1d", tickers=["AAPL", "MRNA"], columns=[], min_bars=1, filters={{}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
+     
+     SUPPORTED TIMEFRAMES:
+     • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
+     • Custom aggregations: "5m", "10m", "15m", "30m" (from 1-minute data)
+                           "2h", "4h", "6h", "8h", "12h" (from 1-hour data)  
+                           "2w", "3w", "4w" (from 1-week data)
+     
+     TIMEFRAME SELECTION GUIDE:
+     - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
+     - Swing Trading: Use "1h", "4h", "1d" 
+     - Position Trading: Use "1d", "1w", "2w"
+     - Multi-timeframe: Combine different intervals for confirmation
+     
      IMPORTANT: min_bars cannot exceed 10,000 - use minimum needed:
        - 1 bar: Simple current patterns (volume spikes, price thresholds)
        - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
@@ -163,48 +176,62 @@ def strategy():
     instances = []
     
     try:
-        # Example 1: Specific ticker strategy (e.g., for MRNA gaps) - Uses batching automatically
-        target_tickers = ["MRNA"]  # Extract from prompt analysis
+        # Example 1: Multi-timeframe momentum strategy using 5-minute and 4-hour data
+        target_tickers = ["AAPL", "MSFT"]  # Extract from prompt analysis
         
-        bar_data = get_bar_data(
-            timeframe="1d",
+        # Get 5-minute data for short-term momentum (aggregated from 1-minute)
+        bars_5m = get_bar_data(
+            timeframe="5m",  # Custom aggregation: 5-minute bars from 1-minute data
             tickers=target_tickers,
-            columns=["ticker", "timestamp", "open", "close", "volume"],
-            min_bars=2  # Need 2 bars: current and previous for gap calculation using shift()
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=20  # Need 20 bars for short-term indicators
         )
         
-        if bar_data is None or len(bar_data) == 0:
+        # Get 4-hour data for trend confirmation (aggregated from 1-hour)  
+        bars_4h = get_bar_data(
+            timeframe="4h",  # Custom aggregation: 4-hour bars from 1-hour data
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=10  # Need 10 bars for trend analysis
+        )
+        
+        if bars_5m is None or len(bars_5m) == 0 or bars_4h is None or len(bars_4h) == 0:
             return instances
         
-        # Convert to DataFrame for analysis
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        # Convert to DataFrames for analysis
+        df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_4h = pd.DataFrame(bars_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
         
-        if len(df) == 0:
+        if len(df_5m) == 0 or len(df_4h) == 0:
             return instances
+        
+        # Analyze each ticker separately
+        for ticker in target_tickers:
+            ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
+            ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp')
             
-        # Sort by timestamp for proper analysis
-        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-        
-        # Calculate indicators with proper error handling
-        df['prev_close'] = df.groupby('ticker')['close'].shift(1)
-        df = df.dropna()  # Remove rows with missing previous close
-        
-        # Apply strategy logic (gap up detection)
-        df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
-        
-        # CORRECT: Return ALL instances that meet criteria (no .tail(1))
-        signals = df[df['gap_percent'] >= 1.0]  # All gaps >= 1%
-        
-        # Build results with ticker (not securityid)
-        for _, row in signals.iterrows():
-            instances.append({{
-                'ticker': row['ticker'],
-                'timestamp': int(row['timestamp']),
-                'gap_percent': float(row['gap_percent']),
-                'entry_price': float(row['open']),  # Use opening price as entry
-                'prev_close': float(row['prev_close']),
-                'score': min(1.0, row['gap_percent'] / 10.0)  # Score based on gap strength
-            }})
+            if len(ticker_5m) < 5 or len(ticker_4h) < 3:
+                continue
+            
+            # Calculate 5-minute momentum (RSI-like indicator)
+            ticker_5m['price_change'] = ticker_5m['close'].pct_change()
+            recent_momentum = ticker_5m['price_change'].tail(5).mean()
+            
+            # Calculate 4-hour trend (simple moving average)
+            ticker_4h['sma_3'] = ticker_4h['close'].rolling(3).mean()
+            current_price = ticker_4h['close'].iloc[-1]
+            current_sma = ticker_4h['sma_3'].iloc[-1]
+            
+            # Multi-timeframe signal: 5m momentum + 4h trend alignment
+            if recent_momentum > 0.01 and current_price > current_sma:  # Bullish on both timeframes
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_5m['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'momentum_5m': float(recent_momentum),
+                    'trend_4h': float(current_price / current_sma - 1),
+                    'score': min(1.0, recent_momentum * 10 + (current_price / current_sma - 1))
+                }})
             
     except Exception as e:
         print(f"Strategy execution error: {{e}}")
@@ -296,38 +323,201 @@ def strategy():
     
     return instances
 
-# Example 4: Market average calculation using aggregate_mode (ONLY for market-wide calculations)
+# Example 4: Scalping strategy using 1-minute and 5-minute timeframes
 def strategy():
     instances = []
     
     try:
-        # Use aggregate_mode=True ONLY when you need ALL market data together
-        # This disables batching and provides complete dataset
-        bar_data = get_bar_data(
-            timeframe="1d",
-            tickers=None,  # All tickers
-            columns=["ticker", "timestamp", "close"],
-            min_bars=1,  # Only need current bars for market average
-            aggregate_mode=True  # Get ALL data at once for market calculations
+        # High-frequency scalping using minute-level data
+        target_tickers = ["AAPL", "TSLA", "NVDA"]  # High-volume stocks for scalping
+        
+        # Get 1-minute data for entry signals
+        bars_1m = get_bar_data(
+            timeframe="1m",  # Direct 1-minute table access (fastest)
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=10  # Last 10 minutes for momentum
         )
         
-        if bar_data is None or len(bar_data) == 0:
+        # Get 5-minute data for trend confirmation  
+        bars_5m = get_bar_data(
+            timeframe="5m",  # Aggregated from 1-minute data
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=3   # Last 3 periods for micro-trend
+        )
+        
+        if bars_1m is None or len(bars_1m) == 0 or bars_5m is None or len(bars_5m) == 0:
             return instances
         
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+        df_1m = pd.DataFrame(bars_1m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "close"])
         
-        # Calculate market average for each day
-        daily_avg = df.groupby('timestamp')['close'].mean()
-        
-        # Find days where market moved significantly
-        for timestamp, avg_price in daily_avg.items():
-            if avg_price > 100.0:  # Market average above $100
+        for ticker in target_tickers:
+            ticker_1m = df_1m[df_1m['ticker'] == ticker].sort_values('timestamp').tail(5)
+            ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
+            
+            if len(ticker_1m) < 3 or len(ticker_5m) < 2:
+                continue
+            
+            # 1-minute momentum: recent price action
+            recent_high = ticker_1m['high'].max()
+            current_price = ticker_1m['close'].iloc[-1]
+            momentum = (current_price / recent_high) - 1
+            
+            # 5-minute trend confirmation
+            trend_up = ticker_5m['close'].iloc[-1] > ticker_5m['close'].iloc[-2]
+            
+            # Volume spike detection (1-minute)
+            avg_volume = ticker_1m['volume'].mean()
+            current_volume = ticker_1m['volume'].iloc[-1]
+            volume_spike = current_volume > avg_volume * 1.5
+            
+            # Scalping signal: momentum + trend + volume
+            if momentum > 0.005 and trend_up and volume_spike:  # 0.5%+ momentum with confirmations
                 instances.append({{
-                    'ticker': 'SPY',  # Use SPY as market representative
-                    'timestamp': int(timestamp),
-                    'market_average': float(avg_price),
-                    'entry_price': float(avg_price),
-                    'score': min(1.0, avg_price / 200.0)  # Normalized score
+                    'ticker': ticker,
+                    'timestamp': int(ticker_1m['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'momentum_1m': float(momentum),
+                    'volume_ratio': float(current_volume / avg_volume),
+                    'score': min(1.0, momentum * 100 + (current_volume / avg_volume - 1))
+                }})
+        
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 5: Multi-timeframe swing trading (4-hour and daily)
+def strategy():
+    instances = []
+    
+    try:
+        # Swing trading using 4-hour and daily timeframes
+        bar_data_4h = get_bar_data(
+            timeframe="4h",  # Custom aggregation from 1-hour data
+            tickers=None,    # Screen all stocks
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=14,     # 14 periods for RSI calculation
+            filters={{"sector": "Technology", "market_cap_min": 1000000000}}  # Large-cap tech
+        )
+        
+        bar_data_1d = get_bar_data(
+            timeframe="1d",  # Daily data for longer-term trend
+            tickers=None,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=20,     # 20 days for moving average
+            filters={{"sector": "Technology", "market_cap_min": 1000000000}}
+        )
+        
+        if bar_data_4h is None or len(bar_data_4h) == 0 or bar_data_1d is None or len(bar_data_1d) == 0:
+            return instances
+        
+        df_4h = pd.DataFrame(bar_data_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
+        
+        # Get unique tickers from both datasets
+        common_tickers = set(df_4h['ticker']).intersection(set(df_1d['ticker']))
+        
+        for ticker in common_tickers:
+            ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp').tail(14)
+            ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp').tail(20)
+            
+            if len(ticker_4h) < 10 or len(ticker_1d) < 15:
+                continue
+            
+            # Calculate 4-hour RSI (simplified)
+            price_changes = ticker_4h['close'].pct_change().dropna()
+            gains = price_changes.where(price_changes > 0, 0)
+            losses = -price_changes.where(price_changes < 0, 0)
+            avg_gain = gains.rolling(14).mean().iloc[-1]
+            avg_loss = losses.rolling(14).mean().iloc[-1]
+            rs = avg_gain / avg_loss if avg_loss > 0 else 100
+            rsi_4h = 100 - (100 / (1 + rs))
+            
+            # Calculate daily trend (20-day SMA)
+            sma_20 = ticker_1d['close'].rolling(20).mean().iloc[-1]
+            current_price = ticker_1d['close'].iloc[-1]
+            daily_trend = (current_price / sma_20) - 1
+            
+            # Swing trading signal: oversold on 4h + uptrend on daily
+            if rsi_4h < 35 and daily_trend > 0.05:  # RSI oversold + 5%+ above SMA
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_4h['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'rsi_4h': float(rsi_4h),
+                    'daily_trend': float(daily_trend),
+                    'score': min(1.0, (35 - rsi_4h) / 35 + daily_trend)
+                }})
+        
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 6: Weekly position trading with 2-week confirmation
+def strategy():
+    instances = []
+    
+    try:
+        # Long-term position trading using weekly timeframes
+        bars_1w = get_bar_data(
+            timeframe="1w",  # Direct weekly table access
+            tickers=None,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=52,     # 1 year of weekly data
+            filters={{"market_cap_min": 10000000000}}  # Large-cap stocks only
+        )
+        
+        bars_2w = get_bar_data(
+            timeframe="2w",  # Custom aggregation from weekly data
+            tickers=None,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=26      # 1 year of bi-weekly data
+        )
+        
+        if bars_1w is None or len(bars_1w) == 0 or bars_2w is None or len(bars_2w) == 0:
+            return instances
+        
+        df_1w = pd.DataFrame(bars_1w, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_2w = pd.DataFrame(bars_2w, columns=["ticker", "timestamp", "close"])
+        
+        common_tickers = set(df_1w['ticker']).intersection(set(df_2w['ticker']))
+        
+        for ticker in common_tickers:
+            ticker_1w = df_1w[df_1w['ticker'] == ticker].sort_values('timestamp').tail(20)
+            ticker_2w = df_2w[df_2w['ticker'] == ticker].sort_values('timestamp').tail(10)
+            
+            if len(ticker_1w) < 15 or len(ticker_2w) < 8:
+                continue
+            
+            # Weekly breakout detection
+            recent_high_20w = ticker_1w['high'].max()
+            current_price = ticker_1w['close'].iloc[-1]
+            breakout_strength = (current_price / recent_high_20w) - 1
+            
+            # 2-week trend confirmation  
+            trend_2w = ticker_2w['close'].iloc[-1] / ticker_2w['close'].iloc[-3] - 1
+            
+            # Volume confirmation
+            avg_volume = ticker_1w['volume'].mean()
+            recent_volume = ticker_1w['volume'].iloc[-1]
+            volume_surge = recent_volume > avg_volume * 1.2
+            
+            # Position signal: breakout + trend + volume
+            if breakout_strength > 0.02 and trend_2w > 0.1 and volume_surge:
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_1w['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'breakout_strength': float(breakout_strength),
+                    'trend_2w': float(trend_2w),
+                    'volume_ratio': float(recent_volume / avg_volume),
+                    'score': min(1.0, breakout_strength * 10 + trend_2w + (recent_volume / avg_volume - 1))
                 }})
         
     except Exception as e:

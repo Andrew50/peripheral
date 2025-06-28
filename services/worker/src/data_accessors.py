@@ -355,6 +355,205 @@ class DataAccessorProvider:
                 'locales': []
             }
     
+    def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], tickers: List[str] = None, 
+                                columns: List[str] = None, min_bars: int = 1, 
+                                filters: Dict[str, any] = None) -> np.ndarray:
+        """
+        Get aggregated OHLCV data by combining base timeframe data into custom intervals
+        
+        Args:
+            timeframe_config: Dict with source table and aggregation parameters
+            tickers: List of ticker symbols 
+            columns: Desired columns
+            min_bars: Minimum bars needed
+            filters: Filtering criteria
+            
+        Returns:
+            numpy.ndarray with aggregated OHLCV data
+        """
+        try:
+            source_table = timeframe_config["source"]
+            
+            # Determine aggregation parameters
+            if "aggregate_minutes" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_minutes"]
+                base_interval_minutes = 1  # 1-minute source
+            elif "aggregate_hours" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_hours"] * 60
+                base_interval_minutes = 60  # 1-hour source
+            elif "aggregate_weeks" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_weeks"] * 7 * 24 * 60
+                base_interval_minutes = 7 * 24 * 60  # 1-week source
+            else:
+                # Fallback to daily data
+                return self._get_bar_data_single("1d", tickers, columns, min_bars, filters)
+            
+            # Calculate how many base intervals we need to get enough aggregated bars
+            base_bars_needed = min_bars * (interval_minutes // base_interval_minutes)
+            
+            # Get base timeframe data (using the source timeframe)
+            if source_table == "ohlcv_1m":
+                source_timeframe = "1m"
+            elif source_table == "ohlcv_1h":
+                source_timeframe = "1h"
+            elif source_table == "ohlcv_1w":
+                source_timeframe = "1w"
+            else:
+                source_timeframe = "1d"
+            
+            # Fetch base data with increased min_bars to ensure enough data for aggregation
+            base_data = self._get_bar_data_single(
+                source_timeframe, tickers, 
+                ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"],
+                base_bars_needed, filters
+            )
+            
+            if base_data is None or len(base_data) == 0:
+                return np.array([])
+            
+            # Perform aggregation
+            aggregated_data = self._aggregate_ohlcv_data(base_data, interval_minutes, base_interval_minutes)
+            
+            # Filter columns if requested
+            if columns and aggregated_data is not None and len(aggregated_data) > 0:
+                aggregated_data = self._filter_columns(aggregated_data, columns)
+            
+            return aggregated_data
+            
+        except Exception as e:
+            logger.error(f"Error in aggregated bar data: {e}")
+            return np.array([])
+    
+    def _aggregate_ohlcv_data(self, base_data: np.ndarray, target_interval_minutes: int, 
+                             base_interval_minutes: int) -> np.ndarray:
+        """
+        Aggregate OHLCV data from base timeframe to target interval
+        
+        Args:
+            base_data: Source OHLCV data as numpy array
+            target_interval_minutes: Target aggregation interval in minutes
+            base_interval_minutes: Base data interval in minutes
+            
+        Returns:
+            Aggregated OHLCV data as numpy array
+        """
+        try:
+            if len(base_data) == 0:
+                return np.array([])
+            
+            # Convert to pandas DataFrame for easier aggregation
+            import pandas as pd
+            
+            # Determine column names (assuming standard OHLCV format)
+            if base_data.shape[1] >= 8:
+                columns = ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"]
+            else:
+                columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+            
+            df = pd.DataFrame(base_data, columns=columns[:base_data.shape[1]])
+            
+            if len(df) == 0:
+                return np.array([])
+            
+            # Convert timestamp to datetime for aggregation
+            df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+            
+            # Calculate aggregation interval
+            interval_ratio = target_interval_minutes // base_interval_minutes
+            
+            # Group by security and time intervals
+            aggregated_results = []
+            
+            for securityid in df['securityid'].unique():
+                security_data = df[df['securityid'] == securityid].copy()
+                security_data = security_data.sort_values('datetime')
+                
+                # Create time bins for aggregation
+                if target_interval_minutes < 60:
+                    # For minute aggregations
+                    freq = f"{target_interval_minutes}T"
+                elif target_interval_minutes < 1440:
+                    # For hour aggregations
+                    freq = f"{target_interval_minutes // 60}H"
+                else:
+                    # For day/week aggregations
+                    freq = f"{target_interval_minutes // 1440}D"
+                
+                # Group by time intervals
+                grouped = security_data.set_index('datetime').groupby(pd.Grouper(freq=freq))
+                
+                for interval_start, group in grouped:
+                    if len(group) == 0:
+                        continue
+                    
+                    # Aggregate OHLCV data
+                    aggregated_row = {
+                        'securityid': securityid,
+                        'timestamp': int(interval_start.timestamp()),
+                        'open': group['open'].iloc[0],  # First open
+                        'high': group['high'].max(),    # Highest high
+                        'low': group['low'].min(),      # Lowest low
+                        'close': group['close'].iloc[-1], # Last close
+                        'volume': group['volume'].sum()   # Total volume
+                    }
+                    
+                    # Add ticker if available
+                    if 'ticker' in group.columns:
+                        aggregated_row['ticker'] = group['ticker'].iloc[0]
+                    
+                    aggregated_results.append(aggregated_row)
+            
+            if not aggregated_results:
+                return np.array([])
+            
+            # Convert back to numpy array
+            result_df = pd.DataFrame(aggregated_results)
+            
+            # Sort by securityid and timestamp
+            result_df = result_df.sort_values(['securityid', 'timestamp'])
+            
+            # Ensure column order matches expected format
+            if 'ticker' in result_df.columns:
+                column_order = ['securityid', 'ticker', 'timestamp', 'open', 'high', 'low', 'close', 'volume']
+            else:
+                column_order = ['securityid', 'timestamp', 'open', 'high', 'low', 'close', 'volume']
+            
+            result_df = result_df[column_order]
+            
+            return result_df.values
+            
+        except Exception as e:
+            logger.error(f"Error aggregating OHLCV data: {e}")
+            return np.array([])
+    
+    def _filter_columns(self, data: np.ndarray, requested_columns: List[str]) -> np.ndarray:
+        """Filter numpy array to only include requested columns"""
+        try:
+            if len(data) == 0:
+                return np.array([])
+            
+            # Map column names to indices
+            if data.shape[1] >= 8:
+                available_columns = ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"]
+            else:
+                available_columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+            
+            # Find indices of requested columns
+            column_indices = []
+            for col in requested_columns:
+                if col in available_columns:
+                    column_indices.append(available_columns.index(col))
+            
+            if not column_indices:
+                return np.array([])
+            
+            # Extract only requested columns
+            return data[:, column_indices]
+            
+        except Exception as e:
+            logger.error(f"Error filtering columns: {e}")
+            return np.array([])
+    
     def _get_bar_data_single(self, timeframe: str = "1d", tickers: List[str] = None, 
                            columns: List[str] = None, min_bars: int = 1, 
                            filters: Dict[str, any] = None) -> np.ndarray:
@@ -385,18 +584,39 @@ class DataAccessorProvider:
             if min_bars > 10000:  # Prevent excessive data requests
                 min_bars = 10000
                 
-            # Map timeframes to database tables
+            # Map timeframes to database tables and aggregation sources
             timeframe_tables = {
+                # Direct table access (no aggregation needed)
                 "1m": "ohlcv_1m",
-                "5m": "ohlcv_5m", 
-                "15m": "ohlcv_15m",
-                "30m": "ohlcv_30m",
-                "1h": "ohlcv_1h",
+                "1h": "ohlcv_1h", 
                 "1d": "ohlcv_1d",
-                "1w": "ohlcv_1w"
+                "1w": "ohlcv_1w",
+                # Custom aggregations (will be processed by aggregation engine)
+                "5m": {"source": "ohlcv_1m", "aggregate_minutes": 5},
+                "10m": {"source": "ohlcv_1m", "aggregate_minutes": 10},
+                "15m": {"source": "ohlcv_1m", "aggregate_minutes": 15},
+                "30m": {"source": "ohlcv_1m", "aggregate_minutes": 30},
+                "2h": {"source": "ohlcv_1h", "aggregate_hours": 2},
+                "4h": {"source": "ohlcv_1h", "aggregate_hours": 4},
+                "6h": {"source": "ohlcv_1h", "aggregate_hours": 6},
+                "8h": {"source": "ohlcv_1h", "aggregate_hours": 8},
+                "12h": {"source": "ohlcv_1h", "aggregate_hours": 12},
+                "2w": {"source": "ohlcv_1w", "aggregate_weeks": 2},
+                "3w": {"source": "ohlcv_1w", "aggregate_weeks": 3},
+                "4w": {"source": "ohlcv_1w", "aggregate_weeks": 4}
             }
             
-            table_name = timeframe_tables.get(timeframe, "ohlcv_1d")
+            # Determine if we need aggregation or direct table access
+            timeframe_config = timeframe_tables.get(timeframe, "ohlcv_1d")
+            
+            if isinstance(timeframe_config, dict):
+                # Custom aggregation needed
+                return self._get_aggregated_bar_data(
+                    timeframe_config, tickers, columns, min_bars, filters
+                )
+            else:
+                # Direct table access
+                table_name = timeframe_config
             
             # Default columns if not specified (removed ticker and adj_close)
             if columns is None:

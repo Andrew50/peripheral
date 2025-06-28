@@ -13,15 +13,6 @@
 		[key: string]: any;
 	}
 
-	/* ───── Create price alert ──────────────────────────────────────────────── */
-	async function createPriceAlert() {
-		// Prompt user for ticker & price, then save via API helper
-		const inst = await queryInstanceInput(['ticker', 'price'], ['ticker', 'price'], {
-			ticker: ''
-		});
-		await newPriceAlert(inst);
-	}
-
 	/* ───── Delete helpers ──────────────────────────────────────────────────── */
 	function deleteAlert(alert: Alert) {
 		privateRequest('deleteAlert', { alertId: alert.alertId }, true);
@@ -36,18 +27,13 @@
 	$: extendedInactiveAlerts = inactiveAlerts as unknown as Writable<ExtendedInstance[]>;
 	$: extendedAlertLogs = alertLogs as unknown as Writable<ExtendedInstance[]>;
 
-	const handleDeleteAlert = (item: ExtendedInstance) => deleteAlert(item as Alert);
-	const handleDeleteAlertLog = (item: ExtendedInstance) => deleteAlertLog(item as AlertLog);
+	const handleDeleteAlert = (item: ExtendedInstance) => deleteAlert(item as unknown as Alert);
+	const handleDeleteAlertLog = (item: ExtendedInstance) =>
+		deleteAlertLog(item as unknown as AlertLog);
 </script>
 
 <!-- ───── UI ─────────────────────────────────────────────────────────────────── -->
 <div class="alerts-container">
-	<div class="alert-creator">
-		<h3>Create New Price Alert</h3>
-		<p class="description">Set alerts based on price levels.</p>
-		<button class="create-btn" on:click={createPriceAlert}>Create Alert</button>
-	</div>
-
 	<!-- Active Alerts -->
 	<h3>Active Alerts</h3>
 	<List
@@ -87,33 +73,5 @@
 		padding: clamp(0.5rem, 1vw, 1rem);
 		height: 100%;
 		overflow-y: auto;
-	}
-
-	.alert-creator {
-		background: var(--ui-bg-secondary);
-		border-radius: 8px;
-		padding: 20px;
-		margin-bottom: 24px;
-	}
-
-	.description {
-		color: var(--text-secondary);
-		font-size: 14px;
-		margin: 0 0 12px 0;
-	}
-
-	.create-btn {
-		background: var(--accent-primary);
-		color: #fff;
-		padding: 12px 24px;
-		border-radius: 6px;
-		border: none;
-		font-weight: 600;
-		cursor: pointer;
-		transition: background 0.2s ease;
-	}
-
-	.create-btn:hover {
-		background: var(--accent-primary-dark);
 	}
 </style>

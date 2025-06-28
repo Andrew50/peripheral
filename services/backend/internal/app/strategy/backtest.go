@@ -271,20 +271,14 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 	results := make([]BacktestResult, len(instances))
 
 	for i, instance := range instances {
-		// Convert timestamp properly - handle different timestamp formats
+		// Convert timestamp properly - Python worker returns Unix timestamps in seconds
 		timestamp := instance.Timestamp
 
-		// If timestamp looks like it might be in wrong format, try to fix it
-		// Check if it's a reasonable Unix timestamp (between 1970 and 2100)
-		if timestamp > 0 && timestamp < 4000000000000 { // Less than year 2100 in milliseconds
-			if timestamp < 1000000000000 { // If less than year 2001 in milliseconds, assume it's in seconds
-				timestamp = timestamp * 1000
-			}
-			// If it looks like a very small number, might be days since epoch - try different conversion
-			if timestamp < 100000 { // Less than ~1.2 days in seconds, likely wrong
-				// Could be days since epoch, convert to milliseconds
-				timestamp = timestamp * 24 * 60 * 60 * 1000
-			}
+		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
+		// Check if timestamp is in seconds (reasonable range for Unix timestamps)
+		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
+			// Convert seconds to milliseconds
+			timestamp = timestamp * 1000
 		}
 
 		// Extract entry price from strategy results or use EntryPrice field
