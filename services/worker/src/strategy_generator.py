@@ -577,6 +577,7 @@ TICKER EXTRACTION FROM PROMPTS:
 
 SECURITY RULES:
 - Only use whitelisted imports: pandas, numpy, datetime, math
+- CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
 - No file operations, network access, or dangerous functions
 - No exec, eval, or dynamic code execution
 - Use only standard mathematical and data manipulation operations

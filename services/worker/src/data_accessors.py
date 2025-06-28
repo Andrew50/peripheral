@@ -1194,15 +1194,10 @@ def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, 
     """
     accessor = get_data_accessor()
     
-    # Handle tickers parameter (preferred) or fall back to security_ids
-    if tickers is not None:
-        # Convert tickers to security_ids if provided
-        if len(tickers) == 0:
-            final_security_ids = []
-        else:
-            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
-    else:
-        # Use security_ids directly (backward compatibility)
-        final_security_ids = security_ids
+    # The 'security_ids' parameter is deprecated. This function now passes 'tickers' and 'filters'
+    # directly to the underlying data accessor, which handles all necessary conversions and filtering.
+    # This change fixes a bug where security IDs were incorrectly passed as tickers and filters were ignored.
+    if security_ids is not None and tickers is None:
+        logger.warning("The 'security_ids' parameter is deprecated and is not used. Please use 'tickers'.")
     
-    return accessor.get_general_data(final_security_ids, columns) 
+    return accessor.get_general_data(tickers=tickers, columns=columns, filters=filters) 
