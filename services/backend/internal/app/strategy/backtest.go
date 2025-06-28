@@ -35,12 +35,12 @@ type BacktestResult struct {
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances   int              `json:"totalInstances"`
-	PositiveSignals  int              `json:"positiveSignals"`
-	DateRange        []string         `json:"dateRange"`
-	SymbolsProcessed int              `json:"symbolsProcessed"`
-	Columns          []string         `json:"columns"`
-	ColumnSamples    map[string][]any `json:"columnSamples"`
+	TotalInstances    int              `json:"totalInstances"`
+	PositiveInstances int              `json:"positiveInstances"`
+	DateRange         []string         `json:"dateRange"`
+	SymbolsProcessed  int              `json:"symbolsProcessed"`
+	Columns           []string         `json:"columns"`
+	ColumnSamples     map[string][]any `json:"columnSamples"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
@@ -74,7 +74,7 @@ type WorkerInstance struct {
 // WorkerSummary represents worker summary statistics
 type WorkerSummary struct {
 	TotalInstances            int            `json:"total_instances"`
-	PositiveSignals           int            `json:"positive_signals"`
+	PositiveInstances         int            `json:"positive_instances"`
 	DateRange                 DateRangeField `json:"date_range"`
 	SymbolsProcessed          int            `json:"symbols_processed"`
 	ExecutionType             string         `json:"execution_type,omitempty"`
@@ -319,11 +319,11 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 // convertWorkerSummaryToBacktestSummary converts worker summary to API format
 func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummary {
 	return BacktestSummary{
-		TotalInstances:   summary.TotalInstances,
-		PositiveSignals:  summary.PositiveSignals,
-		DateRange:        []string(summary.DateRange),
-		SymbolsProcessed: summary.SymbolsProcessed,
-		Columns:          []string{"ticker", "timestamp", "classification", "entry_price"},
-		ColumnSamples:    map[string][]any{},
+		TotalInstances:    summary.TotalInstances,
+		PositiveInstances: summary.PositiveInstances,
+		DateRange:         []string(summary.DateRange),
+		SymbolsProcessed:  summary.SymbolsProcessed,
+		Columns:           []string{"ticker", "timestamp", "classification", "entry_price"},
+		ColumnSamples:     map[string][]any{},
 	}
 }

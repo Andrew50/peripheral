@@ -424,7 +424,7 @@ class AccessorStrategyEngine:
         # Basic statistics
         total_instances = len(instances)
         # Since all returned instances are positive signals (they met criteria), count all
-        positive_signals = total_instances  # All instances are positive signals
+        positive_instances = total_instances  # All instances are positive instances
         unique_tickers = len(set(i['ticker'] for i in instances))
         
         # Calculate signal rate (always 1.0 since all returned instances are signals)
@@ -436,7 +436,7 @@ class AccessorStrategyEngine:
         
         metrics = {
             'total_instances': total_instances,
-            'positive_signals': positive_signals,
+            'positive_instances': positive_instances,
             'signal_rate': round(signal_rate, 4),
             'unique_tickers': unique_tickers,
             'avg_score': round(avg_score, 4)

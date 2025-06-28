@@ -162,12 +162,12 @@ def strategy():
         result = asyncio.run(run_strategy_test())
         
         if result.get('success', False):
-            signals = result.get('ranked_results', [])
-            print(f"    ✅ Multi-timeframe strategy: Generated {len(signals)} signals")
+            instances = result.get('ranked_results', [])
+            print(f"    ✅ Multi-timeframe strategy: Generated {len(instances)} instances")
             
-            if signals:
-                signal = signals[0]
-                timeframes_used = signal.get('timeframes_used', 0)
+            if instances:
+                instance = instances[0]
+                timeframes_used = instance.get('timeframes_used', 0)
                 print(f"    📈 Used {timeframes_used} timeframe(s) successfully")
                 
             return True

@@ -222,7 +222,7 @@ def strategy():
             current_price = ticker_4h['close'].iloc[-1]
             current_sma = ticker_4h['sma_3'].iloc[-1]
             
-            # Multi-timeframe signal: 5m momentum + 4h trend alignment
+            # Multi-timeframe strategy trigger: 5m momentum + 4h trend alignment
             if recent_momentum > 0.01 and current_price > current_sma:  # Bullish on both timeframes
                 instances.append({{
                     'ticker': ticker,
@@ -306,9 +306,9 @@ def strategy():
         df['change_5d_pct'] = ((df['close'] - df['prev_close_5d']) / df['prev_close_5d']) * 100
         
         # Find technology stocks with significant moves
-        signals = df[df['change_5d_pct'] >= 10.0]  # 10%+ gain over 5 days
+        qualifying_instances = df[df['change_5d_pct'] >= 10.0]  # 10%+ gain over 5 days
         
-        for _, row in signals.iterrows():
+        for _, row in qualifying_instances.iterrows():
             instances.append({{
                 'ticker': row['ticker'],
                 'timestamp': int(row['timestamp']),
@@ -331,7 +331,7 @@ def strategy():
         # High-frequency scalping using minute-level data
         target_tickers = ["AAPL", "TSLA", "NVDA"]  # High-volume stocks for scalping
         
-        # Get 1-minute data for entry signals
+        # Get 1-minute data for entry detection
         bars_1m = get_bar_data(
             timeframe="1m",  # Direct 1-minute table access (fastest)
             tickers=target_tickers,
@@ -373,7 +373,7 @@ def strategy():
             current_volume = ticker_1m['volume'].iloc[-1]
             volume_spike = current_volume > avg_volume * 1.5
             
-            # Scalping signal: momentum + trend + volume
+            # Scalping strategy trigger: momentum + trend + volume
             if momentum > 0.005 and trend_up and volume_spike:  # 0.5%+ momentum with confirmations
                 instances.append({{
                     'ticker': ticker,
@@ -442,7 +442,7 @@ def strategy():
             current_price = ticker_1d['close'].iloc[-1]
             daily_trend = (current_price / sma_20) - 1
             
-            # Swing trading signal: oversold on 4h + uptrend on daily
+            # Swing trading strategy: oversold on 4h + uptrend on daily
             if rsi_4h < 35 and daily_trend > 0.05:  # RSI oversold + 5%+ above SMA
                 instances.append({{
                     'ticker': ticker,
@@ -508,7 +508,7 @@ def strategy():
             recent_volume = ticker_1w['volume'].iloc[-1]
             volume_surge = recent_volume > avg_volume * 1.2
             
-            # Position signal: breakout + trend + volume
+            # Position strategy: breakout + trend + volume
             if breakout_strength > 0.02 and trend_2w > 0.1 and volume_surge:
                 instances.append({{
                     'ticker': ticker,
@@ -528,17 +528,17 @@ def strategy():
 ```
 
 COMMON MISTAKES TO AVOID:
-❌ signals = df[condition].groupby('ticker').tail(1)  # WRONG - limits to 1 per ticker
+❌ qualifying_instances = df[condition].groupby('ticker').tail(1)  # WRONG - limits to 1 per ticker
 ❌ latest_df = df.groupby('ticker').last()  # WRONG - only latest data
-❌ df.drop_duplicates(subset=['ticker'])  # WRONG - removes valid signals
-❌ 'signal': True  # WRONG - unnecessary field, if returned it met criteria
+❌ df.drop_duplicates(subset=['ticker'])  # WRONG - removes valid instances
+❌ 'signal': True  # WRONG - unnecessary field, if returned it inherently met criteria
 ❌ No 'score' field  # WRONG - score is required for ranking
 ❌ aggregate_mode=True for individual stock patterns  # WRONG - use only for market-wide calculations
 
-✅ signals = df[condition]  # CORRECT - returns all matching instances
-✅ signals = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
+✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
+✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
 ✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
-✅ 'score': min(1.0, signal_strength / max_strength)  # CORRECT - normalized score
+✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
 ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
 
 PATTERN RECOGNITION:
@@ -547,8 +547,8 @@ PATTERN RECOGNITION:
 - Volume patterns: Compare current vs historical average - return ALL volume spikes  
   min_bars=1 for simple threshold, min_bars=20+ for rolling average
   Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
-- Price patterns: Use moving averages, RSI - return ALL signal occurrences
-  min_bars=20+ for indicators, Score: Based on signal strength (RSI distance from 50, etc.)
+- Price patterns: Use moving averages, RSI - return ALL qualifying instances
+  min_bars=20+ for indicators, Score: Based on instance strength (RSI distance from 50, etc.)
 - Breakout patterns: Identify price breakouts - return ALL breakouts
   min_bars=2+ for comparison, Score: min(1.0, breakout_strength / max_expected)
 - Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
@@ -575,8 +575,8 @@ RETURN FORMAT:
 - Return List[Dict] where each dict contains:
   * 'ticker': str (e.g., "MRNA", "AAPL")
   * 'timestamp': int (Unix timestamp)
-  * 'entry_price': float (price at signal time - open, close, etc.)
-  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger signal)
+  * 'entry_price': float (price at instance time - open, close, etc.)
+  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance)
   * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc.)
 - DO NOT include 'signal': True - it's redundant
 

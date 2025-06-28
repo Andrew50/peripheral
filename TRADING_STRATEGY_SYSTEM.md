@@ -131,7 +131,7 @@ result = await run_backtest(strategy_id=123)
     ],
     "summary": {
         "total_instances": 45,
-        "positive_signals": 32,
+        "positive_instances": 32,
         "date_range": ["2022-01-01", "2024-01-01"],
         "symbols_processed": 500
     },

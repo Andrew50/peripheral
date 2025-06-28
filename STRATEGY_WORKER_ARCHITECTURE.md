@@ -76,7 +76,7 @@ async def run_alert(strategy_id: int, **kwargs) -> Dict[str, Any]:
     "instances": [...],  // All backtest instances
     "summary": {
         "total_instances": 45,
-        "positive_signals": 32,
+        "positive_instances": 32,
         "symbols_processed": 500,
         "date_range": ["2022-01-01", "2024-01-01"]
     },

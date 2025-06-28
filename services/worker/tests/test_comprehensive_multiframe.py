@@ -366,22 +366,22 @@ def strategy():
         )
         
         if result.get('success', False):
-            signals = result.get('ranked_results', [])
-            print(f"    ✅ Strategy executed: {len(signals)} signals generated")
+            instances = result.get('ranked_results', [])
+            print(f"    ✅ Strategy executed: {len(instances)} instances generated")
             
-            if signals:
-                signal = signals[0]
-                timeframes_working = signal.get('timeframes_working', 0)
+            if instances:
+                instance = instances[0]
+                timeframes_working = instance.get('timeframes_working', 0)
                 print(f"    📊 Timeframes accessible: {timeframes_working}/3")
                 
-                if signal.get('ticker') == 'ERROR':
-                    print(f"    ⚠️ Strategy had execution error: {signal.get('error')}")
+                if instance.get('ticker') == 'ERROR':
+                    print(f"    ⚠️ Strategy had execution error: {instance.get('error')}")
                     return False
                 else:
                     print("    ✅ Multi-timeframe strategy executed successfully")
                     return True
             else:
-                print("    ⚠️ No signals generated (expected if no data)")
+                print("    ⚠️ No instances generated (expected if no data)")
                 return True
         else:
             error = result.get('error', 'Unknown error')

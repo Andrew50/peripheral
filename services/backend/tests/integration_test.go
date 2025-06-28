@@ -47,12 +47,12 @@ type BacktestResult struct {
 }
 
 type BacktestSummary struct {
-	TotalInstances   int              `json:"totalInstances"`
-	PositiveSignals  int              `json:"positiveSignals"`
-	DateRange        []string         `json:"dateRange"`
-	SymbolsProcessed int              `json:"symbolsProcessed"`
-	Columns          []string         `json:"columns"`
-	ColumnSamples    map[string][]any `json:"columnSamples"`
+	TotalInstances    int              `json:"totalInstances"`
+	PositiveInstances int              `json:"positiveInstances"`
+	DateRange         []string         `json:"dateRange"`
+	SymbolsProcessed  int              `json:"symbolsProcessed"`
+	Columns           []string         `json:"columns"`
+	ColumnSamples     map[string][]any `json:"columnSamples"`
 }
 
 type BacktestResponse struct {
@@ -298,7 +298,7 @@ func testStrategyBacktest(t *testing.T, conn *data.Conn, userID, strategyID int,
 
 	t.Logf("✅ Backtest completed successfully:")
 	t.Logf("   Total Instances: %d", backtestResult.Summary.TotalInstances)
-	t.Logf("   Positive Signals: %d", backtestResult.Summary.PositiveSignals)
+	t.Logf("   Positive Instances: %d", backtestResult.Summary.PositiveInstances)
 	t.Logf("   Symbols Processed: %d", backtestResult.Summary.SymbolsProcessed)
 	t.Logf("   Date Range: %v", backtestResult.Summary.DateRange)
 }
@@ -347,13 +347,13 @@ func validateBacktestResults(t *testing.T, result BacktestResponse, _ string) {
 		t.Errorf("❌ Invalid total instances: %d", result.Summary.TotalInstances)
 	}
 
-	if result.Summary.PositiveSignals < 0 {
-		t.Errorf("❌ Invalid positive signals: %d", result.Summary.PositiveSignals)
+	if result.Summary.PositiveInstances < 0 {
+		t.Errorf("❌ Invalid positive instances: %d", result.Summary.PositiveInstances)
 	}
 
-	if result.Summary.PositiveSignals > result.Summary.TotalInstances {
-		t.Errorf("❌ Positive signals (%d) cannot exceed total instances (%d)",
-			result.Summary.PositiveSignals, result.Summary.TotalInstances)
+	if result.Summary.PositiveInstances > result.Summary.TotalInstances {
+		t.Errorf("❌ Positive instances (%d) cannot exceed total instances (%d)",
+			result.Summary.PositiveInstances, result.Summary.TotalInstances)
 	}
 
 	if len(result.Summary.DateRange) != 2 {
@@ -502,11 +502,11 @@ func handleRunBacktest(_ *data.Conn, userID int, argsBytes []byte) (interface{},
 			},
 		},
 		Summary: BacktestSummary{
-			TotalInstances:   2,
-			PositiveSignals:  2,
-			DateRange:        []string{time.Now().AddDate(0, -6, 0).Format("2006-01-02"), time.Now().Format("2006-01-02")},
-			SymbolsProcessed: 100,
-			Columns:          []string{"ticker", "timestamp", "classification"},
+			TotalInstances:    2,
+			PositiveInstances: 2,
+			DateRange:         []string{time.Now().AddDate(0, -6, 0).Format("2006-01-02"), time.Now().Format("2006-01-02")},
+			SymbolsProcessed:  100,
+			Columns:           []string{"ticker", "timestamp", "classification"},
 		},
 	}
 

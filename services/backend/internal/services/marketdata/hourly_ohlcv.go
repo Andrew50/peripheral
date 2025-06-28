@@ -20,12 +20,9 @@ func Update1HourOHLCV(conn *data.Conn) error {
 		// Log completion time for monitoring
 	}()
 
-	// Get current time and determine target date range
+	// Get current time for timestamp checks
 	now := time.Now()
-	targetDate := now.AddDate(0, 0, -1) // Start from yesterday
-	if now.Hour() < 9 {                 // Before market open, use day before yesterday
-		targetDate = now.AddDate(0, 0, -2)
-	}
+	_ = now // Used for potential future date range logic
 
 	// Check latest timestamp in database
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

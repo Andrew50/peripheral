@@ -20,14 +20,9 @@ func Update1MinuteOHLCV(conn *data.Conn) error {
 		// Log completion time for monitoring
 	}()
 
-	// Get current time and determine target date
+	// Get current time for timestamp checks
 	now := time.Now()
-	// Only fetch data for yesterday and today to avoid excessive API calls
-	// 1-minute data is very high volume, so we limit the range
-	targetDate := now.AddDate(0, 0, -1) // Start from yesterday
-	if now.Hour() < 9 {                 // Before market open, use day before yesterday
-		targetDate = now.AddDate(0, 0, -2)
-	}
+	_ = now // Used for potential future date range logic
 
 	// Check latest timestamp in database
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
