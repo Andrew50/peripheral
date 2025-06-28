@@ -180,6 +180,7 @@
 	});
 	export let chartId: number;
 	export let width: number;
+	export let defaultChartData: any = null;
 	let chartSecurityId: number;
 	let chartTimeframe: string;
 	let chartTimeframeInSeconds: number;
@@ -369,43 +370,8 @@
 		}
 	}
 
-	function backendLoadChartData(inst: ChartQueryDispatch): void {
-		if (inst.requestType === 'loadNewTicker') {
-			eventSeries.setData([]); // Clear events only when loading new ticker
-			pendingBarUpdate = null;
-			pendingVolumeUpdate = null;
-			bidLine.setData([]);
-			askLine.setData([]);
-			arrowSeries.setData([]);
-		}
-		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
-			return;
-		}
-		console.log('backendLoadChartData', inst);
-		const visibleRange = chart.timeScale().getVisibleRange();
-		isLoadingChartData = true;
-		lastChartQueryDispatchTime = Date.now();
-		if (
-			$streamInfo.replayActive &&
-			(inst.timestamp == 0 || (inst.timestamp ?? 0) > $streamInfo.timestamp)
-		) {
-			('adjusting to stream timestamp');
-			inst.timestamp = Math.floor($streamInfo.timestamp);
-		}
-		inst;
-		inst.extendedHours;
-		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
-			securityId: inst.securityId,
-			timeframe: inst.timeframe,
-			timestamp: inst.timestamp,
-			direction: inst.direction,
-			bars: inst.bars,
-			extendedhours: inst.extendedHours,
-			isreplay: $streamInfo.replayActive,
-			includeSECFilings: get(settings).showFilings
-		})
-			.then((response) => {
-				const barDataList = response.bars;
+	function processChartDataResponse(response: { bars: BarData[]; isEarliestData: boolean }, inst: ChartQueryDispatch, visibleRange: any): void {
+		const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
 					isLoadingChartData = false;
 					queuedLoad = null;
@@ -708,17 +674,6 @@
 						vwapSeries.setData([]);
 					}
 					if (inst.requestType == 'loadNewTicker') {
-						chart.timeScale().resetTimeScale();
-						//chart.timeScale().fitContent();
-						if (currentChartInstance.timestamp === 0) {
-							chart.timeScale().applyOptions({
-								rightOffset: 10
-							});
-						} else {
-							chart.timeScale().applyOptions({
-								rightOffset: 0
-							});
-						}
 						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
@@ -733,6 +688,23 @@
 						whyMovingTicker = inst.ticker ?? '';
 						whyMovingTrigger = Date.now();
 					}
+
+					// Apply time scale reset and right offset for new ticker loads after all data is processed
+					if (inst.requestType === 'loadNewTicker' && chart && inst.direction === 'backward') {
+						// Use requestAnimationFrame to ensure chart has processed the data
+						requestAnimationFrame(() => {
+							chart.timeScale().resetTimeScale();
+							if (inst.timestamp === 0) {
+								chart.timeScale().applyOptions({
+									rightOffset: 10  // Live data gets right margin
+								});
+							} else {
+								chart.timeScale().applyOptions({
+									rightOffset: 0   // Historical data gets no right margin
+								});
+							}
+						});
+					}
 				};
 				if (
 					inst.direction == 'backward' ||
@@ -741,23 +713,43 @@
 					(inst.direction == 'forward' && !isLoadingChartData)
 				) {
 					queuedLoad();
-					/*if (
-						inst.requestType === 'loadNewTicker' &&
-						!chartLatestDataReached &&
-						!$streamInfo.replayActive
-						) {
-						backendLoadChartData({
-							...currentChartInstance,
-							timestamp: ESTSecondstoUTCMillis(
-								chartCandleSeries.data()[chartCandleSeries.data().length - 1].time as UTCTimestamp
-							) as UTCTimestamp,
-							bars: 150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
-							direction: 'forward',
-							requestType: 'loadAdditionalData',
-							includeLastBar: true
-						});
-					}*/
 				}
+	}
+
+	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		if (inst.requestType === 'loadNewTicker') {
+			eventSeries.setData([]); // Clear events only when loading new ticker
+			pendingBarUpdate = null;
+			pendingVolumeUpdate = null;
+			bidLine.setData([]);
+			askLine.setData([]);
+			arrowSeries.setData([]);
+		}
+		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
+			return;
+		}
+		console.log('backendLoadChartData', inst);
+		const visibleRange = chart.timeScale().getVisibleRange();
+		isLoadingChartData = true;
+		lastChartQueryDispatchTime = Date.now();
+		if (
+			$streamInfo.replayActive &&
+			(inst.timestamp == 0 || (inst.timestamp ?? 0) > $streamInfo.timestamp)
+		) {
+			inst.timestamp = Math.floor($streamInfo.timestamp);
+		}
+		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
+			securityId: inst.securityId,
+			timeframe: inst.timeframe,
+			timestamp: inst.timestamp,
+			direction: inst.direction,
+			bars: inst.bars,
+			extendedhours: inst.extendedHours,
+			isreplay: $streamInfo.replayActive,
+			includeSECFilings: get(settings).showFilings
+		})
+			.then((response) => {
+				processChartDataResponse(response, inst, visibleRange);
 			})
 			.catch((error: string) => {
 				console.error(error);
@@ -1254,7 +1246,7 @@
 		});
 	}
 
-	function change(newReq: ChartQueryDispatch) {
+	function change(newReq: ChartQueryDispatch, preloadedResponse?: { bars: BarData[]; isEarliestData: boolean }) {
 		// Reset pending updates when changing charts
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
@@ -1291,6 +1283,11 @@
 			...currentChartInstance,
 			...updatedReq
 		};
+
+		// Update global chart state so other components know about the current chart
+		if (typeof chartId === 'number') {
+			setActiveChart(chartId, currentChartInstance);
+		}
 
 		// Determine if viewing live data based on timestamp
 		isViewingLiveData = updatedReq.timestamp === 0;
@@ -1358,7 +1355,13 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
-		backendLoadChartData(updatedReq);
+
+		// Use preloaded data if available, otherwise fetch from backend
+		if (preloadedResponse) {
+			processChartDataResponse(preloadedResponse, updatedReq, null);
+		} else {
+			backendLoadChartData(updatedReq);
+		}
 	}
 
 	onMount(() => {
@@ -1780,12 +1783,6 @@
 			latestCrosshairPositionTime = barToUse.time as number;
 			latestCrosshairPositionY = param && param.point ? param.point.y : 0;
 
-			/*
-			// Original RVOL calculation logic was here, would need adaptation
-			// if currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
-			//	...
-			// }
-			*/
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
 			if (selectedEvent) {
@@ -1937,8 +1934,37 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 
+
+
 		const loadDefaultChart = async () => {
-			// Check if the current instance is still empty/default before loading NVDA
+			// Check if preloaded data is available
+			if (defaultChartData) {
+
+				// Use server-side preloaded data
+				const chartQueryDispatch: ChartQueryDispatch = {
+					ticker: defaultChartData.ticker,
+					timestamp: defaultChartData.timestamp,
+					timeframe: defaultChartData.timeframe,
+					securityId: defaultChartData.securityId,
+					price: defaultChartData.price,
+					chartId: chartId,
+					extendedHours: false,
+					bars: defaultChartData.bars,
+					direction: 'backward',
+					requestType: 'loadNewTicker',
+					includeLastBar: true
+				};
+				
+				const preloadedResponse = {
+					bars: defaultChartData.chartData.bars,
+					isEarliestData: defaultChartData.chartData.isEarliestData || false
+				};
+				
+				change(chartQueryDispatch, preloadedResponse);
+				return;
+			}
+
+			// Load default SPY chart if no current instance
 			if (!currentChartInstance || !currentChartInstance.ticker) {
 				try {
 					type SecurityIdResponse = { securityId?: number };
@@ -1950,21 +1976,21 @@
 						}
 					);
 
-					const nvdaSecurityId = response?.securityId ?? 0;
+					const spySecurityId = response?.securityId ?? 0;
 
-					if (nvdaSecurityId !== 0) {
+					if (spySecurityId !== 0) {
 						queryChart({
 							ticker: 'SPY',
 							timeframe: '1d',
 							timestamp: 0,
-							securityId: nvdaSecurityId,
+							securityId: spySecurityId,
 							price: 0
 						});
 					} else {
-						console.warn('Could not fetch securityId for default ticker NVDA.');
+						console.warn('Could not fetch securityId for default ticker SPY.');
 					}
 				} catch (error) {
-					console.error('Error fetching securityId for default ticker NVDA:', error);
+					console.error('Error fetching securityId for default ticker SPY:', error);
 				}
 			}
 		};
@@ -1985,7 +2011,6 @@
 			document.removeEventListener('keydown', handleGlobalKeyDown);
 			document.removeEventListener('keyup', handleGlobalKeyUp);
 
-			// ... any other cleanup code ...
 		};
 	});
 
