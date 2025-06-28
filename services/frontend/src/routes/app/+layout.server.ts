@@ -25,7 +25,8 @@ export const load = async ({ cookies, url }: RequestEvent) => {
 	
 	// Validate token server-side by making request to backend
 	try {
-		const backendUrl = process.env.BACKEND_URL || 'http://localhost:5058';
+		// Use 'backend' as the hostname, which is the service name in k8s
+		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
 		
 		const response = await fetch(`${backendUrl}/private`, {
 			method: 'POST',
