@@ -951,7 +951,7 @@
 			<!-- Main content and sidebar wrapper -->
 			<div class="main-and-sidebar-wrapper">
 				<!-- Top bar -->
-				<TopBar instance={$activeChartInstance || {}} />
+				<TopBar instance={$activeChartInstance || {}} menuWidth={$menuWidth} />
 
 				<!-- Content below top bar -->
 				<div class="content-below-topbar">

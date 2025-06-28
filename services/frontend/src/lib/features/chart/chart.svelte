@@ -2049,11 +2049,11 @@
 	}
 
 	// Function to calculate optimal position for event-info popup
-	function calculateEventInfoPosition(containerWidth: number) {
+	function calculateEventInfoPosition(containerWidth: number, containerHeight: number) {
 		// Try to get the actual legend element and its dimensions
 		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
-		let legendWidth = 300; // Conservative default width
 		let legendRight = 300; // Default right edge position
+		let legendBottom = 100; // Default bottom position
 
 		if (legendElement) {
 			const legendRect = legendElement.getBoundingClientRect();
@@ -2061,26 +2061,41 @@
 			const chartRect = chartContainer?.getBoundingClientRect();
 
 			if (chartRect) {
-				// Calculate legend's right edge relative to chart container
+				// Calculate legend's right edge and bottom relative to chart container
 				legendRight = legendRect.right - chartRect.left;
+				legendBottom = legendRect.bottom - chartRect.top;
 			}
 		}
 
-		const popupWidth = 220; // event-info width
-		const margin = 15; // Margin from legend and edges
+		const margin = 10; // Margin from legend and edges
+		const minPopupWidth = 200; // Minimum popup width
 
-		// Position to the right of the legend
+		// Calculate available space to the right of legend
+		const availableWidth = containerWidth - legendRight - margin * 2;
+
+		// Set popup width to available space (with min/max constraints)
+		const popupWidth = Math.max(minPopupWidth, Math.min(availableWidth, 350));
+
+		// Position to the right of the legend with margin
 		let leftPosition = legendRight + margin;
 
-		// Check if it would overflow the right side
-		if (leftPosition + popupWidth + margin > containerWidth) {
-			// Position it as far right as possible without overflow
-			leftPosition = Math.max(containerWidth - popupWidth - margin, legendRight + 5);
+		// Ensure popup doesn't go beyond right edge
+		if (leftPosition + popupWidth > containerWidth - margin) {
+			leftPosition = containerWidth - popupWidth - margin;
 		}
+
+		// Ensure popup doesn't go beyond left edge (shouldn't happen but safety check)
+		leftPosition = Math.max(margin, leftPosition);
+
+		// For vertical positioning, start at top but ensure it doesn't go beyond bottom
+		let topPosition = 5;
+		const maxHeight = containerHeight - topPosition - margin;
 
 		return {
 			left: leftPosition,
-			top: 5 // Same level as legend
+			top: topPosition,
+			width: popupWidth,
+			maxHeight: maxHeight
 		};
 	}
 
@@ -2197,12 +2212,16 @@
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
-	{@const position = calculateEventInfoPosition(width)}
+	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
+	{@const containerHeight = chartContainer?.clientHeight || 600}
+	{@const position = calculateEventInfoPosition(width, containerHeight)}
 	<div
 		class="event-info"
 		style="
             left: {position.left}px;
-            top: {position.top}px;"
+            top: {position.top}px;
+            width: {position.width}px;
+            max-height: {position.maxHeight}px;"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -2285,13 +2304,16 @@
 		border-radius: 8px;
 		padding: 8px 10px 10px 10px;
 		z-index: 1000;
-		width: 220px;
-		max-width: calc(100% - 40px); /* Prevent overflow with margin */
+		/* Width and max-height now set via inline styles for dynamic sizing */
+		min-width: 200px;
+		overflow-y: auto;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 		transform: scale(0.95);
 		transform-origin: top left;
 		opacity: 0;
 		animation: fadeInDown 0.2s ease-out forwards;
+		word-wrap: break-word;
+		hyphens: auto;
 	}
 	@keyframes fadeInDown {
 		from {
@@ -2328,8 +2350,8 @@
 	}
 	.event-row {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.3rem;
 		padding: 6px 0;
 		border-bottom: 1px solid #444;
 		color: #e0e0e0;
@@ -2343,15 +2365,24 @@
 		font-size: 0.95rem;
 		color: #fff;
 		font-weight: 500;
+		word-wrap: break-word;
+		line-height: 1.3;
 	}
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
-		margin-top: 4px;
+		line-height: 1.2;
+	}
+	.dividend-details {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
 	}
 	.event-actions {
 		display: flex;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: flex-start;
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2394,10 +2425,9 @@
 		color: #fff;
 	}
 	.filing-row {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 0.75rem;
-		align-items: center;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid #444;
 	}
@@ -2405,12 +2435,14 @@
 		font-size: 1rem;
 		font-weight: 600;
 		color: #fff;
+		word-wrap: break-word;
+		line-height: 1.2;
 	}
 	.filing-row .event-actions {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.4rem;
 	}
 	.btn-sm {
 		padding: 0.15rem 0.3rem;

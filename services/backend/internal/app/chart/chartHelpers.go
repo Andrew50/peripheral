@@ -88,9 +88,11 @@ func GetRequestStartEndTime(
 func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 	if timeframe == "hour" {
 		return 60 * 60 * int64(multiplier)
-	} else if timeframe == "minute" {
+	}
+	if timeframe == "minute" {
 		return 60 * int64(multiplier)
-	} else if timeframe == "second" {
+	}
+	if timeframe == "second" {
 		return int64(multiplier)
 	}
 	if timeframe == "day" {

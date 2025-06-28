@@ -23,6 +23,7 @@
 	import { tick } from 'svelte';
 
 	export let instance: Instance;
+	export let menuWidth: number = 0;
 
 	const commonTimeframes = ['1', '1h', '1d', '1w'];
 	let countdown = writable('--');
@@ -660,7 +661,7 @@
 		min-height: 40px;
 		background-color: #0f0f0f;
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start; /* Start from left, don't space-between */
 		align-items: center;
 		padding: 0 10px;
 		flex-shrink: 0;
@@ -682,7 +683,7 @@
 	.top-bar-right {
 		display: flex;
 		align-items: center;
-		margin-right: 0px; /* Reduced margin for tighter controls */
+		padding-left: 16px; /* Add space after countdown section */
 	}
 
 	/* Base styles for metadata buttons */
@@ -852,9 +853,11 @@
 	.sidebar-controls {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		width: 100%;
+		justify-content: flex-start; /* Left align the controls */
+		width: auto; /* Don't force full width */
 		min-width: 200px;
+		height: 40px;
+		gap: 8px; /* Add space between left and right controls */
 	}
 
 	.watchlist-controls-left {
@@ -868,15 +871,14 @@
 	.watchlist-controls-right {
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
+		justify-content: flex-start; /* Keep close to left controls */
 	}
 
 	.alert-controls-right {
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
+		justify-content: flex-start; /* Left align like watchlist controls */
 		width: 100%;
-		margin-right: -8px; /* Extend to the edge */
 		padding-right: 8px; /* Add padding for visual breathing room */
 	}
 
@@ -884,6 +886,7 @@
 		position: relative;
 		display: inline-flex;
 		align-items: center;
+		justify-content: flex-start; /* Ensure left alignment */
 		width: fit-content;
 		background: transparent;
 		border-radius: 6px;
@@ -953,7 +956,7 @@
 	.new-watchlist-container {
 		position: absolute;
 		top: 100%;
-		right: 0;
+		left: 0; /* Align with left edge of top-bar-right (which is positioned at drag bar edge) */
 		margin-top: 8px;
 		padding: 12px;
 		background: rgba(0, 0, 0, 0.9);

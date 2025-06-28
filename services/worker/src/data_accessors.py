@@ -150,6 +150,19 @@ class DataAccessorProvider:
             if min_bars > 10000:  # Prevent excessive data requests
                 min_bars = 10000
             
+            # Validation mode: override tickers=None to use minimal dataset for fast validation
+            if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation':
+                if tickers is None:
+                    tickers = self.execution_context.get('symbols', ['AAPL'])[:1]  # Only use first ticker for validation
+                    logger.info(f"🧪 Validation mode: overriding tickers=None to use minimal dataset: {tickers}")
+                elif len(tickers) > 1:
+                    tickers = tickers[:1]  # Limit to first ticker only for validation
+                    logger.info(f"🧪 Validation mode: limiting tickers to first symbol only: {tickers}")
+                # Also limit min_bars for validation to prevent excessive data requests
+                if min_bars > 2:
+                    min_bars = 2  # Maximum 2 bars for validation
+                    logger.info(f"🧪 Validation mode: limiting min_bars to {min_bars} for fast validation")
+            
             # Check if we need to use batching
             should_batch = self._should_use_batching(tickers, aggregate_mode)
             

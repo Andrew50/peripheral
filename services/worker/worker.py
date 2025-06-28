@@ -189,8 +189,8 @@ class StrategyWorker:
             try:
                 if hasattr(self, 'db_conn') and self.db_conn:
                     self.db_conn.close()
-            except:
-                pass
+            except Exception:
+                logger.debug("Error closing database connection (expected during reconnection)")
             self.db_conn = self._init_database()
             logger.info("Database connection restored")
         except Exception as e:
@@ -225,8 +225,8 @@ class StrategyWorker:
                     # Try to reconnect
                     try:
                         self.db_conn.close()
-                    except:
-                        pass
+                    except Exception:
+                        logger.debug("Error closing database connection (expected during reconnection)")
                     self.db_conn = self._init_database()
                     logger.info(f"Database reconnected on attempt {attempt + 1}")
                 else:
