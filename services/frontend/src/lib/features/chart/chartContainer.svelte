@@ -5,6 +5,7 @@
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryChart } from './interface';
 	export let width: number;
+	export let defaultChartData: any;
 
 	// Add focus management
 	let containerRef: HTMLDivElement;
@@ -28,7 +29,11 @@
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
-				<Chart width={width / $settings.chartColumns} chartId={i + j * $settings.chartColumns} />
+				<Chart 
+					width={width / $settings.chartColumns} 
+					chartId={i + j * $settings.chartColumns}
+					defaultChartData={(i + j * $settings.chartColumns) === 0 ? defaultChartData : null}
+				/>
 			{/each}
 		</div>
 	{/each}

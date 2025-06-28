@@ -9,10 +9,12 @@
 	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
-	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
-	//import Algo from '$lib/components/algo.svelte';
 	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
+	// Define PageData interface locally since auto-generated types aren't available yet
+	interface PageData {
+		defaultChartData: any;
+	}
 
 	// Replay logic
 	import {
@@ -44,8 +46,6 @@
 
 	// Import Instance from types
 	import type { Instance } from '$lib/utils/types/types';
-
-
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
 
@@ -57,6 +57,10 @@
 	// Import auth modal
 	import AuthModal from '$lib/components/authModal.svelte';
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
+	
+	// Export data prop for server-side preloaded data
+	export let data: PageData;
+	
 
 	// Import extended hours toggle store
 	import {
@@ -402,7 +406,6 @@
 
 	async function preloadComponents() {
 		try {
-			// Preload all components in parallel - fire and forget
 			const preloadPromises = [
 				import('$lib/features/screener/screener.svelte'),
 				import('$lib/features/strategies/strategies.svelte'), 
@@ -411,10 +414,7 @@
 			
 			// Await them to know when done (optional)
 			await Promise.all(preloadPromises);
-			console.log('📦 Background preloading complete');
 		} catch (error) {
-			console.warn('Background preloading failed:', error);
-			// Fail silently - components will still load on-demand if needed
 		}
 	}
 
@@ -964,7 +964,7 @@
 					<div class="main-content">
 						<!-- Chart area -->
 						<div class="chart-wrapper">
-							<ChartContainer width={chartWidth} />
+							<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
 						</div>
 
 						<!-- Bottom windows container -->
