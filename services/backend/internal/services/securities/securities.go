@@ -617,7 +617,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 					continue
 				}
 				initialDate := time.Time(event.Date).Format("2006-01-02")
-				
+
 				// Check if a row already exists with this ticker and date range
 				var existingCount int
 				err := conn.DB.QueryRow(ctx, `
@@ -628,13 +628,13 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				if err != nil {
 					return fmt.Errorf("failed to check existing row for ticker %s: %w", ticker, err)
 				}
-				
+
 				if existingCount > 0 {
 					// Row already exists, skip insertion
 					maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
 					continue
 				}
-				
+
 				getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
 				var figi string
 				if err != nil {
@@ -650,8 +650,9 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
 			}
 
-		// Mark ticker as processed
-		processedTickers[ticker] = struct{}{}
+			// Mark ticker as processed
+			processedTickers[ticker] = struct{}{}
+		}
 	}
 
 	// Continue with the polygon.ListTickers part...
