@@ -43,17 +43,7 @@
 		closeModal();
 
 		if (typeof window !== 'undefined') {
-			// Check if we're currently on a shared page
-			const urlParams = new URLSearchParams(window.location.search);
-			const shareParam = urlParams.get('share');
-
-			if (shareParam) {
-				// If on a shared page, redirect to regular app without share parameter
-				window.location.href = '/app';
-			} else {
-				// Otherwise, refresh the page to update auth state
-				window.location.reload();
-			}
+			window.location.href = '/app';
 		}
 	}
 </script>
