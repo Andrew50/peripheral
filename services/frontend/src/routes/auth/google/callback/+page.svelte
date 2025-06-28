@@ -2,12 +2,8 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { publicRequest } from '$lib/utils/helpers/backend';
-
-	interface GoogleCallbackResponse {
-		token: string;
-		profilePic: string;
-		username: string;
-	}
+	import type { GoogleCallbackResponse } from '$lib/auth';
+	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 
 	let errorMessage = '';
 
@@ -39,11 +35,9 @@
 				state
 			});
 
-			sessionStorage.setItem('authToken', response.token);
-			sessionStorage.setItem('profilePic', response.profilePic || '');
-			sessionStorage.setItem('username', response.username || '');
-
-			// Log what was stored
+			// Set auth data using centralized utilities
+			setAuthCookies(response.token, response.profilePic, response.username);
+			setAuthSessionStorage(response.token, response.profilePic, response.username);
 
 			// Clean up stored state
 			sessionStorage.removeItem('googleAuthState');
@@ -88,8 +82,6 @@
 		box-sizing: border-box;
 	}
 
-	/* Remove old .loading style */
-	/* .loading { ... } */
 
 	.loading-container {
 		text-align: center;
