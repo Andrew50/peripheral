@@ -2020,6 +2020,32 @@
 		selectedEvent = null;
 	}
 
+	// Function to calculate optimal position for event-info popup
+	function calculateEventInfoPosition(containerWidth: number) {
+		const legendWidth = 280; // Approximate legend width
+		const popupWidth = 220; // event-info width
+		const margin = 20; // Margin from edges
+
+		// Preferred position: to the right of legend
+		let leftPosition = legendWidth + margin;
+
+		// Check if it would overflow the right side
+		if (leftPosition + popupWidth + margin > containerWidth) {
+			// Position it as far right as possible without overflow
+			leftPosition = containerWidth - popupWidth - margin;
+
+			// If still doesn't fit (very narrow screen), position at legend level
+			if (leftPosition < legendWidth) {
+				leftPosition = margin; // Position at left edge with margin
+			}
+		}
+
+		return {
+			left: leftPosition,
+			top: 5 // Same level as legend
+		};
+	}
+
 	// New interface for the data object
 	interface ChartData {
 		type?: string;
@@ -2108,6 +2134,17 @@
 	{#if isChartSwitching}
 		<div class="chart-switching-overlay"></div>
 	{/if}
+
+	<!-- Company Logo positioned at bottom right where axes meet -->
+	{#if currentChartInstance?.logo}
+		<div class="chart-logo-container">
+			<img
+				src={currentChartInstance.logo}
+				alt="{currentChartInstance?.name || 'Company'} logo"
+				class="chart-company-logo"
+			/>
+		</div>
+	{/if}
 </div>
 
 <!-- Why Moving Popup -->
@@ -2115,11 +2152,12 @@
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
+	{@const position = calculateEventInfoPosition(width)}
 	<div
 		class="event-info"
 		style="
-            left: {selectedEvent.x}px;
-            top: {selectedEvent.y}px; /* Position relative to marker's y */"
+            left: {position.left}px;
+            top: {position.top}px;"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -2203,32 +2241,24 @@
 		padding: 8px 10px 10px 10px;
 		z-index: 1000;
 		width: 220px;
+		max-width: calc(100% - 40px); /* Prevent overflow with margin */
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
-		transform-origin: bottom center;
+		transform: scale(0.95);
+		transform-origin: top left;
 		opacity: 0;
 		animation: fadeInDown 0.2s ease-out forwards;
 	}
 	@keyframes fadeInDown {
 		from {
 			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+			transform: scale(0.85);
 		}
 		to {
 			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+			transform: scale(1);
 		}
 	}
-	.event-info::after {
-		content: '';
-		position: absolute;
-		top: 100%; /* Position arrow below the box */
-		left: 50%;
-		transform: translateX(-50%);
-		border-width: 8px 8px 0; /* T:8 R:8 B:0 L:8 -> Points Down */
-		border-style: solid;
-		border-color: #252525 transparent transparent transparent; /* Color top border */
-	}
+
 	.event-header {
 		display: flex;
 		align-items: center;
@@ -2365,14 +2395,30 @@
 		}
 	}
 
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
-		}
-		to {
-			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
-		}
+	/* Chart logo styles positioned at bottom right where axes meet */
+	.chart-logo-container {
+		position: absolute;
+		bottom: 20px;
+		right: 20px;
+		z-index: 100;
+		pointer-events: none;
+		opacity: 0.7;
+		transition: opacity 0.2s ease;
+	}
+
+	.chart-logo-container:hover {
+		opacity: 1;
+	}
+
+	.chart-company-logo {
+		height: 20px;
+		max-width: 60px;
+		object-fit: contain;
+		filter: brightness(0.8) contrast(0.9);
+		transition: filter 0.2s ease;
+	}
+
+	.chart-company-logo:hover {
+		filter: brightness(1) contrast(1);
 	}
 </style>

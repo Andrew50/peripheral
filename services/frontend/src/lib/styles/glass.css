@@ -2,12 +2,12 @@
 
 :root {
 	--glass-radius: 36px;
-	--glass-bg: rgba(30, 30, 30, 0.45);
-	--glass-border: #2e2e2e;
-	--glass-highlight: rgba(255, 255, 255, 0.4);
-	--glass-shade: rgba(255, 255, 255, 0.06);
-	--glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-	--glass-blur: blur(14px) saturate(160%);
+	--glass-bg: rgba(30, 30, 30, 0.25);
+	--glass-border: rgba(255, 255, 255, 0.08);
+	--glass-highlight: rgba(255, 255, 255, 0.15);
+	--glass-shade: rgba(255, 255, 255, 0.03);
+	--glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+	--glass-blur: blur(8px) saturate(120%);
 }
 
 /* Main glass effect container */
@@ -25,24 +25,22 @@
 	overflow: hidden;
 }
 
-/* Glass overlay gradient for extra depth */
+/* Glass overlay gradient for extra depth - reduced intensity */
 .glass::before {
 	content: '';
 	position: absolute;
 	inset: 0;
 	border-radius: inherit;
-	background: linear-gradient(
-		to bottom,
-		rgba(255, 255, 255, 0.12) 0%,
-		rgba(255, 255, 255, 0.04) 30%,
-		rgba(255, 255, 255, 0) 60%
-	);
+	background: linear-gradient(to bottom,
+			rgba(255, 255, 255, 0.06) 0%,
+			rgba(255, 255, 255, 0.02) 30%,
+			rgba(255, 255, 255, 0) 60%);
 	pointer-events: none;
 	z-index: 0;
 }
 
 /* Ensure content appears above the glass overlay */
-.glass > * {
+.glass>* {
 	position: relative;
 	z-index: 1;
 }
@@ -87,12 +85,10 @@
 }
 
 .glass--light-theme::before {
-	background: linear-gradient(
-		to bottom,
-		rgba(255, 255, 255, 0.2) 0%,
-		rgba(255, 255, 255, 0.08) 30%,
-		rgba(255, 255, 255, 0) 60%
-	);
+	background: linear-gradient(to bottom,
+			rgba(255, 255, 255, 0.2) 0%,
+			rgba(255, 255, 255, 0.08) 30%,
+			rgba(255, 255, 255, 0) 60%);
 }
 
 /* Responsive glass adjustments */

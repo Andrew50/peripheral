@@ -105,6 +105,68 @@ class AccessorStrategyEngine:
                 'execution_mode': 'backtest'
             }
     
+    async def execute_validation(
+        self, 
+        strategy_code: str
+    ) -> Dict[str, Any]:
+        """
+        Execute strategy for VALIDATION ONLY using minimal data for speed
+        
+        Args:
+            strategy_code: Python code defining the strategy function  
+            
+        Returns:
+            Dict with validation result (success/error only)
+        """
+        logger.info("🧪 Starting fast validation execution (minimal data)")
+        
+        start_time = time.time()
+        
+        try:
+            # Validate strategy code first
+            if not self.validator.validate_code(strategy_code):
+                raise SecurityError("Strategy code validation failed")
+            
+            # Set execution context for validation with MINIMAL data
+            self.data_accessor.set_execution_context(
+                mode='validation',  # Special validation mode
+                symbols=['AAPL']    # Just one symbol for validation
+            )
+            
+            logger.info("🔧 Validation optimizations enabled:")
+            logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
+            logger.info("   ✓ Fast execution path (validation mode)")
+            logger.info("   ✓ Skip result ranking and processing")
+            
+            # Execute strategy with validation context (don't care about results)
+            instances = await self._execute_strategy(
+                strategy_code, 
+                execution_mode='validation'
+            )
+            
+            execution_time = (time.time() - start_time) * 1000
+            
+            result = {
+                'success': True,
+                'execution_mode': 'validation',
+                'instances_generated': len(instances),
+                'execution_time_ms': int(execution_time),
+                'message': 'Validation passed - strategy can execute without errors'
+            }
+            
+            logger.info(f"✅ Validation completed successfully: {execution_time:.1f}ms")
+            return result
+            
+        except Exception as e:
+            execution_time = (time.time() - start_time) * 1000
+            logger.error(f"❌ Validation failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'execution_mode': 'validation',
+                'execution_time_ms': int(execution_time)
+            }
+
     async def execute_screening(
         self, 
         strategy_code: str, 

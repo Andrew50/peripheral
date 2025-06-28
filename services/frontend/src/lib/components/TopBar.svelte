@@ -461,17 +461,6 @@
 <div class="top-bar">
 	<!-- Left side content -->
 	<div class="top-bar-left">
-		<!-- Company Logo -->
-		{#if instance?.logo}
-			<div class="logo-container">
-				<img
-					src={instance.logo}
-					alt="{instance?.name || 'Company'} logo"
-					class="company-logo-topbar"
-				/>
-			</div>
-		{/if}
-
 		<button
 			class="symbol metadata-button"
 			on:click={handleTickerClick}
@@ -793,30 +782,6 @@
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 
-	/* Logo styles */
-	.logo-container {
-		height: 24px;
-		max-width: 80px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		margin-right: 8px;
-		overflow: hidden;
-	}
-
-	.company-logo-topbar {
-		height: 100%;
-		max-width: 100%;
-		object-fit: contain;
-		filter: brightness(0.9);
-		transition: filter 0.2s ease;
-	}
-
-	.company-logo-topbar:hover {
-		filter: brightness(1);
-	}
-
 	/* Calendar button styles */
 	.calendar-button {
 		padding: 6px 8px;
@@ -941,6 +906,7 @@
 		appearance: none;
 		-webkit-appearance: none;
 		-moz-appearance: none;
+		text-align: left;
 	}
 
 	.watchlist-selector .caret-icon {

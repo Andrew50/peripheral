@@ -170,6 +170,18 @@ ROBUST ERROR HANDLING:
 - Handle missing data gracefully with try/except blocks
 - Return empty list [] on any error or missing data
 
+CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
+- Always convert calculated columns to numeric before groupby operations:
+  df['calculated_column'] = pd.to_numeric(df['calculated_column'], errors='coerce')
+- Remove NaN values before quantile operations:
+  df = df.dropna(subset=['calculated_column'])
+- For percentage calculations, ensure no division by zero:
+  df = df[df['denominator'] != 0]
+- Example safe quantile calculation:
+  df['change_pct'] = pd.to_numeric(df['change_pct'], errors='coerce')
+  df = df.dropna(subset=['change_pct'])
+  quantile_val = df.groupby('timestamp')['change_pct'].quantile(0.9)
+
 EXAMPLE PATTERNS:
 ```python
 def strategy():
@@ -304,6 +316,10 @@ def strategy():
         df['prev_close_5d'] = df.groupby('ticker')['close'].shift(5)
         df = df.dropna()
         df['change_5d_pct'] = ((df['close'] - df['prev_close_5d']) / df['prev_close_5d']) * 100
+        
+        # CRITICAL: Ensure numeric dtype for statistical operations
+        df['change_5d_pct'] = pd.to_numeric(df['change_5d_pct'], errors='coerce')
+        df = df.dropna(subset=['change_5d_pct'])
         
         # Find technology stocks with significant moves
         qualifying_instances = df[df['change_5d_pct'] >= 10.0]  # 10%+ gain over 5 days
@@ -642,12 +658,14 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
     async def _generate_and_validate_strategy(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
         """Generate strategy with validation retry logic"""
         
+        last_validation_error = None
+        
         for attempt in range(max_retries + 1):
             try:
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
-                # Generate strategy code (this is NOT async)
-                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt)
+                # Generate strategy code with error context for retries
+                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt, last_validation_error)
                 
                 if not strategy_code:
                     continue
@@ -659,6 +677,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                     logger.info("Strategy validation passed")
                     return strategy_code, True
                 else:
+                    last_validation_error = validation_result['error']
                     logger.warning(f"Validation failed on attempt {attempt + 1}: {validation_result['error']}")
                     if attempt == max_retries:
                         # Return the last generated code even if validation failed
@@ -728,7 +747,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
     
-    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0) -> str:
+    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
         
@@ -759,9 +778,16 @@ Generate the updated strategy function."""
 
 Generate a strategy function that detects this pattern in market data."""
             
-            # Add retry-specific guidance without bloating the prompt
+            # Add retry-specific guidance with error context
             if attempt > 0:
-                user_prompt += f"\n\nNote: Focus on code safety and proper error handling."
+                user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attempt + 1}:"
+                user_prompt += f"\n- Previous attempt failed validation"
+                if last_error:
+                    user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
+                user_prompt += f"\n- Focus on data type safety for pandas operations"
+                user_prompt += f"\n- Use pd.to_numeric() before .quantile() operations"
+                user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
+                user_prompt += f"\n- Ensure proper error handling for edge cases"
             
             # Use only o3 model as requested
             models_to_try = [
@@ -881,15 +907,13 @@ Generate a strategy function that detects this pattern in market data."""
             # Try a quick execution test with the new accessor engine
             logger.info("🧪 Running execution test...")
             try:
-                # Add timeout to execution test to prevent hanging
+                # Use fast validation mode with minimal data and short timeout
                 engine = AccessorStrategyEngine()
                 test_result = await asyncio.wait_for(
-                    engine.execute_screening(
-                        strategy_code=strategy_code,
-                        universe=['AAPL'],  # Test with single symbol
-                        limit=10
+                    engine.execute_validation(
+                        strategy_code=strategy_code
                     ),
-                    timeout=60.0  # 1 minute timeout for validation test
+                    timeout=15.0  # 15 second timeout for fast validation
                 )
                 
                 logger.info(f"🧪 Execution test completed: success={test_result.get('success', False)}")
@@ -908,21 +932,52 @@ Generate a strategy function that detects this pattern in market data."""
                     }
                     
             except asyncio.TimeoutError:
-                logger.warning("⏰ Execution test timed out after 60 seconds")
-                # Still consider valid if security checks passed but execution test timed out
+                logger.warning("⏰ Fast validation timed out after 15 seconds")
+                # Timeout in validation mode suggests serious performance issues
                 return {
-                    "valid": True,
-                    "error": "Warning: Execution test timed out"
+                    "valid": False,
+                    "error": "Validation timeout - strategy may have infinite loops or performance issues"
                 }
                 
             except Exception as exec_error:
+                error_msg = str(exec_error)
                 logger.warning(f"⚠️ Execution test failed with exception: {exec_error}")
                 logger.warning(f"📄 Execution test traceback: {traceback.format_exc()}")
-                # Still consider valid if security checks passed but execution test failed
-                # (might be due to missing data or other environmental issues)
+                
+                # Classify error types - only allow data-related issues as warnings
+                data_related_errors = [
+                    "no data", "empty dataset", "missing data", "connection", 
+                    "timeout", "network", "database", "redis"
+                ]
+                
+                programming_errors = [
+                    "quantile", "dtype", "syntax", "name", "attribute", 
+                    "type", "index", "key", "value", "division by zero"
+                ]
+                
+                error_lower = error_msg.lower()
+                
+                # If it's a clear programming error, mark as invalid for retry
+                if any(prog_err in error_lower for prog_err in programming_errors):
+                    logger.error(f"🚨 Programming error detected: {error_msg}")
+                    return {
+                        "valid": False,
+                        "error": f"Programming error: {error_msg}"
+                    }
+                
+                # Only allow data-related errors as warnings
+                if any(data_err in error_lower for data_err in data_related_errors):
+                    logger.info(f"💡 Data-related error (allowing as warning): {error_msg}")
+                    return {
+                        "valid": True,
+                        "error": f"Warning: Data-related issue: {error_msg}"
+                    }
+                
+                # Default: treat unknown errors as programming errors
+                logger.error(f"🚨 Unknown error type, treating as programming error: {error_msg}")
                 return {
-                    "valid": True,
-                    "error": f"Warning: Execution test failed: {str(exec_error)}"
+                    "valid": False,
+                    "error": f"Programming error: {error_msg}"
                 }
             
         except (SecurityError, StrategyComplianceError) as e:

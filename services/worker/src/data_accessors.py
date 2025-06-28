@@ -562,7 +562,7 @@ class DataAccessorProvider:
         Args:
             timeframe: Data timeframe ('1d', '1h', '5m', etc.)
             tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
-            columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+            columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required
             filters: Dict of filtering criteria for securities table fields:
                     - sector: str (e.g., 'Technology', 'Healthcare')
@@ -617,9 +617,9 @@ class DataAccessorProvider:
                 # Direct table access
                 table_name = timeframe_config
             
-            # Default columns if not specified (removed ticker and adj_close)
+            # Default columns if not specified - include ticker by default
             if columns is None:
-                columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+                columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume"]
             
             # Validate columns against allowed set (removed adj_close)
             allowed_columns = {"securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"}
@@ -637,6 +637,13 @@ class DataAccessorProvider:
                 start_with_buffer = context['start_date'] - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_with_buffer, context['end_date']]
+            elif context['mode'] == 'validation':
+                # Validation mode: Ultra-minimal data for fast validation
+                # Force minimal bars and recent data only
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)
+                date_params = []
+                # Override min_bars to be minimal for validation
+                min_bars = min(min_bars, 2)  # Never more than 2 bars for validation
             elif context['mode'] == 'screening':
                 # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
                 # This is much more efficient than date filtering because:
@@ -1046,6 +1053,10 @@ class DataAccessorProvider:
             
             # Handle ticker-specific filtering
             if tickers is not None and len(tickers) > 0:
+                # Validation mode: limit to single ticker for speed
+                if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation':
+                    tickers = tickers[:1]  # Only use first ticker for validation
+                
                 # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
                 security_ids = self._get_security_ids_from_tickers(tickers, filters)
@@ -1116,7 +1127,7 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
         timeframe: Data timeframe ('1d', '1h', '5m', etc.')
         tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
         security_ids: List of security IDs to fetch (deprecated, use tickers instead)
-        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+        columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
         min_bars: Minimum number of bars required per security
         filters: Dict of filtering criteria for securities table fields:
                 - sector: str (e.g., 'Technology', 'Healthcare')

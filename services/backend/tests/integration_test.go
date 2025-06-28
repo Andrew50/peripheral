@@ -459,7 +459,7 @@ func handleCreateStrategy(_ *data.Conn, userID int, argsBytes []byte) (interface
 	return strategy, nil
 }
 
-func handleRunBacktest(_ *data.Conn, userID int, argsBytes []byte) (interface{}, error) {
+func handleRunBacktest(_ *data.Conn, _ int, argsBytes []byte) (interface{}, error) {
 	// For testing purposes, return a mock backtest result
 	// In a real test, this would call the actual strategy.RunBacktest
 
