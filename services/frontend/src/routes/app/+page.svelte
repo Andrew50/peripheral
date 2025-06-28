@@ -9,15 +9,12 @@
 	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
-	//import TickerInfo from '$lib/features/quotes/tickerInfo.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
-	//import Algo from '$lib/components/algo.svelte';
 	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
-
-	// Windows that will be opened in draggable divs
-	import Screener from '$lib/features/screener/screener.svelte';
-	import Strategies from '$lib/features/strategies/strategies.svelte';
-	import Settings from '$lib/features/settings/settings.svelte';
+	// Define PageData interface locally since auto-generated types aren't available yet
+	interface PageData {
+		defaultChartData: any;
+	}
 
 	// Replay logic
 	import {
@@ -68,6 +65,10 @@
 	// Import auth modal
 	import AuthModal from '$lib/components/authModal.svelte';
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
+	
+	// Export data prop for server-side preloaded data
+	export let data: PageData;
+	
 
 	// Import extended hours toggle store
 	import {
@@ -99,12 +100,10 @@
 	// Bottom windows
 	type BottomWindowType =
 		| 'screener'
-		| 'account'
 		//| 'options'
 		| 'strategies'
 		| 'settings'
 		| 'deploy'
-		| 'backtest'
 		//| 'news'
 		| 'query';
 	interface BottomWindow {
@@ -144,12 +143,6 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
-	// DEPRECATED: Screensaver functionality
-	// Add state variables after other state declarations
-	// let screensaverActive = false;
-	// let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
-
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
@@ -157,20 +150,9 @@
 	// Calendar state
 	let calendarVisible = false;
 
-	// Public viewing mode state - initialize from URL parameters synchronously
-	let isPublicViewing = false;
-	let sharedConversationId = '';
-
-	// Check for shared conversation parameter immediately (before component mounts)
-	if (browser && $page?.url?.searchParams) {
-		const shareParam = $page.url.searchParams.get('share');
-		if (shareParam) {
-			isPublicViewing = true;
-			sharedConversationId = shareParam;
-			// Update the global store so other components know we're in public viewing mode
-			isPublicViewingStore.set(true);
-		}
-	}
+	// Get shared conversation ID from server-side layout data  
+	$: layoutData = $page.data;
+	$: sharedConversationId = layoutData?.sharedConversationId || '';
 
 	// Import connect
 	import { connect } from '$lib/utils/stream/socket';
@@ -364,7 +346,16 @@
 			document.title = 'Atlantis';
 			// Set initial state once
 			lastSidebarMenu = null;
-			menuWidth.set(0);
+			
+			// Calculate default sidebar width as 15% of screen width, but with constraints
+			const defaultSidebarWidth = Math.min(
+				window.innerWidth * 0.15, // 15% of screen width
+				600 // Maximum 600px (same as resize max)
+			);
+			const constrainedWidth = Math.max(defaultSidebarWidth, minWidth); // Ensure it's not smaller than minimum (120px)
+			
+			menuWidth.set(constrainedWidth);
+			changeMenu('watchlist'); // Set watchlist as the default active menu
 
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
@@ -382,13 +373,6 @@
 			});
 		}
 
-		// Handle authentication based on public viewing mode (already determined above)
-		if (!isPublicViewing) {
-			// Normal auth flow for regular users
-			privateRequest<string>('verifyAuth', {}).catch(() => {
-				goto('/login');
-			});
-		}
 
 		initStores();
 
@@ -417,6 +401,38 @@
 		// Now establish socket connection
 		connect();
 	});
+
+	// Background preload components after critical path is complete
+	onMount(async () => {
+		// Wait for critical path to complete
+		await tick();
+		
+		// Use requestIdleCallback for true background loading
+		if (browser && 'requestIdleCallback' in window) {
+			requestIdleCallback(() => {
+				preloadComponents();
+			});
+		} else {
+			// Fallback for browsers without requestIdleCallback
+			setTimeout(() => {
+				preloadComponents();
+			}, 2000); // 2 seconds after page is interactive
+		}
+	});
+
+	async function preloadComponents() {
+		try {
+			const preloadPromises = [
+				import('$lib/features/screener/screener.svelte'),
+				import('$lib/features/strategies/strategies.svelte'), 
+				import('$lib/features/settings/settings.svelte')
+			];
+			
+			// Await them to know when done (optional)
+			await Promise.all(preloadPromises);
+		} catch (error) {
+		}
+	}
 
 	onDestroy(() => {
 		// Clean up all activity listeners
@@ -1246,7 +1262,6 @@
 		defaultMode={$authModalStore.mode}
 		on:success={() => {
 			hideAuthModal();
-			// Optional: refresh page or update auth state
 		}}
 		on:close={hideAuthModal}
 	/>
@@ -1259,7 +1274,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query {isPublicViewing} {sharedConversationId} />
+							<Query isPublicViewing={$isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
 					<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -1489,7 +1504,7 @@
 					<div class="main-content">
 						<!-- Chart area -->
 						<div class="chart-wrapper">
-							<ChartContainer width={chartWidth} />
+							<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
 						</div>
 
 						<!-- Bottom windows container -->
@@ -1498,11 +1513,17 @@
 								<div class="bottom-window">
 									<div class="window-content">
 										{#if w.type === 'screener'}
-											<Screener />
+											{#await import('$lib/features/screener/screener.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{:else if w.type === 'strategies'}
-											<Strategies />
+											{#await import('$lib/features/strategies/strategies.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{:else if w.type === 'settings'}
-											<Settings />
+											{#await import('$lib/features/settings/settings.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{/if}
 									</div>
 								</div>
@@ -1614,12 +1635,12 @@
 			>
 				Strategies
 			</button>
-			<!-- <button
+			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button> -->
+			</button>
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1736,7 +1757,11 @@
 					<button class="close-btn" on:click={toggleSettings}>×</button>
 				</div>
 				<div class="settings-content">
-					<Settings />
+					{#if showSettingsPopup}
+						{#await import('$lib/features/settings/settings.svelte') then module}
+							<svelte:component this={module.default} />
+						{/await}
+					{/if}
 				</div>
 			</div>
 		</div>

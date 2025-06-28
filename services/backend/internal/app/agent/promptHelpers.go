@@ -26,23 +26,12 @@ func getSystemInstruction(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)
 	}
-	constraints, err := fs.ReadFile("prompts/commonConstraints.txt")
-	if err != nil {
-		return "", fmt.Errorf("reading common constraints: %w", err)
-	}
 	const rfc3339Seconds = "2006-01-02T15:04:05Z07:00"
 	now := time.Now()
-
 	// Get current date in EST timezone
 	estLocation, _ := time.LoadLocation("America/New_York")
 	estTime := now.In(estLocation)
-
-	executionConstraints, err := fs.ReadFile("prompts/executionConstraints.txt")
-	if err != nil {
-		return "", fmt.Errorf("reading execution constraints: %w", err)
-	}
-	s := strings.ReplaceAll(string(raw), "{{COMMON_CONSTRAINTS}}", string(constraints))
-	s = strings.ReplaceAll(s, "{{EXECUTION_CONSTRAINTS}}", string(executionConstraints))
+	s := string(raw)
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME}}",
 		estTime.Format(rfc3339Seconds))
 	s = strings.ReplaceAll(s, "{{CURRENT_TIME_SECONDS}}",
@@ -51,6 +40,21 @@ func getSystemInstruction(name string) (string, error) {
 		strconv.Itoa(estTime.Year()))
 	s = strings.ReplaceAll(s, "{{CURRENT_DATE_EST}}",
 		estTime.Format("01-02-2006"))
+	// Fast check if we need to process any constraints
+	if strings.Contains(s, "{{COMMON_CONSTRAINTS}}") {
+		constraints, err := fs.ReadFile("prompts/commonConstraints.txt")
+		if err != nil {
+			return "", fmt.Errorf("reading common constraints: %w", err)
+		}
+		s = strings.ReplaceAll(s, "{{COMMON_CONSTRAINTS}}", string(constraints))
+	}
+	if strings.Contains(s, "{{EXECUTION_CONSTRAINTS}}") {
+		executionConstraints, err := fs.ReadFile("prompts/executionConstraints.txt")
+		if err != nil {
+			return "", fmt.Errorf("reading execution constraints: %w", err)
+		}
+		s = strings.ReplaceAll(s, "{{EXECUTION_CONSTRAINTS}}", string(executionConstraints))
+	}
 	return s, nil
 }
 
