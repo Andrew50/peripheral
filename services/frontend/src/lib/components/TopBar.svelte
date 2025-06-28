@@ -934,7 +934,7 @@
 		color: #ffffff;
 		border: none;
 		border-radius: 0;
-		padding: 6px 8px 6px 0;
+		padding: 6px 8px 6px 8px;
 		margin-left: 0;
 		font-size: 13px;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);

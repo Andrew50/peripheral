@@ -9,7 +9,7 @@ import os
 import logging
 import numpy as np
 import asyncio
-import subprocess
+import subprocess  # nosec B404
 import time
 
 # Add the src directory to the path
