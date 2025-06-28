@@ -395,7 +395,7 @@ class AccessorStrategyEngine:
         return self.validator.validate_code(strategy_code)
 
     def _rank_screening_results(self, instances: List[Dict], limit: int) -> List[Dict]:
-        """Rank screening results by score or other criteria"""
+        """Rank screening results by score or other criteria and convert to WorkerRankedResult format"""
         
         # Sort by score if available, otherwise by timestamp descending (most recent first)
         def sort_key(instance):
@@ -408,7 +408,22 @@ class AccessorStrategyEngine:
         sorted_instances = sorted(instances, key=sort_key, reverse=True)
         
         # Limit results
-        return sorted_instances[:limit]
+        limited_instances = sorted_instances[:limit]
+        
+        # Convert to WorkerRankedResult format expected by Go backend
+        ranked_results = []
+        for instance in limited_instances:
+            # Convert instance to WorkerRankedResult format
+            ranked_result = {
+                'symbol': instance.get('ticker', ''),  # Convert ticker to symbol
+                'score': float(instance.get('score', 0.0)),
+                'current_price': float(instance.get('entry_price', instance.get('close', instance.get('price', 0.0)))),
+                'sector': instance.get('sector', ''),
+                'data': instance  # Include the full instance data
+            }
+            ranked_results.append(ranked_result)
+        
+        return ranked_results
 
     def _calculate_performance_metrics(self, instances: List[Dict]) -> Dict[str, Any]:
         """Calculate performance metrics from instances"""

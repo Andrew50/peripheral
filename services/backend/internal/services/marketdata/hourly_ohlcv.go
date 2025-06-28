@@ -20,9 +20,6 @@ func Update1HourOHLCV(conn *data.Conn) error {
 		// Log completion time for monitoring
 	}()
 
-	// Get current time for timestamp checks
-	now := time.Now()
-	_ = now // Used for potential future date range logic
 
 	// Check latest timestamp in database
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
