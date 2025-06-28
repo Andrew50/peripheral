@@ -14,11 +14,6 @@
 	//import Algo from '$lib/components/algo.svelte';
 	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
 
-	// Windows that will be opened in draggable divs
-	import Screener from '$lib/features/screener/screener.svelte';
-	import Strategies from '$lib/features/strategies/strategies.svelte';
-	import Settings from '$lib/features/settings/settings.svelte';
-
 	// Replay logic
 	import {
 		startReplay,
@@ -134,7 +129,6 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
-
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
@@ -145,8 +139,6 @@
 	// Get shared conversation ID from server-side layout data  
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
-	
-	// Note: isPublicViewing store is set in +layout.svelte and available as $isPublicViewing
 
 	// Import connect 
 	import { connect } from '$lib/utils/stream/socket';
@@ -389,6 +381,42 @@
 		// Now establish socket connection
 		connect();
 	});
+
+	// Background preload components after critical path is complete
+	onMount(async () => {
+		// Wait for critical path to complete
+		await tick();
+		
+		// Use requestIdleCallback for true background loading
+		if (browser && 'requestIdleCallback' in window) {
+			requestIdleCallback(() => {
+				preloadComponents();
+			});
+		} else {
+			// Fallback for browsers without requestIdleCallback
+			setTimeout(() => {
+				preloadComponents();
+			}, 2000); // 2 seconds after page is interactive
+		}
+	});
+
+	async function preloadComponents() {
+		try {
+			// Preload all components in parallel - fire and forget
+			const preloadPromises = [
+				import('$lib/features/screener/screener.svelte'),
+				import('$lib/features/strategies/strategies.svelte'), 
+				import('$lib/features/settings/settings.svelte')
+			];
+			
+			// Await them to know when done (optional)
+			await Promise.all(preloadPromises);
+			console.log('📦 Background preloading complete');
+		} catch (error) {
+			console.warn('Background preloading failed:', error);
+			// Fail silently - components will still load on-demand if needed
+		}
+	}
 
 	onDestroy(() => {
 		// Clean up all activity listeners
@@ -945,11 +973,17 @@
 								<div class="bottom-window">
 									<div class="window-content">
 										{#if w.type === 'screener'}
-											<Screener />
+											{#await import('$lib/features/screener/screener.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{:else if w.type === 'strategies'}
-											<Strategies />
+											{#await import('$lib/features/strategies/strategies.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{:else if w.type === 'settings'}
-											<Settings />
+											{#await import('$lib/features/settings/settings.svelte') then module}
+												<svelte:component this={module.default} />
+											{/await}
 										{/if}
 									</div>
 								</div>
@@ -1053,12 +1087,12 @@
 			>
 				Strategies
 			</button>
-			<!-- <button
+			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
 				on:click={() => openBottomWindow('screener')}
 			>
 				Screener
-			</button> -->
+			</button>
 		</div>
 
 		<div class="bottom-bar-right">
@@ -1187,9 +1221,15 @@
 					<button class="close-btn" on:click={toggleSettings}>×</button>
 				</div>
 				<div class="settings-content">
-					<Settings />
+					{#if showSettingsPopup}
+						{#await import('$lib/features/settings/settings.svelte') then module}
+							<svelte:component this={module.default} />
+						{/await}
+					{/if}
 				</div>
 			</div>
 		</div>
 	{/if}
 </div>
+
+
