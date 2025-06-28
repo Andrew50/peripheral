@@ -1,7 +1,7 @@
 export const load = async ({ fetch }: { fetch: any }) => {
 	try {
 		// Get backend URL - handle both development and production
-		const backendUrl = process.env.BACKEND_URL || 'http://localhost:5058';
+		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
 		
 		// 1. Fetch SPY security ID
 		const securityResponse = await fetch(`${backendUrl}/public`, {
