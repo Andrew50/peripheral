@@ -1,5 +1,5 @@
 import { type Instance } from '$lib/utils/types/types';
-import { writable, get, type Writable } from "svelte/store"
+import { writable, get, type Writable } from 'svelte/store';
 
 // Define a type for SEC Filing context items
 export interface FilingContext {
@@ -10,16 +10,17 @@ export interface FilingContext {
 	timestamp: number; // Keep timestamp for unique key in #each loops
 }
 
-export const inputValue: Writable<string> = writable("");
+export const inputValue: Writable<string> = writable('');
 // Store for chat context items - can hold Instances or FilingContexts
-export const contextItems: Writable<(Instance | FilingContext)[]> = writable<(Instance | FilingContext)[]>([]);
+export const contextItems: Writable<(Instance | FilingContext)[]> = writable<
+	(Instance | FilingContext)[]
+>([]);
 
 export function addInstanceToChat(instance: Instance) {
 	// Add instance to chat context (avoid duplicates based on securityId and timestamp)
-	contextItems.update(items => {
-		const exists = items.some(i =>
-			i.securityId === instance.securityId &&
-			i.timestamp === instance.timestamp
+	contextItems.update((items) => {
+		const exists = items.some(
+			(i) => i.securityId === instance.securityId && i.timestamp === instance.timestamp
 		);
 		return exists ? items : [...items, instance];
 	});
@@ -27,21 +28,22 @@ export function addInstanceToChat(instance: Instance) {
 
 // Remove an instance from chat context
 export function removeInstanceFromChat(instance: Instance) {
-	contextItems.update(items =>
-		items.filter(i =>
-			!(i.securityId === instance.securityId && i.timestamp === instance.timestamp)
+	contextItems.update((items) =>
+		items.filter(
+			(i) => !(i.securityId === instance.securityId && i.timestamp === instance.timestamp)
 		)
 	);
 }
 
 // Add a filing to chat context
 export function addFilingToChatContext(filing: FilingContext) {
-	contextItems.update(items => {
+	contextItems.update((items) => {
 		// Avoid duplicates based on securityId and link
-		const exists = items.some(item =>
-			'link' in item && // Check if it's a FilingContext
-			item.securityId === filing.securityId &&
-			item.link === filing.link
+		const exists = items.some(
+			(item) =>
+				'link' in item && // Check if it's a FilingContext
+				item.securityId === filing.securityId &&
+				item.link === filing.link
 		);
 		return exists ? items : [...items, filing];
 	});
@@ -49,11 +51,14 @@ export function addFilingToChatContext(filing: FilingContext) {
 
 // Remove a filing from chat context
 export function removeFilingFromChat(filing: FilingContext) {
-	contextItems.update(items =>
-		items.filter(item =>
-			!('link' in item && // Check if it's a FilingContext
-				item.securityId === filing.securityId &&
-				item.link === filing.link)
+	contextItems.update((items) =>
+		items.filter(
+			(item) =>
+				!(
+					'link' in item && // Check if it's a FilingContext
+					item.securityId === filing.securityId &&
+					item.link === filing.link
+				)
 		)
 	);
 }
@@ -62,13 +67,15 @@ export function removeFilingFromChat(filing: FilingContext) {
 export const requestChatOpen = writable(false);
 
 /** Holds the context and query to be processed by the chat component upon opening */
-export const pendingChatQuery = writable<{ context: (Instance | FilingContext)[]; query: string } | null>(null);
+export const pendingChatQuery = writable<{
+	context: (Instance | FilingContext)[];
+	query: string;
+} | null>(null);
 
 export function openChatAndQuery(context: FilingContext | Instance, query: string) {
 	pendingChatQuery.set({ context: [context], query }); // Context is always an array
 	requestChatOpen.set(true); // Signal the page to open the chat
 }
-
 
 // Define the ContentChunk and TableData types to match the backend
 export type TableData = {
@@ -127,10 +134,10 @@ export type QueryResponse = {
 
 // Conversation history type
 export type ConversationData = {
-	conversation_id?: string;       // Active conversation ID
-	title?: string;                 // Conversation title
+	conversation_id?: string; // Active conversation ID
+	title?: string; // Conversation title
 	messages: Array<{
-		message_id?: string;        // Backend message ID (UUID)
+		message_id?: string; // Backend message ID (UUID)
 		query: string;
 		content_chunks?: ContentChunk[];
 		response_text: string;
@@ -145,13 +152,13 @@ export type ConversationData = {
 
 // Simplified timeline event - just use the raw messages from backend
 export type TimelineEvent = {
-	message: string;   // The actual status message from backend
+	message: string; // The actual status message from backend
 	timestamp: Date;
 };
 
 // Message type for chat history
 export type Message = {
-	message_id: string;                     // Use backend message_id directly
+	message_id: string; // Use backend message_id directly
 	content: string;
 	sender: 'user' | 'assistant' | 'system';
 	timestamp: Date;
@@ -159,8 +166,8 @@ export type Message = {
 	isLoading?: boolean;
 	suggestedQueries?: string[];
 	contextItems?: (Instance | FilingContext)[];
-	status?: string;        // "pending", "completed", "error"
-	completedAt?: Date;     // When the response was completed
+	status?: string; // "pending", "completed", "error"
+	completedAt?: Date; // When the response was completed
 	isNewResponse?: boolean; // Flag to indicate this is a new response since last seen
 };
 

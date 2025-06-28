@@ -26,7 +26,6 @@ services:
       - POLYGON_API_KEY=${POLYGON_API_KEY}
       - X_API_KEY=${X_API_KEY}
       - TWITTER_API_IO_KEY=${TWITTER_API_IO_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
@@ -131,7 +130,6 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - HOT_RELOAD=true
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     deploy:
       replicas: 3
       resources:

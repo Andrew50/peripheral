@@ -35,12 +35,12 @@ type BacktestResult struct {
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances   int              `json:"totalInstances"`
-	PositiveSignals  int              `json:"positiveSignals"`
-	DateRange        []string         `json:"dateRange"`
-	SymbolsProcessed int              `json:"symbolsProcessed"`
-	Columns          []string         `json:"columns"`
-	ColumnSamples    map[string][]any `json:"columnSamples"`
+	TotalInstances    int              `json:"totalInstances"`
+	PositiveInstances int              `json:"positiveInstances"`
+	DateRange         []string         `json:"dateRange"`
+	SymbolsProcessed  int              `json:"symbolsProcessed"`
+	Columns           []string         `json:"columns"`
+	ColumnSamples     map[string][]any `json:"columnSamples"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
@@ -74,7 +74,7 @@ type WorkerInstance struct {
 // WorkerSummary represents worker summary statistics
 type WorkerSummary struct {
 	TotalInstances            int            `json:"total_instances"`
-	PositiveSignals           int            `json:"positive_signals"`
+	PositiveInstances         int            `json:"positive_instances"`
 	DateRange                 DateRangeField `json:"date_range"`
 	SymbolsProcessed          int            `json:"symbols_processed"`
 	ExecutionType             string         `json:"execution_type,omitempty"`
@@ -271,16 +271,38 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 	results := make([]BacktestResult, len(instances))
 
 	for i, instance := range instances {
+		// Convert timestamp properly - Python worker returns Unix timestamps in seconds
+		timestamp := instance.Timestamp
+
+		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
+		// Check if timestamp is in seconds (reasonable range for Unix timestamps)
+		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
+			// Convert seconds to milliseconds
+			timestamp = timestamp * 1000
+		}
+
+		// Extract entry price from strategy results or use EntryPrice field
+		entryPrice := instance.EntryPrice
+		if entryPrice == 0 && instance.StrategyResults != nil {
+			if price, ok := instance.StrategyResults["entry_price"].(float64); ok {
+				entryPrice = price
+			} else if price, ok := instance.StrategyResults["open"].(float64); ok {
+				entryPrice = price
+			} else if price, ok := instance.StrategyResults["close"].(float64); ok {
+				entryPrice = price
+			}
+		}
+
 		results[i] = BacktestResult{
 			Ticker:          instance.Ticker,
 			SecurityID:      0, // Will be populated if needed
-			Timestamp:       instance.Timestamp,
-			Open:            instance.EntryPrice,
-			High:            instance.EntryPrice,
-			Low:             instance.EntryPrice,
-			Close:           instance.EntryPrice,
+			Timestamp:       timestamp,
+			Open:            entryPrice,
+			High:            entryPrice,
+			Low:             entryPrice,
+			Close:           entryPrice,
 			Volume:          0,
-			Classification:  instance.Classification,
+			Classification:  true, // Since instance was returned, it met criteria
 			FutureReturns:   map[string]float64{},
 			StrategyResults: instance.StrategyResults,
 		}
@@ -297,11 +319,11 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 // convertWorkerSummaryToBacktestSummary converts worker summary to API format
 func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummary {
 	return BacktestSummary{
-		TotalInstances:   summary.TotalInstances,
-		PositiveSignals:  summary.PositiveSignals,
-		DateRange:        []string(summary.DateRange),
-		SymbolsProcessed: summary.SymbolsProcessed,
-		Columns:          []string{"ticker", "timestamp", "classification", "entry_price"},
-		ColumnSamples:    map[string][]any{},
+		TotalInstances:    summary.TotalInstances,
+		PositiveInstances: summary.PositiveInstances,
+		DateRange:         []string(summary.DateRange),
+		SymbolsProcessed:  summary.SymbolsProcessed,
+		Columns:           []string{"ticker", "timestamp", "classification", "entry_price"},
+		ColumnSamples:     map[string][]any{},
 	}
 }

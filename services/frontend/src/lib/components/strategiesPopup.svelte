@@ -131,14 +131,19 @@
 </script>
 
 {#if $menuState.status === 'active'}
+	<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 	<div
 		class="context-menu popup-container responsive-shadow responsive-border"
 		bind:this={menu}
 		style="top: {$menuState.y}px; left: {$menuState.x}px;"
 		on:mousedown|preventDefault={down}
-		on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') down(e); }}
+		on:keydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') down(e);
+		}}
 		role="dialog"
 		aria-label="Strategy Menu"
+		tabindex="0"
 	>
 		<div class="content-container content-padding">
 			<table>

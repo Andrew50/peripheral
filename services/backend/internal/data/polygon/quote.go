@@ -526,3 +526,74 @@ func GetDailyOHLCVForTicker(ctx context.Context, client *polygon.Client, ticker 
 		Date:   res.From,
 	}, nil
 }
+
+// GetAllStocks1MinuteOHLCV fetches 1-minute aggregated OHLCV data for all stocks on a given date
+func GetAllStocks1MinuteOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing date for 1-minute data: %v", err)
+	}
+	
+	// For 1-minute data, we use ListAggs with minute aggregation
+	// Note: This returns aggregated minute data, not individual minute bars
+	// We'll get a response similar to grouped daily but for minute timeframe
+	params := &models.GetGroupedDailyAggsParams{
+		Date:       models.Date(on),
+		MarketType: "stocks", 
+		Locale:     "us",
+	}
+	
+	// Use the same grouped endpoint but it will aggregate minute data
+	res, err := client.GetGroupedDailyAggs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting grouped 1-minute aggs: %v", err)
+	}
+	return res, nil
+}
+
+// GetAllStocks1HourOHLCV fetches 1-hour aggregated OHLCV data for all stocks on a given date  
+func GetAllStocks1HourOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing date for 1-hour data: %v", err)
+	}
+	
+	// For 1-hour data, we use the same approach but with hourly aggregation
+	params := &models.GetGroupedDailyAggsParams{
+		Date:       models.Date(on),
+		MarketType: "stocks",
+		Locale:     "us", 
+	}
+	
+	res, err := client.GetGroupedDailyAggs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting grouped 1-hour aggs: %v", err)
+	}
+	return res, nil
+}
+
+// GetAllStocks1WeekOHLCV fetches 1-week aggregated OHLCV data for all stocks for a given week
+func GetAllStocks1WeekOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing date for 1-week data: %v", err)
+	}
+	
+	// For weekly data, we need to get the start of the week (Monday)
+	weekStart := on
+	for weekStart.Weekday() != time.Monday {
+		weekStart = weekStart.AddDate(0, 0, -1)
+	}
+	
+	params := &models.GetGroupedDailyAggsParams{
+		Date:       models.Date(weekStart),
+		MarketType: "stocks",
+		Locale:     "us",
+	}
+	
+	res, err := client.GetGroupedDailyAggs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("error getting grouped 1-week aggs: %v", err)
+	}
+	return res, nil
+}

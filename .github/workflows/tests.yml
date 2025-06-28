@@ -23,6 +23,7 @@ env:
   # Default to mock tests in CI
   SKIP_INTEGRATION_TESTS: ${{ github.event.inputs.run_full_tests != 'true' && 'true' || 'false' }}
   BACKEND_URL: ${{ github.event.inputs.backend_url || 'http://localhost:8080' }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
   # Integration test matrix

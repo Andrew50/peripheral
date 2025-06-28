@@ -374,9 +374,11 @@
 </script>
 
 {#if visible}
-	<div 
-		class="popup-container calendar-popup" 
-		id="calendar-window" 
+	<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+	<div
+		class="popup-container calendar-popup"
+		id="calendar-window"
 		on:click|stopPropagation
 		on:keydown={(e) => {
 			if (e.key === 'Escape') {
@@ -386,6 +388,7 @@
 		}}
 		role="dialog"
 		aria-label="Calendar picker"
+		tabindex="0"
 	>
 		<div class="content-container">
 			<div class="calendar-header-section">

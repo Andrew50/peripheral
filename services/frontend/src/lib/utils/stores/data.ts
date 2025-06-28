@@ -6,9 +6,9 @@ export const setups = writable<Setup[]>([]);
 
 // Fetch setups from the backend
 privateRequest<Setup[]>('getSetups', {})
-  .then((v: Setup[]) => {
-    setups.set(v);
-  })
-  .catch((error) => {
-    console.error('Error fetching setups:', error);
-  });
+	.then((v: Setup[]) => {
+		setups.set(v);
+	})
+	.catch((error) => {
+		console.error('Error fetching setups:', error);
+	});

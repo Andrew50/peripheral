@@ -5,7 +5,7 @@
 	import DrawingMenu from './drawingMenu.svelte';
 	import WhyMoving from '$lib/components/whyMoving.svelte';
 
-	import { chartRequest,privateRequest,publicRequest } from '$lib/utils/helpers/backend';
+	import { chartRequest, privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
@@ -199,6 +199,7 @@
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
+	let lastFetchedSecurityId: number | null = null;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
 	// Type guards moved to a higher scope
@@ -221,7 +222,6 @@
 
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
-
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
@@ -247,6 +247,28 @@
 	} | null = null;
 
 	let sessionHighlighting: SessionHighlighting;
+
+	// Function to fetch detailed ticker information including logo
+	function fetchTickerDetails(securityId: number) {
+		if (lastFetchedSecurityId === securityId) return;
+
+		lastFetchedSecurityId = securityId;
+		publicRequest<Record<string, any>>('getTickerMenuDetails', {
+			securityId: securityId
+		})
+			.then((details) => {
+				if (lastFetchedSecurityId === securityId) {
+					// Update currentChartInstance with the detailed information
+					currentChartInstance = {
+						...currentChartInstance,
+						...details
+					};
+				}
+			})
+			.catch((error) => {
+				console.error('Chart component: Error fetching ticker details:', error);
+			});
+	}
 
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
@@ -1289,6 +1311,11 @@
 			setActiveChart(chartId, currentChartInstance);
 		}
 
+		// Fetch detailed ticker information including logo
+		if (updatedReq.securityId) {
+			fetchTickerDetails(updatedReq.securityId);
+		}
+
 		// Determine if viewing live data based on timestamp
 		isViewingLiveData = updatedReq.timestamp === 0;
 		// Clear quote lines if not viewing live data initially
@@ -2046,6 +2073,57 @@
 		selectedEvent = null;
 	}
 
+	// Function to calculate optimal position for event-info popup
+	function calculateEventInfoPosition(containerWidth: number, containerHeight: number) {
+		// Try to get the actual legend element and its dimensions
+		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
+		let legendRight = 300; // Default right edge position
+		let legendBottom = 100; // Default bottom position
+
+		if (legendElement) {
+			const legendRect = legendElement.getBoundingClientRect();
+			const chartContainer = document.querySelector(`#chart_container-${chartId}`);
+			const chartRect = chartContainer?.getBoundingClientRect();
+
+			if (chartRect) {
+				// Calculate legend's right edge and bottom relative to chart container
+				legendRight = legendRect.right - chartRect.left;
+				legendBottom = legendRect.bottom - chartRect.top;
+			}
+		}
+
+		const margin = 10; // Margin from legend and edges
+		const minPopupWidth = 200; // Minimum popup width
+
+		// Calculate available space to the right of legend
+		const availableWidth = containerWidth - legendRight - margin * 2;
+
+		// Set popup width to available space (with min/max constraints)
+		const popupWidth = Math.max(minPopupWidth, Math.min(availableWidth, 350));
+
+		// Position to the right of the legend with margin
+		let leftPosition = legendRight + margin;
+
+		// Ensure popup doesn't go beyond right edge
+		if (leftPosition + popupWidth > containerWidth - margin) {
+			leftPosition = containerWidth - popupWidth - margin;
+		}
+
+		// Ensure popup doesn't go beyond left edge (shouldn't happen but safety check)
+		leftPosition = Math.max(margin, leftPosition);
+
+		// For vertical positioning, start at top but ensure it doesn't go beyond bottom
+		let topPosition = 5;
+		const maxHeight = containerHeight - topPosition - margin;
+
+		return {
+			left: leftPosition,
+			top: topPosition,
+			width: popupWidth,
+			maxHeight: maxHeight
+		};
+	}
+
 	// New interface for the data object
 	interface ChartData {
 		type?: string;
@@ -2134,6 +2212,24 @@
 	{#if isChartSwitching}
 		<div class="chart-switching-overlay"></div>
 	{/if}
+
+	<!-- Company Logo positioned at bottom right where axes meet -->
+	{#if currentChartInstance?.logo || currentChartInstance?.icon}
+		<div class="chart-logo-container">
+			<img
+				src={currentChartInstance.logo || currentChartInstance.icon}
+				alt="{currentChartInstance?.name || 'Company'} logo"
+				class="chart-company-logo"
+			/>
+		</div>
+	{:else if currentChartInstance?.ticker}
+		<!-- Debug fallback: show ticker letter if no logo/icon available -->
+		<div class="chart-logo-container">
+			<div class="chart-ticker-fallback">
+				{currentChartInstance.ticker.charAt(0)}
+			</div>
+		</div>
+	{/if}
 </div>
 
 <!-- Why Moving Popup -->
@@ -2141,11 +2237,16 @@
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
+	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
+	{@const containerHeight = chartContainer?.clientHeight || 600}
+	{@const position = calculateEventInfoPosition(width, containerHeight)}
 	<div
 		class="event-info"
 		style="
-            left: {selectedEvent.x}px;
-            top: {selectedEvent.y}px; /* Position relative to marker's y */"
+            left: {position.left}px;
+            top: {position.top}px;
+            width: {position.width}px;
+            max-height: {position.maxHeight}px;"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -2228,33 +2329,28 @@
 		border-radius: 8px;
 		padding: 8px 10px 10px 10px;
 		z-index: 1000;
-		width: 220px;
+		/* Width and max-height now set via inline styles for dynamic sizing */
+		min-width: 200px;
+		overflow-y: auto;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
-		transform-origin: bottom center;
+		transform: scale(0.95);
+		transform-origin: top left;
 		opacity: 0;
 		animation: fadeInDown 0.2s ease-out forwards;
+		word-wrap: break-word;
+		hyphens: auto;
 	}
 	@keyframes fadeInDown {
 		from {
 			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+			transform: scale(0.85);
 		}
 		to {
 			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+			transform: scale(1);
 		}
 	}
-	.event-info::after {
-		content: '';
-		position: absolute;
-		top: 100%; /* Position arrow below the box */
-		left: 50%;
-		transform: translateX(-50%);
-		border-width: 8px 8px 0; /* T:8 R:8 B:0 L:8 -> Points Down */
-		border-style: solid;
-		border-color: #252525 transparent transparent transparent; /* Color top border */
-	}
+
 	.event-header {
 		display: flex;
 		align-items: center;
@@ -2279,8 +2375,8 @@
 	}
 	.event-row {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.3rem;
 		padding: 6px 0;
 		border-bottom: 1px solid #444;
 		color: #e0e0e0;
@@ -2294,15 +2390,24 @@
 		font-size: 0.95rem;
 		color: #fff;
 		font-weight: 500;
+		word-wrap: break-word;
+		line-height: 1.3;
 	}
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
-		margin-top: 4px;
+		line-height: 1.2;
+	}
+	.dividend-details {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
 	}
 	.event-actions {
 		display: flex;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: flex-start;
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2345,10 +2450,9 @@
 		color: #fff;
 	}
 	.filing-row {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 0.75rem;
-		align-items: center;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid #444;
 	}
@@ -2356,12 +2460,14 @@
 		font-size: 1rem;
 		font-weight: 600;
 		color: #fff;
+		word-wrap: break-word;
+		line-height: 1.2;
 	}
 	.filing-row .event-actions {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.4rem;
 	}
 	.btn-sm {
 		padding: 0.15rem 0.3rem;
@@ -2391,14 +2497,45 @@
 		}
 	}
 
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
-		}
-		to {
-			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
-		}
+	/* Chart logo styles positioned at bottom right where axes meet */
+	.chart-logo-container {
+		position: absolute;
+		bottom: 2px;
+		right: 2px;
+		z-index: 1000; /* High z-index to appear above chart canvas */
+		pointer-events: none;
+		opacity: 0.85;
+		transition: opacity 0.2s ease;
+		padding: 2px;
+	}
+
+	.chart-logo-container:hover {
+		opacity: 1;
+	}
+
+	.chart-company-logo {
+		height: 18px;
+		max-width: 50px;
+		object-fit: contain;
+		filter: brightness(0.9) contrast(0.95);
+		transition: filter 0.2s ease;
+		display: block;
+	}
+
+	.chart-company-logo:hover {
+		filter: brightness(1) contrast(1);
+	}
+
+	/* Fallback ticker display for debugging */
+	.chart-ticker-fallback {
+		width: 20px;
+		height: 18px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 10px;
+		font-weight: bold;
+		font-family: monospace;
 	}
 </style>

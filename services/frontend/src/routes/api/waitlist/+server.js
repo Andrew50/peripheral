@@ -28,7 +28,7 @@ export async function POST({ request }) {
 		const data = JSON.parse(await fs.readFile(WAITLIST_FILE, 'utf-8'));
 
 		// Check if email already exists
-		if (data.emails.some(entry => entry.email === email)) {
+		if (data.emails.some((entry) => entry.email === email)) {
 			return json({ error: 'Email already registered' }, { status: 409 });
 		}
 
@@ -57,4 +57,4 @@ export async function GET() {
 		console.error('Waitlist error:', error);
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}
-} 
+}

@@ -458,10 +458,11 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			/*
 				if len(failedTasks) > 0 {
 					////fmt.Println("\nFailed tasks:")
-					for _, taskID := range taskIDs {
-						if failedTasks[taskID] {
-						}
-					}
+					//for _, taskID := range taskIDs {
+					//	if failedTasks[taskID] {
+					//		// Debug output would go here
+					//	}
+					//}
 				}*/
 
 			// Return true only if all tasks completed successfully
@@ -477,10 +478,11 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			/*
 				if len(completedTasks) < len(taskIDs) {
 					////fmt.Println("\nIncomplete or failed tasks:")
-					for _, taskID := range taskIDs {
-						if !completedTasks[taskID] {
-						}
-					}
+					//for _, taskID := range taskIDs {
+					//	if !completedTasks[taskID] {
+					//		// Debug output would go here
+					//	}
+					//}
 				}
 			*/
 
@@ -659,10 +661,11 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 			// List incomplete tasks
 			/*if len(completedTasks) < len(taskIDs) {
 				////fmt.Println("\nIncomplete tasks:")
-				for _, taskID := range taskIDs {
-					if !completedTasks[taskID] {
-					}
-				}
+				//for _, taskID := range taskIDs {
+				//	if !completedTasks[taskID] {
+				//		// Debug output would go here
+				//	}
+				//}
 			}*/
 
 			return

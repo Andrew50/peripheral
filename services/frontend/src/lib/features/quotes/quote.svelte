@@ -12,20 +12,24 @@
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
-		getReferenceStartTimeForDateMilliseconds,
-		timeframeToSeconds
+		getReferenceStartTimeForDateMilliseconds
 	} from '$lib/utils/helpers/timestamp';
 	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 	import { showAuthModal } from '$lib/stores/authModal';
-	import { isPublicViewing, watchlists, flagWatchlistId, flagWatchlist, currentWatchlistId, currentWatchlistItems } from '$lib/utils/stores/stores';
+	import {
+		isPublicViewing,
+		watchlists,
+		flagWatchlistId,
+		flagWatchlist,
+		currentWatchlistId,
+		currentWatchlistItems
+	} from '$lib/utils/stores/stores';
 
 	let instance: Writable<Instance> = writable({});
 	let container: HTMLDivElement;
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
-	let countdown = writable('--');
-	let countdownInterval: ReturnType<typeof setInterval>;
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
 		if (chartInstance?.ticker) {
@@ -34,10 +38,9 @@
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
 				lastFetchedSecurityId = Number(chartInstance.securityId);
-				publicRequest<Record<string, any>>(
-					'getTickerMenuDetails',
-					{ securityId: chartInstance.securityId }
-				)
+				publicRequest<Record<string, any>>('getTickerMenuDetails', {
+					securityId: chartInstance.securityId
+				})
 					.then((details) => {
 						if (lastFetchedSecurityId === Number(chartInstance.securityId)) {
 							currentDetails = details;
@@ -58,88 +61,7 @@
 		}
 	});
 
-
-
-	function formatTime(seconds: number): string {
-		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
-		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
-		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
-		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
-		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
-		const minutes = Math.floor((seconds % (60 * 60)) / 60);
-		const secs = Math.floor(seconds % 60);
-
-		if (years > 0) return `${years}y ${months}m`;
-		if (months > 0) return `${months}m ${weeks}w`;
-		if (weeks > 0) return `${weeks}w ${days}d`;
-		if (days > 0) return `${days}d ${hours}h`;
-		if (hours > 0) return `${hours}h ${minutes}m`;
-		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
-		return `${secs < 10 ? '0' : ''}${secs}s`;
-	}
-
-	function calculateCountdown() {
-		const currentInst = get(instance);
-		if (!currentInst?.timeframe) {
-			countdown.set('--');
-			return;
-		}
-
-		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
-		const chartTimeframeInSeconds = timeframeToSeconds(currentInst.timeframe);
-
-		let nextBarClose =
-			currentTimeInSeconds -
-			(currentTimeInSeconds % chartTimeframeInSeconds) +
-			chartTimeframeInSeconds;
-
-		// For daily timeframes, adjust to market close (4:00 PM EST)
-		if (currentInst.timeframe.includes('d')) {
-			const currentDate = new Date(currentTimeInSeconds * 1000);
-			const estOptions = { timeZone: 'America/New_York' };
-			const formatter = new Intl.DateTimeFormat('en-US', {
-				...estOptions,
-				year: 'numeric',
-				month: 'numeric',
-				day: 'numeric'
-			});
-
-			const [month, day, year] = formatter.format(currentDate).split('/');
-
-			const marketCloseDate = new Date(
-				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
-			);
-
-			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
-
-			if (currentTimeInSeconds >= nextBarClose) {
-				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
-
-				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
-				if (dayOfWeek === 0) {
-					// Sunday
-					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
-				} else if (dayOfWeek === 6) {
-					// Saturday
-					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
-				}
-
-				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
-			}
-		}
-
-		const remainingTime = nextBarClose - currentTimeInSeconds;
-
-		if (remainingTime > 0) {
-			countdown.set(formatTime(remainingTime));
-		} else {
-			countdown.set('Bar Closed');
-		}
-	}
-
 	onMount(() => {
-		countdownInterval = setInterval(calculateCountdown, 1000);
-
 		// Initialize with flagWatchlistId if available
 		if (flagWatchlistId !== undefined) {
 			currentWatchlistId.set(flagWatchlistId);
@@ -158,15 +80,13 @@
 		});
 
 		return () => {
-			clearInterval(countdownInterval);
 			unsubscribeWatchlists();
 		};
 	});
 
-
 	function cleanCompanyName(name: string): string {
 		if (!name || name === 'N/A') return name;
-		
+
 		// Remove common stock class designations
 		return name
 			.replace(/\s+(Class\s+[A-Z]+\s+)?Common\s+Stock$/i, '')
@@ -197,73 +117,62 @@
 		// Use currently selected watchlist or fall back to first available
 		const currentWatchlistIdValue = get(currentWatchlistId);
 		const watchlistId = currentWatchlistIdValue || watchlistsValue[0]?.watchlistId;
-		
+
 		privateRequest<number>('newWatchlistItem', {
 			watchlistId: watchlistId,
 			securityId: currentInstance.securityId
-		}).then((watchlistItemId: number) => {
-			const targetWatchlist = watchlistsValue.find(w => w.watchlistId === watchlistId);
-			console.log(`Added ${currentInstance.ticker} to ${targetWatchlist?.watchlistName || 'watchlist'}`);
-			
-			// Update the appropriate store with the new item (same logic as watchlist component)
-			const newItem = {
-				...currentInstance,
-				watchlistItemId: watchlistItemId
-			};
+		})
+			.then((watchlistItemId: number) => {
+				const targetWatchlist = watchlistsValue.find((w) => w.watchlistId === watchlistId);
+				console.log(
+					`Added ${currentInstance.ticker} to ${targetWatchlist?.watchlistName || 'watchlist'}`
+				);
 
-			// Update the appropriate global stores
-			if (watchlistId === flagWatchlistId) {
-				// Update the global flagWatchlist store
-				flagWatchlist.update((items) => {
-					const currentItems = Array.isArray(items) ? items : [];
-					// Check if item already exists to avoid duplicates
-					if (!currentItems.find(item => item.ticker === newItem.ticker)) {
-						return [...currentItems, newItem];
-					}
-					return currentItems;
-				});
-			}
-			
-			// Also update currentWatchlistItems if this is the currently selected watchlist
-			const currentWatchlistIdValue = get(currentWatchlistId);
-			if (watchlistId === currentWatchlistIdValue) {
-				currentWatchlistItems.update((items) => {
-					const currentItems = Array.isArray(items) ? items : [];
-					// Check if item already exists to avoid duplicates
-					if (!currentItems.find(item => item.ticker === newItem.ticker)) {
-						return [...currentItems, newItem];
-					}
-					return currentItems;
-				});
-			}
-			
-		}).catch((error) => {
-			console.error('Error adding to watchlist:', error);
-		});
+				// Update the appropriate store with the new item (same logic as watchlist component)
+				const newItem = {
+					...currentInstance,
+					watchlistItemId: watchlistItemId
+				};
+
+				// Update the appropriate global stores
+				if (watchlistId === flagWatchlistId) {
+					// Update the global flagWatchlist store
+					flagWatchlist.update((items) => {
+						const currentItems = Array.isArray(items) ? items : [];
+						// Check if item already exists to avoid duplicates
+						if (!currentItems.find((item) => item.ticker === newItem.ticker)) {
+							return [...currentItems, newItem];
+						}
+						return currentItems;
+					});
+				}
+
+				// Also update currentWatchlistItems if this is the currently selected watchlist
+				const currentWatchlistIdValue = get(currentWatchlistId);
+				if (watchlistId === currentWatchlistIdValue) {
+					currentWatchlistItems.update((items) => {
+						const currentItems = Array.isArray(items) ? items : [];
+						// Check if item already exists to avoid duplicates
+						if (!currentItems.find((item) => item.ticker === newItem.ticker)) {
+							return [...currentItems, newItem];
+						}
+						return currentItems;
+					});
+				}
+			})
+			.catch((error) => {
+				console.error('Error adding to watchlist:', error);
+			});
 	}
-
-
 </script>
 
-<div
-	class="ticker-info-container"
-	bind:this={container}
->
+<div class="ticker-info-container" bind:this={container}>
 	<div class="content">
-				<!-- Header Section -->
+		<!-- Header Section -->
 		<div class="quote-header">
-			<div class="logo-container">
-				{#if ($instance?.logo || currentDetails?.logo)}
-					<img
-						src={$instance?.logo || currentDetails?.logo}
-						alt="{$instance?.name || currentDetails?.name || 'Company'} logo"
-						class="company-logo-rect"
-					/>
-				{/if}
-			</div>
 			<div class="ticker-row">
 				<div class="icon-circle">
-					{#if ($instance?.icon || currentDetails?.icon)}
+					{#if $instance?.icon || currentDetails?.icon}
 						<img
 							src={$instance?.icon || currentDetails?.icon}
 							alt="{$instance?.name || currentDetails?.name || 'Company'} icon"
@@ -279,18 +188,20 @@
 					<div class="ticker-line">
 						<div class="ticker">{$instance.ticker || '--'}</div>
 						{#if $instance?.primary_exchange || currentDetails?.primary_exchange}
-							<div class="exchange">{getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange)}</div>
+							<div class="exchange">
+								{getExchangeName($instance?.primary_exchange || currentDetails?.primary_exchange)}
+							</div>
 						{/if}
 					</div>
-					{#if ($instance?.active === false || currentDetails?.active === false)}
+					{#if $instance?.active === false || currentDetails?.active === false}
 						<div class="warning-triangle-container">
 							<div class="warning-triangle"></div>
 							<div class="tooltip">Delisted</div>
 						</div>
 					{/if}
 				</div>
-				<button 
-					class="add-to-watchlist-button" 
+				<button
+					class="add-to-watchlist-button"
 					on:click|stopPropagation={addToWatchlist}
 					title="Add to Watchlist"
 				>
@@ -369,19 +280,13 @@
 			</div>
 		</div>
 
-		<!-- Countdown Section -->
-		<div class="countdown-section">
-			<div class="countdown-container">
-				<span class="countdown-label">Next Bar Close:</span>
-				<span class="countdown-value">{$countdown}</span>
-			</div>
-		</div>
-
 		<!-- Description Section -->
 		{#if $instance?.description || currentDetails?.description}
 			<div class="description">
 				<span class="label">Description:</span>
-				<p class="value description-text">{$instance?.description || currentDetails?.description}</p>
+				<p class="value description-text">
+					{$instance?.description || currentDetails?.description}
+				</p>
 			</div>
 		{/if}
 	</div>
@@ -441,6 +346,7 @@
 		gap: 6px;
 		margin-left: 8px;
 		margin-right: 8px;
+		margin-top: 16px;
 		width: calc(100% - 16px);
 		align-self: stretch;
 	}
@@ -456,26 +362,6 @@
 		background: var(--ui-bg-secondary);
 		border: 1px solid var(--ui-border);
 		overflow: hidden;
-	}
-
-	.logo-container {
-		width: 140px;
-		height: 36px;
-		border-radius: 2px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		background: transparent;
-		overflow: hidden;
-		margin: 0px auto;
-	}
-
-	.company-logo-rect {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		border-radius: 2px;
 	}
 
 	.company-logo {
@@ -570,7 +456,9 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 		opacity: 0;
 		visibility: hidden;
-		transition: opacity 0.2s ease, visibility 0.2s ease;
+		transition:
+			opacity 0.2s ease,
+			visibility 0.2s ease;
 		margin-bottom: 4px;
 		z-index: 1000;
 	}
@@ -646,8 +534,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2px, 0.3vw, 3px);
-		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) 8px;
+		margin-bottom: clamp(4px, 1vw, 6px);
+		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(4px, 1vw, 6px) 8px;
 	}
 
 	.main-price-row {
@@ -692,8 +580,8 @@
 
 	/* Market Data */
 	.quote-market-data {
-		margin-bottom: clamp(4px, 1vw, 8px);
-		padding: clamp(2px, 0.5vw, 4px) clamp(8px, 1.5vw, 12px) clamp(2px, 0.5vw, 4px) clamp(4px, 0.8vw, 6px);
+		margin-bottom: clamp(2px, 0.5vw, 4px);
+		padding: 0 clamp(8px, 1.5vw, 12px) 0 clamp(4px, 0.8vw, 6px);
 	}
 
 	/* Details */
@@ -701,8 +589,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2px, 0.5vw, 4px);
-		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(4px, 0.8vw, 6px);
+		margin-bottom: clamp(4px, 1vw, 8px);
+		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px)
+			clamp(4px, 0.8vw, 6px);
 	}
 
 	.detail-item {
@@ -726,40 +615,10 @@
 		font-weight: 500;
 	}
 
-	/* Countdown */
-	.countdown-section {
-		margin-top: clamp(8px, 1.5vw, 12px);
-		padding: clamp(8px, 1.5vw, 12px);
-	}
-
-	.countdown-container {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
-	}
-
-	.countdown-label {
-		color: var(--text-secondary);
-		font-size: 0.75em;
-		font-weight: 500;
-		text-transform: uppercase;
-	}
-
-	.countdown-value {
-		font-family: var(--font-primary);
-		font-weight: 600;
-		font-size: clamp(0.65rem, 0.4rem + 0.4vw, 0.8rem);
-		color: var(--text-primary);
-		padding: clamp(3px, 0.5vw, 4px) clamp(6px, 1vw, 8px);
-		min-width: clamp(50px, 8vw, 60px);
-		text-align: center;
-	}
-
 	/* Description */
 	.description {
-		margin-top: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px);
+		margin-top: clamp(4px, 1vw, 8px);
+		padding: clamp(6px, 1vw, 8px);
 	}
 
 	.description .label {
@@ -783,56 +642,56 @@
 			gap: clamp(1px, 0.2vw, 2px);
 			padding: clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) 8px;
 		}
-		
+
 		.main-price-row {
 			gap: clamp(4px, 0.8vw, 6px);
 		}
-		
+
 		.price-large {
 			font-size: clamp(1.1rem, 1.8vw, 1.4rem);
 		}
-		
+
 		.change-absolute,
 		.change-percent {
 			font-size: clamp(0.75rem, 1.1vw, 0.9rem);
 		}
-		
+
 		.quote-details {
 			gap: clamp(1px, 0.3vw, 3px);
 			padding: clamp(8px, 1.5vw, 10px);
 		}
-		
+
 		.detail-item {
 			font-size: clamp(0.6rem, 0.4rem + 0.4vw, 0.8rem);
 		}
 	}
-	
+
 	@media (max-width: 1000px) {
 		.main-price-row {
 			gap: clamp(3px, 0.6vw, 5px);
 		}
-		
+
 		.price-large {
 			font-size: clamp(1rem, 1.6vw, 1.3rem);
 		}
-		
+
 		.change-absolute,
 		.change-percent {
 			font-size: clamp(0.7rem, 1vw, 0.85rem);
 		}
 	}
-	
+
 	@media (max-width: 600px) {
 		.main-price-row {
 			flex-direction: column;
 			align-items: flex-start;
 			gap: clamp(2px, 0.4vw, 3px);
 		}
-		
+
 		.price-large {
 			font-size: clamp(0.9rem, 1.5vw, 1.2rem);
 		}
-		
+
 		.change-absolute,
 		.change-percent {
 			font-size: clamp(0.65rem, 0.9vw, 0.8rem);

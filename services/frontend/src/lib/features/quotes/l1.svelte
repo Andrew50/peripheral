@@ -57,8 +57,6 @@
 		release();
 		currentSecurityId = null;
 	});
-
-
 </script>
 
 <div class="quote-container">
@@ -85,12 +83,23 @@
 
 <style>
 	.quote-container {
-		font-family: 'Inter', sans-serif;
-		font-size: 12px;
+		font-family:
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			Segoe UI,
+			Roboto,
+			Oxygen,
+			Ubuntu,
+			Cantarell,
+			Open Sans,
+			Helvetica Neue,
+			sans-serif;
+		font-size: 14px;
 		color: var(--text-primary, white);
 		width: 100%;
 		margin: 0 auto;
-		padding: 2px 8px 2px 0;
+		padding: 0 8px 0 0;
 		display: flex;
 		justify-content: flex-start;
 		gap: 12px;
@@ -104,7 +113,7 @@
 		font-weight: 500;
 		transition: all 0.15s ease;
 		border-radius: 4px;
-		padding: 2px 6px;
+		padding: 1px 4px;
 		cursor: default;
 	}
 

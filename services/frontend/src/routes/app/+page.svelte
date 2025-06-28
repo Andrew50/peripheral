@@ -32,7 +32,7 @@
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { get } from 'svelte/store';
+	import { get, writable } from 'svelte/store';
 	import {
 		initStores,
 		streamInfo,
@@ -40,12 +40,20 @@
 		dispatchMenuChange,
 		menuWidth,
 		settings,
-		isPublicViewing,
+		isPublicViewing as isPublicViewingStore,
+		watchlists,
+		flagWatchlistId,
+		currentWatchlistId as globalCurrentWatchlistId,
+		currentWatchlistItems
 	} from '$lib/utils/stores/stores';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance } from '$lib/utils/types/types';
+	import type { Instance, Watchlist as WatchlistType } from '$lib/utils/types/types';
+
+	// Add import near the top with other imports
+	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
+
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
 
@@ -57,10 +65,9 @@
 	// Import auth modal
 	import AuthModal from '$lib/components/authModal.svelte';
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
-	
+
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
-	
 
 	// Import extended hours toggle store
 	import {
@@ -69,15 +76,17 @@
 		activeChartInstance
 	} from '$lib/features/chart/interface';
 
-	// Import TopBar component
-	import TopBar from '$lib/components/TopBar.svelte';
+	// TopBar functionality moved inline
+	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
+	import { addInstanceToWatchlist as addToWatchlist } from '$lib/features/watchlist/watchlistUtils';
+	import { newPriceAlert } from '$lib/features/alerts/interface';
 
 	// Import mobile banner component
 	import MobileBanner from '$lib/components/mobileBanner.svelte';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
-	
+
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
@@ -140,13 +149,12 @@
 	// Calendar state
 	let calendarVisible = false;
 
-	// Get shared conversation ID from server-side layout data  
+	// Get shared conversation ID from server-side layout data
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
 
-	// Import connect 
+	// Import connect
 	import { connect } from '$lib/utils/stream/socket';
-
 
 	// Apply color scheme reactively based on the store
 	$: if ($settings.colorScheme && browser) {
@@ -186,7 +194,7 @@
 				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
 			}
 			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
-			
+
 			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
 
 			// Only reduce chart width if sidebar widths are within bounds
@@ -206,10 +214,12 @@
 		const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
 		const isAtTop = scrollTop === 0;
 		const isAtBottom = scrollTop + clientHeight >= scrollHeight;
-		
+
 		// If at top or bottom and trying to scroll further, prevent default
-		if ((isAtTop && e.touches[0].clientY > e.touches[0].clientY) || 
-			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)) {
+		if (
+			(isAtTop && e.touches[0].clientY > e.touches[0].clientY) ||
+			(isAtBottom && e.touches[0].clientY < e.touches[0].clientY)
+		) {
 			e.preventDefault();
 		}
 	};
@@ -220,11 +230,13 @@
 		const currentInputStatus = get(inputQuery).status;
 		const inputWindowExists = document.getElementById('input-window') !== null;
 		const now = Date.now();
-		
+
 		// Don't trigger if input is active, input window exists, or we recently triggered auto-input
-		if (currentInputStatus !== 'inactive' || 
-			inputWindowExists || 
-			(now - lastAutoInputTime) < AUTO_INPUT_DEBOUNCE_MS) {
+		if (
+			currentInputStatus !== 'inactive' ||
+			inputWindowExists ||
+			now - lastAutoInputTime < AUTO_INPUT_DEBOUNCE_MS
+		) {
 			return;
 		}
 
@@ -244,7 +256,7 @@
 		if (/^[a-zA-Z0-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey) {
 			// Update last trigger time
 			lastAutoInputTime = now;
-			
+
 			// Prevent the event from propagating to avoid double capture
 			event.preventDefault();
 			event.stopPropagation();
@@ -257,18 +269,16 @@
 				inputString: initialKey
 			} as any;
 
-			queryInstanceInput(
-				'any',
-				['ticker', 'timeframe'],
-				instanceWithInput
-			).then((updatedInstance) => {
-				queryChart(updatedInstance, true);
-			}).catch((error) => {
-				// Handle cancellation silently
-				if (error.message !== 'User cancelled input') {
-					console.error('Error in auto-input capture:', error);
-				}
-			});
+			queryInstanceInput('any', ['ticker', 'timeframe'], instanceWithInput)
+				.then((updatedInstance) => {
+					queryChart(updatedInstance, true);
+				})
+				.catch((error) => {
+					// Handle cancellation silently
+					if (error.message !== 'User cancelled input') {
+						console.error('Error in auto-input capture:', error);
+					}
+				});
 
 			// Focus the chart container after input activation
 			const chartContainer = document.getElementById(`chart_container-0`);
@@ -335,14 +345,14 @@
 			document.title = 'Atlantis';
 			// Set initial state once
 			lastSidebarMenu = null;
-			
+
 			// Calculate default sidebar width as 15% of screen width, but with constraints
 			const defaultSidebarWidth = Math.min(
 				window.innerWidth * 0.15, // 15% of screen width
 				600 // Maximum 600px (same as resize max)
 			);
 			const constrainedWidth = Math.max(defaultSidebarWidth, minWidth); // Ensure it's not smaller than minimum (120px)
-			
+
 			menuWidth.set(constrainedWidth);
 			changeMenu('watchlist'); // Set watchlist as the default active menu
 
@@ -351,12 +361,16 @@
 
 			// Add global keyboard event listener with stable function reference
 			document.addEventListener('keydown', keydownHandler);
-			
+
 			// Add touch event listeners for additional overscroll prevention
 			document.addEventListener('touchstart', preventOverscroll, { passive: false });
 			document.addEventListener('touchmove', preventOverscroll, { passive: false });
-		}
 
+			// Listen for calendar events from TopBar
+			document.addEventListener('calendar-click', () => {
+				calendarVisible = true;
+			});
+		}
 
 		initStores();
 
@@ -390,7 +404,7 @@
 	onMount(async () => {
 		// Wait for critical path to complete
 		await tick();
-		
+
 		// Use requestIdleCallback for true background loading
 		if (browser && 'requestIdleCallback' in window) {
 			requestIdleCallback(() => {
@@ -408,14 +422,13 @@
 		try {
 			const preloadPromises = [
 				import('$lib/features/screener/screener.svelte'),
-				import('$lib/features/strategies/strategies.svelte'), 
+				import('$lib/features/strategies/strategies.svelte'),
 				import('$lib/features/settings/settings.svelte')
 			];
-			
+
 			// Await them to know when done (optional)
 			await Promise.all(preloadPromises);
-		} catch (error) {
-		}
+		} catch (error) {}
 	}
 
 	onDestroy(() => {
@@ -772,10 +785,10 @@
 			currentY = event.touches[0].clientY;
 		}
 
-		// Account for the top bar height (40px) and adjust for the drag handle position
-		// Since quote is now on top, we calculate height from the top
-		const topBarHeight = 40;
-		const newHeight = currentY - topBarHeight;
+		// Account for the bottom bar height (40px) and calculate height from the bottom
+		// Since quote is now on bottom, we calculate height from the bottom up
+		const bottomBarHeight = 40;
+		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
 		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
@@ -794,7 +807,6 @@
 		document.removeEventListener('touchmove', handleSidebarResize);
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
-
 
 	// Add reactive statements to update the profile icon when data changes
 	$: if (profilePic || username) {
@@ -878,7 +890,7 @@
 			leftMenuWidth = 0;
 		} else {
 			// Set to 15% of screen width when opening
-			leftMenuWidth = window.innerWidth * 0.30;
+			leftMenuWidth = window.innerWidth * 0.3;
 		}
 		updateChartWidth();
 	}
@@ -894,6 +906,330 @@
 		setTimeout(() => {
 			requestChatOpen.set(false);
 		}, 0);
+	}
+
+	// TopBar functionality
+	const commonTimeframes = ['1', '1h', '1d', '1w'];
+	let countdown = writable('--');
+	let countdownInterval: ReturnType<typeof setInterval>;
+	// Helper computed value to check if current timeframe is custom
+	$: isCustomTimeframe =
+		$activeChartInstance?.timeframe && !commonTimeframes.includes($activeChartInstance.timeframe);
+
+	// Watchlist controls state
+	let newWatchlistName = '';
+	let currentWatchlistId: number;
+	let previousWatchlistId: number;
+	let newNameInput: HTMLInputElement;
+	let showWatchlistInput = false;
+
+	// Extended Instance type to include watchlistItemId
+	interface WatchlistItem extends Instance {
+		watchlistItemId?: number;
+	}
+
+	// TopBar handler functions
+	function handleTickerClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker')
+			.then((v: Instance) => {
+				if (v) queryChart(v, true);
+			})
+			.catch((error) => {
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in ticker input:', error);
+				}
+			});
+	}
+
+	function handleTickerKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			event.stopPropagation();
+			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker')
+				.then((v: Instance) => {
+					if (v) queryChart(v, true);
+				})
+				.catch((error) => {
+					if (error.message !== 'User cancelled input') {
+						console.error('Error in ticker input:', error);
+					}
+				});
+		}
+	}
+
+	function handleSessionClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		if ($activeChartInstance) {
+			const updatedInstance = {
+				...$activeChartInstance,
+				extendedHours: !$activeChartInstance.extendedHours
+			};
+			queryChart(updatedInstance, true);
+		}
+	}
+
+	function handleCustomTimeframeClick() {
+		queryInstanceInput(['timeframe'], ['timeframe'], $activeChartInstance || undefined, 'timeframe')
+			.then((v: Instance) => {
+				if (v) queryChart(v, true);
+			})
+			.catch((error) => {
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in timeframe input:', error);
+				}
+			});
+	}
+
+	function selectTimeframe(newTimeframe: string) {
+		if ($activeChartInstance && $activeChartInstance.timeframe !== newTimeframe) {
+			const updatedInstance = { ...$activeChartInstance, timeframe: newTimeframe };
+			queryChart(updatedInstance, true);
+		}
+	}
+
+	function addInstanceToWatchlist(securityId?: number) {
+		addToWatchlist(currentWatchlistId, securityId);
+	}
+
+	function newWatchlist() {
+		if (newWatchlistName === '') return;
+
+		const existingWatchlist = get(watchlists).find(
+			(w) => w.watchlistName.toLowerCase() === newWatchlistName.toLowerCase()
+		);
+
+		if (existingWatchlist) {
+			alert('A watchlist with this name already exists');
+			return;
+		}
+
+		privateRequest<number>('newWatchlist', { watchlistName: newWatchlistName }).then(
+			(newId: number) => {
+				watchlists.update((v: WatchlistType[]) => {
+					const w: WatchlistType = {
+						watchlistName: newWatchlistName,
+						watchlistId: newId
+					};
+					selectWatchlist(String(newId));
+					newWatchlistName = '';
+					showWatchlistInput = false;
+					if (!Array.isArray(v)) {
+						return [w];
+					}
+					return [w, ...v];
+				});
+			}
+		);
+	}
+
+	function closeNewWatchlistWindow() {
+		showWatchlistInput = false;
+		newWatchlistName = '';
+
+		if (previousWatchlistId === undefined || isNaN(previousWatchlistId)) {
+			const watchlistsValue = get(watchlists);
+			if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
+				previousWatchlistId = watchlistsValue[0].watchlistId;
+			}
+		}
+
+		currentWatchlistId = previousWatchlistId;
+
+		tick().then(() => {
+			selectWatchlist(String(previousWatchlistId));
+		});
+	}
+
+	function selectWatchlist(watchlistIdString: string) {
+		if (!watchlistIdString) return;
+
+		if (watchlistIdString === 'new') {
+			if (currentWatchlistId !== undefined && !isNaN(currentWatchlistId)) {
+				previousWatchlistId = currentWatchlistId;
+			} else {
+				const watchlistsValue = get(watchlists);
+				if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
+					previousWatchlistId = watchlistsValue[0].watchlistId;
+				}
+			}
+
+			showWatchlistInput = true;
+			tick().then(() => {
+				const inputElement = document.getElementById('new-watchlist-input') as HTMLInputElement;
+				if (inputElement) {
+					inputElement.focus();
+				}
+			});
+			return;
+		}
+
+		if (watchlistIdString === 'delete') {
+			const watchlistsValue = get(watchlists);
+			const currentWatchlistIdNum = Number(currentWatchlistId);
+
+			if (currentWatchlistIdNum === flagWatchlistId) {
+				alert('The flag watchlist cannot be deleted.');
+				selectWatchlist(String(currentWatchlistId));
+				return;
+			}
+
+			const watchlist = Array.isArray(watchlistsValue)
+				? watchlistsValue.find((w) => Number(w.watchlistId) === currentWatchlistIdNum)
+				: null;
+
+			const watchlistName = watchlist?.watchlistName || `Watchlist #${currentWatchlistIdNum}`;
+
+			if (confirm(`Are you sure you want to delete "${watchlistName}"?`)) {
+				deleteWatchlist(Number(currentWatchlistId));
+			} else {
+				selectWatchlist(String(currentWatchlistId));
+			}
+			return;
+		}
+
+		showWatchlistInput = false;
+		newWatchlistName = '';
+		const watchlistId = parseInt(watchlistIdString);
+		currentWatchlistId = watchlistId;
+
+		globalCurrentWatchlistId.set(watchlistId);
+
+		privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+			.then((v: WatchlistItem[]) => {
+				currentWatchlistItems.set(v || []);
+			})
+			.catch((err) => {
+				currentWatchlistItems.set([]);
+			});
+	}
+
+	function deleteWatchlist(id: number) {
+		const watchlistId = typeof id === 'string' ? parseInt(id, 10) : id;
+
+		if (watchlistId === flagWatchlistId) {
+			alert('The flag watchlist cannot be deleted.');
+			return;
+		}
+
+		privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
+			watchlists.update((v: WatchlistType[]) => {
+				const updatedWatchlists = v.filter(
+					(watchlist: WatchlistType) => watchlist.watchlistId !== id
+				);
+
+				if (id === currentWatchlistId && updatedWatchlists.length > 0) {
+					setTimeout(() => selectWatchlist(String(updatedWatchlists[0].watchlistId)), 10);
+				}
+
+				return updatedWatchlists;
+			});
+		});
+	}
+
+	function handleWatchlistChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		const value = target.value;
+
+		if (value === 'new') {
+			if (!showWatchlistInput) {
+				previousWatchlistId = currentWatchlistId;
+				selectWatchlist('new');
+			}
+			return;
+		}
+
+		if (value === 'delete') {
+			selectWatchlist('delete');
+			return;
+		}
+
+		previousWatchlistId = parseInt(value, 10);
+		currentWatchlistId = parseInt(value, 10);
+		globalCurrentWatchlistId.set(parseInt(value, 10));
+		selectWatchlist(value);
+	}
+
+	async function createPriceAlert() {
+		const inst = await queryInstanceInput('any', ['ticker'], {
+			ticker: ''
+		});
+		await newPriceAlert(inst);
+	}
+
+	function formatTime(seconds: number): string {
+		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
+		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
+		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
+		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
+		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+		const minutes = Math.floor((seconds % (60 * 60)) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (years > 0) return `${years}y ${months}m`;
+		if (months > 0) return `${months}m ${weeks}w`;
+		if (weeks > 0) return `${weeks}w ${days}d`;
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+		return `${secs < 10 ? '0' : ''}${secs}s`;
+	}
+
+	function calculateCountdown() {
+		if (!$activeChartInstance?.timeframe) {
+			countdown.set('--');
+			return;
+		}
+
+		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
+		const chartTimeframeInSeconds = timeframeToSeconds($activeChartInstance.timeframe);
+
+		let nextBarClose =
+			currentTimeInSeconds -
+			(currentTimeInSeconds % chartTimeframeInSeconds) +
+			chartTimeframeInSeconds;
+
+		if ($activeChartInstance.timeframe.includes('d')) {
+			const currentDate = new Date(currentTimeInSeconds * 1000);
+			const estOptions = { timeZone: 'America/New_York' };
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				...estOptions,
+				year: 'numeric',
+				month: 'numeric',
+				day: 'numeric'
+			});
+
+			const [month, day, year] = formatter.format(currentDate).split('/');
+
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
+			);
+
+			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+
+			if (currentTimeInSeconds >= nextBarClose) {
+				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
+
+				const dayOfWeek = marketCloseDate.getDay();
+				if (dayOfWeek === 0) {
+					marketCloseDate.setDate(marketCloseDate.getDate() + 1);
+				} else if (dayOfWeek === 6) {
+					marketCloseDate.setDate(marketCloseDate.getDate() + 2);
+				}
+
+				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+			}
+		}
+
+		const remainingTime = nextBarClose - currentTimeInSeconds;
+
+		if (remainingTime > 0) {
+			countdown.set(formatTime(remainingTime));
+		} else {
+			countdown.set('Bar Closed');
+		}
 	}
 </script>
 
@@ -937,12 +1273,13 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query isPublicViewing={$isPublicViewing} {sharedConversationId} />
+							<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
 						</div>
 					</div>
+					<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 					<div
 						class="resize-handle right"
-						role="button"
+						role="separator"
 						aria-orientation="vertical"
 						aria-label="Resize left panel"
 						on:mousedown={startLeftResize}
@@ -956,7 +1293,209 @@
 			<!-- Main content and sidebar wrapper -->
 			<div class="main-and-sidebar-wrapper">
 				<!-- Top bar -->
-				<TopBar instance={$activeChartInstance || {}} />
+				<div class="top-bar">
+					<!-- Left side content -->
+					<div class="top-bar-left">
+						<button
+							class="symbol metadata-button"
+							on:click={handleTickerClick}
+							on:keydown={handleTickerKeydown}
+							aria-label="Change ticker"
+						>
+							<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+								<path
+									d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							{$activeChartInstance?.ticker || 'NaN'}
+						</button>
+
+						<!-- Divider -->
+						<div class="divider"></div>
+
+						<!-- Add common timeframe buttons -->
+						{#each commonTimeframes as tf}
+							<button
+								class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
+								tf
+									? 'active'
+									: ''}"
+								on:click={() => selectTimeframe(tf)}
+								aria-label="Set timeframe to {tf}"
+								aria-pressed={$activeChartInstance?.timeframe === tf}
+							>
+								{tf}
+							</button>
+						{/each}
+						<!-- Button to open custom timeframe input -->
+						<button
+							class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+							on:click={handleCustomTimeframeClick}
+							aria-label="Select custom timeframe"
+							aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+						>
+							{#if isCustomTimeframe}
+								{$activeChartInstance?.timeframe}
+							{:else}
+								...
+							{/if}
+						</button>
+
+						<!-- Divider -->
+						<div class="divider"></div>
+
+						<button
+							class="session-type metadata-button"
+							on:click={handleSessionClick}
+							aria-label="Toggle session type"
+						>
+							{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
+						</button>
+
+						<!-- Divider -->
+						<div class="divider"></div>
+
+						<!-- Calendar button for timestamp selection -->
+						<button
+							class="calendar-button metadata-button"
+							on:click={handleCalendar}
+							title="Go to Date"
+							aria-label="Go to Date"
+						>
+							<svg
+								viewBox="0 0 24 24"
+								width="16"
+								height="16"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+									stroke="currentColor"
+									stroke-width="1.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+
+						<!-- Divider -->
+						<div class="divider"></div>
+
+						<!-- Countdown -->
+						<div class="countdown-container">
+							<span class="countdown-label">Next Bar Close:</span>
+							<span class="countdown-value">{$countdown}</span>
+						</div>
+					</div>
+
+					<!-- Right side - Sidebar Controls -->
+					{#if $menuWidth > 0}
+						<div class="top-bar-right">
+							{#if $activeMenu === 'watchlist'}
+								<!-- Watchlist Controls -->
+								<div class="sidebar-controls">
+									{#if Array.isArray($watchlists)}
+										<div class="watchlist-controls-left">
+											<div class="watchlist-selector">
+												<div class="select-wrapper">
+													<select
+														class="default-select metadata-button"
+														id="watchlists-topbar"
+														value={currentWatchlistId?.toString()}
+														on:change={handleWatchlistChange}
+													>
+														<optgroup label="My Watchlists">
+															{#each $watchlists as watchlist}
+																<option value={watchlist.watchlistId.toString()}>
+																	{watchlist.watchlistName === 'flag'
+																		? 'Flag (Protected)'
+																		: watchlist.watchlistName}
+																</option>
+															{/each}
+														</optgroup>
+														<optgroup label="Actions">
+															<option value="new">+ Create New Watchlist</option>
+															{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
+																<option value="delete">- Delete Current Watchlist</option>
+															{/if}
+														</optgroup>
+													</select>
+													<div class="caret-icon">
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+														>
+															<polyline points="6,9 12,15 18,9"></polyline>
+														</svg>
+													</div>
+												</div>
+											</div>
+										</div>
+
+										<div class="watchlist-controls-right">
+											<button
+												class="add-item-button metadata-button"
+												title="Add Symbol"
+												on:click={() => addInstanceToWatchlist()}>+</button
+											>
+										</div>
+									{/if}
+
+									{#if showWatchlistInput}
+										<div class="new-watchlist-container">
+											<input
+												class="input metadata-button"
+												id="new-watchlist-input"
+												bind:this={newNameInput}
+												on:keydown={(event) => {
+													if (event.key === 'Enter') {
+														newWatchlist();
+													} else if (event.key === 'Escape') {
+														closeNewWatchlistWindow();
+													}
+												}}
+												bind:value={newWatchlistName}
+												placeholder="New Watchlist Name"
+											/>
+											<div class="new-watchlist-buttons">
+												<button class="utility-button metadata-button" on:click={newWatchlist}
+													>✓</button
+												>
+												<button
+													class="utility-button metadata-button"
+													on:click={closeNewWatchlistWindow}>✕</button
+												>
+											</div>
+										</div>
+									{/if}
+								</div>
+							{:else if $activeMenu === 'alerts'}
+								<!-- Alert Controls -->
+								<div class="sidebar-controls">
+									<div class="alert-controls-right">
+										<button
+											class="create-alert-btn metadata-button"
+											on:click={createPriceAlert}
+											title="Create New Price Alert"
+										>
+											Create Alert
+										</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
 
 				<!-- Content below top bar -->
 				<div class="content-below-topbar">
@@ -989,9 +1528,10 @@
 								</div>
 							{/each}
 							{#if bottomWindows.length > 0}
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 								<div
 									class="bottom-resize-handle"
-									role="button"
+									role="separator"
 									aria-orientation="horizontal"
 									aria-label="Resize bottom panel"
 									on:mousedown={startBottomResize}
@@ -1005,9 +1545,10 @@
 					<!-- Sidebar -->
 					{#if $menuWidth > 0}
 						<div class="sidebar" style="width: {$menuWidth}px;">
+							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 							<div
 								class="resize-handle"
-								role="button"
+								role="separator"
 								aria-orientation="vertical"
 								aria-label="Resize sidebar"
 								on:mousedown={startResize}
@@ -1016,23 +1557,7 @@
 								tabindex="0"
 							/>
 							<div class="sidebar-content">
-								<!-- Quote section now on top -->
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
-									<Quote />
-								</div>
-
-								<div
-									class="sidebar-resize-handle"
-									role="button"
-									aria-orientation="horizontal"
-									aria-label="Resize watchlist panel"
-									on:mousedown={startSidebarResize}
-									on:touchstart|preventDefault={startSidebarResize}
-									on:keydown={handleKeyboardSidebarResize}
-									tabindex="0"
-								></div>
-
-								<!-- Main sidebar content now on bottom -->
+								<!-- Main sidebar content now on top -->
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist />
@@ -1042,11 +1567,33 @@
 										<News />-->
 									{/if}
 								</div>
+
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									aria-label="Resize quote panel"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<!-- Quote section now on bottom -->
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
 					{/if}
 				</div>
 			</div>
+		</div>
+
+		<!-- Corner logo at the very top-right -->
+		<div class="corner-logo-container">
+			<img src="/favicon.png" alt="Atlantis" class="corner-atlantis-logo" />
 		</div>
 
 		<!-- Sidebar toggle buttons -->
@@ -1096,20 +1643,10 @@
 		</div>
 
 		<div class="bottom-bar-right">
-			<!-- Calendar button for timestamp selection -->
-			<button class="toggle-button calendar-button" on:click={handleCalendar} title="Go to Date">
-				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path
-						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-			</button>
+			<!-- Calendar button moved to top bar -->
 
-			<!-- Combined replay button -->
+			<!-- Replay buttons commented out -->
+			<!-- 
 			<button
 				class="toggle-button replay-button {!$streamInfo.replayActive || $streamInfo.replayPaused
 					? 'play'
@@ -1142,7 +1679,6 @@
 			{#if $streamInfo.replayActive}
 				<button class="toggle-button replay-button stop" on:click={handleStop} title="Stop Replay">
 					<svg viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z" /></svg>
-					<!-- Stop Icon -->
 				</button>
 				<button
 					class="toggle-button replay-button reset"
@@ -1154,7 +1690,6 @@
 							d="M12,5V1L7,6L12,11V8C15.31,8 18,10.69 18,14C18,17.31 15.31,20 12,20C8.69,20 6,17.31 6,14H4C4,18.42 7.58,22 12,22C16.42,22 20,18.42 20,14C20,9.58 16.42,6 12,6V5Z"
 						/></svg
 					>
-					<!-- Reset Icon (e.g., refresh) -->
 				</button>
 				<button
 					class="toggle-button replay-button next-day"
@@ -1166,7 +1701,6 @@
 							d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z"
 						/></svg
 					>
-					<!-- Next Day Icon (e.g., skip next track) -->
 				</button>
 
 				<label class="speed-label">
@@ -1181,6 +1715,7 @@
 					/>
 				</label>
 			{/if}
+			-->
 
 			<span class="value">
 				{#if $streamInfo.timestamp !== undefined}
@@ -1188,7 +1723,7 @@
 				{:else}
 					Loading Time...
 				{/if}
-			</span>	
+			</span>
 			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
 				<!-- Add key to force re-render when the profile changes -->
 				{#key profileIconKey}
@@ -1232,4 +1767,381 @@
 	{/if}
 </div>
 
+<style>
+	/* TopBar styles */
+	.top-bar {
+		height: 40px;
+		min-height: 40px;
+		background-color: #0f0f0f;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 4px solid var(--c1);
+	}
 
+	.top-bar-left {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: 1;
+	}
+
+	.top-bar-right {
+		display: flex;
+		align-items: center;
+		padding-left: 16px;
+	}
+
+	/* Base styles for metadata buttons */
+	.metadata-button {
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: none;
+		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.metadata-button:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+	}
+
+	.metadata-button:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	/* Specific style adjustments for symbol button */
+	.symbol.metadata-button {
+		font-size: 14px;
+		line-height: 20px;
+		color: #ffffff;
+		padding: 6px 12px;
+		gap: 4px;
+	}
+
+	.top-bar .search-icon {
+		opacity: 0.8;
+		transition: opacity 0.2s ease;
+		position: static;
+		padding: 0;
+		left: auto;
+	}
+
+	.top-bar .symbol.metadata-button:hover .search-icon {
+		opacity: 1;
+	}
+
+	/* Styles for preset timeframe buttons */
+	.timeframe-preset-button {
+		min-width: 24px;
+		text-align: center;
+		padding: 6px 4px;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+		margin-left: -2px;
+	}
+
+	.timeframe-preset-button:first-of-type {
+		margin-left: 0;
+	}
+
+	.timeframe-preset-button.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
+
+	/* Styles for the custom timeframe '...' button */
+	.timeframe-custom-button {
+		padding: 6px 4px;
+		min-width: 24px;
+		text-align: center;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+		margin-left: -2px;
+	}
+
+	.timeframe-custom-button.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
+
+	/* Calendar button styles */
+	.calendar-button {
+		padding: 6px 8px;
+		min-width: auto;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.calendar-button svg {
+		opacity: 0.8;
+		transition: opacity 0.2s ease;
+	}
+
+	.calendar-button:hover svg {
+		opacity: 1;
+	}
+
+	/* Countdown styles */
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		border: none;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		line-height: 18px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: none;
+	}
+
+	.countdown-container:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.countdown-label {
+		color: inherit;
+		font-size: inherit;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.countdown-value {
+		font-family: inherit;
+		font-weight: 600;
+		font-size: inherit;
+		color: inherit;
+		min-width: 45px;
+		text-align: center;
+	}
+
+	/* Divider styles */
+	.divider {
+		width: 1px;
+		height: 28px;
+		background: rgba(255, 255, 255, 0.15);
+		margin: 0 6px;
+		flex-shrink: 0;
+	}
+
+	/* Sidebar controls styles */
+	.sidebar-controls {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: auto;
+		min-width: 200px;
+		height: 40px;
+		gap: 8px;
+	}
+
+	.watchlist-controls-left {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		margin-left: 0;
+		padding-left: 0;
+	}
+
+	.watchlist-controls-right {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+	}
+
+	.alert-controls-right {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: 100%;
+		padding-right: 8px;
+	}
+
+	.watchlist-selector .select-wrapper {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: fit-content;
+		background: transparent;
+		border-radius: 6px;
+		padding: 0;
+		margin-left: 0;
+	}
+
+	.watchlist-selector select {
+		flex: 0 1 auto;
+		min-width: fit-content;
+		width: fit-content;
+		background: transparent;
+		color: #ffffff;
+		border: none;
+		border-radius: 0;
+		padding: 6px 8px 6px 8px;
+		margin-left: 0;
+		font-size: 13px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		text-align: left;
+	}
+
+	.watchlist-selector .caret-icon {
+		margin-left: 4px;
+		margin-right: 6px;
+		width: 12px;
+		height: 12px;
+		color: #ffffff;
+		pointer-events: none;
+		flex-shrink: 0;
+	}
+
+	.watchlist-selector .caret-icon svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	.watchlist-selector .select-wrapper:hover {
+		background: rgba(255, 255, 255, 0.15);
+	}
+
+	.add-item-button {
+		color: #ffffff;
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 16px;
+		font-weight: 300;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		background: transparent;
+		border: none;
+		border-radius: 6px;
+		transition: all 0.2s ease;
+		padding: 6px 8px;
+	}
+
+	.add-item-button:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+	}
+
+	.new-watchlist-container {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		margin-top: 8px;
+		padding: 12px;
+		background: rgba(0, 0, 0, 0.9);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		z-index: 100;
+		min-width: 250px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	}
+
+	.new-watchlist-container .input {
+		width: 100%;
+		margin-bottom: 8px;
+		padding: 8px 12px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
+		font-size: 13px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+	}
+
+	.new-watchlist-container .input:focus {
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
+	}
+
+	.new-watchlist-container .input::placeholder {
+		color: rgba(255, 255, 255, 0.6);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.new-watchlist-buttons {
+		display: flex;
+		justify-content: flex-end;
+		gap: 6px;
+	}
+
+	.new-watchlist-buttons .utility-button {
+		padding: 6px 12px;
+		color: #ffffff;
+		font-size: 13px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+		min-width: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
+	}
+
+	.new-watchlist-buttons .utility-button:hover {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+
+	.create-alert-btn {
+		padding: 6px 12px;
+		font-size: 13px;
+		font-weight: 600;
+		color: #ffffff;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+	}
+
+	.create-alert-btn:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+</style>

@@ -41,7 +41,6 @@
 	position: relative;
 	overflow: hidden;
 	min-height: 0;
-	padding-top: 40px; /* Add padding for the absolutely positioned top bar */
 }
 
 .main-content {
@@ -56,7 +55,7 @@
 .bottom-bar {
 	height: 40px;
 	min-height: 40px;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -73,47 +72,81 @@
 	position: relative;
 	overflow: hidden;
 	min-height: 0;
-	height: 100%; /* Ensure it takes available height */
+	height: 100%;
+	/* Ensure it takes available height */
 }
 
 .sidebar {
 	height: 100%;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	flex-direction: column;
 	position: relative;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
+	max-width: min(600px, calc(100vw - 45px));
+	/* 600px max sidebar with 45px button bar */
 	/* Add responsive font scaling */
 	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
 
+.corner-logo-container {
+	position: fixed;
+	top: 0;
+	right: 0;
+	width: 45px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #0a0a0a;
+	z-index: 11;
+	border-left: 4px solid var(--c1);
+	border-bottom: 4px solid var(--c1);
+}
+
+.corner-atlantis-logo {
+	width: 20px;
+	height: 20px;
+	object-fit: contain;
+	opacity: 0.8;
+	transition: opacity 0.2s ease;
+}
+
+.corner-logo-container:hover .corner-atlantis-logo {
+	opacity: 1;
+}
+
 .sidebar-buttons {
 	position: fixed;
-	top: 40px; /* Start below the top bar */
+	top: 40px;
+	/* Start below the top bar */
 	right: 0;
-	height: calc(100vh - 80px); /* Subtract both top bar and bottom bar heights */
+	height: calc(100vh - 80px);
+	/* Subtract both top bar and bottom bar heights */
 	width: 45px;
 	display: flex;
 	flex-direction: column;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	z-index: 2;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
+	max-width: min(600px, calc(100vw - 45px));
+	/* 600px max with 45px button bar */
 }
 
 .resize-handle {
 	width: 4px;
-	height: 100%;
+	height: calc(100vh - 40px);
+	/* Extend to full viewport height minus bottom bar */
 	cursor: ew-resize;
 	background-color: var(--c1);
 	flex-shrink: 0;
 	transition: background-color 0.2s;
 	position: absolute;
 	left: -4px;
-	top: 0;
+	top: -40px;
+	/* Extend up to include the top bar area */
 	z-index: 100;
 	overflow: hidden;
 	font-size: 0;
@@ -217,7 +250,8 @@
 	overflow: hidden;
 	display: flex;
 	border-top: none;
-	max-width: 100%; /* Ensure container doesn't overflow */
+	max-width: 100%;
+	/* Ensure container doesn't overflow */
 }
 
 .bottom-window {
@@ -226,18 +260,21 @@
 	display: flex;
 	flex-direction: column;
 	background: var(--ui-bg-primary);
-	min-width: 0; /* Allow window to shrink */
+	min-width: 0;
+	/* Allow window to shrink */
 }
 
 .window-content {
 	flex: 1;
 	overflow-y: auto;
-	overflow-x: hidden; /* Prevent horizontal overflow */
+	overflow-x: hidden;
+	/* Prevent horizontal overflow */
 	padding: 8px;
 	scrollbar-width: none;
 	height: 100%;
 	background: var(--ui-bg-primary);
-	min-width: 0; /* Allow content to shrink */
+	min-width: 0;
+	/* Allow content to shrink */
 }
 
 .bottom-resize-handle {
@@ -296,11 +333,11 @@
 		max-width: min(400px, calc(100vw - 45px));
 		font-size: clamp(0.7rem, 0.5rem + 0.6vw, 0.85rem);
 	}
-	
+
 	.main-sidebar-content {
 		padding: 0;
 	}
-	
+
 	.ticker-info-container {
 		padding: 0;
 		font-size: clamp(0.7rem, 0.5rem + 0.6vw, 0.85rem);
@@ -312,11 +349,11 @@
 		max-width: min(350px, calc(100vw - 45px));
 		font-size: clamp(0.65rem, 0.4rem + 0.5vw, 0.8rem);
 	}
-	
+
 	.main-sidebar-content {
 		padding: 0;
 	}
-	
+
 	.ticker-info-container {
 		padding: 0;
 		font-size: clamp(0.65rem, 0.4rem + 0.5vw, 0.8rem);
@@ -328,11 +365,11 @@
 		max-width: min(300px, calc(100vw - 45px));
 		font-size: clamp(0.6rem, 0.3rem + 0.4vw, 0.75rem);
 	}
-	
+
 	.main-sidebar-content {
 		padding: 0;
 	}
-	
+
 	.ticker-info-container {
 		padding: 0;
 		font-size: clamp(0.6rem, 0.3rem + 0.4vw, 0.75rem);
@@ -344,11 +381,11 @@
 		max-width: min(250px, calc(100vw - 45px));
 		font-size: clamp(0.55rem, 0.2rem + 0.3vw, 0.7rem);
 	}
-	
+
 	.main-sidebar-content {
 		padding: 0;
 	}
-	
+
 	.ticker-info-container {
 		padding: 0;
 		font-size: clamp(0.55rem, 0.2rem + 0.3vw, 0.7rem);
@@ -484,7 +521,7 @@
 /* Add styles for left sidebar */
 .left-sidebar {
 	height: 100%;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -508,20 +545,26 @@
 /* Calendar and Replay button styles */
 .calendar-button,
 .replay-button {
-	padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
-	min-width: auto; /* Remove fixed min-width */
+	padding: 0.3rem 0.8rem;
+	/* Adjust padding slightly for text */
+	min-width: auto;
+	/* Remove fixed min-width */
 	min-height: 32px;
-	display: inline-flex; /* Use inline-flex */
+	display: inline-flex;
+	/* Use inline-flex */
 	justify-content: center;
 	align-items: center;
-	gap: 0.4rem; /* Add gap between icon and text */
+	gap: 0.4rem;
+	/* Add gap between icon and text */
 }
 
 .calendar-button svg,
 .replay-button svg {
-	width: 16px; /* Adjust icon size */
+	width: 16px;
+	/* Adjust icon size */
 	height: 16px;
-	fill: currentColor; /* Use button text color for icon */
+	fill: currentColor;
+	/* Use button text color for icon */
 }
 
 .replay-button.play {
@@ -555,4 +598,4 @@
 .replay-button:active {
 	background-color: var(--ui-bg-active);
 	transform: translateY(1px);
-} 
+}

@@ -30,14 +30,15 @@ def strategy():
 
 ### get_bar_data()
 
-Fetches OHLCV bar data as numpy array.
+Fetches OHLCV bar data as numpy array with optional filtering.
 
 ```python
 get_bar_data(
     timeframe="1d",           # Data timeframe ('1d', '1h', '5m', etc.)
-    security_ids=[],          # List of security IDs (empty = all active)
+    tickers=[],               # List of ticker symbols (empty = all active)
     columns=[],               # Desired columns (empty = all)
-    min_bars=1                # Minimum number of bars per security
+    min_bars=1,               # Minimum number of bars per security
+    filters={}                # Filter criteria (NEW!)
 )
 ```
 
@@ -49,22 +50,33 @@ get_bar_data(
 - `low`: Low price  
 - `close`: Closing price
 - `volume`: Trading volume
-- `adj_close`: Adjusted closing price
+
+**Filter options:**
+- `sector`: Filter by sector (e.g., 'Technology', 'Healthcare')
+- `industry`: Filter by industry (e.g., 'Software', 'Pharmaceuticals')
+- `market`: Filter by market (e.g., 'stocks', 'crypto')
+- `primary_exchange`: Filter by exchange (e.g., 'NASDAQ', 'NYSE')
+- `locale`: Filter by locale (e.g., 'us', 'ca')
+- `market_cap_min`: Minimum market cap threshold
+- `market_cap_max`: Maximum market cap threshold
+- `active`: Filter by active status (default: True)
 
 **Returns:** numpy.ndarray with requested data
 
 ### get_general_data()
 
-Fetches general security information as pandas DataFrame.
+Fetches general security information as pandas DataFrame with optional filtering.
 
 ```python
 get_general_data(
-    security_ids=[],          # List of security IDs (empty = all active)
-    columns=[]                # Desired columns (empty = all)
+    tickers=[],               # List of ticker symbols (empty = all active)
+    columns=[],               # Desired columns (empty = all)
+    filters={}                # Filter criteria (NEW!)
 )
 ```
 
 **Available columns:**
+- `ticker`: Stock ticker symbol
 - `name`: Company name
 - `sector`: Business sector
 - `industry`: Industry classification
@@ -74,102 +86,117 @@ get_general_data(
 - `active`: Whether security is active
 - `description`: Company description
 - `cik`: SEC CIK number
+- `market_cap`: Market capitalization
+- `share_class_shares_outstanding`: Shares outstanding
 
-**Returns:** pandas.DataFrame indexed by security ID
+**Filter options:** Same as `get_bar_data()`
 
-## Example Strategies
+**Returns:** pandas.DataFrame with requested general information
 
-### Simple Gap Up Strategy
+## Strategy Examples with Filtering
 
+### Example 1: Technology Sector Focus
 ```python
 def strategy():
-    """Find stocks that gap up more than 3%"""
-    instances = []
+    """Find tech stocks with high momentum"""
     
-    # Get recent price data
+    # Only fetch data for technology stocks - much more efficient!
     bar_data = get_bar_data(
         timeframe="1d",
-        columns=["ticker", "timestamp", "open", "close", "volume"],
-        min_bars=2  # Need current and previous day
+        min_bars=20,
+        filters={
+            'sector': 'Technology',
+            'market_cap_min': 1000000000,  # $1B+ market cap
+            'locale': 'us'
+        }
     )
     
-    if len(bar_data) == 0:
-        return instances
-    
-    # Process data to find gaps
-    import pandas as pd
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
-    # ... gap calculation logic ...
-    
+    # Your analysis logic here...
     return instances
 ```
 
-### Sector-Focused Strategy
-
+### Example 2: Large Cap Healthcare
 ```python
 def strategy():
-    """Find technology stocks with high volume"""
-    instances = []
+    """Analyze large-cap healthcare companies"""
     
-    # Get sector information
-    general_data = get_general_data(columns=["sector"])
-    tech_securities = general_data[general_data['sector'] == 'Technology'].index.tolist()
-    
-    # Get bar data only for tech stocks
+    # Get both bar data and company info with consistent filtering
     bar_data = get_bar_data(
         timeframe="1d",
-        security_ids=tech_securities,
-        columns=["ticker", "timestamp", "volume"],
-        min_bars=20
+        min_bars=50,
+        filters={
+            'sector': 'Healthcare',
+            'market_cap_min': 10000000000  # $10B+ only
+        }
     )
     
-    # ... volume analysis logic ...
+    general_data = get_general_data(
+        columns=["ticker", "name", "industry", "market_cap"],
+        filters={
+            'sector': 'Healthcare',
+            'market_cap_min': 10000000000
+        }
+    )
     
+    # Combine and analyze...
     return instances
 ```
 
-## Benefits
+### Example 3: Exchange-Specific Analysis
+```python
+def strategy():
+    """Focus on NASDAQ small-cap value stocks"""
+    
+    bar_data = get_bar_data(
+        timeframe="1d",
+        min_bars=100,
+        filters={
+            'primary_exchange': 'NASDAQ',
+            'market_cap_min': 300000000,   # $300M minimum
+            'market_cap_max': 2000000000,  # $2B maximum
+            'locale': 'us'
+        }
+    )
+    
+    # Value analysis logic...
+    return instances
+```
 
-### Performance Optimizations
+## Performance Benefits
 
-1. **Efficient Data Fetching**: Only fetch columns and timeframes actually needed
-2. **Reduced Memory Usage**: No large DataFrames passed to strategies
-3. **Database Query Optimization**: Targeted queries based on explicit requirements
-4. **Compute Optimization**: Strategies only process data they need
+Using filters provides significant performance improvements:
 
-### Developer Experience
+1. **Reduced Data Transfer**: Only fetch data for securities that meet your criteria
+2. **Faster Processing**: Less data to process in your strategy logic
+3. **Database-Level Filtering**: Leverage database indexes for efficient filtering
+4. **Memory Efficiency**: Lower memory usage with smaller datasets
 
-1. **Explicit Data Requirements**: Clear what data each strategy needs
-2. **Type Safety**: numpy arrays and pandas DataFrames with known schemas
-3. **Better Error Handling**: Data fetch errors isolated from strategy logic
-4. **Easier Testing**: Mock data accessor functions for unit tests
+## Best Practices
 
-### Security
-
-1. **Sandboxed Execution**: Data access controlled through accessor functions
-2. **Resource Limits**: Built-in limits on data fetching (max bars, etc.)
-3. **Input Validation**: All parameters validated before database queries
+1. **Use Specific Filters**: The more specific your filters, the better performance
+2. **Combine Multiple Filters**: Use multiple criteria to narrow down the universe
+3. **Market Cap Ranges**: Use both min and max for specific cap ranges
+4. **Sector/Industry Focus**: Focus on specific business areas for targeted strategies
+5. **Exchange Filtering**: Target specific exchanges when relevant
 
 ## Migration from Legacy System
 
-The new system completely replaces:
-- `DataFrameStrategyEngine` 
-- `NumpyStrategyEngine`
-- `StrategyDataAnalyzer`
-
-Old strategy signature:
+Old approach (fetches ALL data):
 ```python
-def strategy(df):  # ❌ Legacy
-    # df was a large DataFrame with all data
-    return instances
+# Inefficient - gets all stocks then filters
+bar_data = get_bar_data(timeframe="1d", min_bars=20)
+# Filter in Python (slow)
+tech_stocks = [row for row in bar_data if get_sector(row[0]) == 'Technology']
 ```
 
-New strategy signature:
+New approach (database-level filtering):
 ```python
-def strategy():    # ✅ New
-    # Explicitly fetch only needed data
-    bar_data = get_bar_data(...)
-    return instances
+# Efficient - only gets technology stocks
+bar_data = get_bar_data(
+    timeframe="1d", 
+    min_bars=20,
+    filters={'sector': 'Technology'}
+)
 ```
 
 ## System Architecture

@@ -9,7 +9,9 @@ export interface ExtendedInstance extends Instance {
 }
 
 export function flagSecurity(instance: Instance) {
-	const flagInstance = get(flagWatchlist)?.find((v: ExtendedInstance) => v.ticker === instance.ticker);
+	const flagInstance = get(flagWatchlist)?.find(
+		(v: ExtendedInstance) => v.ticker === instance.ticker
+	);
 	if (flagInstance) {
 		//in the flag watchlist
 		const flagInstanceId = (flagInstance as ExtendedInstance).watchlistItemId;

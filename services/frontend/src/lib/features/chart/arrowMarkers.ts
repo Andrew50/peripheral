@@ -69,7 +69,8 @@ function drawArrowDown(ctx: CanvasRenderingContext2D, x: number, y: number, size
 
 // Custom series view for arrow markers.
 export class ArrowMarkersPaneView
-	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions> {
+	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions>
+{
 	private markers: ArrowMarker[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
@@ -200,5 +201,5 @@ export class ArrowMarkersPaneView
 	}
 
 	// Cleanup, if necessary.
-	destroy(): void { }
+	destroy(): void {}
 }

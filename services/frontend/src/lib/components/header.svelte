@@ -62,7 +62,9 @@
 		height: 80px;
 		width: auto;
 		display: block;
-		transition: height 0.3s ease, transform 0.3s ease;
+		transition:
+			height 0.3s ease,
+			transform 0.3s ease;
 		transform: translateY(5px);
 	}
 

@@ -41,7 +41,7 @@
 	function handleAuthSuccess() {
 		dispatch('success');
 		closeModal();
-		
+
 		if (typeof window !== 'undefined') {
 			window.location.href = '/app';
 		}
@@ -50,9 +50,9 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
- <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 {#if visible}
-	<div 
+	<div
 		class="auth-modal-overlay"
 		on:click={handleBackdropClick}
 		on:keydown={handleKeydown}
@@ -65,7 +65,10 @@
 				<!-- Close button -->
 				<button class="close-button" on:click={closeModal} aria-label="Close">
 					<svg viewBox="0 0 24 24" width="24" height="24">
-						<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+						<path
+							d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+							fill="currentColor"
+						/>
 					</svg>
 				</button>
 
@@ -78,8 +81,8 @@
 
 				<!-- Auth component -->
 				<div class="auth-wrapper">
-					<Auth 
-						loginMenu={currentMode === 'login'} 
+					<Auth
+						loginMenu={currentMode === 'login'}
 						modalMode={true}
 						on:authSuccess={handleAuthSuccess}
 						on:toggleMode={toggleMode}
@@ -144,7 +147,7 @@
 		position: relative;
 		width: 100%;
 		overflow: hidden;
-		box-shadow: 
+		box-shadow:
 			0 20px 25px -5px rgba(0, 0, 0, 0.3),
 			0 10px 10px -5px rgba(0, 0, 0, 0.2);
 	}
@@ -259,9 +262,8 @@
 			font-size: 1.25rem;
 		}
 
-
 		.auth-wrapper :global(.auth-card) {
 			padding: 1.5rem;
 		}
 	}
-</style> 
+</style>
