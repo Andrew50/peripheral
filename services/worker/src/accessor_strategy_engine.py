@@ -133,10 +133,24 @@ class AccessorStrategyEngine:
                 symbols=['AAPL']    # Just one symbol for validation
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='validation',
+                symbols=['AAPL']
+            )
+            
+            # Debug: Verify both instances have validation context
+            logger.info(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
+            logger.info(f"🔍 Global accessor context: {global_accessor.execution_context}")
+            logger.info(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
+            
             logger.info("🔧 Validation optimizations enabled:")
             logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
             logger.info("   ✓ Fast execution path (validation mode)")
             logger.info("   ✓ Skip result ranking and processing")
+            logger.info("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
             instances = await self._execute_strategy(

@@ -158,12 +158,8 @@ class DataAccessorProvider:
                 elif len(tickers) > 1:
                     tickers = tickers[:1]  # Limit to first ticker only for validation
                     logger.info(f"🧪 Validation mode: limiting tickers to first symbol only: {tickers}")
-                # Also limit min_bars for validation to prevent excessive data requests
-                if min_bars > 2:
-                    min_bars = 2  # Maximum 2 bars for validation
-                    logger.info(f"🧪 Validation mode: limiting min_bars to {min_bars} for fast validation")
-            
-            # Check if we need to use batching
+               
+            # Check if we need to use batching (now with potentially corrected tickers)
             should_batch = self._should_use_batching(tickers, aggregate_mode)
             
             if should_batch:
@@ -656,8 +652,11 @@ class DataAccessorProvider:
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
                 date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
                 date_params = []
-                # Override min_bars to be minimal for validation
-                min_bars = min(min_bars, 2)  # Never more than 2 bars for validation
+                # Override min_bars to be reasonable for validation, but respect strategy needs
+                if min_bars > 100:  # Set reasonable upper limit for validation
+                    original_min_bars = min_bars
+                    min_bars = 100  # Maximum 100 bars for validation
+                    logger.info(f"🧪 Validation mode: limiting min_bars from {original_min_bars} to {min_bars} for performance")
             elif context['mode'] == 'screening':
                 # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
                 # This is much more efficient than date filtering because:
@@ -1157,6 +1156,17 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
         numpy.ndarray with requested bar data
     """
     accessor = get_data_accessor()
+    
+    # Debug: Check if this global function is being called with validation context issues
+    if hasattr(accessor, 'execution_context'):
+        context = accessor.execution_context
+        if context.get('mode') == 'validation' and tickers is None:
+            logger.warning(f"🚨 VALIDATION ISSUE: Global get_bar_data called with tickers=None during validation mode!")
+            logger.warning(f"   Context: {context}")
+            logger.warning(f"   This suggests strategy is using global function instead of bound function")
+            # Override for validation to prevent database crash
+            tickers = context.get('symbols', ['AAPL'])[:1]
+            logger.warning(f"   Emergency override: limiting to {tickers}")
     
     # Use tickers directly (new preferred approach)
     return accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode)

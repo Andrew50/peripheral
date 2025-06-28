@@ -455,9 +455,6 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			}
 			processedTickers[ticker] = struct{}{}
 			continue
-		} else {
-			// we need to verify that there isn't like an overlapping / different stock with the same securityid
-
 		}
 
 		// Mark ticker as processed
