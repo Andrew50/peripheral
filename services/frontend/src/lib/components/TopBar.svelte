@@ -557,7 +557,7 @@
 	</div>
 
 	<!-- Right side - Sidebar Controls -->
-	<div class="top-bar-right">
+	<div class="top-bar-right" style="right: {menuWidth > 0 ? menuWidth + 45 : 45}px;">
 		{#if $activeMenu === 'watchlist'}
 			<!-- Watchlist Controls -->
 			<div class="sidebar-controls">
@@ -661,7 +661,7 @@
 		min-height: 40px;
 		background-color: #0f0f0f;
 		display: flex;
-		justify-content: flex-start; /* Start from left, don't space-between */
+		justify-content: space-between; /* Restore space-between for proper positioning */
 		align-items: center;
 		padding: 0 10px;
 		flex-shrink: 0;
@@ -681,6 +681,9 @@
 	}
 
 	.top-bar-right {
+		position: absolute;
+		top: 0;
+		height: 40px;
 		display: flex;
 		align-items: center;
 		padding-left: 16px; /* Add space after countdown section */
