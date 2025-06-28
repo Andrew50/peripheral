@@ -49,7 +49,7 @@
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance, Watchlist } from '$lib/utils/types/types';
+	import type { Instance, Watchlist as WatchlistType } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
 	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
@@ -65,10 +65,9 @@
 	// Import auth modal
 	import AuthModal from '$lib/components/authModal.svelte';
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
-	
+
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
-	
 
 	// Import extended hours toggle store
 	import {
@@ -150,7 +149,7 @@
 	// Calendar state
 	let calendarVisible = false;
 
-	// Get shared conversation ID from server-side layout data  
+	// Get shared conversation ID from server-side layout data
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
 
@@ -346,14 +345,14 @@
 			document.title = 'Atlantis';
 			// Set initial state once
 			lastSidebarMenu = null;
-			
+
 			// Calculate default sidebar width as 15% of screen width, but with constraints
 			const defaultSidebarWidth = Math.min(
 				window.innerWidth * 0.15, // 15% of screen width
 				600 // Maximum 600px (same as resize max)
 			);
 			const constrainedWidth = Math.max(defaultSidebarWidth, minWidth); // Ensure it's not smaller than minimum (120px)
-			
+
 			menuWidth.set(constrainedWidth);
 			changeMenu('watchlist'); // Set watchlist as the default active menu
 
@@ -372,7 +371,6 @@
 				calendarVisible = true;
 			});
 		}
-
 
 		initStores();
 
@@ -406,7 +404,7 @@
 	onMount(async () => {
 		// Wait for critical path to complete
 		await tick();
-		
+
 		// Use requestIdleCallback for true background loading
 		if (browser && 'requestIdleCallback' in window) {
 			requestIdleCallback(() => {
@@ -424,14 +422,13 @@
 		try {
 			const preloadPromises = [
 				import('$lib/features/screener/screener.svelte'),
-				import('$lib/features/strategies/strategies.svelte'), 
+				import('$lib/features/strategies/strategies.svelte'),
 				import('$lib/features/settings/settings.svelte')
 			];
-			
+
 			// Await them to know when done (optional)
 			await Promise.all(preloadPromises);
-		} catch (error) {
-		}
+		} catch (error) {}
 	}
 
 	onDestroy(() => {
@@ -975,7 +972,7 @@
 	}
 
 	function handleCustomTimeframeClick() {
-		queryInstanceInput(['timeframe'], ['timeframe'], $activeChartInstance, 'timeframe')
+		queryInstanceInput(['timeframe'], ['timeframe'], $activeChartInstance || undefined, 'timeframe')
 			.then((v: Instance) => {
 				if (v) queryChart(v, true);
 			})
@@ -1011,8 +1008,8 @@
 
 		privateRequest<number>('newWatchlist', { watchlistName: newWatchlistName }).then(
 			(newId: number) => {
-				watchlists.update((v: Watchlist[]) => {
-					const w: Watchlist = {
+				watchlists.update((v: WatchlistType[]) => {
+					const w: WatchlistType = {
 						watchlistName: newWatchlistName,
 						watchlistId: newId
 					};
@@ -1118,8 +1115,10 @@
 		}
 
 		privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
-			watchlists.update((v: Watchlist[]) => {
-				const updatedWatchlists = v.filter((watchlist: Watchlist) => watchlist.watchlistId !== id);
+			watchlists.update((v: WatchlistType[]) => {
+				const updatedWatchlists = v.filter(
+					(watchlist: WatchlistType) => watchlist.watchlistId !== id
+				);
 
 				if (id === currentWatchlistId && updatedWatchlists.length > 0) {
 					setTimeout(() => selectWatchlist(String(updatedWatchlists[0].watchlistId)), 10);
@@ -1274,7 +1273,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query isPublicViewing={$isPublicViewing} {sharedConversationId} />
+							<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
 						</div>
 					</div>
 					<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -1340,7 +1339,7 @@
 							aria-pressed={isCustomTimeframe ? 'true' : 'false'}
 						>
 							{#if isCustomTimeframe}
-								{$activeChartInstance.timeframe}
+								{$activeChartInstance?.timeframe}
 							{:else}
 								...
 							{/if}
@@ -1421,7 +1420,7 @@
 														</optgroup>
 														<optgroup label="Actions">
 															<option value="new">+ Create New Watchlist</option>
-															{#if currentWatchlistId && currentWatchlistId !== $flagWatchlistId}
+															{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
 																<option value="delete">- Delete Current Watchlist</option>
 															{/if}
 														</optgroup>
@@ -1768,379 +1767,381 @@
 	{/if}
 </div>
 
-/* TopBar styles */
-.top-bar {
-	height: 40px;
-	min-height: 40px;
-	background-color: #0f0f0f;
-	display: flex;
-	align-items: center;
-	padding: 0 10px;
-	flex-shrink: 0;
-	width: 100%;
-	z-index: 10;
-	border-bottom: 4px solid var(--c1);
-}
+<style>
+	/* TopBar styles */
+	.top-bar {
+		height: 40px;
+		min-height: 40px;
+		background-color: #0f0f0f;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 4px solid var(--c1);
+	}
 
-.top-bar-left {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	flex: 1;
-}
+	.top-bar-left {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: 1;
+	}
 
-.top-bar-right {
-	display: flex;
-	align-items: center;
-	padding-left: 16px;
-}
+	.top-bar-right {
+		display: flex;
+		align-items: center;
+		padding-left: 16px;
+	}
 
-/* Base styles for metadata buttons */
-.metadata-button {
-	font-family: inherit;
-	font-size: 13px;
-	line-height: 18px;
-	color: rgba(255, 255, 255, 0.9);
-	padding: 6px 10px;
-	background: transparent;
-	border-radius: 6px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	border: 1px solid transparent;
-	cursor: pointer;
-	transition: none;
-	text-align: left;
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-}
+	/* Base styles for metadata buttons */
+	.metadata-button {
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: none;
+		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
 
-.metadata-button:focus {
-	outline: none;
-	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
-}
+	.metadata-button:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+	}
 
-.metadata-button:hover {
-	background: rgba(255, 255, 255, 0.15);
-	border-color: transparent;
-	color: #ffffff;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
+	.metadata-button:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
 
-/* Specific style adjustments for symbol button */
-.symbol.metadata-button {
-	font-size: 14px;
-	line-height: 20px;
-	color: #ffffff;
-	padding: 6px 12px;
-	gap: 4px;
-}
+	/* Specific style adjustments for symbol button */
+	.symbol.metadata-button {
+		font-size: 14px;
+		line-height: 20px;
+		color: #ffffff;
+		padding: 6px 12px;
+		gap: 4px;
+	}
 
-.top-bar .search-icon {
-	opacity: 0.8;
-	transition: opacity 0.2s ease;
-	position: static;
-	padding: 0;
-	left: auto;
-}
+	.top-bar .search-icon {
+		opacity: 0.8;
+		transition: opacity 0.2s ease;
+		position: static;
+		padding: 0;
+		left: auto;
+	}
 
-.top-bar .symbol.metadata-button:hover .search-icon {
-	opacity: 1;
-}
+	.top-bar .symbol.metadata-button:hover .search-icon {
+		opacity: 1;
+	}
 
-/* Styles for preset timeframe buttons */
-.timeframe-preset-button {
-	min-width: 24px;
-	text-align: center;
-	padding: 6px 4px;
-	display: inline-flex;
-	justify-content: center;
-	align-items: center;
-	margin-left: -2px;
-}
+	/* Styles for preset timeframe buttons */
+	.timeframe-preset-button {
+		min-width: 24px;
+		text-align: center;
+		padding: 6px 4px;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+		margin-left: -2px;
+	}
 
-.timeframe-preset-button:first-of-type {
-	margin-left: 0;
-}
+	.timeframe-preset-button:first-of-type {
+		margin-left: 0;
+	}
 
-.timeframe-preset-button.active {
-	background: rgba(255, 255, 255, 0.2);
-	border-color: transparent;
-	color: #ffffff;
-	font-weight: 600;
-	box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
-}
+	.timeframe-preset-button.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
 
-/* Styles for the custom timeframe '...' button */
-.timeframe-custom-button {
-	padding: 6px 4px;
-	min-width: 24px;
-	text-align: center;
-	display: inline-flex;
-	justify-content: center;
-	align-items: center;
-	margin-left: -2px;
-}
+	/* Styles for the custom timeframe '...' button */
+	.timeframe-custom-button {
+		padding: 6px 4px;
+		min-width: 24px;
+		text-align: center;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+		margin-left: -2px;
+	}
 
-.timeframe-custom-button.active {
-	background: rgba(255, 255, 255, 0.2);
-	border-color: transparent;
-	color: #ffffff;
-	font-weight: 600;
-	box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
-}
+	.timeframe-custom-button.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
 
-/* Calendar button styles */
-.calendar-button {
-	padding: 6px 8px;
-	min-width: auto;
-	display: inline-flex;
-	justify-content: center;
-	align-items: center;
-}
+	/* Calendar button styles */
+	.calendar-button {
+		padding: 6px 8px;
+		min-width: auto;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+	}
 
-.calendar-button svg {
-	opacity: 0.8;
-	transition: opacity 0.2s ease;
-}
+	.calendar-button svg {
+		opacity: 0.8;
+		transition: opacity 0.2s ease;
+	}
 
-.calendar-button:hover svg {
-	opacity: 1;
-}
+	.calendar-button:hover svg {
+		opacity: 1;
+	}
 
-/* Countdown styles */
-.countdown-container {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 10px;
-	background: transparent;
-	border-radius: 6px;
-	border: none;
-	color: rgba(255, 255, 255, 0.9);
-	font-size: 13px;
-	line-height: 18px;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-	transition: none;
-}
+	/* Countdown styles */
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		border: none;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		line-height: 18px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: none;
+	}
 
-.countdown-container:hover {
-	background: rgba(255, 255, 255, 0.15);
-	color: #ffffff;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
+	.countdown-container:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
 
-.countdown-label {
-	color: inherit;
-	font-size: inherit;
-	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
+	.countdown-label {
+		color: inherit;
+		font-size: inherit;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
 
-.countdown-value {
-	font-family: inherit;
-	font-weight: 600;
-	font-size: inherit;
-	color: inherit;
-	min-width: 45px;
-	text-align: center;
-}
+	.countdown-value {
+		font-family: inherit;
+		font-weight: 600;
+		font-size: inherit;
+		color: inherit;
+		min-width: 45px;
+		text-align: center;
+	}
 
-/* Divider styles */
-.divider {
-	width: 1px;
-	height: 28px;
-	background: rgba(255, 255, 255, 0.15);
-	margin: 0 6px;
-	flex-shrink: 0;
-}
+	/* Divider styles */
+	.divider {
+		width: 1px;
+		height: 28px;
+		background: rgba(255, 255, 255, 0.15);
+		margin: 0 6px;
+		flex-shrink: 0;
+	}
 
-/* Sidebar controls styles */
-.sidebar-controls {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-	width: auto;
-	min-width: 200px;
-	height: 40px;
-	gap: 8px;
-}
+	/* Sidebar controls styles */
+	.sidebar-controls {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: auto;
+		min-width: 200px;
+		height: 40px;
+		gap: 8px;
+	}
 
-.watchlist-controls-left {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-	margin-left: 0;
-	padding-left: 0;
-}
+	.watchlist-controls-left {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		margin-left: 0;
+		padding-left: 0;
+	}
 
-.watchlist-controls-right {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-}
+	.watchlist-controls-right {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+	}
 
-.alert-controls-right {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-	width: 100%;
-	padding-right: 8px;
-}
+	.alert-controls-right {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: 100%;
+		padding-right: 8px;
+	}
 
-.watchlist-selector .select-wrapper {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	justify-content: flex-start;
-	width: fit-content;
-	background: transparent;
-	border-radius: 6px;
-	padding: 0;
-	margin-left: 0;
-}
+	.watchlist-selector .select-wrapper {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-start;
+		width: fit-content;
+		background: transparent;
+		border-radius: 6px;
+		padding: 0;
+		margin-left: 0;
+	}
 
-.watchlist-selector select {
-	flex: 0 1 auto;
-	min-width: fit-content;
-	width: fit-content;
-	background: transparent;
-	color: #ffffff;
-	border: none;
-	border-radius: 0;
-	padding: 6px 8px 6px 8px;
-	margin-left: 0;
-	font-size: 13px;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-	appearance: none;
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	text-align: left;
-}
+	.watchlist-selector select {
+		flex: 0 1 auto;
+		min-width: fit-content;
+		width: fit-content;
+		background: transparent;
+		color: #ffffff;
+		border: none;
+		border-radius: 0;
+		padding: 6px 8px 6px 8px;
+		margin-left: 0;
+		font-size: 13px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		text-align: left;
+	}
 
-.watchlist-selector .caret-icon {
-	margin-left: 4px;
-	margin-right: 6px;
-	width: 12px;
-	height: 12px;
-	color: #ffffff;
-	pointer-events: none;
-	flex-shrink: 0;
-}
+	.watchlist-selector .caret-icon {
+		margin-left: 4px;
+		margin-right: 6px;
+		width: 12px;
+		height: 12px;
+		color: #ffffff;
+		pointer-events: none;
+		flex-shrink: 0;
+	}
 
-.watchlist-selector .caret-icon svg {
-	width: 100%;
-	height: 100%;
-}
+	.watchlist-selector .caret-icon svg {
+		width: 100%;
+		height: 100%;
+	}
 
-.watchlist-selector .select-wrapper:hover {
-	background: rgba(255, 255, 255, 0.15);
-}
+	.watchlist-selector .select-wrapper:hover {
+		background: rgba(255, 255, 255, 0.15);
+	}
 
-.add-item-button {
-	color: #ffffff;
-	width: 28px;
-	height: 28px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 16px;
-	font-weight: 300;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	background: transparent;
-	border: none;
-	border-radius: 6px;
-	transition: all 0.2s ease;
-	padding: 6px 8px;
-}
+	.add-item-button {
+		color: #ffffff;
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 16px;
+		font-weight: 300;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		background: transparent;
+		border: none;
+		border-radius: 6px;
+		transition: all 0.2s ease;
+		padding: 6px 8px;
+	}
 
-.add-item-button:hover {
-	background: rgba(255, 255, 255, 0.15);
-	color: #ffffff;
-}
+	.add-item-button:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+	}
 
-.new-watchlist-container {
-	position: absolute;
-	top: 100%;
-	left: 0;
-	margin-top: 8px;
-	padding: 12px;
-	background: rgba(0, 0, 0, 0.9);
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 8px;
-	z-index: 100;
-	min-width: 250px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
+	.new-watchlist-container {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		margin-top: 8px;
+		padding: 12px;
+		background: rgba(0, 0, 0, 0.9);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		z-index: 100;
+		min-width: 250px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	}
 
-.new-watchlist-container .input {
-	width: 100%;
-	margin-bottom: 8px;
-	padding: 8px 12px;
-	border-radius: 6px;
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	background: rgba(0, 0, 0, 0.3);
-	color: #ffffff;
-	font-size: 13px;
-	font-weight: 500;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	transition: all 0.2s ease;
-}
+	.new-watchlist-container .input {
+		width: 100%;
+		margin-bottom: 8px;
+		padding: 8px 12px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.3);
+		color: #ffffff;
+		font-size: 13px;
+		font-weight: 500;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+	}
 
-.new-watchlist-container .input:focus {
-	border-color: rgba(255, 255, 255, 0.6);
-	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
-	outline: none;
-}
+	.new-watchlist-container .input:focus {
+		border-color: rgba(255, 255, 255, 0.6);
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		outline: none;
+	}
 
-.new-watchlist-container .input::placeholder {
-	color: rgba(255, 255, 255, 0.6);
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-}
+	.new-watchlist-container .input::placeholder {
+		color: rgba(255, 255, 255, 0.6);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
 
-.new-watchlist-buttons {
-	display: flex;
-	justify-content: flex-end;
-	gap: 6px;
-}
+	.new-watchlist-buttons {
+		display: flex;
+		justify-content: flex-end;
+		gap: 6px;
+	}
 
-.new-watchlist-buttons .utility-button {
-	padding: 6px 12px;
-	color: #ffffff;
-	font-size: 13px;
-	font-weight: 600;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	transition: all 0.2s ease;
-	min-width: 32px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: rgba(255, 255, 255, 0.1);
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 6px;
-}
+	.new-watchlist-buttons .utility-button {
+		padding: 6px 12px;
+		color: #ffffff;
+		font-size: 13px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+		min-width: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
+	}
 
-.new-watchlist-buttons .utility-button:hover {
-	background: rgba(255, 255, 255, 0.2);
-	border-color: rgba(255, 255, 255, 0.4);
-}
+	.new-watchlist-buttons .utility-button:hover {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.4);
+	}
 
-.create-alert-btn {
-	padding: 6px 12px;
-	font-size: 13px;
-	font-weight: 600;
-	color: #ffffff;
-	background: transparent;
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 6px;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-	transition: all 0.2s ease;
-}
+	.create-alert-btn {
+		padding: 6px 12px;
+		font-size: 13px;
+		font-weight: 600;
+		color: #ffffff;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 6px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		transition: all 0.2s ease;
+	}
 
-.create-alert-btn:hover {
-	background: rgba(255, 255, 255, 0.15);
-	border-color: rgba(255, 255, 255, 0.4);
-}
+	.create-alert-btn:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+</style>

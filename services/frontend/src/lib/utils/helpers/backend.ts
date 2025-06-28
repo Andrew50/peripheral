@@ -161,8 +161,9 @@ export async function privateRequest<T>(
 	});
 
 	if (response.status === 401) {
-		// For public viewing mode, silently handle 401 errors
+		// Redirect to login page for authentication errors
 		console.warn('Authentication required for:', func);
+		goto('/login');
 		throw new Error('Authentication required');
 	} else if (response.ok) {
 		const result = (await response.json()) as T;
