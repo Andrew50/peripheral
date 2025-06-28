@@ -43,15 +43,13 @@
 		dispatchMenuChange,
 		menuWidth,
 		settings,
-		isPublicViewing as isPublicViewingStore
+		isPublicViewing,
 	} from '$lib/utils/stores/stores';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
 	import type { Instance } from '$lib/utils/types/types';
 
-	// Add import near the top with other imports
-	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -93,12 +91,10 @@
 	// Bottom windows
 	type BottomWindowType =
 		| 'screener'
-		| 'account'
 		//| 'options'
 		| 'strategies'
 		| 'settings'
 		| 'deploy'
-		| 'backtest'
 		//| 'news'
 		| 'query';
 	interface BottomWindow {
@@ -138,11 +134,6 @@
 	const MIN_TICKER_HEIGHT = 100;
 	const MAX_TICKER_HEIGHT = 600;
 
-	// DEPRECATED: Screensaver functionality
-	// Add state variables after other state declarations
-	// let screensaverActive = false;
-	// let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-	// const INACTIVITY_TIMEOUT = 5 * 1000; // 5 seconds in milliseconds
 
 	// Add left sidebar state variables next to the other state variables
 	let leftMenuWidth = 600; // <-- Set initial width to 300
@@ -151,20 +142,11 @@
 	// Calendar state
 	let calendarVisible = false;
 
-	// Public viewing mode state - initialize from URL parameters synchronously
-	let isPublicViewing = false;
-	let sharedConversationId = '';
-
-	// Check for shared conversation parameter immediately (before component mounts)
-	if (browser && $page?.url?.searchParams) {
-		const shareParam = $page.url.searchParams.get('share');
-		if (shareParam) {
-			isPublicViewing = true;
-			sharedConversationId = shareParam;
-			// Update the global store so other components know we're in public viewing mode
-			isPublicViewingStore.set(true);
-		}
-	}
+	// Get shared conversation ID from server-side layout data  
+	$: layoutData = $page.data;
+	$: sharedConversationId = layoutData?.sharedConversationId || '';
+	
+	// Note: isPublicViewing store is set in +layout.svelte and available as $isPublicViewing
 
 	// Import connect 
 	import { connect } from '$lib/utils/stream/socket';
@@ -357,7 +339,16 @@
 			document.title = 'Atlantis';
 			// Set initial state once
 			lastSidebarMenu = null;
-			menuWidth.set(0);
+			
+			// Calculate default sidebar width as 15% of screen width, but with constraints
+			const defaultSidebarWidth = Math.min(
+				window.innerWidth * 0.15, // 15% of screen width
+				600 // Maximum 600px (same as resize max)
+			);
+			const constrainedWidth = Math.max(defaultSidebarWidth, minWidth); // Ensure it's not smaller than minimum (120px)
+			
+			menuWidth.set(constrainedWidth);
+			changeMenu('watchlist'); // Set watchlist as the default active menu
 
 			updateChartWidth();
 			window.addEventListener('resize', updateChartWidth);
@@ -370,13 +361,6 @@
 			document.addEventListener('touchmove', preventOverscroll, { passive: false });
 		}
 
-		// Handle authentication based on public viewing mode (already determined above)
-		if (!isPublicViewing) {
-			// Normal auth flow for regular users
-			privateRequest<string>('verifyAuth', {}).catch(() => {
-				goto('/login');
-			});
-		} 
 
 		initStores();
 
@@ -913,7 +897,6 @@
 		defaultMode={$authModalStore.mode}
 		on:success={() => {
 			hideAuthModal();
-			// Optional: refresh page or update auth state
 		}}
 		on:close={hideAuthModal}
 	/>
@@ -926,7 +909,7 @@
 				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 					<div class="sidebar-content">
 						<div class="main-sidebar-content">
-							<Query {isPublicViewing} {sharedConversationId} />
+							<Query isPublicViewing={$isPublicViewing} {sharedConversationId} />
 						</div>
 					</div>
 					<div

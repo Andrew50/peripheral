@@ -3,6 +3,8 @@
 	import { publicRequest } from '$lib/utils/helpers/backend';
 	import '$lib/styles/global.css';
 	import { browser } from '$app/environment';
+	import type { LoginResponse } from '$lib/auth';
+	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 
 	import Header from '$lib/components/header.svelte';
 	import { goto } from '$app/navigation';
@@ -27,9 +29,6 @@
 	// Clear error message and reset form when switching between login/signup
 	$: if (loginMenu !== undefined) {
 		errorMessage.set('');
-		// Optionally clear form fields when switching modes
-		// email = '';
-		// password = '';
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -50,22 +49,14 @@
 		// If not in modal mode, let the default link behavior happen
 	}
 
-	interface Login {
-		token: string;
-		settings: string;
-		profilePic: string;
-		username: string;
-	}
-
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
-			const r = await publicRequest<Login>('login', { email: email, password: password });
+			const r = await publicRequest<LoginResponse>('login', { email: email, password: password });
 			if (browser) {
-				// Set the regular session data
-				sessionStorage.setItem('authToken', r.token);
-				sessionStorage.setItem('profilePic', r.profilePic);
-				sessionStorage.setItem('username', r.username);
+				// Set auth data using centralized utilities
+				setAuthCookies(r.token, r.profilePic, r.username);
+				setAuthSessionStorage(r.token, r.profilePic, r.username);
 			}
 
 			// Dispatch success event for modal usage
