@@ -534,8 +534,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: clamp(2px, 0.3vw, 3px);
-		margin-bottom: clamp(10px, 2vw, 16px);
-		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) 8px;
+		margin-bottom: clamp(4px, 1vw, 6px);
+		padding: clamp(8px, 1.5vw, 12px) clamp(8px, 1.5vw, 12px) clamp(4px, 1vw, 6px) 8px;
 	}
 
 	.main-price-row {
@@ -580,9 +580,8 @@
 
 	/* Market Data */
 	.quote-market-data {
-		margin-bottom: clamp(4px, 1vw, 8px);
-		padding: clamp(2px, 0.5vw, 4px) clamp(8px, 1.5vw, 12px) clamp(2px, 0.5vw, 4px)
-			clamp(4px, 0.8vw, 6px);
+		margin-bottom: clamp(2px, 0.5vw, 4px);
+		padding: 0 clamp(8px, 1.5vw, 12px) 0 clamp(4px, 0.8vw, 6px);
 	}
 
 	/* Details */

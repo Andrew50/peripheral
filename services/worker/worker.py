@@ -177,25 +177,64 @@ class StrategyWorker:
             logger.error(f"Failed to connect to database: {e}")
             raise
     
-    def _fetch_strategy_code(self, strategy_id: str) -> str:
-        """Fetch strategy code from database by strategy_id"""
+    def _ensure_db_connection(self):
+        """Ensure database connection is healthy, reconnect if needed"""
         try:
+            # Test the connection with a simple query
             with self.db_conn.cursor() as cursor:
-                # Fetch from consolidated strategies table
-                cursor.execute(
-                    "SELECT pythonCode FROM strategies WHERE strategyId = %s AND is_active = true",
-                    (strategy_id,)
-                )
-                result = cursor.fetchone()
-                
-                if result and result['pythoncode']:
-                    return result['pythoncode']
-                
-                raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
-                
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+            logger.warning(f"Database connection test failed, reconnecting: {e}")
+            try:
+                if hasattr(self, 'db_conn') and self.db_conn:
+                    self.db_conn.close()
+            except:
+                pass
+            self.db_conn = self._init_database()
+            logger.info("Database connection restored")
         except Exception as e:
-            logger.error(f"Failed to fetch strategy code for strategy_id {strategy_id}: {e}")
-            raise
+            logger.error(f"Unexpected error testing database connection: {e}")
+            # For other errors, don't reconnect to avoid infinite loops
+            pass
+    
+    def _fetch_strategy_code(self, strategy_id: str) -> str:
+        """Fetch strategy code from database by strategy_id with connection recovery"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Test connection health before use
+                self._ensure_db_connection()
+                
+                with self.db_conn.cursor() as cursor:
+                    # Fetch from consolidated strategies table
+                    cursor.execute(
+                        "SELECT pythonCode FROM strategies WHERE strategyId = %s AND is_active = true",
+                        (strategy_id,)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result and result['pythoncode']:
+                        return result['pythoncode']
+                    
+                    raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+                    
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                logger.warning(f"Database connection error on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    # Try to reconnect
+                    try:
+                        self.db_conn.close()
+                    except:
+                        pass
+                    self.db_conn = self._init_database()
+                    logger.info(f"Database reconnected on attempt {attempt + 1}")
+                else:
+                    logger.error(f"Failed to fetch strategy code after {max_retries} attempts")
+                    raise
+            except Exception as e:
+                logger.error(f"Failed to fetch strategy code for strategy_id {strategy_id}: {e}")
+                raise
     
     def _extract_required_symbols(self, strategy_code: str) -> List[str]:
         """Extract required symbols from strategy code using AST parsing"""
@@ -1049,8 +1088,12 @@ class StrategyWorker:
             logger.error(f"Redis connection lost, reconnecting: {e}")
             self.redis_client = self._init_redis()
         
-        # Skip DB check during normal operation to reduce overhead
-        # DB connection will be checked when actually needed during task execution
+        # Lightweight DB connection check to prevent stale connections
+        try:
+            self._ensure_db_connection()
+        except Exception as e:
+            logger.error(f"Database connection check failed: {e}")
+            # Don't raise here to avoid interrupting the worker loop
 
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get current queue statistics"""

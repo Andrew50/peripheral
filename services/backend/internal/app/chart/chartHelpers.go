@@ -125,15 +125,20 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	// add .toLower() or toUpper to not have to check two different cases
 	if identifier == "s" {
 		return num, "second", "s", 1, nil
-	} else if identifier == "h" {
+	}
+	if identifier == "h" {
 		return num, "hour", "m", 60, nil
-	} else if identifier == "d" {
+	}
+	if identifier == "d" {
 		return num, "day", "d", 1, nil
-	} else if identifier == "w" {
+	}
+	if identifier == "w" {
 		return num, "week", "d", 7, nil
-	} else if identifier == "m" {
+	}
+	if identifier == "m" {
 		return num, "month", "d", 30, nil
-	} else if identifier == "y" {
+	}
+	if identifier == "y" {
 		return num, "year", "d", 365, nil
 	}
 	return 0, "", "", 0, fmt.Errorf("incorrect timeframe passed")

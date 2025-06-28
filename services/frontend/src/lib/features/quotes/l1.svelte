@@ -99,7 +99,7 @@
 		color: var(--text-primary, white);
 		width: 100%;
 		margin: 0 auto;
-		padding: 2px 8px 2px 0;
+		padding: 0 8px 0 0;
 		display: flex;
 		justify-content: flex-start;
 		gap: 12px;
@@ -113,7 +113,7 @@
 		font-weight: 500;
 		transition: all 0.15s ease;
 		border-radius: 4px;
-		padding: 2px 6px;
+		padding: 1px 4px;
 		cursor: default;
 	}
 
