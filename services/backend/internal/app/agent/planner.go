@@ -567,14 +567,6 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
-		Tools: []responses.ToolUnionParam{
-			{
-				OfWebSearchPreview: &responses.WebSearchToolParam{
-					Type:              "web_search_preview",
-					SearchContextSize: "medium",
-				},
-			},
-		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error generating final response: %w", err)
