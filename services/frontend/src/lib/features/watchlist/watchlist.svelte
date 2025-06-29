@@ -259,33 +259,14 @@
 	/* New style for the list container */
 	.list-scroll-container {
 		flex-grow: 1; /* Take remaining vertical space */
-		overflow-y: auto; /* Allow vertical scrolling */
+		overflow: visible; /* Remove scrolling from this container */
 		min-height: 0; /* Necessary for flex-grow in some cases */
 		padding: 0;
 		background: transparent;
 		border: none;
 		border-radius: 0;
-	}
-
-	/* Custom scrollbar for WebKit browsers */
-	.list-scroll-container::-webkit-scrollbar {
-		width: 6px; /* Width of the scrollbar */
-	}
-
-	.list-scroll-container::-webkit-scrollbar-track {
-		background: transparent; /* Transparent background */
-		border-radius: 3px;
-	}
-
-	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white */
-		border-radius: 3px;
-		border: 1px solid transparent; /* Creates padding around thumb */
-		background-clip: content-box;
-	}
-
-	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.4); /* Slightly more opaque on hover */
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* Shortcut flag icon styling */
