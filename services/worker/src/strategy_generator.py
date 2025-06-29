@@ -775,9 +775,8 @@ Generate the updated strategy function."""
                 if extracted_tickers:
                     ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use tickers={extracted_tickers} in your data accessor calls."
                 
-                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}
+                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}"""
 
-Generate a strategy function that detects this pattern in market data."""
             
             # Add retry-specific guidance with error context
             if attempt > 0:
@@ -802,34 +801,28 @@ Generate a strategy function that detects this pattern in market data."""
                     logger.info(f"Attempting generation with model: {model_name}")
                     
                     # Adjust parameters for o3 models (similar to o1, they don't support temperature/max_tokens the same way)
-                    if model_name.startswith("o3") or model_name.startswith("o1"):
+                    if model_name.startswith("o3"):
                         # Set a timeout for the OpenAI API call to prevent hanging
                         logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 180s)")
                         
                         # Use the timeout parameter for OpenAI API calls
-                        response = self.openai_client.chat.completions.create(
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "user", "content": f"{system_instruction}\n\n{user_prompt}"}
-                            ],
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
                             timeout=180.0  # 3 minute timeout for o3 model
                         )
                     else:
                         logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
                         
-                        response = self.openai_client.chat.completions.create(
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "system", "content": system_instruction},
-                                {"role": "user", "content": user_prompt}
-                            ],
-                            temperature=0.1,
-                            max_tokens=max_tokens,
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
                             timeout=120.0  # 2 minute timeout for other models
                         )
                     
-                    strategy_code = response.choices[0].message.content.strip()
-                    
+                    strategy_code = response.output_text
                     # Extract Python code from response
                     strategy_code = self._extract_python_code(strategy_code)
                     
