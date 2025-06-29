@@ -154,7 +154,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		padding: 0 0 8px 0;
+		padding: 0 12px 8px 12px;
 		width: 100%;
 	}
 
