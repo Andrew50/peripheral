@@ -66,7 +66,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux, aj]
     # Removed the needs: [check-build] dependency
     if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
     env:
