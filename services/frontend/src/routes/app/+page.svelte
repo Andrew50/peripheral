@@ -78,7 +78,13 @@
 
 	// TopBar functionality moved inline
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
-	import { addInstanceToWatchlist as addToWatchlist } from '$lib/features/watchlist/watchlistUtils';
+	import { 
+		addInstanceToWatchlist as addToWatchlist,
+		selectWatchlist,
+		createNewWatchlist,
+		deleteWatchlist,
+		initializeDefaultWatchlist
+	} from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 
 	// Import mobile banner component
@@ -379,6 +385,12 @@
 				toggleMenu(menuName as Menu);
 			}
 		});
+
+		// Initialize watchlist functionality - select default watchlist on page load
+		setTimeout(() => {
+			const watchlistCleanup = initializeDefaultWatchlist();
+			// Store cleanup function for later use if needed
+		}, 100);
 
 		// Force profile display to update
 		currentProfileDisplay = calculateProfileDisplay();
@@ -922,12 +934,6 @@
 	let previousWatchlistId: number;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
-
-	// Extended Instance type to include watchlistItemId
-	interface WatchlistItem extends Instance {
-		watchlistItemId?: number;
-	}
-
 	// TopBar handler functions
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -990,39 +996,18 @@
 		}
 	}
 
-	function addInstanceToWatchlist(securityId?: number) {
-		addToWatchlist(currentWatchlistId, securityId);
-	}
 
 	function newWatchlist() {
 		if (newWatchlistName === '') return;
 
-		const existingWatchlist = get(watchlists).find(
-			(w) => w.watchlistName.toLowerCase() === newWatchlistName.toLowerCase()
-		);
-
-		if (existingWatchlist) {
-			alert('A watchlist with this name already exists');
-			return;
-		}
-
-		privateRequest<number>('newWatchlist', { watchlistName: newWatchlistName }).then(
-			(newId: number) => {
-				watchlists.update((v: WatchlistType[]) => {
-					const w: WatchlistType = {
-						watchlistName: newWatchlistName,
-						watchlistId: newId
-					};
-					selectWatchlist(String(newId));
-					newWatchlistName = '';
-					showWatchlistInput = false;
-					if (!Array.isArray(v)) {
-						return [w];
-					}
-					return [w, ...v];
-				});
-			}
-		);
+		createNewWatchlist(newWatchlistName)
+			.then(() => {
+				newWatchlistName = '';
+				showWatchlistInput = false;
+			})
+			.catch((error) => {
+				alert(error.message);
+			});
 	}
 
 	function closeNewWatchlistWindow() {
@@ -1043,7 +1028,7 @@
 		});
 	}
 
-	function selectWatchlist(watchlistIdString: string) {
+	function handleWatchlistSelection(watchlistIdString: string) {
 		if (!watchlistIdString) return;
 
 		if (watchlistIdString === 'new') {
@@ -1072,7 +1057,7 @@
 
 			if (currentWatchlistIdNum === flagWatchlistId) {
 				alert('The flag watchlist cannot be deleted.');
-				selectWatchlist(String(currentWatchlistId));
+				handleWatchlistSelection(String(currentWatchlistId));
 				return;
 			}
 
@@ -1083,9 +1068,11 @@
 			const watchlistName = watchlist?.watchlistName || `Watchlist #${currentWatchlistIdNum}`;
 
 			if (confirm(`Are you sure you want to delete "${watchlistName}"?`)) {
-				deleteWatchlist(Number(currentWatchlistId));
+				deleteWatchlist(Number(currentWatchlistId)).catch((error) => {
+					alert(error.message);
+				});
 			} else {
-				selectWatchlist(String(currentWatchlistId));
+				handleWatchlistSelection(String(currentWatchlistId));
 			}
 			return;
 		}
@@ -1095,38 +1082,8 @@
 		const watchlistId = parseInt(watchlistIdString);
 		currentWatchlistId = watchlistId;
 
-		globalCurrentWatchlistId.set(watchlistId);
-
-		privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
-			.then((v: WatchlistItem[]) => {
-				currentWatchlistItems.set(v || []);
-			})
-			.catch((err) => {
-				currentWatchlistItems.set([]);
-			});
-	}
-
-	function deleteWatchlist(id: number) {
-		const watchlistId = typeof id === 'string' ? parseInt(id, 10) : id;
-
-		if (watchlistId === flagWatchlistId) {
-			alert('The flag watchlist cannot be deleted.');
-			return;
-		}
-
-		privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
-			watchlists.update((v: WatchlistType[]) => {
-				const updatedWatchlists = v.filter(
-					(watchlist: WatchlistType) => watchlist.watchlistId !== id
-				);
-
-				if (id === currentWatchlistId && updatedWatchlists.length > 0) {
-					setTimeout(() => selectWatchlist(String(updatedWatchlists[0].watchlistId)), 10);
-				}
-
-				return updatedWatchlists;
-			});
-		});
+		// Use the centralized function
+		selectWatchlist(watchlistIdString);
 	}
 
 	function handleWatchlistChange(event: Event) {
@@ -1136,13 +1093,13 @@
 		if (value === 'new') {
 			if (!showWatchlistInput) {
 				previousWatchlistId = currentWatchlistId;
-				selectWatchlist('new');
+				handleWatchlistSelection('new');
 			}
 			return;
 		}
 
 		if (value === 'delete') {
-			selectWatchlist('delete');
+			handleWatchlistSelection('delete');
 			return;
 		}
 
@@ -1441,14 +1398,6 @@
 												</div>
 											</div>
 										</div>
-
-										<div class="watchlist-controls-right">
-											<button
-												class="add-item-button metadata-button"
-												title="Add Symbol"
-												on:click={() => addInstanceToWatchlist()}>+</button
-											>
-										</div>
 									{/if}
 
 									{#if showWatchlistInput}
@@ -1643,7 +1592,6 @@
 		</div>
 
 		<div class="bottom-bar-right">
-			<!-- Calendar button moved to top bar -->
 
 			<!-- Replay buttons commented out -->
 			<!-- 
@@ -1977,12 +1925,6 @@
 		padding-left: 0;
 	}
 
-	.watchlist-controls-right {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-	}
-
 	.alert-controls-right {
 		display: flex;
 		align-items: center;
@@ -2038,28 +1980,6 @@
 
 	.watchlist-selector .select-wrapper:hover {
 		background: rgba(255, 255, 255, 0.15);
-	}
-
-	.add-item-button {
-		color: #ffffff;
-		width: 28px;
-		height: 28px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 16px;
-		font-weight: 300;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		background: transparent;
-		border: none;
-		border-radius: 6px;
-		transition: all 0.2s ease;
-		padding: 6px 8px;
-	}
-
-	.add-item-button:hover {
-		background: rgba(255, 255, 255, 0.15);
-		color: #ffffff;
 	}
 
 	.new-watchlist-container {

@@ -173,7 +173,9 @@
 	}
 
 	.price-cell {
-		padding: 0 4px;
+		padding: 0;
 		transition: color 0.2s ease;
+		width: 100%;
+		text-align: inherit;
 	}
 </style>
