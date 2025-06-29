@@ -53,7 +53,7 @@ var (
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",
-				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
+				Description: "Get company name, market, locale, primary exchange, market cap, shares outstanding, industry, sector and total shares for a given security.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -520,19 +520,6 @@ var (
 			Function:      wrapWithContext(GetStockChange),
 			StatusMessage: "Getting stock change...",
 		},
-		/*"getAllTickerSnapshots": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAllTickerSnapshots",
-				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
-				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
-			StatusMessage: "Scanning market data...",
-		}, */
 
 		"getOHLCData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
