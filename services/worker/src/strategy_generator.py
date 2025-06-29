@@ -161,8 +161,23 @@ CRITICAL: INSTANCE STRUCTURE
 - DO NOT include 'signal': True field - if returned, it inherently met criteria
 - Include relevant price data: 'open', 'close', 'entry_price' when available
 - Use proper timestamp format: int(row['timestamp']) for Unix timestamp
-- Include meaningful data like gap_percent, volume_ratio, etc.
 - REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
+
+CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
+- MUST include ALL calculated indicator values that triggered your strategy
+- Examples: 'rsi': 75.2, 'macd': 0.45, 'volume_ratio': 2.3, 'gap_percent': 4.1
+- Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
+- Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
+- Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
+- DO NOT include static thresholds or constants (e.g., 'rsi_threshold': 30)
+- This data is ESSENTIAL for backtesting, analysis, and understanding why signals triggered
+
+CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM - NO BUFFERS
+- min_bars = EXACT number of bars required for calculation, NOT a suggestion
+- Examples: RSI needs 14 bars → min_bars=14, MACD needs 26 bars → min_bars=26
+- NEVER add buffer periods like "need 20 + 5 buffer = 25"
+- If you need multiple indicators, use the MAXIMUM of their individual minimums
+- Example: RSI(14) + SMA(50) strategy → min_bars=50 (not 64, not 55)
 
 ROBUST ERROR HANDLING:
 - Always check if data is None or empty before processing
@@ -196,7 +211,7 @@ def strategy():
             timeframe="5m",  # Custom aggregation: 5-minute bars from 1-minute data
             tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=20  # Need 20 bars for short-term indicators
+            min_bars=5  # Need 5 bars for short-term momentum calculation
         )
         
         # Get 4-hour data for trend confirmation (aggregated from 1-hour)  
@@ -204,7 +219,7 @@ def strategy():
             timeframe="4h",  # Custom aggregation: 4-hour bars from 1-hour data
             tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=10  # Need 10 bars for trend analysis
+            min_bars=3  # Need 3 bars for trend analysis (current + 2 previous for moving average)
         )
         
         if bars_5m is None or len(bars_5m) == 0 or bars_4h is None or len(bars_4h) == 0:
@@ -240,8 +255,11 @@ def strategy():
                     'ticker': ticker,
                     'timestamp': int(ticker_5m['timestamp'].iloc[-1]),
                     'entry_price': float(current_price),
+                    # CRITICAL: Include ALL calculated indicator values
                     'momentum_5m': float(recent_momentum),
                     'trend_4h': float(current_price / current_sma - 1),
+                    'sma_3_4h': float(current_sma),
+                    'price_change_5m': float(ticker_5m['price_change'].iloc[-1]),
                     'score': min(1.0, recent_momentum * 10 + (current_price / current_sma - 1))
                 }})
             
@@ -280,9 +298,12 @@ def strategy():
             instances.append({{
                 'ticker': row['ticker'],
                 'timestamp': int(row['timestamp']),
-                'volume_ratio': float(row['volume_ratio']),
                 'entry_price': float(row.get('close', 0)),  # Use close as entry price
+                # CRITICAL: Include important indicator values that triggered the signal
+                'volume_ratio': float(row['volume_ratio']),
                 'volume': int(row['volume']),
+                'volume_avg_20': int(row['volume_avg_20']),
+                'volume_breakout_strength': float(row['volume_ratio'] - 2.0),  # How much above threshold
                 'score': min(1.0, (row['volume_ratio'] - 2.0) / 3.0)  # Higher ratio = higher score
             }})
             
@@ -339,7 +360,86 @@ def strategy():
     
     return instances
 
-# Example 4: Scalping strategy using 1-minute and 5-minute timeframes
+# Example 4: RSI + MACD Strategy - DEMONSTRATES PROPER INDICATOR INCLUSION
+def strategy():
+    instances = []
+    
+    try:
+        bar_data = get_bar_data(
+            timeframe="1d",
+            columns=["ticker", "timestamp", "close"],
+            min_bars=26,  # Need exactly 26 bars for MACD calculation (slow EMA period)
+            filters={{"market_cap_min": 1000000000}}  # Large cap only
+        )
+        
+        if bar_data is None or len(bar_data) == 0:
+            return instances
+        
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+        
+        # Calculate RSI (14-period)
+        def calculate_rsi(prices, period=14):
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            return 100 - (100 / (1 + rs))
+        
+        # Calculate MACD
+        def calculate_macd(prices):
+            ema_12 = prices.ewm(span=12).mean()
+            ema_26 = prices.ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            signal_line = macd_line.ewm(span=9).mean()
+            histogram = macd_line - signal_line
+            return macd_line, signal_line, histogram, ema_12, ema_26
+        
+        # Apply calculations per ticker
+        for ticker in df['ticker'].unique():
+            ticker_data = df[df['ticker'] == ticker].copy()
+            if len(ticker_data) < 26:
+                continue
+                
+            # Calculate indicators
+            ticker_data['rsi'] = calculate_rsi(ticker_data['close'])
+            macd, signal, histogram, ema_12, ema_26 = calculate_macd(ticker_data['close'])
+            ticker_data['macd'] = macd
+            ticker_data['macd_signal'] = signal
+            ticker_data['macd_histogram'] = histogram
+            ticker_data['ema_12'] = ema_12
+            ticker_data['ema_26'] = ema_26
+            
+            # Strategy trigger: RSI oversold + MACD bullish crossover
+            latest = ticker_data.iloc[-1]
+            prev = ticker_data.iloc[-2]
+            
+            if (latest['rsi'] < 30 and  # RSI oversold
+                latest['macd'] > latest['macd_signal'] and  # MACD above signal
+                prev['macd'] <= prev['macd_signal']):  # Bullish crossover
+                
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(latest['timestamp']),
+                    'entry_price': float(latest['close']),
+                    # CRITICAL: Include ALL calculated indicators - this is the key!
+                    'rsi': round(float(latest['rsi']), 2),
+                    'macd': round(float(latest['macd']), 4),
+                    'macd_signal': round(float(latest['macd_signal']), 4),
+                    'macd_histogram': round(float(latest['macd_histogram']), 4),
+                    'ema_12': round(float(latest['ema_12']), 2),
+                    'ema_26': round(float(latest['ema_26']), 2),
+                    'macd_crossover_strength': float(latest['macd'] - latest['macd_signal']),
+                    'score': min(1.0, (30 - latest['rsi']) / 20 + abs(latest['macd_histogram']) * 10)
+                }})
+                
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 5: Scalping strategy using 1-minute and 5-minute timeframes
 def strategy():
     instances = []
     
@@ -352,7 +452,7 @@ def strategy():
             timeframe="1m",  # Direct 1-minute table access (fastest)
             tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=10  # Last 10 minutes for momentum
+            min_bars=5  # Need 5 minutes for momentum calculation
         )
         
         # Get 5-minute data for trend confirmation  
@@ -360,7 +460,7 @@ def strategy():
             timeframe="5m",  # Aggregated from 1-minute data
             tickers=target_tickers,
             columns=["ticker", "timestamp", "close"],
-            min_bars=3   # Last 3 periods for micro-trend
+            min_bars=2   # Need 2 periods for micro-trend (current vs previous)
         )
         
         if bars_1m is None or len(bars_1m) == 0 or bars_5m is None or len(bars_5m) == 0:
@@ -485,7 +585,7 @@ def strategy():
             timeframe="1w",  # Direct weekly table access
             tickers=None,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=52,     # 1 year of weekly data
+            min_bars=20,     # Need 20 weeks for high calculation and volume average
             filters={{"market_cap_min": 10000000000}}  # Large-cap stocks only
         )
         
@@ -493,7 +593,7 @@ def strategy():
             timeframe="2w",  # Custom aggregation from weekly data
             tickers=None,
             columns=["ticker", "timestamp", "close"],
-            min_bars=26      # 1 year of bi-weekly data
+            min_bars=3      # Need 3 bi-weekly periods for trend calculation (current vs 2 periods ago)
         )
         
         if bars_1w is None or len(bars_1w) == 0 or bars_2w is None or len(bars_2w) == 0:
@@ -506,9 +606,9 @@ def strategy():
         
         for ticker in common_tickers:
             ticker_1w = df_1w[df_1w['ticker'] == ticker].sort_values('timestamp').tail(20)
-            ticker_2w = df_2w[df_2w['ticker'] == ticker].sort_values('timestamp').tail(10)
+            ticker_2w = df_2w[df_2w['ticker'] == ticker].sort_values('timestamp').tail(3)
             
-            if len(ticker_1w) < 15 or len(ticker_2w) < 8:
+            if len(ticker_1w) < 15 or len(ticker_2w) < 3:
                 continue
             
             # Weekly breakout detection

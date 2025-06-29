@@ -3,17 +3,17 @@ Filtered Data Accessor Strategy Examples
 Examples showing how to use the new filtering capabilities to efficiently fetch data
 """
 
-# Example 1: Technology Sector Gap-Up Strategy
+# Example 1: Technology Sector Gap Up Strategy with Volume Confirmation
 TECH_GAP_UP_STRATEGY = '''
 def strategy():
-    """Find technology stocks that gap up more than 2% with volume confirmation"""
+    """Find tech stocks that gap up more than 2% with volume confirmation"""
     instances = []
     
     # Get recent bar data for technology stocks only - much more efficient!
     bar_data = get_bar_data(
         timeframe="1d", 
         columns=["ticker", "timestamp", "open", "close", "volume"], 
-        min_bars=25,  # Need 20 for volume average + recent data
+        min_bars=21,  # Need 20 for volume average + 1 current bar for calculation
         filters={
             'sector': 'Technology',
             'market': 'stocks',
@@ -69,7 +69,7 @@ def strategy():
     bar_data = get_bar_data(
         timeframe="1d", 
         columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"], 
-        min_bars=50,
+        min_bars=20,  # Need 20 for 20-day calculations (absolute minimum)
         filters={
             'sector': 'Healthcare',
             'market_cap_min': 10000000000,  # $10B+ market cap
@@ -147,7 +147,7 @@ def strategy():
     bar_data = get_bar_data(
         timeframe="1d", 
         columns=["ticker", "timestamp", "close", "volume"], 
-        min_bars=100,
+        min_bars=50,  # Need 50 for 50-day calculations (absolute minimum)
         filters={
             'primary_exchange': 'NASDAQ',
             'market_cap_min': 300000000,   # $300M minimum
@@ -167,7 +167,6 @@ def strategy():
     
     # Calculate price metrics
     df_sorted['sma_50'] = df_sorted.groupby('ticker')['close'].rolling(50).mean().reset_index(0, drop=True)
-    df_sorted['sma_200'] = df_sorted.groupby('ticker')['close'].rolling(200).mean().reset_index(0, drop=True)
     df_sorted['volume_avg'] = df_sorted.groupby('ticker')['volume'].rolling(50).mean().reset_index(0, drop=True)
     
     # Get latest data
@@ -177,9 +176,7 @@ def strategy():
     value_stocks = latest_data[
         latest_data['close'].notna() &
         latest_data['sma_50'].notna() &
-        latest_data['sma_200'].notna() &
         (latest_data['close'] < latest_data['sma_50'] * 0.95) &  # Below 50-day MA
-        (latest_data['sma_50'] > latest_data['sma_200']) &        # But 50-day still above 200-day
         (latest_data['volume'] > latest_data['volume_avg'] * 1.2)  # Above average volume
     ]
     
@@ -212,7 +209,7 @@ def strategy():
         bar_data = get_bar_data(
             timeframe="1d", 
             columns=["ticker", "timestamp", "close"], 
-            min_bars=30,
+            min_bars=30,  # Need 30 bars for 30-day return calculation
             filters={
                 'sector': sector,
                 'market_cap_min': 1000000000,  # $1B+ only
