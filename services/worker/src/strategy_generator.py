@@ -618,7 +618,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             # Generate strategy code with retry logic
             logger.info("Generating strategy code with OpenAI o3...")
-            strategy_code, validation_passed = await self._generate_and_validate_strategy(prompt, existing_strategy, max_retries=2)
+            strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
             
             if not strategy_code:
                 return {
@@ -656,7 +656,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 "error": str(e)
             }
     
-    async def _generate_and_validate_strategy(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
+    async def _generate_and_validate_strategy(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
         """Generate strategy with validation retry logic"""
         
         last_validation_error = None
@@ -666,7 +666,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
                 # Generate strategy code with error context for retries
-                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt, last_validation_error)
+                strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error)
                 
                 if not strategy_code:
                     continue
@@ -748,7 +748,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
     
-    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
+    def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
         
@@ -810,6 +810,7 @@ Generate the updated strategy function."""
                             model=model_name,
                             input=f"{user_prompt}",
                             instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
                             timeout=180.0  # 3 minute timeout for o3 model
                         )
                     else:
@@ -819,6 +820,7 @@ Generate the updated strategy function."""
                             model=model_name,
                             input=f"{user_prompt}",
                             instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
                             timeout=120.0  # 2 minute timeout for other models
                         )
                     
