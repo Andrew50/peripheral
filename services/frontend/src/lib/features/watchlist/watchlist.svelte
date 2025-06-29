@@ -154,7 +154,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		padding: 0 12px 8px 12px;
+		padding: 0 0 8px 0;
 		width: 100%;
 	}
 
@@ -220,7 +220,7 @@
 		background: transparent;
 		border-radius: 0;
 		overflow: visible;
-		padding: clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 1rem);
+		padding: 0;
 	}
 
 	:global(.default-select) {
@@ -261,10 +261,10 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow-y: auto; /* Allow vertical scrolling */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		padding: 4px;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
+		padding: 0;
+		background: transparent;
+		border: none;
+		border-radius: 0;
 	}
 
 	/* Custom scrollbar for WebKit browsers */

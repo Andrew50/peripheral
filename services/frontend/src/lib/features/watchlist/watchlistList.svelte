@@ -542,7 +542,7 @@
 	table {
 		width: 100%;
 		border-collapse: separate;
-		border-spacing: 0 clamp(1px, 0.2vw, 2px);
+		border-spacing: 0 1px;
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
@@ -552,10 +552,23 @@
 
 	th,
 	td {
-		padding: clamp(1px, 0.15vw, 2px) clamp(6px, 1.2vw, 12px);
+		padding: clamp(4px, 0.4vw, 6px) clamp(2px, 0.4vw, 4px);
 		text-align: left;
 		background: transparent;
 		font-size: clamp(0.75rem, 0.875rem, 1rem);
+		vertical-align: middle;
+	}
+
+	/* Ticker column - reduce left padding */
+	th:nth-child(2),
+	td:nth-child(2) {
+		padding-left: clamp(1px, 0.2vw, 2px);
+	}
+
+	/* Second-to-last column (Extended hours) - reduce right padding */
+	th:nth-last-child(2),
+	td:nth-last-child(2) {
+		padding-right: clamp(1px, 0.2vw, 2px);
 	}
 
 	/* Header cells keep original styling */
@@ -563,9 +576,10 @@
 		border-bottom: none;
 	}
 
-	/* Body cells only get rounded styling */
+	/* Body cells */
 	tbody td {
 		border: none;
+		vertical-align: middle;
 	}
 
 	tbody td:first-child {
@@ -612,7 +626,7 @@
 	}
 
 	.sorting {
-		background-color: var(--ui-bg-hover);
+		background-color: transparent;
 	}
 
 	table.sorting tbody tr {
@@ -701,8 +715,6 @@
 	}
 
 	.ticker-name {
-		overflow: hidden; /* Prevent long names from breaking layout */
-		white-space: nowrap;
 		vertical-align: middle;
 	}
 
@@ -721,14 +733,66 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
+	/* First column (Flag column) - minimize left space */
+	th:first-child,
+	td:first-child {
+		width: 20px;
+		min-width: 20px;
+		max-width: 20px;
+		padding: clamp(1px, 0.15vw, 2px) 0 clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px);
+		text-align: center;
+		vertical-align: middle;
+	}
+
 	/* Regular Last column (Delete Button) */
 	th:last-child,
 	td:last-child {
 		width: 30px;
+		min-width: 30px;
 		max-width: 30px;
-		padding: clamp(2px, 0.4vw, 4px) 0;
+		padding: clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px) clamp(1px, 0.15vw, 2px) 0;
 		text-align: center;
 		vertical-align: middle;
+	}
+
+	/* Define widths for main content columns */
+	th:nth-child(2),
+	td:nth-child(2) {
+		width: 25%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.2vw, 2px);
+	}
+
+	th:nth-child(3),
+	td:nth-child(3) {
+		width: 18%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(0px, 0.1vw, 1px);
+	}
+
+	th:nth-child(4),
+	td:nth-child(4) {
+		width: 17%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.15vw, 2px);
+	}
+
+	th:nth-child(5),
+	td:nth-child(5) {
+		width: 20%;
+		min-width: 55px;
+		text-align: left;
+		padding-right: clamp(2px, 0.3vw, 4px);
+	}
+
+	th:nth-child(6),
+	td:nth-child(6) {
+		width: 13%;
+		min-width: 40px;
+		text-align: left;
 	}
 	
 
@@ -741,13 +805,14 @@
 		background: none;
 		color: var(--text-secondary);
 		font-size: 0.75em;
-		padding: 4px;
+		padding: 0;
 		line-height: 1;
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 20px;
 		height: 20px;
+		margin: auto;
 	}
 	
 	.delete-button:hover {
@@ -757,18 +822,17 @@
 
 	/* Table header */
 	thead tr {
-		background: var(--ui-bg-element);
+		background: transparent;
 	}
 
 	/* Table rows */
 	tbody tr {
-		background: var(--ui-bg-primary);
+		background: transparent;
 		border-radius: 6px;
-		margin: 1px 0;
 	}
 
 	tbody tr:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.05);
 		border-radius: 6px;
 	}
 
