@@ -608,7 +608,7 @@ var (
 		},
 		"getStrategyFromNaturalLanguage": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name: "getStrategyFromNaturalLanguage",
+				Name:        "getStrategyFromNaturalLanguage",
 				Description: "Create or edit a Python trading strategy from natural language description using AI code generation. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting, screening, and real-time alerts. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -621,32 +621,6 @@ var (
 			},
 			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
 			StatusMessage: "Building strategy...",
-		},
-		"calculateBacktestStatistic": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "calculateBacktestStatistic",
-				Description: "Calculates a statistic for a specific column from cached backtest results. Use this instead of requesting raw backtest data for simple calculations.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the strategy whose backtest results should be used.",
-						},
-						"columnName": {
-							Type:        genai.TypeString,
-							Description: "The original column name in the backtest results to perform the calculation on (e.g., 'close', 'volume', 'future_1d_return').",
-						},
-						"calculationType": {
-							Type:        genai.TypeString,
-							Description: "The type of calculation to perform. Supported values: 'average', 'sum', 'min', 'max', 'count'.",
-						},
-					},
-					Required: []string{"strategyId", "columnName", "calculationType"},
-				},
-			},
-			Function:      wrapWithContext(CalculateBacktestStatistic),
-			StatusMessage: "Calculating backtest statistics...",
 		},
 		// [SEARCH TOOLS]
 		"runWebSearch": {
