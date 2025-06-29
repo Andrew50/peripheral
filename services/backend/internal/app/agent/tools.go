@@ -606,9 +606,9 @@ var (
 			Function:      wrapWithContext(strategy.DeleteStrategy),
 			StatusMessage: "Deleting strategy...",
 		},
-		"getStrategyFromNaturalLanguage": {
+		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getStrategyFromNaturalLanguage",
+				Name:        "runStrategyAgent",
 				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
