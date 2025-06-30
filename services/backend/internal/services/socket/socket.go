@@ -106,8 +106,8 @@ type FunctionStatusUpdate struct {
 	UserMessage string `json:"userMessage"`
 }
 
-// SendFunctionStatus sends a status update about a running function to a specific user.
-func SendFunctionStatus(userID int, userMessage string) {
+// SendChatFunctionStatus sends a status update about a running function to a specific user.
+func SendChatFunctionStatus(userID int, userMessage string) {
 	// Use a default message if the specific one is empty
 	messageToSend := userMessage
 	if messageToSend == "" {
