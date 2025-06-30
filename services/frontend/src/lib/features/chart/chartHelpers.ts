@@ -1,4 +1,6 @@
+import { UTCSecondstoESTSeconds } from '$lib/utils/helpers/timestamp';
 import html2canvas from 'html2canvas';
+import type { UTCTimestamp } from 'lightweight-charts';
 
 export async function handleScreenshot(chartId: string) {
 	try {
@@ -126,4 +128,12 @@ export function adjustEventsToTradingDays(events: any[], candleData: any[]) {
 
 	// Convert the map back to an array
 	return Array.from(mergedEventsMap.values());
+}
+
+export function extendedHours(timestamp: number): boolean {
+	// Convert timestamp to Eastern Time
+	const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
+	const date = new Date(estTimestampSeconds * 1000);
+	const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+	return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
 }
