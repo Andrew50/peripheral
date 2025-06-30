@@ -1823,7 +1823,7 @@
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
 				return;
 			}
-			if (isLoadingAdditionalData) {
+			if (isLoadingAdditionalData || isSwitchingTickers) {
 				return;
 			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
