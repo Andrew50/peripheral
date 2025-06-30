@@ -20,9 +20,13 @@ func Update1MinuteOHLCV(conn *data.Conn) error {
 		// Log completion time for monitoring
 	}()
 
+	today := time.Now().Format("2006-01-02")
+	if time.Now().Hour() < 17 {
+		today = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	}
 
 	// Check latest timestamp in database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM ohlcv_1m")
@@ -48,22 +52,20 @@ func Update1MinuteOHLCV(conn *data.Conn) error {
 
 	// Set default start date if no existing data
 	if !hasRows || nullableMaxDate == nil || maxDate.IsZero() {
-		// Start from 3 months ago for initial load (1-minute data is huge)
-		maxDate = time.Now().AddDate(0, -3, 0)
+		// Start from 6 months ago for initial 1-minute data load
+		maxDate = time.Date(2003, 10, 1, 0, 0, 0, 0, time.UTC)
 	}
 
-	// Collect dates to process (only last 7 days to manage API load)
+	if maxDate.Format("2006-01-02") == today {
+		return nil // Already up to date
+	}
+
+	// Collect all dates that need to be processed
 	dates := []time.Time{}
-	currentDate := maxDate.Truncate(24 * time.Hour).AddDate(0, 0, 1)
-	endDate := time.Now().Truncate(24 * time.Hour)
+	currentDate := maxDate.AddDate(0, 0, 1)
+	todayTime, _ := time.Parse("2006-01-02", today)
 
-	// Limit to last 7 days to prevent excessive API calls
-	sevenDaysAgo := time.Now().AddDate(0, 0, -7).Truncate(24 * time.Hour)
-	if currentDate.Before(sevenDaysAgo) {
-		currentDate = sevenDaysAgo
-	}
-
-	for currentDate.Before(endDate) || currentDate.Equal(endDate) {
+	for currentDate.Before(todayTime) || currentDate.Equal(todayTime) {
 		// Skip weekends (no market data)
 		if currentDate.Weekday() != time.Saturday && currentDate.Weekday() != time.Sunday {
 			dates = append(dates, currentDate)
@@ -78,8 +80,8 @@ func Update1MinuteOHLCV(conn *data.Conn) error {
 	// Use thread-safe security cache
 	var securityCache sync.Map
 
-	// Limit concurrency for 1-minute data (high API load)
-	maxConcurrency := 2 // Conservative limit for minute data
+	// Conservative concurrency for 1-minute data (high API load)
+	maxConcurrency := 2
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	var wg sync.WaitGroup
 	errorCh := make(chan error, len(dates))
@@ -158,12 +160,12 @@ func store1MinuteOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGrouped
 
 	// Process batches with controlled concurrency
 	var wg sync.WaitGroup
-	maxConcurrency := 1 // Conservative to prevent INSERT deadlocks
+	maxConcurrency := 1 // REDUCED to 1 to prevent deadlocks in TimescaleDB
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	errorCh := make(chan error, batchCount)
 
 	// Global context for all goroutines
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second) // Longer timeout for minute data
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second) // Longer timeout due to reduced concurrency
 	defer cancel()
 
 	// Pre-collect all tickers for this date

@@ -10,7 +10,7 @@ import asyncio
 import traceback
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
+from datetime import datetime, time
 from typing import Dict, Any, Optional, List
 import re
 import time
@@ -160,7 +160,7 @@ CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 CRITICAL: INSTANCE STRUCTURE
 - DO NOT include 'signal': True field - if returned, it inherently met criteria
 - Include relevant price data: 'open', 'close', 'entry_price' when available
-- Use proper timestamp format: int(row['timestamp']) for Unix timestamp
+                - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
 - REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
 
 CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
@@ -196,6 +196,22 @@ CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
   df['change_pct'] = pd.to_numeric(df['change_pct'], errors='coerce')
   df = df.dropna(subset=['change_pct'])
   quantile_val = df.groupby('timestamp')['change_pct'].quantile(0.9)
+
+CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
+- Timestamps returned by get_bar_data() are Unix timestamps in SECONDS (not milliseconds)
+- When converting to datetime, always use unit="s":
+  df['dt'] = pd.to_datetime(df['timestamp'], unit="s")  # CORRECT
+- NEVER use unit="ms" as this will cause incorrect datetime conversions
+- For time-based filtering, convert to datetime first, then use .dt accessor for time operations
+- For market hours (like Friday 3:45-3:55 PM), convert to Eastern Time:
+  df['datetime_et'] = pd.to_datetime(df['timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+
+CRITICAL: X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
+- X-minute bars may not align exactly with specific times like 15:45, 15:55
+- Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
+- For Friday afternoon patterns, look for the closest X-minute bars to target times
+- Example time range filtering:
+  afternoon_bars = df[(df['datetime_et'].dt.time >= time(15, 40)) & (df['datetime_et'].dt.time <= time(16, 0))]
 
 EXAMPLE PATTERNS:
 ```python

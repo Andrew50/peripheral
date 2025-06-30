@@ -1141,10 +1141,10 @@ class DataAccessorProvider:
             if final_columns:
                 df = df[final_columns]
             
-            # Use ticker as index if available and securityid was not explicitly requested
-            if "ticker" in df.columns and "securityid" not in safe_columns:
-                df.set_index("ticker", inplace=True)
-            elif "securityid" in df.columns:
+            # IMPORTANT: Don't set ticker as index if it was explicitly requested as a column
+            # Strategies need ticker as a column to iterate over results
+            # Only set securityid as index if it was explicitly requested
+            if "securityid" in safe_columns and "securityid" in df.columns:
                 df.set_index("securityid", inplace=True)
             
             return df
