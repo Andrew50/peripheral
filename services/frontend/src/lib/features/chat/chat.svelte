@@ -1546,7 +1546,7 @@
 										{/each}
 									</div>
 								{:else}
-									<p>{@html parseMarkdown(message.content)}</p>
+									{@html parseMarkdown(message.content)}
 								{/if}
 							</div>
 
