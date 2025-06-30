@@ -332,8 +332,11 @@
 		event.preventDefault();
 		event.stopPropagation();
 		if (button === 0) {
-			selectedRowIndex = index;
-			queryChart(instance);
+			// Only query chart if clicking on a different row
+			if (selectedRowIndex !== index) {
+				selectedRowIndex = index;
+				queryChart(instance);
+			}
 		} else if (button === 1) {
 			flagSecurity(instance);
 		}
