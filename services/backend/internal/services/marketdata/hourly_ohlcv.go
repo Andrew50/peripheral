@@ -275,13 +275,16 @@ func store1HourOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 				record := item.record
 				securityID := item.securityID
 
+				// Convert Polygon Millis timestamp to time.Time (UTC)
+				tsUTC := time.Time(record.Timestamp).UTC()
+
 				valueStrings = append(valueStrings,
 					fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 						argPosition, argPosition+1, argPosition+2, argPosition+3,
 						argPosition+4, argPosition+5, argPosition+6))
 
 				valueArgs = append(valueArgs,
-					record.Timestamp, securityID, record.Open, record.High,
+					tsUTC, securityID, record.Open, record.High,
 					record.Low, record.Close, record.Volume)
 
 				argPosition += 7
