@@ -235,6 +235,12 @@ func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningR
 	return results
 }
 
+type CreateStrategyFromPromptResult struct {
+	StrategyID int    `json:"strategyId"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+}
+
 func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START (WORKER QUEUE) ===")
 	log.Printf("UserID: %d", userID)
@@ -263,7 +269,11 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 		log.Printf("Strategy name: %s", result.Strategy.Name)
 	}
 
-	return result.Strategy, nil
+	return CreateStrategyFromPromptResult{
+		StrategyID: result.Strategy.StrategyID,
+		Name:       result.Strategy.Name,
+		Version:    result.Strategy.Version,
+	}, nil
 }
 
 // WorkerCreateStrategyResult represents the result from the Python worker

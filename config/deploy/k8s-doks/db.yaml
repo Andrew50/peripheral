@@ -12,6 +12,16 @@ spec:
       labels:
         app: db
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - backend
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: db
           image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
