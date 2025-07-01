@@ -455,7 +455,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			// Delete all active rows except the one with the highest securityid
 			_, err := conn.DB.Exec(ctx, `
 				DELETE FROM securities 
-				WHERE ticker = $1 maxDate IS NULL AND securityid NOT IN (
+				WHERE ticker = $1 AND maxDate IS NULL AND securityid NOT IN (
 					SELECT MIN(securityid) 
 					FROM securities 
 					WHERE ticker = $1 AND maxDate IS NULL
