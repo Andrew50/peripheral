@@ -1016,15 +1016,14 @@ func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (in
 	results.LastTradePrice = snapshot.LastTrade.Price
 	currPrice := snapshot.Day.Close
 	lastClose := snapshot.PrevDay.Close
-	results.TodayChange = math.Round((currPrice-lastClose)*100) / 100
-	results.TodayChangePercent = math.Round(((currPrice-lastClose)/lastClose)*100*100) / 100
+	results.TodayChange = float64(int((currPrice-lastClose)*1000)) / 1000
+	results.TodayChangePercent = float64(int(((currPrice-lastClose)/lastClose)*100*1000)) / 1000
 	results.Volume = snapshot.Day.Volume
 	results.TodayOpen = snapshot.Day.Open
 	results.TodayHigh = snapshot.Day.High
 	results.TodayLow = snapshot.Day.Low
 	results.TodayClose = snapshot.Day.Close
 	results.PreviousClose = lastClose
-	////fmt.Println(results)
 	return results, nil
 }
 

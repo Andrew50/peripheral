@@ -1308,7 +1308,6 @@
 								tabindex="0"
 							/>
 							<div class="sidebar-content">
-								<!-- Main sidebar content now on top -->
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist />
@@ -1342,10 +1341,7 @@
 			</div>
 		</div>
 
-		<!-- Corner logo at the very top-right -->
-		<div class="corner-logo-container">
-			<img src="/favicon.png" alt="Atlantis" class="corner-atlantis-logo" />
-		</div>
+
 
 		<!-- Sidebar toggle buttons -->
 		<div class="sidebar-buttons">
