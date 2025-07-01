@@ -9,6 +9,7 @@ import (
 	"backend/internal/data"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"google.golang.org/genai"
 )
@@ -21,7 +22,16 @@ type Tool struct {
 
 // Wrapper function to adapt existing functions to context-aware signatures
 func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, error)) func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error) {
-	return func(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	return func(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (result interface{}, err error) {
+		// Add panic recovery to prevent function panics from crashing the backend
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Panic recovered in function execution: %v\n", r)
+				err = fmt.Errorf("function panic: %v", r)
+				result = nil
+			}
+		}()
+
 		// Check if context is cancelled before calling the function
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

@@ -1,4 +1,4 @@
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { Instance, Watchlist } from '$lib/utils/types/types';
 import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { queryInstanceInput } from '$lib/components/input/input.svelte';
@@ -11,12 +11,22 @@ import {
 	watchlists
 } from '$lib/utils/stores/stores';
 import { tick } from 'svelte';
-
 // Extended Instance type to include watchlistItemId
 interface WatchlistItem extends Instance {
 	watchlistItemId?: number;
 }
 
+export const visibleWatchlistIds = writable<number[]>([]);
+
+// Function to initialize visible watchlists
+export function initializeVisibleWatchlists(watchlistsArray: Watchlist[], currentWatchlistId: number) {
+	if (watchlistsArray && watchlistsArray.length > 0 && currentWatchlistId) {
+		const currentIds = get(visibleWatchlistIds);
+		if (currentIds.length === 0) {
+			visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map(w => w.watchlistId));
+		}
+	}
+}
 // Helper function to update both stores when adding items
 function updateWatchlistStores(newItem: WatchlistItem, targetWatchlistId: number) {
 	// Always update currentWatchlistItems (what the UI shows)
@@ -94,6 +104,8 @@ export function createNewWatchlist(watchlistName: string): Promise<number> {
 		
 		// Automatically select the new watchlist
 		selectWatchlist(String(newId));
+		// Add the new watchlist to the front of visible tabs
+		addToVisibleTabs(newId);
 		
 		return newId;
 	});
@@ -237,3 +249,15 @@ export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?:
 		}
 	);
 } 
+// Add new watchlist to front of visible tabs
+export function addToVisibleTabs(newWatchlistId: number) {
+	if (!newWatchlistId) return;
+	
+	visibleWatchlistIds.update(ids => {
+		// If it's already visible, do nothing
+		if (ids.includes(newWatchlistId)) return ids;
+		
+		// Add to front and keep max 3 tabs
+		return [newWatchlistId, ...ids].slice(0, 3);
+	});
+}
