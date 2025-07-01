@@ -3,17 +3,17 @@ Filtered Data Accessor Strategy Examples
 Examples showing how to use the new filtering capabilities to efficiently fetch data
 """
 
-# Example 1: Technology Sector Gap-Up Strategy
+# Example 1: Technology Sector Gap Up Strategy with Volume Confirmation
 TECH_GAP_UP_STRATEGY = '''
 def strategy():
-    """Find technology stocks that gap up more than 2% with volume confirmation"""
+    """Find tech stocks that gap up more than 2% with volume confirmation"""
     instances = []
     
     # Get recent bar data for technology stocks only - much more efficient!
     bar_data = get_bar_data(
         timeframe="1d", 
         columns=["ticker", "timestamp", "open", "close", "volume"], 
-        min_bars=25,  # Need 20 for volume average + recent data
+        min_bars=21,  # Need 20 for volume average + 1 current bar for calculation
         filters={
             'sector': 'Technology',
             'market': 'stocks',
@@ -69,7 +69,7 @@ def strategy():
     bar_data = get_bar_data(
         timeframe="1d", 
         columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"], 
-        min_bars=50,
+        min_bars=20,  # Need 20 for 20-day calculations (absolute minimum)
         filters={
             'sector': 'Healthcare',
             'market_cap_min': 10000000000,  # $10B+ market cap
@@ -137,122 +137,192 @@ def strategy():
     return instances
 '''
 
-# Example 3: NASDAQ Small Cap Value Strategy  
-NASDAQ_SMALL_CAP_STRATEGY = '''
+# Example 3: Software Companies by Size and Employee Count Strategy
+SOFTWARE_COMPANIES_STRATEGY = '''
 def strategy():
-    """Find undervalued small-cap stocks on NASDAQ"""
+    """Find software companies filtered by specific criteria including employee count"""
     instances = []
     
-    # Get bar data for NASDAQ small-cap stocks
-    bar_data = get_bar_data(
-        timeframe="1d", 
-        columns=["ticker", "timestamp", "close", "volume"], 
-        min_bars=100,
+    # Get general data for software companies with employee and share data
+    general_data = get_general_data(
+        columns=[
+            "ticker", "name", "industry", "market_cap", 
+            "total_employees", "weighted_shares_outstanding", 
+            "sic_code", "sic_description"
+        ],
         filters={
-            'primary_exchange': 'NASDAQ',
-            'market_cap_min': 300000000,   # $300M minimum
-            'market_cap_max': 2000000000,  # $2B maximum (small cap range)
-            'locale': 'us'
+            'industry': 'Software',
+            'market_cap_min': 1000000000,  # $1B+ market cap
+            'total_employees_min': 1000,   # At least 1,000 employees
+            'total_employees_max': 50000,  # No more than 50,000 employees
+            'locale': 'us',
+            'active': True
         }
+    )
+    
+    if len(general_data) == 0:
+        return instances
+    
+    # Get recent price data for these companies
+    tickers = general_data['ticker'].tolist()
+    bar_data = get_bar_data(
+        timeframe="1d",
+        tickers=tickers,
+        columns=["ticker", "timestamp", "close", "volume"],
+        min_bars=5
     )
     
     if len(bar_data) == 0:
         return instances
     
     import pandas as pd
+    import numpy as np
     
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
-    df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
-    df_sorted = df.sort_values(['ticker', 'date']).copy()
+    # Process price data
+    price_df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
+    latest_prices = price_df.groupby('ticker').tail(1)
     
-    # Calculate price metrics
-    df_sorted['sma_50'] = df_sorted.groupby('ticker')['close'].rolling(50).mean().reset_index(0, drop=True)
-    df_sorted['sma_200'] = df_sorted.groupby('ticker')['close'].rolling(200).mean().reset_index(0, drop=True)
-    df_sorted['volume_avg'] = df_sorted.groupby('ticker')['volume'].rolling(50).mean().reset_index(0, drop=True)
-    
-    # Get latest data
-    latest_data = df_sorted.groupby('ticker').tail(1)
-    
-    # Filter for value conditions
-    value_stocks = latest_data[
-        latest_data['close'].notna() &
-        latest_data['sma_50'].notna() &
-        latest_data['sma_200'].notna() &
-        (latest_data['close'] < latest_data['sma_50'] * 0.95) &  # Below 50-day MA
-        (latest_data['sma_50'] > latest_data['sma_200']) &        # But 50-day still above 200-day
-        (latest_data['volume'] > latest_data['volume_avg'] * 1.2)  # Above average volume
-    ]
-    
-    for _, row in value_stocks.iterrows():
-        discount_from_sma50 = (1 - row['close'] / row['sma_50']) * 100
+    # Merge with general data
+    for _, company in general_data.iterrows():
+        ticker = company['ticker']
+        
+        # Get latest price for this ticker
+        price_data = latest_prices[latest_prices['ticker'] == ticker]
+        if price_data.empty:
+            continue
+            
+        latest_price = price_data['close'].iloc[0]
+        
+        # Calculate market cap per employee
+        market_cap = company.get('market_cap', 0)
+        employees = company.get('total_employees', 0)
+        
+        if employees > 0:
+            market_cap_per_employee = market_cap / employees
+        else:
+            market_cap_per_employee = 0
+        
+        # Calculate enterprise value estimate (simplified)
+        weighted_shares = company.get('weighted_shares_outstanding', 0)
+        if weighted_shares > 0:
+            shares_outstanding_est = weighted_shares
+        else:
+            shares_outstanding_est = market_cap / latest_price if latest_price > 0 else 0
         
         instances.append({
-            'ticker': row['ticker'],
-            'timestamp': str(row['date']),
-            'current_price': round(row['close'], 2),
-            'discount_from_sma50': round(discount_from_sma50, 2),
-            'volume_ratio': round(row['volume'] / row['volume_avg'], 2),
-            'score': min(1.0, discount_from_sma50 / 10 + (row['volume'] / row['volume_avg']) / 5),
-            'message': f"{row['ticker']} (NASDAQ small-cap) trading {discount_from_sma50:.1f}% below 50-day MA with elevated volume"
+            'ticker': ticker,
+            'timestamp': str(pd.Timestamp.now().date()),
+            'company_name': company.get('name', ticker),
+            'market_cap': f"${market_cap/1e9:.1f}B" if market_cap > 0 else "N/A",
+            'total_employees': f"{employees:,}" if employees > 0 else "N/A",
+            'market_cap_per_employee': f"${market_cap_per_employee:,.0f}" if market_cap_per_employee > 0 else "N/A",
+            'weighted_shares_outstanding': f"{weighted_shares/1e6:.1f}M" if weighted_shares > 0 else "N/A",
+            'sic_code': company.get('sic_code', 'N/A'),
+            'sic_description': company.get('sic_description', 'N/A'),
+            'latest_price': f"${latest_price:.2f}",
+            'score': min(1.0, market_cap_per_employee / 1000000) if market_cap_per_employee > 0 else 0.5,
+            'message': f"{ticker} - {company.get('name', ticker)}: {employees:,} employees, ${market_cap/1e9:.1f}B market cap (${market_cap_per_employee:,.0f}/employee)"
         })
+    
+    # Sort by market cap per employee (highest first)
+    instances.sort(key=lambda x: float(x['market_cap_per_employee'].replace('$', '').replace(',', '')) if x['market_cap_per_employee'] != "N/A" else 0, reverse=True)
     
     return instances
 '''
 
-# Example 4: Multi-Sector Comparison Strategy
-MULTI_SECTOR_COMPARISON_STRATEGY = '''
+# Example 4: SIC Code Based Industry Analysis Strategy  
+SIC_CODE_ANALYSIS_STRATEGY = '''
 def strategy():
-    """Compare performance across different sectors"""
+    """Analyze companies by specific SIC codes for targeted industry exposure"""
     instances = []
     
-    sectors_to_analyze = ['Technology', 'Healthcare', 'Financials', 'Energy', 'Consumer Discretionary']
+    # Target specific SIC codes for technology and biotech
+    target_sic_codes = [
+        '7372',  # Prepackaged Software
+        '7373',  # Computer Integrated Systems Design
+        '2834',  # Pharmaceutical Preparations
+        '3674',  # Semiconductors and Related Devices
+    ]
     
-    for sector in sectors_to_analyze:
-        # Get data for each sector separately
-        bar_data = get_bar_data(
-            timeframe="1d", 
-            columns=["ticker", "timestamp", "close"], 
-            min_bars=30,
+    all_companies = []
+    
+    for sic_code in target_sic_codes:
+        # Get companies with specific SIC code
+        companies = get_general_data(
+            columns=[
+                "ticker", "name", "sic_code", "sic_description", 
+                "market_cap", "total_employees", "sector", "industry"
+            ],
             filters={
-                'sector': sector,
-                'market_cap_min': 1000000000,  # $1B+ only
-                'locale': 'us'
+                'sic_code': sic_code,
+                'market_cap_min': 500000000,  # $500M+ market cap  
+                'locale': 'us',
+                'active': True
             }
         )
         
-        if len(bar_data) == 0:
-            continue
-            
-        import pandas as pd
-        import numpy as np
+        if len(companies) > 0:
+            all_companies.append(companies)
+    
+    if not all_companies:
+        return instances
+    
+    import pandas as pd
+    
+    # Combine all companies
+    combined_df = pd.concat(all_companies, ignore_index=True)
+    
+    # Get recent performance data
+    tickers = combined_df['ticker'].tolist()
+    bar_data = get_bar_data(
+        timeframe="1d",
+        tickers=tickers,
+        columns=["ticker", "timestamp", "close", "volume"],
+        min_bars=10
+    )
+    
+    if len(bar_data) == 0:
+        return instances
+    
+    # Process performance data
+    price_df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
+    
+    # Calculate 10-day performance for each ticker
+    price_df = price_df.sort_values(['ticker', 'timestamp'])
+    price_df['returns_10d'] = price_df.groupby('ticker')['close'].pct_change(periods=9)
+    latest_performance = price_df.groupby('ticker').tail(1)
+    
+    # Merge with company data
+    for _, company in combined_df.iterrows():
+        ticker = company['ticker']
         
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
-        df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
-        df_sorted = df.sort_values(['ticker', 'date']).copy()
+        # Get performance data
+        perf_data = latest_performance[latest_performance['ticker'] == ticker]
+        returns_10d = perf_data['returns_10d'].iloc[0] if not perf_data.empty else 0
         
-        # Calculate 30-day returns for each stock
-        df_sorted['returns_30d'] = df_sorted.groupby('ticker')['close'].pct_change(periods=30)
+        # Calculate employee efficiency metric
+        market_cap = company.get('market_cap', 0)
+        employees = company.get('total_employees', 0)
+        efficiency = market_cap / employees if employees > 0 else 0
         
-        # Get latest returns for each ticker
-        latest_returns = df_sorted.groupby('ticker')['returns_30d'].last()
-        
-        # Calculate sector average
-        sector_avg_return = latest_returns.mean()
-        sector_median_return = latest_returns.median()
-        top_performers = latest_returns.nlargest(3)
-        
-        # Create sector summary
         instances.append({
-            'ticker': f'{sector.upper()}_SECTOR',
+            'ticker': ticker,
             'timestamp': str(pd.Timestamp.now().date()),
-            'sector': sector,
-            'avg_return_30d': round(sector_avg_return * 100, 2),
-            'median_return_30d': round(sector_median_return * 100, 2),
-            'top_performers': list(top_performers.index),
-            'top_performer_returns': [round(x * 100, 2) for x in top_performers.values],
-            'score': min(1.0, max(0.0, (sector_avg_return + 0.1) * 2)),  # Score based on sector performance
-            'message': f"{sector} sector: avg {sector_avg_return*100:.1f}% (30d), top performer: {top_performers.index[0]} +{top_performers.iloc[0]*100:.1f}%"
+            'company_name': company.get('name', ticker),
+            'sic_code': company.get('sic_code', 'N/A'),
+            'sic_description': company.get('sic_description', 'N/A'),
+            'sector': company.get('sector', 'N/A'),
+            'industry': company.get('industry', 'N/A'), 
+            'market_cap': f"${market_cap/1e9:.1f}B" if market_cap > 0 else "N/A",
+            'total_employees': f"{employees:,}" if employees > 0 else "N/A",
+            'efficiency_metric': f"${efficiency:,.0f}" if efficiency > 0 else "N/A",
+            'returns_10d': f"{returns_10d*100:.1f}%" if returns_10d != 0 else "N/A",
+            'score': min(1.0, (efficiency / 1000000) + (returns_10d * 2)) if efficiency > 0 else 0.3,
+            'message': f"{ticker} ({company.get('sic_code')}) - {company.get('sic_description', 'Unknown')}: {returns_10d*100:.1f}% (10d), ${efficiency:,.0f}/employee efficiency"
         })
+    
+    # Sort by efficiency metric
+    instances.sort(key=lambda x: float(x['efficiency_metric'].replace('$', '').replace(',', '')) if x['efficiency_metric'] != "N/A" else 0, reverse=True)
     
     return instances
 ''' 

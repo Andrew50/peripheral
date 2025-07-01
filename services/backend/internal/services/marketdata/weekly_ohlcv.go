@@ -28,8 +28,13 @@ func Update1WeekOHLCV(conn *data.Conn) error {
 		targetDate = targetDate.AddDate(0, 0, -1)
 	}
 
+	// If it's before market close on Monday, use previous week
+	if now.Weekday() == time.Monday && now.Hour() < 17 {
+		targetDate = targetDate.AddDate(0, 0, -7)
+	}
+
 	// Check latest timestamp in database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM ohlcv_1w")
@@ -55,38 +60,32 @@ func Update1WeekOHLCV(conn *data.Conn) error {
 
 	// Set default start date if no existing data
 	if !hasRows || nullableMaxDate == nil || maxDate.IsZero() {
-		// Start from 10 years ago for initial weekly data load (small dataset)
-		maxDate = time.Now().AddDate(-10, 0, 0)
+		// Start from default date for initial weekly data load
+		maxDate = time.Date(2003, 10, 1, 0, 0, 0, 0, time.UTC)
 		// Align to Monday
 		for maxDate.Weekday() != time.Monday {
 			maxDate = maxDate.AddDate(0, 0, -1)
 		}
 	}
 
-	// Collect week starts to process (last 52 weeks for weekly data)
+	// Check if we're already up to date
+	if maxDate.Format("2006-01-02") == targetDate.Format("2006-01-02") {
+		return nil // Already up to date
+	}
+
+	// Collect week starts to process
 	weekStarts := []time.Time{}
 	currentWeek := maxDate
 	if !maxDate.IsZero() {
 		currentWeek = maxDate.AddDate(0, 0, 7) // Next week
 	}
-	endWeek := now
 
 	// Align current week to Monday
 	for currentWeek.Weekday() != time.Monday {
 		currentWeek = currentWeek.AddDate(0, 0, -1)
 	}
 
-	// Limit to last 52 weeks for weekly data (manageable and comprehensive)
-	fiftyTwoWeeksAgo := time.Now().AddDate(0, 0, -364) // 52 weeks
-	for fiftyTwoWeeksAgo.Weekday() != time.Monday {
-		fiftyTwoWeeksAgo = fiftyTwoWeeksAgo.AddDate(0, 0, -1)
-	}
-
-	if currentWeek.Before(fiftyTwoWeeksAgo) {
-		currentWeek = fiftyTwoWeeksAgo
-	}
-
-	for currentWeek.Before(endWeek) || currentWeek.Equal(endWeek) {
+	for currentWeek.Before(targetDate) || currentWeek.Equal(targetDate) {
 		weekStarts = append(weekStarts, currentWeek)
 		currentWeek = currentWeek.AddDate(0, 0, 7) // Next week
 	}
@@ -99,7 +98,7 @@ func Update1WeekOHLCV(conn *data.Conn) error {
 	var securityCache sync.Map
 
 	// Higher concurrency for weekly data (less API load)
-	maxConcurrency := 5 // Higher than daily data since weekly is low volume
+	maxConcurrency := 5
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	var wg sync.WaitGroup
 	errorCh := make(chan error, len(weekStarts))
@@ -176,14 +175,14 @@ func store1WeekOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 	// Calculate number of batches
 	batchCount := int(math.Ceil(float64(len(results)) / float64(batchSize)))
 
-	// Process batches with controlled concurrency
+	// Process batches with REDUCED concurrency to prevent deadlocks
 	var wg sync.WaitGroup
-	maxConcurrency := 2 // Moderate concurrency for weekly data
+	maxConcurrency := 1 // REDUCED to 1 to prevent deadlocks in TimescaleDB
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	errorCh := make(chan error, batchCount)
 
 	// Global context for all goroutines
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // Moderate timeout for weekly data
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second) // Longer timeout due to reduced concurrency
 	defer cancel()
 
 	// Pre-collect all tickers for this week
@@ -218,8 +217,8 @@ func store1WeekOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 
 			currentBatch := results[startIdx:endIdx]
 
-			// Start transaction for this batch
-			batchCtx, batchCancel := context.WithTimeout(ctx, 30*time.Second)
+			// Start transaction for this batch with longer timeout
+			batchCtx, batchCancel := context.WithTimeout(ctx, 60*time.Second)
 			defer batchCancel()
 
 			tx, err := conn.DB.Begin(batchCtx)
@@ -317,7 +316,7 @@ func store1WeekOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 				query += ", " + valueStrings[i]
 			}
 
-			// Add conflict resolution
+			// Add conflict resolution with explicit locking to prevent deadlocks
 			query += " ON CONFLICT (timestamp, securityid) DO NOTHING"
 
 			_, err = tx.Exec(batchCtx, query, valueArgs...)

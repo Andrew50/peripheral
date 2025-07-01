@@ -271,8 +271,9 @@ jobs:
           version: latest # Or specify the version pre-baked in your container
           working-directory: services/backend
           args: --out-format=colored-line-number --timeout=3m --config=.golangci.yml --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --allow-parallel-runners --go=1.24 --path-prefix=services/backend
-          # skip-cache, skip-pkg-cache, skip-build-cache are removed to enable internal caching
-          only-new-issues: true # Keep this if desired
+          # Disable PR diff fetching to avoid 20k line limit issues
+          only-new-issues: false
+          skip-cache: true
         env:
           GO111MODULE: "on"
         # continue-on-error for this specific action is handled by job's continue-on-error

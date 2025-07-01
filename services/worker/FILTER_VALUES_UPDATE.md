@@ -31,7 +31,7 @@
 
 ### 4. **Updated Code Examples**
 - Gap detection: `min_bars=2` (need current + previous for shift() comparison)
-- Volume breakout: `min_bars=20` (need 20 bars for volume average)
+- Volume breakout: `min_bars=21` (need 20 bars for volume average + 1 current bar)
 - Sector strategy: `min_bars=5` (need 5 bars for 5-day price change)
 - Market average: `min_bars=1` (only need current bars for average)
 

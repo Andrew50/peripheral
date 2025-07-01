@@ -68,7 +68,10 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 			return "", nil
 		}
 
-		client := &http.Client{}
+		// Create HTTP client with timeout to prevent hanging
+		client := &http.Client{
+			Timeout: 10 * time.Second, // 10 second timeout
+		}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to create request: %v", err)
@@ -77,23 +80,31 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 
 		resp, err := client.Do(req)
 		if err != nil {
-
+			// Log timeout errors to console
+			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
+				log.Printf("Timeout error fetching image from %s: %v", url, err)
+			} else {
+				log.Printf("Network error fetching image from %s: %v", url, err)
+			}
 			return "", fmt.Errorf("failed to fetch image: %v", err)
 		}
 		defer resp.Body.Close()
 
 		// Check if the response status is OK
 		if resp.StatusCode != http.StatusOK {
+			log.Printf("HTTP error %d fetching image from %s", resp.StatusCode, url)
 			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
 		}
 
 		imageData, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Printf("Error reading image data from %s: %v", url, err)
 			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
 		// If no image data was returned, return empty string
 		if len(imageData) == 0 {
+			log.Printf("Empty image data received from %s", url)
 			return "", fmt.Errorf("empty image data received")
 		}
 
@@ -174,7 +185,12 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 					 WHEN NULLIF($6::BIGINT, 0) > 0 AND NULLIF($12, 0) > 0 
 					 THEN CAST(($6::BIGINT / $12) AS BIGINT)
 					 ELSE NULL 
-				 END
+				 END,
+				 share_class_figi = NULLIF($13, ''),
+				 sic_code = NULLIF($14, ''),
+				 sic_description = NULLIF($15, ''),
+				 total_employees = NULLIF($16::BIGINT, 0),
+				 weighted_shares_outstanding = NULLIF($17::BIGINT, 0)
 			 WHERE securityid = $11`,
 			utils.NullString(truncateString(details.Name, 500)),
 			utils.NullString(truncateString(string(details.Market), 50)),
@@ -187,7 +203,12 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 			utils.NullString(iconBase64),
 			utils.NullInt64(details.ShareClassSharesOutstanding),
 			securityID,
-			currentPrice)
+			currentPrice,
+			utils.NullString(details.ShareClassFIGI),
+			utils.NullString(details.SICCode),
+			utils.NullString(details.SICDescription),
+			utils.NullInt64(int64(details.TotalEmployees)),
+			utils.NullInt64(details.WeightedSharesOutstanding))
 
 		if err != nil {
 			if test {
