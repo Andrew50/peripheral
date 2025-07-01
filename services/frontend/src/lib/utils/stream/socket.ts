@@ -45,6 +45,24 @@ const pendingChatRequests = new Map<
 	}
 >();
 
+// Store for single pending chat request while disconnected
+let pendingChatRequest: {
+	requestId: string;
+	resolve: (value: any) => void;
+	reject: (error: Error) => void;
+	query: string;
+	context: any[];
+	activeChartContext: any;
+	conversationId: string;
+	timeoutId: number;
+} | null = null;
+
+// Chat request timeout duration (30 seconds)
+const CHAT_REQUEST_TIMEOUT = 30000;
+
+// Track if we're currently attempting to connect (to prevent multiple simultaneous attempts)
+let isConnecting = false;
+
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
@@ -86,17 +104,22 @@ export function connect() {
 	if (!browser) return;
 	if (get(isPublicViewing)) return;
 
+	isConnecting = true;
+	connectionStatus.set('connecting');
+
 	try {
 		const token = sessionStorage.getItem('authToken');
 		const socketUrl = base_url + '/ws' + '?token=' + token;
 		socket = new WebSocket(socketUrl);
 	} catch (e) {
 		console.error(e);
+		isConnecting = false;
 		setTimeout(connect, 1000);
 		return;
 	}
 	socket.addEventListener('close', () => {
 		connectionStatus.set('disconnected');
+		isConnecting = false;
 
 		// Reject all pending chat requests
 		pendingChatRequests.forEach((request, requestId) => {
@@ -104,12 +127,20 @@ export function connect() {
 		});
 		pendingChatRequests.clear();
 
+		// Reject pending chat request
+		if (pendingChatRequest) {
+			clearTimeout(pendingChatRequest.timeoutId);
+			pendingChatRequest.reject(new Error('WebSocket connection closed'));
+			pendingChatRequest = null;
+		}
+
 		if (shouldReconnect) {
 			reconnect();
 		}
 	});
 	socket.addEventListener('open', () => {
 		connectionStatus.set('connected');
+		isConnecting = false;
 		reconnectAttempts = 0;
 		reconnectInterval = 5000;
 
@@ -119,6 +150,9 @@ export function connect() {
 			subscribe(channelName);
 		}
 		pendingSubscriptions.clear();
+
+		// Process pending chat request
+		processPendingChatRequest();
 	});
 	socket.addEventListener('message', (event) => {
 		let data;
@@ -302,33 +336,44 @@ export function sendChatQuery(
 	let requestId: string;
 
 	const promise = new Promise((resolve, reject) => {
-		if (socket?.readyState !== WebSocket.OPEN) {
-			reject(new Error('WebSocket is not connected'));
-			return;
-		}
-
 		// Generate unique request ID
 		requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-		// Store the promise resolvers
-		pendingChatRequests.set(requestId, { resolve, reject });
+		if (socket?.readyState === WebSocket.OPEN) {
+			// Connection is open, send immediately
+			sendChatQueryNow(requestId, query, context, activeChartContext, conversationId, resolve, reject);
+		} else {
+			// Cancel any existing pending chat request
+			if (pendingChatRequest) {
+				clearTimeout(pendingChatRequest.timeoutId);
+				pendingChatRequest.reject(new Error('Chat request cancelled - new request initiated'));
+			}
 
-		// Create the chat query message
-		const chatQuery = {
-			action: 'chat_query',
-			request_id: requestId,
-			query: query,
-			context: context,
-			activeChartContext: activeChartContext,
-			conversation_id: conversationId
-		};
+			// Connection is not open, store the request and attempt immediate reconnection
+			const timeoutId = setTimeout(() => {
+				if (pendingChatRequest?.requestId === requestId) {
+					pendingChatRequest = null;
+					reject(new Error('Chat request timeout - could not establish connection'));
+				}
+			}, CHAT_REQUEST_TIMEOUT);
 
-		try {
-			socket.send(JSON.stringify(chatQuery));
-		} catch (error) {
-			// Clean up on send failure
-			pendingChatRequests.delete(requestId);
-			reject(error);
+			pendingChatRequest = {
+				requestId,
+				resolve,
+				reject,
+				query,
+				context,
+				activeChartContext,
+				conversationId,
+				timeoutId
+			};
+
+			// Immediately attempt to reconnect if not already connecting
+			if (!isConnecting && shouldReconnect) {
+				// Reset reconnection attempts for user-initiated requests
+				reconnectAttempts = 0;
+				connect();
+			}
 		}
 	});
 
@@ -341,12 +386,76 @@ export function sendChatQuery(
 	return { promise, cancel };
 }
 
+// Helper function to send chat query immediately
+function sendChatQueryNow(
+	requestId: string,
+	query: string,
+	context: any[],
+	activeChartContext: any,
+	conversationId: string,
+	resolve: (value: any) => void,
+	reject: (error: Error) => void
+) {
+	// Store the promise resolvers
+	pendingChatRequests.set(requestId, { resolve, reject });
+
+	// Create the chat query message
+	const chatQuery = {
+		action: 'chat_query',
+		request_id: requestId,
+		query: query,
+		context: context,
+		activeChartContext: activeChartContext,
+		conversation_id: conversationId
+	};
+
+	try {
+		socket?.send(JSON.stringify(chatQuery));
+	} catch (error) {
+		// Clean up on send failure
+		pendingChatRequests.delete(requestId);
+		reject(error);
+	}
+}
+
+// Process pending chat request when connection is restored
+function processPendingChatRequest() {
+	if (!pendingChatRequest) return; 
+
+	// Clear the timeout since we're processing now
+	clearTimeout(pendingChatRequest.timeoutId);
+	
+	// Send the pending request
+	sendChatQueryNow(
+		pendingChatRequest.requestId,
+		pendingChatRequest.query,
+		pendingChatRequest.context,
+		pendingChatRequest.activeChartContext,
+		pendingChatRequest.conversationId,
+		pendingChatRequest.resolve,
+		pendingChatRequest.reject
+	);
+	
+	// Clear the pending request
+	pendingChatRequest = null;
+	
+}
+
 // Cancel a chat query by request ID
 export function cancelChatQuery(requestId: string) {
-	const pendingRequest = pendingChatRequests.get(requestId);
-	if (pendingRequest) {
+	// Check active requests
+	const activePendingRequest = pendingChatRequests.get(requestId);
+	if (activePendingRequest) {
 		pendingChatRequests.delete(requestId);
-		pendingRequest.reject(new Error('Chat request cancelled'));
+		activePendingRequest.reject(new Error('Chat request cancelled'));
+		return;
+	}
+
+	// Check pending chat request
+	if (pendingChatRequest?.requestId === requestId) {
+		clearTimeout(pendingChatRequest.timeoutId);
+		pendingChatRequest.reject(new Error('Chat request cancelled'));
+		pendingChatRequest = null;
 	}
 }
 
