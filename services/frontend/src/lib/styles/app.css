@@ -90,32 +90,7 @@
 	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
 
-.corner-logo-container {
-	position: fixed;
-	top: 0;
-	right: 0;
-	width: 45px;
-	height: 40px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background-color: #0a0a0a;
-	z-index: 11;
-	border-left: 4px solid var(--c1);
-	border-bottom: 4px solid var(--c1);
-}
 
-.corner-atlantis-logo {
-	width: 20px;
-	height: 20px;
-	object-fit: contain;
-	opacity: 0.8;
-	transition: opacity 0.2s ease;
-}
-
-.corner-logo-container:hover .corner-atlantis-logo {
-	opacity: 1;
-}
 
 .sidebar-buttons {
 	position: fixed;
