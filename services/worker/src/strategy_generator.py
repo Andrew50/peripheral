@@ -102,6 +102,15 @@ class StrategyGenerator:
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
+🔍 FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
+✅ get_bar_data(timeframe, columns, min_bars, filters) → numpy.ndarray
+✅ get_general_data(columns, filters) → pandas.DataFrame
+
+❌ DO NOT USE - THESE FUNCTIONS DO NOT EXIST:
+get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
+
+📋 NOTE: get_bar_data() and get_general_data() are automatically available in the execution environment.
+
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
 - Use data accessor functions with filters (NOT deprecated tickers parameter):
