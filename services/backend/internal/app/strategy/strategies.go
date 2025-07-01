@@ -269,6 +269,18 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 		log.Printf("Strategy name: %s", result.Strategy.Name)
 	}
 
+	// Check if the strategy creation was successful
+	if !result.Success {
+		log.Printf("ERROR: Strategy creation failed: %s", result.Error)
+		return nil, fmt.Errorf("strategy creation failed: %s", result.Error)
+	}
+
+	// Check if strategy object is nil
+	if result.Strategy == nil {
+		log.Printf("ERROR: Strategy creation succeeded but strategy object is nil")
+		return nil, fmt.Errorf("strategy creation succeeded but strategy object is nil")
+	}
+
 	return CreateStrategyFromPromptResult{
 		StrategyID: result.Strategy.StrategyID,
 		Name:       result.Strategy.Name,

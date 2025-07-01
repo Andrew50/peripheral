@@ -105,7 +105,7 @@ class StrategyGenerator:
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
 - Use data accessor functions with ticker symbols (NOT security IDs):
-  * get_bar_data(timeframe="1d", tickers=["AAPL", "MRNA"], columns=[], min_bars=1, filters={{}}) -> numpy array
+  * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
      
      SUPPORTED TIMEFRAMES:
@@ -124,9 +124,9 @@ CRITICAL REQUIREMENTS:
        - 1 bar: Simple current patterns (volume spikes, price thresholds)
        - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
        - 20+ bars: Technical indicators (moving averages, RSI)
-  * get_bar_data(timeframe="1d", tickers=None, aggregate_mode=True) -> numpy array (for market-wide calculations only where all data is always required for calculations, this argument will block batching during exectuion of the strategy)
+  * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) -> numpy array (for market-wide calculations only where all data is always required for calculations, this argument will block batching during exectuion of the strategy)
      Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
-  * get_general_data(tickers=["AAPL", "MRNA"], columns=[], filters={{}}) -> pandas DataFrame  
+  * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
      Columns: ticker, name, sector, industry, market_cap, market, locale, primary_exchange, active, description, cik, total_shares
 
 AVAILABLE FILTERS (use in filters parameter):
@@ -142,13 +142,14 @@ FILTER EXAMPLES:
 - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}
 - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}
 - Small cap stocks: filters={{"market_cap_max": 2000000000}}
+- Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 
 EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - you don't need to worry about this.
 
 TICKER USAGE:
 - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" 
-- For specific tickers mentioned in prompts, use tickers=["TICKER_NAME"]
-- For universe-wide strategies, use tickers=None to get all available tickers
+- For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
+- For universe-wide strategies, use filters={{}} (no tickers filter) to get all available tickers
 - Return results with 'ticker' field (string), not 'securityid'
 
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
@@ -225,17 +226,17 @@ def strategy():
         # Get 5-minute data for short-term momentum (aggregated from 1-minute)
         bars_5m = get_bar_data(
             timeframe="5m",  # Custom aggregation: 5-minute bars from 1-minute data
-            tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=5  # Need 5 bars for short-term momentum calculation
+            min_bars=5,  # Need 5 bars for short-term momentum calculation
+            filters={{"tickers": target_tickers}}
         )
         
         # Get 4-hour data for trend confirmation (aggregated from 1-hour)  
         bars_4h = get_bar_data(
             timeframe="4h",  # Custom aggregation: 4-hour bars from 1-hour data
-            tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=3  # Need 3 bars for trend analysis (current + 2 previous for moving average)
+            min_bars=3,  # Need 3 bars for trend analysis (current + 2 previous for moving average)
+            filters={{"tickers": target_tickers}}
         )
         
         if bars_5m is None or len(bars_5m) == 0 or bars_4h is None or len(bars_4h) == 0:
@@ -292,9 +293,9 @@ def strategy():
     try:
         bar_data = get_bar_data(
             timeframe="1d",
-            tickers=None,  # All tickers
             columns=["ticker", "timestamp", "volume"],
-            min_bars=20  # Need 20 bars for volume average calculation
+            min_bars=20,  # Need 20 bars for volume average calculation
+            filters={{}}  # All tickers
         )
         
         if bar_data is None or len(bar_data) == 0:
@@ -337,7 +338,6 @@ def strategy():
         # Focus on technology stocks only
         bar_data = get_bar_data(
             timeframe="1d",
-            tickers=None,  # All tickers in the sector
             columns=["ticker", "timestamp", "open", "close", "volume"],
             min_bars=5,  # Need 5 bars to calculate 5-day price change
             filters={{"sector": "Technology"}}  # Filter to Technology sector only
@@ -466,17 +466,17 @@ def strategy():
         # Get 1-minute data for entry detection
         bars_1m = get_bar_data(
             timeframe="1m",  # Direct 1-minute table access (fastest)
-            tickers=target_tickers,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=5  # Need 5 minutes for momentum calculation
+            min_bars=5,  # Need 5 minutes for momentum calculation
+            filters={{"tickers": target_tickers}}
         )
         
         # Get 5-minute data for trend confirmation  
         bars_5m = get_bar_data(
             timeframe="5m",  # Aggregated from 1-minute data
-            tickers=target_tickers,
             columns=["ticker", "timestamp", "close"],
-            min_bars=2   # Need 2 periods for micro-trend (current vs previous)
+            min_bars=2,   # Need 2 periods for micro-trend (current vs previous)
+            filters={{"tickers": target_tickers}}
         )
         
         if bars_1m is None or len(bars_1m) == 0 or bars_5m is None or len(bars_5m) == 0:
@@ -530,7 +530,6 @@ def strategy():
         # Swing trading using 4-hour and daily timeframes
         bar_data_4h = get_bar_data(
             timeframe="4h",  # Custom aggregation from 1-hour data
-            tickers=None,    # Screen all stocks
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
             min_bars=14,     # 14 periods for RSI calculation
             filters={{"sector": "Technology", "market_cap_min": 1000000000}}  # Large-cap tech
@@ -538,7 +537,6 @@ def strategy():
         
         bar_data_1d = get_bar_data(
             timeframe="1d",  # Daily data for longer-term trend
-            tickers=None,
             columns=["ticker", "timestamp", "close"],
             min_bars=20,     # 20 days for moving average
             filters={{"sector": "Technology", "market_cap_min": 1000000000}}
@@ -599,7 +597,6 @@ def strategy():
         # Long-term position trading using weekly timeframes
         bars_1w = get_bar_data(
             timeframe="1w",  # Direct weekly table access
-            tickers=None,
             columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
             min_bars=20,     # Need 20 weeks for high calculation and volume average
             filters={{"market_cap_min": 10000000000}}  # Large-cap stocks only
@@ -607,9 +604,9 @@ def strategy():
         
         bars_2w = get_bar_data(
             timeframe="2w",  # Custom aggregation from weekly data
-            tickers=None,
             columns=["ticker", "timestamp", "close"],
-            min_bars=3      # Need 3 bi-weekly periods for trend calculation (current vs 2 periods ago)
+            min_bars=3,      # Need 3 bi-weekly periods for trend calculation (current vs 2 periods ago)
+            filters={{"market_cap_min": 10000000000}}
         )
         
         if bars_1w is None or len(bars_1w) == 0 or bars_2w is None or len(bars_2w) == 0:
@@ -889,7 +886,7 @@ Generate the updated strategy function."""
                 extracted_tickers = self._extract_tickers_from_prompt(prompt)
                 ticker_context = ""
                 if extracted_tickers:
-                    ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use tickers={extracted_tickers} in your data accessor calls."
+                    ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use filters={{'tickers': {extracted_tickers}}} in your data accessor calls."
                 
                 user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}"""
 
