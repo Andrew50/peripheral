@@ -34,7 +34,7 @@ jobs:
 
     strategy:
       matrix:
-        test-suite: ['go-integration-tests', 'python-integration-tests', 'friday-gap-analysis']
+        test-suite: ['go-integration-tests', 'python-integration-tests', 'friday-gap-analysis', 'get-bar-data-filters']
 
     steps:
     - name: 🔧 Checkout code
@@ -49,7 +49,7 @@ jobs:
         cache-dependency-path: services/backend/go.sum
 
     - name: 🐍 Setup Python
-      if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis'
+      if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis' || matrix.test-suite == 'get-bar-data-filters'
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
@@ -57,7 +57,7 @@ jobs:
         cache-dependency-path: services/worker/requirements.txt
 
     - name: 📦 Install Python dependencies
-      if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis'
+      if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis' || matrix.test-suite == 'get-bar-data-filters'
       run: |
         cd services/worker
         pip install -r requirements.txt
@@ -162,6 +162,27 @@ jobs:
         echo "✅ Large-Cap Stock Gap Direction Analysis Completed"
         echo "✅ Integration Test Framework Validation Completed"
 
+    - name: 🧪 Run get_bar_data Filters Tests
+      if: matrix.test-suite == 'get-bar-data-filters'
+      run: |
+        echo "🧪 Running get_bar_data Filters Integration Tests"
+        cd services/worker/tests
+        
+        # Run the comprehensive filter test suite
+        echo "🔍 Testing get_bar_data filter functionality..."
+        python test_get_bar_data_filters.py
+        
+        # Print summary at the end
+        echo ""
+        echo "📋 get_bar_data Filters Tests Summary"
+        echo "======================================"
+        echo "✅ Market Cap Filter Tests Completed"
+        echo "✅ Sector and Industry Filter Tests Completed"
+        echo "✅ Exchange and Locale Filter Tests Completed"
+        echo "✅ Combined Filter Logic Tests Completed"
+        echo "✅ Filter Performance Tests Completed"
+        echo "✅ Filter Validation and Edge Case Tests Completed"
+
   # Full pipeline test - only runs when explicitly requested
   full-pipeline-test:
     name: Full Pipeline Integration Test
@@ -226,6 +247,16 @@ jobs:
         SKIP_INTEGRATION_TESTS: ${{ env.SKIP_INTEGRATION_TESTS }}
         BACKEND_URL: ${{ env.BACKEND_URL }}
         RUN_FRIDAY_GAP_TEST: 'true'
+
+    - name: 🔍 Run get_bar_data Filters Test
+      run: |
+        echo "🔍 Running get_bar_data Filters Test"
+        cd services/worker/tests
+        python test_get_bar_data_filters.py
+      env:
+        SKIP_INTEGRATION_TESTS: ${{ env.SKIP_INTEGRATION_TESTS }}
+        BACKEND_URL: ${{ env.BACKEND_URL }}
+        RUN_GET_BAR_DATA_FILTERS_TEST: 'true'
 
     - name: 📊 Upload test results
       if: always()

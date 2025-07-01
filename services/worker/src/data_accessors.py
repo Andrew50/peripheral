@@ -293,6 +293,26 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
             
             where_clause = " AND ".join(filter_parts)
             # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
@@ -713,6 +733,26 @@ class DataAccessorProvider:
                     security_filter_parts.append("s.market_cap <= %s")
                     security_params.append(filters['market_cap_max'])
                 
+                if 'sic_code' in filters:
+                    security_filter_parts.append("s.sic_code = %s")
+                    security_params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    security_filter_parts.append("s.total_employees >= %s")
+                    security_params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    security_filter_parts.append("s.total_employees <= %s")
+                    security_params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding >= %s")
+                    security_params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding <= %s")
+                    security_params.append(filters['weighted_shares_outstanding_max'])
+                
                 if 'active' in filters:
                     security_filter_parts.append("s.active = %s")
                     security_params.append(filters['active'])
@@ -986,6 +1026,26 @@ class DataAccessorProvider:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
                 
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
+                
                 if 'active' in filters:
                     filter_parts.append("active = %s")
                     params.append(filters['active'])
@@ -1044,7 +1104,8 @@ class DataAccessorProvider:
             allowed_columns = {
                 "securityid", "ticker", "name", "sector", "industry", "market", 
                 "primary_exchange", "locale", "active", "description", "cik",
-                "market_cap", "share_class_shares_outstanding"
+                "market_cap", "share_class_shares_outstanding", "share_class_figi",
+                "sic_code", "sic_description", "total_employees", "weighted_shares_outstanding"
             }
             safe_columns = [col for col in columns if col in allowed_columns]
             
@@ -1087,6 +1148,26 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
                 
                 if 'active' in filters:
                     filter_parts.append("active = %s")
