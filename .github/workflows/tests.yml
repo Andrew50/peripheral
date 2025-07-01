@@ -29,7 +29,7 @@ jobs:
   # Integration test matrix
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, self-hosted, Linux, X64]
     timeout-minutes: 30
 
     strategy:
@@ -186,7 +186,7 @@ jobs:
   # Full pipeline test - only runs when explicitly requested
   full-pipeline-test:
     name: Full Pipeline Integration Test
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, self-hosted, Linux, X64]
     timeout-minutes: 60
     if: github.event.inputs.run_full_tests == 'true'
 
