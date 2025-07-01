@@ -456,6 +456,7 @@ type GetTickerMenuDetailsResults struct {
 	SicDescription              sql.NullString  `json:"sic_description"`
 	TotalEmployees              sql.NullInt64   `json:"total_employees"`
 	WeightedSharesOutstanding   sql.NullInt64   `json:"weighted_shares_outstanding"`
+	WhyMovingContent            sql.NullString  `json:"why_moving_content,omitempty"`
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
@@ -465,25 +466,25 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Modified query to handle NULL market_cap and missing columns
+	// Combined query to handle NULL market_cap, missing columns, and whymoving data in one request
 	query := `
 		SELECT 
-			ticker,
-			NULLIF(name, '') as name,
-			NULLIF(market, '') as market,
-			NULLIF(locale, '') as locale,
-			NULLIF(primary_exchange, '') as primary_exchange,
+			s.ticker,
+			NULLIF(s.name, '') as name,
+			NULLIF(s.market, '') as market,
+			NULLIF(s.locale, '') as locale,
+			NULLIF(s.primary_exchange, '') as primary_exchange,
 			CASE 
-				WHEN maxDate IS NULL THEN 'Now'
-				ELSE to_char(maxDate, 'YYYY-MM-DD')
+				WHEN s.maxDate IS NULL THEN 'Now'
+				ELSE to_char(s.maxDate, 'YYYY-MM-DD')
 			END as active,
-			NULLIF(market_cap, 0),  -- This will convert 0 to NULL
-			NULLIF(description, '') as description,
-			NULLIF(logo, '') as logo,
-			NULLIF(icon, '') as icon,
-			share_class_shares_outstanding,
-			NULLIF(industry, '') as industry,
-			NULLIF(sector, '') as sector,
+			NULLIF(s.market_cap, 0),  -- This will convert 0 to NULL
+			NULLIF(s.description, '') as description,
+			NULLIF(s.logo, '') as logo,
+			NULLIF(s.icon, '') as icon,
+			s.share_class_shares_outstanding,
+			NULLIF(s.industry, '') as industry,
+			NULLIF(s.sector, '') as sector,
 			CASE 
 				WHEN EXISTS (
 					SELECT 1 FROM information_schema.columns 
@@ -492,18 +493,27 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 				THEN (SELECT total_shares FROM securities WHERE securityId = $1 LIMIT 1)
 				ELSE 0
 			END as total_shares,
-			NULLIF(share_class_figi, '') as share_class_figi,
-			NULLIF(sic_code, '') as sic_code,
-			NULLIF(sic_description, '') as sic_description,
-			total_employees,
-			weighted_shares_outstanding
-		FROM securities 
-		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
+			NULLIF(s.share_class_figi, '') as share_class_figi,
+			NULLIF(s.sic_code, '') as sic_code,
+			NULLIF(s.sic_description, '') as sic_description,
+			s.total_employees,
+			s.weighted_shares_outstanding,
+			w.content as why_moving_content
+		FROM securities s
+		LEFT JOIN (
+			SELECT DISTINCT ON (securityid) securityid, content
+			FROM why_is_it_moving 
+			WHERE securityid = $1 
+			AND is_content = true 
+			AND created_at >= NOW() - INTERVAL '6 hours'
+			ORDER BY securityid, created_at DESC
+		) w ON s.securityid = w.securityid
+		WHERE s.securityId = $1 AND (s.maxDate IS NULL OR s.maxDate = (
 			SELECT MAX(maxDate) 
 			FROM securities 
-			WHERE securityId = $1
+			WHERE s.securityId = $1
 		))
-		ORDER BY maxDate IS NULL DESC, maxDate DESC NULLS FIRST
+		ORDER BY s.maxDate IS NULL DESC, s.maxDate DESC NULLS FIRST
 		LIMIT 1`
 
 	var results GetTickerMenuDetailsResults
@@ -527,10 +537,12 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		&results.SicDescription,
 		&results.TotalEmployees,
 		&results.WeightedSharesOutstanding,
+		&results.WhyMovingContent,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
+
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,
@@ -552,6 +564,7 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		"sic_description":                results.SicDescription.String,
 		"total_employees":                nil,
 		"weighted_shares_outstanding":    nil,
+		"why_moving_content":             nil,
 	}
 
 	// Only include market_cap if it's valid
@@ -577,6 +590,11 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 	// Only include weighted_shares_outstanding if it's valid
 	if results.WeightedSharesOutstanding.Valid {
 		response["weighted_shares_outstanding"] = results.WeightedSharesOutstanding.Int64
+	}
+
+	// Only include whymoving data if it's valid
+	if results.WhyMovingContent.Valid {
+		response["why_moving_content"] = results.WhyMovingContent.String
 	}
 
 	return response, nil
