@@ -158,10 +158,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			totalTokenCounts.OutputTokenCount += v.TokenCounts.OutputTokenCount
-			totalTokenCounts.InputTokenCount += v.TokenCounts.InputTokenCount
-			totalTokenCounts.ThoughtsTokenCount += v.TokenCounts.ThoughtsTokenCount
-			totalTokenCounts.TotalTokenCount += v.TokenCounts.TotalTokenCount
+			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
+			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
+			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
+			totalTokenCounts.TotalTokenCount += int64(v.TokenCounts.TotalTokenCount)
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
@@ -275,10 +275,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					}, err
 				}
 
-				totalTokenCounts.OutputTokenCount += finalResponse.TokenCounts.OutputTokenCount
-				totalTokenCounts.InputTokenCount += finalResponse.TokenCounts.InputTokenCount
-				totalTokenCounts.ThoughtsTokenCount += finalResponse.TokenCounts.ThoughtsTokenCount
-				totalTokenCounts.TotalTokenCount += finalResponse.TokenCounts.TotalTokenCount
+				totalTokenCounts.OutputTokenCount += int64(finalResponse.TokenCounts.OutputTokenCount)
+				totalTokenCounts.InputTokenCount += int64(finalResponse.TokenCounts.InputTokenCount)
+				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
+				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
