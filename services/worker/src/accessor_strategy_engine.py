@@ -89,7 +89,7 @@ class AccessorStrategyEngine:
                     'total_instances': len(instances),
                     'symbols_analyzed': len(symbols),
                     'date_range': f"{start_date.date()} to {end_date.date()}",
-                    'execution_time_ms': execution_time
+                    'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
                 },
                 'performance': performance
             }
@@ -105,6 +105,82 @@ class AccessorStrategyEngine:
                 'execution_mode': 'backtest'
             }
     
+    async def execute_validation(
+        self, 
+        strategy_code: str
+    ) -> Dict[str, Any]:
+        """
+        Execute strategy for VALIDATION ONLY using minimal data for speed
+        
+        Args:
+            strategy_code: Python code defining the strategy function  
+            
+        Returns:
+            Dict with validation result (success/error only)
+        """
+        logger.info("🧪 Starting fast validation execution (minimal data)")
+        
+        start_time = time.time()
+        
+        try:
+            # Validate strategy code first
+            if not self.validator.validate_code(strategy_code):
+                raise SecurityError("Strategy code validation failed")
+            
+            # Set execution context for validation with MINIMAL data
+            self.data_accessor.set_execution_context(
+                mode='validation',  # Special validation mode
+                symbols=['AAPL']    # Just one symbol for validation
+            )
+            
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='validation',
+                symbols=['AAPL']
+            )
+            
+            # Debug: Verify both instances have validation context
+            logger.info(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
+            logger.info(f"🔍 Global accessor context: {global_accessor.execution_context}")
+            logger.info(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
+            
+            logger.info("🔧 Validation optimizations enabled:")
+            logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
+            logger.info("   ✓ Fast execution path (validation mode)")
+            logger.info("   ✓ Skip result ranking and processing")
+            logger.info("   ✓ Context set on both engine and global data accessors")
+            
+            # Execute strategy with validation context (don't care about results)
+            instances = await self._execute_strategy(
+                strategy_code, 
+                execution_mode='validation'
+            )
+            
+            execution_time = (time.time() - start_time) * 1000
+            
+            result = {
+                'success': True,
+                'execution_mode': 'validation',
+                'instances_generated': len(instances),
+                'execution_time_ms': int(execution_time),
+                'message': 'Validation passed - strategy can execute without errors'
+            }
+            
+            logger.info(f"✅ Validation completed successfully: {execution_time:.1f}ms")
+            return result
+            
+        except Exception as e:
+            execution_time = (time.time() - start_time) * 1000
+            logger.error(f"❌ Validation failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'execution_mode': 'validation',
+                'execution_time_ms': int(execution_time)
+            }
+
     async def execute_screening(
         self, 
         strategy_code: str, 
@@ -124,6 +200,7 @@ class AccessorStrategyEngine:
             Dict with ranked results and scores
         """
         logger.info(f"Starting accessor screening: {len(universe)} symbols, limit {limit}")
+        logger.info("📊 Screening mode: Using minimal recent data for optimal performance")
         
         start_time = time.time()
         
@@ -132,11 +209,19 @@ class AccessorStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Set execution context for data accessors
+            # Set execution context for data accessors with screening optimizations
             self.data_accessor.set_execution_context(
                 mode='screening',
                 symbols=universe
             )
+            
+            # Log optimization settings
+            logger.info("🔧 Screening optimizations enabled:")
+            logger.info("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
+            logger.info("   ✓ NO date filtering (eliminates unnecessary data overhead)")
+            logger.info("   ✓ Database-optimized query structure (most recent records only)")
+            logger.info(f"   ✓ Universe size: {len(universe)} symbols")
+            logger.info(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
             instances = await self._execute_strategy(
@@ -155,14 +240,17 @@ class AccessorStrategyEngine:
                 'ranked_results': ranked_results,
                 'universe_size': len(universe),
                 'results_returned': len(ranked_results),
-                'execution_time_ms': execution_time
+                'execution_time_ms': int(execution_time),  # Convert to integer for Go compatibility
+                'optimization_enabled': True,
+                'data_strategy': 'minimal_recent'
             }
             
-            logger.info(f"Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
+            logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
+            logger.info(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
             return result
             
         except Exception as e:
-            logger.error(f"Screening execution failed: {e}")
+            logger.error(f"❌ Screening execution failed: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -215,9 +303,9 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'alert',
                 'alerts': alerts,
-                'signals': {inst['ticker']: inst for inst in instances if inst.get('signal', False)},
+                'signals': {inst['ticker']: inst for inst in instances},  # All instances are signals
                 'symbols_processed': len(symbols),
-                'execution_time_ms': execution_time
+                'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
             }
             
             logger.info(f"Alert scan completed: {len(alerts)} alerts, {execution_time:.1f}ms")
@@ -236,24 +324,24 @@ class AccessorStrategyEngine:
         
         alerts = []
         for instance in instances:
-            if instance.get('signal', False):
-                alert = {
-                    'symbol': instance['ticker'],
-                    'type': 'strategy_signal',
-                    'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
-                    'timestamp': datetime.now().isoformat(),
-                    'data': instance
-                }
-                
-                # Add priority based on score/strength
-                if 'score' in instance:
-                    alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
-                elif 'signal_strength' in instance:
-                    alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
-                else:
-                    alert['priority'] = 'medium'
-                
-                alerts.append(alert)
+            # Since all instances are signals (they met criteria), convert all to alerts
+            alert = {
+                'symbol': instance['ticker'],
+                'type': 'strategy_signal',
+                'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
+                'timestamp': datetime.now().isoformat(),
+                'data': instance
+            }
+            
+            # Add priority based on score/strength
+            if 'score' in instance:
+                alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
+            elif 'signal_strength' in instance:
+                alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
+            else:
+                alert['priority'] = 'medium'
+            
+            alerts.append(alert)
         
         return alerts
 
@@ -320,11 +408,13 @@ class AccessorStrategyEngine:
         """Create safe execution environment with data accessor functions"""
         
         # Create bound methods that use this engine's data accessor
-        def bound_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1):
-            return self.data_accessor.get_bar_data(timeframe, tickers, columns, min_bars)
+        def bound_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1, filters=None, 
+                              aggregate_mode=False):
+            return self.data_accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, 
+                                                  aggregate_mode)
         
-        def bound_get_general_data(tickers=None, columns=None):
-            return self.data_accessor.get_general_data(tickers, columns)
+        def bound_get_general_data(tickers=None, columns=None, filters=None):
+            return self.data_accessor.get_general_data(tickers, columns, filters)
         
         safe_globals = {
             # Standard imports
@@ -381,21 +471,35 @@ class AccessorStrategyEngine:
         return self.validator.validate_code(strategy_code)
 
     def _rank_screening_results(self, instances: List[Dict], limit: int) -> List[Dict]:
-        """Rank screening results by score or other criteria"""
+        """Rank screening results by score or other criteria and convert to WorkerRankedResult format"""
         
-        # Sort by score if available, otherwise by timestamp
+        # Sort by score if available, otherwise by timestamp descending (most recent first)
         def sort_key(instance):
             if 'score' in instance:
                 return instance['score']
-            elif 'signal' in instance and instance['signal']:
-                return 1.0
             else:
-                return 0.0
+                # Use timestamp for sorting if no score - more recent = higher priority
+                return instance.get('timestamp', 0)
         
         sorted_instances = sorted(instances, key=sort_key, reverse=True)
         
         # Limit results
-        return sorted_instances[:limit]
+        limited_instances = sorted_instances[:limit]
+        
+        # Convert to WorkerRankedResult format expected by Go backend
+        ranked_results = []
+        for instance in limited_instances:
+            # Convert instance to WorkerRankedResult format
+            ranked_result = {
+                'symbol': instance.get('ticker', ''),  # Convert ticker to symbol
+                'score': float(instance.get('score', 0.0)),
+                'current_price': float(instance.get('entry_price', instance.get('close', instance.get('price', 0.0)))),
+                'sector': instance.get('sector', ''),
+                'data': instance  # Include the full instance data
+            }
+            ranked_results.append(ranked_result)
+        
+        return ranked_results
 
     def _calculate_performance_metrics(self, instances: List[Dict]) -> Dict[str, Any]:
         """Calculate performance metrics from instances"""
@@ -410,11 +514,12 @@ class AccessorStrategyEngine:
         
         # Basic statistics
         total_instances = len(instances)
-        positive_signals = len([i for i in instances if i.get('signal', False)])
+        # Since all returned instances are positive signals (they met criteria), count all
+        positive_instances = total_instances  # All instances are positive instances
         unique_tickers = len(set(i['ticker'] for i in instances))
         
-        # Calculate signal rate
-        signal_rate = positive_signals / total_instances if total_instances > 0 else 0
+        # Calculate signal rate (always 1.0 since all returned instances are signals)
+        signal_rate = 1.0
         
         # Calculate average score if available
         scores = [i.get('score', 0) for i in instances if 'score' in i and isinstance(i['score'], (int, float))]
@@ -422,7 +527,7 @@ class AccessorStrategyEngine:
         
         metrics = {
             'total_instances': total_instances,
-            'positive_signals': positive_signals,
+            'positive_instances': positive_instances,
             'signal_rate': round(signal_rate, 4),
             'unique_tickers': unique_tickers,
             'avg_score': round(avg_score, 4)
@@ -432,7 +537,7 @@ class AccessorStrategyEngine:
         numeric_fields = []
         for instance in instances:
             for key, value in instance.items():
-                if key not in ['ticker', 'timestamp', 'signal'] and isinstance(value, (int, float)):
+                if key not in ['ticker', 'timestamp'] and isinstance(value, (int, float)):
                     if key not in numeric_fields:
                         numeric_fields.append(key)
         

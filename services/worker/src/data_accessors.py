@@ -12,14 +12,78 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 from decimal import Decimal
+import psycopg2
+import threading
+from contextlib import contextmanager
+import time
 try:
-    import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
 
 logger = logging.getLogger(__name__)
 
+
+# Add connection pool management
+class ConnectionPoolManager:
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            self.pool = None
+            self.max_connections = 10  # Limit per worker
+            self.connection_timeout = 30
+            self.retry_attempts = 3
+            self.retry_delay = 1
+            self._initialized = True
+    
+    @contextmanager
+    def get_connection(self):
+        """Get database connection with retry logic and timeout"""
+        connection = None
+        for attempt in range(self.retry_attempts):
+            try:
+                connection = psycopg2.connect(
+                    host=os.getenv('DB_HOST', 'localhost'),
+                    port=os.getenv('DB_PORT', '5432'),
+                    user=os.getenv('DB_USER', 'postgres'),
+                    password=os.getenv('DB_PASSWORD', ''),
+                    database=os.getenv('POSTGRES_DB', 'postgres'),
+                    connect_timeout=self.connection_timeout,
+                    application_name=f'worker_{os.getpid()}'
+                )
+                yield connection
+                break
+            except psycopg2.OperationalError as e:
+                if "recovery mode" in str(e) and attempt < self.retry_attempts - 1:
+                    logging.warning(f"Database in recovery mode, retrying in {self.retry_delay}s (attempt {attempt + 1}/{self.retry_attempts})")
+                    time.sleep(self.retry_delay)
+                    self.retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
+                if attempt < self.retry_attempts - 1:
+                    time.sleep(self.retry_delay)
+                    continue
+                else:
+                    raise
+            finally:
+                if connection:
+                    connection.close()
+
+# Global connection pool instance
+connection_pool = ConnectionPoolManager()
 
 class DataAccessorProvider:
     """Provides optimized data accessor functions for strategy execution"""
@@ -41,8 +105,9 @@ class DataAccessorProvider:
         }
         
     def get_connection(self):
-        """Get database connection"""
-        return psycopg2.connect(**self.db_config)
+        """Get database connection using pooled connection with retry logic"""
+        # Use the global connection pool instead of direct connection
+        return connection_pool.get_connection()
     
     def set_execution_context(self, mode: str, symbols: List[str] = None, 
                              start_date: datetime = None, end_date: datetime = None):
@@ -55,15 +120,493 @@ class DataAccessorProvider:
         }
 
     def get_bar_data(self, timeframe: str = "1d", tickers: List[str] = None, 
-                     columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
+                     columns: List[str] = None, min_bars: int = 1, 
+                     filters: Dict[str, any] = None, aggregate_mode: bool = False,
+                     extended_hours: bool = False) -> np.ndarray:
+        """
+        Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
+        
+        Args:
+            timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+            tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
+            columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+            min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
+            aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
+            extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                           Only affects intraday timeframes - daily and above ignore this parameter
+                           
+        Returns:
+            numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
+        """
+        try:
+            # Validate inputs
+            if min_bars < 1:
+                min_bars = 1
+            if min_bars > 10000:  # Prevent excessive data requests
+                min_bars = 10000
+            
+            # Validation mode: override tickers=None to use minimal dataset for fast validation
+            if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation':
+                if tickers is None:
+                    tickers = self.execution_context.get('symbols', ['AAPL'])[:1]  # Only use first ticker for validation
+                    logger.info(f"🧪 Validation mode: overriding tickers=None to use minimal dataset: {tickers}")
+                elif len(tickers) > 1:
+                    tickers = tickers[:1]  # Limit to first ticker only for validation
+                    logger.info(f"🧪 Validation mode: limiting tickers to first symbol only: {tickers}")
+               
+            # Check if we need to use batching (now with potentially corrected tickers)
+            should_batch = self._should_use_batching(tickers, aggregate_mode)
+            
+            if should_batch:
+                logger.info(f"🔄 Using batched data fetching for large dataset")
+                return self._get_bar_data_batched(timeframe, tickers, columns, min_bars, filters, extended_hours)
+            else:
+                # Use original method for smaller datasets or when aggregate_mode is True
+                return self._get_bar_data_single(timeframe, tickers, columns, min_bars, filters, extended_hours)
+                
+        except Exception as e:
+            logger.error(f"Error in get_bar_data: {e}")
+            return np.array([])
+    
+    def _should_use_batching(self, tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
+        """Determine if batching should be used based on the request parameters"""
+        # Never batch if aggregate_mode is explicitly enabled
+        if aggregate_mode:
+            logger.info("🔍 Aggregate mode enabled - disabling batching to provide all data at once")
+            return False
+        
+        # Always batch when tickers=None (all securities)
+        if tickers is None:
+            logger.info("🔄 Batching enabled: fetching all securities")
+            return True
+        
+        # Batch when ticker list is large
+        if len(tickers) > 1000:
+            logger.info(f"🔄 Batching enabled: {len(tickers)} tickers > 1000 limit")
+            return True
+        
+        return False
+    
+    def _get_bar_data_batched(self, timeframe: str = "1d", tickers: List[str] = None, 
+                            columns: List[str] = None, min_bars: int = 1, 
+                            filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+        """Get bar data using batching approach for large datasets"""
+        try:
+            batch_size = 1000
+            all_results = []
+            
+            # Get the universe of tickers to process
+            if tickers is None:
+                # Get all active tickers
+                logger.info("🌍 Fetching universe of all active tickers for batching")
+                universe_tickers = self._get_all_active_tickers(filters)
+                if not universe_tickers:
+                    logger.warning("No active tickers found in universe")
+                    return np.array([])
+                logger.info(f"📊 Found {len(universe_tickers)} active tickers in universe")
+            else:
+                universe_tickers = tickers
+                logger.info(f"📊 Processing {len(universe_tickers)} specified tickers")
+            
+            # Process in batches
+            total_batches = (len(universe_tickers) + batch_size - 1) // batch_size
+            logger.info(f"🔄 Processing {total_batches} batches of up to {batch_size} tickers each")
+            
+            for i in range(0, len(universe_tickers), batch_size):
+                batch_num = i // batch_size + 1
+                batch_tickers = universe_tickers[i:i + batch_size]
+                
+                logger.info(f"📦 Processing batch {batch_num}/{total_batches}: {len(batch_tickers)} tickers")
+                
+                try:
+                    # Get data for this batch using the single method
+                    batch_result = self._get_bar_data_single(
+                        timeframe=timeframe,
+                        tickers=batch_tickers,
+                        columns=columns,
+                        min_bars=min_bars,
+                        filters=filters,
+                        extended_hours=extended_hours
+                    )
+                    
+                    if batch_result is not None and len(batch_result) > 0:
+                        all_results.append(batch_result)
+                        logger.debug(f"✅ Batch {batch_num} returned {len(batch_result)} rows")
+                    else:
+                        logger.debug(f"⚠️ Batch {batch_num} returned no data")
+                        
+                except Exception as batch_error:
+                    logger.error(f"❌ Error in batch {batch_num}: {batch_error}")
+                    # Continue with next batch instead of failing completely
+                    continue
+            
+            # Combine all batch results
+            if all_results:
+                combined_result = np.vstack(all_results)
+                logger.info(f"✅ Batching complete: {len(combined_result)} total rows from {len(all_results)} batches")
+                return combined_result
+            else:
+                logger.warning("No data returned from any batch")
+                return np.array([])
+                
+        except Exception as e:
+            logger.error(f"Error in batched data fetching: {e}")
+            return np.array([])
+    
+    def _get_all_active_tickers(self, filters: Dict[str, any] = None) -> List[str]:
+        """Get list of all active tickers with optional filtering"""
+        try:
+            # Build filter conditions for active securities
+            filter_parts = ["maxdate IS NULL", "active = true"]
+            params = []
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
+            
+            where_clause = " AND ".join(filter_parts)
+            # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
+            query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"  # nosec B608
+            
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                cursor.close()
+            
+            return [row[0] for row in results if row[0]]  # Filter out None tickers
+            
+        except Exception as e:
+            logger.error(f"Error fetching active tickers: {e}")
+            return []
+    
+    def get_available_filter_values(self) -> Dict[str, List[str]]:
+        """Get all available values for filter fields from the database"""
+        try:
+            with connection_pool.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                filter_values = {}
+                
+                # Get distinct sectors
+                cursor.execute("""
+                    SELECT DISTINCT sector 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL 
+                    ORDER BY sector
+                """)
+                filter_values['sectors'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct industries
+                cursor.execute("""
+                    SELECT DISTINCT industry 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL 
+                    ORDER BY industry
+                """)
+                filter_values['industries'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct primary exchanges
+                cursor.execute("""
+                    SELECT DISTINCT primary_exchange 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL 
+                    ORDER BY primary_exchange
+                """)
+                filter_values['primary_exchanges'] = [row[0] for row in cursor.fetchall()]
+                
+                # Get distinct locales
+                cursor.execute("""
+                    SELECT DISTINCT locale 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND locale IS NOT NULL 
+                    ORDER BY locale
+                """)
+                filter_values['locales'] = [row[0] for row in cursor.fetchall()]
+                
+                cursor.close()
+                
+                return filter_values
+                
+        except Exception as e:
+            logger.error(f"Error fetching filter values: {e}")
+            return {
+                'sectors': [],
+                'industries': [],
+                'primary_exchanges': [],
+                'locales': []
+            }
+    
+    def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], tickers: List[str] = None, 
+                                columns: List[str] = None, min_bars: int = 1, 
+                                filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+        """
+        Get aggregated OHLCV data by combining base timeframe data into custom intervals
+        
+        Args:
+            timeframe_config: Dict with source table and aggregation parameters
+            tickers: List of ticker symbols 
+            columns: Desired columns
+            min_bars: Minimum bars needed
+            filters: Filtering criteria
+            
+        Returns:
+            numpy.ndarray with aggregated OHLCV data
+        """
+        try:
+            source_table = timeframe_config["source"]
+            
+            # Determine aggregation parameters
+            if "aggregate_minutes" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_minutes"]
+                base_interval_minutes = 1  # 1-minute source
+            elif "aggregate_hours" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_hours"] * 60
+                base_interval_minutes = 60  # 1-hour source
+            elif "aggregate_weeks" in timeframe_config:
+                interval_minutes = timeframe_config["aggregate_weeks"] * 7 * 24 * 60
+                base_interval_minutes = 7 * 24 * 60  # 1-week source
+            else:
+                # Fallback to daily data
+                return self._get_bar_data_single("1d", tickers, columns, min_bars, filters, extended_hours)
+            
+            # Calculate how many base intervals we need to get enough aggregated bars
+            base_bars_needed = min_bars * (interval_minutes // base_interval_minutes)
+            
+            # Get base timeframe data (using the source timeframe)
+            if source_table == "ohlcv_1m":
+                source_timeframe = "1m"
+            elif source_table == "ohlcv_1h":
+                source_timeframe = "1h"
+            elif source_table == "ohlcv_1w":
+                source_timeframe = "1w"
+            else:
+                source_timeframe = "1d"
+            
+            # Fetch base data with increased min_bars to ensure enough data for aggregation
+            base_data = self._get_bar_data_single(
+                source_timeframe, tickers, 
+                ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"],
+                base_bars_needed, filters, extended_hours
+            )
+            
+            if base_data is None or len(base_data) == 0:
+                return np.array([])
+            
+            # Perform aggregation
+            aggregated_data = self._aggregate_ohlcv_data(base_data, interval_minutes, base_interval_minutes)
+            
+            # Filter columns if requested
+            if columns and aggregated_data is not None and len(aggregated_data) > 0:
+                aggregated_data = self._filter_columns(aggregated_data, columns)
+            
+            return aggregated_data
+            
+        except Exception as e:
+            logger.error(f"Error in aggregated bar data: {e}")
+            return np.array([])
+    
+    def _aggregate_ohlcv_data(self, base_data: np.ndarray, target_interval_minutes: int, 
+                             base_interval_minutes: int) -> np.ndarray:
+        """
+        Aggregate OHLCV data from base timeframe to target interval
+        
+        Args:
+            base_data: Source OHLCV data as numpy array
+            target_interval_minutes: Target aggregation interval in minutes
+            base_interval_minutes: Base data interval in minutes
+            
+        Returns:
+            Aggregated OHLCV data as numpy array
+        """
+        try:
+            if len(base_data) == 0:
+                return np.array([])
+            
+            # Convert to pandas DataFrame for easier aggregation
+            import pandas as pd
+            
+            # Determine column names (assuming standard OHLCV format)
+            if base_data.shape[1] >= 8:
+                columns = ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"]
+            else:
+                columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+            
+            df = pd.DataFrame(base_data, columns=columns[:base_data.shape[1]])
+            
+            if len(df) == 0:
+                return np.array([])
+            
+            # Convert timestamp to datetime for aggregation
+            df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+            
+            # Calculate aggregation interval
+            interval_ratio = target_interval_minutes // base_interval_minutes
+            
+            # Group by security and time intervals
+            aggregated_results = []
+            
+            for securityid in df['securityid'].unique():
+                security_data = df[df['securityid'] == securityid].copy()
+                security_data = security_data.sort_values('datetime')
+                
+                # Create time bins for aggregation
+                if target_interval_minutes < 60:
+                    # For minute aggregations
+                    freq = f"{target_interval_minutes}T"
+                elif target_interval_minutes < 1440:
+                    # For hour aggregations
+                    freq = f"{target_interval_minutes // 60}H"
+                else:
+                    # For day/week aggregations
+                    freq = f"{target_interval_minutes // 1440}D"
+                
+                # Group by time intervals
+                grouped = security_data.set_index('datetime').groupby(pd.Grouper(freq=freq))
+                
+                for interval_start, group in grouped:
+                    if len(group) == 0:
+                        continue
+                    
+                    # Aggregate OHLCV data
+                    aggregated_row = {
+                        'securityid': securityid,
+                        'timestamp': int(interval_start.timestamp()),
+                        'open': group['open'].iloc[0],  # First open
+                        'high': group['high'].max(),    # Highest high
+                        'low': group['low'].min(),      # Lowest low
+                        'close': group['close'].iloc[-1], # Last close
+                        'volume': group['volume'].sum()   # Total volume
+                    }
+                    
+                    # Add ticker if available
+                    if 'ticker' in group.columns:
+                        aggregated_row['ticker'] = group['ticker'].iloc[0]
+                    
+                    aggregated_results.append(aggregated_row)
+            
+            if not aggregated_results:
+                return np.array([])
+            
+            # Convert back to numpy array
+            result_df = pd.DataFrame(aggregated_results)
+            
+            # Sort by securityid and timestamp
+            result_df = result_df.sort_values(['securityid', 'timestamp'])
+            
+            # Ensure column order matches expected format
+            if 'ticker' in result_df.columns:
+                column_order = ['securityid', 'ticker', 'timestamp', 'open', 'high', 'low', 'close', 'volume']
+            else:
+                column_order = ['securityid', 'timestamp', 'open', 'high', 'low', 'close', 'volume']
+            
+            result_df = result_df[column_order]
+            
+            return result_df.values
+            
+        except Exception as e:
+            logger.error(f"Error aggregating OHLCV data: {e}")
+            return np.array([])
+    
+    def _filter_columns(self, data: np.ndarray, requested_columns: List[str]) -> np.ndarray:
+        """Filter numpy array to only include requested columns"""
+        try:
+            if len(data) == 0:
+                return np.array([])
+            
+            # Map column names to indices
+            if data.shape[1] >= 8:
+                available_columns = ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"]
+            else:
+                available_columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+            
+            # Find indices of requested columns
+            column_indices = []
+            for col in requested_columns:
+                if col in available_columns:
+                    column_indices.append(available_columns.index(col))
+            
+            if not column_indices:
+                return np.array([])
+            
+            # Extract only requested columns
+            return data[:, column_indices]
+            
+        except Exception as e:
+            logger.error(f"Error filtering columns: {e}")
+            return np.array([])
+    
+    def _get_bar_data_single(self, timeframe: str = "1d", tickers: List[str] = None, 
+                           columns: List[str] = None, min_bars: int = 1, 
+                           filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
         Args:
             timeframe: Data timeframe ('1d', '1h', '5m', etc.)
             tickers: List of ticker symbols to fetch (None = all active securities, explicit list recommended)
-            columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+            columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
+            extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                           Only affects intraday timeframes - daily and above ignore this parameter
             
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -75,22 +618,43 @@ class DataAccessorProvider:
             if min_bars > 10000:  # Prevent excessive data requests
                 min_bars = 10000
                 
-            # Map timeframes to database tables
+            # Map timeframes to database tables and aggregation sources
             timeframe_tables = {
+                # Direct table access (no aggregation needed)
                 "1m": "ohlcv_1m",
-                "5m": "ohlcv_5m", 
-                "15m": "ohlcv_15m",
-                "30m": "ohlcv_30m",
-                "1h": "ohlcv_1h",
+                "1h": "ohlcv_1h", 
                 "1d": "ohlcv_1d",
-                "1w": "ohlcv_1w"
+                "1w": "ohlcv_1w",
+                # Custom aggregations (will be processed by aggregation engine)
+                "5m": {"source": "ohlcv_1m", "aggregate_minutes": 5},
+                "10m": {"source": "ohlcv_1m", "aggregate_minutes": 10},
+                "15m": {"source": "ohlcv_1m", "aggregate_minutes": 15},
+                "30m": {"source": "ohlcv_1m", "aggregate_minutes": 30},
+                "2h": {"source": "ohlcv_1h", "aggregate_hours": 2},
+                "4h": {"source": "ohlcv_1h", "aggregate_hours": 4},
+                "6h": {"source": "ohlcv_1h", "aggregate_hours": 6},
+                "8h": {"source": "ohlcv_1h", "aggregate_hours": 8},
+                "12h": {"source": "ohlcv_1h", "aggregate_hours": 12},
+                "2w": {"source": "ohlcv_1w", "aggregate_weeks": 2},
+                "3w": {"source": "ohlcv_1w", "aggregate_weeks": 3},
+                "4w": {"source": "ohlcv_1w", "aggregate_weeks": 4}
             }
             
-            table_name = timeframe_tables.get(timeframe, "ohlcv_1d")
+            # Determine if we need aggregation or direct table access
+            timeframe_config = timeframe_tables.get(timeframe, "ohlcv_1d")
             
-            # Default columns if not specified (removed ticker and adj_close)
+            if isinstance(timeframe_config, dict):
+                # Custom aggregation needed
+                return self._get_aggregated_bar_data(
+                    timeframe_config, tickers, columns, min_bars, filters, extended_hours
+                )
+            else:
+                # Direct table access
+                table_name = timeframe_config
+            
+            # Default columns if not specified - include ticker by default
             if columns is None:
-                columns = ["securityid", "timestamp", "open", "high", "low", "close", "volume"]
+                columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume"]
             
             # Validate columns against allowed set (removed adj_close)
             allowed_columns = {"securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"}
@@ -108,34 +672,133 @@ class DataAccessorProvider:
                 start_with_buffer = context['start_date'] - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_with_buffer, context['end_date']]
+            elif context['mode'] == 'validation':
+                # Validation mode: Ultra-minimal data for fast validation
+                # Force minimal bars and recent data only
+                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
+                date_params = []
+                # Override min_bars to be reasonable for validation, but respect strategy needs
+                if min_bars > 100:  # Set reasonable upper limit for validation
+                    original_min_bars = min_bars
+                    min_bars = 100  # Maximum 100 bars for validation
+                    logger.info(f"🧪 Validation mode: limiting min_bars from {original_min_bars} to {min_bars} for performance")
             elif context['mode'] == 'screening':
-                # Screening mode without specific dates: get most recent min_bars only
-                timeframe_delta = self._get_timeframe_delta(timeframe)
-                lookback_duration = timeframe_delta * min_bars * 2  # Extra buffer for data availability
-                date_filter = "o.timestamp >= %s"
-                date_params = [datetime.now() - lookback_duration]
+                # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
+                # This is much more efficient than date filtering because:
+                # 1. Gets exactly min_bars per security (no more, no less)
+                # 2. No unnecessary date calculations or buffers
+                # 3. Database optimizer handles getting most recent records efficiently
+                date_filter = "TRUE"  # No date restriction, rely on ROW_NUMBER LIMIT
+                date_params = []
             else:
                 # No specific date range: get ALL available data
                 date_filter = "TRUE"  # No date restriction
                 date_params = []
             
             # Handle security filtering
-            if tickers is None or len(tickers) == 0:
-                # Get all active securities (don't use context symbols automatically)
-                security_filter = "s.active = true AND s.maxdate IS NULL"
-                security_params = []
+            security_filter_parts = []
+            security_params = []
+            
+            # Base filter for active securities
+            security_filter_parts.append("s.maxdate IS NULL")
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    security_filter_parts.append("s.sector = %s")
+                    security_params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    security_filter_parts.append("s.industry = %s")
+                    security_params.append(filters['industry'])
+                
+                #if 'market' in filters:
+                #    security_filter_parts.append("s.market = %s")
+                #    security_params.append(filters['market'])
+                
+                if 'primary_exchange' in filters:
+                    security_filter_parts.append("s.primary_exchange = %s")
+                    security_params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    security_filter_parts.append("s.locale = %s")
+                    security_params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    security_filter_parts.append("s.market_cap >= %s")
+                    security_params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    security_filter_parts.append("s.market_cap <= %s")
+                    security_params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    security_filter_parts.append("s.sic_code = %s")
+                    security_params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    security_filter_parts.append("s.total_employees >= %s")
+                    security_params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    security_filter_parts.append("s.total_employees <= %s")
+                    security_params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding >= %s")
+                    security_params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding <= %s")
+                    security_params.append(filters['weighted_shares_outstanding_max'])
+                
+                if 'active' in filters:
+                    security_filter_parts.append("s.active = %s")
+                    security_params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    security_filter_parts.append("s.active = true")
             else:
-                # Convert ticker symbols to security IDs
+                # Default to active if no filters provided
+                security_filter_parts.append("s.active = true")
+            
+            # Handle ticker-specific filtering
+            if tickers is not None and len(tickers) > 0:
+                # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs")
-                security_ids = self._get_security_ids_from_tickers(tickers)
+                security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
                     return np.array([])
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                security_filter = f"s.securityid IN ({placeholders})"
-                security_params = security_ids
+                security_filter_parts.append(f"s.securityid IN ({placeholders})")
+                security_params.extend(security_ids)
+            
+            # Combine all filter parts
+            security_filter = " AND ".join(security_filter_parts)
+            
+            # Add extended hours filtering for intraday timeframes
+            extended_hours_filter = ""
+            extended_hours_params = []
+            
+            # Only apply extended hours filtering for intraday timeframes (seconds, minutes, hours)
+            # Daily and above timeframes ignore the extended_hours parameter
+            intraday_timeframes = ["1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h"]
+            if timeframe in intraday_timeframes and not extended_hours:
+                # Filter to regular trading hours only (9:30 AM to 4:00 PM ET)
+                # Use PostgreSQL's EXTRACT function to get hour and minute in ET timezone
+                extended_hours_filter = """AND (
+                    EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') > 9 OR
+                    (EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') = 9 AND 
+                     EXTRACT(MINUTE FROM o.timestamp AT TIME ZONE 'America/New_York') >= 30)
+                ) AND (
+                    EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') < 16
+                ) AND (
+                    EXTRACT(DOW FROM o.timestamp AT TIME ZONE 'America/New_York') BETWEEN 1 AND 5
+                )"""
             
             # Build column selection
             select_columns = []
@@ -161,6 +824,10 @@ class DataAccessorProvider:
                     where_clause = f"{security_filter} AND {date_filter}"
                 else:
                     where_clause = security_filter
+                
+                # Add extended hours filter if applicable
+                if extended_hours_filter:
+                    where_clause += f" {extended_hours_filter}"
                     
                 order_clause = "s.securityid, o.timestamp ASC"
                 
@@ -190,43 +857,91 @@ class DataAccessorProvider:
                     where_clause = f"{security_filter} AND {date_filter}"
                 else:
                     where_clause = security_filter
+                
+                # Add extended hours filter if applicable
+                if extended_hours_filter:
+                    where_clause += f" {extended_hours_filter}"
                     
                 final_select_clause = ', '.join(final_columns)
                 
-                # Determine ORDER BY columns - only use columns that are in the final result
-                order_by_columns = []
-                if "securityid" in final_columns:
-                    order_by_columns.append("securityid")
-                if "timestamp" in final_columns:
-                    order_by_columns.append("timestamp ASC")
-                
-                # Default ordering if no order columns available
-                if not order_by_columns:
-                    order_by_clause = "1"  # Order by first column
+                # Optimize ordering for screening mode - prioritize most recent data
+                if context['mode'] == 'screening':
+                    # For screening, order by most recent timestamp first within each security
+                    # This ensures we get the absolute latest data for screening decisions
+                    order_by_columns = []
+                    if "securityid" in final_columns:
+                        order_by_columns.append("securityid")
+                    if "timestamp" in final_columns:
+                        order_by_columns.append("timestamp DESC")  # Most recent first for screening
+                    
+                    # Default ordering if no order columns available
+                    if not order_by_columns:
+                        order_by_clause = "1"  # Order by first column
+                    else:
+                        order_by_clause = ", ".join(order_by_columns)
+                        
+                    # For screening mode with small min_bars, add additional optimization
+                    if min_bars <= 10:
+                        # Use optimized query that focuses on index efficiency for recent data
+                        # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                        query = f"""WITH ranked_data AS (
+                            SELECT {select_clause},
+                                   ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                            FROM {from_clause}
+                            WHERE {where_clause}
+                        )
+                        SELECT {final_select_clause}
+                        FROM ranked_data 
+                        WHERE rn <= %s
+                        ORDER BY {order_by_clause}"""  # nosec B608
+                    else:
+                        # For larger min_bars, use standard approach but still prioritize recent data
+                        # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                        query = f"""WITH ranked_data AS (
+                            SELECT {select_clause},
+                                   ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                            FROM {from_clause}
+                            WHERE {where_clause}
+                        )
+                        SELECT {final_select_clause}
+                        FROM ranked_data 
+                        WHERE rn <= %s
+                        ORDER BY {order_by_clause}"""  # nosec B608
                 else:
-                    order_by_clause = ", ".join(order_by_columns)
+                    # Non-screening mode: use existing logic
+                    order_by_columns = []
+                    if "securityid" in final_columns:
+                        order_by_columns.append("securityid")
+                    if "timestamp" in final_columns:
+                        order_by_columns.append("timestamp ASC")
+                    
+                    # Default ordering if no order columns available
+                    if not order_by_columns:
+                        order_by_clause = "1"  # Order by first column
+                    else:
+                        order_by_clause = ", ".join(order_by_columns)
+                    
+                    # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
+                    query = f"""WITH ranked_data AS (
+                        SELECT {select_clause},
+                               ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
+                        FROM {from_clause}
+                        WHERE {where_clause}
+                    )
+                    SELECT {final_select_clause}
+                    FROM ranked_data 
+                    WHERE rn <= %s
+                    ORDER BY {order_by_clause}"""  # nosec B608
                 
-                # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                query = f"""WITH ranked_data AS (
-                    SELECT {select_clause},
-                           ROW_NUMBER() OVER (PARTITION BY s.securityid ORDER BY o.timestamp DESC) as rn
-                    FROM {from_clause}
-                    WHERE {where_clause}
-                )
-                SELECT {final_select_clause}
-                FROM ranked_data 
-                WHERE rn <= %s
-                ORDER BY {order_by_clause}"""  # nosec B608
                 params = security_params + date_params + [min_bars]
             
-            conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                
+                cursor.close()
             
             if not results:
                 return np.array([])
@@ -266,22 +981,90 @@ class DataAccessorProvider:
         }
         return timeframe_map.get(timeframe, timedelta(days=1))
     
-    def _get_security_ids_from_tickers(self, tickers: List[str]) -> List[int]:
-        """Convert ticker symbols to security IDs"""
+    def _get_security_ids_from_tickers(self, tickers: List[str], filters: Dict[str, any] = None) -> List[int]:
+        """Convert ticker symbols to security IDs with optional filtering"""
         try:
             if not tickers:
                 return []
             
-            placeholders = ','.join(['%s'] * len(tickers))
-            # nosec B608: Safe - placeholders are just '%s' strings, tickers validated as list of strings, all values parameterized
-            query = f"SELECT securityid FROM securities WHERE ticker IN ({placeholders}) AND active = true AND maxdate IS NULL"  # nosec B608
+            # Build filter conditions
+            filter_parts = ["maxdate IS NULL"]
+            params = []
             
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, tickers)
-            results = cursor.fetchall()
-            cursor.close()
-            conn.close()
+            # Add ticker filter
+            placeholders = ','.join(['%s'] * len(tickers))
+            filter_parts.append(f"ticker IN ({placeholders})")
+            params.extend(tickers)
+            
+            # Apply additional filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                #if 'market' in filters:
+                #    filter_parts.append("market = %s")
+                #    params.append(filters['market'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
+                
+                if 'active' in filters:
+                    filter_parts.append("active = %s")
+                    params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    filter_parts.append("active = true")
+            else:
+                # Default to active if no filters provided
+                filter_parts.append("active = true")
+            
+            where_clause = " AND ".join(filter_parts)
+            # nosec B608: Safe - query built from validated components, all values parameterized
+            query = f"SELECT securityid FROM securities WHERE {where_clause}"  # nosec B608
+            
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                cursor.close()
             
             return [row[0] for row in results]
             
@@ -289,17 +1072,27 @@ class DataAccessorProvider:
             logger.error(f"Error converting tickers to security IDs: {e}")
             return []
 
-    def get_general_data(self, tickers: List[str] = None, columns: List[str] = None) -> pd.DataFrame:
+    def get_general_data(self, tickers: List[str] = None, columns: List[str] = None, 
+                         filters: Dict[str, any] = None) -> pd.DataFrame:
+                    #- market: str (e.g., 'stocks', 'crypto')
         """
         Get general security information as pandas DataFrame
         
         Args:
             tickers: List of ticker symbols to fetch (None = all active securities)
             columns: Desired columns (None = all available)
+            filters: Dict of filtering criteria for securities table fields:
+                    - sector: str (e.g., 'Technology', 'Healthcare')
+                    - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                    - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                    - locale: str (e.g., 'us', 'ca')
+                    - market_cap_min: float (minimum market cap)
+                    - market_cap_max: float (maximum market cap)
+                    - active: bool (default True if not specified)
             
         Returns:
-            pandas.DataFrame with columns: ticker, name, sector, industry, market, primary_exchange, 
-                                         locale, active, description, cik
+            pandas.DataFrame with columns: ticker, name, sector, industry, primary_exchange, 
+                                         locale, active, description, cik, market_cap, etc.
         """
         try:
             # Default columns if not specified - include ticker by default
@@ -311,7 +1104,8 @@ class DataAccessorProvider:
             allowed_columns = {
                 "securityid", "ticker", "name", "sector", "industry", "market", 
                 "primary_exchange", "locale", "active", "description", "cik",
-                "market_cap", "share_class_shares_outstanding"
+                "market_cap", "share_class_shares_outstanding", "share_class_figi",
+                "sic_code", "sic_description", "total_employees", "weighted_shares_outstanding"
             }
             safe_columns = [col for col in columns if col in allowed_columns]
             
@@ -325,36 +1119,97 @@ class DataAccessorProvider:
             if "ticker" not in internal_columns and "ticker" in allowed_columns:
                 internal_columns.append("ticker")
                 
-            # Build the query
-            if tickers is None or len(tickers) == 0:
-                # Get all active securities
-                select_clause = ', '.join(internal_columns)
-                # nosec B608: Safe - columns validated against allowlist, no user input in table name or WHERE clause
-                query = f"SELECT {select_clause} FROM securities WHERE active = true AND maxdate IS NULL ORDER BY securityid"  # nosec B608
-                params = []
+            # Build the query with filters
+            filter_parts = ["maxdate IS NULL"]
+            params = []
+            
+            # Apply filters if provided
+            if filters:
+                if 'sector' in filters:
+                    filter_parts.append("sector = %s")
+                    params.append(filters['sector'])
+                
+                if 'industry' in filters:
+                    filter_parts.append("industry = %s")
+                    params.append(filters['industry'])
+                
+                if 'primary_exchange' in filters:
+                    filter_parts.append("primary_exchange = %s")
+                    params.append(filters['primary_exchange'])
+                
+                if 'locale' in filters:
+                    filter_parts.append("locale = %s")
+                    params.append(filters['locale'])
+                
+                if 'market_cap_min' in filters:
+                    filter_parts.append("market_cap >= %s")
+                    params.append(filters['market_cap_min'])
+                
+                if 'market_cap_max' in filters:
+                    filter_parts.append("market_cap <= %s")
+                    params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
+                
+                if 'active' in filters:
+                    filter_parts.append("active = %s")
+                    params.append(filters['active'])
+                else:
+                    # Default to active if not explicitly specified
+                    filter_parts.append("active = true")
             else:
-                # Convert ticker symbols to security IDs
+                # Default to active if no filters provided
+                filter_parts.append("active = true")
+            
+            # Handle ticker-specific filtering
+            if tickers is not None and len(tickers) > 0:
+                # Validation mode: limit to single ticker for speed
+                if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation':
+                    tickers = tickers[:1]  # Only use first ticker for validation
+                
+                # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
-                security_ids = self._get_security_ids_from_tickers(tickers)
+                security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
                     return pd.DataFrame()
                 
-                # Filter by specific security IDs
+                # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                select_clause = ', '.join(internal_columns)
-                # nosec B608: Safe - columns validated against allowlist, placeholders are just '%s' strings, all values parameterized  
-                query = f"SELECT {select_clause} FROM securities WHERE securityid IN ({placeholders}) AND maxdate IS NULL ORDER BY securityid"  # nosec B608
-                params = security_ids
+                filter_parts.append(f"securityid IN ({placeholders})")
+                params.extend(security_ids)
             
-            conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            # Build final query
+            where_clause = " AND ".join(filter_parts)
+            select_clause = ', '.join(internal_columns)
+            # nosec B608: Safe - columns validated against allowlist, all values parameterized
+            query = f"SELECT {select_clause} FROM securities WHERE {where_clause} ORDER BY securityid"  # nosec B608
             
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            cursor.close()
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                
+                cursor.close()
             
             if not results:
                 return pd.DataFrame()
@@ -367,10 +1222,10 @@ class DataAccessorProvider:
             if final_columns:
                 df = df[final_columns]
             
-            # Use ticker as index if available and securityid was not explicitly requested
-            if "ticker" in df.columns and "securityid" not in safe_columns:
-                df.set_index("ticker", inplace=True)
-            elif "securityid" in df.columns:
+            # IMPORTANT: Don't set ticker as index if it was explicitly requested as a column
+            # Strategies need ticker as a column to iterate over results
+            # Only set securityid as index if it was explicitly requested
+            if "securityid" in safe_columns and "securityid" in df.columns:
                 df.set_index("securityid", inplace=True)
             
             return df
@@ -391,36 +1246,50 @@ def get_data_accessor() -> DataAccessorProvider:
     return _data_accessor
 
 def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
-                 columns: List[str] = None, min_bars: int = 1) -> np.ndarray:
+                 columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
+                 aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
     """
-    Global function for strategy access to bar data
+    Global function for strategy access to bar data with intelligent batching
     
     Args:
-        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.')
         tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
         security_ids: List of security IDs to fetch (deprecated, use tickers instead)
-        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+        columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
         min_bars: Minimum number of bars required per security
+        filters: Dict of filtering criteria for securities table fields:
+                - sector: str (e.g., 'Technology', 'Healthcare')
+                - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                - locale: str (e.g., 'us', 'ca')
+                - market_cap_min: float (minimum market cap)
+                - market_cap_max: float (maximum market cap)
+                - active: bool (default True if not specified)
+        aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                       Only affects intraday timeframes - daily and above ignore this parameter
         
     Returns:
         numpy.ndarray with requested bar data
     """
     accessor = get_data_accessor()
     
-    # Handle tickers parameter (preferred) or fall back to security_ids
-    if tickers is not None:
-        # Convert tickers to security_ids if provided
-        if len(tickers) == 0:
-            final_security_ids = []
-        else:
-            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
-    else:
-        # Use security_ids directly (backward compatibility)
-        final_security_ids = security_ids
+    # Debug: Check if this global function is being called with validation context issues
+    if hasattr(accessor, 'execution_context'):
+        context = accessor.execution_context
+        if context.get('mode') == 'validation' and tickers is None:
+            logger.warning(f"🚨 VALIDATION ISSUE: Global get_bar_data called with tickers=None during validation mode!")
+            logger.warning(f"   Context: {context}")
+            logger.warning(f"   This suggests strategy is using global function instead of bound function")
+            # Override for validation to prevent database crash
+            tickers = context.get('symbols', ['AAPL'])[:1]
+            logger.warning(f"   Emergency override: limiting to {tickers}")
     
-    return accessor.get_bar_data(timeframe, final_security_ids, columns, min_bars)
+    # Use tickers directly (new preferred approach)
+    return accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode, extended_hours)
 
-def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None) -> pd.DataFrame:
+def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None, 
+                     filters: Dict[str, any] = None) -> pd.DataFrame:
     """
     Global function for strategy access to general security data
     
@@ -428,21 +1297,143 @@ def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, 
         tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
         security_ids: List of security IDs to fetch (deprecated, use tickers instead)
         columns: Desired columns (None = all available)
+        filters: Dict of filtering criteria for securities table fields:
+                - sector: str (e.g., 'Technology', 'Healthcare')
+                - industry: str (e.g., 'Software', 'Pharmaceuticals')
+                - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
+                - locale: str (e.g., 'us', 'ca')
+                - market_cap_min: float (minimum market cap)
+                - market_cap_max: float (maximum market cap)
+                - active: bool (default True if not specified)
         
     Returns:
         pandas.DataFrame with general security information
     """
     accessor = get_data_accessor()
     
-    # Handle tickers parameter (preferred) or fall back to security_ids
-    if tickers is not None:
-        # Convert tickers to security_ids if provided
-        if len(tickers) == 0:
-            final_security_ids = []
-        else:
-            final_security_ids = accessor._get_security_ids_from_tickers(tickers)
-    else:
-        # Use security_ids directly (backward compatibility)
-        final_security_ids = security_ids
+    # The 'security_ids' parameter is deprecated. This function now passes 'tickers' and 'filters'
+    # directly to the underlying data accessor, which handles all necessary conversions and filtering.
+    # This change fixes a bug where security IDs were incorrectly passed as tickers and filters were ignored.
+    if security_ids is not None and tickers is None:
+        logger.warning("The 'security_ids' parameter is deprecated and is not used. Please use 'tickers'.")
     
-    return accessor.get_general_data(final_security_ids, columns) 
+    return accessor.get_general_data(tickers=tickers, columns=columns, filters=filters)
+
+# Legacy wrapper functions for backward compatibility
+# These functions are mentioned in the README but delegate to get_bar_data()
+
+def get_price_data(symbol: str, timeframe: str = "1d", days: int = 30, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get raw OHLCV data for a single symbol
+    
+    Args:
+        symbol: Ticker symbol (e.g., 'AAPL')
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        days: Number of days of data to fetch (converted to min_bars)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with OHLCV data
+    """
+    # Convert days to approximate min_bars based on timeframe
+    if timeframe == "1d":
+        min_bars = days
+    elif timeframe == "1h":
+        min_bars = days * 6  # Approximate trading hours per day
+    elif timeframe in ["1m", "5m", "15m", "30m"]:
+        # Approximate bars per day for intraday timeframes
+        minutes_per_day = 390  # 6.5 trading hours
+        if timeframe == "1m":
+            bars_per_day = minutes_per_day
+        elif timeframe == "5m":
+            bars_per_day = minutes_per_day // 5
+        elif timeframe == "15m":
+            bars_per_day = minutes_per_day // 15
+        elif timeframe == "30m":
+            bars_per_day = minutes_per_day // 30
+        else:
+            bars_per_day = 390  # Default fallback
+        min_bars = days * bars_per_day
+    else:
+        min_bars = days  # Default fallback
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=[symbol],
+        min_bars=min_bars,
+        extended_hours=extended_hours
+    )
+
+
+def get_historical_data(symbol: str, timeframe: str = "1d", periods: int = 30, 
+                       offset: int = 0, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get historical price data with lag/offset
+    
+    Args:
+        symbol: Ticker symbol (e.g., 'AAPL')
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        periods: Number of periods to fetch
+        offset: Number of periods to offset (lag) - currently not implemented
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with historical OHLCV data
+        
+    Note:
+        The offset parameter is not currently implemented in the underlying system.
+        This function delegates to get_bar_data() for now.
+    """
+    if offset > 0:
+        logger.warning(f"get_historical_data: offset parameter ({offset}) is not implemented, ignoring")
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=[symbol],
+        min_bars=periods,
+        extended_hours=extended_hours
+    )
+
+
+def get_multiple_symbols_data(symbols: List[str], timeframe: str = "1d", 
+                             days: int = 30, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get batch price data for multiple symbols
+    
+    Args:
+        symbols: List of ticker symbols (e.g., ['AAPL', 'MSFT', 'GOOGL'])
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        days: Number of days of data to fetch (converted to min_bars)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with batch OHLCV data
+    """
+    # Convert days to approximate min_bars based on timeframe (same logic as get_price_data)
+    if timeframe == "1d":
+        min_bars = days
+    elif timeframe == "1h":
+        min_bars = days * 6  # Approximate trading hours per day
+    elif timeframe in ["1m", "5m", "15m", "30m"]:
+        # Approximate bars per day for intraday timeframes
+        minutes_per_day = 390  # 6.5 trading hours
+        if timeframe == "1m":
+            bars_per_day = minutes_per_day
+        elif timeframe == "5m":
+            bars_per_day = minutes_per_day // 5
+        elif timeframe == "15m":
+            bars_per_day = minutes_per_day // 15
+        elif timeframe == "30m":
+            bars_per_day = minutes_per_day // 30
+        else:
+            bars_per_day = 390  # Default fallback
+        min_bars = days * bars_per_day
+    else:
+        min_bars = days  # Default fallback
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=symbols,
+        min_bars=min_bars,
+        extended_hours=extended_hours
+    ) 

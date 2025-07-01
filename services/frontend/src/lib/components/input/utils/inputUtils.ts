@@ -7,70 +7,68 @@ import { get } from 'svelte/store';
 import { userLastTickers } from '$lib/utils/stores/stores';
 let isLoadingSecurities = false;
 
-    function capitalize(str: string, lower = false): string {
-        return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
-            match.toUpperCase()
-        );
-    }
+function capitalize(str: string, lower = false): string {
+	return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
+		match.toUpperCase()
+	);
+}
 
-    function formatTimeframe(timeframe: string): string {
-        const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
-        let result = timeframe;
-        if (match) {
-            switch (match[2]) {
-                case 'd':
-                    result = `${match[1]} days`;
-                    break;
-                case 'w':
-                    result = `${match[1]} weeks`;
-                    break;
-                case 'm':
-                    result = `${match[1]} months`;
-                    break;
-                case 'h':
-                    result = `${match[1]} hours`;
-                    break;
-                case 's':
-                    result = `${match[1]} seconds`;
-                    break;
-                default:
-                    result = `${match[1]} minutes`;
-                    break;
-            }
-            if (match[1] === '1') {
-                result = result.slice(0, -1);
-            }
-        }
-        return result;
-    }
-    // Add this new helper function above the existing determineInputType function
-    function detectInputTypeSync(
-        inputString: string,
-        possibleKeysArg: InstanceAttributes[] | 'any'
-    ): string {
-        // Make sure we have a valid array of possible keys
-        const possibleKeys = Array.isArray(possibleKeysArg) ? possibleKeysArg : [...allKeys];
+function formatTimeframe(timeframe: string): string {
+	const match = timeframe.match(/^(\d+)([dwmsh]?)$/i) ?? null;
+	let result = timeframe;
+	if (match) {
+		switch (match[2]) {
+			case 'd':
+				result = `${match[1]} days`;
+				break;
+			case 'w':
+				result = `${match[1]} weeks`;
+				break;
+			case 'm':
+				result = `${match[1]} months`;
+				break;
+			case 'h':
+				result = `${match[1]} hours`;
+				break;
+			case 's':
+				result = `${match[1]} seconds`;
+				break;
+			default:
+				result = `${match[1]} minutes`;
+				break;
+		}
+		if (match[1] === '1') {
+			result = result.slice(0, -1);
+		}
+	}
+	return result;
+}
+// Add this new helper function above the existing determineInputType function
+function detectInputTypeSync(
+	inputString: string,
+	possibleKeysArg: InstanceAttributes[] | 'any'
+): string {
+	// Make sure we have a valid array of possible keys
+	const possibleKeys = Array.isArray(possibleKeysArg) ? possibleKeysArg : [...allKeys];
 
-        if (!inputString || inputString === '') {
-            return '';
-        }
+	if (!inputString || inputString === '') {
+		return '';
+	}
 
-        // Test for timeframe first - if it starts with a number, it's likely a timeframe
-        if (possibleKeys.includes('timeframe') && /^\d/.test(inputString)) {
-            return 'timeframe';
-        } else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
-            return 'ticker';
-        } 
-        else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
-            // Default to ticker for any alphabetic input if ticker is possible
-            return 'ticker';
-        }
+	// Test for timeframe first - if it starts with a number, it's likely a timeframe
+	if (possibleKeys.includes('timeframe') && /^\d/.test(inputString)) {
+		return 'timeframe';
+	} else if (possibleKeys.includes('ticker') && /^[A-Z]+$/.test(inputString)) {
+		return 'ticker';
+	} else if (possibleKeys.includes('ticker') && /^[a-zA-Z]+$/.test(inputString)) {
+		// Default to ticker for any alphabetic input if ticker is possible
+		return 'ticker';
+	}
 
-        return '';
-    }
+	return '';
+}
 
-
-    export async function validateInput(
+export async function validateInput(
 	inputString: string,
 	inputType: string,
 	onSecuritiesUpdate?: (securities: Instance[]) => void
@@ -78,70 +76,69 @@ let isLoadingSecurities = false;
 	inputValid: boolean;
 	securities: Instance[];
 }> {
-		if (inputType === 'ticker') {
-			isLoadingSecurities = true;
+	if (inputType === 'ticker') {
+		isLoadingSecurities = true;
 
-			try {
-				// Add a small delay to avoid too many rapid requests during typing
-				await new Promise((resolve) => setTimeout(resolve, 10));
+		try {
+			// Add a small delay to avoid too many rapid requests during typing
+			await new Promise((resolve) => setTimeout(resolve, 10));
 
-				let securities: Instance[];
+			let securities: Instance[];
 
-				// If input string is empty, show user's recent tickers above popular tickers
-				if (!inputString || inputString.trim() === '') {
-					const cachedTickers = get(userLastTickers);
-					const recentSecurities = (cachedTickers || []).slice(0, 2);
-					
-					// Show recent tickers immediately if available
-					if (recentSecurities.length > 0 && onSecuritiesUpdate) {
-						onSecuritiesUpdate(recentSecurities);
-					}
-					
-					// Fetch popular tickers and combine with recent ones
-					const popularTickers = await publicRequest<Instance[]>('getPopularTickers', {});
-					
-					// Combine recent tickers (first) with popular tickers, avoiding duplicates
-					const combined = [...recentSecurities];
-					if (Array.isArray(popularTickers)) {
-						for (const popular of popularTickers) {
-							if (!combined.some(cached => cached.ticker === popular.ticker)) {
-								combined.push(popular);
-							}
+			// If input string is empty, show user's recent tickers above popular tickers
+			if (!inputString || inputString.trim() === '') {
+				const cachedTickers = get(userLastTickers);
+				const recentSecurities = (cachedTickers || []).slice(0, 2);
+
+				// Show recent tickers immediately if available
+				if (recentSecurities.length > 0 && onSecuritiesUpdate) {
+					onSecuritiesUpdate(recentSecurities);
+				}
+
+				// Fetch popular tickers and combine with recent ones
+				const popularTickers = await publicRequest<Instance[]>('getPopularTickers', {});
+
+				// Combine recent tickers (first) with popular tickers, avoiding duplicates
+				const combined = [...recentSecurities];
+				if (Array.isArray(popularTickers)) {
+					for (const popular of popularTickers) {
+						if (!combined.some(cached => cached.ticker === popular.ticker)) {
+							combined.push(popular);
 						}
 					}
-					
-					return {
-						inputValid: true,
-						securities: combined
-					};
-				} else {
-					// Otherwise, search for tickers matching the input (original behavior)
-					securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
-						ticker: inputString
-					});
 				}
 
-				if (Array.isArray(securities) && securities.length > 0) {
-					return {
-						inputValid: true,
-						securities: securities
-					};
-				}
-				return { inputValid: inputString.length === 0, securities: [] }; // Empty input is valid
-			} catch (error) {
-				console.error('Error fetching securities:', error);
-				// Return empty results but mark as valid if we have some input or empty input
-				// This allows the UI to stay responsive even if backend request fails
 				return {
-					inputValid: true, // Consider both empty and non-empty input as valid when there's an error
-					securities: []
+					inputValid: true,
+					securities: combined
 				};
-			} finally {
-				isLoadingSecurities = false;
+			} else {
+				// Otherwise, search for tickers matching the input (original behavior)
+				securities = await publicRequest<Instance[]>('getSecuritiesFromTicker', {
+					ticker: inputString
+				});
 			}
-		} else if (inputType === 'timeframe') {
-			const regex = /^\d{1,3}[yqmwhds]?$/i;
-			return { inputValid: regex.test(inputString), securities: [] };
-		} 
-    }
-    
+
+			if (Array.isArray(securities) && securities.length > 0) {
+				return {
+					inputValid: true,
+					securities: securities
+				};
+			}
+			return { inputValid: inputString.length === 0, securities: [] }; // Empty input is valid
+		} catch (error) {
+			console.error('Error fetching securities:', error);
+			// Return empty results but mark as valid if we have some input or empty input
+			// This allows the UI to stay responsive even if backend request fails
+			return {
+				inputValid: true, // Consider both empty and non-empty input as valid when there's an error
+				securities: []
+			};
+		} finally {
+			isLoadingSecurities = false;
+		}
+	} else if (inputType === 'timeframe') {
+		const regex = /^\d{1,3}[yqmwhds]?$/i;
+		return { inputValid: regex.test(inputString), securities: [] };
+	}
+}

@@ -79,11 +79,11 @@
 
 	async function copyShareLink() {
 		if (!shareLink) return;
-		
+
 		try {
 			await navigator.clipboard.writeText(shareLink);
 			shareCopied = true;
-			
+
 			if (shareCopyTimeout) {
 				clearTimeout(shareCopyTimeout);
 			}
@@ -133,11 +133,14 @@
 			<h4>Share Conversation</h4>
 			<button class="close-btn" on:click={closeModal} aria-label="Close">
 				<svg viewBox="0 0 24 24" width="16" height="16">
-					<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
+					<path
+						d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+						fill="currentColor"
+					/>
 				</svg>
 			</button>
 		</div>
-		
+
 		<div class="share-modal-content">
 			{#if shareLoading}
 				<div class="share-loading">
@@ -145,29 +148,30 @@
 				</div>
 			{:else if shareLink}
 				<div class="share-link-container">
-					<p class="share-description">
-						Anyone with this link can view this conversation.
-					</p>
-					
+					<p class="share-description">Anyone with this link can view this conversation.</p>
+
 					<div class="share-link-field">
-						<input 
-							type="text" 
-							value={shareLink} 
-							readonly 
-							class="share-link-input"
-						/>
-						<button 
-							class="copy-link-btn glass glass--small glass--responsive {shareCopied ? 'copied' : ''}"
+						<input type="text" value={shareLink} readonly class="share-link-input" />
+						<button
+							class="copy-link-btn glass glass--small glass--responsive {shareCopied
+								? 'copied'
+								: ''}"
 							on:click={copyShareLink}
 						>
 							{#if shareCopied}
 								<svg viewBox="0 0 24 24" width="14" height="14">
-									<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor" />
+									<path
+										d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"
+										fill="currentColor"
+									/>
 								</svg>
 								Copied!
 							{:else}
 								<svg viewBox="0 0 24 24" width="14" height="14">
-									<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor" />
+									<path
+										d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"
+										fill="currentColor"
+									/>
 								</svg>
 								Copy
 							{/if}
@@ -177,11 +181,14 @@
 			{:else}
 				<div class="share-error">
 					<p>Failed to generate share link. Please try again.</p>
-					<button class="retry-btn glass glass--small glass--responsive" on:click={() => generateShareLink(currentConversationId || sharedConversationId)}>
+					<button
+						class="retry-btn glass glass--small glass--responsive"
+						on:click={() => generateShareLink(currentConversationId || sharedConversationId)}
+					>
 						Retry
 					</button>
 				</div>
 			{/if}
 		</div>
 	</div>
-{/if} 
+{/if}

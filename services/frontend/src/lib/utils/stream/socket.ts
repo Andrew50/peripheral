@@ -21,8 +21,6 @@ export type TitleUpdate = {
 	title: string;
 };
 
-
-
 // Define the type for chat responses from backend
 export type ChatResponse = {
 	type: 'chat_response';
@@ -38,13 +36,14 @@ export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
 
-
-
 // Store to manage pending chat requests
-const pendingChatRequests = new Map<string, {
-	resolve: (value: any) => void;
-	reject: (error: Error) => void;
-}>();
+const pendingChatRequests = new Map<
+	string,
+	{
+		resolve: (value: any) => void;
+		reject: (error: Error) => void;
+	}
+>();
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -57,7 +56,6 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 	| 'close-extended'
 	| 'quote'
 	| 'all'; //all trades
-
 
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
@@ -81,13 +79,13 @@ let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 
-export const latestValue = new Map<string, StreamData>(); 
+export const latestValue = new Map<string, StreamData>();
 import { isPublicViewing } from '$lib/utils/stores/stores';
 
 export function connect() {
 	if (!browser) return;
-	if( get(isPublicViewing))return;
-	
+	if (get(isPublicViewing)) return;
+
 	try {
 		const token = sessionStorage.getItem('authToken');
 		const socketUrl = base_url + '/ws' + '?token=' + token;
@@ -99,13 +97,13 @@ export function connect() {
 	}
 	socket.addEventListener('close', () => {
 		connectionStatus.set('disconnected');
-		
+
 		// Reject all pending chat requests
 		pendingChatRequests.forEach((request, requestId) => {
 			request.reject(new Error('WebSocket connection closed'));
 		});
 		pendingChatRequests.clear();
-		
+
 		if (shouldReconnect) {
 			reconnect();
 		}
@@ -114,7 +112,6 @@ export function connect() {
 		connectionStatus.set('connected');
 		reconnectAttempts = 0;
 		reconnectInterval = 5000;
-
 
 		// Resubscribe to all active channels and pending subscriptions
 		const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
@@ -146,20 +143,21 @@ export function connect() {
 			return; // Handled title update
 		}
 
-
-
 		// Handle chat responses
 		if (data && data.type === 'chat_response') {
 			const chatResponse = data as ChatResponse;
 			const pendingRequest = pendingChatRequests.get(chatResponse.request_id);
-			
+
 			if (pendingRequest) {
 				pendingChatRequests.delete(chatResponse.request_id);
-				
+
 				if (chatResponse.success) {
 					pendingRequest.resolve(chatResponse.data);
 				} else {
-					pendingRequest.reject(new Error(chatResponse.error || 'Chat request failed'));
+					// Create error with response data so frontend can extract messageID and conversationID
+					const error = new Error(chatResponse.error || 'Chat request failed') as any;
+					error.response = chatResponse.data; // Attach response data to error
+					pendingRequest.reject(error);
 				}
 			}
 			return; // Handled chat response
@@ -182,16 +180,16 @@ export function connect() {
 							price: data.price,
 							data: data
 						};
-						
+
 						// If this is extended hours data, mark it for extended calculation
 						if (channelName.includes('-slow-extended')) {
 							tickData.isExtended = true;
 						}
-						
+
 						enqueueTick(tickData);
 					}
 				}
-				
+
 				// Handle close data for the hub (both regular and extended)
 				if ((channelName.includes('-close-regular') || channelName.includes('-close-extended')) && data.price !== undefined) {
 					const securityId = parseInt(channelName.split('-')[0]);
@@ -200,14 +198,14 @@ export function connect() {
 							securityid: securityId,
 							data: data
 						};
-						
+
 						// Set appropriate reference price field based on channel type
 						if (channelName.includes('-close-regular')) {
 							tickData.prevClose = data.price;
 						} else if (channelName.includes('-close-extended')) {
 							tickData.extendedClose = data.price;
 						}
-						
+
 						enqueueTick(tickData);
 					}
 				}
@@ -216,14 +214,12 @@ export function connect() {
 				if (callbacks) {
 					callbacks.forEach((callback) => callback(data));
 				}
-
 			}
 		}
 	});
 	socket.addEventListener('error', () => {
 		socket?.close();
 	});
-
 }
 
 function disconnect() {
@@ -270,12 +266,13 @@ export function unsubscribe(channelName: string) {
 	}
 }
 
-
 export function subscribeSECFilings() {
 	if (socket?.readyState === WebSocket.OPEN) {
-		socket.send(JSON.stringify({
-			action: 'subscribe-sec-filings'
-		}));
+		socket.send(
+			JSON.stringify({
+				action: 'subscribe-sec-filings'
+			})
+		);
 	} else {
 		// Store the subscription request to be sent when connection is established
 		pendingSubscriptions.add('sec-filings');
@@ -284,11 +281,13 @@ export function subscribeSECFilings() {
 
 export function unsubscribeSECFilings() {
 	if (socket?.readyState === WebSocket.OPEN) {
-		socket.send(JSON.stringify({
-			action: 'unsubscribe-sec-filings'
-		}));
+		socket.send(
+			JSON.stringify({
+				action: 'unsubscribe-sec-filings'
+			})
+		);
 	}
-	
+
 	// Remove from pending subscriptions if present
 	pendingSubscriptions.delete('sec-filings');
 }
@@ -301,7 +300,7 @@ export function sendChatQuery(
 	conversationId: string = ''
 ): { promise: Promise<any>; cancel: () => void } {
 	let requestId: string;
-	
+
 	const promise = new Promise((resolve, reject) => {
 		if (socket?.readyState !== WebSocket.OPEN) {
 			reject(new Error('WebSocket is not connected'));
@@ -362,7 +361,7 @@ if (browser) {
 				unsubscribe(channelName);
 			}
 		});
-		
+
 		// Close the socket
 		if (socket && socket.readyState === WebSocket.OPEN) {
 			// Set flag to prevent automatic reconnection

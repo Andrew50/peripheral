@@ -227,7 +227,9 @@ func UpdateSecurityCik(conn *data.Conn) error {
 
 // Alternative more efficient approach for large datasets
 func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
-	ctx := context.Background()
+	// Add timeout to prevent hanging indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	defer cancel()
 
 	// 1. Pre-load all existing tickers with maxdate IS NULL into a set
 	existingTickers := make(map[string]struct{})
@@ -247,10 +249,18 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 	if err = rows.Err(); err != nil {
 		return fmt.Errorf("error iterating existing tickers: %w", err)
 	}
-	//fmt.Println("🟢 Pre-loaded existing tickers")
+	// che
 	processedTickers := make(map[string]struct{})
 
-	ipos, err := polygon.GetPolygonIPOs(conn.Polygon, time.Now().Format("2006-01-02"))
+	// Use America/New_York timezone for all market operations
+	nyLoc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return fmt.Errorf("failed to load America/New_York timezone: %w", err)
+	}
+
+	todayNY := time.Now().In(nyLoc).Format("2006-01-02")
+
+	ipos, err := polygon.GetPolygonIPOs(conn.Polygon, todayNY)
 	if err != nil {
 		return fmt.Errorf("failed to fetch polygon IPOs: %w", err)
 	}
@@ -261,6 +271,19 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 		listingDate, err := time.Parse("2006-01-02", ipos.ListingDate)
 		if err != nil {
 			return fmt.Errorf("failed to parse listing date %s: %w", ipos.ListingDate, err)
+		}
+		// first check if this ipo is already in the database
+		var existingSecurityID int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT securityid 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2`,
+			ipo, listingDate).Scan(&existingSecurityID)
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("failed to check if IPO ticker %s is already in the database: %w", ipo, err)
+		}
+		if err == nil && existingSecurityID != 0 {
+			continue
 		}
 
 		// Insert new IPO security with listing date as minDate and NULL maxDate
@@ -273,20 +296,22 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			"", // Empty string for figi since we don't have it yet
 		)
 		if err != nil {
-			return fmt.Errorf("failed to insert IPO ticker %s: %w", ipo, err)
+			fmt.Printf("failed to insert IPO ticker %s: %v\n", ipo, err)
+			continue
 		}
 		processedTickers[ipo] = struct{}{}
 	}
-	// 2. Fetch active stocks via daily data
-	res, err := polygon.GetAllStocksDailyOHLCV(ctx, conn.Polygon, time.Now().Format("2006-01-02"))
+	res, err := polygon.GetAllStocksDailyOHLCV(ctx, conn.Polygon, todayNY)
 	if err != nil {
 		return fmt.Errorf("failed to fetch polygon daily OHLCV: %w", err)
 	}
 	var processingDate string
 	results := res.Results
-
-	for _, result := range results {
+	fmt.Println(len(results))
+	for numTicker, result := range results {
 		ticker := result.Ticker
+		fmt.Println(ticker, numTicker)
+
 		if processingDate == "" {
 			processingDate = time.Time(result.Timestamp).Format("2006-01-02")
 		}
@@ -305,7 +330,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				LIMIT 1`,
 				ticker).Scan(&securityID, &mostRecentMaxDate)
 			if err != nil && err != pgx.ErrNoRows {
-				return fmt.Errorf("failed to check historical record for ticker %s: %w", ticker, err)
+				fmt.Printf("failed to check historical record for ticker %s: %v\n", ticker, err)
+				continue
 			}
 			// found record in db
 			if mostRecentMaxDate != nil {
@@ -322,7 +348,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 						WHERE securityid = $1 AND ticker = $2`,
 						securityID, ticker)
 					if err != nil {
-						return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
+						fmt.Printf("failed to update maxdate for ticker %s: %v\n", ticker, err)
+						continue
 					}
 					processedTickers[ticker] = struct{}{}
 					continue
@@ -331,24 +358,27 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				// Second Check if this is a ticker change
 				res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
 				if err != nil {
-					return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
+					fmt.Printf("failed to get ticker events for ticker %s: %v\n", ticker, err)
+					continue
 				}
 
 				// Check for splits around the processing date
 				isSplitDetected := false
-				events := res[0].Events
+				events := res.Events
 				for _, event := range events {
-					if time.Time(event.Date).Format("2006-01-02") == processingDate {
+					if event.Date == processingDate {
 						// First check if this is just a split
 						splits, err := postgres.GetStockSplits(conn.Polygon, ticker)
 						if err != nil {
-							return fmt.Errorf("failed to get stock splits for ticker %s: %w", ticker, err)
+							fmt.Printf("failed to get stock splits for ticker %s: %v\n", ticker, err)
+							continue
 						}
 
 						// Parse processing date to time.Time for comparison
 						processDatetime, err := time.Parse("2006-01-02", processingDate)
 						if err != nil {
-							return fmt.Errorf("failed to parse processing date %s: %w", processingDate, err)
+							fmt.Printf("failed to parse processing date %s: %v\n", processingDate, err)
+							continue
 						}
 
 						for _, split := range splits {
@@ -364,7 +394,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 									WHERE securityid = $1 AND ticker = $2 AND NOT EXISTS (SELECT 1 FROM securities WHERE ticker = $2 AND maxDate = NULL)`,
 									securityID, ticker)
 								if err != nil {
-									return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
+									fmt.Printf("failed to update maxdate for ticker %s: %v\n", ticker, err)
+									continue
 								}
 								processedTickers[ticker] = struct{}{}
 								isSplitDetected = true
@@ -381,284 +412,215 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 					continue
 				}
 				// Then this is a ticker change and we need to link the new ticker to the old one
-				//log.Printf("Ticker change detected for %s", ticker)
 				getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, processingDate)
 				if err != nil {
-					return fmt.Errorf("failed to get ticker details for ticker %s: %w", ticker, err)
+					fmt.Printf("failed to get ticker details for ticker %s: %v\n", ticker, err)
+					continue
 				}
 				cik, err := strconv.ParseInt(getTickerDetailsResponse.CIK, 10, 64)
 				if err != nil {
-					return fmt.Errorf("failed to convert CIK to int: %w", err)
+					fmt.Printf("failed to convert CIK to int: %v\n", err)
+					continue
 				}
 				figi := getTickerDetailsResponse.CompositeFIGI
 
 				// Parse processing date and subtract 1 day
 				processDatetime, err := time.Parse("2006-01-02", processingDate)
 				if err != nil {
-					return fmt.Errorf("failed to parse processing date %s: %w", processingDate, err)
+					fmt.Printf("failed to parse processing date %s: %v\n", processingDate, err)
+					continue
 				}
 				previousDay := processDatetime.AddDate(0, 0, -1).Format("2006-01-02")
 
 				oldTicker, err := postgres.GetTickerFromCIK(conn.Polygon, int(cik), previousDay)
 				if err != nil {
-					return fmt.Errorf("failed to get old ticker for ticker %s: %w", ticker, err)
+					fmt.Printf("failed to get old ticker for ticker %s: %v\n", ticker, err)
+					continue
 				}
-				//log.Printf("Ticker change: %s -> %s", oldTicker, ticker)
 				_, err = conn.DB.Exec(ctx, `UPDATE securities SET maxDate = $1 WHERE ticker=$2 AND securityId=$3 AND maxDate IS NULL AND NOT EXISTS (SELECT 1 FROM securities WHERE ticker = $2 AND maxDate = $1)`, processingDate, oldTicker, securityID)
 				if err != nil {
-					return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
+					fmt.Printf("failed to update maxdate for ticker %s: %v\n", ticker, err)
+					continue
 				}
 				// Use safe insertion with comprehensive validation
 				err = safeInsertSecurityTickerChange(ctx, conn, ticker, figi, processingDate, nil, true, true, "ticker change")
 				if err != nil {
-					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
+					fmt.Printf("failed to insert new ticker %s: %v\n", ticker, err)
+					continue
 				}
 				processedTickers[ticker] = struct{}{}
 				continue
 			}
 			// If no record found, then this is a new ticker for our DB
-			//log.Printf("New ticker detected: %s", ticker)
 			// Figure out the start date of the ticker via 'ticker change' api lol
-			res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
+			err = processTickerEventsForNewListing(ctx, conn, ticker)
 			if err != nil {
-				return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
-			}
-			// Check if we have any events before accessing them
-			if len(res) == 0 {
-				//log.Printf("No ticker events found for %s, skipping", ticker)
+				fmt.Printf("failed to process ticker events for new listing %s: %v\n", ticker, err)
 				continue
-			}
-
-			events := res[0].Events
-			// this is sorted by date, so the most historical one is last
-			var maxDateToInsert interface{}
-			var isActive bool
-			// this handles ticker changes
-			for eventIndex, event := range events {
-				if eventIndex == 0 {
-					maxDateToInsert = nil
-				}
-				initialDate := time.Time(event.Date).Format("2006-01-02")
-				getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
-				var figi string
-				if err != nil {
-					figi = ""
-				} else {
-					figi = getTickerDetailsResponse.CompositeFIGI
-				}
-				// Use safe insertion with comprehensive validation
-				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
-				if err != nil {
-					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
-				}
-				maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
-				isActive = false
 			}
 			processedTickers[ticker] = struct{}{}
 			continue
-		} else {
-			// we need to verify that there isn't like an overlapping / different stock with the same securityid
+		}
+		// we need to verify that there isn't more than one active row with this ticker
+		var activeTickerRowCount int
+		err := conn.DB.QueryRow(ctx, `
+			SELECT COUNT(*) 
+			FROM securities 
+			WHERE ticker = $1 AND maxDate IS NULL`,
+			ticker).Scan(&activeTickerRowCount)
+		if err != nil {
+			fmt.Printf("failed to get active ticker row count for ticker %s: %v\n", ticker, err)
+			continue
+		}
+		if activeTickerRowCount > 1 {
+			// Multiple active rows exist, keep only the one with highest securityid
 
-			// Get the securityid for the current ticker with maxdate = null
-			var currentSecurityID int
-			err := conn.DB.QueryRow(ctx, `
-				SELECT securityid 
-				FROM securities 
-				WHERE ticker = $1 AND maxDate IS NULL`,
-				ticker).Scan(&currentSecurityID)
+			// Delete all active rows except the one with the highest securityid
+			_, err := conn.DB.Exec(ctx, `
+				DELETE FROM securities 
+				WHERE securityid NOT IN (
+					SELECT MIN(securityid) 
+					FROM securities 
+					WHERE ticker = $1 AND maxDate IS NULL
+				)`,
+				ticker)
 			if err != nil {
-				return fmt.Errorf("failed to get securityid for ticker %s: %w", ticker, err)
+				fmt.Printf("failed to delete duplicate active rows for ticker %s: %v\n", ticker, err)
+				continue
+			}
+		}
+
+		// we need to verify that there isn't like an overlapping / different stock with the same securityid
+		// Get the securityid for the current ticker with maxdate = null
+		var currentSecurityID int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT securityid 
+			FROM securities 
+			WHERE ticker = $1 AND maxDate IS NULL`,
+			ticker).Scan(&currentSecurityID)
+		if err != nil {
+			fmt.Printf("failed to get securityid for ticker %s: %v\n", ticker, err)
+			continue
+		}
+
+		// Get all rows with the same securityid
+		rows, err := conn.DB.Query(ctx, `
+			SELECT securityid, ticker, minDate, maxDate 
+			FROM securities 
+			WHERE securityid = $1 
+			ORDER BY minDate`,
+			currentSecurityID)
+		if err != nil {
+			fmt.Printf("failed to get rows with same securityid for ticker %s: %v\n", ticker, err)
+			continue
+		}
+		defer rows.Close()
+
+		// Process the rows to check for overlaps or conflicts
+		var conflictingRows []struct {
+			securityID int
+			ticker     string
+			minDate    time.Time
+			maxDate    *time.Time
+		}
+
+		for rows.Next() {
+			var secID int
+			var rowTicker string
+			var minDate time.Time
+			var maxDate *time.Time
+
+			if err := rows.Scan(&secID, &rowTicker, &minDate, &maxDate); err != nil {
+				fmt.Printf("failed to scan conflicting row: %v\n", err)
+				continue
 			}
 
-			// Get all rows with the same securityid
-			rows, err := conn.DB.Query(ctx, `
-				SELECT securityid, ticker, minDate, maxDate 
-				FROM securities 
-				WHERE securityid = $1 
-				ORDER BY minDate`,
-				currentSecurityID)
-			if err != nil {
-				return fmt.Errorf("failed to get rows with same securityid for ticker %s: %w", ticker, err)
-			}
-			defer rows.Close()
-
-			// Process the rows to check for overlaps or conflicts
-			var conflictingRows []struct {
+			conflictingRows = append(conflictingRows, struct {
+				securityID int
+				ticker     string
+				minDate    time.Time
+				maxDate    *time.Time
+			}{secID, rowTicker, minDate, maxDate})
+		}
+		// Handle conflicts if multiple active rows exist
+		if len(conflictingRows) > 1 {
+			// Check if there are multiple active (maxDate = null) rows
+			var activeRows []struct {
 				securityID int
 				ticker     string
 				minDate    time.Time
 				maxDate    *time.Time
 			}
-
-			for rows.Next() {
-				var secID int
-				var rowTicker string
-				var minDate time.Time
-				var maxDate *time.Time
-
-				if err := rows.Scan(&secID, &rowTicker, &minDate, &maxDate); err != nil {
-					return fmt.Errorf("failed to scan conflicting row: %w", err)
+			for _, row := range conflictingRows {
+				if row.maxDate == nil {
+					activeRows = append(activeRows, row)
 				}
-
-				conflictingRows = append(conflictingRows, struct {
-					securityID int
-					ticker     string
-					minDate    time.Time
-					maxDate    *time.Time
-				}{secID, rowTicker, minDate, maxDate})
 			}
-			// Handle conflicts if multiple active rows exist
-			if len(conflictingRows) > 1 {
-				// Check if there are multiple active (maxDate = null) rows
-				var activeRows []struct {
+
+			if len(activeRows) > 1 {
+				var currentTickerRow *struct {
 					securityID int
 					ticker     string
 					minDate    time.Time
 					maxDate    *time.Time
 				}
-				for _, row := range conflictingRows {
-					if row.maxDate == nil {
-						activeRows = append(activeRows, row)
+				// First, find and store the current ticker's data
+				for i := range activeRows {
+					if activeRows[i].ticker == ticker {
+						currentTickerRow = &activeRows[i]
+						break
 					}
 				}
-
-				if len(activeRows) > 1 {
-					var currentTickerRow *struct {
-						securityID int
-						ticker     string
-						minDate    time.Time
-						maxDate    *time.Time
-					}
-					// First, find and store the current ticker's data
-					for i := range activeRows {
-						if activeRows[i].ticker == ticker {
-							currentTickerRow = &activeRows[i]
-							break
-						}
-					}
-					if currentTickerRow == nil {
-						continue
-					}
-					// Simply update the current ticker's securityid to the next available serial value
-					_, err := conn.DB.Exec(ctx, `
-						UPDATE securities 
-						SET securityid = nextval('securities_securityid_seq')
-						WHERE securityid = $1 AND ticker = $2 AND maxDate IS NULL`,
-						currentSecurityID, ticker)
-					if err != nil {
-						continue
-					}
-					// Delist all remaining active rows on the original securityid
-					_, err = conn.DB.Exec(ctx, `
-						UPDATE securities 
-						SET maxDate = $1 
-						WHERE securityid = $2 AND maxDate IS NULL`,
-						processingDate, currentSecurityID)
-					if err != nil {
-						log.Printf("Error delisting remaining conflicting rows for securityid %d: %v", currentSecurityID, err)
-						continue
-					}
-					// this is just inserting the previous ticker (ticker changes)
-					res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
-					if err != nil {
-						return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
-					}
-					// Check if we have any events before accessing them
-					if len(res) == 0 {
-						//log.Printf("No ticker events found for %s, skipping", ticker)
-						continue
-					}
-					events := res[0].Events
-					// this is sorted by date, so the most historical one is last
-					var maxDateToInsert interface{}
-					// this handles ticker changes
-					for eventIndex, event := range events {
-						if eventIndex == 0 {
-							maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
-							continue
-						}
-						initialDate := time.Time(event.Date).Format("2006-01-02")
-						getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
-						var figi string
-						if err != nil {
-							figi = ""
-						} else {
-							figi = getTickerDetailsResponse.CompositeFIGI
-						}
-						// Use safe insertion with comprehensive validation
-						err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, false, figi, true, "new ticker listing")
-						if err != nil {
-							return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
-						}
-						maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
-					}
-				}
-				processedTickers[ticker] = struct{}{}
-				continue
-			}
-			// testing if the ticker changes are correct
-			res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
-			if err != nil {
-				return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
-			}
-			// Check if we have any events before accessing them
-			if len(res) == 0 {
-				//log.Printf("No ticker events found for %s, skipping", ticker)
-				processedTickers[ticker] = struct{}{}
-				continue
-			}
-			events := res[0].Events
-			// this is sorted by date, so the most historical one is last
-			var maxDateToInsert interface{}
-			// this handles ticker changes
-			for eventIndex, event := range events {
-				if eventIndex == 0 {
-					maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
+				if currentTickerRow == nil {
 					continue
 				}
-				initialDate := time.Time(event.Date).Format("2006-01-02")
-
-				// Check if a row already exists with this ticker and date range
-				var existingCount int
-				err := conn.DB.QueryRow(ctx, `
-					SELECT COUNT(*) 
-					FROM securities 
-					WHERE ticker = $1 AND minDate = $2 AND maxDate = $3`,
-					ticker, initialDate, maxDateToInsert).Scan(&existingCount)
+				// Simply update the current ticker's securityid to the next available serial value
+				_, err := conn.DB.Exec(ctx, `
+				UPDATE securities 
+				SET securityid = nextval('securities_securityid_seq')
+				WHERE securityid = $1 AND ticker = $2 AND maxDate IS NULL`,
+					currentSecurityID, ticker)
 				if err != nil {
-					return fmt.Errorf("failed to check existing row for ticker %s: %w", ticker, err)
-				}
-
-				if existingCount > 0 {
-					// Row already exists, skip insertion
-					maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
 					continue
 				}
 
-				getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
-				var figi string
+				// Delist all remaining active rows on the original securityid
+				_, err = conn.DB.Exec(ctx, `
+				UPDATE securities 
+				SET maxDate = $1 
+				WHERE securityid = $2 AND maxDate IS NULL`,
+					processingDate, currentSecurityID)
 				if err != nil {
-					figi = ""
-				} else {
-					figi = getTickerDetailsResponse.CompositeFIGI
+					log.Printf("Error delisting remaining conflicting rows for securityid %d: %v", currentSecurityID, err)
+					continue
 				}
-				// Use safe insertion with comprehensive validation
-				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, false, figi, true, "new ticker listing")
+				// this is just inserting the previous ticker (ticker changes)
+				err = processTickerEventsForExistingSecurity(ctx, conn, ticker, currentSecurityID)
 				if err != nil {
-					return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
+					fmt.Printf("failed to process ticker events for existing security %s: %v\n", ticker, err)
+					continue
 				}
-				maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
 			}
-
-			// Mark ticker as processed
 			processedTickers[ticker] = struct{}{}
+			continue
 		}
+
+		// testing if the ticker changes are correct
+		err = processTickerEventsWithConflictResolution(ctx, conn, ticker, currentSecurityID)
+		if err != nil {
+			fmt.Printf("failed to process ticker events with conflict resolution for %s: %v\n", ticker, err)
+			continue
+		}
+
+		// Mark ticker as processed
+		processedTickers[ticker] = struct{}{}
 	}
 
 	// Continue with the polygon.ListTickers part...
 	iter, err := polygon.ListTickers(conn.Polygon, "", "", "gte", 1000, true)
 	if err != nil {
-		return fmt.Errorf("failed to fetch polygon tickers: %w", err)
+		fmt.Printf("failed to fetch polygon tickers: %v\n", err)
+		return nil
 	}
 	for iter.Next() {
 		ticker := iter.Item().Ticker
@@ -676,7 +638,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 					LIMIT 1`,
 					ticker).Scan(&securityID, &mostRecentMaxDate)
 				if err != nil && err != pgx.ErrNoRows {
-					return fmt.Errorf("failed to check historical record for ticker %s: %w", ticker, err)
+					fmt.Printf("failed to check historical record for ticker %s: %v\n", ticker, err)
+					continue
 				}
 				// found record in db
 				if mostRecentMaxDate != nil {
@@ -693,7 +656,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 							WHERE securityid = $1 AND ticker = $2 AND NOT EXISTS (SELECT 1 FROM securities WHERE ticker = $2 AND maxDate = NULL)`,
 							securityID, ticker)
 						if err != nil {
-							return fmt.Errorf("failed to update maxdate for ticker %s: %w", ticker, err)
+							fmt.Printf("failed to update maxdate for ticker %s: %v\n", ticker, err)
+							continue
 						}
 						processedTickers[ticker] = struct{}{}
 						continue
@@ -701,47 +665,17 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				}
 				// If no record found, then this is a new ticker for our DB
 				// Figure out the start date of the ticker via 'ticker change' api lol
-				res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
+				err = processTickerEventsForNewListing(ctx, conn, ticker)
 				if err != nil {
-					return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
-				}
-
-				// Check if we have any events before accessing them
-				if len(res) == 0 {
+					fmt.Printf("failed to process ticker events for new listing %s: %v\n", ticker, err)
 					continue
-				}
-
-				events := res[0].Events
-				// this is sorted by date, so the most historical one is last
-				var maxDateToInsert interface{}
-				var isActive bool
-				// this handles ticker changes
-				for eventIndex, event := range events {
-					if eventIndex == 0 {
-						maxDateToInsert = nil
-					}
-					initialDate := time.Time(event.Date).Format("2006-01-02")
-					getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, ticker, initialDate)
-					var figi string
-					if err != nil {
-						figi = ""
-					} else {
-						figi = getTickerDetailsResponse.CompositeFIGI
-					}
-					// Use safe insertion with comprehensive validation
-					err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
-					if err != nil {
-						return fmt.Errorf("failed to insert new ticker %s: %w", ticker, err)
-					}
-					maxDateToInsert = time.Time(event.Date).AddDate(0, 0, -1).Format("2006-01-02")
-					isActive = false
 				}
 				processedTickers[ticker] = struct{}{}
 				continue
 			}
 		}
 	}
-
+	fmt.Println("Finished processing active tickers")
 	// At the end, find any active tickers that weren't processed today and mark them as delisted
 	if processingDate != "" {
 		// Get all currently active tickers that weren't processed
@@ -750,7 +684,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			FROM securities 
 			WHERE maxDate IS NULL`)
 		if err != nil {
-			return fmt.Errorf("failed to query active tickers for delisting: %w", err)
+			fmt.Printf("failed to query active tickers for delisting: %v\n", err)
+			return nil
 		}
 		defer rows.Close()
 
@@ -763,7 +698,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			var ticker string
 			var securityID int
 			if err := rows.Scan(&ticker, &securityID); err != nil {
-				return fmt.Errorf("failed to scan ticker for delisting: %w", err)
+				fmt.Printf("failed to scan ticker for delisting: %v\n", err)
+				continue
 			}
 
 			// If this ticker wasn't processed today, mark it for delisting
@@ -784,7 +720,8 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				AND NOT EXISTS (SELECT 1 FROM securities WHERE ticker = $3 AND maxDate = $1)`,
 				processingDate, item.securityID, item.ticker)
 			if err != nil {
-				return fmt.Errorf("failed to delist ticker %s: %w", item.ticker, err)
+				fmt.Printf("failed to delist ticker %s: %v\n", item.ticker, err)
+				continue
 			}
 		}
 	}
@@ -980,5 +917,253 @@ func safeInsertSecurityV2(ctx context.Context, conn *data.Conn, ticker string, m
 	if debug {
 		fmt.Printf("SUCCESS: %s completed for ticker=%s, minDate=%s\n", actionDescription, ticker, minDate)
 	}
+	return nil
+}
+
+// processTickerEventsForNewListing handles ticker change events for a new ticker listing
+func processTickerEventsForNewListing(ctx context.Context, conn *data.Conn, ticker string) error {
+	res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
+	if err != nil {
+		return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
+	}
+
+	// Check if we have any events before accessing them
+	if len(res.Events) == 0 {
+		return nil
+	}
+
+	events := res.Events
+	// this is sorted by date, so the most historical one is last
+	var maxDateToInsert interface{}
+	var isActive bool
+	tickerToInsert := ticker
+	// this handles ticker changes
+	for eventIndex, event := range events {
+		if eventIndex == 0 {
+			maxDateToInsert = nil
+		}
+		initialDate := event.Date
+		getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, tickerToInsert, initialDate)
+		var figi string
+		if err != nil {
+			figi = ""
+		} else {
+			figi = getTickerDetailsResponse.CompositeFIGI
+		}
+		tickerToInsert = event.TickerChange["ticker"].(string)
+		// first check if this is already in the database
+		var existingSecurityID int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT securityid 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2 AND maxDate= $3`,
+			tickerToInsert, initialDate, maxDateToInsert).Scan(&existingSecurityID)
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("failed to check if ticker %s is already in the database: %w", tickerToInsert, err)
+		}
+		if err == nil && existingSecurityID != 0 {
+			continue
+		}
+
+		// Use safe insertion with comprehensive validation
+		err = safeInsertSecurityV2(ctx, conn, tickerToInsert, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
+		if err != nil {
+			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+		}
+
+		// Parse the date string, subtract a day, and format back to string
+		eventDate, err := time.Parse("2006-01-02", event.Date)
+		if err != nil {
+			return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+		}
+		maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+		isActive = false
+	}
+
+	return nil
+}
+
+// processTickerEventsForExistingSecurity handles ticker change events for an existing security with a specific securityID
+func processTickerEventsForExistingSecurity(ctx context.Context, conn *data.Conn, ticker string, currentSecurityID int) error {
+	res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
+	if err != nil {
+		return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
+	}
+
+	// Check if we have any events before accessing them
+	if len(res.Events) == 0 {
+		return nil
+	}
+
+	events := res.Events
+	// this is sorted by date, so the most historical one is last
+	var maxDateToInsert interface{}
+
+	// this handles ticker changes
+	for eventIndex, event := range events {
+		if eventIndex == 0 {
+			// Parse the date string, subtract a day, and format back to string
+			eventDate, err := time.Parse("2006-01-02", event.Date)
+			if err != nil {
+				return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+			}
+			maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+			continue
+		}
+
+		initialDate := event.Date
+		tickerToInsert := event.TickerChange["ticker"].(string)
+
+		getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, tickerToInsert, initialDate)
+		var figi string
+		if err != nil {
+			figi = ""
+		} else {
+			figi = getTickerDetailsResponse.CompositeFIGI
+		}
+
+		// first check if this row already exists
+		var existingEventRowCount int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT COUNT(*) 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2`,
+			tickerToInsert, initialDate).Scan(&existingEventRowCount)
+		if err != nil {
+			return fmt.Errorf("failed to check existing row for ticker %s: %w", tickerToInsert, err)
+		}
+
+		if existingEventRowCount > 0 {
+			// delete it so we can refresh it - delete ALL rows with this ticker and minDate
+			_, err = conn.DB.Exec(ctx, `
+				DELETE FROM securities 
+				WHERE ticker = $1 AND minDate = $2`,
+				tickerToInsert, initialDate)
+			if err != nil {
+				return fmt.Errorf("failed to delete existing row for ticker %s: %w", tickerToInsert, err)
+			}
+		}
+
+		// Insert with the current ticker's securityid to maintain the relationship
+		_, err = conn.DB.Exec(ctx, `
+			INSERT INTO securities (securityid, ticker, minDate, maxDate, active, figi) 
+			VALUES ($1, $2, $3, $4, $5, $6) 
+			ON CONFLICT (ticker, minDate) DO NOTHING`,
+			currentSecurityID, tickerToInsert, initialDate, maxDateToInsert, false, figi)
+		if err != nil {
+			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+		}
+
+		// Parse the date string, subtract a day, and format back to string
+		eventDate, err := time.Parse("2006-01-02", event.Date)
+		if err != nil {
+			return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+		}
+		maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+	}
+
+	return nil
+}
+
+// processTickerEventsWithConflictResolution handles ticker change events with advanced conflict resolution
+func processTickerEventsWithConflictResolution(ctx context.Context, conn *data.Conn, ticker string, currentSecurityID int) error {
+	res, err := postgres.GetTickerEventsCustom(conn.Polygon, ticker, conn.PolygonKey)
+	if err != nil {
+		return fmt.Errorf("failed to get ticker events for ticker %s: %w", ticker, err)
+	}
+
+	// Check if we have any events before accessing them
+	if len(res.Events) == 0 {
+		return nil
+	}
+
+	events := res.Events
+	// this is sorted by date, so the most historical one is last
+	var maxDateToInsert interface{}
+
+	// this handles ticker changes
+	for eventIndex, event := range events {
+		if eventIndex == 0 {
+			// Parse the date string, subtract a day, and format back to string
+			eventDate, err := time.Parse("2006-01-02", event.Date)
+			if err != nil {
+				return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+			}
+			maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+			continue
+		}
+
+		initialDate := event.Date
+		tickerToInsert := event.TickerChange["ticker"].(string)
+
+		// Check if a row already exists with this ticker and date range
+		var existingCount int
+		err = conn.DB.QueryRow(ctx, `
+		SELECT COUNT(*) 
+		FROM securities 
+		WHERE ticker = $1 AND minDate = $2 AND maxDate = $3 AND securityid = $4`,
+			tickerToInsert, initialDate, maxDateToInsert, currentSecurityID).Scan(&existingCount)
+		if err != nil {
+			return fmt.Errorf("failed to check existing row for ticker %s: %w", ticker, err)
+		}
+
+		if existingCount > 0 {
+			// Row already exists, skip insertion
+			// Parse the date string, subtract a day, and format back to string
+			eventDate, err := time.Parse("2006-01-02", event.Date)
+			if err != nil {
+				return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+			}
+			maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+			continue
+		}
+
+		var existingEventWrongSecurityIDCount int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT COUNT(*) 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2`,
+			tickerToInsert, initialDate).Scan(&existingEventWrongSecurityIDCount)
+		if err != nil {
+			return fmt.Errorf("failed to check existing row for ticker %s: %w", ticker, err)
+		}
+
+		if existingEventWrongSecurityIDCount > 0 {
+			// delete it so we can refresh it - delete ALL rows with this ticker and minDate
+			_, err = conn.DB.Exec(ctx, `
+				DELETE FROM securities 
+				WHERE ticker = $1 AND minDate = $2`,
+				tickerToInsert, initialDate)
+			if err != nil {
+				return fmt.Errorf("failed to delete existing row for ticker %s: %w", ticker, err)
+			}
+		}
+
+		getTickerDetailsResponse, err := polygon.GetTickerDetails(conn.Polygon, tickerToInsert, initialDate)
+		var figi string
+		if err != nil {
+			figi = ""
+		} else {
+			figi = getTickerDetailsResponse.CompositeFIGI
+		}
+
+		// Insert with the current ticker's securityid to maintain the relationship
+		_, err = conn.DB.Exec(ctx, `
+			INSERT INTO securities (securityid, ticker, minDate, maxDate, active, figi) 
+			VALUES ($1, $2, $3, $4, $5, $6) 
+			ON CONFLICT (ticker, minDate) DO NOTHING`,
+			currentSecurityID, tickerToInsert, initialDate, maxDateToInsert, false, figi)
+		if err != nil {
+			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+		}
+
+		// Parse the date string, subtract a day, and format back to string
+		eventDate, err := time.Parse("2006-01-02", event.Date)
+		if err != nil {
+			return fmt.Errorf("failed to parse event date %s: %w", event.Date, err)
+		}
+		maxDateToInsert = eventDate.AddDate(0, 0, -1).Format("2006-01-02")
+	}
+
 	return nil
 }

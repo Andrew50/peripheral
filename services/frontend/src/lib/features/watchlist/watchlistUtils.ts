@@ -1,13 +1,16 @@
 import { get } from 'svelte/store';
-import type { Instance } from '$lib/utils/types/types';
+import type { Instance, Watchlist } from '$lib/utils/types/types';
 import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { queryInstanceInput } from '$lib/components/input/input.svelte';
+import { showAuthModal } from '$lib/stores/authModal';
 import {
+	currentWatchlistItems,
 	flagWatchlistId,
 	isPublicViewing,
-	currentWatchlistItems
+	currentWatchlistId as globalCurrentWatchlistId,
+	watchlists
 } from '$lib/utils/stores/stores';
-import { showAuthModal } from '$lib/stores/authModal';
+import { tick } from 'svelte';
 
 // Extended Instance type to include watchlistItemId
 interface WatchlistItem extends Instance {
@@ -40,6 +43,107 @@ function updateWatchlistStores(newItem: WatchlistItem, targetWatchlistId: number
 			});
 		});
 	}
+}
+
+// Centralized watchlist selection function
+export function selectWatchlist(watchlistIdString: string) {
+	if (!watchlistIdString) return;
+
+	const watchlistId = parseInt(watchlistIdString);
+	if (isNaN(watchlistId)) return;
+
+	// Update the global store so other components know which watchlist is selected
+	globalCurrentWatchlistId.set(watchlistId);
+
+	// Fetch items and update the global store
+	privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
+		.then((v: WatchlistItem[]) => {
+			currentWatchlistItems.set(v || []);
+		})
+		.catch((err) => {
+			console.error('Error fetching watchlist items:', err);
+			currentWatchlistItems.set([]);
+		});
+}
+
+// Centralized new watchlist creation
+export function createNewWatchlist(watchlistName: string): Promise<number> {
+	if (!watchlistName) {
+		throw new Error('Watchlist name is required');
+	}
+
+	const existingWatchlist = get(watchlists).find(
+		(w) => w.watchlistName.toLowerCase() === watchlistName.toLowerCase()
+	);
+
+	if (existingWatchlist) {
+		throw new Error('A watchlist with this name already exists');
+	}
+
+	return privateRequest<number>('newWatchlist', { watchlistName }).then((newId: number) => {
+		watchlists.update((v: Watchlist[]) => {
+			const w: Watchlist = {
+				watchlistName: watchlistName,
+				watchlistId: newId
+			};
+			if (!Array.isArray(v)) {
+				return [w];
+			}
+			return [w, ...v];
+		});
+		
+		// Automatically select the new watchlist
+		selectWatchlist(String(newId));
+		
+		return newId;
+	});
+}
+
+// Centralized watchlist deletion
+export function deleteWatchlist(watchlistId: number): Promise<void> {
+	if (watchlistId === flagWatchlistId) {
+		throw new Error('The flag watchlist cannot be deleted.');
+	}
+
+	return privateRequest<void>('deleteWatchlist', { watchlistId }).then(() => {
+		watchlists.update((v: Watchlist[]) => {
+			const updatedWatchlists = v.filter(
+				(watchlist: Watchlist) => watchlist.watchlistId !== watchlistId
+			);
+
+			// If we deleted the current watchlist, select another one
+			const currentId = get(globalCurrentWatchlistId);
+			if (watchlistId === currentId && updatedWatchlists.length > 0) {
+				setTimeout(() => selectWatchlist(String(updatedWatchlists[0].watchlistId)), 10);
+			}
+
+			return updatedWatchlists;
+		});
+	});
+}
+
+// Initialize watchlist - select default watchlist on page load
+export function initializeDefaultWatchlist() {
+	// Try to select flag watchlist first if available
+	if (flagWatchlistId !== undefined) {
+		selectWatchlist(String(flagWatchlistId));
+		return;
+	}
+
+	// Subscribe to watchlists store to select initial watchlist when list arrives
+	const unsubscribeWatchlists = watchlists.subscribe((list) => {
+		const currentWatchlistId = get(globalCurrentWatchlistId);
+		if (
+			Array.isArray(list) &&
+			list.length > 0 &&
+			(currentWatchlistId === undefined || isNaN(currentWatchlistId))
+		) {
+			selectWatchlist(String(list[0].watchlistId));
+		}
+	});
+
+	// Return cleanup function for the watchlist subscription
+	return unsubscribeWatchlists;
 }
 
 export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?: number, ticker?: string) {

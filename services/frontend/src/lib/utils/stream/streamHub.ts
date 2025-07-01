@@ -38,8 +38,8 @@ export function register(securityid: number) {
   }
   return () => {
     const m = (refCounts.get(securityid) ?? 1) - 1;
-    if (m <= 0) { 
-      refCounts.delete(securityid); 
+    if (m <= 0) {
+      refCounts.delete(securityid);
       unsubscribe(`${securityid}-slow-regular`);
       unsubscribe(`${securityid}-slow-extended`);
       unsubscribe(`${securityid}-close-regular`);
@@ -64,75 +64,75 @@ const latestExtended = new Map<number, any>();
 
 export function enqueueTick(t: any) {
   const securityid = t.securityid;
-  
+
   // Route to appropriate data structure based on data type
   if (t.isExtended || t.extendedClose !== undefined) {
     // Extended hours data
-    latestExtended.set(securityid, {...latestExtended.get(securityid), ...t});
+    latestExtended.set(securityid, { ...latestExtended.get(securityid), ...t });
   } else {
     // Regular hours data
-    latestRegular.set(securityid, {...latestRegular.get(securityid), ...t});
+    latestRegular.set(securityid, { ...latestRegular.get(securityid), ...t });
   }
-  
-  if (!dirty) { 
-    dirty = true; 
+
+  if (!dirty) {
+    dirty = true;
     requestAnimationFrame(flush);
   }
 }
 
 function flush() {
   dirty = false;
-  
+
   // Process regular hours data
   for (const t of latestRegular.values()) {
     processRegularHoursData(t);
   }
-  
+
   // Process extended hours data
   for (const t of latestExtended.values()) {
     processExtendedHoursData(t);
   }
-  
+
   latestRegular.clear();
   latestExtended.clear();
 }
 
 function processRegularHoursData(t: any) {
   const securityid = t.securityid;
-  
+
   // Update regular price cache and store
   if (t.price !== undefined) {
     priceCache.set(securityid, t.price);
-    getColumnStore(securityid, 'price').set({ 
+    getColumnStore(securityid, 'price').set({
       price: t.price,
       formatted: t.price.toFixed(2)
     });
   }
-  
+
   // Update prevClose cache and store
   if (t.prevClose !== undefined) {
     prevCloseCache.set(securityid, t.prevClose);
     getColumnStore(securityid, 'prevClose').set({ prevClose: t.prevClose });
   }
-  
+
   // Calculate and update regular change and change percentage
   const currentPrice = priceCache.get(securityid);
   const prevClose = prevCloseCache.get(securityid);
   if (currentPrice !== undefined && prevClose !== undefined && prevClose !== 0) {
     const change = currentPrice - prevClose;
     const changePct = ((currentPrice / prevClose - 1) * 100);
-    
-    getColumnStore(securityid, 'change').set({ 
+
+    getColumnStore(securityid, 'change').set({
       change: change,
       formatted: change.toFixed(2)
     });
-    
-    getColumnStore(securityid, 'changePct').set({ 
+
+    getColumnStore(securityid, 'changePct').set({
       pct: changePct,
       formatted: changePct.toFixed(2) + '%'
     });
   }
-  
+
   // Handle market cap
   if (t.marketCap !== undefined) {
     getColumnStore(securityid, 'marketCap').set({ marketCap: t.marketCap });
@@ -141,31 +141,31 @@ function processRegularHoursData(t: any) {
 
 function processExtendedHoursData(t: any) {
   const securityid = t.securityid;
-  
+
   // Update extended price cache
   if (t.price !== undefined) {
     extendedPriceCache.set(securityid, t.price);
   }
-  
+
   // Update extendedClose cache
   if (t.extendedClose !== undefined) {
     extendedCloseCache.set(securityid, t.extendedClose);
   }
-  
+
   // Calculate and update extended hours change
   const currentExtendedPrice = extendedPriceCache.get(securityid);
   const extendedClose = extendedCloseCache.get(securityid);
-  
+
   if (currentExtendedPrice !== undefined && extendedClose !== undefined && extendedClose !== 0) {
     const chgExt = ((currentExtendedPrice / extendedClose - 1) * 100);
-    
-    getColumnStore(securityid, 'chgExt').set({ 
+
+    getColumnStore(securityid, 'chgExt').set({
       chgExt: chgExt,
       formatted: chgExt.toFixed(2) + '%'
     });
   } else if (t.chgExt !== undefined) {
     // Handle direct chgExt values (fallback)
-    getColumnStore(securityid, 'chgExt').set({ 
+    getColumnStore(securityid, 'chgExt').set({
       chgExt: t.chgExt,
       formatted: t.chgExt.toFixed(2) + '%'
     });

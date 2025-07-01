@@ -542,12 +542,12 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 }
 
 // MarkPendingMessageAsError marks a pending message as error status instead of deleting it
-func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, errorMessage string) error {
+func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, messageID string, errorMessage string) error {
 	// Update the database to mark as error
 	querySQL := `
 		UPDATE conversation_messages 
 		SET response_text = $1, completed_at = $2, status = $3
-		WHERE conversation_id = $4 AND query = $5 AND status = 'pending'`
+		WHERE conversation_id = $4 AND message_id = $5 AND status = 'pending'`
 
 	now := time.Now()
 	result, err := conn.DB.Exec(ctx, querySQL,
@@ -555,7 +555,7 @@ func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int,
 		now,
 		"error",
 		conversationID,
-		query,
+		messageID,
 	)
 
 	if err != nil {
@@ -564,7 +564,7 @@ func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int,
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		return fmt.Errorf("no pending message found with message_id: %s in conversation: %s", messageID, conversationID)
 	}
 
 	// Invalidate cache for this conversation since the message was updated

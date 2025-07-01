@@ -112,10 +112,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 					lastErr = err
 					time.Sleep(1 * time.Second)
 					continue
-				} else {
-					dbResult <- dbConnResult{conn: dbConn, err: nil}
-					return
 				}
+				dbResult <- dbConnResult{conn: dbConn, err: nil}
+				return
 			}
 		}
 	}()
@@ -170,10 +169,9 @@ func InitConn(inContainer bool) (*Conn, func()) {
 					lastErr = err
 					time.Sleep(1 * time.Second)
 					continue
-				} else {
-					redisResult <- redisConnResult{client: cache, err: nil}
-					return
 				}
+				redisResult <- redisConnResult{client: cache, err: nil}
+				return
 			}
 		}
 	}()

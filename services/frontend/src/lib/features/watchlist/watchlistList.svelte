@@ -332,8 +332,11 @@
 		event.preventDefault();
 		event.stopPropagation();
 		if (button === 0) {
-			selectedRowIndex = index;
-			queryChart(instance);
+			// Only query chart if clicking on a different row
+			if (selectedRowIndex !== index) {
+				selectedRowIndex = index;
+				queryChart(instance);
+			}
 		} else if (button === 1) {
 			flagSecurity(instance);
 		}
@@ -410,123 +413,132 @@
 			<button on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table" class:sorting={isSorting}>
-			<thead>
-				<tr class="default-tr">
-					<th class="default-th"></th>
-					{#each columns as col}
-						<th
-							class="default-th"
-							data-type={col.toLowerCase().replace(/\s+/g, '-')}
-							class:sortable={col !== ''}
-							class:sorting={sortColumn === col}
-							class:sort-asc={sortColumn === col && sortDirection === 'asc'}
-							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
-							on:click={() => handleSort(col)}
-						>
-							<div class="th-content">
-								<span>{displayNames[col] || formatColumnHeader(col)}</span>
-								{#if sortColumn === col}
-									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-								{/if}
-							</div>
-						</th>
-					{/each}
-					<th class="default-th"></th>
-				</tr>
-			</thead>
+		<!-- Fixed Header -->
+		<div class="table-header">
+			<table class="header-table" class:sorting={isSorting}>
+				<thead>
+					<tr class="default-tr">
+						<th class="default-th"></th>
+						{#each columns as col}
+							<th
+								class="default-th"
+								data-type={col.toLowerCase().replace(/\s+/g, '-')}
+								class:sortable={col !== ''}
+								class:sorting={sortColumn === col}
+								class:sort-asc={sortColumn === col && sortDirection === 'asc'}
+								class:sort-desc={sortColumn === col && sortDirection === 'desc'}
+								on:click={() => handleSort(col)}
+							>
+								<div class="th-content">
+									<span>{displayNames[col] || formatColumnHeader(col)}</span>
+									{#if sortColumn === col}
+										<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+									{/if}
+								</div>
+							</th>
+						{/each}
+						<th class="default-th"></th>
+					</tr>
+				</thead>
+			</table>
+		</div>
+
+		<!-- Scrollable Body -->
+		<div class="table-body">
 			{#if Array.isArray($list) && $list.length > 0}
-				<tbody>
-					{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
-						<tr
-							class="default-tr {rowClass(watch)}"
-							on:mousedown={(event) => clickHandler(event, watch, i)}
-							on:touchstart={(event) => handleTouchStart(event, watch, i)}
-							on:touchend={handleTouchEnd}
-							id="row-{i}"
-							class:selected={i === selectedRowIndex}
-							on:contextmenu={(event) => {
-								event.preventDefault();
-							}}
-						>
-							<td class="default-td">
-								{#if isFlagged(watch, $flagWatchlist)}
-									<span class="flag-icon">
+				<table class="body-table">
+					<tbody>
+						{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
+							<tr
+								class="default-tr {rowClass(watch)}"
+								on:mousedown={(event) => clickHandler(event, watch, i)}
+								on:touchstart={(event) => handleTouchStart(event, watch, i)}
+								on:touchend={handleTouchEnd}
+								id="row-{i}"
+								class:selected={i === selectedRowIndex}
+								on:contextmenu={(event) => {
+									event.preventDefault();
+								}}
+							>
+								<td class="default-td">
+									{#if isFlagged(watch, $flagWatchlist)}
+										<span class="flag-icon">
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M5 5v14"></path>
+												<path d="M19 5l-6 4 6 4-6 4"></path>
+											</svg>
+										</span>
+									{/if}
+								</td>
+								{#each columns as col}
+									{#if col === 'Ticker'}
+										<td class="default-td">
+											{#if watch.icon && watch.icon !== BLACK_PIXEL}
+												<img
+													src={watch.icon}
+													alt={`${watch.ticker} icon`}
+													class="ticker-icon"
+													on:error={(e) => handleImageError(e, watch.ticker ?? '')}
+												/>
+											{:else if watch.ticker}
+												<span class="default-ticker-icon">
+													{watch.ticker.charAt(0).toUpperCase()}
+												</span>
+											{/if}
+											<span class="ticker-name">{watch.ticker}</span>
+										</td>
+									{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+										<td class="default-td">
+											<StreamCellV2
+												on:contextmenu={(event) => {
+													event.preventDefault();
+													event.stopPropagation();
+												}}
+												instance={watch}
+												type={getStreamCellType(col)}
+											/>
+										</td>
+									{/if}
+								{/each}
+								<td class="default-td">
+									<button
+										class="delete-button"
+										on:click={(event) => {
+											deleteRow(event, watch);
+										}}
+										on:mousedown={(event) => {
+											event.stopPropagation();
+											event.preventDefault();
+										}}
+										title="Remove from watchlist"
+									>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+											width="12"
+											height="12"
 										>
-											<path d="M5 5v14"></path>
-											<path d="M19 5l-6 4 6 4-6 4"></path>
-										</svg>
-									</span>
-								{/if}
-							</td>
-							{#each columns as col}
-								{#if col === 'Ticker'}
-									<td class="default-td">
-										{#if watch.icon && watch.icon !== BLACK_PIXEL}
-											<img
-												src={watch.icon}
-												alt={`${watch.ticker} icon`}
-												class="ticker-icon"
-												on:error={(e) => handleImageError(e, watch.ticker ?? '')}
+											<path
+												d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
 											/>
-										{:else if watch.ticker}
-											<span class="default-ticker-icon">
-												{watch.ticker.charAt(0).toUpperCase()}
-											</span>
-										{/if}
-										<span class="ticker-name">{watch.ticker}</span>
-									</td>
-								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
-									<td class="default-td">
-										<StreamCellV2
-											on:contextmenu={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-											}}
-											instance={watch}
-											type={getStreamCellType(col)}
-										/>
-									</td>
-								{/if}
-							{/each}
-							<td class="default-td">
-								<button
-									class="delete-button"
-									on:click={(event) => {
-										deleteRow(event, watch);
-									}}
-									on:mousedown={(event) => {
-										event.stopPropagation();
-										event.preventDefault();
-									}}
-									title="Remove from watchlist"
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										viewBox="0 0 20 20"
-										fill="currentColor"
-										width="12"
-										height="12"
-									>
-										<path
-											d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
-										/>
-									</svg>
-								</button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
+										</svg>
+									</button>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			{/if}
-		</table>
+		</div>
 	{/if}
 </div>
 
@@ -537,12 +549,30 @@
 		max-width: 100%;
 		padding: 0;
 		margin: 0;
+		height: 100%;
+		max-height: 100%;
+		display: flex;
+		flex-direction: column;
 	}
 
-	table {
+	.table-header {
+		flex-shrink: 0;
+		width: 100%;
+		background: transparent;
+	}
+
+	.table-body {
+		flex-grow: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
+		width: 100%;
+	}
+
+	.header-table,
+	.body-table {
 		width: 100%;
 		border-collapse: separate;
-		border-spacing: 0 clamp(1px, 0.2vw, 2px);
+		border-spacing: 0 2px;
 		margin: 0;
 		padding: 0;
 		color: var(--text-primary);
@@ -550,22 +580,75 @@
 		background: transparent;
 	}
 
+	.body-table {
+		border-spacing: 0 2px;
+	}
+
+	.header-table {
+		border-spacing: 0;
+	}
+
 	th,
 	td {
-		padding: clamp(1px, 0.15vw, 2px) clamp(6px, 1.2vw, 12px);
+		padding: clamp(4px, 0.4vw, 6px) clamp(2px, 0.4vw, 4px);
 		text-align: left;
 		background: transparent;
 		font-size: clamp(0.75rem, 0.875rem, 1rem);
+		vertical-align: middle;
 	}
 
-	/* Header cells keep original styling */
+	/* Ticker column - reduce left padding */
+	th:nth-child(2),
+	td:nth-child(2) {
+		padding-left: clamp(1px, 0.2vw, 2px);
+	}
+
+	/* Second-to-last column (Extended hours) - reduce right padding */
+	th:nth-last-child(2),
+	td:nth-last-child(2) {
+		padding-right: clamp(1px, 0.2vw, 2px);
+	}
+
+	/* Header cells */
 	th {
-		border-bottom: none;
+		font-weight: bold;
+		color: var(--text-secondary);
+		position: static;
+		z-index: 1;
+		background: transparent;
 	}
 
-	/* Body cells only get rounded styling */
+	/* Header divider - removed */
+	thead tr {
+		background: transparent;
+		position: relative;
+	}
+
+	/* Custom scrollbar for the table body */
+	.table-body::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.table-body::-webkit-scrollbar-track {
+		background: transparent;
+		border-radius: 3px;
+	}
+
+	.table-body::-webkit-scrollbar-thumb {
+		background-color: rgba(255, 255, 255, 0.2);
+		border-radius: 3px;
+		border: 1px solid transparent;
+		background-clip: content-box;
+	}
+
+	.table-body::-webkit-scrollbar-thumb:hover {
+		background-color: rgba(255, 255, 255, 0.4);
+	}
+
+	/* Body cells */
 	tbody td {
 		border: none;
+		vertical-align: middle;
 	}
 
 	tbody td:first-child {
@@ -576,14 +659,6 @@
 	tbody td:last-child {
 		border-top-right-radius: 6px;
 		border-bottom-right-radius: 6px;
-	}
-
-	th {
-		font-weight: bold;
-		color: var(--text-secondary);
-		position: sticky;
-		top: 0;
-		z-index: 1;
 	}
 
 	/* Sorting styles */
@@ -612,7 +687,7 @@
 	}
 
 	.sorting {
-		background-color: var(--ui-bg-hover);
+		background-color: transparent;
 	}
 
 	table.sorting tbody tr {
@@ -640,7 +715,6 @@
 		opacity: 1;
 		color: var(--ui-accent);
 	}
-
 
 	tr:hover .delete-button {
 		opacity: 1;
@@ -672,8 +746,6 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
-
-
 	.ticker-icon {
 		width: clamp(16px, 2.5vw, 22px);
 		height: clamp(16px, 2.5vw, 22px);
@@ -701,12 +773,8 @@
 	}
 
 	.ticker-name {
-		overflow: hidden; /* Prevent long names from breaking layout */
-		white-space: nowrap;
 		vertical-align: middle;
 	}
-
-
 
 	/* Professional flag icon styling */
 	.flag-icon {
@@ -721,18 +789,68 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
+	/* First column (Flag column) - minimize left space */
+	th:first-child,
+	td:first-child {
+		width: 20px;
+		min-width: 20px;
+		max-width: 20px;
+		padding: clamp(1px, 0.15vw, 2px) 0 clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px);
+		text-align: center;
+		vertical-align: middle;
+	}
+
 	/* Regular Last column (Delete Button) */
 	th:last-child,
 	td:last-child {
 		width: 30px;
+		min-width: 30px;
 		max-width: 30px;
-		padding: clamp(2px, 0.4vw, 4px) 0;
+		padding: clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px) clamp(1px, 0.15vw, 2px) 0;
 		text-align: center;
 		vertical-align: middle;
 	}
+
+	/* Define widths for main content columns */
+	th:nth-child(2),
+	td:nth-child(2) {
+		width: 25%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.2vw, 2px);
+	}
+
+	th:nth-child(3),
+	td:nth-child(3) {
+		width: 18%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(0px, 0.1vw, 1px);
+	}
+
+	th:nth-child(4),
+	td:nth-child(4) {
+		width: 17%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.15vw, 2px);
+	}
+
+	th:nth-child(5),
+	td:nth-child(5) {
+		width: 20%;
+		min-width: 55px;
+		text-align: left;
+		padding-right: clamp(2px, 0.3vw, 4px);
+	}
+
+	th:nth-child(6),
+	td:nth-child(6) {
+		width: 13%;
+		min-width: 40px;
+		text-align: left;
+	}
 	
-
-
 	.delete-button {
 		opacity: 0;
 		transition: none;
@@ -741,13 +859,14 @@
 		background: none;
 		color: var(--text-secondary);
 		font-size: 0.75em;
-		padding: 4px;
+		padding: 0;
 		line-height: 1;
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 20px;
 		height: 20px;
+		margin: auto;
 	}
 	
 	.delete-button:hover {
@@ -755,21 +874,31 @@
 		color: var(--text-secondary);
 	}
 
-	/* Table header */
-	thead tr {
-		background: var(--ui-bg-element);
-	}
-
 	/* Table rows */
 	tbody tr {
-		background: var(--ui-bg-primary);
+		background: transparent;
 		border-radius: 6px;
-		margin: 1px 0;
+		position: relative;
+	}
+
+	tbody tr::after {
+		content: '';
+		position: absolute;
+		bottom: -1px;
+		left: 12px;
+		right: 12px;
+		height: 1px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 0.5px;
 	}
 
 	tbody tr:hover {
-		background: var(--ui-bg-hover);
+		background: rgba(255, 255, 255, 0.05);
 		border-radius: 6px;
+	}
+
+	tbody tr:hover::after {
+		opacity: 0;
 	}
 
 	/* Selected row enhancement */
@@ -778,5 +907,7 @@
 		border-radius: 6px;
 	}
 
-	
+	tbody tr.selected::after {
+		opacity: 0;
+	}
 </style>

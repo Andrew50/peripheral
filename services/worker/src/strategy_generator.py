@@ -7,11 +7,15 @@ import os
 import json
 import logging
 import asyncio
+import traceback
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
+from datetime import datetime, time
 from typing import Dict, Any, Optional, List
 import re
+import time
+import threading
+from contextlib import contextmanager
 
 from openai import OpenAI
 from validator import SecurityValidator, SecurityError, StrategyComplianceError
@@ -19,6 +23,30 @@ from accessor_strategy_engine import AccessorStrategyEngine
 
 logger = logging.getLogger(__name__)
 
+# Add rate limiting for database operations
+class RateLimiter:
+    def __init__(self, max_requests_per_minute=30):
+        self.max_requests = max_requests_per_minute
+        self.requests = []
+        self.lock = threading.Lock()
+    
+    def can_proceed(self):
+        with self.lock:
+            now = time.time()
+            # Remove requests older than 1 minute
+            self.requests = [req_time for req_time in self.requests if now - req_time < 60]
+            
+            if len(self.requests) < self.max_requests:
+                self.requests.append(now)
+                return True
+            return False
+    
+    def wait_if_needed(self):
+        while not self.can_proceed():
+            time.sleep(1)  # Wait 1 second before retrying
+
+# Global rate limiter for database operations
+db_rate_limiter = RateLimiter(max_requests_per_minute=20)
 
 class StrategyGenerator:
     """Generates and validates trading strategies using OpenAI o3"""
@@ -37,18 +65,85 @@ class StrategyGenerator:
         self.openai_client = OpenAI(api_key=api_key)
         logger.info("OpenAI client initialized successfully")
     
+    def _get_current_filter_values(self) -> Dict[str, List[str]]:
+        """Get current available filter values from database - REQUIRED"""
+        try:
+            # Apply rate limiting to prevent connection storms
+            db_rate_limiter.wait_if_needed()
+            
+            from data_accessors import DataAccessorProvider
+            accessor = DataAccessorProvider()
+            db_values = accessor.get_available_filter_values()
+            
+            # Validate that we got actual data
+            required_keys = ['sectors', 'industries', 'primary_exchanges', 'locales']
+            for key in required_keys:
+                if key not in db_values or not db_values[key]:
+                    raise ValueError(f"Database returned empty {key} list")
+            
+            logger.info(f"✅ Fetched current filter values: {len(db_values['sectors'])} sectors, {len(db_values['industries'])} industries")
+            return db_values
+            
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Could not fetch current filter values from database: {e}")
+            raise RuntimeError(f"Strategy generation requires database connection to get current filter values: {e}") from e
+    
     def _get_system_instruction(self) -> str:
-        """Get system instruction for OpenAI code generation"""
-        return """
-You are a trading strategy generator that creates Python functions using data accessor functions.
+        """Get system instruction for OpenAI code generation with current database filter values"""
+        
+        # Get current filter values from database
+        filter_values = self._get_current_filter_values()
+        
+        # Format filter values for the prompt
+        sectors_str = '", "'.join(filter_values['sectors'])
+        industries_str = '", "'.join(filter_values['industries'])
+        exchanges_str = '", "'.join(filter_values['primary_exchanges'])
+        locales_str = '", "'.join(filter_values['locales'])
+        
+        return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
 - Use data accessor functions with ticker symbols (NOT security IDs):
-  * get_bar_data(timeframe="1d", tickers=["AAPL", "MRNA"], columns=[], min_bars=2) -> numpy array
+  * get_bar_data(timeframe="1d", tickers=["AAPL", "MRNA"], columns=[], min_bars=1, filters={{}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
-  * get_general_data(tickers=["AAPL", "MRNA"], columns=[]) -> pandas DataFrame  
+     
+     SUPPORTED TIMEFRAMES:
+     • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
+     • Custom aggregations: "5m", "10m", "15m", "30m" (from 1-minute data)
+                           "2h", "4h", "6h", "8h", "12h" (from 1-hour data)  
+                           "2w", "3w", "4w" (from 1-week data)
+     
+     TIMEFRAME SELECTION GUIDE:
+     - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
+     - Swing Trading: Use "1h", "4h", "1d" 
+     - Position Trading: Use "1d", "1w", "2w"
+     - Multi-timeframe: Combine different intervals for confirmation
+     
+     IMPORTANT: min_bars cannot exceed 10,000 - use minimum needed:
+       - 1 bar: Simple current patterns (volume spikes, price thresholds)
+       - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
+       - 20+ bars: Technical indicators (moving averages, RSI)
+  * get_bar_data(timeframe="1d", tickers=None, aggregate_mode=True) -> numpy array (for market-wide calculations only where all data is always required for calculations, this argument will block batching during exectuion of the strategy)
+     Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
+  * get_general_data(tickers=["AAPL", "MRNA"], columns=[], filters={{}}) -> pandas DataFrame  
      Columns: ticker, name, sector, industry, market_cap, market, locale, primary_exchange, active, description, cik, total_shares
+
+AVAILABLE FILTERS (use in filters parameter):
+- sector: "{sectors_str}"
+- industry: "{industries_str}"
+- primary_exchange: "{exchanges_str}"
+- locale: "{locales_str}" (us=United States, ca=Canada, mx=Mexico)
+- market_cap_min: float (e.g., 1000000000 for $1B minimum)
+- market_cap_max: float (e.g., 10000000000 for $10B maximum)
+
+FILTER EXAMPLES:
+- Technology stocks: filters={{"sector": "Technology"}}
+- Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}
+- NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}
+- Small cap stocks: filters={{"market_cap_max": 2000000000}}
+
+EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - you don't need to worry about this.
 
 TICKER USAGE:
 - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" 
@@ -56,11 +151,67 @@ TICKER USAGE:
 - For universe-wide strategies, use tickers=None to get all available tickers
 - Return results with 'ticker' field (string), not 'securityid'
 
+CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
+- DO NOT use .tail(1) or .head(1) to limit results per ticker
+- Return every occurrence that meets your criteria across the entire dataset
+- The execution engine will handle filtering for different modes (backtest, screening, alerts)
+- Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
+
+CRITICAL: INSTANCE STRUCTURE
+- DO NOT include 'signal': True field - if returned, it inherently met criteria
+- Include relevant price data: 'open', 'close', 'entry_price' when available
+                - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
+- REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
+
+CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
+- MUST include ALL calculated indicator values that triggered your strategy
+- Examples: 'rsi': 75.2, 'macd': 0.45, 'volume_ratio': 2.3, 'gap_percent': 4.1
+- Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
+- Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
+- Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
+- DO NOT include static thresholds or constants (e.g., 'rsi_threshold': 30)
+- This data is ESSENTIAL for backtesting, analysis, and understanding why signals triggered
+
+CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM - NO BUFFERS
+- min_bars = EXACT number of bars required for calculation, NOT a suggestion
+- Examples: RSI needs 14 bars → min_bars=14, MACD needs 26 bars → min_bars=26
+- NEVER add buffer periods like "need 20 + 5 buffer = 25"
+- If you need multiple indicators, use the MAXIMUM of their individual minimums
+- Example: RSI(14) + SMA(50) strategy → min_bars=50 (not 64, not 55)
+
 ROBUST ERROR HANDLING:
 - Always check if data is None or empty before processing
 - Use proper DataFrame column checks: if 'column_name' in df.columns
 - Handle missing data gracefully with try/except blocks
 - Return empty list [] on any error or missing data
+
+CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
+- Always convert calculated columns to numeric before groupby operations:
+  df['calculated_column'] = pd.to_numeric(df['calculated_column'], errors='coerce')
+- Remove NaN values before quantile operations:
+  df = df.dropna(subset=['calculated_column'])
+- For percentage calculations, ensure no division by zero:
+  df = df[df['denominator'] != 0]
+- Example safe quantile calculation:
+  df['change_pct'] = pd.to_numeric(df['change_pct'], errors='coerce')
+  df = df.dropna(subset=['change_pct'])
+  quantile_val = df.groupby('timestamp')['change_pct'].quantile(0.9)
+
+CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
+- Timestamps returned by get_bar_data() are Unix timestamps in SECONDS (not milliseconds)
+- When converting to datetime, always use unit="s":
+  df['dt'] = pd.to_datetime(df['timestamp'], unit="s")  # CORRECT
+- NEVER use unit="ms" as this will cause incorrect datetime conversions
+- For time-based filtering, convert to datetime first, then use .dt accessor for time operations
+- For market hours (like Friday 3:45-3:55 PM), convert to Eastern Time:
+  df['datetime_et'] = pd.to_datetime(df['timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+
+CRITICAL: X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
+- X-minute bars may not align exactly with specific times like 15:45, 15:55
+- Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
+- For Friday afternoon patterns, look for the closest X-minute bars to target times
+- Example time range filtering:
+  afternoon_bars = df[(df['datetime_et'].dt.time >= time(15, 40)) & (df['datetime_et'].dt.time <= time(16, 0))]
 
 EXAMPLE PATTERNS:
 ```python
@@ -68,117 +219,472 @@ def strategy():
     instances = []
     
     try:
-        # Example 1: Specific ticker strategy (e.g., for MRNA)
-        target_tickers = ["MRNA"]  # Extract from prompt analysis
+        # Example 1: Multi-timeframe momentum strategy using 5-minute and 4-hour data
+        target_tickers = ["AAPL", "MSFT"]  # Extract from prompt analysis
         
-        bar_data = get_bar_data(
-            timeframe="1d",
-            tickers=target_tickers,  # Use specific ticker
-            columns=["ticker", "timestamp", "open", "close", "volume"],
-            min_bars=2  # Only need 2 bars for gap detection (previous close + current open)
+        # Get 5-minute data for short-term momentum (aggregated from 1-minute)
+        bars_5m = get_bar_data(
+            timeframe="5m",  # Custom aggregation: 5-minute bars from 1-minute data
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=5  # Need 5 bars for short-term momentum calculation
         )
         
-        if bar_data is None or len(bar_data) == 0:
+        # Get 4-hour data for trend confirmation (aggregated from 1-hour)  
+        bars_4h = get_bar_data(
+            timeframe="4h",  # Custom aggregation: 4-hour bars from 1-hour data
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=3  # Need 3 bars for trend analysis (current + 2 previous for moving average)
+        )
+        
+        if bars_5m is None or len(bars_5m) == 0 or bars_4h is None or len(bars_4h) == 0:
             return instances
         
-        # Convert to DataFrame for analysis
-        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        # Convert to DataFrames for analysis
+        df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_4h = pd.DataFrame(bars_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
         
-        if len(df) == 0:
+        if len(df_5m) == 0 or len(df_4h) == 0:
             return instances
+        
+        # Analyze each ticker separately
+        for ticker in target_tickers:
+            ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
+            ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp')
             
-        # Sort by timestamp for proper analysis
-        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-        
-        # Calculate indicators with proper error handling
-        df['prev_close'] = df.groupby('ticker')['close'].shift(1)
-        df = df.dropna()  # Remove rows with missing previous close
-        
-        # Apply strategy logic (gap up detection)
-        df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
-        
-        # Filter based on criteria - get most recent signal per ticker
-        signals = df[df['gap_percent'] >= 1.0].groupby('ticker').tail(1)  # Latest signal per ticker
-        
-        # Build results with ticker (not securityid)
-        for _, row in signals.iterrows():
-            instances.append({
-                'ticker': row['ticker'],  # Use ticker string
-                'timestamp': int(row['timestamp']),
-                'signal': True,
-                'gap_percent': float(row['gap_percent'])
-            })
+            if len(ticker_5m) < 5 or len(ticker_4h) < 3:
+                continue
+            
+            # Calculate 5-minute momentum (RSI-like indicator)
+            ticker_5m['price_change'] = ticker_5m['close'].pct_change()
+            recent_momentum = ticker_5m['price_change'].tail(5).mean()
+            
+            # Calculate 4-hour trend (simple moving average)
+            ticker_4h['sma_3'] = ticker_4h['close'].rolling(3).mean()
+            current_price = ticker_4h['close'].iloc[-1]
+            current_sma = ticker_4h['sma_3'].iloc[-1]
+            
+            # Multi-timeframe strategy trigger: 5m momentum + 4h trend alignment
+            if recent_momentum > 0.01 and current_price > current_sma:  # Bullish on both timeframes
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_5m['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    # CRITICAL: Include ALL calculated indicator values
+                    'momentum_5m': float(recent_momentum),
+                    'trend_4h': float(current_price / current_sma - 1),
+                    'sma_3_4h': float(current_sma),
+                    'price_change_5m': float(ticker_5m['price_change'].iloc[-1]),
+                    'score': min(1.0, recent_momentum * 10 + (current_price / current_sma - 1))
+                }})
             
     except Exception as e:
-        # Log error but don't fail - return empty results
-        print(f"Strategy execution error: {e}")
+        print(f"Strategy execution error: {{e}}")
         return []
     
     return instances
 
-# Example 2: Universe-wide strategy with try/except blocks
+# Example 2: Volume breakout - return ALL breakouts, not just latest (BATCHED automatically)
 def strategy():
     instances = []
     
     try:
-        # Get data for all tickers
         bar_data = get_bar_data(
             timeframe="1d",
-            tickers=None,  # All available tickers
+            tickers=None,  # All tickers
+            columns=["ticker", "timestamp", "volume"],
+            min_bars=20  # Need 20 bars for volume average calculation
+        )
+        
+        if bar_data is None or len(bar_data) == 0:
+            return instances
+        
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "volume"])
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+        
+        # Calculate 20-day volume average
+        df['volume_avg_20'] = df.groupby('ticker')['volume'].rolling(20).mean().reset_index(0, drop=True)
+        df['volume_ratio'] = df['volume'] / df['volume_avg_20']
+        
+        # CORRECT: Find ALL volume breakouts (no .tail(1))
+        breakouts = df[df['volume_ratio'] >= 2.0]  # Volume 2x average
+        
+        for _, row in breakouts.iterrows():
+            instances.append({{
+                'ticker': row['ticker'],
+                'timestamp': int(row['timestamp']),
+                'entry_price': float(row.get('close', 0)),  # Use close as entry price
+                # CRITICAL: Include important indicator values that triggered the signal
+                'volume_ratio': float(row['volume_ratio']),
+                'volume': int(row['volume']),
+                'volume_avg_20': int(row['volume_avg_20']),
+                'volume_breakout_strength': float(row['volume_ratio'] - 2.0),  # How much above threshold
+                'score': min(1.0, (row['volume_ratio'] - 2.0) / 3.0)  # Higher ratio = higher score
+            }})
+            
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 3: Sector-specific strategy using filters
+def strategy():
+    instances = []
+    
+    try:
+        # Focus on technology stocks only
+        bar_data = get_bar_data(
+            timeframe="1d",
+            tickers=None,  # All tickers in the sector
             columns=["ticker", "timestamp", "open", "close", "volume"],
-            min_bars=2  # Minimum for detecting a singular timestep
+            min_bars=5,  # Need 5 bars to calculate 5-day price change
+            filters={{"sector": "Technology"}}  # Filter to Technology sector only
         )
         
         if bar_data is None or len(bar_data) == 0:
             return instances
         
         df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
         
-        # Add fundamental data if needed
-        try:
-            fundamental_data = get_general_data(
-                tickers=None,
-                columns=["ticker", "market_cap", "sector", "industry"]  # Valid columns only
-            )
-            
-            if fundamental_data is not None and len(fundamental_data) > 0:
-                df = df.merge(fundamental_data, on='ticker', how='left')
-        except Exception as merge_error:
-            print(f"Warning: Could not merge fundamental data: {merge_error}")
-            # Continue without fundamental data
+        # Calculate 5-day price change for technology stocks
+        df['prev_close_5d'] = df.groupby('ticker')['close'].shift(5)
+        df = df.dropna()
+        df['change_5d_pct'] = ((df['close'] - df['prev_close_5d']) / df['prev_close_5d']) * 100
         
-        # Apply universe-wide strategy logic with error handling
-        try:
-            # Get latest data per ticker for screening (one result per ticker)
-            latest_df = df.groupby('ticker').tail(1)
-            
-            # Apply screening criteria here...
-            filtered_df = latest_df  # Replace with actual filtering logic
-            
-            # Return results with ticker
-            for _, row in filtered_df.iterrows():
-                instances.append({
-                    'ticker': row['ticker'],
-                    'timestamp': int(row['timestamp']),
-                    'signal': True
-                })
-        except Exception as calc_error:
-            print(f"Calculation error: {calc_error}")
-            return []
+        # CRITICAL: Ensure numeric dtype for statistical operations
+        df['change_5d_pct'] = pd.to_numeric(df['change_5d_pct'], errors='coerce')
+        df = df.dropna(subset=['change_5d_pct'])
+        
+        # Find technology stocks with significant moves
+        qualifying_instances = df[df['change_5d_pct'] >= 10.0]  # 10%+ gain over 5 days
+        
+        for _, row in qualifying_instances.iterrows():
+            instances.append({{
+                'ticker': row['ticker'],
+                'timestamp': int(row['timestamp']),
+                'change_5d_pct': float(row['change_5d_pct']),
+                'entry_price': float(row['close']),
+                'score': min(1.0, row['change_5d_pct'] / 20.0)  # Normalized score
+            }})
             
     except Exception as e:
-        print(f"Strategy execution error: {e}")
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 4: RSI + MACD Strategy - DEMONSTRATES PROPER INDICATOR INCLUSION
+def strategy():
+    instances = []
+    
+    try:
+        bar_data = get_bar_data(
+            timeframe="1d",
+            columns=["ticker", "timestamp", "close"],
+            min_bars=26,  # Need exactly 26 bars for MACD calculation (slow EMA period)
+            filters={{"market_cap_min": 1000000000}}  # Large cap only
+        )
+        
+        if bar_data is None or len(bar_data) == 0:
+            return instances
+        
+        df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
+        df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+        
+        # Calculate RSI (14-period)
+        def calculate_rsi(prices, period=14):
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            return 100 - (100 / (1 + rs))
+        
+        # Calculate MACD
+        def calculate_macd(prices):
+            ema_12 = prices.ewm(span=12).mean()
+            ema_26 = prices.ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            signal_line = macd_line.ewm(span=9).mean()
+            histogram = macd_line - signal_line
+            return macd_line, signal_line, histogram, ema_12, ema_26
+        
+        # Apply calculations per ticker
+        for ticker in df['ticker'].unique():
+            ticker_data = df[df['ticker'] == ticker].copy()
+            if len(ticker_data) < 26:
+                continue
+                
+            # Calculate indicators
+            ticker_data['rsi'] = calculate_rsi(ticker_data['close'])
+            macd, signal, histogram, ema_12, ema_26 = calculate_macd(ticker_data['close'])
+            ticker_data['macd'] = macd
+            ticker_data['macd_signal'] = signal
+            ticker_data['macd_histogram'] = histogram
+            ticker_data['ema_12'] = ema_12
+            ticker_data['ema_26'] = ema_26
+            
+            # Strategy trigger: RSI oversold + MACD bullish crossover
+            latest = ticker_data.iloc[-1]
+            prev = ticker_data.iloc[-2]
+            
+            if (latest['rsi'] < 30 and  # RSI oversold
+                latest['macd'] > latest['macd_signal'] and  # MACD above signal
+                prev['macd'] <= prev['macd_signal']):  # Bullish crossover
+                
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(latest['timestamp']),
+                    'entry_price': float(latest['close']),
+                    # CRITICAL: Include ALL calculated indicators - this is the key!
+                    'rsi': round(float(latest['rsi']), 2),
+                    'macd': round(float(latest['macd']), 4),
+                    'macd_signal': round(float(latest['macd_signal']), 4),
+                    'macd_histogram': round(float(latest['macd_histogram']), 4),
+                    'ema_12': round(float(latest['ema_12']), 2),
+                    'ema_26': round(float(latest['ema_26']), 2),
+                    'macd_crossover_strength': float(latest['macd'] - latest['macd_signal']),
+                    'score': min(1.0, (30 - latest['rsi']) / 20 + abs(latest['macd_histogram']) * 10)
+                }})
+                
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 5: Scalping strategy using 1-minute and 5-minute timeframes
+def strategy():
+    instances = []
+    
+    try:
+        # High-frequency scalping using minute-level data
+        target_tickers = ["AAPL", "TSLA", "NVDA"]  # High-volume stocks for scalping
+        
+        # Get 1-minute data for entry detection
+        bars_1m = get_bar_data(
+            timeframe="1m",  # Direct 1-minute table access (fastest)
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=5  # Need 5 minutes for momentum calculation
+        )
+        
+        # Get 5-minute data for trend confirmation  
+        bars_5m = get_bar_data(
+            timeframe="5m",  # Aggregated from 1-minute data
+            tickers=target_tickers,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=2   # Need 2 periods for micro-trend (current vs previous)
+        )
+        
+        if bars_1m is None or len(bars_1m) == 0 or bars_5m is None or len(bars_5m) == 0:
+            return instances
+        
+        df_1m = pd.DataFrame(bars_1m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "close"])
+        
+        for ticker in target_tickers:
+            ticker_1m = df_1m[df_1m['ticker'] == ticker].sort_values('timestamp').tail(5)
+            ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
+            
+            if len(ticker_1m) < 3 or len(ticker_5m) < 2:
+                continue
+            
+            # 1-minute momentum: recent price action
+            recent_high = ticker_1m['high'].max()
+            current_price = ticker_1m['close'].iloc[-1]
+            momentum = (current_price / recent_high) - 1
+            
+            # 5-minute trend confirmation
+            trend_up = ticker_5m['close'].iloc[-1] > ticker_5m['close'].iloc[-2]
+            
+            # Volume spike detection (1-minute)
+            avg_volume = ticker_1m['volume'].mean()
+            current_volume = ticker_1m['volume'].iloc[-1]
+            volume_spike = current_volume > avg_volume * 1.5
+            
+            # Scalping strategy trigger: momentum + trend + volume
+            if momentum > 0.005 and trend_up and volume_spike:  # 0.5%+ momentum with confirmations
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_1m['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'momentum_1m': float(momentum),
+                    'volume_ratio': float(current_volume / avg_volume),
+                    'score': min(1.0, momentum * 100 + (current_volume / avg_volume - 1))
+                }})
+        
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 5: Multi-timeframe swing trading (4-hour and daily)
+def strategy():
+    instances = []
+    
+    try:
+        # Swing trading using 4-hour and daily timeframes
+        bar_data_4h = get_bar_data(
+            timeframe="4h",  # Custom aggregation from 1-hour data
+            tickers=None,    # Screen all stocks
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=14,     # 14 periods for RSI calculation
+            filters={{"sector": "Technology", "market_cap_min": 1000000000}}  # Large-cap tech
+        )
+        
+        bar_data_1d = get_bar_data(
+            timeframe="1d",  # Daily data for longer-term trend
+            tickers=None,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=20,     # 20 days for moving average
+            filters={{"sector": "Technology", "market_cap_min": 1000000000}}
+        )
+        
+        if bar_data_4h is None or len(bar_data_4h) == 0 or bar_data_1d is None or len(bar_data_1d) == 0:
+            return instances
+        
+        df_4h = pd.DataFrame(bar_data_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
+        
+        # Get unique tickers from both datasets
+        common_tickers = set(df_4h['ticker']).intersection(set(df_1d['ticker']))
+        
+        for ticker in common_tickers:
+            ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp').tail(14)
+            ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp').tail(20)
+            
+            if len(ticker_4h) < 10 or len(ticker_1d) < 15:
+                continue
+            
+            # Calculate 4-hour RSI (simplified)
+            price_changes = ticker_4h['close'].pct_change().dropna()
+            gains = price_changes.where(price_changes > 0, 0)
+            losses = -price_changes.where(price_changes < 0, 0)
+            avg_gain = gains.rolling(14).mean().iloc[-1]
+            avg_loss = losses.rolling(14).mean().iloc[-1]
+            rs = avg_gain / avg_loss if avg_loss > 0 else 100
+            rsi_4h = 100 - (100 / (1 + rs))
+            
+            # Calculate daily trend (20-day SMA)
+            sma_20 = ticker_1d['close'].rolling(20).mean().iloc[-1]
+            current_price = ticker_1d['close'].iloc[-1]
+            daily_trend = (current_price / sma_20) - 1
+            
+            # Swing trading strategy: oversold on 4h + uptrend on daily
+            if rsi_4h < 35 and daily_trend > 0.05:  # RSI oversold + 5%+ above SMA
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_4h['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'rsi_4h': float(rsi_4h),
+                    'daily_trend': float(daily_trend),
+                    'score': min(1.0, (35 - rsi_4h) / 35 + daily_trend)
+                }})
+        
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
+        return []
+    
+    return instances
+
+# Example 6: Weekly position trading with 2-week confirmation
+def strategy():
+    instances = []
+    
+    try:
+        # Long-term position trading using weekly timeframes
+        bars_1w = get_bar_data(
+            timeframe="1w",  # Direct weekly table access
+            tickers=None,
+            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
+            min_bars=20,     # Need 20 weeks for high calculation and volume average
+            filters={{"market_cap_min": 10000000000}}  # Large-cap stocks only
+        )
+        
+        bars_2w = get_bar_data(
+            timeframe="2w",  # Custom aggregation from weekly data
+            tickers=None,
+            columns=["ticker", "timestamp", "close"],
+            min_bars=3      # Need 3 bi-weekly periods for trend calculation (current vs 2 periods ago)
+        )
+        
+        if bars_1w is None or len(bars_1w) == 0 or bars_2w is None or len(bars_2w) == 0:
+            return instances
+        
+        df_1w = pd.DataFrame(bars_1w, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
+        df_2w = pd.DataFrame(bars_2w, columns=["ticker", "timestamp", "close"])
+        
+        common_tickers = set(df_1w['ticker']).intersection(set(df_2w['ticker']))
+        
+        for ticker in common_tickers:
+            ticker_1w = df_1w[df_1w['ticker'] == ticker].sort_values('timestamp').tail(20)
+            ticker_2w = df_2w[df_2w['ticker'] == ticker].sort_values('timestamp').tail(3)
+            
+            if len(ticker_1w) < 15 or len(ticker_2w) < 3:
+                continue
+            
+            # Weekly breakout detection
+            recent_high_20w = ticker_1w['high'].max()
+            current_price = ticker_1w['close'].iloc[-1]
+            breakout_strength = (current_price / recent_high_20w) - 1
+            
+            # 2-week trend confirmation  
+            trend_2w = ticker_2w['close'].iloc[-1] / ticker_2w['close'].iloc[-3] - 1
+            
+            # Volume confirmation
+            avg_volume = ticker_1w['volume'].mean()
+            recent_volume = ticker_1w['volume'].iloc[-1]
+            volume_surge = recent_volume > avg_volume * 1.2
+            
+            # Position strategy: breakout + trend + volume
+            if breakout_strength > 0.02 and trend_2w > 0.1 and volume_surge:
+                instances.append({{
+                    'ticker': ticker,
+                    'timestamp': int(ticker_1w['timestamp'].iloc[-1]),
+                    'entry_price': float(current_price),
+                    'breakout_strength': float(breakout_strength),
+                    'trend_2w': float(trend_2w),
+                    'volume_ratio': float(recent_volume / avg_volume),
+                    'score': min(1.0, breakout_strength * 10 + trend_2w + (recent_volume / avg_volume - 1))
+                }})
+        
+    except Exception as e:
+        print(f"Strategy execution error: {{e}}")
         return []
     
     return instances
 ```
 
+COMMON MISTAKES TO AVOID:
+❌ qualifying_instances = df[condition].groupby('ticker').tail(1)  # WRONG - limits to 1 per ticker
+❌ latest_df = df.groupby('ticker').last()  # WRONG - only latest data
+❌ df.drop_duplicates(subset=['ticker'])  # WRONG - removes valid instances
+❌ 'signal': True  # WRONG - unnecessary field, if returned it inherently met criteria
+❌ No 'score' field  # WRONG - score is required for ranking
+❌ aggregate_mode=True for individual stock patterns  # WRONG - use only for market-wide calculations
+
+✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
+✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
+✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
+✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
+✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
+
 PATTERN RECOGNITION:
-- Gap patterns: Compare open vs previous close
-- Volume patterns: Compare current vs historical average using rolling windows
-- Price patterns: Use moving averages, RSI, and technical indicators
-- Breakout patterns: Identify price breakouts above/below key levels
-- Fundamental patterns: Use market cap, sector, industry classification data
+- Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
+  min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
+- Volume patterns: Compare current vs historical average - return ALL volume spikes  
+  min_bars=1 for simple threshold, min_bars=20+ for rolling average
+  Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
+- Price patterns: Use moving averages, RSI - return ALL qualifying instances
+  min_bars=20+ for indicators, Score: Based on instance strength (RSI distance from 50, etc.)
+- Breakout patterns: Identify price breakouts - return ALL breakouts
+  min_bars=2+ for comparison, Score: min(1.0, breakout_strength / max_expected)
+- Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
+  min_bars=1 (current data only), Score: Based on fundamental strength
 
 TICKER EXTRACTION FROM PROMPTS:
 - If prompt mentions specific ticker (e.g., "MRNA gaps up"), use tickers=["MRNA"]
@@ -187,6 +693,7 @@ TICKER EXTRACTION FROM PROMPTS:
 
 SECURITY RULES:
 - Only use whitelisted imports: pandas, numpy, datetime, math
+- CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
 - No file operations, network access, or dangerous functions
 - No exec, eval, or dynamic code execution
 - Use only standard mathematical and data manipulation operations
@@ -201,10 +708,12 @@ RETURN FORMAT:
 - Return List[Dict] where each dict contains:
   * 'ticker': str (e.g., "MRNA", "AAPL")
   * 'timestamp': int (Unix timestamp)
-  * Additional fields as needed for strategy results
+  * 'entry_price': float (price at instance time - open, close, etc.)
+  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance)
+  * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc.)
+- DO NOT include 'signal': True - it's redundant
 
-Generate clean, robust Python code that uses ticker symbols and handles errors gracefully to produce accurate trading signals.
-"""
+Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
@@ -225,7 +734,7 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
             
             # Generate strategy code with retry logic
             logger.info("Generating strategy code with OpenAI o3...")
-            strategy_code, validation_passed = await self._generate_and_validate_strategy(prompt, existing_strategy, max_retries=2)
+            strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
             
             if not strategy_code:
                 return {
@@ -263,15 +772,17 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
                 "error": str(e)
             }
     
-    async def _generate_and_validate_strategy(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
+    async def _generate_and_validate_strategy(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
         """Generate strategy with validation retry logic"""
+        
+        last_validation_error = None
         
         for attempt in range(max_retries + 1):
             try:
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
-                # Generate strategy code (this is NOT async)
-                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt)
+                # Generate strategy code with error context for retries
+                strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error)
                 
                 if not strategy_code:
                     continue
@@ -283,6 +794,7 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
                     logger.info("Strategy validation passed")
                     return strategy_code, True
                 else:
+                    last_validation_error = validation_result['error']
                     logger.warning(f"Validation failed on attempt {attempt + 1}: {validation_result['error']}")
                     if attempt == max_retries:
                         # Return the last generated code even if validation failed
@@ -298,13 +810,18 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
     
     async def _fetch_existing_strategy(self, user_id: int, strategy_id: int) -> Optional[Dict[str, Any]]:
         """Fetch existing strategy for editing"""
+        conn = None
+        cursor = None
         try:
+            logger.info(f"📖 Fetching existing strategy (user_id: {user_id}, strategy_id: {strategy_id})")
+            
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': os.getenv('POSTGRES_DB', 'postgres')
+                'database': os.getenv('POSTGRES_DB', 'postgres'),
+                'connect_timeout': 30
             }
             
             conn = psycopg2.connect(**db_config)
@@ -317,10 +834,9 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
             """, (strategy_id, user_id))
             
             result = cursor.fetchone()
-            cursor.close()
-            conn.close()
             
             if result:
+                logger.info(f"✅ Found existing strategy: {result['name']}")
                 return {
                     'strategyId': result['strategyid'],
                     'name': result['name'],
@@ -328,14 +844,34 @@ Generate clean, robust Python code that uses ticker symbols and handles errors g
                     'prompt': result['prompt'] or '',
                     'pythonCode': result['pythoncode'] or ''
                 }
-            return None
+            else:
+                logger.warning(f"⚠️ No strategy found for user_id {user_id}, strategy_id {strategy_id}")
+                return None
             
         except Exception as e:
-            logger.error(f"Failed to fetch existing strategy: {e}")
+            logger.error(f"❌ Failed to fetch existing strategy: {e}")
+            logger.error(f"📄 Fetch strategy traceback: {traceback.format_exc()}")
             return None
+        finally:
+            # Ensure connections are always closed
+            try:
+                if cursor:
+                    cursor.close()
+                    logger.debug("🔌 Database cursor closed")
+                if conn:
+                    conn.close()
+                    logger.debug("🔌 Database connection closed")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
     
-    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0) -> str:
-        """Generate strategy code using OpenAI with optimized prompts"""
+    def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
+        """
+        Generate strategy code using OpenAI with optimized prompts
+        
+        IMPORTANT: The system instruction emphasizes returning ALL matching instances,
+        not just the latest per ticker. This prevents the .tail(1) bug that was
+        limiting backtest results to only one instance per symbol.
+        """
         try:
             system_instruction = self._get_system_instruction()
             
@@ -355,13 +891,19 @@ Generate the updated strategy function."""
                 if extracted_tickers:
                     ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use tickers={extracted_tickers} in your data accessor calls."
                 
-                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}
+                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}"""
 
-Generate a strategy function that detects this pattern in market data."""
             
-            # Add retry-specific guidance without bloating the prompt
+            # Add retry-specific guidance with error context
             if attempt > 0:
-                user_prompt += f"\n\nNote: Focus on code safety and proper error handling."
+                user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attempt + 1}:"
+                user_prompt += f"\n- Previous attempt failed validation"
+                if last_error:
+                    user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
+                user_prompt += f"\n- Focus on data type safety for pandas operations"
+                user_prompt += f"\n- Use pd.to_numeric() before .quantile() operations"
+                user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
+                user_prompt += f"\n- Ensure proper error handling for edge cases"
             
             # Use only o3 model as requested
             models_to_try = [
@@ -375,26 +917,30 @@ Generate a strategy function that detects this pattern in market data."""
                     logger.info(f"Attempting generation with model: {model_name}")
                     
                     # Adjust parameters for o3 models (similar to o1, they don't support temperature/max_tokens the same way)
-                    if model_name.startswith("o3") or model_name.startswith("o1"):
-                        response = self.openai_client.chat.completions.create(
+                    if model_name.startswith("o3"):
+                        # Set a timeout for the OpenAI API call to prevent hanging
+                        logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 180s)")
+                        
+                        # Use the timeout parameter for OpenAI API calls
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "user", "content": f"{system_instruction}\n\n{user_prompt}"}
-                            ]
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
+                            timeout=180.0  # 3 minute timeout for o3 model
                         )
                     else:
-                        response = self.openai_client.chat.completions.create(
+                        logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
+                        
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "system", "content": system_instruction},
-                                {"role": "user", "content": user_prompt}
-                            ],
-                            temperature=0.1,
-                            max_tokens=max_tokens
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
+                            timeout=120.0  # 2 minute timeout for other models
                         )
                     
-                    strategy_code = response.choices[0].message.content.strip()
-                    
+                    strategy_code = response.output_text
                     # Extract Python code from response
                     strategy_code = self._extract_python_code(strategy_code)
                     
@@ -444,53 +990,117 @@ Generate a strategy function that detects this pattern in market data."""
         return response.strip()
     
     async def _validate_strategy_code(self, strategy_code: str) -> Dict[str, Any]:
-        """Validate strategy code using the security validator and test execution"""
+        """Validate strategy code using the security validator and test execution with comprehensive error handling"""
         try:
+            logger.info(f"🔍 Starting validation of strategy code ({len(strategy_code)} characters)")
+            
             # First, use the existing validator for security checks
-            is_valid = self.validator.validate_code(strategy_code)
+            logger.info("🛡️ Running security validation...")
+            try:
+                is_valid = self.validator.validate_code(strategy_code)
+                logger.info(f"🛡️ Security validation result: {is_valid}")
+            except Exception as security_error:
+                logger.error(f"🚨 Security validation crashed: {security_error}")
+                logger.error(f"📄 Security validation traceback: {traceback.format_exc()}")
+                return {
+                    "valid": False,
+                    "error": f"Security validation crashed: {str(security_error)}"
+                }
             
             if not is_valid:
+                logger.warning("❌ Security validation failed")
                 return {
                     "valid": False,
                     "error": "Security validation failed"
                 }
             
+            logger.info("✅ Security validation passed")
+            
             # Try a quick execution test with the new accessor engine
+            logger.info("🧪 Running execution test...")
             try:
+                # Use fast validation mode with minimal data and short timeout
                 engine = AccessorStrategyEngine()
-                test_result = await engine.execute_screening(
-                    strategy_code=strategy_code,
-                    universe=['AAPL'],  # Test with single symbol
-                    limit=10
+                test_result = await asyncio.wait_for(
+                    engine.execute_validation(
+                        strategy_code=strategy_code
+                    ),
+                    timeout=15.0  # 15 second timeout for fast validation
                 )
                 
+                logger.info(f"🧪 Execution test completed: success={test_result.get('success', False)}")
+                
                 if test_result.get('success', False):
+                    logger.info("✅ Execution test passed")
                     return {
                         "valid": True,
                         "error": None
                     }
                 else:
+                    logger.warning(f"❌ Execution test failed: {test_result.get('error', 'Unknown error')}")
                     return {
                         "valid": False,
                         "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
                     }
                     
-            except Exception as exec_error:
-                logger.warning(f"Execution test failed: {exec_error}")
-                # Still consider valid if security checks passed but execution test failed
-                # (might be due to missing data or other environmental issues)
+            except asyncio.TimeoutError:
+                logger.warning("⏰ Fast validation timed out after 15 seconds")
+                # Timeout in validation mode suggests serious performance issues
                 return {
-                    "valid": True,
-                    "error": f"Warning: Execution test failed: {str(exec_error)}"
+                    "valid": False,
+                    "error": "Validation timeout - strategy may have infinite loops or performance issues"
+                }
+                
+            except Exception as exec_error:
+                error_msg = str(exec_error)
+                logger.warning(f"⚠️ Execution test failed with exception: {exec_error}")
+                logger.warning(f"📄 Execution test traceback: {traceback.format_exc()}")
+                
+                # Classify error types - only allow data-related issues as warnings
+                data_related_errors = [
+                    "no data", "empty dataset", "missing data", "connection", 
+                    "timeout", "network", "database", "redis"
+                ]
+                
+                programming_errors = [
+                    "quantile", "dtype", "syntax", "name", "attribute", 
+                    "type", "index", "key", "value", "division by zero"
+                ]
+                
+                error_lower = error_msg.lower()
+                
+                # If it's a clear programming error, mark as invalid for retry
+                if any(prog_err in error_lower for prog_err in programming_errors):
+                    logger.error(f"🚨 Programming error detected: {error_msg}")
+                    return {
+                        "valid": False,
+                        "error": f"Programming error: {error_msg}"
+                    }
+                
+                # Only allow data-related errors as warnings
+                if any(data_err in error_lower for data_err in data_related_errors):
+                    logger.info(f"💡 Data-related error (allowing as warning): {error_msg}")
+                    return {
+                        "valid": True,
+                        "error": f"Warning: Data-related issue: {error_msg}"
+                    }
+                
+                # Default: treat unknown errors as programming errors
+                logger.error(f"🚨 Unknown error type, treating as programming error: {error_msg}")
+                return {
+                    "valid": False,
+                    "error": f"Programming error: {error_msg}"
                 }
             
         except (SecurityError, StrategyComplianceError) as e:
+            logger.error(f"🚨 Strategy compliance error: {e}")
             return {
                 "valid": False,
                 "error": str(e)
             }
         except Exception as e:
-            logger.error(f"Validation error: {e}")
+            logger.error(f"💥 Unexpected validation error: {e}")
+            logger.error(f"📄 Validation error traceback: {traceback.format_exc()}")
             return {
                 "valid": False,
                 "error": f"Validation failed: {str(e)}"
@@ -544,13 +1154,18 @@ Generate a strategy function that detects this pattern in market data."""
     async def _save_strategy(self, user_id: int, name: str, description: str, prompt: str, 
                            python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
         """Save strategy to database with duplicate name handling"""
+        conn = None
+        cursor = None
         try:
+            logger.info(f"💾 Saving strategy to database (user_id: {user_id}, strategy_id: {strategy_id})")
+            
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
                 'port': os.getenv('DB_PORT', '5432'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', ''),
-                'database': os.getenv('POSTGRES_DB', 'postgres')
+                'database': os.getenv('POSTGRES_DB', 'postgres'),
+                'connect_timeout': 30  # 30 second connection timeout
             }
             
             conn = psycopg2.connect(**db_config)
@@ -592,8 +1207,8 @@ Generate a strategy function that detects this pattern in market data."""
             
             result = cursor.fetchone()
             conn.commit()
-            cursor.close()
-            conn.close()
+            
+            logger.info(f"✅ Strategy saved successfully with ID: {result['strategyid'] if result else 'None'}")
             
             if result:
                 return {
@@ -611,8 +1226,20 @@ Generate a strategy function that detects this pattern in market data."""
                 raise Exception("Failed to save strategy - no result returned")
                 
         except Exception as e:
-            logger.error(f"Failed to save strategy: {e}")
-            raise 
+            logger.error(f"❌ Failed to save strategy: {e}")
+            logger.error(f"📄 Save strategy traceback: {traceback.format_exc()}")
+            raise
+        finally:
+            # Ensure connections are always closed
+            try:
+                if cursor:
+                    cursor.close()
+                    logger.debug("🔌 Database cursor closed")
+                if conn:
+                    conn.close()
+                    logger.debug("🔌 Database connection closed")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}") 
 
     def _extract_tickers_from_prompt(self, prompt: str) -> List[str]:
         """Extract ticker symbols from user prompt"""

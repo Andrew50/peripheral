@@ -162,7 +162,10 @@
 	<div class="tab-navigation">
 		<button
 			class={activeTab === 'filings' ? 'active' : ''}
-			on:click={() => { activeTab = 'filings'; subscribeToGlobalFilings(); }}
+			on:click={() => {
+				activeTab = 'filings';
+				subscribeToGlobalFilings();
+			}}
 		>
 			Global SEC Filings
 		</button>
@@ -243,7 +246,6 @@
 			{/if}
 		</div>
 	{/if}
-
 </div>
 
 <style>

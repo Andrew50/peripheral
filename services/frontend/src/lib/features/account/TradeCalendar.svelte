@@ -32,8 +32,18 @@
 	let errorMessage = writable<string | null>(null);
 
 	const monthNames = [
-		'January', 'February', 'March', 'April', 'May', 'June',
-		'July', 'August', 'September', 'October', 'November', 'December'
+		'January',
+		'February',
+		'March',
+		'April',
+		'May',
+		'June',
+		'July',
+		'August',
+		'September',
+		'October',
+		'November',
+		'December'
 	];
 
 	async function fetchDailyStats(year: number, month: number) {
@@ -46,7 +56,7 @@
 			});
 
 			const statsMap = new Map<string, DailyStat>();
-			response.daily_stats.forEach(stat => {
+			response.daily_stats.forEach((stat) => {
 				statsMap.set(stat.date, stat);
 			});
 			dailyStatsMap.set(statsMap);
@@ -54,7 +64,7 @@
 
 			// Populate weekly stats map
 			const weeklyStatsMap = new Map<string, WeeklyStat>();
-			response.weekly_stats.forEach(stat => {
+			response.weekly_stats.forEach((stat) => {
 				weeklyStatsMap.set(stat.week_start_date, stat);
 			});
 			weeklyStats.set(weeklyStatsMap);
@@ -150,7 +160,6 @@
 		const day = date.getDate().toString().padStart(2, '0');
 		return `${year}-${month}-${day}`;
 	}
-
 </script>
 
 <div class="trade-calendar-container">
@@ -161,7 +170,9 @@
 		<button on:click={() => changeMonth(1)}>&gt;</button>
 		<button on:click={() => changeYear(1)}>&gt;&gt;</button>
 		<div class="monthly-pnl">
-			Monthly P&L: <span class={$monthlyPnl >= 0 ? 'positive' : 'negative'}>${$monthlyPnl.toFixed(2)}</span>
+			Monthly P&L: <span class={$monthlyPnl >= 0 ? 'positive' : 'negative'}
+				>${$monthlyPnl.toFixed(2)}</span
+			>
 		</div>
 	</div>
 
@@ -191,10 +202,16 @@
 								<div class="day-number">{day.getDate()}</div>
 								<div class="day-stats">
 									{#if stat}
-										<div class="pnl" class:positive={stat.total_pnl > 0} class:negative={stat.total_pnl < 0}>
+										<div
+											class="pnl"
+											class:positive={stat.total_pnl > 0}
+											class:negative={stat.total_pnl < 0}
+										>
 											${stat.total_pnl.toFixed(2)}
 										</div>
-										<div class="trade-count">{stat.trade_count} trade{stat.trade_count !== 1 ? 's' : ''}</div>
+										<div class="trade-count">
+											{stat.trade_count} trade{stat.trade_count !== 1 ? 's' : ''}
+										</div>
 									{:else}
 										<div class="pnl">$0.00</div>
 										<div class="trade-count">0 trades</div>
@@ -204,16 +221,24 @@
 						</div>
 					{/each}
 					<!-- Weekly Total Cell - Updated Lookup Logic -->
-					{@const firstDayOfWeek = week.find(d => d !== null)}
-					{@const weekStartDateKey = firstDayOfWeek ? formatDateKey(getWeekStartDate(firstDayOfWeek)) : null}
+					{@const firstDayOfWeek = week.find((d) => d !== null)}
+					{@const weekStartDateKey = firstDayOfWeek
+						? formatDateKey(getWeekStartDate(firstDayOfWeek))
+						: null}
 					{@const weeklyStat = weekStartDateKey ? $weeklyStats.get(weekStartDateKey) : null}
 					<div class="calendar-day weekly-total">
 						{#if weeklyStat}
 							<div class="day-stats">
-								<div class="pnl" class:positive={weeklyStat.total_pnl > 0} class:negative={weeklyStat.total_pnl < 0}>
+								<div
+									class="pnl"
+									class:positive={weeklyStat.total_pnl > 0}
+									class:negative={weeklyStat.total_pnl < 0}
+								>
 									${weeklyStat.total_pnl.toFixed(2)}
 								</div>
-								<div class="trade-count">{weeklyStat.trade_count} trade{weeklyStat.trade_count !== 1 ? 's' : ''}</div>
+								<div class="trade-count">
+									{weeklyStat.trade_count} trade{weeklyStat.trade_count !== 1 ? 's' : ''}
+								</div>
 							</div>
 						{:else}
 							<div class="day-stats">
@@ -345,7 +370,8 @@
 		color: var(--negative, #f44336);
 	}
 
-	.loading-message, .error-message {
+	.loading-message,
+	.error-message {
 		text-align: center;
 		padding: 20px;
 		color: var(--text-secondary, #888);
@@ -364,4 +390,4 @@
 	.weekly-total .day-stats {
 		text-align: right;
 	}
-</style> 
+</style>

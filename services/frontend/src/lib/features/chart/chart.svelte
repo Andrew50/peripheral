@@ -5,7 +5,7 @@
 	import DrawingMenu from './drawingMenu.svelte';
 	import WhyMoving from '$lib/components/whyMoving.svelte';
 
-	import { chartRequest,privateRequest,publicRequest } from '$lib/utils/helpers/backend';
+	import { chartRequest, privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
@@ -39,7 +39,7 @@
 		LineWidth
 	} from 'lightweight-charts';
 	import {
-		calculateRVOL,
+
 		calculateSingleADR,
 		calculateVWAP,
 		calculateMultipleSMAs
@@ -57,7 +57,7 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
+	import { adjustEventsToTradingDays, handleScreenshot, extendedHours } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
 	import {
 		type FilingContext,
@@ -149,7 +149,6 @@
 	let latestCrosshairPositionY = 0;
 	let chartEarliestDataReached = false;
 	let chartLatestDataReached = false;
-	let isLoadingChartData = false;
 	let lastChartQueryDispatchTime = 0;
 	let queuedLoad: Function | null = null;
 	let shiftDown = false;
@@ -199,6 +198,7 @@
 	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
+	let lastFetchedSecurityId: number | null = null;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
 	// Type guards moved to a higher scope
@@ -221,7 +221,6 @@
 
 	// Add new property to track alert lines
 	let alertLines: AlertLine[] = [];
-
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
@@ -248,6 +247,28 @@
 
 	let sessionHighlighting: SessionHighlighting;
 
+	// Function to fetch detailed ticker information including logo
+	function fetchTickerDetails(securityId: number) {
+		if (lastFetchedSecurityId === securityId) return;
+
+		lastFetchedSecurityId = securityId;
+		publicRequest<Record<string, any>>('getTickerMenuDetails', {
+			securityId: securityId
+		})
+			.then((details) => {
+				if (lastFetchedSecurityId === securityId) {
+					// Update currentChartInstance with the detailed information
+					currentChartInstance = {
+						...currentChartInstance,
+						...details
+					};
+				}
+			})
+			.catch((error) => {
+				console.error('Chart component: Error fetching ticker details:', error);
+			});
+	}
+
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
 	let pendingVolumeUpdate: any = null;
@@ -256,7 +277,12 @@
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
-	let isChartSwitching = false; // Track chart switching overlay state
+	let isSwitchingTickers = false; // Track chart switching overlay state
+	let isLoadingAdditionalData = false; // Track if back or forward loading 
+	let latestLoadToken = 0;
+	let activeTickerChangeRequestAbort: AbortController | null = null; 
+
+
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -341,13 +367,6 @@
 		});
 	}
 
-	function extendedHours(timestamp: number): boolean {
-		// Convert timestamp to Eastern Time
-		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
-		const date = new Date(estTimestampSeconds * 1000);
-		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
-		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
-	}
 
 	// Helper function to clear quote lines
 	function clearQuoteLines() {
@@ -373,7 +392,6 @@
 	function processChartDataResponse(response: { bars: BarData[]; isEarliestData: boolean }, inst: ChartQueryDispatch, visibleRange: any): void {
 		const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-					isLoadingChartData = false;
 					queuedLoad = null;
 					return;
 				}
@@ -407,14 +425,33 @@
 						newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
 						newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
 					}
-				} else if (inst.requestType === 'loadAdditionalData') {
-					const latestCandleTime =
-						chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
-					if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
-						newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
-						newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
+				} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
+					// Forward loading: append new data to existing data
+					const existingData = chartCandleSeries.data();
+					const existingVolumeData = chartVolumeSeries.data();
+					
+					
+					if (existingData.length > 0 && newCandleData.length > 0) {
+						const latestCandleTime = existingData[existingData.length - 1]?.time;
+						
+						// Find the first new candle that comes after the latest existing candle
+						let startIndex = 0;
+						for (let i = 0; i < newCandleData.length; i++) {
+							if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
+								startIndex = i;
+								break;
+							}
+						}
+						// Only append truly new data
+						if (startIndex < newCandleData.length) {
+							newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
+							newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
+						} else {
+							newCandleData = existingData as any;
+							newVolumeData = existingVolumeData as any;
+						}
 					}
-				} else if (inst.requestType === 'loadNewTicker') {
+				}  else if (inst.requestType === 'loadNewTicker') {
 					if (inst.includeLastBar == false && !$streamInfo.replayActive) {
 						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
 						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
@@ -455,31 +492,14 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						console.log('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-
-					if (inst.direction == 'forward') {
-						// Only set visible range if both from and to values are valid
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-
-						if (
-							visibleRange &&
-							typeof visibleRange.from === 'number' &&
-							typeof visibleRange.to === 'number'
-						) {
-							chart.timeScale().setVisibleRange({
-								from: visibleRange.from,
-								to: visibleRange.to
-							});
-						}
-					} else if (inst.direction == 'backward') {
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
+					chartCandleSeries.setData(newCandleData);
+					chartVolumeSeries.setData(newVolumeData);
+					if (inst.direction == 'backward') {
 						if (
 							arrowSeries &&
 							inst &&
@@ -677,11 +697,9 @@
 						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
-					isLoadingChartData = false; // Ensure this runs after data is loaded
-
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
-						isChartSwitching = false;
+						isSwitchingTickers = false;
 					}
 					// Trigger Why Moving popup only for new ticker loads
 					if (inst.requestType === 'loadNewTicker') {
@@ -709,28 +727,35 @@
 				if (
 					inst.direction == 'backward' ||
 					inst.requestType == 'loadNewTicker' ||
-					(inst.direction == 'forward' && !isPanning) ||
-					(inst.direction == 'forward' && !isLoadingChartData)
+					inst.direction == 'forward'
 				) {
 					queuedLoad();
 				}
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		if (!inst.ticker || !inst.timeframe || !inst.securityId) {
+			return;
+		}
 		if (inst.requestType === 'loadNewTicker') {
+			latestLoadToken++;
+			activeTickerChangeRequestAbort?.abort();
+			activeTickerChangeRequestAbort = new AbortController();
 			eventSeries.setData([]); // Clear events only when loading new ticker
 			pendingBarUpdate = null;
 			pendingVolumeUpdate = null;
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
+
+		} else if (inst.requestType === 'loadAdditionalData') {
+			isLoadingAdditionalData = true;
 		}
-		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
-			return;
-		}
+		const thisRequestTickerIncrementCount = latestLoadToken;
+		const signal = activeTickerChangeRequestAbort?.signal;
+
 		console.log('backendLoadChartData', inst);
 		const visibleRange = chart.timeScale().getVisibleRange();
-		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
 			$streamInfo.replayActive &&
@@ -747,20 +772,25 @@
 			extendedhours: inst.extendedHours,
 			isreplay: $streamInfo.replayActive,
 			includeSECFilings: get(settings).showFilings
-		})
+		}, false, false, signal)
 			.then((response) => {
+				if (thisRequestTickerIncrementCount !== latestLoadToken) return;
+
 				processChartDataResponse(response, inst, visibleRange);
 			})
-			.catch((error: string) => {
+			.catch((error: Error) => {
+				if (error?.name === 'AbortError' || thisRequestTickerIncrementCount !== latestLoadToken) return;
 				console.error(error);
-
-				isLoadingChartData = false; // Ensure this runs after data is loaded
-
-				// Hide overlay on error
-				if (inst.requestType === 'loadNewTicker') {
-					isChartSwitching = false;
+				isLoadingAdditionalData = false;
+				isSwitchingTickers = false;
+			})
+			.finally(() => {
+				console.log(chartCandleSeries.data().length)
+				if (thisRequestTickerIncrementCount === latestLoadToken) {
+					isLoadingAdditionalData = false;	
+					isSwitchingTickers = false;
 				}
-			});
+			})
 	}
 	function updateLatestQuote(data: QuoteData) {
 		if (!data?.bidPrice || !data?.askPrice) {
@@ -1030,7 +1060,7 @@
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isLoadingChartData ||
+			isSwitchingTickers ||
 			trade.conditions?.some((condition) => excludedConditions.has(condition))
 		) {
 			return;
@@ -1254,7 +1284,7 @@
 
 		// Show overlay for new ticker changes
 		if (newReq.requestType === 'loadNewTicker') {
-			isChartSwitching = true;
+			isSwitchingTickers = true;
 		}
 
 		const securityId =
@@ -1287,6 +1317,11 @@
 		// Update global chart state so other components know about the current chart
 		if (typeof chartId === 'number') {
 			setActiveChart(chartId, currentChartInstance);
+		}
+
+		// Fetch detailed ticker information including logo
+		if (updatedReq.securityId) {
+			fetchTickerDetails(updatedReq.securityId);
 		}
 
 		// Determine if viewing live data based on timestamp
@@ -1337,16 +1372,16 @@
 		if ('trades' in newReq && Array.isArray(newReq.trades)) {
 			updatedReq.trades = newReq.trades;
 		}
+		if (arrowSeries) {
+			arrowSeries.setData([]);
+		}
+
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
 			alertLines.forEach((line) => {
 				chartCandleSeries.removePriceLine(line.line);
 			});
 			alertLines = [];
-		}
-
-		if (arrowSeries) {
-			arrowSeries.setData([]);
 		}
 
 		// Reset session highlighting when changing securities
@@ -1356,7 +1391,7 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 
-		// Use preloaded data if available, otherwise fetch from backend
+		// Use preloaded data (this is from the initial page load on going to /app)
 		if (preloadedResponse) {
 			processChartDataResponse(preloadedResponse, updatedReq, null);
 		} else {
@@ -1791,13 +1826,16 @@
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
 				return;
 			}
+			if (isLoadingAdditionalData || isSwitchingTickers) {
+				return;
+			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
 
 			// Backward loading condition:
 			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
 			// Corrected condition: Check if number of bars to the left is less than the buffer
-			if (logicalRange.from < 20 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
+			if (logicalRange.from < 30 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
@@ -1834,9 +1872,6 @@
 					return;
 				}
 				if ($streamInfo.replayActive) {
-					return;
-				}
-				if (isLoadingChartData) {
 					return;
 				}
 				const lastBar = chartCandleSeries.data().at(-1);
@@ -2046,6 +2081,57 @@
 		selectedEvent = null;
 	}
 
+	// Function to calculate optimal position for event-info popup
+	function calculateEventInfoPosition(containerWidth: number, containerHeight: number) {
+		// Try to get the actual legend element and its dimensions
+		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
+		let legendRight = 300; // Default right edge position
+		let legendBottom = 100; // Default bottom position
+
+		if (legendElement) {
+			const legendRect = legendElement.getBoundingClientRect();
+			const chartContainer = document.querySelector(`#chart_container-${chartId}`);
+			const chartRect = chartContainer?.getBoundingClientRect();
+
+			if (chartRect) {
+				// Calculate legend's right edge and bottom relative to chart container
+				legendRight = legendRect.right - chartRect.left;
+				legendBottom = legendRect.bottom - chartRect.top;
+			}
+		}
+
+		const margin = 10; // Margin from legend and edges
+		const minPopupWidth = 200; // Minimum popup width
+
+		// Calculate available space to the right of legend
+		const availableWidth = containerWidth - legendRight - margin * 2;
+
+		// Set popup width to available space (with min/max constraints)
+		const popupWidth = Math.max(minPopupWidth, Math.min(availableWidth, 350));
+
+		// Position to the right of the legend with margin
+		let leftPosition = legendRight + margin;
+
+		// Ensure popup doesn't go beyond right edge
+		if (leftPosition + popupWidth > containerWidth - margin) {
+			leftPosition = containerWidth - popupWidth - margin;
+		}
+
+		// Ensure popup doesn't go beyond left edge (shouldn't happen but safety check)
+		leftPosition = Math.max(margin, leftPosition);
+
+		// For vertical positioning, start at top but ensure it doesn't go beyond bottom
+		let topPosition = 5;
+		const maxHeight = containerHeight - topPosition - margin;
+
+		return {
+			left: leftPosition,
+			top: topPosition,
+			width: popupWidth,
+			maxHeight: maxHeight
+		};
+	}
+
 	// New interface for the data object
 	interface ChartData {
 		type?: string;
@@ -2131,8 +2217,26 @@
 	<DrawingMenu {drawingMenuProps} />
 
 	<!-- Chart switching overlay -->
-	{#if isChartSwitching}
+	{#if isSwitchingTickers}
 		<div class="chart-switching-overlay"></div>
+	{/if}
+
+	<!-- Company Logo positioned at bottom right where axes meet -->
+	{#if currentChartInstance?.logo || currentChartInstance?.icon}
+		<div class="chart-logo-container">
+			<img
+				src={currentChartInstance.logo || currentChartInstance.icon}
+				alt="{currentChartInstance?.name || 'Company'} logo"
+				class="chart-company-logo"
+			/>
+		</div>
+	{:else if currentChartInstance?.ticker}
+		<!-- Debug fallback: show ticker letter if no logo/icon available -->
+		<div class="chart-logo-container">
+			<div class="chart-ticker-fallback">
+				{currentChartInstance.ticker.charAt(0)}
+			</div>
+		</div>
 	{/if}
 </div>
 
@@ -2141,11 +2245,16 @@
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
+	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
+	{@const containerHeight = chartContainer?.clientHeight || 600}
+	{@const position = calculateEventInfoPosition(width, containerHeight)}
 	<div
 		class="event-info"
 		style="
-            left: {selectedEvent.x}px;
-            top: {selectedEvent.y}px; /* Position relative to marker's y */"
+            left: {position.left}px;
+            top: {position.top}px;
+            width: {position.width}px;
+            max-height: {position.maxHeight}px;"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -2228,33 +2337,28 @@
 		border-radius: 8px;
 		padding: 8px 10px 10px 10px;
 		z-index: 1000;
-		width: 220px;
+		/* Width and max-height now set via inline styles for dynamic sizing */
+		min-width: 200px;
+		overflow-y: auto;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
-		transform-origin: bottom center;
+		transform: scale(0.95);
+		transform-origin: top left;
 		opacity: 0;
 		animation: fadeInDown 0.2s ease-out forwards;
+		word-wrap: break-word;
+		hyphens: auto;
 	}
 	@keyframes fadeInDown {
 		from {
 			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
+			transform: scale(0.85);
 		}
 		to {
 			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
+			transform: scale(1);
 		}
 	}
-	.event-info::after {
-		content: '';
-		position: absolute;
-		top: 100%; /* Position arrow below the box */
-		left: 50%;
-		transform: translateX(-50%);
-		border-width: 8px 8px 0; /* T:8 R:8 B:0 L:8 -> Points Down */
-		border-style: solid;
-		border-color: #252525 transparent transparent transparent; /* Color top border */
-	}
+
 	.event-header {
 		display: flex;
 		align-items: center;
@@ -2279,8 +2383,8 @@
 	}
 	.event-row {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.3rem;
 		padding: 6px 0;
 		border-bottom: 1px solid #444;
 		color: #e0e0e0;
@@ -2294,15 +2398,24 @@
 		font-size: 0.95rem;
 		color: #fff;
 		font-weight: 500;
+		word-wrap: break-word;
+		line-height: 1.3;
 	}
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
-		margin-top: 4px;
+		line-height: 1.2;
+	}
+	.dividend-details {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
 	}
 	.event-actions {
 		display: flex;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: flex-start;
 	}
 	/* Sleek button and filing styles */
 	.btn {
@@ -2345,10 +2458,9 @@
 		color: #fff;
 	}
 	.filing-row {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 0.75rem;
-		align-items: center;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid #444;
 	}
@@ -2356,12 +2468,14 @@
 		font-size: 1rem;
 		font-weight: 600;
 		color: #fff;
+		word-wrap: break-word;
+		line-height: 1.2;
 	}
 	.filing-row .event-actions {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.4rem;
 	}
 	.btn-sm {
 		padding: 0.15rem 0.3rem;
@@ -2391,14 +2505,45 @@
 		}
 	}
 
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
-		}
-		to {
-			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
-		}
+	/* Chart logo styles positioned at bottom right where axes meet */
+	.chart-logo-container {
+		position: absolute;
+		bottom: 2px;
+		right: 2px;
+		z-index: 1000; /* High z-index to appear above chart canvas */
+		pointer-events: none;
+		opacity: 0.85;
+		transition: opacity 0.2s ease;
+		padding: 2px;
+	}
+
+	.chart-logo-container:hover {
+		opacity: 1;
+	}
+
+	.chart-company-logo {
+		height: 18px;
+		max-width: 50px;
+		object-fit: contain;
+		filter: brightness(0.9) contrast(0.95);
+		transition: filter 0.2s ease;
+		display: block;
+	}
+
+	.chart-company-logo:hover {
+		filter: brightness(1) contrast(1);
+	}
+
+	/* Fallback ticker display for debugging */
+	.chart-ticker-fallback {
+		width: 20px;
+		height: 18px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 10px;
+		font-weight: bold;
+		font-family: monospace;
 	}
 </style>
