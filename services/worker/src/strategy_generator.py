@@ -104,7 +104,7 @@ class StrategyGenerator:
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
-- Use data accessor functions with ticker symbols (NOT security IDs):
+- Use data accessor functions with filters (NOT deprecated tickers parameter):
   * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
      
@@ -124,7 +124,7 @@ CRITICAL REQUIREMENTS:
        - 1 bar: Simple current patterns (volume spikes, price thresholds)
        - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
        - 20+ bars: Technical indicators (moving averages, RSI)
-  * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) -> numpy array (for market-wide calculations only where all data is always required for calculations, this argument will block batching during exectuion of the strategy)
+  * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
      Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
   * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
      Columns: ticker, name, sector, industry, market_cap, market, locale, primary_exchange, active, description, cik, total_shares
@@ -147,9 +147,9 @@ FILTER EXAMPLES:
 EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - you don't need to worry about this.
 
 TICKER USAGE:
-- Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" 
+- Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
 - For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
-- For universe-wide strategies, use filters={{}} (no tickers filter) to get all available tickers
+- For universe-wide strategies, use filters={{}} or filters with sector/industry constraints
 - Return results with 'ticker' field (string), not 'securityid'
 
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
@@ -684,8 +684,8 @@ PATTERN RECOGNITION:
   min_bars=1 (current data only), Score: Based on fundamental strength
 
 TICKER EXTRACTION FROM PROMPTS:
-- If prompt mentions specific ticker (e.g., "MRNA gaps up"), use tickers=["MRNA"]
-- If prompt mentions "stocks" or "companies" generally, use tickers=None
+- If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
+- If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
 - Common ticker patterns: AAPL, MRNA, TSLA, AMZN, GOOGL, MSFT, NVDA
 
 SECURITY RULES:

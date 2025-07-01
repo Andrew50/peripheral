@@ -17,42 +17,67 @@ logger = logging.getLogger(__name__)
 
 
 # Mock the data accessor functions for testing
-def mock_get_bar_data(timeframe="1d", tickers=None, columns=None, min_bars=1, filters=None, aggregate_mode=False):
+def mock_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, aggregate_mode=False, extended_hours=False):
     """Mock get_bar_data function for testing"""
     import numpy as np
     
+    # Extract tickers from filters
+    tickers = None
+    if filters and 'tickers' in filters:
+        tickers = filters['tickers']
+        if isinstance(tickers, str):
+            tickers = [tickers]
+    
     if columns is None:
-        columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume", "adj_close"]
+        columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume"]
     
-    # Generate mock data
+    # Generate mock bar data - simplified for testing
+    if tickers:
+        num_symbols = len(tickers)
+    else:
+        num_symbols = 2  # Default mock data for 2 symbols
+        tickers = ["AAPL", "GOOGL"]
+    
+    # Generate data for specified number of bars
+    total_rows = num_symbols * min_bars
+    
     mock_data = []
-    
-    # Use provided tickers or default set
-    if tickers is None:
-        tickers = ["AAPL", "GOOGL", "MSFT"]
-    elif isinstance(tickers, str):
-        tickers = [tickers]
-    
-    for ticker in tickers:
-        for i in range(max(min_bars, 1)):  # Ensure at least 1 bar
-            timestamp = 1700000000 + (i * 86400)  # Mock timestamps
-            row = []
+    for i, ticker in enumerate(tickers[:num_symbols]):
+        for bar in range(min_bars):
+            timestamp = 1609459200 + (bar * 86400)  # Start from 2021-01-01, daily intervals
+            row = [
+                ticker,           # ticker
+                timestamp,        # timestamp
+                100.0 + bar,     # open
+                105.0 + bar,     # high  
+                98.0 + bar,      # low
+                102.0 + bar,     # close
+                1000000 + bar    # volume
+            ]
+            
+            # Filter to requested columns
+            filtered_row = []
             for col in columns:
                 if col == "ticker":
-                    row.append(ticker)
+                    filtered_row.append(row[0])
                 elif col == "timestamp":
-                    row.append(timestamp)
-                elif col in ["open", "high", "low", "close", "adj_close"]:
-                    row.append(100.0 + i)  # Mock prices
+                    filtered_row.append(row[1])
+                elif col == "open":
+                    filtered_row.append(row[2])
+                elif col == "high":
+                    filtered_row.append(row[3])
+                elif col == "low":
+                    filtered_row.append(row[4])
+                elif col == "close":
+                    filtered_row.append(row[5])
                 elif col == "volume":
-                    row.append(1500000 + i * 10000)  # Mock volume > 1M for test
-                else:
-                    row.append(0)
-            mock_data.append(row)
+                    filtered_row.append(row[6])
+            
+            mock_data.append(filtered_row)
     
     return np.array(mock_data, dtype=object)
 
-def mock_get_general_data(tickers=None, columns=None, filters=None):
+def mock_get_general_data(columns=None, filters=None):
     """Mock get_general_data function for testing"""
     import pandas as pd
     

@@ -167,7 +167,7 @@ def strategy():
     tickers = general_data['ticker'].tolist()
     bar_data = get_bar_data(
         timeframe="1d",
-        tickers=tickers,
+        filters={'tickers': tickers},
         columns=["ticker", "timestamp", "close", "volume"],
         min_bars=5
     )
@@ -276,7 +276,7 @@ def strategy():
     tickers = combined_df['ticker'].tolist()
     bar_data = get_bar_data(
         timeframe="1d",
-        tickers=tickers,
+        filters={'tickers': tickers},
         columns=["ticker", "timestamp", "close", "volume"],
         min_bars=10
     )

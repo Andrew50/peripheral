@@ -1301,16 +1301,13 @@ def get_data_accessor() -> DataAccessorProvider:
         _data_accessor = DataAccessorProvider()
     return _data_accessor
 
-def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
-                 columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
+def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
                  aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
     """
     Global function for strategy access to bar data with intelligent batching
     
     Args:
-        timeframe: Data timeframe ('1d', '1h', '5m', etc.')
-        tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities)
-        security_ids: List of security IDs to fetch (deprecated, use tickers instead)
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
         columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
         min_bars: Minimum number of bars required per security
         filters: Dict of filtering criteria for securities table fields:
@@ -1331,41 +1328,14 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
     """
     accessor = get_data_accessor()
     
-    # Handle backward compatibility: convert old tickers parameter to filters
-    if tickers is not None:
-        if filters is None:
-            filters = {}
-        if 'tickers' not in filters:
-            filters['tickers'] = tickers
-            logger.info(f"🔄 Converting deprecated tickers parameter to filters['tickers']")
-    
-    # Debug: Check if this global function is being called with validation context issues
-    if hasattr(accessor, 'execution_context'):
-        context = accessor.execution_context
-        effective_tickers = filters.get('tickers') if filters else None
-        if context.get('mode') == 'validation' and effective_tickers is None and not filters:
-            logger.warning(f"🚨 VALIDATION ISSUE: Global get_bar_data called with no tickers during validation mode!")
-            logger.warning(f"   Context: {context}")
-            logger.warning(f"   This suggests strategy is using global function instead of bound function")
-            # Override for validation to prevent database crash (only when no filters specified)
-            if filters is None:
-                filters = {}
-            filters['tickers'] = context.get('symbols', ['AAPL'])[:1]
-            logger.warning(f"   Emergency override: limiting to {filters['tickers']}")
-        elif context.get('mode') == 'validation' and effective_tickers is None and filters:
-            logger.info(f"🧪 Validation mode: keeping tickers=None with filters - user wants to test filtered strategy")
-    
-    # Use new API
+    # Use new API directly
     return accessor.get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours)
 
-def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None, 
-                     filters: Dict[str, any] = None) -> pd.DataFrame:
+def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) -> pd.DataFrame:
     """
     Global function for strategy access to general security data
     
     Args:
-        tickers: List of ticker symbols to fetch (e.g., ['AAPL', 'MRNA']) (None = all active securities) - DEPRECATED: use filters['tickers'] instead
-        security_ids: List of security IDs to fetch (deprecated, use filters['tickers'] instead)
         columns: Desired columns (None = all available)
         filters: Dict of filtering criteria for securities table fields:
                 - tickers: List[str] (e.g., ['AAPL', 'MRNA']) (None = all active securities)
@@ -1381,19 +1351,6 @@ def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, 
         pandas.DataFrame with general security information
     """
     accessor = get_data_accessor()
-    
-    # Handle backward compatibility: convert old tickers parameter to filters
-    if tickers is not None:
-        if filters is None:
-            filters = {}
-        if 'tickers' not in filters:
-            filters['tickers'] = tickers
-            logger.info(f"🔄 Converting deprecated tickers parameter to filters['tickers']")
-    
-    # The 'security_ids' parameter is deprecated and ignored
-    if security_ids is not None:
-        logger.warning("The 'security_ids' parameter is deprecated and is not used. Please use filters['tickers'].")
-    
     return accessor.get_general_data(columns=columns, filters=filters)
 
 # Legacy wrapper functions for backward compatibility
@@ -1433,10 +1390,10 @@ def get_price_data(symbol: str, timeframe: str = "1d", days: int = 30, extended_
         min_bars = days * bars_per_day
     else:
         min_bars = days  # Default fallback
-    
+
     return get_bar_data(
         timeframe=timeframe,
-        tickers=[symbol],
+        filters={'tickers': [symbol]},
         min_bars=min_bars,
         extended_hours=extended_hours
     )
@@ -1463,10 +1420,10 @@ def get_historical_data(symbol: str, timeframe: str = "1d", periods: int = 30,
     """
     if offset > 0:
         logger.warning(f"get_historical_data: offset parameter ({offset}) is not implemented, ignoring")
-    
+
     return get_bar_data(
         timeframe=timeframe,
-        tickers=[symbol],
+        filters={'tickers': [symbol]},
         min_bars=periods,
         extended_hours=extended_hours
     )
@@ -1507,10 +1464,10 @@ def get_multiple_symbols_data(symbols: List[str], timeframe: str = "1d",
         min_bars = days * bars_per_day
     else:
         min_bars = days  # Default fallback
-    
+
     return get_bar_data(
         timeframe=timeframe,
-        tickers=symbols,
+        filters={'tickers': symbols},
         min_bars=min_bars,
         extended_hours=extended_hours
     ) 
