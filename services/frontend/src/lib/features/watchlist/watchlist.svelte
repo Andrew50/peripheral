@@ -12,7 +12,7 @@
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
-	import { addInstanceToWatchlist as addToWatchlist, selectWatchlist, createNewWatchlist, deleteWatchlist } from './watchlistUtils';
+	import { addInstanceToWatchlist as addToWatchlist, selectWatchlist, createNewWatchlist, deleteWatchlist, addToVisibleTabs, visibleWatchlistIds, initializeVisibleWatchlists } from './watchlistUtils';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -51,32 +51,19 @@
 	let showDropdown = false;
 	
 	// Track visible watchlists for tabs in fixed order
-	let visibleWatchlistIds: number[] = [];
 	
 	// Get all visible watchlists in their fixed positions
-	$: visibleWatchlists = visibleWatchlistIds
+	$: visibleWatchlists = $visibleWatchlistIds
 		.slice(0, 3) // Show max 3 tabs
 		.map(id => $watchlists?.find(w => w.watchlistId === id))
 		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
-	
-	// Add new watchlist to front of visible tabs
-	function addToVisibleTabs(newWatchlistId: number) {
-		if (!newWatchlistId) return;
-		
-		// If it's already visible, do nothing
-		if (visibleWatchlistIds.includes(newWatchlistId)) return;
-		
-		// Add to front and keep max 3 tabs
-		visibleWatchlistIds = [newWatchlistId, ...visibleWatchlistIds].slice(0, 3);
-	}
+
 
 	function newWatchlist() {
 		if (newWatchlistName === '') return;
 
 		createNewWatchlist(newWatchlistName)
-			.then((newWatchlistId: number) => {
-				// Add the new watchlist to the front of visible tabs
-				addToVisibleTabs(newWatchlistId);
+			.then((newWatchlistId: number) => {	
 				newWatchlistName = '';
 				showWatchlistInput = false;
 			})
@@ -187,10 +174,8 @@
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
 	
 	// Initialize visible watchlists when watchlists and currentWatchlistId are available
-	$: if ($watchlists && $watchlists.length > 0 && currentWatchlistId && visibleWatchlistIds.length === 0) {
-		visibleWatchlistIds = $watchlists
-			.slice(0, 3) // Take first 3 watchlists
-			.map(w => w.watchlistId);
+	$: if ($watchlists && $watchlists.length > 0 && currentWatchlistId && $visibleWatchlistIds.length === 0) {
+		initializeVisibleWatchlists($watchlists, currentWatchlistId);
 	}
 	
 	// Handle direct tab switching - maintain fixed positions
@@ -198,7 +183,7 @@
 		if (watchlistId === currentWatchlistId) return;
 		
 		// Check if this watchlist is already visible
-		const isVisible = visibleWatchlistIds.includes(watchlistId);
+		const isVisible = $visibleWatchlistIds.includes(watchlistId);
 		
 		if (isVisible) {
 			// Just switch - no reordering for visible tabs
