@@ -20,9 +20,13 @@ func Update1HourOHLCV(conn *data.Conn) error {
 		// Log completion time for monitoring
 	}()
 
+	today := time.Now().Format("2006-01-02")
+	if time.Now().Hour() < 17 {
+		today = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	}
 
 	// Check latest timestamp in database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	maxDateRows, err := conn.DB.Query(ctx, "SELECT MAX(timestamp) FROM ohlcv_1h")
@@ -48,22 +52,20 @@ func Update1HourOHLCV(conn *data.Conn) error {
 
 	// Set default start date if no existing data
 	if !hasRows || nullableMaxDate == nil || maxDate.IsZero() {
-		// Start from 2 years ago for initial hourly data load
-		maxDate = time.Now().AddDate(-2, 0, 0)
+		// Start from default date for initial hourly data load
+		maxDate = time.Date(2003, 10, 1, 0, 0, 0, 0, time.UTC)
 	}
 
-	// Collect dates to process (last 30 days for hourly data)
+	if maxDate.Format("2006-01-02") == today {
+		return nil // Already up to date
+	}
+
+	// Collect all dates that need to be processed
 	dates := []time.Time{}
-	currentDate := maxDate.Truncate(24 * time.Hour).AddDate(0, 0, 1)
-	endDate := time.Now().Truncate(24 * time.Hour)
+	currentDate := maxDate.AddDate(0, 0, 1)
+	todayTime, _ := time.Parse("2006-01-02", today)
 
-	// Limit to last 30 days for hourly data (more manageable than minute data)
-	thirtyDaysAgo := time.Now().AddDate(0, 0, -30).Truncate(24 * time.Hour)
-	if currentDate.Before(thirtyDaysAgo) {
-		currentDate = thirtyDaysAgo
-	}
-
-	for currentDate.Before(endDate) || currentDate.Equal(endDate) {
+	for currentDate.Before(todayTime) || currentDate.Equal(todayTime) {
 		// Skip weekends (no market data)
 		if currentDate.Weekday() != time.Saturday && currentDate.Weekday() != time.Sunday {
 			dates = append(dates, currentDate)
@@ -79,7 +81,7 @@ func Update1HourOHLCV(conn *data.Conn) error {
 	var securityCache sync.Map
 
 	// Moderate concurrency for hourly data
-	maxConcurrency := 3 // Higher than minute data, lower than daily
+	maxConcurrency := 3
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	var wg sync.WaitGroup
 	errorCh := make(chan error, len(dates))
@@ -158,12 +160,12 @@ func store1HourOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 
 	// Process batches with controlled concurrency
 	var wg sync.WaitGroup
-	maxConcurrency := 1 // Conservative to prevent INSERT deadlocks
+	maxConcurrency := 1 // REDUCED to 1 to prevent deadlocks in TimescaleDB
 	sem := semaphore.NewWeighted(int64(maxConcurrency))
 	errorCh := make(chan error, batchCount)
 
 	// Global context for all goroutines
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) // Moderate timeout for hourly data
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second) // Longer timeout due to reduced concurrency
 	defer cancel()
 
 	// Pre-collect all tickers for this date
@@ -273,13 +275,16 @@ func store1HourOHLCVParallel(conn *data.Conn, ohlcvResponse *models.GetGroupedDa
 				record := item.record
 				securityID := item.securityID
 
+				// Convert Polygon Millis timestamp to time.Time (UTC)
+				tsUTC := time.Time(record.Timestamp).UTC()
+
 				valueStrings = append(valueStrings,
 					fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 						argPosition, argPosition+1, argPosition+2, argPosition+3,
 						argPosition+4, argPosition+5, argPosition+6))
 
 				valueArgs = append(valueArgs,
-					record.Timestamp, securityID, record.Open, record.High,
+					tsUTC, securityID, record.Open, record.High,
 					record.Low, record.Close, record.Volume)
 
 				argPosition += 7

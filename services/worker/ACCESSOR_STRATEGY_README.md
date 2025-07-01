@@ -103,7 +103,7 @@ def strategy():
     # Only fetch data for technology stocks - much more efficient!
     bar_data = get_bar_data(
         timeframe="1d",
-        min_bars=20,
+        min_bars=5,  # Need 5 bars for momentum calculation
         filters={
             'sector': 'Technology',
             'market_cap_min': 1000000000,  # $1B+ market cap
@@ -123,7 +123,7 @@ def strategy():
     # Get both bar data and company info with consistent filtering
     bar_data = get_bar_data(
         timeframe="1d",
-        min_bars=50,
+        min_bars=20,  # Need 20 bars for moving average calculation
         filters={
             'sector': 'Healthcare',
             'market_cap_min': 10000000000  # $10B+ only
@@ -149,7 +149,7 @@ def strategy():
     
     bar_data = get_bar_data(
         timeframe="1d",
-        min_bars=100,
+        min_bars=50,  # Need 50 bars for value analysis calculations
         filters={
             'primary_exchange': 'NASDAQ',
             'market_cap_min': 300000000,   # $300M minimum
@@ -178,13 +178,78 @@ Using filters provides significant performance improvements:
 3. **Market Cap Ranges**: Use both min and max for specific cap ranges
 4. **Sector/Industry Focus**: Focus on specific business areas for targeted strategies
 5. **Exchange Filtering**: Target specific exchanges when relevant
+6. **CRITICAL: Always Include Indicator Values**: Every returned instance MUST include ALL calculated indicator values
+7. **CRITICAL: min_bars Must Be Absolute Minimum**: NO buffers, NO suggestions - exact calculation requirement only
+
+## Instance Return Requirements
+
+**CRITICAL**: When returning instances, you MUST include ALL calculated indicator values that were used to trigger the signal. This is essential for:
+
+- **Backtesting**: Understanding historical performance
+- **Analysis**: Evaluating signal strength and quality
+- **Debugging**: Identifying why signals triggered
+- **Optimization**: Fine-tuning strategy parameters
+
+### Example of Proper Instance Return:
+```python
+# CORRECT: Include ALL calculated values
+instances.append({
+    'ticker': 'AAPL',
+    'timestamp': 1640995200,
+    'entry_price': 150.25,
+    # Include ALL indicator values used (but NOT static thresholds)
+    'rsi': 28.5,
+    'sma_50': 145.20,
+    'volume_ratio': 2.3,
+    'volume_avg_20': 50000000,
+    'gap_percent': 4.2,
+    'macd': 0.45,
+    'macd_signal': 0.38,
+    'score': 0.85
+})
+
+# WRONG: Missing indicator values
+instances.append({
+    'ticker': 'AAPL',
+    'timestamp': 1640995200,
+    'score': 0.85  # Missing all the important data!
+})
+```
+
+## min_bars Calculation Rules
+
+**CRITICAL**: `min_bars` must be the **absolute minimum** bars required for calculation:
+
+### Common Indicator Requirements:
+- **RSI (14-period)**: `min_bars=14`
+- **MACD**: `min_bars=26` (slow EMA period - signal line overlaps)
+- **SMA (20-period)**: `min_bars=20`
+- **Bollinger Bands (20-period)**: `min_bars=20`
+- **Volume Average (20-day)**: `min_bars=20`
+
+### Multiple Indicator Strategies:
+Use the **MAXIMUM** of individual requirements:
+- **RSI + SMA(50)**: `min_bars=50` (not 64, not 55)
+- **MACD + RSI**: `min_bars=26` (not 40, not 30)
+- **Gap detection**: `min_bars=2` (current + previous)
+
+### WRONG Examples:
+```python
+# WRONG: Adding unnecessary buffers
+min_bars=30  # "Need 20 for SMA + 10 buffer"
+min_bars=35  # "Need 26 for MACD + 9 for signal"
+
+# CORRECT: Exact requirements only
+min_bars=20  # Need exactly 20 for SMA
+min_bars=26  # Need exactly 26 for MACD
+```
 
 ## Migration from Legacy System
 
 Old approach (fetches ALL data):
 ```python
 # Inefficient - gets all stocks then filters
-bar_data = get_bar_data(timeframe="1d", min_bars=20)
+bar_data = get_bar_data(timeframe="1d", min_bars=5)
 # Filter in Python (slow)
 tech_stocks = [row for row in bar_data if get_sector(row[0]) == 'Technology']
 ```
@@ -194,7 +259,7 @@ New approach (database-level filtering):
 # Efficient - only gets technology stocks
 bar_data = get_bar_data(
     timeframe="1d", 
-    min_bars=20,
+    min_bars=5,  # Only the minimum bars needed for calculation
     filters={'sector': 'Technology'}
 )
 ```

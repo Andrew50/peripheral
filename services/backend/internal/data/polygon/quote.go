@@ -8,11 +8,13 @@ import (
 	"fmt"
 
 	//	"log"
+	"sync"
 	"time"
 
 	polygon "github.com/polygon-io/client-go/rest"
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
+	"golang.org/x/sync/semaphore"
 )
 
 // var stdoutMutex sync.Mutex
@@ -527,49 +529,14 @@ func GetDailyOHLCVForTicker(ctx context.Context, client *polygon.Client, ticker 
 	}, nil
 }
 
-// GetAllStocks1MinuteOHLCV fetches 1-minute aggregated OHLCV data for all stocks on a given date
+// GetAllStocks1MinuteOHLCV fetches all individual 1-minute OHLCV bars for all stocks on a given date
 func GetAllStocks1MinuteOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
-	on, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing date for 1-minute data: %v", err)
-	}
-	
-	// For 1-minute data, we use ListAggs with minute aggregation
-	// Note: This returns aggregated minute data, not individual minute bars
-	// We'll get a response similar to grouped daily but for minute timeframe
-	params := &models.GetGroupedDailyAggsParams{
-		Date:       models.Date(on),
-		MarketType: "stocks", 
-		Locale:     "us",
-	}
-	
-	// Use the same grouped endpoint but it will aggregate minute data
-	res, err := client.GetGroupedDailyAggs(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("error getting grouped 1-minute aggs: %v", err)
-	}
-	return res, nil
+	return getAggregatedOHLCVForAllStocks(ctx, client, date, 1, "minute")
 }
 
-// GetAllStocks1HourOHLCV fetches 1-hour aggregated OHLCV data for all stocks on a given date  
+// GetAllStocks1HourOHLCV fetches all individual 1-hour OHLCV bars for all stocks on a given date
 func GetAllStocks1HourOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
-	on, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing date for 1-hour data: %v", err)
-	}
-	
-	// For 1-hour data, we use the same approach but with hourly aggregation
-	params := &models.GetGroupedDailyAggsParams{
-		Date:       models.Date(on),
-		MarketType: "stocks",
-		Locale:     "us", 
-	}
-	
-	res, err := client.GetGroupedDailyAggs(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("error getting grouped 1-hour aggs: %v", err)
-	}
-	return res, nil
+	return getAggregatedOHLCVForAllStocks(ctx, client, date, 1, "hour")
 }
 
 // GetAllStocks1WeekOHLCV fetches 1-week aggregated OHLCV data for all stocks for a given week
@@ -578,22 +545,185 @@ func GetAllStocks1WeekOHLCV(ctx context.Context, client *polygon.Client, date st
 	if err != nil {
 		return nil, fmt.Errorf("error parsing date for 1-week data: %v", err)
 	}
-	
+
 	// For weekly data, we need to get the start of the week (Monday)
 	weekStart := on
 	for weekStart.Weekday() != time.Monday {
 		weekStart = weekStart.AddDate(0, 0, -1)
 	}
-	
-	params := &models.GetGroupedDailyAggsParams{
-		Date:       models.Date(weekStart),
-		MarketType: "stocks",
-		Locale:     "us",
-	}
-	
-	res, err := client.GetGroupedDailyAggs(ctx, params)
+
+	return getAggregatedOHLCVForAllStocks(ctx, client, weekStart.Format("2006-01-02"), 1, "week")
+}
+
+// getAggregatedOHLCVForAllStocks is a helper function that fetches OHLCV data for all stocks
+// using the proper timespan and multiplier for different timeframes.
+// For minute/hour data: returns individual bars (not aggregated)
+// For daily data: uses GetGroupedDailyAggs API
+// For weekly data: aggregates daily bars into weekly bars
+func getAggregatedOHLCVForAllStocks(ctx context.Context, client *polygon.Client, date string, multiplier int, timespan string) (*models.GetGroupedDailyAggsResponse, error) {
+	on, err := time.Parse("2006-01-02", date)
 	if err != nil {
-		return nil, fmt.Errorf("error getting grouped 1-week aggs: %v", err)
+		return nil, fmt.Errorf("error parsing date for %s data: %v", timespan, err)
 	}
-	return res, nil
+
+	// For timeframes other than daily, we need to use a different approach
+	// since GetGroupedDailyAggs only supports daily data
+	if timespan == "day" {
+		// Use the original grouped daily aggs for daily data
+		params := &models.GetGroupedDailyAggsParams{
+			Date:       models.Date(on),
+			MarketType: "stocks",
+			Locale:     "us",
+		}
+		res, err := client.GetGroupedDailyAggs(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("error getting grouped daily aggs: %v", err)
+		}
+		return res, nil
+	}
+
+	// For other timeframes (minute, hour, week), we need to aggregate across all tickers
+	// This is a more complex operation that requires getting all tickers first, then aggregating
+
+	// Get all active tickers for the date
+	tickers, err := AllTickersTickerOnly(client, date)
+	if err != nil {
+		return nil, fmt.Errorf("error getting all tickers: %v", err)
+	}
+
+	if tickers == nil || len(*tickers) == 0 {
+		return &models.GetGroupedDailyAggsResponse{
+			ResultsCount: 0,
+			Results:      []models.Agg{},
+		}, nil
+	}
+
+	// Set up date range for the timespan
+	var fromTime, toTime time.Time
+	switch timespan {
+	case "minute":
+		// For minute data, get the entire trading day
+		fromTime = time.Date(on.Year(), on.Month(), on.Day(), 4, 0, 0, 0, time.UTC) // 4 AM ET pre-market
+		toTime = time.Date(on.Year(), on.Month(), on.Day(), 20, 0, 0, 0, time.UTC)  // 8 PM ET post-market
+	case "hour":
+		// For hourly data, get the entire trading day
+		fromTime = time.Date(on.Year(), on.Month(), on.Day(), 4, 0, 0, 0, time.UTC) // 4 AM ET pre-market
+		toTime = time.Date(on.Year(), on.Month(), on.Day(), 20, 0, 0, 0, time.UTC)  // 8 PM ET post-market
+	case "week":
+		// For weekly data, get the entire week (Monday to Friday)
+		fromTime = on                      // Should already be Monday from caller
+		toTime = fromTime.AddDate(0, 0, 4) // Friday of the same week
+		toTime = time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 20, 0, 0, 0, time.UTC)
+	default:
+		return nil, fmt.Errorf("unsupported timespan: %s", timespan)
+	}
+
+	fromMillis := models.Millis(fromTime)
+	toMillis := models.Millis(toTime)
+
+	// Collect aggregated results for all tickers
+	var results []models.Agg
+	var resultsMutex sync.Mutex
+
+	// Use semaphore to limit concurrent API calls
+	const maxConcurrency = 2 // REDUCED from 5 to prevent API rate limits
+	sem := semaphore.NewWeighted(maxConcurrency)
+	var wg sync.WaitGroup
+	errorCh := make(chan error, len(*tickers))
+
+	// Process tickers in batches to avoid overwhelming the API
+	const batchSize = 25 // REDUCED from 50 to be more conservative
+	for i := 0; i < len(*tickers); i += batchSize {
+		end := i + batchSize
+		if end > len(*tickers) {
+			end = len(*tickers)
+		}
+
+		batch := (*tickers)[i:end]
+
+		wg.Add(1)
+		go func(tickerBatch []string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			if err := sem.Acquire(ctx, 1); err != nil {
+				errorCh <- err
+				return
+			}
+			defer sem.Release(1)
+
+			for _, ticker := range tickerBatch {
+				// Get aggregates for this ticker
+				iter, err := GetAggsData(client, ticker, multiplier, timespan, fromMillis, toMillis, 50000, "asc", true)
+				if err != nil {
+					continue // Skip problematic tickers instead of failing entire operation
+				}
+
+				// For minute and hour data, return individual bars (not aggregated)
+				// For week data, aggregate multiple days into a single bar
+				if timespan == "minute" || timespan == "hour" {
+					// Return all individual bars for minute/hour data
+					for iter.Next() {
+						agg := iter.Item()
+						// Set the ticker for each bar
+						agg.Ticker = ticker
+
+						resultsMutex.Lock()
+						results = append(results, agg)
+						resultsMutex.Unlock()
+					}
+				} else {
+					// For weekly data, aggregate the data for this ticker for the timeframe
+					var aggregatedAgg *models.Agg
+
+					for iter.Next() {
+						agg := iter.Item()
+						if aggregatedAgg == nil {
+							// First bar - initialize
+							aggregatedAgg = &models.Agg{
+								Ticker:    ticker,
+								Open:      agg.Open,
+								High:      agg.High,
+								Low:       agg.Low,
+								Close:     agg.Close,
+								Volume:    agg.Volume,
+								Timestamp: agg.Timestamp, // Use first timestamp for the period
+							}
+						} else {
+							// Subsequent bars - aggregate
+							if agg.High > aggregatedAgg.High {
+								aggregatedAgg.High = agg.High
+							}
+							if agg.Low < aggregatedAgg.Low {
+								aggregatedAgg.Low = agg.Low
+							}
+							aggregatedAgg.Close = agg.Close // Last close
+							aggregatedAgg.Volume += agg.Volume
+						}
+					}
+
+					if aggregatedAgg != nil {
+						resultsMutex.Lock()
+						results = append(results, *aggregatedAgg)
+						resultsMutex.Unlock()
+					}
+				}
+			}
+		}(batch)
+	}
+
+	wg.Wait()
+	close(errorCh)
+
+	// Check for any critical errors
+	for err := range errorCh {
+		if err != nil {
+			return nil, fmt.Errorf("error processing tickers: %v", err)
+		}
+	}
+
+	return &models.GetGroupedDailyAggsResponse{
+		ResultsCount: len(results),
+		Results:      results,
+	}, nil
 }

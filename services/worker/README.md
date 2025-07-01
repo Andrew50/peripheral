@@ -94,10 +94,22 @@ The system is designed to force AI models to implement their own technical analy
 ## Available Raw Data Functions
 
 ### Price & Market Data
-- `get_price_data(symbol, timeframe, days)` - Raw OHLCV data
-- `get_historical_data(symbol, timeframe, periods, offset)` - Historical price data with lag
+- `get_price_data(symbol, timeframe, days, extended_hours=False)` - Raw OHLCV data
+- `get_historical_data(symbol, timeframe, periods, offset, extended_hours=False)` - Historical price data with lag
 - `get_security_info(symbol)` - Basic security metadata
-- `get_multiple_symbols_data(symbols, timeframe, days)` - Batch price data
+- `get_multiple_symbols_data(symbols, timeframe, days, extended_hours=False)` - Batch price data
+- `get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode, extended_hours=False)` - Advanced bar data access
+
+#### Extended Hours Support
+The `extended_hours` parameter controls whether to include premarket and after-hours trading data:
+
+- **`extended_hours=False` (default)**: Only regular trading session data (9:30 AM - 4:00 PM ET, Monday-Friday)
+- **`extended_hours=True`**: Includes premarket (4:00 AM - 9:30 AM ET) and after-hours (4:00 PM - 8:00 PM ET) data
+
+**Important Notes:**
+- Extended hours parameter only affects **intraday timeframes** (seconds, minutes, hours)
+- Daily timeframes and above ignore this parameter (no extended hours concept for daily data)
+- Supported intraday timeframes: `1m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`
 
 ### Fundamental Data
 - `get_fundamental_data(symbol, metrics)` - Raw financial metrics
@@ -138,8 +150,11 @@ Strategies receive only raw market data:
 
 ```python
 def classify_symbol(symbol):
-    # Get raw price data
+    # Get raw price data (regular hours only)
     price_data = get_price_data(symbol, timeframe='1d', days=50)
+    
+    # For intraday analysis with extended hours
+    # intraday_data = get_price_data(symbol, timeframe='1h', days=5, extended_hours=True)
     
     # Implement RSI calculation
     def calculate_rsi(prices, period=14):
@@ -186,7 +201,11 @@ def classify_symbol(symbol):
 
 ```python
 def classify_symbol(symbol):
+    # Get daily price data for Bollinger Bands calculation
     price_data = get_price_data(symbol, timeframe='1d', days=50)
+    
+    # Alternative: Get minute data including extended hours for more granular analysis
+    # minute_data = get_price_data(symbol, timeframe='5m', days=2, extended_hours=True)
     
     def calculate_bollinger_bands(prices, period=20, std_dev=2.0):
         if len(prices) < period:

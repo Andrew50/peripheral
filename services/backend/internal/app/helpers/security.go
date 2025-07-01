@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -450,6 +451,11 @@ type GetTickerMenuDetailsResults struct {
 	Industry                    sql.NullString  `json:"industry"`
 	Sector                      sql.NullString  `json:"sector"`
 	TotalShares                 sql.NullInt64   `json:"totalShares"`
+	ShareClassFigi              sql.NullString  `json:"share_class_figi"`
+	SicCode                     sql.NullString  `json:"sic_code"`
+	SicDescription              sql.NullString  `json:"sic_description"`
+	TotalEmployees              sql.NullInt64   `json:"total_employees"`
+	WeightedSharesOutstanding   sql.NullInt64   `json:"weighted_shares_outstanding"`
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
@@ -485,7 +491,12 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 				) 
 				THEN (SELECT total_shares FROM securities WHERE securityId = $1 LIMIT 1)
 				ELSE 0
-			END as total_shares
+			END as total_shares,
+			NULLIF(share_class_figi, '') as share_class_figi,
+			NULLIF(sic_code, '') as sic_code,
+			NULLIF(sic_description, '') as sic_description,
+			total_employees,
+			weighted_shares_outstanding
 		FROM securities 
 		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
 			SELECT MAX(maxDate) 
@@ -511,6 +522,11 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		&results.Industry,
 		&results.Sector,
 		&results.TotalShares,
+		&results.ShareClassFigi,
+		&results.SicCode,
+		&results.SicDescription,
+		&results.TotalEmployees,
+		&results.WeightedSharesOutstanding,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
@@ -531,6 +547,11 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		"industry":                       results.Industry.String,
 		"sector":                         results.Sector.String,
 		"totalShares":                    nil,
+		"share_class_figi":               results.ShareClassFigi.String,
+		"sic_code":                       results.SicCode.String,
+		"sic_description":                results.SicDescription.String,
+		"total_employees":                nil,
+		"weighted_shares_outstanding":    nil,
 	}
 
 	// Only include market_cap if it's valid
@@ -546,6 +567,16 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 	// Only include share_class_shares_outstanding if it's valid
 	if results.ShareClassSharesOutstanding.Valid {
 		response["share_class_shares_outstanding"] = results.ShareClassSharesOutstanding.Int64
+	}
+
+	// Only include total_employees if it's valid
+	if results.TotalEmployees.Valid {
+		response["total_employees"] = results.TotalEmployees.Int64
+	}
+
+	// Only include weighted_shares_outstanding if it's valid
+	if results.WeightedSharesOutstanding.Valid {
+		response["weighted_shares_outstanding"] = results.WeightedSharesOutstanding.Int64
 	}
 
 	return response, nil
@@ -566,6 +597,11 @@ type TickerDetailsResponse struct {
 	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
 	Industry                    string  `json:"industry"`
 	Sector                      string  `json:"sector"`
+	ShareClassFigi              string  `json:"share_class_figi"`
+	SicCode                     string  `json:"sic_code"`
+	SicDescription              string  `json:"sic_description"`
+	TotalEmployees              int64   `json:"total_employees"`
+	WeightedSharesOutstanding   int64   `json:"weighted_shares_outstanding"`
 }
 
 // GetTickerDetails performs operations related to GetTickerDetails functionality.
@@ -606,7 +642,10 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 			return "", nil
 		}
 
-		client := &http.Client{}
+		// Create HTTP client with timeout to prevent hanging
+		client := &http.Client{
+			Timeout: 10 * time.Second, // 10 second timeout
+		}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to create request: %v", err)
@@ -615,22 +654,31 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 
 		resp, err := client.Do(req)
 		if err != nil {
+			// Log timeout errors to console
+			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
+				log.Printf("Timeout error fetching image from %s: %v", url, err)
+			} else {
+				log.Printf("Network error fetching image from %s: %v", url, err)
+			}
 			return "", fmt.Errorf("failed to fetch image: %v", err)
 		}
 		defer resp.Body.Close()
 
 		// Check if the response status is OK
 		if resp.StatusCode != http.StatusOK {
+			log.Printf("HTTP error %d fetching image from %s", resp.StatusCode, url)
 			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
 		}
 
 		imageData, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Printf("Error reading image data from %s: %v", url, err)
 			return "", fmt.Errorf("failed to read image data: %v", err)
 		}
 
 		// If no image data was returned, return empty string
 		if len(imageData) == 0 {
+			log.Printf("Empty image data received from %s", url)
 			return "", fmt.Errorf("empty image data received")
 		}
 
@@ -693,6 +741,11 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		Icon:                        iconBase64,
 		Sector:                      sector,
 		Industry:                    industry,
+		ShareClassFigi:              details.ShareClassFIGI,
+		SicCode:                     details.SICCode,
+		SicDescription:              details.SICDescription,
+		TotalEmployees:              int64(details.TotalEmployees),
+		WeightedSharesOutstanding:   details.WeightedSharesOutstanding,
 	}
 
 	return response, nil

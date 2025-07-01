@@ -110,7 +110,7 @@ You are an expert assistant specializing in translating natural language queries
 8.  **Defaults:**
     *   If no timeframe is specified for a general query, assume `["daily"]`.
     *   If `stocks.universe` isn't specified, use `"all"`.
-    *   If `date_range` is missing, use the past year from the current date. The current date is {{CURRENT_TIME}}.
+    *   If `date_range` is missing, use all available data. Only apply date restrictions when explicitly requested by the user or when specific dates/periods are mentioned (e.g., "in 2023", "from 2020 to present"). The current date is {{CURRENT_TIME}}.
     *   If indicator `input_field` isn't specified, default to `"close"`.
     *   If `logic` for combining conditions isn't specified, use `"AND"`.
     *   If `output_columns` isn't specified, all OHLCV data and indicators are included.

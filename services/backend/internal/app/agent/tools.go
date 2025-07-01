@@ -396,7 +396,7 @@ var (
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Execute a comprehensive historical backtest of a Python trading strategy. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Execution typically takes 30-90 seconds for full market analysis. Use for strategy validation, performance analysis, and generating detailed historical results with optional forward return calculations.",
+				Description: "Execute a comprehensive historical backtest of a Python trading strategy to find all instances where the strategy conditions were met in historical data. Use this after creating a strategy to discover all historical occurrences of patterns, conditions, or comparative analysis. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Returns all historical instances where the strategy criteria matched, along with timestamps, tickers, and relevant data. Execution typically takes 30-90 seconds for full market analysis. Use for finding historical patterns, identifying all occurrences of conditions, comparative analysis over time, and generating detailed historical results with optional forward return calculations.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -593,10 +593,10 @@ var (
 			Function:      wrapWithContext(strategy.DeleteStrategy),
 			StatusMessage: "Deleting strategy...",
 		},
-		"getStrategyFromNaturalLanguage": {
+		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getStrategyFromNaturalLanguage",
-				Description: "Create or edit a Python trading strategy from natural language description using AI code generation. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting, screening, and real-time alerts. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
+				Name:        "runStrategyAgent",
+				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{

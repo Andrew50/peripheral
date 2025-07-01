@@ -121,7 +121,8 @@ class DataAccessorProvider:
 
     def get_bar_data(self, timeframe: str = "1d", tickers: List[str] = None, 
                      columns: List[str] = None, min_bars: int = 1, 
-                     filters: Dict[str, any] = None, aggregate_mode: bool = False) -> np.ndarray:
+                     filters: Dict[str, any] = None, aggregate_mode: bool = False,
+                     extended_hours: bool = False) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
         
@@ -139,7 +140,9 @@ class DataAccessorProvider:
                     - market_cap_max: float (maximum market cap)
                     - active: bool (default True if not specified)
             aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
-            
+            extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                           Only affects intraday timeframes - daily and above ignore this parameter
+                           
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
         """
@@ -164,10 +167,10 @@ class DataAccessorProvider:
             
             if should_batch:
                 logger.info(f"🔄 Using batched data fetching for large dataset")
-                return self._get_bar_data_batched(timeframe, tickers, columns, min_bars, filters)
+                return self._get_bar_data_batched(timeframe, tickers, columns, min_bars, filters, extended_hours)
             else:
                 # Use original method for smaller datasets or when aggregate_mode is True
-                return self._get_bar_data_single(timeframe, tickers, columns, min_bars, filters)
+                return self._get_bar_data_single(timeframe, tickers, columns, min_bars, filters, extended_hours)
                 
         except Exception as e:
             logger.error(f"Error in get_bar_data: {e}")
@@ -194,7 +197,7 @@ class DataAccessorProvider:
     
     def _get_bar_data_batched(self, timeframe: str = "1d", tickers: List[str] = None, 
                             columns: List[str] = None, min_bars: int = 1, 
-                            filters: Dict[str, any] = None) -> np.ndarray:
+                            filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
         """Get bar data using batching approach for large datasets"""
         try:
             batch_size = 1000
@@ -230,7 +233,8 @@ class DataAccessorProvider:
                         tickers=batch_tickers,
                         columns=columns,
                         min_bars=min_bars,
-                        filters=filters
+                        filters=filters,
+                        extended_hours=extended_hours
                     )
                     
                     if batch_result is not None and len(batch_result) > 0:
@@ -289,6 +293,26 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
             
             where_clause = " AND ".join(filter_parts)
             # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
@@ -365,7 +389,7 @@ class DataAccessorProvider:
     
     def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], tickers: List[str] = None, 
                                 columns: List[str] = None, min_bars: int = 1, 
-                                filters: Dict[str, any] = None) -> np.ndarray:
+                                filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
         """
         Get aggregated OHLCV data by combining base timeframe data into custom intervals
         
@@ -394,7 +418,7 @@ class DataAccessorProvider:
                 base_interval_minutes = 7 * 24 * 60  # 1-week source
             else:
                 # Fallback to daily data
-                return self._get_bar_data_single("1d", tickers, columns, min_bars, filters)
+                return self._get_bar_data_single("1d", tickers, columns, min_bars, filters, extended_hours)
             
             # Calculate how many base intervals we need to get enough aggregated bars
             base_bars_needed = min_bars * (interval_minutes // base_interval_minutes)
@@ -413,7 +437,7 @@ class DataAccessorProvider:
             base_data = self._get_bar_data_single(
                 source_timeframe, tickers, 
                 ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"],
-                base_bars_needed, filters
+                base_bars_needed, filters, extended_hours
             )
             
             if base_data is None or len(base_data) == 0:
@@ -564,7 +588,7 @@ class DataAccessorProvider:
     
     def _get_bar_data_single(self, timeframe: str = "1d", tickers: List[str] = None, 
                            columns: List[str] = None, min_bars: int = 1, 
-                           filters: Dict[str, any] = None) -> np.ndarray:
+                           filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
@@ -581,6 +605,8 @@ class DataAccessorProvider:
                     - market_cap_min: float (minimum market cap)
                     - market_cap_max: float (maximum market cap)
                     - active: bool (default True if not specified)
+            extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                           Only affects intraday timeframes - daily and above ignore this parameter
             
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -620,7 +646,7 @@ class DataAccessorProvider:
             if isinstance(timeframe_config, dict):
                 # Custom aggregation needed
                 return self._get_aggregated_bar_data(
-                    timeframe_config, tickers, columns, min_bars, filters
+                    timeframe_config, tickers, columns, min_bars, filters, extended_hours
                 )
             else:
                 # Direct table access
@@ -707,6 +733,26 @@ class DataAccessorProvider:
                     security_filter_parts.append("s.market_cap <= %s")
                     security_params.append(filters['market_cap_max'])
                 
+                if 'sic_code' in filters:
+                    security_filter_parts.append("s.sic_code = %s")
+                    security_params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    security_filter_parts.append("s.total_employees >= %s")
+                    security_params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    security_filter_parts.append("s.total_employees <= %s")
+                    security_params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding >= %s")
+                    security_params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    security_filter_parts.append("s.weighted_shares_outstanding <= %s")
+                    security_params.append(filters['weighted_shares_outstanding_max'])
+                
                 if 'active' in filters:
                     security_filter_parts.append("s.active = %s")
                     security_params.append(filters['active'])
@@ -734,6 +780,26 @@ class DataAccessorProvider:
             # Combine all filter parts
             security_filter = " AND ".join(security_filter_parts)
             
+            # Add extended hours filtering for intraday timeframes
+            extended_hours_filter = ""
+            extended_hours_params = []
+            
+            # Only apply extended hours filtering for intraday timeframes (seconds, minutes, hours)
+            # Daily and above timeframes ignore the extended_hours parameter
+            intraday_timeframes = ["1m", "5m", "10m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h"]
+            if timeframe in intraday_timeframes and not extended_hours:
+                # Filter to regular trading hours only (9:30 AM to 4:00 PM ET)
+                # Use PostgreSQL's EXTRACT function to get hour and minute in ET timezone
+                extended_hours_filter = """AND (
+                    EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') > 9 OR
+                    (EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') = 9 AND 
+                     EXTRACT(MINUTE FROM o.timestamp AT TIME ZONE 'America/New_York') >= 30)
+                ) AND (
+                    EXTRACT(HOUR FROM o.timestamp AT TIME ZONE 'America/New_York') < 16
+                ) AND (
+                    EXTRACT(DOW FROM o.timestamp AT TIME ZONE 'America/New_York') BETWEEN 1 AND 5
+                )"""
+            
             # Build column selection
             select_columns = []
             for col in safe_columns:
@@ -758,6 +824,10 @@ class DataAccessorProvider:
                     where_clause = f"{security_filter} AND {date_filter}"
                 else:
                     where_clause = security_filter
+                
+                # Add extended hours filter if applicable
+                if extended_hours_filter:
+                    where_clause += f" {extended_hours_filter}"
                     
                 order_clause = "s.securityid, o.timestamp ASC"
                 
@@ -787,6 +857,10 @@ class DataAccessorProvider:
                     where_clause = f"{security_filter} AND {date_filter}"
                 else:
                     where_clause = security_filter
+                
+                # Add extended hours filter if applicable
+                if extended_hours_filter:
+                    where_clause += f" {extended_hours_filter}"
                     
                 final_select_clause = ', '.join(final_columns)
                 
@@ -952,6 +1026,26 @@ class DataAccessorProvider:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
                 
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
+                
                 if 'active' in filters:
                     filter_parts.append("active = %s")
                     params.append(filters['active'])
@@ -1010,7 +1104,8 @@ class DataAccessorProvider:
             allowed_columns = {
                 "securityid", "ticker", "name", "sector", "industry", "market", 
                 "primary_exchange", "locale", "active", "description", "cik",
-                "market_cap", "share_class_shares_outstanding"
+                "market_cap", "share_class_shares_outstanding", "share_class_figi",
+                "sic_code", "sic_description", "total_employees", "weighted_shares_outstanding"
             }
             safe_columns = [col for col in columns if col in allowed_columns]
             
@@ -1053,6 +1148,26 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
+                
+                if 'sic_code' in filters:
+                    filter_parts.append("sic_code = %s")
+                    params.append(filters['sic_code'])
+                
+                if 'total_employees_min' in filters:
+                    filter_parts.append("total_employees >= %s")
+                    params.append(filters['total_employees_min'])
+                
+                if 'total_employees_max' in filters:
+                    filter_parts.append("total_employees <= %s")
+                    params.append(filters['total_employees_max'])
+                
+                if 'weighted_shares_outstanding_min' in filters:
+                    filter_parts.append("weighted_shares_outstanding >= %s")
+                    params.append(filters['weighted_shares_outstanding_min'])
+                
+                if 'weighted_shares_outstanding_max' in filters:
+                    filter_parts.append("weighted_shares_outstanding <= %s")
+                    params.append(filters['weighted_shares_outstanding_max'])
                 
                 if 'active' in filters:
                     filter_parts.append("active = %s")
@@ -1107,10 +1222,10 @@ class DataAccessorProvider:
             if final_columns:
                 df = df[final_columns]
             
-            # Use ticker as index if available and securityid was not explicitly requested
-            if "ticker" in df.columns and "securityid" not in safe_columns:
-                df.set_index("ticker", inplace=True)
-            elif "securityid" in df.columns:
+            # IMPORTANT: Don't set ticker as index if it was explicitly requested as a column
+            # Strategies need ticker as a column to iterate over results
+            # Only set securityid as index if it was explicitly requested
+            if "securityid" in safe_columns and "securityid" in df.columns:
                 df.set_index("securityid", inplace=True)
             
             return df
@@ -1132,7 +1247,7 @@ def get_data_accessor() -> DataAccessorProvider:
 
 def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids: List[int] = None,
                  columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
-                 aggregate_mode: bool = False) -> np.ndarray:
+                 aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
     """
     Global function for strategy access to bar data with intelligent batching
     
@@ -1151,6 +1266,8 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
                 - market_cap_max: float (maximum market cap)
                 - active: bool (default True if not specified)
         aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
+                       Only affects intraday timeframes - daily and above ignore this parameter
         
     Returns:
         numpy.ndarray with requested bar data
@@ -1169,7 +1286,7 @@ def get_bar_data(timeframe: str = "1d", tickers: List[str] = None, security_ids:
             logger.warning(f"   Emergency override: limiting to {tickers}")
     
     # Use tickers directly (new preferred approach)
-    return accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode)
+    return accessor.get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode, extended_hours)
 
 def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, columns: List[str] = None, 
                      filters: Dict[str, any] = None) -> pd.DataFrame:
@@ -1200,4 +1317,123 @@ def get_general_data(tickers: List[str] = None, security_ids: List[int] = None, 
     if security_ids is not None and tickers is None:
         logger.warning("The 'security_ids' parameter is deprecated and is not used. Please use 'tickers'.")
     
-    return accessor.get_general_data(tickers=tickers, columns=columns, filters=filters) 
+    return accessor.get_general_data(tickers=tickers, columns=columns, filters=filters)
+
+# Legacy wrapper functions for backward compatibility
+# These functions are mentioned in the README but delegate to get_bar_data()
+
+def get_price_data(symbol: str, timeframe: str = "1d", days: int = 30, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get raw OHLCV data for a single symbol
+    
+    Args:
+        symbol: Ticker symbol (e.g., 'AAPL')
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        days: Number of days of data to fetch (converted to min_bars)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with OHLCV data
+    """
+    # Convert days to approximate min_bars based on timeframe
+    if timeframe == "1d":
+        min_bars = days
+    elif timeframe == "1h":
+        min_bars = days * 6  # Approximate trading hours per day
+    elif timeframe in ["1m", "5m", "15m", "30m"]:
+        # Approximate bars per day for intraday timeframes
+        minutes_per_day = 390  # 6.5 trading hours
+        if timeframe == "1m":
+            bars_per_day = minutes_per_day
+        elif timeframe == "5m":
+            bars_per_day = minutes_per_day // 5
+        elif timeframe == "15m":
+            bars_per_day = minutes_per_day // 15
+        elif timeframe == "30m":
+            bars_per_day = minutes_per_day // 30
+        else:
+            bars_per_day = 390  # Default fallback
+        min_bars = days * bars_per_day
+    else:
+        min_bars = days  # Default fallback
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=[symbol],
+        min_bars=min_bars,
+        extended_hours=extended_hours
+    )
+
+
+def get_historical_data(symbol: str, timeframe: str = "1d", periods: int = 30, 
+                       offset: int = 0, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get historical price data with lag/offset
+    
+    Args:
+        symbol: Ticker symbol (e.g., 'AAPL')
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        periods: Number of periods to fetch
+        offset: Number of periods to offset (lag) - currently not implemented
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with historical OHLCV data
+        
+    Note:
+        The offset parameter is not currently implemented in the underlying system.
+        This function delegates to get_bar_data() for now.
+    """
+    if offset > 0:
+        logger.warning(f"get_historical_data: offset parameter ({offset}) is not implemented, ignoring")
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=[symbol],
+        min_bars=periods,
+        extended_hours=extended_hours
+    )
+
+
+def get_multiple_symbols_data(symbols: List[str], timeframe: str = "1d", 
+                             days: int = 30, extended_hours: bool = False) -> np.ndarray:
+    """
+    Legacy function: Get batch price data for multiple symbols
+    
+    Args:
+        symbols: List of ticker symbols (e.g., ['AAPL', 'MSFT', 'GOOGL'])
+        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
+        days: Number of days of data to fetch (converted to min_bars)
+        extended_hours: If True, include premarket and after-hours data for intraday timeframes
+        
+    Returns:
+        numpy.ndarray with batch OHLCV data
+    """
+    # Convert days to approximate min_bars based on timeframe (same logic as get_price_data)
+    if timeframe == "1d":
+        min_bars = days
+    elif timeframe == "1h":
+        min_bars = days * 6  # Approximate trading hours per day
+    elif timeframe in ["1m", "5m", "15m", "30m"]:
+        # Approximate bars per day for intraday timeframes
+        minutes_per_day = 390  # 6.5 trading hours
+        if timeframe == "1m":
+            bars_per_day = minutes_per_day
+        elif timeframe == "5m":
+            bars_per_day = minutes_per_day // 5
+        elif timeframe == "15m":
+            bars_per_day = minutes_per_day // 15
+        elif timeframe == "30m":
+            bars_per_day = minutes_per_day // 30
+        else:
+            bars_per_day = 390  # Default fallback
+        min_bars = days * bars_per_day
+    else:
+        min_bars = days  # Default fallback
+    
+    return get_bar_data(
+        timeframe=timeframe,
+        tickers=symbols,
+        min_bars=min_bars,
+        extended_hours=extended_hours
+    ) 
