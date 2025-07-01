@@ -456,7 +456,8 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 }
 
 // UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
-func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (*MessageCompletionData, error) {
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall,
+	toolResults []ExecuteResult, suggestedQueries []string, tokenCount TokenCounts) (*MessageCompletionData, error) {
 	// Verify user owns the conversation
 	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
 		return nil, err
@@ -482,7 +483,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		functionCallsJSON,
 		toolResultsJSON,
 		suggestedQueriesJSON,
-		tokenCount,
+		tokenCount.TotalTokenCount,
 		now,
 		"completed",
 		conversationID,

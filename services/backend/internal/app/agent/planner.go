@@ -51,13 +51,6 @@ type FinalResponse struct {
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 
-type TokenCounts struct {
-	InputTokenCount    int64 `json:"input_token_count,omitempty"`
-	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
-	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
-	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
-}
-
 /*
 	func replySchema() *genai.Schema {
 		return &genai.Schema{

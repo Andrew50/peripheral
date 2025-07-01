@@ -478,7 +478,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			// Delete all active rows except the one with the highest securityid
 			_, err := conn.DB.Exec(ctx, `
 				DELETE FROM securities 
-				WHERE securityid NOT IN (
+				WHERE ticker = $1 maxDate IS NULL AND securityid NOT IN (
 					SELECT MIN(securityid) 
 					FROM securities 
 					WHERE ticker = $1 AND maxDate IS NULL
@@ -514,7 +514,6 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			fmt.Printf("failed to get rows with same securityid for ticker %s: %v\n", ticker, err)
 			continue
 		}
-		defer rows.Close()
 
 		// Process the rows to check for overlaps or conflicts
 		var conflictingRows []struct {
@@ -542,6 +541,15 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 				maxDate    *time.Time
 			}{secID, rowTicker, minDate, maxDate})
 		}
+
+		// Check for iteration errors
+		if err = rows.Err(); err != nil {
+			fmt.Printf("error iterating conflicting rows for ticker %s: %v\n", ticker, err)
+		}
+
+		// Explicitly close rows to prevent resource leak
+		rows.Close()
+
 		// Handle conflicts if multiple active rows exist
 		if len(conflictingRows) > 1 {
 			// Check if there are multiple active (maxDate = null) rows

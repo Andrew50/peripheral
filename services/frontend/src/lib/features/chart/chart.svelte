@@ -785,7 +785,6 @@
 				isSwitchingTickers = false;
 			})
 			.finally(() => {
-				console.log(chartCandleSeries.data().length)
 				if (thisRequestTickerIncrementCount === latestLoadToken) {
 					isLoadingAdditionalData = false;	
 					isSwitchingTickers = false;

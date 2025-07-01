@@ -40,6 +40,12 @@ type Citation struct {
 	EndIndex    int    `json:"end_index,omitempty"`
 	PublishDate string `json:"publish_date,omitempty"`
 }
+type TokenCounts struct {
+	InputTokenCount    int64 `json:"input_token_count,omitempty"`
+	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
+	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
+	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
+}
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
@@ -102,10 +108,12 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	var accumulatedThoughts []string
 	planningPrompt := ""
 	maxTurns := 15
-	totalRequestOutputTokenCount := 0
-	totalRequestInputTokenCount := 0
-	totalRequestThoughtsTokenCount := 0
-	totalRequestTokenCount := 0
+	var totalTokenCounts TokenCounts
+	totalTokenCounts.InputTokenCount = 0
+	totalTokenCounts.OutputTokenCount = 0
+	totalTokenCounts.ThoughtsTokenCount = 0
+	totalTokenCounts.TotalTokenCount = 0
+
 	for {
 		// Check if context is cancelled during the planning loop
 		if ctx.Err() != nil {
@@ -150,16 +158,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			totalRequestOutputTokenCount += int(v.TokenCounts.OutputTokenCount)
-			totalRequestInputTokenCount += int(v.TokenCounts.InputTokenCount)
-			totalRequestThoughtsTokenCount += int(v.TokenCounts.ThoughtsTokenCount)
-			totalRequestTokenCount += int(v.TokenCounts.TotalTokenCount)
+			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
+			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
+			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
+			totalTokenCounts.TotalTokenCount += int64(v.TokenCounts.TotalTokenCount)
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalRequestTokenCount)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
 			if err != nil {
 				return QueryResponse{
 					ContentChunks:  []ContentChunk{},
@@ -185,7 +193,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 
 			// Handle result discarding if specified in the plan
-			if len(v.DiscardResults) > 0 {
+			if len(v.DiscardResults) > 0 && v.Stage != StageFinishedExecuting {
 				// Create a map for quick lookup of IDs to discard
 				discardMap := make(map[int64]bool)
 				for _, id := range v.DiscardResults {
@@ -267,10 +275,10 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					}, err
 				}
 
-				totalRequestOutputTokenCount += int(finalResponse.TokenCounts.OutputTokenCount)
-				totalRequestInputTokenCount += int(finalResponse.TokenCounts.InputTokenCount)
-				totalRequestThoughtsTokenCount += int(finalResponse.TokenCounts.ThoughtsTokenCount)
-				totalRequestTokenCount += int(finalResponse.TokenCounts.TotalTokenCount)
+				totalTokenCounts.OutputTokenCount += int64(finalResponse.TokenCounts.OutputTokenCount)
+				totalTokenCounts.InputTokenCount += int64(finalResponse.TokenCounts.InputTokenCount)
+				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
+				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
@@ -279,7 +287,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				allResults := append(activeResults, discardedResults...)
 
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
 					return QueryResponse{
 						ContentChunks:  []ContentChunk{},
