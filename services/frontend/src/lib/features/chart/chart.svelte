@@ -39,7 +39,7 @@
 		LineWidth
 	} from 'lightweight-charts';
 	import {
-		calculateRVOL,
+
 		calculateSingleADR,
 		calculateVWAP,
 		calculateMultipleSMAs
@@ -57,7 +57,7 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
+	import { adjustEventsToTradingDays, handleScreenshot, extendedHours } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
 	import {
 		type FilingContext,
@@ -149,7 +149,6 @@
 	let latestCrosshairPositionY = 0;
 	let chartEarliestDataReached = false;
 	let chartLatestDataReached = false;
-	let isLoadingChartData = false;
 	let lastChartQueryDispatchTime = 0;
 	let queuedLoad: Function | null = null;
 	let shiftDown = false;
@@ -278,7 +277,12 @@
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
-	let isChartSwitching = false; // Track chart switching overlay state
+	let isSwitchingTickers = false; // Track chart switching overlay state
+	let isLoadingAdditionalData = false; // Track if back or forward loading 
+	let latestLoadToken = 0;
+	let activeTickerChangeRequestAbort: AbortController | null = null; 
+
+
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -363,13 +367,6 @@
 		});
 	}
 
-	function extendedHours(timestamp: number): boolean {
-		// Convert timestamp to Eastern Time
-		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
-		const date = new Date(estTimestampSeconds * 1000);
-		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
-		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
-	}
 
 	// Helper function to clear quote lines
 	function clearQuoteLines() {
@@ -395,7 +392,6 @@
 	function processChartDataResponse(response: { bars: BarData[]; isEarliestData: boolean }, inst: ChartQueryDispatch, visibleRange: any): void {
 		const barDataList = response.bars;
 				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-					isLoadingChartData = false;
 					queuedLoad = null;
 					return;
 				}
@@ -429,14 +425,33 @@
 						newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
 						newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
 					}
-				} else if (inst.requestType === 'loadAdditionalData') {
-					const latestCandleTime =
-						chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
-					if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
-						newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
-						newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
+				} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
+					// Forward loading: append new data to existing data
+					const existingData = chartCandleSeries.data();
+					const existingVolumeData = chartVolumeSeries.data();
+					
+					
+					if (existingData.length > 0 && newCandleData.length > 0) {
+						const latestCandleTime = existingData[existingData.length - 1]?.time;
+						
+						// Find the first new candle that comes after the latest existing candle
+						let startIndex = 0;
+						for (let i = 0; i < newCandleData.length; i++) {
+							if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
+								startIndex = i;
+								break;
+							}
+						}
+						// Only append truly new data
+						if (startIndex < newCandleData.length) {
+							newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
+							newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
+						} else {
+							newCandleData = existingData as any;
+							newVolumeData = existingVolumeData as any;
+						}
 					}
-				} else if (inst.requestType === 'loadNewTicker') {
+				}  else if (inst.requestType === 'loadNewTicker') {
 					if (inst.includeLastBar == false && !$streamInfo.replayActive) {
 						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
 						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
@@ -477,31 +492,14 @@
 					if (inst.direction == 'backward') {
 						chartEarliestDataReached = response.isEarliestData;
 					} else if (inst.direction == 'forward') {
-						console.log('chartLatestDataReached');
 						chartLatestDataReached = true;
 					}
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-
-					if (inst.direction == 'forward') {
-						// Only set visible range if both from and to values are valid
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-
-						if (
-							visibleRange &&
-							typeof visibleRange.from === 'number' &&
-							typeof visibleRange.to === 'number'
-						) {
-							chart.timeScale().setVisibleRange({
-								from: visibleRange.from,
-								to: visibleRange.to
-							});
-						}
-					} else if (inst.direction == 'backward') {
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
+					chartCandleSeries.setData(newCandleData);
+					chartVolumeSeries.setData(newVolumeData);
+					if (inst.direction == 'backward') {
 						if (
 							arrowSeries &&
 							inst &&
@@ -699,11 +697,9 @@
 						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
 					}
-					isLoadingChartData = false; // Ensure this runs after data is loaded
-
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
-						isChartSwitching = false;
+						isSwitchingTickers = false;
 					}
 					// Trigger Why Moving popup only for new ticker loads
 					if (inst.requestType === 'loadNewTicker') {
@@ -731,28 +727,35 @@
 				if (
 					inst.direction == 'backward' ||
 					inst.requestType == 'loadNewTicker' ||
-					(inst.direction == 'forward' && !isPanning) ||
-					(inst.direction == 'forward' && !isLoadingChartData)
+					inst.direction == 'forward'
 				) {
 					queuedLoad();
 				}
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		if (!inst.ticker || !inst.timeframe || !inst.securityId) {
+			return;
+		}
 		if (inst.requestType === 'loadNewTicker') {
+			latestLoadToken++;
+			activeTickerChangeRequestAbort?.abort();
+			activeTickerChangeRequestAbort = new AbortController();
 			eventSeries.setData([]); // Clear events only when loading new ticker
 			pendingBarUpdate = null;
 			pendingVolumeUpdate = null;
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
+
+		} else if (inst.requestType === 'loadAdditionalData') {
+			isLoadingAdditionalData = true;
 		}
-		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
-			return;
-		}
+		const thisRequestTickerIncrementCount = latestLoadToken;
+		const signal = activeTickerChangeRequestAbort?.signal;
+
 		console.log('backendLoadChartData', inst);
 		const visibleRange = chart.timeScale().getVisibleRange();
-		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
 			$streamInfo.replayActive &&
@@ -769,20 +772,25 @@
 			extendedhours: inst.extendedHours,
 			isreplay: $streamInfo.replayActive,
 			includeSECFilings: get(settings).showFilings
-		})
+		}, false, false, signal)
 			.then((response) => {
+				if (thisRequestTickerIncrementCount !== latestLoadToken) return;
+
 				processChartDataResponse(response, inst, visibleRange);
 			})
-			.catch((error: string) => {
+			.catch((error: Error) => {
+				if (error?.name === 'AbortError' || thisRequestTickerIncrementCount !== latestLoadToken) return;
 				console.error(error);
-
-				isLoadingChartData = false; // Ensure this runs after data is loaded
-
-				// Hide overlay on error
-				if (inst.requestType === 'loadNewTicker') {
-					isChartSwitching = false;
+				isLoadingAdditionalData = false;
+				isSwitchingTickers = false;
+			})
+			.finally(() => {
+				console.log(chartCandleSeries.data().length)
+				if (thisRequestTickerIncrementCount === latestLoadToken) {
+					isLoadingAdditionalData = false;	
+					isSwitchingTickers = false;
 				}
-			});
+			})
 	}
 	function updateLatestQuote(data: QuoteData) {
 		if (!data?.bidPrice || !data?.askPrice) {
@@ -1052,7 +1060,7 @@
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isLoadingChartData ||
+			isSwitchingTickers ||
 			trade.conditions?.some((condition) => excludedConditions.has(condition))
 		) {
 			return;
@@ -1276,7 +1284,7 @@
 
 		// Show overlay for new ticker changes
 		if (newReq.requestType === 'loadNewTicker') {
-			isChartSwitching = true;
+			isSwitchingTickers = true;
 		}
 
 		const securityId =
@@ -1364,16 +1372,16 @@
 		if ('trades' in newReq && Array.isArray(newReq.trades)) {
 			updatedReq.trades = newReq.trades;
 		}
+		if (arrowSeries) {
+			arrowSeries.setData([]);
+		}
+
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
 			alertLines.forEach((line) => {
 				chartCandleSeries.removePriceLine(line.line);
 			});
 			alertLines = [];
-		}
-
-		if (arrowSeries) {
-			arrowSeries.setData([]);
 		}
 
 		// Reset session highlighting when changing securities
@@ -1383,7 +1391,7 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 
-		// Use preloaded data if available, otherwise fetch from backend
+		// Use preloaded data (this is from the initial page load on going to /app)
 		if (preloadedResponse) {
 			processChartDataResponse(preloadedResponse, updatedReq, null);
 		} else {
@@ -1818,13 +1826,16 @@
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
 				return;
 			}
+			if (isLoadingAdditionalData || isSwitchingTickers) {
+				return;
+			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
 
 			// Backward loading condition:
 			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
 			// Corrected condition: Check if number of bars to the left is less than the buffer
-			if (logicalRange.from < 20 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
+			if (logicalRange.from < 30 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
@@ -1861,9 +1872,6 @@
 					return;
 				}
 				if ($streamInfo.replayActive) {
-					return;
-				}
-				if (isLoadingChartData) {
 					return;
 				}
 				const lastBar = chartCandleSeries.data().at(-1);
@@ -2209,7 +2217,7 @@
 	<DrawingMenu {drawingMenuProps} />
 
 	<!-- Chart switching overlay -->
-	{#if isChartSwitching}
+	{#if isSwitchingTickers}
 		<div class="chart-switching-overlay"></div>
 	{/if}
 

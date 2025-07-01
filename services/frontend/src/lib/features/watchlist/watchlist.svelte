@@ -4,7 +4,6 @@
 	import type { Instance, Watchlist } from '$lib/utils/types/types';
 	import { onMount, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import {
 		flagWatchlistId,
 		watchlists,
@@ -16,7 +15,7 @@
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
-	import { addInstanceToWatchlist as addToWatchlist } from './watchlistUtils';
+	import { addInstanceToWatchlist as addToWatchlist, selectWatchlist } from './watchlistUtils';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -75,11 +74,12 @@
 	function getWatchlistInitial(name: string): string {
 		return name.charAt(0).toUpperCase();
 	}
+
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
 	<!-- Shortcut buttons -->
-	<div class="shortcut-container">
+	<div class="watchlist-shortcuts-container">
 		<div class="watchlist-shortcuts">
 			{#if Array.isArray($watchlists)}
 				{#each $watchlists as watchlist}
@@ -88,6 +88,7 @@
 							? 'active'
 							: ''}"
 						title={watchlist.watchlistName}
+						on:click={() => selectWatchlist(String(watchlist.watchlistId))}
 					>
 						{#if watchlist.watchlistName.toLowerCase() === 'flag'}
 							<span class="flag-shortcut-icon">
@@ -113,6 +114,17 @@
 		</div>
 	</div>
 
+	<!-- Add Symbol button -->
+	<div class="add-symbol-container">
+		<button
+			class="add-symbol-button"
+			title="Add Symbol"
+			on:click={() => addToWatchlist($globalCurrentWatchlistId)}
+		>
+			+
+		</button>
+	</div>
+
 	<!-- Wrap List component for scrolling -->
 	<div class="list-scroll-container">
 		<WatchlistList
@@ -124,9 +136,9 @@
 </div>
 
 <style>
-	.shortcut-container {
+	.watchlist-shortcuts-container {
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
 		align-items: center;
 		padding: 12px;
 		width: 100%;
@@ -136,6 +148,37 @@
 		display: flex;
 		gap: 6px;
 		flex-wrap: wrap;
+	}
+
+	.add-symbol-container {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		padding: 0 12px 8px 12px;
+		width: 100%;
+	}
+
+	.add-symbol-button {
+		padding: 6px 8px;
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		min-width: 32px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: none;
+	}
+
+	.add-symbol-button:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: #ffffff;
 	}
 
 	.shortcut-button {
@@ -177,7 +220,7 @@
 		background: transparent;
 		border-radius: 0;
 		overflow: visible;
-		padding: clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 1rem);
+		padding: 0;
 	}
 
 	:global(.default-select) {
@@ -216,33 +259,14 @@
 	/* New style for the list container */
 	.list-scroll-container {
 		flex-grow: 1; /* Take remaining vertical space */
-		overflow-y: auto; /* Allow vertical scrolling */
+		overflow: visible; /* Remove scrolling from this container */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		padding: 4px;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
-	}
-
-	/* Custom scrollbar for WebKit browsers */
-	.list-scroll-container::-webkit-scrollbar {
-		width: 6px; /* Width of the scrollbar */
-	}
-
-	.list-scroll-container::-webkit-scrollbar-track {
-		background: transparent; /* Transparent background */
-		border-radius: 3px;
-	}
-
-	.list-scroll-container::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent white */
-		border-radius: 3px;
-		border: 1px solid transparent; /* Creates padding around thumb */
-		background-clip: content-box;
-	}
-
-	.list-scroll-container::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.4); /* Slightly more opaque on hover */
+		padding: 0;
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* Shortcut flag icon styling */

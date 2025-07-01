@@ -106,54 +106,113 @@ CREATE INDEX IF NOT EXISTS idx_ohlcv_1w_securityid ON ohlcv_1w (securityid);
 CREATE INDEX IF NOT EXISTS idx_ohlcv_1w_timestamp ON ohlcv_1w ("timestamp" DESC);
 CREATE INDEX IF NOT EXISTS idx_ohlcv_1w_security_time ON ohlcv_1w (securityid, "timestamp" DESC);
 ------------------------------------------------------------------
--- 4. Add compression policies for optimal storage (optional)
+-- 4. Enable columnstore before adding compression policies
+------------------------------------------------------------------
+-- Enable columnstore on each hypertable (required for compression policies)
+DO $$ BEGIN -- Enable columnstore on ohlcv_1m if not already enabled
+BEGIN
+ALTER TABLE ohlcv_1m
+SET (
+        timescaledb.compress,
+        timescaledb.compress_orderby = 'timestamp DESC',
+        timescaledb.compress_segmentby = 'securityid'
+    );
+EXCEPTION
+WHEN duplicate_object THEN NULL;
+-- Table already has compression enabled
+WHEN others THEN RAISE NOTICE 'Could not enable compression on ohlcv_1m: %',
+SQLERRM;
+END;
+-- Enable columnstore on ohlcv_1h if not already enabled
+BEGIN
+ALTER TABLE ohlcv_1h
+SET (
+        timescaledb.compress,
+        timescaledb.compress_orderby = 'timestamp DESC',
+        timescaledb.compress_segmentby = 'securityid'
+    );
+EXCEPTION
+WHEN duplicate_object THEN NULL;
+-- Table already has compression enabled
+WHEN others THEN RAISE NOTICE 'Could not enable compression on ohlcv_1h: %',
+SQLERRM;
+END;
+-- Enable columnstore on ohlcv_1w if not already enabled
+BEGIN
+ALTER TABLE ohlcv_1w
+SET (
+        timescaledb.compress,
+        timescaledb.compress_orderby = 'timestamp DESC',
+        timescaledb.compress_segmentby = 'securityid'
+    );
+EXCEPTION
+WHEN duplicate_object THEN NULL;
+-- Table already has compression enabled
+WHEN others THEN RAISE NOTICE 'Could not enable compression on ohlcv_1w: %',
+SQLERRM;
+END;
+END $$;
+------------------------------------------------------------------
+-- 5. Add compression policies for optimal storage
 ------------------------------------------------------------------
 -- Enable compression on older chunks for space efficiency
 -- Note: Compression policies require columnstore to be enabled
 -- 1-minute data: compress after 7 days
-DO $$ BEGIN
-SELECT add_compression_policy('ohlcv_1m', INTERVAL '7 days');
+DO $$ BEGIN BEGIN PERFORM add_compression_policy('ohlcv_1m', INTERVAL '7 days');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Compression policy for ohlcv_1m skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add compression policy for ohlcv_1m: %',
 SQLERRM;
+END;
 END $$;
 -- 1-hour data: compress after 30 days  
-DO $$ BEGIN
-SELECT add_compression_policy('ohlcv_1h', INTERVAL '30 days');
+DO $$ BEGIN BEGIN PERFORM add_compression_policy('ohlcv_1h', INTERVAL '30 days');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Compression policy for ohlcv_1h skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add compression policy for ohlcv_1h: %',
 SQLERRM;
+END;
 END $$;
 -- 1-week data: compress after 90 days
-DO $$ BEGIN
-SELECT add_compression_policy('ohlcv_1w', INTERVAL '90 days');
+DO $$ BEGIN BEGIN PERFORM add_compression_policy('ohlcv_1w', INTERVAL '90 days');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Compression policy for ohlcv_1w skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add compression policy for ohlcv_1w: %',
 SQLERRM;
+END;
 END $$;
 ------------------------------------------------------------------
--- 5. Add retention policies for data lifecycle management (optional)
+-- 6. Add retention policies for data lifecycle management
 ------------------------------------------------------------------
 -- 1-minute data: retain for 6 months (high volume, shorter retention)
-DO $$ BEGIN
-SELECT add_retention_policy('ohlcv_1m', INTERVAL '6 months');
+DO $$ BEGIN BEGIN PERFORM add_retention_policy('ohlcv_1m', INTERVAL '6 months');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Retention policy for ohlcv_1m skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add retention policy for ohlcv_1m: %',
 SQLERRM;
+END;
 END $$;
 -- 1-hour data: retain for 5 years
-DO $$ BEGIN
-SELECT add_retention_policy('ohlcv_1h', INTERVAL '5 years');
+DO $$ BEGIN BEGIN PERFORM add_retention_policy('ohlcv_1h', INTERVAL '5 years');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Retention policy for ohlcv_1h skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add retention policy for ohlcv_1h: %',
 SQLERRM;
+END;
 END $$;
 -- 1-week data: retain for 20 years (low volume, long retention)
-DO $$ BEGIN
-SELECT add_retention_policy('ohlcv_1w', INTERVAL '20 years');
+DO $$ BEGIN BEGIN PERFORM add_retention_policy('ohlcv_1w', INTERVAL '20 years');
 EXCEPTION
-WHEN others THEN RAISE NOTICE 'Retention policy for ohlcv_1w skipped: %',
+WHEN duplicate_object THEN NULL;
+-- Policy already exists
+WHEN others THEN RAISE NOTICE 'Could not add retention policy for ohlcv_1w: %',
 SQLERRM;
+END;
 END $$;
 COMMIT;
 /*
@@ -162,7 +221,9 @@ COMMIT;
  - Created ohlcv_1h table with 1-week chunks and 5-year retention  
  - Created ohlcv_1w table with 1-month chunks and 20-year retention
  - All tables have space partitioning (16 partitions) for optimal query performance
+ - Enabled columnstore compression with proper segment and order by settings
  - Compression policies reduce storage costs for older data
  - Retention policies automatically manage data lifecycle
  - Optimized indexes for common query patterns (security, time, security+time)
+ - Added proper error handling for idempotent migration execution
  */

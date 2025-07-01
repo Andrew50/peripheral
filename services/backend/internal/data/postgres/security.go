@@ -90,6 +90,11 @@ type TickerEvent struct {
 	TickerChange map[string]interface{} `json:"ticker_change,omitempty"`
 }
 
+type TickerEventResult struct {
+	Name   string        `json:"name"`
+	Events []TickerEvent `json:"events"`
+}
+
 type TickerEventsAPIResponse struct {
 	Results struct {
 		Name          string        `json:"name"`
@@ -102,10 +107,10 @@ type TickerEventsAPIResponse struct {
 }
 
 // GetTickerEventsCustom bypasses the SDK to call the API directly
-func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) ([]models.TickerEventResult, error) {
+func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) (TickerEventResult, error) {
 	// Validate ticker ID to prevent URL manipulation
 	if id == "" || len(id) > 10 || strings.ContainsAny(id, "/:?#[]@!$&'()*+,;=") {
-		return nil, fmt.Errorf("invalid ticker ID: %s", id)
+		return TickerEventResult{}, fmt.Errorf("invalid ticker ID: %s", id)
 	}
 
 	polygonURL := fmt.Sprintf("https://api.polygon.io/vX/reference/tickers/%s/events?apiKey=%s", id, apiKey)
@@ -113,52 +118,42 @@ func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) ([]model
 	// #nosec G107 - URL is constructed with validated ticker ID for Polygon API only
 	resp, err := http.Get(polygonURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
+		return TickerEventResult{}, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
 		// Ticker not found, return empty results
-		return []models.TickerEventResult{}, nil
+		return TickerEventResult{}, nil
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		return TickerEventResult{}, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return TickerEventResult{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var apiResponse TickerEventsAPIResponse
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		return TickerEventResult{}, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	// Convert to SDK format
-	var results []models.TickerEventResult
+	// Convert to in-house format
+	var results TickerEventResult
 	if len(apiResponse.Results.Events) > 0 {
 		// Create a single TickerEventResult with all events
-		eventResult := models.TickerEventResult{
-			Name:   apiResponse.Results.Name,
-			Events: make([]models.TickerEvent, len(apiResponse.Results.Events)),
+		for _, event := range apiResponse.Results.Events {
+			results.Events = append(results.Events, TickerEvent{
+				Type:         event.Type,
+				Date:         event.Date,
+				TickerChange: event.TickerChange,
+			})
 		}
+		results.Name = apiResponse.Results.Name
 
-		for i, event := range apiResponse.Results.Events {
-			// Parse the date
-			parsedDate, err := time.Parse("2006-01-02", event.Date)
-			if err != nil {
-				parsedDate = time.Time{} // Use zero time if parsing fails
-			}
-
-			eventResult.Events[i] = models.TickerEvent{
-				Type: event.Type,
-				Date: models.Date(parsedDate),
-			}
-		}
-
-		results = append(results, eventResult)
 	}
 
 	return results, nil

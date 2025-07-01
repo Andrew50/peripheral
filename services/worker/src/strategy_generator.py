@@ -734,7 +734,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             # Generate strategy code with retry logic
             logger.info("Generating strategy code with OpenAI o3...")
-            strategy_code, validation_passed = await self._generate_and_validate_strategy(prompt, existing_strategy, max_retries=2)
+            strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
             
             if not strategy_code:
                 return {
@@ -772,7 +772,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 "error": str(e)
             }
     
-    async def _generate_and_validate_strategy(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
+    async def _generate_and_validate_strategy(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
         """Generate strategy with validation retry logic"""
         
         last_validation_error = None
@@ -782,7 +782,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
                 # Generate strategy code with error context for retries
-                strategy_code = self._generate_strategy_code(prompt, existing_strategy, attempt, last_validation_error)
+                strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error)
                 
                 if not strategy_code:
                     continue
@@ -864,7 +864,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
     
-    def _generate_strategy_code(self, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
+    def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
         
@@ -891,9 +891,8 @@ Generate the updated strategy function."""
                 if extracted_tickers:
                     ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use tickers={extracted_tickers} in your data accessor calls."
                 
-                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}
+                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}"""
 
-Generate a strategy function that detects this pattern in market data."""
             
             # Add retry-specific guidance with error context
             if attempt > 0:
@@ -918,34 +917,30 @@ Generate a strategy function that detects this pattern in market data."""
                     logger.info(f"Attempting generation with model: {model_name}")
                     
                     # Adjust parameters for o3 models (similar to o1, they don't support temperature/max_tokens the same way)
-                    if model_name.startswith("o3") or model_name.startswith("o1"):
+                    if model_name.startswith("o3"):
                         # Set a timeout for the OpenAI API call to prevent hanging
                         logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 180s)")
                         
                         # Use the timeout parameter for OpenAI API calls
-                        response = self.openai_client.chat.completions.create(
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "user", "content": f"{system_instruction}\n\n{user_prompt}"}
-                            ],
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
                             timeout=180.0  # 3 minute timeout for o3 model
                         )
                     else:
                         logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
                         
-                        response = self.openai_client.chat.completions.create(
+                        response = self.openai_client.responses.create(
                             model=model_name,
-                            messages=[
-                                {"role": "system", "content": system_instruction},
-                                {"role": "user", "content": user_prompt}
-                            ],
-                            temperature=0.1,
-                            max_tokens=max_tokens,
+                            input=f"{user_prompt}",
+                            instructions=f"{system_instruction}",
+                            user=f"user:{userID}",
                             timeout=120.0  # 2 minute timeout for other models
                         )
                     
-                    strategy_code = response.choices[0].message.content.strip()
-                    
+                    strategy_code = response.output_text
                     # Extract Python code from response
                     strategy_code = self._extract_python_code(strategy_code)
                     

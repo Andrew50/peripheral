@@ -53,7 +53,7 @@ var (
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",
-				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
+				Description: "Get company name, market, locale, primary exchange, market cap, shares outstanding, industry, sector and total shares for a given security.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -520,19 +520,6 @@ var (
 			Function:      wrapWithContext(GetStockChange),
 			StatusMessage: "Getting stock change...",
 		},
-		/*"getAllTickerSnapshots": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAllTickerSnapshots",
-				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
-				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
-			StatusMessage: "Scanning market data...",
-		}, */
 
 		"getOHLCData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -621,32 +608,6 @@ var (
 			},
 			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
 			StatusMessage: "Building strategy...",
-		},
-		"calculateBacktestStatistic": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "calculateBacktestStatistic",
-				Description: "Calculates a statistic for a specific column from cached backtest results. Use this instead of requesting raw backtest data for simple calculations.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the strategy whose backtest results should be used.",
-						},
-						"columnName": {
-							Type:        genai.TypeString,
-							Description: "The original column name in the backtest results to perform the calculation on (e.g., 'close', 'volume', 'future_1d_return').",
-						},
-						"calculationType": {
-							Type:        genai.TypeString,
-							Description: "The type of calculation to perform. Supported values: 'average', 'sum', 'min', 'max', 'count'.",
-						},
-					},
-					Required: []string{"strategyId", "columnName", "calculationType"},
-				},
-			},
-			Function:      wrapWithContext(CalculateBacktestStatistic),
-			StatusMessage: "Calculating backtest statistics...",
 		},
 		// [SEARCH TOOLS]
 		"runWebSearch": {
