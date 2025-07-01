@@ -425,14 +425,33 @@
 						newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
 						newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
 					}
-				} else if (inst.requestType === 'loadAdditionalData') {
-					const latestCandleTime =
-						chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
-					if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
-						newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
-						newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
+				} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
+					// Forward loading: append new data to existing data
+					const existingData = chartCandleSeries.data();
+					const existingVolumeData = chartVolumeSeries.data();
+					
+					
+					if (existingData.length > 0 && newCandleData.length > 0) {
+						const latestCandleTime = existingData[existingData.length - 1]?.time;
+						
+						// Find the first new candle that comes after the latest existing candle
+						let startIndex = 0;
+						for (let i = 0; i < newCandleData.length; i++) {
+							if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
+								startIndex = i;
+								break;
+							}
+						}
+						// Only append truly new data
+						if (startIndex < newCandleData.length) {
+							newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
+							newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
+						} else {
+							newCandleData = existingData as any;
+							newVolumeData = existingVolumeData as any;
+						}
 					}
-				} else if (inst.requestType === 'loadNewTicker') {
+				}  else if (inst.requestType === 'loadNewTicker') {
 					if (inst.includeLastBar == false && !$streamInfo.replayActive) {
 						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
 						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
@@ -478,25 +497,9 @@
 				}
 				queuedLoad = () => {
 					// Add SEC filings request when loading new ticker
-
-					if (inst.direction == 'forward') {
-						// Only set visible range if both from and to values are valid
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-
-						if (
-							visibleRange &&
-							typeof visibleRange.from === 'number' &&
-							typeof visibleRange.to === 'number'
-						) {
-							chart.timeScale().setVisibleRange({
-								from: visibleRange.from,
-								to: visibleRange.to
-							});
-						}
-					} else if (inst.direction == 'backward') {
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
+					chartCandleSeries.setData(newCandleData);
+					chartVolumeSeries.setData(newVolumeData);
+					if (inst.direction == 'backward') {
 						if (
 							arrowSeries &&
 							inst &&
@@ -724,8 +727,7 @@
 				if (
 					inst.direction == 'backward' ||
 					inst.requestType == 'loadNewTicker' ||
-					(inst.direction == 'forward' && !isPanning) ||
-					(inst.direction == 'forward' && !isLoadingAdditionalData)
+					inst.direction == 'forward'
 				) {
 					queuedLoad();
 				}
@@ -783,6 +785,7 @@
 				isSwitchingTickers = false;
 			})
 			.finally(() => {
+				console.log(chartCandleSeries.data().length)
 				if (thisRequestTickerIncrementCount === latestLoadToken) {
 					isLoadingAdditionalData = false;	
 					isSwitchingTickers = false;
@@ -1832,7 +1835,7 @@
 			// Backward loading condition:
 			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
 			// Corrected condition: Check if number of bars to the left is less than the buffer
-			if (logicalRange.from < 20 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
+			if (logicalRange.from < 30 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
