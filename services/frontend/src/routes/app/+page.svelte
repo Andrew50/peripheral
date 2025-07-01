@@ -41,15 +41,11 @@
 		menuWidth,
 		settings,
 		isPublicViewing as isPublicViewingStore,
-		watchlists,
-		flagWatchlistId,
-		currentWatchlistId as globalCurrentWatchlistId,
-		currentWatchlistItems
 	} from '$lib/utils/stores/stores';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance, Watchlist as WatchlistType } from '$lib/utils/types/types';
+	import type { Instance} from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
 	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
@@ -79,10 +75,6 @@
 	// TopBar functionality moved inline
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
 	import { 
-		addInstanceToWatchlist as addToWatchlist,
-		selectWatchlist,
-		createNewWatchlist,
-		deleteWatchlist,
 		initializeDefaultWatchlist
 	} from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
@@ -928,12 +920,7 @@
 	$: isCustomTimeframe =
 		$activeChartInstance?.timeframe && !commonTimeframes.includes($activeChartInstance.timeframe);
 
-	// Watchlist controls state
-	let newWatchlistName = '';
-	let currentWatchlistId: number;
-	let previousWatchlistId: number;
-	let newNameInput: HTMLInputElement;
-	let showWatchlistInput = false;
+
 	// TopBar handler functions
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -997,117 +984,7 @@
 	}
 
 
-	function newWatchlist() {
-		if (newWatchlistName === '') return;
 
-		createNewWatchlist(newWatchlistName)
-			.then(() => {
-				newWatchlistName = '';
-				showWatchlistInput = false;
-			})
-			.catch((error) => {
-				alert(error.message);
-			});
-	}
-
-	function closeNewWatchlistWindow() {
-		showWatchlistInput = false;
-		newWatchlistName = '';
-
-		if (previousWatchlistId === undefined || isNaN(previousWatchlistId)) {
-			const watchlistsValue = get(watchlists);
-			if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
-				previousWatchlistId = watchlistsValue[0].watchlistId;
-			}
-		}
-
-		currentWatchlistId = previousWatchlistId;
-
-		tick().then(() => {
-			selectWatchlist(String(previousWatchlistId));
-		});
-	}
-
-	function handleWatchlistSelection(watchlistIdString: string) {
-		if (!watchlistIdString) return;
-
-		if (watchlistIdString === 'new') {
-			if (currentWatchlistId !== undefined && !isNaN(currentWatchlistId)) {
-				previousWatchlistId = currentWatchlistId;
-			} else {
-				const watchlistsValue = get(watchlists);
-				if (Array.isArray(watchlistsValue) && watchlistsValue.length > 0) {
-					previousWatchlistId = watchlistsValue[0].watchlistId;
-				}
-			}
-
-			showWatchlistInput = true;
-			tick().then(() => {
-				const inputElement = document.getElementById('new-watchlist-input') as HTMLInputElement;
-				if (inputElement) {
-					inputElement.focus();
-				}
-			});
-			return;
-		}
-
-		if (watchlistIdString === 'delete') {
-			const watchlistsValue = get(watchlists);
-			const currentWatchlistIdNum = Number(currentWatchlistId);
-
-			if (currentWatchlistIdNum === flagWatchlistId) {
-				alert('The flag watchlist cannot be deleted.');
-				handleWatchlistSelection(String(currentWatchlistId));
-				return;
-			}
-
-			const watchlist = Array.isArray(watchlistsValue)
-				? watchlistsValue.find((w) => Number(w.watchlistId) === currentWatchlistIdNum)
-				: null;
-
-			const watchlistName = watchlist?.watchlistName || `Watchlist #${currentWatchlistIdNum}`;
-
-			if (confirm(`Are you sure you want to delete "${watchlistName}"?`)) {
-				deleteWatchlist(Number(currentWatchlistId)).catch((error) => {
-					alert(error.message);
-				});
-			} else {
-				handleWatchlistSelection(String(currentWatchlistId));
-			}
-			return;
-		}
-
-		showWatchlistInput = false;
-		newWatchlistName = '';
-		const watchlistId = parseInt(watchlistIdString);
-		currentWatchlistId = watchlistId;
-
-		// Use the centralized function
-		selectWatchlist(watchlistIdString);
-	}
-
-	function handleWatchlistChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		const value = target.value;
-
-		if (value === 'new') {
-			if (!showWatchlistInput) {
-				previousWatchlistId = currentWatchlistId;
-				handleWatchlistSelection('new');
-			}
-			return;
-		}
-
-		if (value === 'delete') {
-			handleWatchlistSelection('delete');
-			return;
-		}
-
-		previousWatchlistId = parseInt(value, 10);
-		currentWatchlistId = parseInt(value, 10);
-		globalCurrentWatchlistId.set(parseInt(value, 10));
-		selectWatchlist(value);
-	}
 
 	async function createPriceAlert() {
 		const inst = await queryInstanceInput('any', ['ticker'], {
@@ -1353,82 +1230,7 @@
 					<!-- Right side - Sidebar Controls -->
 					{#if $menuWidth > 0}
 						<div class="top-bar-right">
-							{#if $activeMenu === 'watchlist'}
-								<!-- Watchlist Controls -->
-								<div class="sidebar-controls">
-									{#if Array.isArray($watchlists)}
-										<div class="watchlist-controls-left">
-											<div class="watchlist-selector">
-												<div class="select-wrapper">
-													<select
-														class="default-select metadata-button"
-														id="watchlists-topbar"
-														value={currentWatchlistId?.toString()}
-														on:change={handleWatchlistChange}
-													>
-														<optgroup label="My Watchlists">
-															{#each $watchlists as watchlist}
-																<option value={watchlist.watchlistId.toString()}>
-																	{watchlist.watchlistName === 'flag'
-																		? 'Flag (Protected)'
-																		: watchlist.watchlistName}
-																</option>
-															{/each}
-														</optgroup>
-														<optgroup label="Actions">
-															<option value="new">+ Create New Watchlist</option>
-															{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
-																<option value="delete">- Delete Current Watchlist</option>
-															{/if}
-														</optgroup>
-													</select>
-													<div class="caret-icon">
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2"
-															stroke-linecap="round"
-															stroke-linejoin="round"
-														>
-															<polyline points="6,9 12,15 18,9"></polyline>
-														</svg>
-													</div>
-												</div>
-											</div>
-										</div>
-									{/if}
-
-									{#if showWatchlistInput}
-										<div class="new-watchlist-container">
-											<input
-												class="input metadata-button"
-												id="new-watchlist-input"
-												bind:this={newNameInput}
-												on:keydown={(event) => {
-													if (event.key === 'Enter') {
-														newWatchlist();
-													} else if (event.key === 'Escape') {
-														closeNewWatchlistWindow();
-													}
-												}}
-												bind:value={newWatchlistName}
-												placeholder="New Watchlist Name"
-											/>
-											<div class="new-watchlist-buttons">
-												<button class="utility-button metadata-button" on:click={newWatchlist}
-													>✓</button
-												>
-												<button
-													class="utility-button metadata-button"
-													on:click={closeNewWatchlistWindow}>✕</button
-												>
-											</div>
-										</div>
-									{/if}
-								</div>
-							{:else if $activeMenu === 'alerts'}
+												{#if $activeMenu === 'alerts'}
 								<!-- Alert Controls -->
 								<div class="sidebar-controls">
 									<div class="alert-controls-right">
@@ -1917,13 +1719,7 @@
 		gap: 8px;
 	}
 
-	.watchlist-controls-left {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		margin-left: 0;
-		padding-left: 0;
-	}
+
 
 	.alert-controls-right {
 		display: flex;
@@ -1933,120 +1729,9 @@
 		padding-right: 8px;
 	}
 
-	.watchlist-selector .select-wrapper {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: fit-content;
-		background: transparent;
-		border-radius: 6px;
-		padding: 0;
-		margin-left: 0;
-	}
 
-	.watchlist-selector select {
-		flex: 0 1 auto;
-		min-width: fit-content;
-		width: fit-content;
-		background: transparent;
-		color: #ffffff;
-		border: none;
-		border-radius: 0;
-		padding: 6px 8px 6px 8px;
-		margin-left: 0;
-		font-size: 13px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-		appearance: none;
-		-webkit-appearance: none;
-		-moz-appearance: none;
-		text-align: left;
-	}
 
-	.watchlist-selector .caret-icon {
-		margin-left: 4px;
-		margin-right: 6px;
-		width: 12px;
-		height: 12px;
-		color: #ffffff;
-		pointer-events: none;
-		flex-shrink: 0;
-	}
 
-	.watchlist-selector .caret-icon svg {
-		width: 100%;
-		height: 100%;
-	}
-
-	.watchlist-selector .select-wrapper:hover {
-		background: rgba(255, 255, 255, 0.15);
-	}
-
-	.new-watchlist-container {
-		position: absolute;
-		top: 100%;
-		left: 0;
-		margin-top: 8px;
-		padding: 12px;
-		background: rgba(0, 0, 0, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 8px;
-		z-index: 100;
-		min-width: 250px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-	}
-
-	.new-watchlist-container .input {
-		width: 100%;
-		margin-bottom: 8px;
-		padding: 8px 12px;
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
-		color: #ffffff;
-		font-size: 13px;
-		font-weight: 500;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-	}
-
-	.new-watchlist-container .input:focus {
-		border-color: rgba(255, 255, 255, 0.6);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
-		outline: none;
-	}
-
-	.new-watchlist-container .input::placeholder {
-		color: rgba(255, 255, 255, 0.6);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-	}
-
-	.new-watchlist-buttons {
-		display: flex;
-		justify-content: flex-end;
-		gap: 6px;
-	}
-
-	.new-watchlist-buttons .utility-button {
-		padding: 6px 12px;
-		color: #ffffff;
-		font-size: 13px;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-		min-width: 32px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 6px;
-	}
-
-	.new-watchlist-buttons .utility-button:hover {
-		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.4);
-	}
 
 	.create-alert-btn {
 		padding: 6px 12px;
