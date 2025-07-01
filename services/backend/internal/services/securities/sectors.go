@@ -8,18 +8,18 @@ package securities
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-    "database/sql"
 
-	"backend/internal/data"           // your conn.go
+	"backend/internal/data" // your conn.go
+
 	"github.com/jackc/pgx/v4/pgxpool" // postgres
 )
-
 
 // ------------------------------------------------------------------- //
 //  Types                                                              //
@@ -37,7 +37,6 @@ type listing struct {
 	Sector   string `json:"sector"`   // e.g. "Technology"
 	Industry string `json:"industry"` // e.g. "Consumer Electronics"
 }
-
 
 // map[ticker] = (sector, industry)
 type meta struct{ Sector, Industry string }
@@ -78,8 +77,8 @@ func UpdateSectors(ctx context.Context, c *data.Conn) error {
 			continue
 		}
 
-		needsUpdate := (!s.CurrentSector.Valid || s.CurrentSector.String != meta.Sector) ||
-			(!s.CurrentIndustry.Valid || s.CurrentIndustry.String != meta.Industry)
+		needsUpdate := (!s.CurrentSector.Valid || s.CurrentSector.String == "" || s.CurrentSector.String != meta.Sector) ||
+			(!s.CurrentIndustry.Valid || s.CurrentIndustry.String == "" || s.CurrentIndustry.String != meta.Industry)
 
 		if !needsUpdate {
 			continue
@@ -107,19 +106,19 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	// each exchange has   <ex>/<ex>_full_ticker.json
 	// see repo README: https://github.com/rreichel3/US-Stock-Symbols
 	exchanges := []string{"nasdaq", "nyse", "amex"}
-	base      := "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/%s/%s_full_tickers.json"
+	base := "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/%s/%s_full_tickers.json"
 
 	out := make(map[string]meta, 15_000) // rough upper bound
 
 	for _, ex := range exchanges {
-		url  := fmt.Sprintf(base, ex, ex)
+		url := fmt.Sprintf(base, ex, ex)
 
 		body, err := fetch(ctx, url)
 		if err != nil {
 			return nil, err
 		}
 
-		var lst []listing            // listing{Symbol, Sector, Industry}
+		var lst []listing // listing{Symbol, Sector, Industry}
 		if err := json.Unmarshal(body, &lst); err != nil {
 			return nil, fmt.Errorf("decode %s: %w", ex, err)
 		}
@@ -179,4 +178,3 @@ func applyUpdate(ctx context.Context, db *pgxpool.Pool, ticker string, m meta) e
 		m.Sector, m.Industry, ticker)
 	return err
 }
-
