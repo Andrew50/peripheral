@@ -35,10 +35,9 @@ Fetches OHLCV bar data as numpy array with optional filtering.
 ```python
 get_bar_data(
     timeframe="1d",           # Data timeframe ('1d', '1h', '5m', etc.)
-    tickers=[],               # List of ticker symbols (empty = all active)
     columns=[],               # Desired columns (empty = all)
     min_bars=1,               # Minimum number of bars per security
-    filters={}                # Filter criteria (NEW!)
+    filters={}                # Filter criteria
 )
 ```
 
@@ -52,6 +51,7 @@ get_bar_data(
 - `volume`: Trading volume
 
 **Filter options:**
+- `tickers`: List of ticker symbols (e.g., ['AAPL', 'MRNA']) (empty = all active)
 - `sector`: Filter by sector (e.g., 'Technology', 'Healthcare')
 - `industry`: Filter by industry (e.g., 'Software', 'Pharmaceuticals')
 - `market`: Filter by market (e.g., 'stocks', 'crypto')
@@ -69,9 +69,8 @@ Fetches general security information as pandas DataFrame with optional filtering
 
 ```python
 get_general_data(
-    tickers=[],               # List of ticker symbols (empty = all active)
     columns=[],               # Desired columns (empty = all)
-    filters={}                # Filter criteria (NEW!)
+    filters={}                # Filter criteria
 )
 ```
 
