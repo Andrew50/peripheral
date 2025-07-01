@@ -227,7 +227,9 @@ func UpdateSecurityCik(conn *data.Conn) error {
 
 // Alternative more efficient approach for large datasets
 func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
-	ctx := context.Background()
+	// Add timeout to prevent hanging indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	defer cancel()
 
 	// 1. Pre-load all existing tickers with maxdate IS NULL into a set
 	existingTickers := make(map[string]struct{})
@@ -250,7 +252,15 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 	// che
 	processedTickers := make(map[string]struct{})
 
-	ipos, err := polygon.GetPolygonIPOs(conn.Polygon, time.Now().Format("2006-01-02"))
+	// Use America/New_York timezone for all market operations
+	nyLoc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return fmt.Errorf("failed to load America/New_York timezone: %w", err)
+	}
+
+	todayNY := time.Now().In(nyLoc).Format("2006-01-02")
+
+	ipos, err := polygon.GetPolygonIPOs(conn.Polygon, todayNY)
 	if err != nil {
 		return fmt.Errorf("failed to fetch polygon IPOs: %w", err)
 	}
@@ -261,6 +271,19 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 		listingDate, err := time.Parse("2006-01-02", ipos.ListingDate)
 		if err != nil {
 			return fmt.Errorf("failed to parse listing date %s: %w", ipos.ListingDate, err)
+		}
+		// first check if this ipo is already in the database
+		var existingSecurityID int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT securityid 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2`,
+			ipo, listingDate).Scan(&existingSecurityID)
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("failed to check if IPO ticker %s is already in the database: %w", ipo, err)
+		}
+		if err == nil && existingSecurityID != 0 {
+			continue
 		}
 
 		// Insert new IPO security with listing date as minDate and NULL maxDate
@@ -277,17 +300,16 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 		}
 		processedTickers[ipo] = struct{}{}
 	}
-	// 2. Fetch active stocks via daily data
-	res, err := polygon.GetAllStocksDailyOHLCV(ctx, conn.Polygon, time.Now().Format("2006-01-02"))
+	res, err := polygon.GetAllStocksDailyOHLCV(ctx, conn.Polygon, todayNY)
 	if err != nil {
 		return fmt.Errorf("failed to fetch polygon daily OHLCV: %w", err)
 	}
 	var processingDate string
 	results := res.Results
-
-	for _, result := range results {
+	fmt.Println(len(results))
+	for numTicker, result := range results {
 		ticker := result.Ticker
-		fmt.Println(ticker)
+		fmt.Println(ticker, numTicker)
 
 		if processingDate == "" {
 			processingDate = time.Time(result.Timestamp).Format("2006-01-02")
@@ -901,6 +923,20 @@ func processTickerEventsForNewListing(ctx context.Context, conn *data.Conn, tick
 			figi = getTickerDetailsResponse.CompositeFIGI
 		}
 		tickerToInsert = event.TickerChange["ticker"].(string)
+		// first check if this is already in the database
+		var existingSecurityID int
+		err = conn.DB.QueryRow(ctx, `
+			SELECT securityid 
+			FROM securities 
+			WHERE ticker = $1 AND minDate = $2 AND maxDate= $3`,
+			tickerToInsert, initialDate, maxDateToInsert).Scan(&existingSecurityID)
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("failed to check if ticker %s is already in the database: %w", tickerToInsert, err)
+		}
+		if err == nil && existingSecurityID != 0 {
+			continue
+		}
+
 		// Use safe insertion with comprehensive validation
 		err = safeInsertSecurityV2(ctx, conn, tickerToInsert, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
 		if err != nil {
