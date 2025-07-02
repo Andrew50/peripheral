@@ -158,9 +158,9 @@ func processTickerAllTimeframes(conn *data.Conn, ticker string) error {
 			return fmt.Errorf("error getting latest date for %s %s: %w", ticker, tf.name, err)
 		}
 
-		// If fromDate is nil, start from 2008 (Polygon's data availability)
+		// If fromDate is nil, start from 1 year ago
 		if fromDate == nil {
-			startDate := time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC)
+			startDate := time.Now().AddDate(-1, 0, 0) // 1 year ago
 			fromDate = &startDate
 		} else {
 			// Start from the day after the latest data
