@@ -24,67 +24,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# Add connection pool management
-class ConnectionPoolManager:
-    _instance = None
-    _lock = threading.Lock()
-    
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if not self._initialized:
-            self.pool = None
-            self.max_connections = 10  # Limit per worker
-            self.connection_timeout = 30
-            self.retry_attempts = 3
-            self.retry_delay = 1
-            self._initialized = True
-    
-    @contextmanager
-    def get_connection(self):
-        """Get database connection with retry logic and timeout"""
-        connection = None
-        for attempt in range(self.retry_attempts):
-            try:
-                connection = psycopg2.connect(
-                    host=os.getenv('DB_HOST', 'localhost'),
-                    port=os.getenv('DB_PORT', '5432'),
-                    user=os.getenv('DB_USER', 'postgres'),
-                    password=os.getenv('DB_PASSWORD', ''),
-                    database=os.getenv('POSTGRES_DB', 'postgres'),
-                    connect_timeout=self.connection_timeout,
-                    application_name=f'worker_{os.getpid()}'
-                )
-                yield connection
-                break
-            except psycopg2.OperationalError as e:
-                if "recovery mode" in str(e) and attempt < self.retry_attempts - 1:
-                    logging.warning(f"Database in recovery mode, retrying in {self.retry_delay}s (attempt {attempt + 1}/{self.retry_attempts})")
-                    time.sleep(self.retry_delay)
-                    self.retry_delay *= 2  # Exponential backoff
-                    continue
-                else:
-                    raise
-            except Exception as e:
-                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
-                if attempt < self.retry_attempts - 1:
-                    time.sleep(self.retry_delay)
-                    continue
-                else:
-                    raise
-            finally:
-                if connection:
-                    connection.close()
-
-# Global connection pool instance
-connection_pool = ConnectionPoolManager()
-
 class DataAccessorProvider:
     """Provides optimized data accessor functions for strategy execution"""
     
@@ -104,11 +43,45 @@ class DataAccessorProvider:
             'end_date': None
         }
         
+    @contextmanager
     def get_connection(self):
-        """Get database connection using pooled connection with retry logic"""
-        # Use the global connection pool instead of direct connection
-        return connection_pool.get_connection()
-    
+        """Get database connection with retry logic and timeout"""
+        connection = None
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                connection = psycopg2.connect(
+                    host=self.db_config['host'],
+                    port=self.db_config['port'],
+                    user=self.db_config['user'],
+                    password=self.db_config['password'],
+                    database=self.db_config['database'],
+                    connect_timeout=30,
+                    application_name=f'worker_{os.getpid()}'
+                )
+                yield connection
+                break
+            except psycopg2.OperationalError as e:
+                if "recovery mode" in str(e) and attempt < max_retries - 1:
+                    logging.warning(f"Database in recovery mode, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+            finally:
+                if connection:
+                    connection.close()
+
     def set_execution_context(self, mode: str, symbols: List[str] = None, 
                              start_date: datetime = None, end_date: datetime = None):
         """Set execution context for data fetching strategy"""
@@ -363,7 +336,7 @@ class DataAccessorProvider:
     def get_available_filter_values(self) -> Dict[str, List[str]]:
         """Get all available values for filter fields from the database"""
         try:
-            with connection_pool.get_connection() as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 filter_values = {}
@@ -506,13 +479,13 @@ class DataAccessorProvider:
             # Determine date range based on execution context
             context = self.execution_context
             
-            if context['start_date'] and context['end_date']:
+            if context.get('start_date') and context.get('end_date'):
                 # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
                 timeframe_delta = self._get_timeframe_delta(timeframe)
-                start_with_buffer = context['start_date'] - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
+                start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
-                date_params = [start_with_buffer, context['end_date']]
-            elif context['mode'] == 'validation':
+                date_params = [start_with_buffer, context.get('end_date')]
+            elif context.get('mode') == 'validation':
                 # Validation mode: Ultra-minimal data for fast validation
                 # Force minimal bars and recent data only
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
@@ -523,7 +496,7 @@ class DataAccessorProvider:
                     original_min_bars = min_bars
                     min_bars = 100  # Maximum 100 bars for validation
                     logger.info(f"🧪 Validation mode: limiting min_bars from {original_min_bars} to {min_bars} for performance")
-            elif context['mode'] == 'screening':
+            elif context.get('mode') == 'screening':
                 # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
                 # This is much more efficient than date filtering because:
                 # 1. Gets exactly min_bars per security (no more, no less)
@@ -653,7 +626,7 @@ class DataAccessorProvider:
                     select_columns.append(f"o.{col}")
             
             # Build the complete query
-            if context['mode'] == 'backtest' or (not context['start_date'] and not context['end_date'] and context['mode'] != 'screening'):
+            if context.get('mode') == 'backtest' or (not context.get('start_date') and not context.get('end_date') and context.get('mode') != 'screening'):
                 # For backtest mode or when no specific dates and not screening: get all data in range, don't limit per security
                 # Build parameterized query components
                 select_clause = ', '.join(select_columns)
@@ -705,7 +678,7 @@ class DataAccessorProvider:
                 final_select_clause = ', '.join(final_columns)
                 
                 # Optimize ordering for screening mode - prioritize most recent data
-                if context['mode'] == 'screening':
+                if context.get('mode') == 'screening':
                     # For screening, order by most recent timestamp first within each security
                     # This ensures we get the absolute latest data for screening decisions
                     order_by_columns = []

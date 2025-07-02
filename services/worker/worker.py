@@ -572,7 +572,7 @@ class StrategyWorker:
                     normal_tasks_processed += 1
                     
                 # Parse task
-                logger.info(f"📦 Received {queue_type} task (Total: P:{priority_tasks_processed}/N:{normal_tasks_processed})")
+                logger.debug(f"📦 Received {queue_type} task (Total: P:{priority_tasks_processed}/N:{normal_tasks_processed})")
                 
                 try:
                     task_data = json.loads(task_message)
@@ -585,7 +585,7 @@ class StrategyWorker:
                 args = task_data.get('args', {})
                 priority = task_data.get('priority', 'normal')
 
-                logger.info(f"🎯 Processing {task_type} task {task_id} from {queue_type} queue (Priority: {priority})")
+                logger.info(f"🎯 Processing {task_type} task {task_id}")
                 tasks_processed += 1
                 
                 # Validate task data
@@ -601,7 +601,7 @@ class StrategyWorker:
 
                 try:
                     # Set task status to running
-                    logger.info(f"▶️ Starting execution of {task_type} task {task_id}")
+                    logger.debug(f"▶️ Starting execution of {task_type} task {task_id}")
                     self._set_task_result(task_id, "running", {
                         "worker_id": self.worker_id,
                         "queue_type": queue_type,
@@ -612,7 +612,7 @@ class StrategyWorker:
                     start_time = time.time()
                     
                     # Execute the task with comprehensive error handling
-                    logger.info(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
+                    logger.debug(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
                     
                     result = None
                     try:
@@ -709,7 +709,7 @@ class StrategyWorker:
             self._publish_progress(task_id, "initialization", "Fetching strategy code from database...")
         
         strategy_code = self._fetch_strategy_code(strategy_id)
-        logger.info(f"Fetched strategy code from database for strategy_id: {strategy_id}")
+        logger.debug(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
         if task_id:
             self._publish_progress(task_id, "validation", "Validating strategy code security...")
@@ -725,13 +725,13 @@ class StrategyWorker:
         # Determine target symbols (strategies will fetch their own data via accessors)
         if securities_filter:
             target_symbols = securities_filter
-            logger.info(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
+            logger.debug(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
         elif symbols_input:
             target_symbols = symbols_input
-            logger.info(f"Using provided symbols: {len(target_symbols)} symbols")
+            logger.debug(f"Using provided symbols: {len(target_symbols)} symbols")
         else:
             target_symbols = []  # Let strategy determine its own symbols
-            logger.info("No symbols specified - strategy will determine requirements")
+            logger.debug("No symbols specified - strategy will determine requirements")
         
         if task_id:
             self._publish_progress(task_id, "symbols", f"Prepared {len(target_symbols)} symbols for analysis", 
@@ -877,7 +877,7 @@ class StrategyWorker:
                 raise Exception("Strategy creation timed out after 5 minutes")
             
             logger.info(f"📥 Strategy generator returned result type: {type(result)}")
-            logger.info(f"📊 Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
+            logger.debug(f"📊 Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
             
             if task_id:
                 if result.get("success"):
@@ -990,7 +990,7 @@ class StrategyWorker:
             channel = "worker_task_updates"
             message_json = json.dumps(progress_update)
             
-            logger.info(f"📡 Publishing progress update for {task_id}: {stage} - {message}")
+            logger.debug(f"📡 Publishing progress update for {task_id}: {stage} - {message}")
             logger.debug(f"   📤 Channel: {channel}")
             logger.debug(f"   📄 Message: {message_json}")
             
@@ -998,7 +998,7 @@ class StrategyWorker:
             logger.debug(f"   👥 Subscribers notified: {result}")
             
             if result == 0:
-                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+                logger.debug(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
             else:
                 logger.debug(f"✅ Progress update published successfully to {result} subscribers")
             
@@ -1041,7 +1041,7 @@ class StrategyWorker:
             result_key = f"task_result:{task_id}"
             result_json = json.dumps(result)
             
-            logger.info(f"💾 Setting task result for {task_id}: {status}")
+            logger.debug(f"💾 Setting task result for {task_id}: {status}")
             logger.debug(f"   🔑 Key: {result_key}")
             logger.debug(f"   📄 Data: {result_json[:200]}...")
             
@@ -1063,7 +1063,7 @@ class StrategyWorker:
             channel = "worker_task_updates"
             update_json = json.dumps(update_message)
             
-            logger.info(f"📡 Publishing task update for {task_id}: {status}")
+            logger.debug(f"📡 Publishing task update for {task_id}: {status}")
             logger.debug(f"   📤 Channel: {channel}")
             logger.debug(f"   📄 Update: {update_json[:200]}...")
             
@@ -1071,7 +1071,7 @@ class StrategyWorker:
             logger.debug(f"   👥 Subscribers notified: {subscribers}")
             
             if subscribers == 0:
-                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+                logger.debug(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
             else:
                 logger.debug(f"✅ Task update published successfully to {subscribers} subscribers")
             
@@ -1109,7 +1109,7 @@ class StrategyWorker:
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            logger.info(f"Queue stats: Priority={priority_length}, Normal={normal_length}, Total={priority_length + normal_length}")
+            logger.debug(f"Queue stats: Priority={priority_length}, Normal={normal_length}, Total={priority_length + normal_length}")
             return stats
             
         except Exception as e:
@@ -1124,7 +1124,7 @@ class StrategyWorker:
         """Log current queue status for monitoring"""
         stats = self.get_queue_stats()
         if "error" not in stats:
-            logger.info(f"[QUEUE STATUS] Worker {self.worker_id}: "
+            logger.debug(f"[QUEUE STATUS] Worker {self.worker_id}: "
                        f"Priority Queue: {stats['priority_queue_length']} tasks, "
                        f"Normal Queue: {stats['normal_queue_length']} tasks, "
                        f"Total: {stats['total_pending_tasks']} tasks")

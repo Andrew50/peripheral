@@ -142,15 +142,15 @@ class AccessorStrategyEngine:
             )
             
             # Debug: Verify both instances have validation context
-            logger.info(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
-            logger.info(f"🔍 Global accessor context: {global_accessor.execution_context}")
-            logger.info(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
+            logger.debug(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
+            logger.debug(f"🔍 Global accessor context: {global_accessor.execution_context}")
+            logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
             
-            logger.info("🔧 Validation optimizations enabled:")
-            logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
-            logger.info("   ✓ Fast execution path (validation mode)")
-            logger.info("   ✓ Skip result ranking and processing")
-            logger.info("   ✓ Context set on both engine and global data accessors")
+            logger.debug("🔧 Validation optimizations enabled:")
+            logger.debug("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
+            logger.debug("   ✓ Fast execution path (validation mode)")
+            logger.debug("   ✓ Skip result ranking and processing")
+            logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
             instances = await self._execute_strategy(
@@ -216,12 +216,12 @@ class AccessorStrategyEngine:
             )
             
             # Log optimization settings
-            logger.info("🔧 Screening optimizations enabled:")
-            logger.info("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
-            logger.info("   ✓ NO date filtering (eliminates unnecessary data overhead)")
-            logger.info("   ✓ Database-optimized query structure (most recent records only)")
-            logger.info(f"   ✓ Universe size: {len(universe)} symbols")
-            logger.info(f"   ✓ Result limit: {limit}")
+            logger.debug("🔧 Screening optimizations enabled:")
+            logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
+            logger.debug("   ✓ NO date filtering (eliminates unnecessary data overhead)")
+            logger.debug("   ✓ Database-optimized query structure (most recent records only)")
+            logger.debug(f"   ✓ Universe size: {len(universe)} symbols")
+            logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
             instances = await self._execute_strategy(
@@ -246,7 +246,7 @@ class AccessorStrategyEngine:
             }
             
             logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
-            logger.info(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
+            logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
             return result
             
         except Exception as e:
@@ -377,13 +377,20 @@ class AccessorStrategyEngine:
             if not strategy_func:
                 raise ValueError("No strategy function found. Function should be named 'strategy'")
             
-            # Execute strategy function (no parameters in new approach)
+            # Execute strategy function with proper error handling
             logger.info(f"Executing strategy function using data accessor approach")
-            instances = strategy_func()
+            try:
+                instances = strategy_func()
+            except Exception as strategy_error:
+                logger.error(f"Strategy function execution failed: {strategy_error}")
+                logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
+                # Return empty list instead of crashing - let the calling code handle empty results
+                return []
             
             # Validate and clean instances
             if not isinstance(instances, list):
-                raise ValueError(f"Strategy function must return a list, got {type(instances)}")
+                logger.error(f"Strategy function must return a list, got {type(instances)}")
+                return []
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -401,8 +408,10 @@ class AccessorStrategyEngine:
             return valid_instances
             
         except Exception as e:
-            logger.error(f"Strategy execution failed: {e}")
-            raise
+            logger.error(f"Strategy compilation or setup failed: {e}")
+            logger.debug(f"Setup error details: {type(e).__name__}: {e}")
+            # Return empty list for compilation/setup errors too
+            return []
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""
