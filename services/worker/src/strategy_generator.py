@@ -885,7 +885,7 @@ Generate the updated strategy function."""
             
             # Use only o3 model as requested
             models_to_try = [
-                ("o3", None),                # o3 model only
+                ("o4-mini", None),                # o3 model only
             ]
             
             last_error = None
