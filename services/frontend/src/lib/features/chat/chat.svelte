@@ -543,18 +543,18 @@
 		// Create new abort controller for this request
 		currentAbortController = new AbortController();
 
-		try {
-			// Note: Create a temporary user message for immediate UI feedback
-			// The backend will provide the actual message ID, but we need something for the UI
-			const userMessage: Message = {
-				message_id: 'temp_' + Date.now(), // Temporary ID for UI only
-				content: $inputValue,
-				sender: 'user',
-				timestamp: new Date(),
-				contextItems: [...$contextItems],
-				status: 'pending'
-			};
+				// Note: Create a temporary user message for immediate UI feedback
+		// The backend will provide the actual message ID, but we need something for the UI
+		const userMessage: Message = {
+			message_id: 'temp_' + Date.now(), // Temporary ID for UI only
+			content: $inputValue,
+			sender: 'user',
+			timestamp: new Date(),
+			contextItems: [...$contextItems],
+			status: 'pending'
+		};
 
+		try {
 			// Initialize processing timeline
 			processingTimeline = [
 				{
@@ -1615,64 +1615,29 @@
 							<!-- Error message retry button -->
 							{#if message.sender === 'assistant' && (message.status === 'error' || message.content.includes('Error:'))}
 								<div class="error-retry-section">
-									<div class="retry-container">
-										<button
-											class="error-retry-btn glass glass--small glass--responsive"
-											on:click={() => showRetryOptions(message)}
-											title="Retry Message"
+									<button
+										class="error-retry-btn glass glass--small glass--responsive"
+										on:click={() => retryMessage(message)}
+										title="Retry Message"
+									>
+										<svg
+											viewBox="0 0 24 24"
+											width="16"
+											height="16"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
 										>
-											<svg
-												viewBox="0 0 24 24"
-												width="16"
-												height="16"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<polyline points="23 4 23 10 17 10"></polyline>
-												<polyline points="1 20 1 14 7 14"></polyline>
-												<path
-													d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"
-												></path>
-											</svg>
-											Try again
-										</button>
-
-										{#if showRetryPopup === message.message_id}
-											<div
-												class="retry-popup glass glass--rounded glass--responsive"
-												bind:this={retryPopupRef}
-											>
-												<button
-													class="retry-option"
-													on:click={() => {
-														retryMessage(message);
-														closeRetryPopup();
-													}}
-												>
-													<svg
-														viewBox="0 0 24 24"
-														width="16"
-														height="16"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														stroke-linecap="round"
-														stroke-linejoin="round"
-													>
-														<polyline points="23 4 23 10 17 10"></polyline>
-														<polyline points="1 20 1 14 7 14"></polyline>
-														<path
-															d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"
-														></path>
-													</svg>
-													Retry
-												</button>
-											</div>
-										{/if}
-									</div>
+											<polyline points="23 4 23 10 17 10"></polyline>
+											<polyline points="1 20 1 14 7 14"></polyline>
+											<path
+												d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"
+											></path>
+										</svg>
+										Try again
+									</button>
 								</div>
 							{/if}
 
