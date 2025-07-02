@@ -84,7 +84,7 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="banner-message"> For the best experience, try Atlantis on desktop. </span>
+				<span class="banner-message"> For the best experience, try Peripheral on desktop. </span>
 			</div>
 			<button
 				class="dismiss-button"
