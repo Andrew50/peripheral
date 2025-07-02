@@ -56,18 +56,18 @@
 
 <!-- ─────────────── Strategy toggle buttons ─────────────── -->
 <div class="controls-container">
-    {#if Array.isArray($strategies)}
-        {#each $strategies as strategy (strategy.strategyId)}
-            <button
-                class="toggle-button { $selectedStrategyIds.has(strategy.strategyId) ? 'active' : '' }"
-                on:click={() => toggleStrategy(strategy.strategyId)}
-            >
-                {strategy.name}
-            </button>
-        {/each}
-    {:else}
-        <p1> No strategies Found </p1>
-    {/if}
+	{#if Array.isArray($strategies)}
+		{#each $strategies as strategy (strategy.strategyId)}
+			<button
+				class="toggle-button {$selectedStrategyIds.has(strategy.strategyId) ? 'active' : ''}"
+				on:click={() => toggleStrategy(strategy.strategyId)}
+			>
+				{strategy.name}
+			</button>
+		{/each}
+	{:else}
+		<p1> No strategies Found </p1>
+	{/if}
 </div>
 
 <!-- ─────────────── Run / Date buttons ─────────────── -->
@@ -80,7 +80,9 @@
 
 <!-- ─────────────── Results list ─────────────── -->
 <List
-	on:contextmenu={(event) => {event.preventDefault()}}
+	on:contextmenu={(event) => {
+		event.preventDefault();
+	}}
 	list={screens}
 	columns={['Ticker', 'Chg%', 'Setup', 'Score', 'Ext.']}
 />
@@ -88,4 +90,3 @@
 <style>
 	/* ── unchanged styles omitted for brevity ── */
 </style>
-

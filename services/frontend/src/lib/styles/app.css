@@ -10,6 +10,11 @@
 	background-color: var(--c1);
 	margin: 0;
 	padding: 0;
+	/* Additional overscroll prevention */
+	overscroll-behavior: none;
+	overscroll-behavior-y: none;
+	/* Prevent mobile pull-to-refresh and bounce */
+	touch-action: pan-x pan-y;
 }
 
 .content-wrapper {
@@ -36,7 +41,6 @@
 	position: relative;
 	overflow: hidden;
 	min-height: 0;
-	padding-top: 40px; /* Add padding for the absolutely positioned top bar */
 }
 
 .main-content {
@@ -51,7 +55,7 @@
 .bottom-bar {
 	height: 40px;
 	min-height: 40px;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -68,45 +72,56 @@
 	position: relative;
 	overflow: hidden;
 	min-height: 0;
-	height: 100%; /* Ensure it takes available height */
+	height: 100%;
+	/* Ensure it takes available height */
 }
 
 .sidebar {
 	height: 100%;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	flex-direction: column;
 	position: relative;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px)); /* 600px max sidebar with 45px button bar */
+	max-width: min(600px, calc(100vw - 45px));
+	/* 600px max sidebar with 45px button bar */
+	/* Add responsive font scaling */
+	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
+
+
 
 .sidebar-buttons {
 	position: fixed;
-	top: 40px; /* Start below the top bar */
+	top: 40px;
+	/* Start below the top bar */
 	right: 0;
-	height: calc(100vh - 80px); /* Subtract both top bar and bottom bar heights */
+	height: calc(100vh - 80px);
+	/* Subtract both top bar and bottom bar heights */
 	width: 45px;
 	display: flex;
 	flex-direction: column;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	z-index: 2;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px)); /* 600px max with 45px button bar */
+	max-width: min(600px, calc(100vw - 45px));
+	/* 600px max with 45px button bar */
 }
 
 .resize-handle {
 	width: 4px;
-	height: 100%;
+	height: calc(100vh - 40px);
+	/* Extend to full viewport height minus bottom bar */
 	cursor: ew-resize;
 	background-color: var(--c1);
 	flex-shrink: 0;
 	transition: background-color 0.2s;
 	position: absolute;
 	left: -4px;
-	top: 0;
+	top: -40px;
+	/* Extend up to include the top bar area */
 	z-index: 100;
 	overflow: hidden;
 	font-size: 0;
@@ -210,7 +225,8 @@
 	overflow: hidden;
 	display: flex;
 	border-top: none;
-	max-width: 100%; /* Ensure container doesn't overflow */
+	max-width: 100%;
+	/* Ensure container doesn't overflow */
 }
 
 .bottom-window {
@@ -219,18 +235,21 @@
 	display: flex;
 	flex-direction: column;
 	background: var(--ui-bg-primary);
-	min-width: 0; /* Allow window to shrink */
+	min-width: 0;
+	/* Allow window to shrink */
 }
 
 .window-content {
 	flex: 1;
 	overflow-y: auto;
-	overflow-x: hidden; /* Prevent horizontal overflow */
+	overflow-x: hidden;
+	/* Prevent horizontal overflow */
 	padding: 8px;
 	scrollbar-width: none;
 	height: 100%;
 	background: var(--ui-bg-primary);
-	min-width: 0; /* Allow content to shrink */
+	min-width: 0;
+	/* Allow content to shrink */
 }
 
 .bottom-resize-handle {
@@ -262,20 +281,117 @@
 	overflow-y: auto;
 	scrollbar-width: none;
 	min-height: 0;
+	/* Remove padding to let components handle their own spacing */
+	padding: 0;
 }
 
 .ticker-info-container {
 	flex-shrink: 0;
 	border-top: 1px solid var(--c3);
-	background: var(--c2);
+	background: #0f0f0f;
 	height: var(--ticker-height);
 	overflow-y: auto;
 	overflow-x: hidden;
+	/* Remove padding to let Quote component handle its own spacing */
+	padding: 0;
+	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
 
 .main-sidebar-content::-webkit-scrollbar,
 .sidebar-content::-webkit-scrollbar {
 	display: none;
+}
+
+/* Responsive Sidebar Scaling */
+@media (max-width: 1400px) {
+	.sidebar {
+		max-width: min(400px, calc(100vw - 45px));
+		font-size: clamp(0.7rem, 0.5rem + 0.6vw, 0.85rem);
+	}
+
+	.main-sidebar-content {
+		padding: 0;
+	}
+
+	.ticker-info-container {
+		padding: 0;
+		font-size: clamp(0.7rem, 0.5rem + 0.6vw, 0.85rem);
+	}
+}
+
+@media (max-width: 1200px) {
+	.sidebar {
+		max-width: min(350px, calc(100vw - 45px));
+		font-size: clamp(0.65rem, 0.4rem + 0.5vw, 0.8rem);
+	}
+
+	.main-sidebar-content {
+		padding: 0;
+	}
+
+	.ticker-info-container {
+		padding: 0;
+		font-size: clamp(0.65rem, 0.4rem + 0.5vw, 0.8rem);
+	}
+}
+
+@media (max-width: 1000px) {
+	.sidebar {
+		max-width: min(300px, calc(100vw - 45px));
+		font-size: clamp(0.6rem, 0.3rem + 0.4vw, 0.75rem);
+	}
+
+	.main-sidebar-content {
+		padding: 0;
+	}
+
+	.ticker-info-container {
+		padding: 0;
+		font-size: clamp(0.6rem, 0.3rem + 0.4vw, 0.75rem);
+	}
+}
+
+@media (max-width: 800px) {
+	.sidebar {
+		max-width: min(250px, calc(100vw - 45px));
+		font-size: clamp(0.55rem, 0.2rem + 0.3vw, 0.7rem);
+	}
+
+	.main-sidebar-content {
+		padding: 0;
+	}
+
+	.ticker-info-container {
+		padding: 0;
+		font-size: clamp(0.55rem, 0.2rem + 0.3vw, 0.7rem);
+	}
+}
+
+/* Global responsive typography for sidebar components */
+.sidebar * {
+	font-size: inherit;
+}
+
+/* Scale buttons and inputs in sidebar */
+.sidebar button,
+.sidebar input,
+.sidebar select {
+	font-size: clamp(0.6rem, 0.4rem + 0.5vw, 0.85rem);
+	padding: clamp(0.3rem, 0.5vw, 0.6rem) clamp(0.5rem, 0.8vw, 1rem);
+}
+
+/* Scale table cells in sidebar */
+.sidebar td,
+.sidebar th {
+	padding: clamp(0.3rem, 0.5vw, 0.6rem) clamp(0.4rem, 0.6vw, 0.8rem);
+	font-size: clamp(0.6rem, 0.4rem + 0.5vw, 0.8rem);
+}
+
+/* Scale icons in sidebar */
+.sidebar img,
+.sidebar svg {
+	width: clamp(1rem, 1.5vw, 1.5rem);
+	height: clamp(1rem, 1.5vw, 1.5rem);
 }
 
 .settings-overlay {
@@ -380,7 +496,7 @@
 /* Add styles for left sidebar */
 .left-sidebar {
 	height: 100%;
-	background-color: #0F0F0F;
+	background-color: #0f0f0f;
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -404,20 +520,26 @@
 /* Calendar and Replay button styles */
 .calendar-button,
 .replay-button {
-	padding: 0.3rem 0.8rem; /* Adjust padding slightly for text */
-	min-width: auto; /* Remove fixed min-width */
+	padding: 0.3rem 0.8rem;
+	/* Adjust padding slightly for text */
+	min-width: auto;
+	/* Remove fixed min-width */
 	min-height: 32px;
-	display: inline-flex; /* Use inline-flex */
+	display: inline-flex;
+	/* Use inline-flex */
 	justify-content: center;
 	align-items: center;
-	gap: 0.4rem; /* Add gap between icon and text */
+	gap: 0.4rem;
+	/* Add gap between icon and text */
 }
 
 .calendar-button svg,
 .replay-button svg {
-	width: 16px; /* Adjust icon size */
+	width: 16px;
+	/* Adjust icon size */
 	height: 16px;
-	fill: currentColor; /* Use button text color for icon */
+	fill: currentColor;
+	/* Use button text color for icon */
 }
 
 .replay-button.play {
@@ -451,4 +573,4 @@
 .replay-button:active {
 	background-color: var(--ui-bg-active);
 	transform: translateY(1px);
-} 
+}

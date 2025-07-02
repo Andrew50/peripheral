@@ -17,9 +17,14 @@
 			if (!dismissed) {
 				// Show banner if on mobile and not previously dismissed
 				const checkMobile = () => {
-					return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+					return (
+						window.innerWidth <= 768 ||
+						/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+							navigator.userAgent
+						)
+					);
 				};
-				
+
 				if (checkMobile()) {
 					bannerVisible = true;
 					mobileBannerStore.set({ visible: true });
@@ -33,7 +38,7 @@
 	function dismissBanner() {
 		bannerVisible = false;
 		mobileBannerStore.set({ visible: false });
-		
+
 		if (browser) {
 			// Store dismissal in localStorage
 			localStorage.setItem(STORAGE_KEY, 'true');
@@ -57,13 +62,29 @@
 		<div class="banner-content">
 			<div class="banner-text">
 				<svg class="banner-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					<path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					<path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<path
+						d="M12 2L2 7L12 12L22 7L12 2Z"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+					<path
+						d="M2 17L12 22L22 17"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+					<path
+						d="M2 12L12 17L22 12"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
 				</svg>
-				<span class="banner-message">
-					For the best experience, try Atlantis on desktop.
-				</span>
+				<span class="banner-message"> For the best experience, try Peripheral on desktop. </span>
 			</div>
 			<button
 				class="dismiss-button"
@@ -72,8 +93,20 @@
 				title="Dismiss"
 			>
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-					<path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<path
+						d="M18 6L6 18"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+					<path
+						d="M6 6L18 18"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
 				</svg>
 			</button>
 		</div>

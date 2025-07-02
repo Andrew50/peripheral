@@ -8,7 +8,13 @@
 	import type { Instance } from '$lib/utils/types/types';
 	// Ignore the $app/environment import error for now
 	import { browser } from '$app/environment';
-	import { capitalize, formatTimeframe, detectInputTypeSync, validateInput } from '$lib/components/input/utils/inputUtils';
+	import {
+		capitalize,
+		formatTimeframe,
+		detectInputTypeSync,
+		validateInput
+	} from '$lib/components/input/utils/inputUtils';
+	import { userLastTickers, updateUserLastTickers } from '$lib/utils/stores/stores';
 
 	/**
 	 * Focus Management Strategy:
@@ -21,7 +27,11 @@
 	 * This approach prevents the input from capturing all keyboard events when it's not active.
 	 */
 
-	import { allKeys, type InstanceAttributes, type InputQuery } from '$lib/components/input/utils/inputTypes';
+	import {
+		allKeys,
+		type InstanceAttributes,
+		type InputQuery
+	} from '$lib/components/input/utils/inputTypes';
 	import { isPublicViewing } from '$lib/utils/stores/stores';
 	let currentSecurityResultRequest = 0;
 	let loadedSecurityResultRequest = -1;
@@ -30,15 +40,17 @@
 
 	let activePromiseReject: ((reason?: any) => void) | null = null;
 	let isDocumentListenerActive = false; // Add guard for document listener
-	
+
 	// Only load security classifications if not in public viewing mode
 	if (browser && !get(isPublicViewing)) {
-		publicRequest<[]>('getSecurityClassifications', {}).then((v: []) => {
-			filterOptions = v;
-		}).catch((error) => {
-			console.warn('Failed to load security classifications:', error);
-			filterOptions = [];
-		});
+		publicRequest<[]>('getSecurityClassifications', {})
+			.then((v: []) => {
+				filterOptions = v;
+			})
+			.catch((error) => {
+				console.warn('Failed to load security classifications:', error);
+				filterOptions = [];
+			});
 	}
 
 	const inactiveInputQuery: InputQuery = {
@@ -119,26 +131,41 @@
 			}, 0);
 		}
 
-		// Perform validation asynchronously
-		validateInput(inputString.toUpperCase(), inputType)
-			.then((validationResp) => {
-				if (thisSecurityResultRequest === currentSecurityResultRequest) {
-					inputQuery.update((v: InputQuery) => ({
-						...v,
-						...validationResp
-					}));
-					loadedSecurityResultRequest = thisSecurityResultRequest;
-
-					// Reset loading state after validation completes
-					if (inputType === 'ticker') {
-						isLoadingSecurities = false;
+		// Perform validation asynchronously in next event loop tick to avoid blocking UI
+		setTimeout(() => {
+			validateInput(
+				inputString.toUpperCase(),
+				inputType,
+				// Callback for immediate updates (recent tickers)
+				(securities: any[]) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							securities,
+							inputValid: true
+						}));
 					}
 				}
-			})
-			.catch((error) => {
-				console.error('Validation error:', error);
-				isLoadingSecurities = false;
-			});
+			)
+				.then((validationResp) => {
+					if (thisSecurityResultRequest === currentSecurityResultRequest) {
+						inputQuery.update((v: InputQuery) => ({
+							...v,
+							...validationResp
+						}));
+						loadedSecurityResultRequest = thisSecurityResultRequest;
+
+						// Reset loading state after validation completes
+						if (inputType === 'ticker') {
+							isLoadingSecurities = false;
+						}
+					}
+				})
+				.catch((error) => {
+					console.error('Validation error:', error);
+					isLoadingSecurities = false;
+				});
+		}, 0);
 	}
 
 	// Modified queryInstanceInput: if called while another query is active,
@@ -210,7 +237,7 @@
 			// Use setTimeout to ensure this runs after all other synchronous code
 			setTimeout(() => {
 				let initialType: string;
-				
+
 				// Only auto-detect type if no forced input type is provided
 				if (!forcedInputType) {
 					// First, forcibly detect the input type without waiting
@@ -242,7 +269,7 @@
 							securities: []
 						}));
 					}
-					
+
 					// Run validation with the forced type
 					determineInputType(initialInputString);
 				}
@@ -269,26 +296,26 @@
 								}
 							}, 1000); // Increased to 1000ms for better network reliability
 						}
-									}, 250); // Increased for better timing
-			}
-		}, 0);
-	} else if (forcedInputType) {
-		// If no initial input string but we have a forced input type, set it up
-		await tick();
-		setTimeout(() => {
-			inputQuery.update((q) => ({
-				...q,
-				inputType: forcedInputType,
-				securities: forcedInputType === 'ticker' ? [] : q.securities
-			}));
-			
-			// If forced to ticker type with no input, load popular tickers
-			if (forcedInputType === 'ticker') {
-				isLoadingSecurities = true;
-				determineInputType(''); // This will trigger popular tickers loading
-			}
-		}, 0);
-	}
+					}, 250); // Increased for better timing
+				}
+			}, 0);
+		} else if (forcedInputType) {
+			// If no initial input string but we have a forced input type, set it up
+			await tick();
+			setTimeout(() => {
+				inputQuery.update((q) => ({
+					...q,
+					inputType: forcedInputType,
+					securities: forcedInputType === 'ticker' ? [] : q.securities
+				}));
+
+				// If forced to ticker type with no input, load popular tickers
+				if (forcedInputType === 'ticker') {
+					isLoadingSecurities = true;
+					determineInputType(''); // This will trigger popular tickers loading
+				}
+			}, 0);
+		}
 
 		// Wait for next tick to ensure UI updates
 		await tick();
@@ -319,25 +346,25 @@
 			}
 		});
 	}
-
 </script>
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	let prevFocusedElement: HTMLElement | null = null;
 	let highlightedIndex = -1;
-	
+
 	// Reactive statement to auto-highlight first result for ticker searches
-	$: if ($inputQuery.inputType === 'ticker' && 
-		  Array.isArray($inputQuery.securities) && 
-		  $inputQuery.securities.length > 0 && 
-		  highlightedIndex === -1) {
+	$: if (
+		$inputQuery.inputType === 'ticker' &&
+		Array.isArray($inputQuery.securities) &&
+		$inputQuery.securities.length > 0 &&
+		highlightedIndex === -1
+	) {
 		highlightedIndex = 0;
 	}
 
 	async function enterInput(iQ: InputQuery, tickerIndex: number = 0): Promise<InputQuery> {
 		if (iQ.inputType === 'ticker') {
-
 			// Wait for securities to load if needed
 			if (loadedSecurityResultRequest !== currentSecurityResultRequest) {
 				await waitForSecurityResult();
@@ -346,10 +373,34 @@
 			// Get the latest state after waiting
 			iQ = $inputQuery;
 
-			// Check if securities are available
-			if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+			let selectedSecurity;
+
+			// Handle recent tickers vs search results
+			if (iQ.inputString === '' || !iQ.inputString) {
+				// When no input, we're showing recent + popular tickers
+				const recentTickers = $userLastTickers.slice(0, 2);
+				const allSecurities = iQ.securities || [];
+				const popularTickers = allSecurities.filter(
+					(sec) => !recentTickers.some((recent) => recent.ticker === sec.ticker)
+				);
+
+				if (tickerIndex < recentTickers.length) {
+					selectedSecurity = recentTickers[tickerIndex];
+				} else {
+					selectedSecurity = popularTickers[tickerIndex - recentTickers.length];
+				}
+			} else {
+				// When searching, use the search results
+				if (Array.isArray(iQ.securities) && iQ.securities.length > 0) {
+					selectedSecurity = iQ.securities[tickerIndex];
+				}
+			}
+
+			if (selectedSecurity) {
 				// Apply the selected security to the instance
-				iQ.instance = { ...iQ.instance, ...iQ.securities[tickerIndex] };
+				iQ.instance = { ...iQ.instance, ...selectedSecurity };
+				// Save to recent tickers
+				updateUserLastTickers(selectedSecurity);
 			} else {
 				// If no securities, at least set the ticker from input string
 				iQ.instance.ticker = iQ.inputString.toUpperCase();
@@ -417,7 +468,7 @@
 	function handleInputChange(event: Event) {
 		const target = event.target as HTMLInputElement;
 		const newValue = target.value;
-		
+
 		// Reset highlighted index when input changes, but set to 0 if we'll have securities
 		const currentState = get(inputQuery);
 		if (currentState.inputType === 'ticker' && newValue.length > 0) {
@@ -425,21 +476,23 @@
 		} else {
 			highlightedIndex = -1;
 		}
-		
-		// Update the input string in the store
+
+		// Update the input string in the store immediately for responsive UI
 		inputQuery.update((v) => ({
 			...v,
 			inputString: newValue
 		}));
-		
-		// Determine input type based on new value
-		determineInputType(newValue);
+
+		// Make the API call non-blocking to avoid UI delays
+		setTimeout(() => {
+			determineInputType(newValue);
+		}, 0);
 	}
 
 	// Handle special keys (Enter, Tab, Escape, Arrow keys)
 	async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 		const currentState = get(inputQuery);
-		
+
 		// Make sure we're in active state
 		if (currentState.status !== 'active') {
 			return;
@@ -463,20 +516,27 @@
 			return;
 		} else if (event.key === 'ArrowDown') {
 			event.preventDefault();
-			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
+			if (
+				currentState.inputType === 'ticker' &&
+				currentState.securities &&
+				currentState.securities.length > 0
+			) {
 				highlightedIndex = Math.min(highlightedIndex + 1, currentState.securities.length - 1);
 				scrollToHighlighted();
 			}
 			return;
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
-			if (currentState.inputType === 'ticker' && currentState.securities && currentState.securities.length > 0) {
+			if (
+				currentState.inputType === 'ticker' &&
+				currentState.securities &&
+				currentState.securities.length > 0
+			) {
 				highlightedIndex = Math.max(highlightedIndex - 1, 0);
 				scrollToHighlighted();
 			}
 			return;
-		} 
-		
+		}
 	}
 
 	// onTouch handler (if needed) now removes the UI by updating via update() too.
@@ -529,7 +589,7 @@
 						const searchInput = document.querySelector('.search-input') as HTMLInputElement;
 						if (searchInput) {
 							searchInput.focus();
-							
+
 							// Process initial input string if present
 							if (v.inputString) {
 								determineInputType(v.inputString);
@@ -539,7 +599,7 @@
 						// Add a click handler to the document to detect clicks outside the popup
 						addDocumentListener();
 					});
-					
+
 					// Use update() to mark that the UI is now active.
 					inputQuery.update((state) => ({ ...state, status: 'active' }));
 				} else if (v.status === 'shutdown') {
@@ -589,16 +649,16 @@
 				sectors: string[];
 				industries: string[];
 			};
-			publicRequest<SecurityClassifications>('getSecurityClassifications', {}).then(
-				(classifications: SecurityClassifications) => {
+			publicRequest<SecurityClassifications>('getSecurityClassifications', {})
+				.then((classifications: SecurityClassifications) => {
 					sectors = classifications.sectors;
 					industries = classifications.industries;
-				}
-			).catch((error) => {
-				console.warn('Failed to load security classifications in onMount:', error);
-				sectors = [];
-				industries = [];
-			});
+				})
+				.catch((error) => {
+					console.warn('Failed to load security classifications in onMount:', error);
+					sectors = [];
+					industries = [];
+				});
 		}
 	});
 
@@ -658,36 +718,43 @@
 
 	let sectors: string[] = [];
 	let industries: string[] = [];
-	
 </script>
+
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if $inputQuery.status === 'active' || $inputQuery.status === 'initializing'}
-	<div class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}" id="input-window" tabindex="-1" on:click|stopPropagation>
+	<div
+		class="popup-container {$inputQuery.inputType === 'timeframe' ? 'timeframe-popup' : ''}"
+		id="input-window"
+		tabindex="-1"
+		on:click|stopPropagation
+	>
 		<div class="content-container glass glass--rounded glass--responsive box-expand">
 			{#if $inputQuery.inputType === 'timeframe'}
 				<div class="timeframe-header-container">
 					<div class="timeframe-title">Change Interval</div>
 				</div>
+			{:else if $inputQuery.inputType === 'ticker'}
+				<div class="table-container">
+					<div class="search-header">
+						<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
+					</div>
+					<div class="search-divider"></div>
+					{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
+						<!-- Show Recent and Popular sections when no input -->
+						{@const recentTickers = $userLastTickers.slice(0, 2)}
+						{@const allSecurities = $inputQuery.securities || []}
+						{@const popularTickers = allSecurities.filter(
+							(sec) => !recentTickers.some((recent) => recent.ticker === sec.ticker)
+						)}
 
-				{:else if $inputQuery.inputType === 'ticker'}
-					<div class="table-container">
-						<div class="search-header">
-							<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
-						</div>
-						<div class="search-divider"></div>
-						{#if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
-							{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
-								<div class="popular-section-header">
-									<span class="popular-text">Popular</span>
+						<!-- Combined scrollable container for both sections -->
+						<div class="securities-list-flex securities-scrollable">
+							{#if recentTickers.length > 0}
+								<div class="recent-section-header">
+									<span class="recent-text">Recent</span>
 								</div>
-							{:else}
-								<div class="securities-section-header">
-									<span class="securities-text">Securities</span>
-								</div>
-							{/if}
-							<div class="securities-list-flex securities-scrollable">
-								{#each $inputQuery.securities as sec, i}
+								{#each recentTickers as sec, i}
 									<div
 										class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
 										on:click={async () => {
@@ -717,6 +784,10 @@
 													alt="Security Icon"
 													on:error={() => {}}
 												/>
+											{:else if sec.ticker}
+												<span class="default-ticker-icon">
+													{sec.ticker.charAt(0).toUpperCase()}
+												</span>
 											{/if}
 										</div>
 										<div class="security-info-flex">
@@ -725,22 +796,135 @@
 										</div>
 									</div>
 								{/each}
-							</div>
-						{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && !isLoadingSecurities && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
-							<div class="search-results-container">
-								<div class="no-results">
-									<span>No matching securities found</span>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/if}
-			</div>
+							{/if}
 
-		<div class="search-bar glass glass--pill glass--responsive search-bar-expand {$inputQuery.inputType === 'timeframe' && !$inputQuery.inputValid && $inputQuery.inputString ? 'error' : ''}">
+							{#if popularTickers.length > 0}
+								<div class="popular-section-header">
+									<span class="popular-text">Popular</span>
+								</div>
+								{#each popularTickers as sec, i}
+									{@const adjustedIndex = i + recentTickers.length}
+									<div
+										class="security-item-flex {adjustedIndex === highlightedIndex
+											? 'highlighted'
+											: ''}"
+										on:click={async () => {
+											const updatedQuery = await enterInput($inputQuery, adjustedIndex);
+											inputQuery.set(updatedQuery);
+										}}
+										on:mouseenter={() => {
+											highlightedIndex = adjustedIndex;
+										}}
+										on:mouseleave={() => {
+											// Keep the highlight on the current item, don't reset
+										}}
+										role="button"
+										tabindex="0"
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.currentTarget.click();
+											}
+										}}
+									>
+										<div class="security-icon-flex">
+											{#if sec.icon}
+												<img
+													src={sec.icon.startsWith('data:')
+														? sec.icon
+														: `data:image/jpeg;base64,${sec.icon}`}
+													alt="Security Icon"
+													on:error={() => {}}
+												/>
+											{:else if sec.ticker}
+												<span class="default-ticker-icon">
+													{sec.ticker.charAt(0).toUpperCase()}
+												</span>
+											{/if}
+										</div>
+										<div class="security-info-flex">
+											<span class="ticker-flex">{sec.ticker}</span>
+											<span class="name-flex">{sec.name}</span>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					{:else if Array.isArray($inputQuery.securities) && $inputQuery.securities.length > 0}
+						<div class="securities-section-header">
+							<span class="securities-text">Securities</span>
+						</div>
+						<div class="securities-list-flex securities-scrollable">
+							{#each $inputQuery.securities as sec, i}
+								<div
+									class="security-item-flex {i === highlightedIndex ? 'highlighted' : ''}"
+									on:click={async () => {
+										const updatedQuery = await enterInput($inputQuery, i);
+										inputQuery.set(updatedQuery);
+									}}
+									on:mouseenter={() => {
+										highlightedIndex = i;
+									}}
+									on:mouseleave={() => {
+										// Keep the highlight on the current item, don't reset
+									}}
+									role="button"
+									tabindex="0"
+									on:keydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.currentTarget.click();
+										}
+									}}
+								>
+									<div class="security-icon-flex">
+										{#if sec.icon}
+											<img
+												src={sec.icon.startsWith('data:')
+													? sec.icon
+													: `data:image/jpeg;base64,${sec.icon}`}
+												alt="Security Icon"
+												on:error={() => {}}
+											/>
+										{:else if sec.ticker}
+											<span class="default-ticker-icon">
+												{sec.ticker.charAt(0).toUpperCase()}
+											</span>
+										{/if}
+									</div>
+									<div class="security-info-flex">
+										<span class="ticker-flex">{sec.ticker}</span>
+										<span class="name-flex">{sec.name}</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else if $inputQuery.inputString && $inputQuery.inputString.length > 0 && !isLoadingSecurities && loadedSecurityResultRequest !== -1 && loadedSecurityResultRequest === currentSecurityResultRequest}
+						<div class="search-results-container">
+							<div class="no-results">
+								<span>No matching securities found</span>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+
+		<div
+			class="search-bar glass glass--pill glass--responsive search-bar-expand {$inputQuery.inputType ===
+				'timeframe' &&
+			!$inputQuery.inputValid &&
+			$inputQuery.inputString
+				? 'error'
+				: ''}"
+		>
 			<div class="search-icon">
 				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<path
+						d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
 				</svg>
 			</div>
 			<input
@@ -768,7 +952,6 @@
 				{/if}
 			</div>
 		{/if}
-
 	</div>
 {/if}
 
@@ -965,7 +1148,9 @@
 		cursor: pointer;
 		border-radius: 0.375rem;
 		border: 1px solid transparent;
-		transition: background-color 0.15s ease, border-color 0.15s ease;
+		transition:
+			background-color 0.15s ease,
+			border-color 0.15s ease;
 		gap: 0.75rem;
 		min-height: 2.25rem;
 	}
@@ -990,6 +1175,22 @@
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
+		border-radius: 50%;
+	}
+
+	.default-ticker-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		font-size: 0.625rem;
+		font-weight: 600;
+		user-select: none;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 	}
 
 	.security-info-flex {
@@ -1049,13 +1250,19 @@
 	}
 
 	.popular-section-header,
-	.securities-section-header {
+	.securities-section-header,
+	.recent-section-header {
 		padding: 0.25rem 0.75rem 0.125rem 0.75rem;
 		margin-bottom: 0.125rem;
 	}
 
+	.popular-section-header {
+		margin-top: 0.5rem;
+	}
+
 	.popular-text,
-	.securities-text {
+	.securities-text,
+	.recent-text {
 		color: rgba(255, 255, 255, 0.6);
 		font-size: 0.75rem;
 		font-weight: 400;
@@ -1063,7 +1270,8 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% {
+		0%,
+		100% {
 			opacity: 1;
 		}
 		50% {
@@ -1119,17 +1327,17 @@
 		#input-window.popup-container {
 			width: min(500px, 95vw);
 		}
-		
+
 		.security-item-flex {
 			padding: 0.5rem 0.625rem;
 			gap: 0.75rem;
 		}
-		
+
 		.security-icon-flex {
 			width: 1.25rem;
 			height: 1.25rem;
 		}
-		
+
 		.ticker-flex {
 			flex-basis: 4rem;
 		}

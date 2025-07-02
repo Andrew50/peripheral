@@ -247,6 +247,7 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 // StopPolygonWS performs operations related to StopPolygonWS functionality.
 func StopPolygonWS() error {
 	if polygonWSConn == nil {
+		fmt.Println("polygon websocket connection is not initialized")
 		return fmt.Errorf("polygon websocket connection is not initialized")
 	}
 

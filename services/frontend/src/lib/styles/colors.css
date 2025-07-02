@@ -1,6 +1,6 @@
 :root {
 	/* Base UI Colors */
-	--c1: #2d3139;
+	--c1: #2e2e2e;
 	/* a darker grey */
 	--c2: #1a1c21;
 	/* base - dark background */
@@ -36,7 +36,9 @@
 	--ui-bg-hover: rgba(255, 255, 255, 0.05);
 	--ui-bg-element: rgba(255, 255, 255, 0.03);
 	--ui-bg-highlight: #222;
-	--ui-border: rgba(255, 255, 255, 0.1);
+	--ui-border: #2e2e2e;
+	--ui-border-darker: #1a1a1a;
+	--ui-border-hover: #4a4a4a;
 	--ui-accent: #3b82f6;
 
 	/* Text Colors */

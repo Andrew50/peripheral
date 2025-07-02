@@ -481,7 +481,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, err
 			}
 			referencePrice = prevCloseSlice[0].GetPrice()
-		} else {
+		} else { // IF EXTENDED HOURS
 			// Check if we're in after-hours (post 4:00 PM) or pre-market
 			easternLocation, err := time.LoadLocation("America/New_York")
 			if err != nil {

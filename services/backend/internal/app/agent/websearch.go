@@ -120,14 +120,16 @@ func _geminiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 		return WebSearchResult{}, fmt.Errorf("no candidates found in result")
 	}
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				resultText = part.Text
-				break
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					resultText = part.Text
+					break
+				}
 			}
 		}
 	}

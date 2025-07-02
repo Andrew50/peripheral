@@ -9,7 +9,7 @@ import type {
 	SeriesDataItemTypeMap,
 	SeriesPrimitivePaneViewZOrder,
 	SeriesType,
-	Time,
+	Time
 } from 'lightweight-charts';
 import { PluginBase } from './plugin-base';
 
@@ -31,12 +31,11 @@ class SessionHighlightingPaneRenderer implements ISeriesPrimitivePaneRenderer {
 			return;
 		}
 
-		target.useBitmapCoordinateSpace(scope => {
+		target.useBitmapCoordinateSpace((scope) => {
 			const ctx = scope.context;
 			const yTop = 0;
 			const height = scope.bitmapSize.height;
-			const halfWidth =
-				(scope.horizontalPixelRatio * this._viewData.barWidth) / 2;
+			const halfWidth = (scope.horizontalPixelRatio * this._viewData.barWidth) / 2;
 			const cutOff = -1 * (halfWidth + 1);
 			const maxX = scope.bitmapSize.width;
 
@@ -55,7 +54,11 @@ class SessionHighlightingPaneRenderer implements ISeriesPrimitivePaneRenderer {
 				const x1 = Math.max(0, Math.round(xScaled - halfWidth));
 				const x2 = Math.min(maxX, Math.round(xScaled + halfWidth));
 
-				if (point.color !== currentColor || index === points.length - 1 || (index < points.length - 1 && Math.abs(x1 - lastX) > 1)) {
+				if (
+					point.color !== currentColor ||
+					index === points.length - 1 ||
+					(index < points.length - 1 && Math.abs(x1 - lastX) > 1)
+				) {
 					// Draw the previous batch if color changes
 					if (currentColor && startX < lastX) {
 						ctx.fillStyle = currentColor;
@@ -92,16 +95,16 @@ class SessionHighlightingPaneView implements ISeriesPrimitivePaneView {
 		this._data = {
 			data: [],
 			barWidth: 6,
-			options: this._source._options,
+			options: this._source._options
 		};
 	}
 
 	update() {
 		const timeScale = this._source.chart.timeScale();
-		this._data.data = this._source._backgroundColors.map(d => {
+		this._data.data = this._source._backgroundColors.map((d) => {
 			return {
 				x: timeScale.timeToCoordinate(d.time) ?? -100,
-				color: d.color,
+				color: d.color
 			};
 		});
 		if (this._data.data.length > 1) {
@@ -135,19 +138,14 @@ interface BackgroundData {
 
 export type SessionHighlighter = (date: Time) => string;
 
-export class SessionHighlighting
-	extends PluginBase
-	implements ISeriesPrimitive<Time> {
+export class SessionHighlighting extends PluginBase implements ISeriesPrimitive<Time> {
 	_paneViews: SessionHighlightingPaneView[];
 	_seriesData: SeriesDataItemTypeMap[SeriesType][] = [];
 	_backgroundColors: BackgroundData[] = [];
 	_options: Required<SessionHighlightingOptions>;
 	_highlighter: SessionHighlighter;
 
-	constructor(
-		highlighter: SessionHighlighter,
-		options: SessionHighlightingOptions = {}
-	) {
+	constructor(highlighter: SessionHighlighter, options: SessionHighlightingOptions = {}) {
 		super();
 		this._highlighter = highlighter;
 		this._options = { ...defaults, ...options };
@@ -155,7 +153,7 @@ export class SessionHighlighting
 	}
 
 	updateAllViews() {
-		this._paneViews.forEach(pw => pw.update());
+		this._paneViews.forEach((pw) => pw.update());
 	}
 
 	paneViews() {
@@ -175,8 +173,13 @@ export class SessionHighlighting
 			if (data.length > 0) {
 				const lastPoint = data[data.length - 1];
 				// Update existing point or add new one
-				if (this._backgroundColors.length > 0 && this._backgroundColors[this._backgroundColors.length - 1].time === lastPoint.time) {
-					this._backgroundColors[this._backgroundColors.length - 1].color = this._highlighter(lastPoint.time);
+				if (
+					this._backgroundColors.length > 0 &&
+					this._backgroundColors[this._backgroundColors.length - 1].time === lastPoint.time
+				) {
+					this._backgroundColors[this._backgroundColors.length - 1].color = this._highlighter(
+						lastPoint.time
+					);
 				} else {
 					const color = this._highlighter(lastPoint.time);
 					// Only add non-transparent colors if skipRegularHours is enabled
@@ -192,15 +195,16 @@ export class SessionHighlighting
 			// Full update needed
 			if (this._options.skipRegularHours) {
 				// Filter out regular market hours when creating the background colors
-				this._backgroundColors = this.series.data()
-					.map(dataPoint => {
+				this._backgroundColors = this.series
+					.data()
+					.map((dataPoint) => {
 						const color = this._highlighter(dataPoint.time);
 						return { time: dataPoint.time, color };
 					})
-					.filter(item => item.color !== 'rgba(0, 0, 0, 0)');
+					.filter((item) => item.color !== 'rgba(0, 0, 0, 0)');
 			} else {
 				// Include all points
-				this._backgroundColors = this.series.data().map(dataPoint => ({
+				this._backgroundColors = this.series.data().map((dataPoint) => ({
 					time: dataPoint.time,
 					color: this._highlighter(dataPoint.time)
 				}));
@@ -224,10 +228,10 @@ export function createDetailedSessionHighlighter(): SessionHighlighter {
 				: typeof timestamp === 'string'
 					? timestamp
 					: new Date().setFullYear(
-						(timestamp as any).year,
-						(timestamp as any).month - 1,
-						(timestamp as any).day
-					)
+							(timestamp as any).year,
+							(timestamp as any).month - 1,
+							(timestamp as any).day
+						)
 		);
 
 		// Calculate time in minutes using UTC methods

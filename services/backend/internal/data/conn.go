@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 	polygon "github.com/polygon-io/client-go/rest"
 )
 
-// Conn represents a structure for handling Conn data.
+// Conn encapsulates database connections and API clients
 type Conn struct {
 	//Cache *redis.Client
 	DB              *pgxpool.Pool
@@ -32,7 +31,16 @@ type Conn struct {
 	OpenAIKey       string
 }
 
-var conn *Conn
+// Result structs for thread-safe communication
+type dbConnResult struct {
+	conn *pgxpool.Pool
+	err  error
+}
+
+type redisConnResult struct {
+	client *redis.Client
+	err    error
+}
 
 // InitConn performs operations related to InitConn functionality.
 func InitConn(inContainer bool) (*Conn, func()) {
@@ -67,66 +75,114 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		cacheURL = fmt.Sprintf("localhost:%s", redisPort)
 	}
 
-	var dbConn *pgxpool.Pool
-	var err error
-	for {
-		// Create a connection pool configuration
-		poolConfig, err := pgxpool.ParseConfig(dbURL)
-		if err != nil {
-			time.Sleep(5 * time.Second)
-			continue
-		}
+	// Add timeout for database connection attempts using context
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 
-		// Configure connection pool with better defaults
-		poolConfig.MaxConns = 20                               // Set max connections to 20 (default is 4)
-		poolConfig.MinConns = 3                                // Keep at least 5 connections in the pool
-		poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
-		poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
-		poolConfig.HealthCheckPeriod = 1 * time.Minute         // How often to check connection health
-		poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Connection timeout
+	// Use channels for thread-safe communication
+	dbResult := make(chan dbConnResult, 1)
+	go func() {
+		defer close(dbResult)
+		var lastErr error
+		for {
+			select {
+			case <-ctx.Done():
+				dbResult <- dbConnResult{conn: nil, err: lastErr}
+				return
+			default:
+				// Create a connection pool configuration
+				poolConfig, parseErr := pgxpool.ParseConfig(dbURL)
+				if parseErr != nil {
+					lastErr = parseErr
+					time.Sleep(1 * time.Second)
+					continue
+				}
 
-		// Create the connection pool with our custom configuration
-		dbConn, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
-		if err != nil {
-			//log.Printf("waiting for db %v\n", err)
-			time.Sleep(5 * time.Second)
-		} else {
-			break
+				// Configure connection pool with better defaults
+				poolConfig.MaxConns = 25                               // Increase max connections
+				poolConfig.MinConns = 5                                // Increase minimum connections
+				poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
+				poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
+				poolConfig.HealthCheckPeriod = 30 * time.Second        // More frequent health checks
+				poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Shorter connection timeout
+
+				// Create the connection pool with our custom configuration
+				dbConn, err := pgxpool.ConnectConfig(ctx, poolConfig)
+				if err != nil {
+					lastErr = err
+					time.Sleep(1 * time.Second)
+					continue
+				}
+				dbResult <- dbConnResult{conn: dbConn, err: nil}
+				return
+			}
 		}
+	}()
+
+	// Wait for database connection result
+	dbRes := <-dbResult
+	if dbRes.err != nil {
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Last error: %v", dbURL, dbRes.err))
+	}
+	if dbRes.conn == nil {
+		panic(fmt.Sprintf("Failed to connect to database after 90 seconds. URL: %s, Error: connection is nil", dbURL))
 	}
 
-	var cache *redis.Client
-	for {
-		// Use Redis password if provided
-		opts := &redis.Options{
-			Addr: cacheURL,
-			// Add connection pool settings
-			PoolSize:     20,               // Increased from 10
-			MinIdleConns: 10,               // Increased from 5
-			PoolTimeout:  60 * time.Second, // Increased from 30
-			// Add timeouts
-			ReadTimeout:  30 * time.Second, // Increased from 10
-			WriteTimeout: 30 * time.Second, // Increased from 10
-			// Add retry settings
-			MaxRetries:      5,
-			MinRetryBackoff: 1 * time.Second,
-			MaxRetryBackoff: 10 * time.Second,
-			// Add dial timeout
-			DialTimeout: 15 * time.Second,
-		}
-		if redisPassword != "" {
-			opts.Password = redisPassword
-		}
+	// Add timeout for Redis connection attempts using context
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer redisCancel()
 
-		cache = redis.NewClient(opts)
-		err = cache.Ping(context.Background()).Err()
-		if err != nil {
-			//if strings.Contains(err.Error(), "the database system is starting up") {
-			//log.Println("waiting for cache")
-			time.Sleep(5 * time.Second)
-		} else {
-			break
+	redisResult := make(chan redisConnResult, 1)
+	go func() {
+		defer close(redisResult)
+		var lastErr error
+		for {
+			select {
+			case <-redisCtx.Done():
+				redisResult <- redisConnResult{client: nil, err: lastErr}
+				return
+			default:
+				// Use Redis password if provided
+				opts := &redis.Options{
+					Addr: cacheURL,
+					// Add connection pool settings
+					PoolSize:     20,               // Increased from 10
+					MinIdleConns: 10,               // Increased from 5
+					PoolTimeout:  60 * time.Second, // Increased from 30
+					// Add timeouts
+					ReadTimeout:  30 * time.Second, // Increased from 10
+					WriteTimeout: 30 * time.Second, // Increased from 10
+					// Add retry settings
+					MaxRetries:      5,
+					MinRetryBackoff: 1 * time.Second,
+					MaxRetryBackoff: 10 * time.Second,
+					// Add dial timeout
+					DialTimeout: 5 * time.Second, // Shorter dial timeout
+				}
+				if redisPassword != "" {
+					opts.Password = redisPassword
+				}
+
+				cache := redis.NewClient(opts)
+				err := cache.Ping(redisCtx).Err()
+				if err != nil {
+					lastErr = err
+					time.Sleep(1 * time.Second)
+					continue
+				}
+				redisResult <- redisConnResult{client: cache, err: nil}
+				return
+			}
 		}
+	}()
+
+	// Wait for Redis connection result
+	redisRes := <-redisResult
+	if redisRes.err != nil {
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Last error: %v", cacheURL, redisRes.err))
+	}
+	if redisRes.client == nil || redisRes.client.Ping(context.Background()).Err() != nil {
+		panic(fmt.Sprintf("Failed to connect to Redis after 90 seconds. URL: %s, Error: connection is nil or ping failed", cacheURL))
 	}
 
 	// Configure the HTTP client with better timeout settings
@@ -152,9 +208,10 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Initialize Gemini API key pool
 	geminiPool := initGeminiKeyPool()
 
-	conn = &Conn{
-		DB:              dbConn,
-		Cache:           cache,
+	// Create local connection object (no global variable)
+	localConn := &Conn{
+		DB:              dbRes.conn,
+		Cache:           redisRes.client,
 		Polygon:         polygonClient,
 		PolygonKey:      polygonKey,
 		GeminiPool:      geminiPool,
@@ -166,14 +223,18 @@ func InitConn(inContainer bool) (*Conn, func()) {
 
 	cleanup := func() {
 		// Close the database connection
-		conn.DB.Close()
+		if localConn.DB != nil {
+			localConn.DB.Close()
+		}
 
 		// Close the Redis cache connection
-		if err := conn.Cache.Close(); err != nil {
-			log.Printf("Error closing Redis cache connection: %v", err)
+		if localConn.Cache != nil {
+			if err := localConn.Cache.Close(); err != nil {
+				log.Printf("Error closing Redis cache connection: %v", err)
+			}
 		}
 	}
-	return conn, cleanup
+	return localConn, cleanup
 }
 
 // Helper function to get environment variables with fallback
@@ -208,33 +269,11 @@ func initGeminiKeyPool() *GeminiKeyPool {
 		LastUsedIdx: -1,
 	}
 
-	// Get keys from environment variables
-	// Format expected: GEMINI_FREE_KEYS=key1,key2,key3 and GEMINI_PAID_KEY=paidkey
-	freeKeysStr := getEnv("GEMINI_FREE_KEYS", "")
-	paidKey := getEnv("GEMINI_PAID_KEY", "")
+	// Get paid key from environment variable
+	paidKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
 
-	// Default rate limit for free keys (Gemini typically allows 60 requests per minute for free tier)
-	freeRateLimit := 15
 	// Paid key has a higher limit, though it varies by plan
 	paidRateLimit := 1000
-
-	// Parse and add free keys
-	if freeKeysStr != "" {
-		// Split the comma-separated string
-		freeKeys := strings.Split(freeKeysStr, ",")
-		for _, key := range freeKeys {
-			key = strings.TrimSpace(key)
-			if key != "" {
-				pool.Keys = append(pool.Keys, &GeminiKeyInfo{
-					Key:            key,
-					IsPaid:         false,
-					RequestCount:   0,
-					LastReset:      time.Now(),
-					RateLimitTotal: freeRateLimit,
-				})
-			}
-		}
-	}
 
 	// Add paid key if provided
 	if paidKey != "" {
@@ -277,7 +316,7 @@ func (p *GeminiKeyPool) resetCounts() {
 	}
 }
 
-// GetNextKey returns the next available API key based on the rotation strategy
+// GetNextKey returns the paid API key if available and under rate limit
 func (p *GeminiKeyPool) GetNextKey() (string, error) {
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()
@@ -286,60 +325,46 @@ func (p *GeminiKeyPool) GetNextKey() (string, error) {
 		return "", fmt.Errorf("no API keys available in the pool")
 	}
 
-	// First try to find a non-paid key under the rate limit
-	for i := 0; i < len(p.Keys); i++ {
-		// Round-robin selection, starting after the last used index
-		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
-		keyInfo := p.Keys[idx]
+	// Since we only have the paid key, just use it
+	keyInfo := p.Keys[0]
 
-		// Skip paid keys in the first pass
-		if keyInfo.IsPaid {
-			continue
-		}
+	keyInfo.Mutex.Lock()
+	defer keyInfo.Mutex.Unlock()
 
-		keyInfo.Mutex.Lock()
-		// Check if this key is under its rate limit
-		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
-			keyInfo.RequestCount++
-			p.LastUsedIdx = idx
-			keyInfo.Mutex.Unlock()
-			return keyInfo.Key, nil
-		}
-		keyInfo.Mutex.Unlock()
+	// Check if this key is under its rate limit
+	if keyInfo.RequestCount < keyInfo.RateLimitTotal {
+		keyInfo.RequestCount++
+		return keyInfo.Key, nil
 	}
 
-	// If all free keys are at their limit, try the paid key
-	for i := 0; i < len(p.Keys); i++ {
-		idx := (p.LastUsedIdx + 1 + i) % len(p.Keys)
-		keyInfo := p.Keys[idx]
-
-		// Now only consider paid keys
-		if !keyInfo.IsPaid {
-			continue
-		}
-
-		keyInfo.Mutex.Lock()
-		// Check if this paid key is under its rate limit
-		if keyInfo.RequestCount < keyInfo.RateLimitTotal {
-			keyInfo.RequestCount++
-			p.LastUsedIdx = idx
-			keyInfo.Mutex.Unlock()
-			return keyInfo.Key, nil
-		}
-		keyInfo.Mutex.Unlock()
-	}
-
-	// If we get here, all keys (including paid ones) are at their rate limit
-	return "", fmt.Errorf("all API keys have reached their rate limits")
+	// If we get here, the paid key has reached its rate limit
+	return "", fmt.Errorf("API key has reached its rate limit")
 }
 
 // GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
 func (c *Conn) GetGeminiKey() (string, error) {
+	// Add nil pointer checks
+	if c == nil {
+		return "", fmt.Errorf("connection object is nil")
+	}
+	if c.GeminiPool == nil {
+		return "", fmt.Errorf("gemini pool is not initialized")
+	}
 	return c.GeminiPool.GetNextKey()
 }
 
 // TestRedisConnectivity tests the Redis connection and returns success status and error message
 func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, string) {
+	// Add nil pointer check for the connection struct itself
+	if c == nil {
+		return false, "Connection object is nil"
+	}
+
+	// Add nil pointer check for the Redis cache
+	if c.Cache == nil {
+		return false, "Redis cache client is not initialized"
+	}
+
 	testKey := fmt.Sprintf("redis_test_key:%d", userID)
 	testValue := fmt.Sprintf("test_value_%d_%d", userID, time.Now().Unix())
 

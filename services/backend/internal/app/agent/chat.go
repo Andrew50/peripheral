@@ -40,6 +40,12 @@ type Citation struct {
 	EndIndex    int    `json:"end_index,omitempty"`
 	PublishDate string `json:"publish_date,omitempty"`
 }
+type TokenCounts struct {
+	InputTokenCount    int64 `json:"input_token_count,omitempty"`
+	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
+	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
+	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
+}
 
 // QueryResponse represents the response to a user query
 type QueryResponse struct {
@@ -77,7 +83,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	// Save pending message using the provided conversation ID
 	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
-		return nil, fmt.Errorf("error saving pending message: %w", err)
+		return QueryResponse{
+			ContentChunks:  []ContentChunk{},
+			Suggestions:    []string{},
+			ConversationID: query.ConversationID,
+			MessageID:      messageID,
+			Timestamp:      time.Now(),
+		}, fmt.Errorf("error saving pending message: %w", err)
 	}
 
 	// Set up cleanup function to remove pending message on error or cancellation
@@ -96,10 +108,12 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	var accumulatedThoughts []string
 	planningPrompt := ""
 	maxTurns := 15
-	totalRequestOutputTokenCount := 0
-	totalRequestInputTokenCount := 0
-	totalRequestThoughtsTokenCount := 0
-	totalRequestTokenCount := 0
+	var totalTokenCounts TokenCounts
+	totalTokenCounts.InputTokenCount = 0
+	totalTokenCounts.OutputTokenCount = 0
+	totalTokenCounts.ThoughtsTokenCount = 0
+	totalTokenCounts.TotalTokenCount = 0
+
 	for {
 		// Check if context is cancelled during the planning loop
 		if ctx.Err() != nil {
@@ -113,10 +127,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
 				// Mark as error instead of deleting for debugging
-				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
+				if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
 					fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 				}
-				return nil, fmt.Errorf("error building planning prompt: %w", err)
+				return QueryResponse{
+					ContentChunks:  []ContentChunk{},
+					Suggestions:    []string{},
+					ConversationID: conversationID,
+					MessageID:      messageID,
+					Timestamp:      time.Now(),
+				}, fmt.Errorf("error building planning prompt: %w", err)
 			}
 			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
 		} else {
@@ -124,26 +144,38 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}
 		if err != nil {
 			// Mark as error instead of deleting for debugging
-			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Planner error: %v", err)); markErr != nil {
 				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 			}
-			return nil, fmt.Errorf("error running planner: %w", err)
+			return QueryResponse{
+				ContentChunks:  []ContentChunk{},
+				Suggestions:    []string{},
+				ConversationID: conversationID,
+				MessageID:      messageID,
+				Timestamp:      time.Now(),
+			}, fmt.Errorf("error fetching response from model: %w", err)
 		}
 		switch v := result.(type) {
 		case DirectAnswer:
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
-			totalRequestOutputTokenCount += int(v.TokenCounts.OutputTokenCount)
-			totalRequestInputTokenCount += int(v.TokenCounts.InputTokenCount)
-			totalRequestThoughtsTokenCount += int(v.TokenCounts.ThoughtsTokenCount)
-			totalRequestTokenCount += int(v.TokenCounts.TotalTokenCount)
+			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
+			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
+			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
+			totalTokenCounts.TotalTokenCount += int64(v.TokenCounts.TotalTokenCount)
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalRequestTokenCount)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
 			if err != nil {
-				return nil, fmt.Errorf("error updating pending message to completed: %w", err)
+				return QueryResponse{
+					ContentChunks:  []ContentChunk{},
+					Suggestions:    []string{},
+					ConversationID: conversationID,
+					MessageID:      messageID,
+					Timestamp:      time.Now(),
+				}, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 
 			return QueryResponse{
@@ -161,7 +193,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 
 			// Handle result discarding if specified in the plan
-			if len(v.DiscardResults) > 0 {
+			if len(v.DiscardResults) > 0 && v.Stage != StageFinishedExecuting {
 				// Create a map for quick lookup of IDs to discard
 				discardMap := make(map[int64]bool)
 				for _, id := range v.DiscardResults {
@@ -194,10 +226,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)
 					if err != nil {
 						// Mark as error instead of deleting for debugging
-						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Execution error: %v", err)); markErr != nil {
+						if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Execution error: %v", err)); markErr != nil {
 							fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 						}
-						return nil, fmt.Errorf("error executing function calls: %w", err)
+						return QueryResponse{
+							ContentChunks:  []ContentChunk{},
+							Suggestions:    []string{},
+							ConversationID: conversationID,
+							MessageID:      messageID,
+							Timestamp:      time.Now(),
+						}, fmt.Errorf("error executing function calls: %w", err)
 					}
 					activeResults = append(activeResults, results...)
 				}
@@ -206,10 +244,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
-					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
 						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 					}
-					return nil, err
+					return QueryResponse{
+						ContentChunks:  []ContentChunk{},
+						Suggestions:    []string{},
+						ConversationID: conversationID,
+						MessageID:      messageID,
+						Timestamp:      time.Now(),
+					}, err
 				}
 			case StageFinishedExecuting:
 				// Generate final response based on active execution results
@@ -219,16 +263,22 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
-					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
+					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
 						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 					}
-					return nil, fmt.Errorf("error generating final response: %w", err)
+					return QueryResponse{
+						ContentChunks:  []ContentChunk{},
+						Suggestions:    []string{},
+						ConversationID: conversationID,
+						MessageID:      messageID,
+						Timestamp:      time.Now(),
+					}, err
 				}
 
-				totalRequestOutputTokenCount += int(finalResponse.TokenCounts.OutputTokenCount)
-				totalRequestInputTokenCount += int(finalResponse.TokenCounts.InputTokenCount)
-				totalRequestThoughtsTokenCount += int(finalResponse.TokenCounts.ThoughtsTokenCount)
-				totalRequestTokenCount += int(finalResponse.TokenCounts.TotalTokenCount)
+				totalTokenCounts.OutputTokenCount += int64(finalResponse.TokenCounts.OutputTokenCount)
+				totalTokenCounts.InputTokenCount += int64(finalResponse.TokenCounts.InputTokenCount)
+				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
+				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
 				// Process any table instructions in the content chunks
 				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
@@ -237,9 +287,15 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				allResults := append(activeResults, discardedResults...)
 
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalRequestTokenCount)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
-					return nil, fmt.Errorf("error updating pending message to completed: %w", err)
+					return QueryResponse{
+						ContentChunks:  []ContentChunk{},
+						Suggestions:    []string{},
+						ConversationID: conversationID,
+						MessageID:      messageID,
+						Timestamp:      time.Now(),
+					}, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
 
 				return QueryResponse{
@@ -256,10 +312,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		firstRound = false
 		if maxTurns <= 0 {
 			// Mark as error instead of deleting for debugging
-			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, query.Query, "Model took too many turns to run"); markErr != nil {
+			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, "Model took too many turns to run"); markErr != nil {
 				fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
 			}
-			return nil, fmt.Errorf("model took too many turns to run")
+			return QueryResponse{
+				ContentChunks:  []ContentChunk{},
+				Suggestions:    []string{},
+				ConversationID: conversationID,
+				MessageID:      messageID,
+				Timestamp:      time.Now(),
+			}, fmt.Errorf("model took too many turns to run")
 		}
 	}
 }

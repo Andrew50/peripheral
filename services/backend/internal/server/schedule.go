@@ -130,18 +130,14 @@ func (s *JobScheduler) saveJobLastCompletionTime(job *Job) error {
 // Define job functions for security detail updates
 // These wrappers avoid redeclaring functions that exist in other files
 func securityDetailUpdateJob(conn *data.Conn) error {
-	// Call the actual function from securitiesTable.go
-	return securities.UpdateSecurityDetails(conn, true)
+	return securities.UpdateSecurityDetails(conn, false)
 }
 
 func securityCikUpdateJob(conn *data.Conn) error {
-	// We call the function from securities.go
 	return securities.UpdateSecurityCik(conn)
 }
 
 func simpleSecuritiesUpdateJob(conn *data.Conn) error {
-	// We call the function from securities.go
-	////fmt.Println("Starting securities update - refreshing security data...")
 	return securities.SimpleUpdateSecuritiesV2(conn)
 }
 
@@ -160,6 +156,27 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+		},
+		{
+			Name:           "Update1MinuteOHLCV",
+			Function:       marketdata.Update1MinuteOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 0}}, // Run at 10:00 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "Update1HourOHLCV",
+			Function:       marketdata.Update1HourOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 15}}, // Run at 10:15 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
+			Name:           "Update1WeekOHLCV",
+			Function:       marketdata.Update1WeekOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 30}}, // Run at 10:30 PM
+			RunOnInit:      true,
+			SkipOnWeekends: false, // Weekly data needs weekend updates
 		},
 		{
 			Name:           "InitAggregates",
@@ -465,38 +482,42 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.ExecutionMutex.Lock()
 	if job.IsRunning {
 		job.ExecutionMutex.Unlock()
+		log.Printf("📋 Job %s is already running, skipping this execution", job.Name)
 		return
 	}
 	job.IsRunning = true
 	job.ExecutionMutex.Unlock()
 
 	// Job execution variables
-	//jobName := job.Name
-	//startTime := time.Now()
-
-	// isQueued := false // Removed as it's no longer used after the `else if isQueued` block was removed.
-	//var taskID string
+	jobName := job.Name
+	startTime := time.Now()
 
 	// Log job start
+	log.Printf("🚀 Starting job: %s at %s", jobName, startTime.Format("2006-01-02 15:04:05"))
 
 	err := job.Function(s.Conn)
 
+	// Calculate execution duration
+	duration := time.Since(startTime).Round(time.Millisecond)
+
 	// Update job status
-	//duration := time.Since(startTime).Round(time.Millisecond)
 	job.ExecutionMutex.Lock()
 	job.IsRunning = false
 	job.LastRun = now
 	job.ExecutionMutex.Unlock()
+
 	if err := s.saveJobLastRunTime(job); err != nil {
-		log.Printf("Error saving job last run time for %s: %v", job.Name, err)
+		log.Printf("❌ Error saving job last run time for %s: %v", job.Name, err)
 	}
 
-	// Handle completion logging based on execution method and result
+	// Handle completion logging based on execution result
 	if err != nil {
+		log.Printf("❌ Job %s FAILED after %v: %v", jobName, duration, err)
 		return
-		// Job failed
 	}
-	// Job completed directly
+
+	// Job completed successfully
+	log.Printf("✅ Job %s completed successfully in %v", jobName, duration)
 
 	// Update completion time
 	completionTime := time.Now()
@@ -504,7 +525,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.LastCompletionTime = completionTime
 	job.ExecutionMutex.Unlock()
 	if err := s.saveJobLastCompletionTime(job); err != nil {
-		log.Printf("Error saving job completion time for %s: %v", job.Name, err)
+		log.Printf("❌ Error saving job completion time for %s: %v", job.Name, err)
 	}
 }
 

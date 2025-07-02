@@ -21,8 +21,6 @@ export type TitleUpdate = {
 	title: string;
 };
 
-
-
 // Define the type for chat responses from backend
 export type ChatResponse = {
 	type: 'chat_response';
@@ -38,13 +36,32 @@ export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
 
-
-
 // Store to manage pending chat requests
-const pendingChatRequests = new Map<string, {
+const pendingChatRequests = new Map<
+	string,
+	{
+		resolve: (value: any) => void;
+		reject: (error: Error) => void;
+	}
+>();
+
+// Store for single pending chat request while disconnected
+let pendingChatRequest: {
+	requestId: string;
 	resolve: (value: any) => void;
 	reject: (error: Error) => void;
-}>();
+	query: string;
+	context: any[];
+	activeChartContext: any;
+	conversationId: string;
+	timeoutId: number;
+} | null = null;
+
+// Chat request timeout duration (30 seconds)
+const CHAT_REQUEST_TIMEOUT = 30000;
+
+// Track if we're currently attempting to connect (to prevent multiple simultaneous attempts)
+let isConnecting = false;
 
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
@@ -57,7 +74,6 @@ export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 	| 'close-extended'
 	| 'quote'
 	| 'all'; //all trades
-
 
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
@@ -81,40 +97,52 @@ let reconnectAttempts: number = 0;
 const maxReconnectAttempts: number = 5;
 let shouldReconnect: boolean = true;
 
-export const latestValue = new Map<string, StreamData>(); 
+export const latestValue = new Map<string, StreamData>();
 import { isPublicViewing } from '$lib/utils/stores/stores';
 
 export function connect() {
 	if (!browser) return;
-	if( get(isPublicViewing))return;
-	
+	if (get(isPublicViewing)) return;
+
+	isConnecting = true;
+	connectionStatus.set('connecting');
+
 	try {
 		const token = sessionStorage.getItem('authToken');
 		const socketUrl = base_url + '/ws' + '?token=' + token;
 		socket = new WebSocket(socketUrl);
 	} catch (e) {
 		console.error(e);
+		isConnecting = false;
 		setTimeout(connect, 1000);
 		return;
 	}
 	socket.addEventListener('close', () => {
 		connectionStatus.set('disconnected');
-		
+		isConnecting = false;
+
 		// Reject all pending chat requests
 		pendingChatRequests.forEach((request, requestId) => {
 			request.reject(new Error('WebSocket connection closed'));
 		});
 		pendingChatRequests.clear();
-		
+
+		// Reject pending chat request
+		if (pendingChatRequest) {
+			clearTimeout(pendingChatRequest.timeoutId);
+			pendingChatRequest.reject(new Error('WebSocket connection closed'));
+			pendingChatRequest = null;
+		}
+
 		if (shouldReconnect) {
 			reconnect();
 		}
 	});
 	socket.addEventListener('open', () => {
 		connectionStatus.set('connected');
+		isConnecting = false;
 		reconnectAttempts = 0;
 		reconnectInterval = 5000;
-
 
 		// Resubscribe to all active channels and pending subscriptions
 		const allChannels = new Set([...activeChannels.keys(), ...pendingSubscriptions]);
@@ -122,6 +150,9 @@ export function connect() {
 			subscribe(channelName);
 		}
 		pendingSubscriptions.clear();
+
+		// Process pending chat request
+		processPendingChatRequest();
 	});
 	socket.addEventListener('message', (event) => {
 		let data;
@@ -146,20 +177,21 @@ export function connect() {
 			return; // Handled title update
 		}
 
-
-
 		// Handle chat responses
 		if (data && data.type === 'chat_response') {
 			const chatResponse = data as ChatResponse;
 			const pendingRequest = pendingChatRequests.get(chatResponse.request_id);
-			
+
 			if (pendingRequest) {
 				pendingChatRequests.delete(chatResponse.request_id);
-				
+
 				if (chatResponse.success) {
 					pendingRequest.resolve(chatResponse.data);
 				} else {
-					pendingRequest.reject(new Error(chatResponse.error || 'Chat request failed'));
+					// Create error with response data so frontend can extract messageID and conversationID
+					const error = new Error(chatResponse.error || 'Chat request failed') as any;
+					error.response = chatResponse.data; // Attach response data to error
+					pendingRequest.reject(error);
 				}
 			}
 			return; // Handled chat response
@@ -174,26 +206,41 @@ export function connect() {
 				handleTimestampUpdate(data.timestamp);
 			} else {
 				// Also feed data to the new streamHub system
-				if (channelName.includes('-slow-regular') && data.price !== undefined) {
+				if ((channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) && data.price !== undefined) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						enqueueTick({
+						const tickData: any = {
 							securityid: securityId,
 							price: data.price,
 							data: data
-						});
+						};
+
+						// If this is extended hours data, mark it for extended calculation
+						if (channelName.includes('-slow-extended')) {
+							tickData.isExtended = true;
+						}
+
+						enqueueTick(tickData);
 					}
 				}
-				
-				// Handle close data for the hub
-				if (channelName.includes('-close-regular') && data.price !== undefined) {
+
+				// Handle close data for the hub (both regular and extended)
+				if ((channelName.includes('-close-regular') || channelName.includes('-close-extended')) && data.price !== undefined) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						enqueueTick({
+						const tickData: any = {
 							securityid: securityId,
-							prevClose: data.price,
 							data: data
-						});
+						};
+
+						// Set appropriate reference price field based on channel type
+						if (channelName.includes('-close-regular')) {
+							tickData.prevClose = data.price;
+						} else if (channelName.includes('-close-extended')) {
+							tickData.extendedClose = data.price;
+						}
+
+						enqueueTick(tickData);
 					}
 				}
 				latestValue.set(channelName, data);
@@ -201,14 +248,12 @@ export function connect() {
 				if (callbacks) {
 					callbacks.forEach((callback) => callback(data));
 				}
-
 			}
 		}
 	});
 	socket.addEventListener('error', () => {
 		socket?.close();
 	});
-
 }
 
 function disconnect() {
@@ -255,12 +300,13 @@ export function unsubscribe(channelName: string) {
 	}
 }
 
-
 export function subscribeSECFilings() {
 	if (socket?.readyState === WebSocket.OPEN) {
-		socket.send(JSON.stringify({
-			action: 'subscribe-sec-filings'
-		}));
+		socket.send(
+			JSON.stringify({
+				action: 'subscribe-sec-filings'
+			})
+		);
 	} else {
 		// Store the subscription request to be sent when connection is established
 		pendingSubscriptions.add('sec-filings');
@@ -269,11 +315,13 @@ export function subscribeSECFilings() {
 
 export function unsubscribeSECFilings() {
 	if (socket?.readyState === WebSocket.OPEN) {
-		socket.send(JSON.stringify({
-			action: 'unsubscribe-sec-filings'
-		}));
+		socket.send(
+			JSON.stringify({
+				action: 'unsubscribe-sec-filings'
+			})
+		);
 	}
-	
+
 	// Remove from pending subscriptions if present
 	pendingSubscriptions.delete('sec-filings');
 }
@@ -286,35 +334,46 @@ export function sendChatQuery(
 	conversationId: string = ''
 ): { promise: Promise<any>; cancel: () => void } {
 	let requestId: string;
-	
-	const promise = new Promise((resolve, reject) => {
-		if (socket?.readyState !== WebSocket.OPEN) {
-			reject(new Error('WebSocket is not connected'));
-			return;
-		}
 
+	const promise = new Promise((resolve, reject) => {
 		// Generate unique request ID
 		requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-		// Store the promise resolvers
-		pendingChatRequests.set(requestId, { resolve, reject });
+		if (socket?.readyState === WebSocket.OPEN) {
+			// Connection is open, send immediately
+			sendChatQueryNow(requestId, query, context, activeChartContext, conversationId, resolve, reject);
+		} else {
+			// Cancel any existing pending chat request
+			if (pendingChatRequest) {
+				clearTimeout(pendingChatRequest.timeoutId);
+				pendingChatRequest.reject(new Error('Chat request cancelled - new request initiated'));
+			}
 
-		// Create the chat query message
-		const chatQuery = {
-			action: 'chat_query',
-			request_id: requestId,
-			query: query,
-			context: context,
-			activeChartContext: activeChartContext,
-			conversation_id: conversationId
-		};
+			// Connection is not open, store the request and attempt immediate reconnection
+			const timeoutId = setTimeout(() => {
+				if (pendingChatRequest?.requestId === requestId) {
+					pendingChatRequest = null;
+					reject(new Error('Chat request timeout - could not establish connection'));
+				}
+			}, CHAT_REQUEST_TIMEOUT);
 
-		try {
-			socket.send(JSON.stringify(chatQuery));
-		} catch (error) {
-			// Clean up on send failure
-			pendingChatRequests.delete(requestId);
-			reject(error);
+			pendingChatRequest = {
+				requestId,
+				resolve,
+				reject,
+				query,
+				context,
+				activeChartContext,
+				conversationId,
+				timeoutId
+			};
+
+			// Immediately attempt to reconnect if not already connecting
+			if (!isConnecting && shouldReconnect) {
+				// Reset reconnection attempts for user-initiated requests
+				reconnectAttempts = 0;
+				connect();
+			}
 		}
 	});
 
@@ -327,12 +386,76 @@ export function sendChatQuery(
 	return { promise, cancel };
 }
 
+// Helper function to send chat query immediately
+function sendChatQueryNow(
+	requestId: string,
+	query: string,
+	context: any[],
+	activeChartContext: any,
+	conversationId: string,
+	resolve: (value: any) => void,
+	reject: (error: Error) => void
+) {
+	// Store the promise resolvers
+	pendingChatRequests.set(requestId, { resolve, reject });
+
+	// Create the chat query message
+	const chatQuery = {
+		action: 'chat_query',
+		request_id: requestId,
+		query: query,
+		context: context,
+		activeChartContext: activeChartContext,
+		conversation_id: conversationId
+	};
+
+	try {
+		socket?.send(JSON.stringify(chatQuery));
+	} catch (error) {
+		// Clean up on send failure
+		pendingChatRequests.delete(requestId);
+		reject(error);
+	}
+}
+
+// Process pending chat request when connection is restored
+function processPendingChatRequest() {
+	if (!pendingChatRequest) return; 
+
+	// Clear the timeout since we're processing now
+	clearTimeout(pendingChatRequest.timeoutId);
+	
+	// Send the pending request
+	sendChatQueryNow(
+		pendingChatRequest.requestId,
+		pendingChatRequest.query,
+		pendingChatRequest.context,
+		pendingChatRequest.activeChartContext,
+		pendingChatRequest.conversationId,
+		pendingChatRequest.resolve,
+		pendingChatRequest.reject
+	);
+	
+	// Clear the pending request
+	pendingChatRequest = null;
+	
+}
+
 // Cancel a chat query by request ID
 export function cancelChatQuery(requestId: string) {
-	const pendingRequest = pendingChatRequests.get(requestId);
-	if (pendingRequest) {
+	// Check active requests
+	const activePendingRequest = pendingChatRequests.get(requestId);
+	if (activePendingRequest) {
 		pendingChatRequests.delete(requestId);
-		pendingRequest.reject(new Error('Chat request cancelled'));
+		activePendingRequest.reject(new Error('Chat request cancelled'));
+		return;
+	}
+
+	// Check pending chat request
+	if (pendingChatRequest?.requestId === requestId) {
+		clearTimeout(pendingChatRequest.timeoutId);
+		pendingChatRequest.reject(new Error('Chat request cancelled'));
+		pendingChatRequest = null;
 	}
 }
 
@@ -347,7 +470,7 @@ if (browser) {
 				unsubscribe(channelName);
 			}
 		});
-		
+
 		// Close the socket
 		if (socket && socket.readyState === WebSocket.OPEN) {
 			// Set flag to prevent automatic reconnection

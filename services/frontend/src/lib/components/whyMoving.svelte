@@ -46,15 +46,15 @@
 
 	function startDismissTimer() {
 		clearTimers();
-		progress = 100;
-		
+		progress = 0;
+
 		// Update progress every 100ms for smooth animation
 		const updateInterval = 100;
-		const progressDecrement = (100 * updateInterval) / dismissTimeMs;
-		
+		const progressIncrement = (100 * updateInterval) / dismissTimeMs;
+
 		progressInterval = setInterval(() => {
-			progress = Math.max(0, progress - progressDecrement);
-			if (progress <= 0) {
+			progress = Math.min(100, progress + progressIncrement);
+			if (progress >= 100) {
 				clearTimers();
 				close();
 			}
@@ -111,16 +111,16 @@
 </script>
 
 {#if visible}
-	<div class="wm-overlay" transition:fade={{duration:150}}>
-		<div class="wm-box glass glass--pill glass--responsive" transition:fly={{ y: position==='top'? -15 : 15, duration:200 }}>
+	<div class="wm-overlay" transition:fade={{ duration: 150 }}>
+		<div
+			class="wm-box glass glass--pill glass--responsive"
+			transition:fly={{ y: position === 'top' ? -15 : 15, duration: 200 }}
+		>
 			<div class="wm-content">
 				{content}
 			</div>
 			<div class="wm-progress-container">
-				<div 
-					class="wm-progress-bar" 
-					style="width: {progress}%"
-				></div>
+				<div class="wm-progress-bar" style="width: {progress}%"></div>
 			</div>
 		</div>
 	</div>
@@ -138,7 +138,7 @@
 		padding-top: 100px; /* Moved down from 20px */
 		z-index: 1002;
 	}
-	
+
 	.wm-box {
 		background: rgba(255, 255, 255, 0.05) !important;
 		backdrop-filter: blur(8px);
@@ -155,7 +155,7 @@
 		position: relative;
 		z-index: 1;
 	}
-	
+
 	.wm-progress-container {
 		height: 3px;
 		background: rgba(255, 255, 255, 0.03);
@@ -163,21 +163,21 @@
 		position: relative;
 		z-index: 1;
 	}
-	
+
 	.wm-progress-bar {
-		height:100%;
-		border-radius:var(--glass-radius);  /* same corners as parent */
+		height: 100%;
+		border-radius: var(--glass-radius); /* same corners as parent */
 		/* subtle inner bevel so it looks like liquid inside glass */
 		box-shadow:
-			inset 0 0 8px rgba(255,255,255,.40),
-			inset 0 1px 0 rgba(255,255,255,.60);
+			inset 0 0 8px rgba(255, 255, 255, 0.4),
+			inset 0 1px 0 rgba(255, 255, 255, 0.6);
 
 		/* shimmer animation */
-		background-size:200% 100%;
+		background-size: 200% 100%;
 		animation: shimmer 2.4s linear infinite;
-		transition: width .12s linear;       /* keeps your existing width anim */
+		transition: width 0.12s linear; /* keeps your existing width anim */
 	}
-	
+
 	/* Responsive design */
 	@media (max-width: 768px) {
 		.wm-overlay {
@@ -194,7 +194,4 @@
 			line-height: 1.25;
 		}
 	}
-
-
 </style>
-

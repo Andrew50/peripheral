@@ -13,17 +13,19 @@ services:
       - ../../services/backend/:/app
     networks:
       - compose_network
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword
       - DB_HOST=db
       - POSTGRES_DB=postgres
       - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
       - POLYGON_API_KEY=${POLYGON_API_KEY}
       - X_API_KEY=${X_API_KEY}
       - TWITTER_API_IO_KEY=${TWITTER_API_IO_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
@@ -117,6 +119,8 @@ services:
     restart: unless-stopped
     volumes:
       - ../../services/worker:/app
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword

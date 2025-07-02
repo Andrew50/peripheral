@@ -5,7 +5,7 @@ metadata:
   labels:
     app: worker
 spec:
-  replicas: 3  # Start with 3 workers
+  replicas: 3 # Start with 3 workers
   selector:
     matchLabels:
       app: worker
@@ -34,6 +34,12 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: POSTGRES_DB
               value: "postgres"
+            # OpenAI API key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: OPENAI_API_KEY
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
@@ -106,12 +112,12 @@ spec:
     scaleUp:
       stabilizationWindowSeconds: 60
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
+        - type: Percent
+          value: 100
+          periodSeconds: 15
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60 
+        - type: Percent
+          value: 50
+          periodSeconds: 60

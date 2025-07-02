@@ -8,20 +8,15 @@
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
+	import { logout } from '$lib/auth';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
 	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
-	let watchlists: Array<{ watchlistId: string; watchlistName: string }> = [];
-	let customTickers = ''; // For managing comma-separated list of tickers
 
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
 	let username = browser ? sessionStorage.getItem('username') || '' : '';
-	let newProfilePic = '';
-	let uploadedImage: File | null = null;
-	let previewUrl = '';
-	let uploadStatus = '';
 
 	// Delete account variables
 	let showDeleteConfirmation = false;
@@ -33,61 +28,10 @@
 		return username === 'Guest';
 	};
 
-	// DEPRECATED: Screensaver settings initialization
-	// Initialize timeframes as a comma-separated string for editing
-	// let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
-
-	onMount(() => {
-		// DEPRECATED: Load watchlists for the screensaver settings
-		// privateRequest<Array<{ watchlistId: string; watchlistName: string }>>('getWatchlists', {}).then(
-		// 	(response) => {
-		// 		watchlists = response || [];
-		// 	}
-		// );
-
-		// DEPRECATED: Initialize custom tickers string if available
-		// if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
-		// 	customTickers = tempSettings.screensaverTickers.join(',');
-		// }
-
-		// Apply the current color scheme on mount using the store value
-		// if ($settings.colorScheme && browser) {
-		// 	const scheme = colorSchemes[$settings.colorScheme];
-		// 	if (scheme) {
-		// 		applyColorScheme(scheme);
-		// 	}
-		// }
-	});
-
 	function updateLayout() {
-		// DEPRECATED: Screensaver timeframes and tickers update
-		// Update timeframes array from the comma-separated string
-		// if (timeframesString) {
-		// 	tempSettings.screensaverTimeframes = timeframesString
-		// 		.split(',')
-		// 		.map((tf) => tf.trim())
-		// 		.filter((tf) => tf.length > 0);
-		// }
-
-		// Update custom tickers if user-defined is selected
-		// if (tempSettings.screensaverDataSource === 'user-defined' && customTickers) {
-		// 	tempSettings.screensaverTickers = customTickers
-		// 		.split(',')
-		// 		.map((ticker) => ticker.trim().toUpperCase())
-		// 		.filter((ticker) => ticker.length > 0);
-		// }
-
 		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
-				settings.set(tempSettings); // Update the store with new settings
-
-				// Apply color scheme if changed - REMOVED FROM HERE, handled by reactive statement
-				// if (browser && tempSettings.colorScheme) {
-				// 	const scheme = colorSchemes[tempSettings.colorScheme];
-				// 	if (scheme) {
-				// 		applyColorScheme(scheme);
-				// 	}
-				// }
+				settings.set(tempSettings); 
 
 				errorMessage = '';
 			});
@@ -102,19 +46,7 @@
 		}
 	}
 
-	function handleLogout() {
-		if (browser) {
-			sessionStorage.removeItem('authToken');
-			sessionStorage.removeItem('profilePic');
-			sessionStorage.removeItem('username');
-		}
-		goto('/');
-	}
 
-	// Function to navigate to the signup page
-	function goToSignup() {
-		goto('/signup');
-	}
 
 	// Generate initial avatar SVG from username
 	function generateInitialAvatar(username: string) {
@@ -122,84 +54,7 @@
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
 	}
 
-	// Handle file selection for profile picture upload
-	function handleFileSelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files && input.files.length > 0) {
-			uploadedImage = input.files[0];
 
-			// Validate file type
-			if (!uploadedImage.type.match('image.*')) {
-				uploadStatus = 'Please select an image file';
-				previewUrl = '';
-				return;
-			}
-
-			// Create a preview URL
-			previewUrl = URL.createObjectURL(uploadedImage);
-			uploadStatus = '';
-		}
-	}
-
-	// Update profile picture
-	async function updateProfilePicture() {
-		if (!uploadedImage) {
-			uploadStatus = 'Please select an image to upload';
-			return;
-		}
-
-		try {
-			uploadStatus = 'Uploading...';
-
-			// Convert image to base64
-			const reader = new FileReader();
-			reader.readAsDataURL(uploadedImage);
-			reader.onload = async () => {
-				const base64String = reader.result as string;
-
-				try {
-					// Send to backend
-					await privateRequest('updateProfilePicture', {
-						profilePicture: base64String
-					});
-
-					// Update in session storage
-					if (browser) {
-						sessionStorage.setItem('profilePic', base64String);
-					}
-
-					profilePic = base64String;
-					uploadStatus = 'Profile picture updated successfully!';
-
-					// Clear file input
-					uploadedImage = null;
-				} catch (error) {
-					console.error('Error uploading profile picture:', error);
-					uploadStatus = 'Failed to update profile picture. Please try again.';
-				}
-			};
-		} catch (error) {
-			console.error('Error processing image:', error);
-			uploadStatus = 'Error processing image. Please try again.';
-		}
-	}
-
-	// Reset to default initial avatar
-	function resetToDefaultAvatar() {
-		if (username) {
-			const defaultAvatar = generateInitialAvatar(username);
-			profilePic = defaultAvatar;
-
-			if (browser) {
-				sessionStorage.setItem('profilePic', defaultAvatar);
-			}
-
-			// Clear uploaded state
-			uploadedImage = null;
-			previewUrl = '';
-			uploadStatus = 'Reset to default avatar';
-		}
-	}
 
 	// Function to handle account deletion
 	async function handleDeleteAccount() {
@@ -216,15 +71,7 @@
 			});
 
 			// If successful, logout and return to login page
-			if (browser) {
-				sessionStorage.removeItem('authToken');
-				sessionStorage.removeItem('profilePic');
-				sessionStorage.removeItem('username');
-				sessionStorage.removeItem('isGuestSession');
-			}
-
-			// Redirect to login page
-			goto('/login');
+			logout('/login');
 		} catch (error) {
 			console.error('Error deleting account:', error);
 			errorMessage = 'Failed to delete account. Please try again.';
@@ -256,12 +103,12 @@
 						You're currently using a guest account. Create your own account to save your preferences
 						and data.
 					</p>
-					<button class="create-account-button" on:click={goToSignup}> Create Your Account </button>
+					<button class="create-account-button" on:click={() => goto('/signup')}> Create Your Account </button>
 				</div>
 			</div>
 
 			<div class="account-actions">
-				<button class="logout-button" on:click={handleLogout}>Logout</button>
+				<button class="logout-button" on:click={() => logout('/')}>Logout</button>
 			</div>
 		</div>
 	{:else}
@@ -285,13 +132,7 @@
 			>
 				Format
 			</button>
-			<!-- DEPRECATED: Screensaver tab -->
-			<!-- <button
-				class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
-				on:click={() => (activeTab = 'screensaver')}
-			>
-				Screensaver
-			</button> -->
+
 			<button
 				class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
 				on:click={() => (activeTab = 'appearance')}
@@ -305,7 +146,7 @@
 				<div class="settings-section">
 					<h3>Chart Layout</h3>
 					<div class="settings-grid">
-						<div class="setting-item">
+						<!--<div class="setting-item">
 							<label for="chartRows">Chart Rows</label>
 							<input
 								type="number"
@@ -326,28 +167,7 @@
 								on:keypress={handleKeyPress}
 							/>
 						</div>
-					</div>
-				</div>
-
-				<div class="settings-section">
-					<h3>Technical Indicators</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="adrPeriod">Average Range Period</label>
-							<input
-								type="number"
-								id="adrPeriod"
-								bind:value={tempSettings.adrPeriod}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-				</div>
-			{:else if activeTab === 'format'}
-				<div class="settings-section">
-					<h3>Display Options</h3>
-					<div class="settings-grid">
+					</div>  -->
 						<div class="setting-item">
 							<label for="dolvol">Show Dollar Volume</label>
 							<div class="toggle-container">
@@ -371,26 +191,32 @@
 								</select>
 							</div>
 						</div>
-
-						<!-- DEPRECATED: Screensaver enable/disable setting -->
-						<!-- <div class="setting-item">
-							<label for="enableScreensaver">Enable Screensaver</label>
-							<div class="toggle-container">
-								<select
-									id="enableScreensaver"
-									bind:value={tempSettings.enableScreensaver}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div> -->
+					</div>
+				</div>
+				<div class="settings-section">
+					<h3>Technical Indicators</h3>
+					<div class="settings-grid">
+						<div class="setting-item">
+							<label for="adrPeriod">Average Range Period</label>
+							<input
+								type="number"
+								id="adrPeriod"
+								bind:value={tempSettings.adrPeriod}
+								min="1"
+								on:keypress={handleKeyPress}
+							/>
+						</div>
+					</div>
+				</div>
+			{:else if activeTab === 'format'}
+				<div class="settings-section">
+					<h3>Display Options</h3>
+					<div class="settings-grid">			
 					</div>
 				</div>
 
 				<div class="settings-section">
-					<h3>Time & Sales</h3>
+					<!--<h3>Time & Sales</h3>
 					<div class="settings-grid">
 						<div class="setting-item">
 							<label for="filterTaS">Show trades less than 100 shares</label>
@@ -419,116 +245,9 @@
 								</select>
 							</div>
 						</div>
-					</div>
+					</div> -->
 				</div>
-			<!-- DEPRECATED: Screensaver settings section -->
-			<!-- {:else if activeTab === 'screensaver'}
-				<div class="settings-section">
-					<h3>Screensaver Settings</h3>
-
-					<div class="setting-item">
-						<label for="enableScreensaver">Enable Screensaver</label>
-						<div class="toggle-container">
-							<select
-								id="enableScreensaver"
-								bind:value={tempSettings.enableScreensaver}
-								on:keypress={handleKeyPress}
-							>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
-						</div>
-					</div>
-
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="screensaverTimeout">Inactivity Timeout (seconds)</label>
-							<input
-								type="number"
-								id="screensaverTimeout"
-								bind:value={tempSettings.screensaverTimeout}
-								min="30"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-
-						<div class="setting-item">
-							<label for="screensaverSpeed">Cycle Speed (seconds)</label>
-							<input
-								type="number"
-								id="screensaverSpeed"
-								bind:value={tempSettings.screensaverSpeed}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-
-					<div class="setting-item wide">
-						<label for="screensaverTimeframes">Timeframes (comma-separated)</label>
-						<input
-							type="text"
-							id="screensaverTimeframes"
-							bind:value={timeframesString}
-							placeholder="1w,1d,1h,1"
-							on:keypress={handleKeyPress}
-						/>
-					</div>
-
-					<h3>Data Source</h3>
-					<div class="setting-item">
-						<label for="screensaverDataSource">Chart Data Source</label>
-						<div class="toggle-container">
-							<select
-								id="screensaverDataSource"
-								bind:value={tempSettings.screensaverDataSource}
-								on:keypress={handleKeyPress}
-							>
-								<option value="gainers-losers">Gainers & Losers</option>
-								<option value="watchlist">Watchlist</option>
-								<option value="user-defined">Custom Tickers</option>
-							</select>
-						</div>
-					</div>
-
-					{#if tempSettings.screensaverDataSource === 'watchlist'}
-						<div class="setting-item">
-							<label for="screensaverWatchlistId">Select Watchlist</label>
-							<div class="toggle-container">
-								<select
-									id="screensaverWatchlistId"
-									bind:value={tempSettings.screensaverWatchlistId}
-									on:keypress={handleKeyPress}
-								>
-									{#each watchlists as watchlist}
-										<option value={watchlist.watchlistId}>{watchlist.watchlistName}</option>
-									{/each}
-								</select>
-							</div>
-						</div>
-					{:else if tempSettings.screensaverDataSource === 'user-defined'}
-						<div class="setting-item wide">
-							<label for="customTickers">Custom Tickers (comma-separated)</label>
-							<input
-								type="text"
-								id="customTickers"
-								bind:value={customTickers}
-								placeholder="AAPL,MSFT,GOOGL,AMZN"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					{/if}
-
-					<div class="info-message screensaver-info">
-						{#if tempSettings.enableScreensaver}
-							The screensaver will activate after {tempSettings.screensaverTimeout} seconds of inactivity,
-							cycling through charts every {tempSettings.screensaverSpeed} seconds.
-						{:else}
-							The screensaver is currently disabled. Enable it to display trending charts during
-							idle periods.
-						{/if}
-					</div>
-				</div> -->
+				
 			{:else if activeTab === 'appearance'}
 				<div class="settings-section">
 					<h3>Color Scheme</h3>
@@ -641,49 +360,11 @@
 							</div>
 						</div>
 
-						<div class="profile-upload-section">
-							<h4>Update Profile Picture</h4>
-
-							<div class="file-upload">
-								<label for="profile-pic-upload" class="file-upload-label"> Choose Image </label>
-								<input
-									type="file"
-									id="profile-pic-upload"
-									accept="image/*"
-									on:change={handleFileSelect}
-								/>
-
-								{#if previewUrl}
-									<div class="preview-container">
-										<img src={previewUrl} alt="Preview" class="preview-image" />
-									</div>
-								{/if}
-
-								<div class="upload-actions">
-									<button
-										class="upload-button"
-										on:click={updateProfilePicture}
-										disabled={!uploadedImage}
-									>
-										Upload
-									</button>
-
-									<button class="reset-button" on:click={resetToDefaultAvatar}>
-										Reset to Default
-									</button>
-								</div>
-
-								{#if uploadStatus}
-									<div class="upload-status">
-										{uploadStatus}
-									</div>
-								{/if}
-							</div>
-						</div>
+						
 					</div>
 
 					<div class="account-actions">
-						<button class="logout-button" on:click={handleLogout}>Logout</button>
+						<button class="logout-button" on:click={() => logout('/')}>Logout</button>
 					</div>
 
 					<div class="danger-zone">
@@ -900,11 +581,6 @@
 		grid-column: 1 / -1;
 	}
 
-	.setting-item.wide input {
-		width: 70%;
-		max-width: 500px;
-	}
-
 	label {
 		font-size: 0.9375rem;
 		color: var(--f2);
@@ -980,7 +656,6 @@
 		border: 1px solid rgba(59, 130, 246, 0.1);
 		margin-top: 1.5rem;
 	}
-
 
 	.account-actions {
 		margin-top: 2rem;
@@ -1061,9 +736,7 @@
 			flex: 0 0 auto;
 		}
 
-		.profile-upload-section {
-			flex: 1;
-		}
+
 	}
 
 	.profile-picture-container {
@@ -1104,117 +777,7 @@
 		color: var(--f1);
 	}
 
-	.profile-upload-section {
-		background-color: rgba(0, 0, 0, 0.1);
-		border-radius: 6px;
-		padding: 1.5rem;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-	}
 
-	.profile-upload-section h4 {
-		margin: 0 0 1.25rem 0;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.file-upload {
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.file-upload input[type='file'] {
-		display: none;
-	}
-
-	.file-upload-label {
-		background-color: var(--c3);
-		color: white;
-		padding: 0.75rem 1.25rem;
-		border-radius: 4px;
-		cursor: pointer;
-		text-align: center;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		transition: background-color 0.2s;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.file-upload-label:hover {
-		background-color: var(--c3-hover);
-	}
-
-	.preview-container {
-		width: 100%;
-		height: 140px;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		overflow: hidden;
-		border-radius: 6px;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.preview-image {
-		max-width: 100%;
-		max-height: 100%;
-		object-fit: contain;
-	}
-
-	.upload-actions {
-		display: flex;
-		gap: 1rem;
-	}
-
-	.upload-button,
-	.reset-button {
-		padding: 0.75rem 1.25rem;
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		flex: 1;
-		transition: all 0.2s;
-	}
-
-	.upload-button {
-		background-color: var(--c3);
-		color: white;
-		border: none;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.upload-button:hover:not(:disabled) {
-		background-color: var(--c3-hover);
-	}
-
-	.upload-button:disabled {
-		background-color: rgba(59, 130, 246, 0.3);
-		cursor: not-allowed;
-		box-shadow: none;
-	}
-
-	.reset-button {
-		background-color: rgba(0, 0, 0, 0.2);
-		color: var(--f1);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.reset-button:hover {
-		background-color: rgba(0, 0, 0, 0.3);
-	}
-
-	.upload-status {
-		padding: 0.875rem;
-		text-align: center;
-		font-size: 0.9375rem;
-		color: var(--f2);
-		background-color: rgba(0, 0, 0, 0.1);
-		border-radius: 4px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-	}
 
 	/* Color scheme preview styles */
 	.color-scheme-preview {

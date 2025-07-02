@@ -25,6 +25,8 @@ import (
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -60,6 +62,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getCurrentSecurityID":  helpers.GetCurrentSecurityID,
 	"getCurrentTicker":      helpers.GetCurrentTicker,
 	"getIcons":              helpers.GetIcons,
+	"getUserLastTickers":    helpers.GetUserLastTickers,
 	"getPrevClose":          helpers.GetPrevClose,
 	"getExchanges":          helpers.GetExchanges,
 
@@ -112,7 +115,9 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"get_daily_trade_stats":  account.GetDailyTradeStats,
 
 	// --- strategy / back-testing ---------------------------------------------
-	"run_backtest":             wrapContextFunc(strategy.RunBacktest),
+	"run_backtest":  wrapContextFunc(strategy.RunBacktest),
+	"run_screening": strategy.RunScreening,
+
 	"getStrategies":            strategy.GetStrategies,
 	"createStrategyFromPrompt": strategy.CreateStrategyFromPrompt,
 	"setAlert":                 strategy.SetAlert,
@@ -148,6 +153,21 @@ var privateFuncWithContext = map[string]func(context.Context, *data.Conn, int, j
 type Request struct {
 	Function  string          `json:"func"`
 	Arguments json.RawMessage `json:"args"`
+}
+
+// StreamingChatRequest represents a streaming chat request
+type StreamingChatRequest struct {
+	Function  string          `json:"func"`
+	Arguments json.RawMessage `json:"args"`
+	StreamID  string          `json:"stream_id,omitempty"`
+}
+
+// StreamingResponse represents a streaming chat response chunk
+type StreamingResponse struct {
+	Type      string      `json:"type"`    // "progress", "partial", "complete", "error"
+	Content   interface{} `json:"content"` // Content varies by type
+	StreamID  string      `json:"stream_id"`
+	Timestamp time.Time   `json:"timestamp"`
 }
 
 func addCORSHeaders(w http.ResponseWriter) {
@@ -549,8 +569,198 @@ func HealthCheck() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// If you need DB ping logic, insert it here and flip OK accordingly.
-		_ = json.NewEncoder(w).Encode(status{OK: true})
+		if err := json.NewEncoder(w).Encode(status{OK: true}); err != nil {
+			http.Error(w, "Error encoding health check response", http.StatusInternalServerError)
+		}
 	}
+}
+
+// Add new streaming endpoint handler
+func streamingChatHandler(conn *data.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		// Validate JWT token
+		tokenString := r.Header.Get("Authorization")
+		userID, err := validateToken(tokenString)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Set headers for SSE
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// Parse request
+		var req StreamingChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sendSSEError(w, "Invalid request format", "")
+			return
+		}
+
+		// Generate stream ID if not provided
+		if req.StreamID == "" {
+			req.StreamID = generateStreamID()
+		}
+
+		// Only support getQuery for streaming
+		if req.Function != "getQuery" {
+			sendSSEError(w, "Streaming only supported for getQuery", req.StreamID)
+			return
+		}
+
+		// Create context with timeout for the entire operation
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+		defer cancel()
+
+		// Send initial progress
+		sendSSEProgress(w, "Starting chat processing...", req.StreamID)
+
+		// Start processing in goroutine
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Log the panic for debugging
+					log.Printf("Panic in streaming chat handler: %v", r)
+					// Send error response to client
+					sendSSEError(w, fmt.Sprintf("Internal server error: %v", r), req.StreamID)
+				}
+			}()
+
+			// Add additional validation before processing
+			if conn == nil {
+				sendSSEError(w, "Database connection is not available", req.StreamID)
+				return
+			}
+
+			// Process the chat request with progress updates
+			result, err := processStreamingChatRequest(ctx, conn, userID, req.Arguments, req.StreamID, w)
+			if err != nil {
+				log.Printf("Streaming chat request error: %v", err)
+				sendSSEError(w, err.Error(), req.StreamID)
+				return
+			}
+
+			// Send final result
+			sendSSEComplete(w, result, req.StreamID)
+		}()
+
+		// Keep connection alive with periodic pings
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sendSSEPing(w)
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+			}
+		}
+	}
+}
+
+// Helper functions for SSE
+func sendSSEProgress(w http.ResponseWriter, message, streamID string) {
+	response := StreamingResponse{
+		Type:      "progress",
+		Content:   map[string]string{"message": message},
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "progress", response)
+}
+
+func sendSSEComplete(w http.ResponseWriter, result interface{}, streamID string) {
+	response := StreamingResponse{
+		Type:      "complete",
+		Content:   result,
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "complete", response)
+}
+
+func sendSSEError(w http.ResponseWriter, errMsg, streamID string) {
+	response := StreamingResponse{
+		Type:      "error",
+		Content:   map[string]string{"error": errMsg},
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "error", response)
+}
+
+func sendSSEPing(w http.ResponseWriter) {
+	fmt.Fprintf(w, ": ping\n\n")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func sendSSEEvent(w http.ResponseWriter, eventType string, data interface{}) {
+	jsonData, _ := json.Marshal(data)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData))
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func generateStreamID() string {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes) // #nosec G104 - rand.Read from crypto/rand is documented to always succeed
+	if err != nil {
+		// This should never happen with crypto/rand, but handle it gracefully
+		panic("failed to generate random bytes for stream ID")
+	}
+	return hex.EncodeToString(bytes)
+}
+
+// Modified chat request processor with progress updates
+func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage, streamID string, w http.ResponseWriter) (interface{}, error) {
+	// Add nil pointer checks
+	if conn == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+	if w == nil {
+		return nil, fmt.Errorf("response writer is nil")
+	}
+
+	// Send progress updates during processing
+	sendSSEProgress(w, "Parsing chat request...", streamID)
+
+	var query agent.ChatRequest
+	if err := json.Unmarshal(args, &query); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	sendSSEProgress(w, "Validating request...", streamID)
+
+	// Check Redis connectivity with better error handling
+	success, message := conn.TestRedisConnectivity(ctx, userID)
+	if !success {
+		return nil, fmt.Errorf("redis connectivity failed: %s", message)
+	}
+
+	sendSSEProgress(w, "Preparing conversation context...", streamID)
+
+	// Call the existing chat processing function with improved error handling
+	result, err := agent.GetChatRequest(ctx, conn, userID, args)
+
+	if err != nil {
+		return nil, fmt.Errorf("chat processing failed: %w", err)
+	}
+
+	return result, nil
 }
 
 // StartServer performs operations related to StartServer functionality.
@@ -560,16 +770,17 @@ func StartServer(conn *data.Conn) {
 
 	http.HandleFunc("/public", publicHandler(conn))
 	http.HandleFunc("/private", privateHandler(conn))
+	http.HandleFunc("/streaming-chat", streamingChatHandler(conn))
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
 	http.HandleFunc("/healthz", HealthCheck())
 
 	server := &http.Server{
 		Addr:    ":5058",
-		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
+		Handler: http.DefaultServeMux,
 		// Good practice to set timeouts to prevent resource exhaustion.
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 240 * time.Second,
+		WriteTimeout: 10 * time.Minute, // Increased for streaming
 		IdleTimeout:  240 * time.Second,
 	}
 

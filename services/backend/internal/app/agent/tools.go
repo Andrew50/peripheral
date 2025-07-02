@@ -9,6 +9,7 @@ import (
 	"backend/internal/data"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"google.golang.org/genai"
 )
@@ -21,7 +22,16 @@ type Tool struct {
 
 // Wrapper function to adapt existing functions to context-aware signatures
 func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, error)) func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error) {
-	return func(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	return func(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (result interface{}, err error) {
+		// Add panic recovery to prevent function panics from crashing the backend
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Panic recovered in function execution: %v\n", r)
+				err = fmt.Errorf("function panic: %v", r)
+				result = nil
+			}
+		}()
+
 		// Check if context is cancelled before calling the function
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -53,7 +63,7 @@ var (
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockDetails",
-				Description: "Get company name, market, locale, primary exchange, active status, market cap, description, logo, shares outstanding, industry, sector and total shares for a given security.",
+				Description: "Get company name, market, locale, primary exchange, market cap, shares outstanding, industry, sector and total shares for a given security.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -396,7 +406,7 @@ var (
 		"run_backtest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_backtest",
-				Description: "Backtest a specified strategy, which is based on stock conditions, patterns, and indicators. Can optionally calculate future returns for specified N-day windows.",
+				Description: "Execute a comprehensive historical backtest of a Python trading strategy to find all instances where the strategy conditions were met in historical data. Use this after creating a strategy to discover all historical occurrences of patterns, conditions, or comparative analysis. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Returns all historical instances where the strategy criteria matched, along with timestamps, tickers, and relevant data. Execution typically takes 30-90 seconds for full market analysis. Use for finding historical patterns, identifying all occurrences of conditions, comparative analysis over time, and generating detailed historical results with optional forward return calculations.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -417,6 +427,35 @@ var (
 			},
 			Function:      strategy.RunBacktest,
 			StatusMessage: "Running backtest...",
+		},
+		"run_screener": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "run_screener",
+				Description: "Screen current market opportunities using a Python trading strategy. Processes live market data to identify and rank securities matching strategy criteria. Strategies access real-time OHLCV data, technical indicators, fundamental metrics, and market conditions. Execution takes 15-45 seconds for full market screening. Use for finding current trading opportunities, generating ranked watchlists, and identifying securities matching specific criteria right now.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "id of the strategy to use for screening",
+						},
+						"universe": {
+							Type:        genai.TypeArray,
+							Description: "Optional. List of ticker symbols to screen. If omitted, screens entire market universe.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+						"limit": {
+							Type:        genai.TypeInteger,
+							Description: "Optional. Maximum number of results to return (default: 100)",
+						},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function:      wrapWithContext(strategy.RunScreening),
+			StatusMessage: "Running screener...",
 		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -439,13 +478,13 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Retrieves the last price (regular or extended hours)for a specified security ticker symbol.",
+				Description: "Retrieves the last price (regular or extended hours)for a specified ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"ticker": {
 							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for.",
+							Description: "The ticker symbol to get the last price for, e.g. 'AAPL'.",
 						},
 					},
 					Required: []string{"ticker"},
@@ -491,19 +530,6 @@ var (
 			Function:      wrapWithContext(GetStockChange),
 			StatusMessage: "Getting stock change...",
 		},
-		/*"getAllTickerSnapshots": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getAllTickerSnapshots",
-				Description: "Get a list of the current bid, ask, price, change, percent change, volume, vwap price, and daily open, high, low and close for all securities.",
-				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{},
-					Required:   []string{},
-				},
-			},
-			Function:      wrapWithContext(helpers.GetAllTickerSnapshots),
-			StatusMessage: "Scanning market data...",
-		}, */
 
 		"getOHLCData": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -577,11 +603,10 @@ var (
 			Function:      wrapWithContext(strategy.DeleteStrategy),
 			StatusMessage: "Deleting strategy...",
 		},
-		"getStrategyFromNaturalLanguage": {
+		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name: "getStrategyFromNaturalLanguage",
-				Description: "IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Create (or overwrite) a strategy from a natural‑language description. " +
-					"Pass strategyId = -1 to create a new strategy.",
+				Name:        "runStrategyAgent",
+				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -593,32 +618,6 @@ var (
 			},
 			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
 			StatusMessage: "Building strategy...",
-		},
-		"calculateBacktestStatistic": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "calculateBacktestStatistic",
-				Description: "Calculates a statistic for a specific column from cached backtest results. Use this instead of requesting raw backtest data for simple calculations.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"strategyId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the strategy whose backtest results should be used.",
-						},
-						"columnName": {
-							Type:        genai.TypeString,
-							Description: "The original column name in the backtest results to perform the calculation on (e.g., 'close', 'volume', 'future_1d_return').",
-						},
-						"calculationType": {
-							Type:        genai.TypeString,
-							Description: "The type of calculation to perform. Supported values: 'average', 'sum', 'min', 'max', 'count'.",
-						},
-					},
-					Required: []string{"strategyId", "columnName", "calculationType"},
-				},
-			},
-			Function:      wrapWithContext(CalculateBacktestStatistic),
-			StatusMessage: "Calculating backtest statistics...",
 		},
 		// [SEARCH TOOLS]
 		"runWebSearch": {

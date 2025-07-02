@@ -4,7 +4,7 @@
 	import { writable, type Writable } from 'svelte/store';
 	import { strategies } from '$lib/utils/stores/stores';
 	import type { Strategy as CoreStrategy } from '$lib/utils/types/types';
-	import { eventDispatcher } from '$lib/features/strategies/interface';   // 🆕 dispatch "new"
+	import { eventDispatcher } from '$lib/features/strategies/interface'; // 🆕 dispatch "new"
 
 	/* ─────────────── Menu State ─────────────── */
 	interface StrategyMenuState {
@@ -40,7 +40,8 @@
 				if (s.status === 'inactive') {
 					unsub();
 
-					if (s.strategy === 'new') {            // 🆕 "create new" clicked
+					if (s.strategy === 'new') {
+						// 🆕 "create new" clicked
 						eventDispatcher.set('new');
 						reject('new');
 					} else if (s.strategy) {
@@ -94,10 +95,12 @@
 		if (e.key === 'Escape') close();
 	}
 
-	function down(e: MouseEvent) {
+	function down(e: MouseEvent | KeyboardEvent) {
 		if (!(e.target as HTMLElement).classList.contains('context-menu')) return;
 		dragging = true;
-		dragStart = { x: e.clientX, y: e.clientY };
+		const clientX = 'clientX' in e ? e.clientX : 0;
+		const clientY = 'clientY' in e ? e.clientY : 0;
+		dragStart = { x: clientX, y: clientY };
 		initialPos = { x: $menuState.x, y: $menuState.y };
 		window.addEventListener('mousemove', move);
 		window.addEventListener('mouseup', up);
@@ -108,8 +111,16 @@
 		const menuWidth = 220;
 		const menuHeight = menu?.offsetHeight ?? 0;
 
-		const nx = clamp(initialPos.x + (e.clientX - dragStart.x), MARGIN, innerWidth - menuWidth - MARGIN);
-		const ny = clamp(initialPos.y + (e.clientY - dragStart.y), MARGIN, innerHeight - menuHeight - MARGIN);
+		const nx = clamp(
+			initialPos.x + (e.clientX - dragStart.x),
+			MARGIN,
+			innerWidth - menuWidth - MARGIN
+		);
+		const ny = clamp(
+			initialPos.y + (e.clientY - dragStart.y),
+			MARGIN,
+			innerHeight - menuHeight - MARGIN
+		);
 		menuState.update((s) => ({ ...s, x: nx, y: ny }));
 	}
 	function up() {
@@ -120,11 +131,16 @@
 </script>
 
 {#if $menuState.status === 'active'}
+	<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 	<div
 		class="context-menu popup-container responsive-shadow responsive-border"
 		bind:this={menu}
 		style="top: {$menuState.y}px; left: {$menuState.x}px;"
 		on:mousedown|preventDefault={down}
+		on:keydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') down(e);
+		}}
 		role="dialog"
 		aria-label="Strategy Menu"
 		tabindex="0"
@@ -164,9 +180,14 @@
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0 0 0 / 0.2);
 	}
-	.content-container { padding: clamp(4px, 1vw, 8px); }
+	.content-container {
+		padding: clamp(4px, 1vw, 8px);
+	}
 
-	table { width: 100%; border-collapse: collapse; }
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
 	.header-row th {
 		text-align: left;
 		font-weight: 600;
@@ -182,8 +203,11 @@
 		border-radius: 4px;
 		transition: background 0.2s;
 	}
-	.item-row:hover td { background: var(--ui-bg-hover); }
+	.item-row:hover td {
+		background: var(--ui-bg-hover);
+	}
 
-	.new-row td { font-style: italic; }        /* 🆕 styling */
+	.new-row td {
+		font-style: italic;
+	} /* 🆕 styling */
 </style>
-

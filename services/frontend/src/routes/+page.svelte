@@ -5,7 +5,7 @@
 	import { onMount } from 'svelte';
 
 	if (browser) {
-		document.title = 'Atlantis';
+		document.title = 'Peripheral';
 	}
 
 	let email = '';
@@ -22,7 +22,7 @@
 			const response = await fetch('/api/waitlist', {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({ email })
 			});
@@ -59,15 +59,15 @@
 	</div>
 
 	<Header />
-	
+
 	<section class="waitlist-section">
 		<div class="content-wrapper">
 			<div class="badge">COMING SOON</div>
-			
+
 			<h1 class="title">
 				<span class="gradient-text">Atlantis</span>
 			</h1>
-			
+
 			<p class="subtitle">
 				The new best way to trade.<br />
 			</p>
@@ -83,11 +83,7 @@
 							class="email-input"
 							disabled={isSubmitting}
 						/>
-						<button 
-							type="submit" 
-							class="submit-button"
-							disabled={isSubmitting || !email}
-						>
+						<button type="submit" class="submit-button" disabled={isSubmitting || !email}>
 							{isSubmitting ? 'Joining...' : 'Join Waitlist'}
 						</button>
 					</div>
@@ -97,14 +93,24 @@
 				</form>
 			{:else}
 				<div class="success-message">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="success-icon">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="2"
+						stroke="currentColor"
+						class="success-icon"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+						/>
 					</svg>
 					<h3>You're on the list!</h3>
-					<p>We'll notify you when Atlantis is ready to launch.</p>
+					<p>We'll notify you when Peripheral is ready to launch.</p>
 				</div>
 			{/if}
-
 		</div>
 	</section>
 </main>
@@ -123,7 +129,13 @@
 		display: flex;
 		flex-direction: column;
 		background: #0a0b0d;
-		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		color: #f9fafb;
 	}
 
@@ -152,7 +164,7 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: 
+		background:
 			radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
 			radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
 			radial-gradient(circle at 40% 60%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
@@ -223,7 +235,14 @@
 		display: inline-block;
 		font-size: clamp(3rem, 8vw, 5rem) !important;
 		font-weight: 700 !important;
-		background: linear-gradient(135deg, #3b82f6 0%, #6366f1 25%, #8b5cf6 50%, #ec4899 75%, #3b82f6 100%);
+		background: linear-gradient(
+			135deg,
+			#3b82f6 0%,
+			#6366f1 25%,
+			#8b5cf6 50%,
+			#ec4899 75%,
+			#3b82f6 100%
+		);
 		background-size: 200% 200%;
 		-webkit-background-clip: text;
 		background-clip: text;
@@ -232,7 +251,8 @@
 	}
 
 	@keyframes gradient-shift {
-		0%, 100% {
+		0%,
+		100% {
 			background-position: 0% 50%;
 		}
 		25% {
@@ -386,8 +406,6 @@
 		font-size: 0.875rem;
 	}
 
-
-
 	/* Mobile responsiveness */
 	@media (max-width: 640px) {
 		.waitlist-section {
@@ -406,8 +424,6 @@
 		.submit-button {
 			width: 100%;
 		}
-
-
 
 		.badge {
 			font-size: 0.75rem;

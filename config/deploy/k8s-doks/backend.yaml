@@ -19,6 +19,16 @@ spec:
         app: backend
     spec:
       restartPolicy: Always # Update the restart policy to "Always"
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - db
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
@@ -28,7 +38,7 @@ spec:
             - containerPort: 5058
           readinessProbe:
             httpGet:
-              path: /healthz      # add a trivial handler that just returns 200
+              path: /healthz # add a trivial handler that just returns 200
               port: 5058
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -70,8 +80,8 @@ spec:
                   key: REDIS_PASSWORD
             # Add Polygon API key
             - name: GEMINI_FREE_KEYS
-              valueFrom: 
-                secretKeyRef: 
+              valueFrom:
+                secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
             - name: POLYGON_API_KEY
@@ -104,6 +114,12 @@ spec:
                 secretKeyRef:
                   name: telegram-secret
                   key: chat-id
+                  optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: OPENAI_API_KEY
           resources:
             requests:
               cpu: "300m"

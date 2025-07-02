@@ -114,7 +114,6 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
 		args.ExtendedHours = false
 	}
-
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
@@ -139,7 +138,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1
-                 ORDER BY minDate DESC NULLS FIRST`
+                 ORDER BY maxDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
@@ -552,8 +551,6 @@ func requestIncompleteBar(
 		timestampStart = currentDayStart + (elapsed/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		// Daily or above
-		// Calculate the start of the current day but we don't need to store it in a variable
-		timestampStart = GetReferenceStartTime(timestampEnd, false, easternLocation)
 		switch timespan {
 		case "day":
 			timestampStart = GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
@@ -870,7 +867,7 @@ func fetchAggData(
 		agg := it.Item()
 		ts := time.Time(agg.Timestamp).In(easternLocation)
 
-		if !extendedHours {
+		if !extendedHours && timespan != "day" {
 			if !utils.IsTimestampRegularHours(ts) {
 				continue
 			}

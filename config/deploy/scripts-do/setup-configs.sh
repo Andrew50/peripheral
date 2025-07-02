@@ -2,22 +2,24 @@
 set -Eeuo pipefail
 
 # --- Environment Variable Validation ---
-#: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}"
+#: "${K8S_NAMESPACE:?Error: K8S_NAMESPACE environment variable is required.}" 
 
 # Require these secrets:
 : "${DB_ROOT_PASSWORD:?Missing DB_ROOT_PASSWORD}"
 : "${REDIS_PASSWORD:?Missing REDIS_PASSWORD}"
 : "${POLYGON_API_KEY:?Missing POLYGON_API_KEY}"
 : "${GEMINI_FREE_KEYS:?Missing GEMINI_FREE_KEYS}"
+: "${OPENAI_API_KEY:?Missing OPENAI_API_KEY}"
 : "${GOOGLE_CLIENT_ID:?Missing GOOGLE_CLIENT_ID}"
 : "${GOOGLE_CLIENT_SECRET:?Missing GOOGLE_CLIENT_SECRET}"
+: "${OPENAI_API_KEY:?Missing OPENAI_API_KEY}"
 : "${JWT_SECRET:?Missing JWT_SECRET}"
 : "${CLOUDFLARE_TUNNEL_TOKEN:?Missing CLOUDFLARE_TUNNEL_TOKEN}"
 
 # Optional Telegram secrets (for monitoring alerts)
-TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-: "${CONFIG_DIR:?Missing CONFIG_DIR}"
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-} 
+TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-} 
+: "${CONFIG_DIR:?Missing CONFIG_DIR}" 
 : "${TMP_DIR:?Missing TMP_DIR}"
 : "${INGRESS_HOST:?Error: INGRESS_HOST environment variable is required.}"
 : "${DOCKER_USERNAME:?Error: DOCKER_USERNAME environment variable is required.}"
@@ -28,8 +30,10 @@ DB_B64=$(echo -n "$DB_ROOT_PASSWORD" | base64 -w 0)
 REDIS_B64=$(echo -n "$REDIS_PASSWORD" | base64 -w 0)
 POLYGON_B64=$(echo -n "$POLYGON_API_KEY" | base64 -w 0)
 GEMINI_B64=$(echo -n "$GEMINI_FREE_KEYS" | base64 -w 0)
+OPENAI_B64=$(echo -n "$OPENAI_API_KEY" | base64 -w 0)
 GOOGLE_ID_B64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 -w 0)
 GOOGLE_SECRET_B64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 -w 0)
+OPENAI_B64=$(echo -n "$OPENAI_API_KEY" | base64 -w 0)
 JWT_B64=$(echo -n "$JWT_SECRET" | base64 -w 0)
 CLOUDFLARE_TOKEN_B64=$(echo -n "$CLOUDFLARE_TUNNEL_TOKEN" | base64 -w 0)
 
@@ -37,7 +41,7 @@ CLOUDFLARE_TOKEN_B64=$(echo -n "$CLOUDFLARE_TUNNEL_TOKEN" | base64 -w 0)
 TELEGRAM_BOT_TOKEN_B64=$(echo -n "$TELEGRAM_BOT_TOKEN" | base64 -w 0)
 TELEGRAM_CHAT_ID_B64=$(echo -n "$TELEGRAM_CHAT_ID" | base64 -w 0)
 
-export DB_B64 REDIS_B64 POLYGON_B64 GEMINI_B64 GOOGLE_ID_B64 GOOGLE_SECRET_B64 JWT_B64 CLOUDFLARE_TOKEN_B64 TELEGRAM_BOT_TOKEN_B64 TELEGRAM_CHAT_ID_B64
+export DB_B64 REDIS_B64 POLYGON_B64 GEMINI_B64 GOOGLE_ID_B64 GOOGLE_SECRET_B64 JWT_B64 CLOUDFLARE_TOKEN_B64 TELEGRAM_BOT_TOKEN_B64 TELEGRAM_CHAT_ID_B64 OPENAI_B64
 
 
 if [[ ! -d "$CONFIG_DIR" ]]; then

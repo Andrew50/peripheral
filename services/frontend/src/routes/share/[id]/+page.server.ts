@@ -19,9 +19,9 @@ function isBotUserAgent(userAgent: string): boolean {
 		'scraper',
 		'preview'
 	];
-	
+
 	const lowerUA = userAgent.toLowerCase();
-	return botPatterns.some(pattern => lowerUA.includes(pattern));
+	return botPatterns.some((pattern) => lowerUA.includes(pattern));
 }
 
 export const load: ServerLoad = async ({ params, request }) => {
@@ -40,7 +40,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 			conversation_id: params.id
 		});
 
-		const cleanTitle = result.title || 'Atlantis';
+		const cleanTitle = result.title || 'Peripheral';
 
 		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const shareUrl = `${origin}/share/${params.id}`;
@@ -57,20 +57,20 @@ export const load: ServerLoad = async ({ params, request }) => {
 		};
 	} catch (error) {
 		console.error('Error loading conversation for preview:', error);
-		
+
 		// Return fallback meta data
 		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const fallbackUrl = `${origin}/share/${params.id}`;
 		const fallbackImageUrl = `${origin}/og/${params.id}`;
-		
+
 		return {
 			conversationId: params.id,
 			isBot,
 			meta: {
-				title: 'Atlantis',
+				title: 'Peripheral',
 				shareUrl: fallbackUrl,
 				ogImageUrl: fallbackImageUrl
 			}
 		};
 	}
-}; 
+};

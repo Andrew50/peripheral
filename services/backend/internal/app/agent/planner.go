@@ -51,13 +51,6 @@ type FinalResponse struct {
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
 
-type TokenCounts struct {
-	InputTokenCount    int64 `json:"input_token_count,omitempty"`
-	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
-	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
-	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
-}
-
 /*
 	func replySchema() *genai.Schema {
 		return &genai.Schema{
@@ -220,10 +213,10 @@ type TokenCounts struct {
 const planningModel = "gemini-2.5-flash"
 
 // const finalResponseModel = "gemini-2.5-flash"
-const openAIPlannerModel = "o4-mini"
-const openAIFinalResponseModel = "o3"
+// const openAIPlannerModel = "o4-mini"
+// const openAIFinalResponseModel = "o3"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
@@ -391,7 +384,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+/*func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
@@ -437,7 +430,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 	resultText := res.OutputText()
 	fmt.Println("\n GPT resultText: ", resultText)
 
-	/*var directAns DirectAnswer
+	var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
 		hasValidContent := false
@@ -457,7 +450,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 			}
 			return directAns, nil
 		}
-	}*/
+	}
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
@@ -513,7 +506,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 		}
 	}
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
-}
+}*/
 
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	apiKey := conn.OpenAIKey
@@ -538,6 +531,12 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
+	var model string
+	if len(executionResults) >= 3 {
+		model = "o3"
+	} else {
+		model = "o4-mini"
+	}
 
 	rawSchema := ref.Reflect(AtlantisFinalResponse{})
 	b, _ := json.Marshal(rawSchema)
@@ -557,7 +556,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Model:        openAIFinalResponseModel,
+		Model:        model,
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
@@ -699,6 +698,14 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 			})
 		}
 	}
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleSystem,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(fmt.Sprintf("CURRENT DATE (EST/Market Time): %s\n CURRENT TIME: %s\n CURRENT TIME IN SECONDS: %d", time.Now().Format("2006-01-02 15:04:05"), time.Now().Format("15:04:05"), time.Now().Unix())),
+			},
+		},
+	})
 
 	return messages, nil
 }
@@ -809,14 +816,16 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	// Concatenate the text from *all* parts to ensure we capture the full response
 	var frSB strings.Builder
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				frSB.WriteString(part.Text)
-				frSB.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					frSB.WriteString(part.Text)
+					frSB.WriteString("\n")
+				}
 			}
 		}
 	}
