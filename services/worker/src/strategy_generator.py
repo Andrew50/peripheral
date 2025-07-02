@@ -972,6 +972,15 @@ Generate the updated strategy function."""
         try:
             logger.info(f"🔍 Starting validation of strategy code ({len(strategy_code)} characters)")
             
+            # Print the entire Python strategy returned by o3 before validation
+            print("\n" + "="*80)
+            print("📋 O3 RETURNED STRATEGY CODE (BEFORE VALIDATION)")
+            print("="*80)
+            print(strategy_code)
+            print("="*80)
+            print("🔍 NOW STARTING VALIDATION PROCESS...")
+            print("="*80 + "\n")
+            
             # First, use the existing validator for security checks
             logger.info("🛡️ Running security validation...")
             try:

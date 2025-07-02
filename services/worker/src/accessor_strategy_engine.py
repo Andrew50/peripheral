@@ -70,6 +70,16 @@ class AccessorStrategyEngine:
                 end_date=end_date
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='backtest',
+                symbols=symbols,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
             # Execute strategy with accessor context
             instances = await self._execute_strategy(
                 strategy_code, 
@@ -215,6 +225,14 @@ class AccessorStrategyEngine:
                 symbols=universe
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='screening',
+                symbols=universe
+            )
+            
             # Log optimization settings
             logger.debug("🔧 Screening optimizations enabled:")
             logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
@@ -284,6 +302,14 @@ class AccessorStrategyEngine:
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
+                mode='alert',
+                symbols=symbols
+            )
+            
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
                 mode='alert',
                 symbols=symbols
             )
