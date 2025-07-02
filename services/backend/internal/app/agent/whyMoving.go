@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ func GetWhyMoving(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	if err != nil {
 		return nil, err
 	}
-	results, err := RunWhyMoving(conn, json.RawMessage(runWhyMovingArgsBytes))
+	results, err := _RunWhyMoving(conn, json.RawMessage(runWhyMovingArgsBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +49,7 @@ type WhyMovingResult struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func _RunWhyMoving(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args WhyMovingArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, err
@@ -130,10 +131,41 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 		return nil, fmt.Errorf("failed to run web search: %w", err)
 	}
 	prompt := ""
+
+	prompt += fmt.Sprintf("\n%s\n", searchTextResult)
+
+	nyLoc, _ := time.LoadLocation("America/New_York")
 	for _, ticker := range tickers {
-		prompt += fmt.Sprintf("%s\n", ticker)
+		snapshot, err := helpers.GetTickerDailySnapshot(conn, 0, json.RawMessage(fmt.Sprintf(`{"ticker": "%s"}`, ticker)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ticker daily snapshot: %w", err)
+		}
+		snapshotRes, ok := snapshot.(helpers.GetTickerDailySnapshotResults)
+		if !ok {
+			return nil, fmt.Errorf("failed to get ticker daily snapshot: %w", err)
+		}
+		prompt += fmt.Sprintf("%s: %s%.3f (%s%.3f%%) ",
+			ticker,
+			map[bool]string{true: "+", false: ""}[snapshotRes.TodayChange > 0],
+			snapshotRes.TodayChange,
+			map[bool]string{true: "+", false: ""}[snapshotRes.TodayChangePercent > 0],
+			snapshotRes.TodayChangePercent)
+		if time.Now().In(nyLoc).Hour() < 9 || (time.Now().In(nyLoc).Hour() == 9 && time.Now().In(nyLoc).Minute() < 30) {
+			prompt += ""
+		}
+		if time.Now().In(nyLoc).Hour() > 16 {
+			afterHoursChange := snapshotRes.LastTradePrice - snapshotRes.TodayClose
+			afterHoursChangePercent := math.Round((afterHoursChange/snapshotRes.TodayClose)*100*100) / 100
+			prompt += fmt.Sprintf("After hours: %s%.3f (%s%.3f%%)",
+				map[bool]string{true: "+", false: ""}[afterHoursChange > 0],
+				afterHoursChange,
+				map[bool]string{true: "+", false: ""}[afterHoursChangePercent > 0],
+				afterHoursChangePercent)
+		}
+		prompt += "\n"
 	}
-	prompt += fmt.Sprintf("\n%s", searchTextResult)
+	prompt += fmt.Sprintf("\nCurrent date/time is %s", time.Now().In(nyLoc).Format("2006-01-02 15:04:05"))
+	fmt.Println("prompt: ", prompt)
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -212,7 +244,7 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 
 func _RunSearchHelper(conn *data.Conn, tickers []string) (string, error) {
 	var sb strings.Builder
-	sb.WriteString("For each of the following tickers, find out why it is gapping/moving as of recently. Prioritize the most recent news.")
+	sb.WriteString("For each of the following tickers, find out why it is gapping/moving as of recently. Prioritize the most recent news. Do NOT include any news that is older than 24 hours.")
 	for _, ticker := range tickers {
 		sb.WriteString(fmt.Sprintf("\n%s", ticker))
 	}

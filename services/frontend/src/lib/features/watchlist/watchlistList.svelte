@@ -581,7 +581,7 @@
 	}
 
 	.body-table {
-		border-spacing: 0 2px;
+		border-spacing: 0 1.5px;
 	}
 
 	.header-table {
@@ -590,10 +590,10 @@
 
 	th,
 	td {
-		padding: clamp(4px, 0.4vw, 6px) clamp(2px, 0.4vw, 4px);
+		padding: clamp(3px, 0.35vw, 5px) clamp(2px, 0.35vw, 3px);
 		text-align: left;
 		background: transparent;
-		font-size: clamp(0.75rem, 0.875rem, 1rem);
+		font-size: clamp(0.73rem, 0.82rem, 0.95rem);
 		vertical-align: middle;
 	}
 
@@ -611,11 +611,12 @@
 
 	/* Header cells */
 	th {
-		font-weight: bold;
+		font-weight: normal;
 		color: var(--text-secondary);
 		position: static;
 		z-index: 1;
 		background: transparent;
+		text-align: right;
 	}
 
 	/* Header divider - removed */
@@ -652,13 +653,13 @@
 	}
 
 	tbody td:first-child {
-		border-top-left-radius: 6px;
-		border-bottom-left-radius: 6px;
+		border-top-left-radius: 3px;
+		border-bottom-left-radius: 3px;
 	}
 
 	tbody td:last-child {
-		border-top-right-radius: 6px;
-		border-bottom-right-radius: 6px;
+		border-top-right-radius: 3px;
+		border-bottom-right-radius: 3px;
 	}
 
 	/* Sorting styles */
@@ -747,12 +748,12 @@
 	}
 
 	.ticker-icon {
-		width: clamp(16px, 2.5vw, 22px);
-		height: clamp(16px, 2.5vw, 22px);
+		width: clamp(15px, 2.3vw, 20px);
+		height: clamp(15px, 2.3vw, 20px);
 		border-radius: 50%; /* Make icons circular */
 		object-fit: cover; /* Ensure icon covers the area nicely */
 		background-color: var(--ui-bg-element); /* BG for unloaded images */
-		margin-right: clamp(2px, 0.5vw, 4px); /* Space between icon and text */
+		margin-right: clamp(2px, 0.4vw, 3px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
@@ -760,15 +761,15 @@
 		display: inline-flex; /* Use inline-flex for alignment */
 		align-items: center;
 		justify-content: center;
-		width: clamp(16px, 2.5vw, 22px);
-		height: clamp(16px, 2.5vw, 22px);
+		width: clamp(15px, 2.3vw, 20px);
+		height: clamp(15px, 2.3vw, 20px);
 		border-radius: 50%;
 		background-color: var(--ui-border); /* Use border color for background */
 		color: var(--text-primary); /* Use primary text color */
-		font-size: clamp(0.5rem, 0.3rem + 0.3vw, 0.625rem);
+		font-size: clamp(0.48rem, 0.3rem + 0.3vw, 0.6rem);
 		font-weight: 500;
 		user-select: none; /* Prevent text selection */
-		margin-right: clamp(2px, 0.5vw, 4px); /* Space between icon and text */
+		margin-right: clamp(2px, 0.4vw, 3px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
@@ -830,10 +831,10 @@
 
 	th:nth-child(4),
 	td:nth-child(4) {
-		width: 17%;
+		width: 18%;
 		min-width: 45px;
 		text-align: left;
-		padding-right: clamp(1px, 0.15vw, 2px);
+		padding-right: clamp(0px, 0.1vw, 1px);
 	}
 
 	th:nth-child(5),
