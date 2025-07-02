@@ -83,13 +83,15 @@ class DataAccessorProvider:
                     connection.close()
 
     def set_execution_context(self, mode: str, symbols: List[str] = None, 
-                             start_date: datetime = None, end_date: datetime = None):
+                             start_date: datetime = None, end_date: datetime = None,
+                             min_bars_requirements: List[Dict] = None):
         """Set execution context for data fetching strategy"""
         self.execution_context = {
             'mode': mode,
             'symbols': symbols,
             'start_date': start_date,
-            'end_date': end_date
+            'end_date': end_date,
+            'min_bars_requirements': min_bars_requirements or []
         }
 
     def get_bar_data(self, timeframe: str = "1d", columns: List[str] = None, 
@@ -486,16 +488,26 @@ class DataAccessorProvider:
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_with_buffer, context.get('end_date')]
             elif context.get('mode') == 'validation':
-                # Validation mode: Ultra-minimal data for fast validation
-                # Force minimal bars and recent data only
+                # Validation mode: Use exact min_bars requirements for accurate validation
+                # No arbitrary caps - respect the strategy's actual needs
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '30 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
                 date_params = []
-                # Override min_bars to be reasonable for validation, but respect strategy needs
-                if min_bars > 100:  # Set reasonable upper limit for validation
-                    original_min_bars = min_bars
-                    min_bars = 100  # Maximum 100 bars for validation
-                    logger.info(f"🧪 Validation mode: limiting min_bars from {original_min_bars} to {min_bars} for performance")
+                
+                # Check if this specific min_bars matches any requirement from the strategy code
+                min_bars_requirements = context.get('min_bars_requirements', [])
+                matching_requirement = None
+                for req in min_bars_requirements:
+                    if req.get('timeframe') == timeframe and req.get('min_bars') == min_bars:
+                        matching_requirement = req
+                        break
+                
+                if matching_requirement:
+                    logger.info(f"🧪 Validation mode: using exact min_bars={min_bars} for {timeframe} (from line {matching_requirement['line_number']})")
+                else:
+                    logger.info(f"🧪 Validation mode: using min_bars={min_bars} for {timeframe} (no arbitrary caps applied)")
+                
+                # No min_bars override - use the strategy's exact requirements
             elif context.get('mode') == 'screening':
                 # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
                 # This is much more efficient than date filtering because:

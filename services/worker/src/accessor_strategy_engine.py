@@ -120,7 +120,7 @@ class AccessorStrategyEngine:
         strategy_code: str
     ) -> Dict[str, Any]:
         """
-        Execute strategy for VALIDATION ONLY using minimal data for speed
+        Execute strategy for VALIDATION ONLY using exact min_bars requirements for speed
         
         Args:
             strategy_code: Python code defining the strategy function  
@@ -128,7 +128,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with validation result (success/error only)
         """
-        logger.info("🧪 Starting fast validation execution (minimal data)")
+        logger.info("🧪 Starting fast validation execution (exact min_bars requirements)")
         
         start_time = time.time()
         
@@ -137,19 +137,32 @@ class AccessorStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Set execution context for validation with MINIMAL data
-            self.data_accessor.set_execution_context(
-                mode='validation',  # Special validation mode
-                symbols=['AAPL']    # Just one symbol for validation
-            )
+            # Extract min_bars requirements from strategy code
+            min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
+            
+            # Log the exact requirements that will be used
+            if min_bars_requirements:
+                logger.info("📊 Extracted min_bars requirements from strategy:")
+                for req in min_bars_requirements:
+                    logger.info(f"   Line {req['line_number']}: get_bar_data(timeframe='{req['timeframe']}', min_bars={req['min_bars']})")
+                max_bars = max(req['min_bars'] for req in min_bars_requirements)
+                logger.info(f"🎯 Validation will use exact min_bars requirements (max: {max_bars} bars)")
+            else:
+                logger.info("📊 No get_bar_data calls found - using minimal data for validation")
+            
+            # Set execution context for validation with exact requirements
+            context_data = {
+                'mode': 'validation',  # Special validation mode
+                'symbols': ['AAPL'],   # Just one symbol for validation
+                'min_bars_requirements': min_bars_requirements  # Pass exact requirements
+            }
+            
+            self.data_accessor.set_execution_context(**context_data)
             
             # CRITICAL: Also set context on global accessor in case strategy uses global functions
             from data_accessors import get_data_accessor
             global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
-                mode='validation',
-                symbols=['AAPL']
-            )
+            global_accessor.set_execution_context(**context_data)
             
             # Debug: Verify both instances have validation context
             logger.debug(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
@@ -157,7 +170,8 @@ class AccessorStrategyEngine:
             logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
             
             logger.debug("🔧 Validation optimizations enabled:")
-            logger.debug("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
+            logger.debug("   ✓ Minimal dataset: 1 symbol")
+            logger.debug("   ✓ Exact min_bars from strategy code (no arbitrary caps)")
             logger.debug("   ✓ Fast execution path (validation mode)")
             logger.debug("   ✓ Skip result ranking and processing")
             logger.debug("   ✓ Context set on both engine and global data accessors")
@@ -174,6 +188,7 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'validation',
                 'instances_generated': len(instances),
+                'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
             }
