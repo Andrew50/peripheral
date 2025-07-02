@@ -226,6 +226,9 @@
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
 
+	// Track previous security ID to avoid unnecessary stream changes
+	let previousSecurityId: number | null = null;
+
 	// Why Moving popup state (declare early to avoid TDZ)
 	let whyMovingTicker: string = '';
 	let whyMovingTrigger: number = 0;
@@ -456,8 +459,16 @@
 						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
 						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
 					}
-					releaseFast();
-					releaseQuote();
+					
+					// Only release streams if securityId is changing
+					const currentSecurityId = typeof inst.securityId === 'string' 
+						? parseInt(inst.securityId, 10) 
+						: inst.securityId;
+					
+					if (previousSecurityId !== currentSecurityId) {
+						releaseFast();
+						releaseQuote();
+					}
 					drawingMenuProps.update((v) => ({
 						...v,
 						chartCandleSeries: chartCandleSeries,
@@ -693,9 +704,18 @@
 					} else {
 						vwapSeries.setData([]);
 					}
-					if (inst.requestType == 'loadNewTicker') {
+					
+					// Only set up new streams if the securityId actually changed
+					const currentSecurityId = typeof inst.securityId === 'string' 
+						? parseInt(inst.securityId, 10) 
+						: inst.securityId;
+					
+					if (inst.requestType == 'loadNewTicker' && previousSecurityId !== currentSecurityId) {
+						releaseFast();
+						releaseQuote();
 						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
 						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
+						previousSecurityId = currentSecurityId;
 					}
 					// Hide chart switching overlay when loading completes
 					if (inst.requestType === 'loadNewTicker') {
