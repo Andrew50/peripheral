@@ -51,13 +51,13 @@ export async function GET({ params }: { params: { id: string } }) {
 		// ---------- 2) Fetch data ----------------------
 		const snippetData = await getChatSnippet(params.id);
 		const { t, q, a } = snippetData ?? {
-			t: 'Atlantis Chat',
+			t: 'Peripheral Chat',
 			q: 'Can you get all the dates of the big boeing plane crashes within the last 5 years....',
 			a: 'The new best way to trade.'
 		};
 
 		// Use the user query as the main title
-		const rawTitle = q || 'Atlantis Query';
+		const rawTitle = q || 'Peripheral Query';
 		const title = rawTitle.length > 95 ? rawTitle.substring(0, 95) + '...' : rawTitle;
 
 		// ---------- 3) Render SVG via Satori -----------
@@ -121,7 +121,7 @@ export async function GET({ params }: { params: { id: string } }) {
 															fontWeight: '600',
 															color: '#ffffff'
 														},
-														children: 'Atlantis'
+														children: 'Peripheral'
 													}
 												}
 											]

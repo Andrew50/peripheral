@@ -33,7 +33,7 @@
 
 <svelte:head>
 	<!-- Basic meta tags -->
-	<title>{data.meta.title} | Atlantis</title>
+	<title>{data.meta.title} | Peripheral</title>
 	<meta name="description" content="The new best way to trade." />
 
 	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
@@ -46,18 +46,18 @@
 	<meta property="og:image:alt" content={data.meta.title} />
 	<meta property="og:url" content={data.meta.shareUrl} />
 	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="Atlantis" />
+	<meta property="og:site_name" content="Peripheral" />
 
 	<!-- Twitter Card meta tags -->
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:site" content="@atlantis" />
+	<meta name="twitter:site" content="@peripheralio" />
 	<meta name="twitter:title" content={data.meta.title} />
 	<meta name="twitter:description" content="The new best way to trade." />
 	<meta name="twitter:image" content={data.meta.ogImageUrl} />
 	<meta name="twitter:image:alt" content={data.meta.title} />
 
 	<!-- Additional meta tags for better sharing -->
-	<meta property="article:author" content="Atlantis" />
+	<meta property="article:author" content="Peripheral" />
 	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
 

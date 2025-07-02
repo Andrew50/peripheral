@@ -40,7 +40,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 			conversation_id: params.id
 		});
 
-		const cleanTitle = result.title || 'Atlantis';
+		const cleanTitle = result.title || 'Peripheral';
 
 		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const shareUrl = `${origin}/share/${params.id}`;
@@ -67,7 +67,7 @@ export const load: ServerLoad = async ({ params, request }) => {
 			conversationId: params.id,
 			isBot,
 			meta: {
-				title: 'Atlantis',
+				title: 'Peripheral',
 				shareUrl: fallbackUrl,
 				ogImageUrl: fallbackImageUrl
 			}
