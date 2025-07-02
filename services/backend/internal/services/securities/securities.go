@@ -478,7 +478,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 			// Delete all active rows except the one with the highest securityid
 			_, err := conn.DB.Exec(ctx, `
 				DELETE FROM securities 
-				WHERE ticker = $1 maxDate IS NULL AND securityid NOT IN (
+				WHERE ticker = $1 AND maxDate IS NULL AND securityid NOT IN (
 					SELECT MIN(securityid) 
 					FROM securities 
 					WHERE ticker = $1 AND maxDate IS NULL
@@ -958,6 +958,7 @@ func processTickerEventsForNewListing(ctx context.Context, conn *data.Conn, tick
 		} else {
 			figi = getTickerDetailsResponse.CompositeFIGI
 		}
+
 		tickerToInsert = event.TickerChange["ticker"].(string)
 		// first check if this is already in the database
 		var existingSecurityID int
@@ -976,7 +977,15 @@ func processTickerEventsForNewListing(ctx context.Context, conn *data.Conn, tick
 		// Use safe insertion with comprehensive validation
 		err = safeInsertSecurityV2(ctx, conn, tickerToInsert, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing")
 		if err != nil {
-			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			// If insertion failed and tickers are similar, try with original ticker as fallback
+			if shouldUseOriginalTicker(ticker, tickerToInsert) {
+				err = safeInsertSecurityV2(ctx, conn, ticker, initialDate, maxDateToInsert, isActive, figi, true, "new ticker listing (fallback to original)")
+				if err != nil {
+					return fmt.Errorf("failed to insert new ticker %s (tried both %s and %s): %w", ticker, tickerToInsert, ticker, err)
+				}
+			} else {
+				return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			}
 		}
 
 		// Parse the date string, subtract a day, and format back to string
@@ -1059,7 +1068,19 @@ func processTickerEventsForExistingSecurity(ctx context.Context, conn *data.Conn
 			ON CONFLICT (ticker, minDate) DO NOTHING`,
 			currentSecurityID, tickerToInsert, initialDate, maxDateToInsert, false, figi)
 		if err != nil {
-			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			// If insertion failed and tickers are similar, try with original ticker as fallback
+			if shouldUseOriginalTicker(ticker, tickerToInsert) {
+				_, err = conn.DB.Exec(ctx, `
+					INSERT INTO securities (securityid, ticker, minDate, maxDate, active, figi) 
+					VALUES ($1, $2, $3, $4, $5, $6) 
+					ON CONFLICT (ticker, minDate) DO NOTHING`,
+					currentSecurityID, ticker, initialDate, maxDateToInsert, false, figi)
+				if err != nil {
+					return fmt.Errorf("failed to insert new ticker %s (tried both %s and %s): %w", ticker, tickerToInsert, ticker, err)
+				}
+			} else {
+				return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			}
 		}
 
 		// Parse the date string, subtract a day, and format back to string
@@ -1162,7 +1183,19 @@ func processTickerEventsWithConflictResolution(ctx context.Context, conn *data.C
 			ON CONFLICT (ticker, minDate) DO NOTHING`,
 			currentSecurityID, tickerToInsert, initialDate, maxDateToInsert, false, figi)
 		if err != nil {
-			return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			// If insertion failed and tickers are similar, try with original ticker as fallback
+			if shouldUseOriginalTicker(ticker, tickerToInsert) {
+				_, err = conn.DB.Exec(ctx, `
+					INSERT INTO securities (securityid, ticker, minDate, maxDate, active, figi) 
+					VALUES ($1, $2, $3, $4, $5, $6) 
+					ON CONFLICT (ticker, minDate) DO NOTHING`,
+					currentSecurityID, ticker, initialDate, maxDateToInsert, false, figi)
+				if err != nil {
+					return fmt.Errorf("failed to insert new ticker %s (tried both %s and %s): %w", ticker, tickerToInsert, ticker, err)
+				}
+			} else {
+				return fmt.Errorf("failed to insert new ticker %s: %w", tickerToInsert, err)
+			}
 		}
 
 		// Parse the date string, subtract a day, and format back to string
@@ -1174,4 +1207,49 @@ func processTickerEventsWithConflictResolution(ctx context.Context, conn *data.C
 	}
 
 	return nil
+}
+
+// shouldUseOriginalTicker checks if the event ticker is similar enough to the original ticker
+// to warrant using the original ticker instead of the event ticker
+func shouldUseOriginalTicker(originalTicker, eventTicker string) bool {
+	// If they're the same, use original
+	if originalTicker == eventTicker {
+		return true
+	}
+
+	// Convert to uppercase for comparison
+	orig := strings.ToUpper(originalTicker)
+	event := strings.ToUpper(eventTicker)
+
+	// Find the length of common prefix
+	minLen := len(orig)
+	if len(event) < minLen {
+		minLen = len(event)
+	}
+
+	commonPrefixLen := 0
+	for i := 0; i < minLen; i++ {
+		if orig[i] == event[i] {
+			commonPrefixLen++
+		} else {
+			break
+		}
+	}
+
+	// If no common prefix or very short prefix, don't use original
+	if commonPrefixLen < 3 {
+		return false
+	}
+
+	// Get the suffixes after the common prefix
+	origSuffix := orig[commonPrefixLen:]
+	eventSuffix := event[commonPrefixLen:]
+
+	// If both suffixes are 2 characters or less, and the common prefix is substantial,
+	// use the original ticker
+	if len(origSuffix) <= 2 && len(eventSuffix) <= 2 && commonPrefixLen >= len(orig)-2 {
+		return true
+	}
+
+	return false
 }
