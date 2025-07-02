@@ -155,6 +155,13 @@ func updateSectorsJob(conn *data.Conn) error {
 var (
 	JobList = []*Job{
 		{
+			Name:           "SimpleUpdateSecurities",
+			Function:       simpleSecuritiesUpdateJob,
+			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
+		{
 			Name:           "UpdateDailyOHLCV",
 			Function:       marketdata.UpdateDailyOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
@@ -201,13 +208,6 @@ var (
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "SimpleUpdateSecurities",
-			Function:       simpleSecuritiesUpdateJob,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
