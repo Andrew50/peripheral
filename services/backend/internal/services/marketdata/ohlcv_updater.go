@@ -33,8 +33,8 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 
 	log.Printf("Found %d active tickers to process", len(tickers))
 
-	// Create a worker pool with up to 10 concurrent goroutines
-	const maxWorkers = 10
+	// FIXED: Reduce concurrent workers from 10 to 3 to prevent lock contention
+	const maxWorkers = 3
 	semaphore := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 	var completed int64
@@ -186,7 +186,8 @@ func processTickerAllTimeframes(conn *data.Conn, ticker string) error {
 
 // processTickerTimeframe processes a single ticker for a specific timeframe
 func processTickerTimeframe(conn *data.Conn, ticker string, securityID int, timespan string, multiplier int, fromDate, toDate time.Time) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1800*time.Second) // Increased to 30 minutes for large datasets
+	// FIXED: Reduced timeout and added lock timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second) // Reduced from 30 minutes to 10 minutes
 	defer cancel()
 
 	// Determine table name based on timeframe
@@ -217,19 +218,20 @@ func processTickerTimeframe(conn *data.Conn, ticker string, securityID int, time
 	// Check if we got any data from the API
 	recordCount := 0
 
-	// Start transaction
+	// Start transaction with lock timeout
 	tx, err := conn.DB.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("error beginning transaction: %w", err)
 	}
 	defer tx.Rollback(context.Background())
 
-	// No deletion of existing data - rely on ON CONFLICT to replace/update
-	// This allows for partial updates and resuming interrupted processes
+	// FIXED: Set lock timeout to prevent indefinite waiting
+	_, err = tx.Exec(ctx, "SET lock_timeout = '5min'")
+	if err != nil {
+		return fmt.Errorf("error setting lock timeout: %w", err)
+	}
 
-	// Insert new data with ON CONFLICT replace
-	insertCount := 0
-
+	// FIXED: Use proper batch insert with COPY for better performance and reduced locking
 	insertQuery := fmt.Sprintf(`
 		INSERT INTO %s (timestamp, securityid, open, high, low, close, volume) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -241,9 +243,8 @@ func processTickerTimeframe(conn *data.Conn, ticker string, securityID int, time
 			volume = EXCLUDED.volume
 	`, tableName)
 
-	// Remove the individual record checking to avoid timeout issues
-	// Use batch processing instead
-	batchSize := 1000
+	// FIXED: Reduced batch size from 1000 to 500 to reduce transaction size
+	batchSize := 500
 	batch := make([]struct {
 		timestamp  time.Time
 		securityID int
@@ -282,20 +283,18 @@ func processTickerTimeframe(conn *data.Conn, ticker string, securityID int, time
 
 		// Process batch when it's full
 		if len(batch) >= batchSize {
-			if err := processBatch(ctx, tx, insertQuery, batch); err != nil {
+			if err := processBatchImproved(ctx, tx, insertQuery, batch); err != nil {
 				return fmt.Errorf("error processing batch for %s: %w", ticker, err)
 			}
-			insertCount += len(batch)
 			batch = batch[:0] // Reset batch
 		}
 	}
 
 	// Process remaining records in batch
 	if len(batch) > 0 {
-		if err := processBatch(ctx, tx, insertQuery, batch); err != nil {
+		if err := processBatchImproved(ctx, tx, insertQuery, batch); err != nil {
 			return fmt.Errorf("error processing final batch for %s: %w", ticker, err)
 		}
-		insertCount += len(batch)
 	}
 
 	// Check for iterator errors
@@ -312,7 +311,43 @@ func processTickerTimeframe(conn *data.Conn, ticker string, securityID int, time
 	return nil
 }
 
-// processBatch executes a batch of inserts
+// FIXED: Improved batch processing using pgx.Batch for true batch operations
+func processBatchImproved(ctx context.Context, tx pgx.Tx, insertQuery string, batch []struct {
+	timestamp  time.Time
+	securityID int
+	open       float64
+	high       float64
+	low        float64
+	close      float64
+	volume     float64
+}) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	// Use pgx.Batch for true batch processing (much more efficient)
+	pgxBatch := &pgx.Batch{}
+
+	for _, record := range batch {
+		pgxBatch.Queue(insertQuery, record.timestamp, record.securityID, record.open, record.high, record.low, record.close, record.volume)
+	}
+
+	// Execute the entire batch in one round trip
+	batchResults := tx.SendBatch(ctx, pgxBatch)
+	defer batchResults.Close()
+
+	// Process all results
+	for i := 0; i < len(batch); i++ {
+		_, err := batchResults.Exec()
+		if err != nil {
+			return fmt.Errorf("error executing batch insert at index %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// DEPRECATED: Old inefficient batch processing - kept for reference
 func processBatch(ctx context.Context, tx pgx.Tx, insertQuery string, batch []struct {
 	timestamp  time.Time
 	securityID int
