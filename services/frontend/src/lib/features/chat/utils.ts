@@ -4,7 +4,7 @@ import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
 
 // Centralized ticker formatting regex pattern
-const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9]{1,5})-(\d+)\$\$/g;
+const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9.]{1,6})-(\d+)\$\$/g;
 
 // Function to parse markdown content and make links open in new tabs
 export function parseMarkdown(content: string): string {

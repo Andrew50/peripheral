@@ -12,7 +12,7 @@
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
+	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'account';
 
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
