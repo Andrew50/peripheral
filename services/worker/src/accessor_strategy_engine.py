@@ -9,6 +9,7 @@ import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import datetime as dt 
 from typing import Any, Dict, List, Optional, Union, Tuple
 import json
 import time
@@ -470,13 +471,48 @@ class AccessorStrategyEngine:
         # Create bound methods that use this engine's data accessor
         def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, 
                               aggregate_mode=False, extended_hours=False):
-            return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
-                                                  aggregate_mode, extended_hours)
+            try:
+                return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
+                                                      aggregate_mode, extended_hours)
+            except Exception as e:
+                logger.error(f"Data accessor error in get_bar_data(timeframe={timeframe}, min_bars={min_bars}): {e}")
+                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                raise  # Re-raise to maintain error propagation
         
         def bound_get_general_data(columns=None, filters=None):
-            return self.data_accessor.get_general_data(columns=columns, filters=filters)
+            try:
+                return self.data_accessor.get_general_data(columns=columns, filters=filters)
+            except Exception as e:
+                logger.error(f"Data accessor error in get_general_data(columns={columns}, filters={filters}): {e}")
+                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                raise  # Re-raise to maintain error propagation
         
         safe_globals = {
+            # Built-ins for safe execution (including __import__ for import statements)
+            '__builtins__': {
+                'print': print,
+                '__import__': __import__,
+                'len': len,
+                'range': range,
+                'enumerate': enumerate,
+                'float': float,
+                'int': int,
+                'str': str,
+                'abs': abs,
+                'max': max,
+                'min': min,
+                'round': round,
+                'sum': sum,
+                'list': list,
+                'dict': dict,
+                'tuple': tuple,
+                'set': set,
+                'sorted': sorted,
+                'reversed': reversed,
+                'any': any,
+                'all': all,
+            },
+            
             # Standard imports
             'pd': pd,
             'numpy': np,
@@ -487,30 +523,11 @@ class AccessorStrategyEngine:
             'get_bar_data': bound_get_bar_data,
             'get_general_data': bound_get_general_data,
             
-            # Utility functions
-            'len': len,
-            'range': range,
-            'enumerate': enumerate,
-            'float': float,
-            'int': int,
-            'str': str,
-            'abs': abs,
-            'max': max,
-            'min': min,
-            'round': round,
-            'sum': sum,
-            'list': list,
-            'dict': dict,
-            'tuple': tuple,
-            'set': set,
-            'sorted': sorted,
-            'reversed': reversed,
-            'any': any,
-            'all': all,
-            
-            # Math and datetime
-            'datetime': datetime,
+            # Math and datetime - make datetime module fully available
+            'datetime': dt,
             'timedelta': timedelta,
+            'time': dt.time,
+            
             
             # Execution mode info
             'execution_mode': execution_mode,
