@@ -230,169 +230,73 @@ ERROR HANDLING NOTE:
 
 EXAMPLE PATTERNS:
 ```python
-def strategy():
-    instances = []
-    
-    # Example 1: Multi-timeframe momentum strategy using 5-minute and 4-hour data
-    target_tickers = ["AAPL", "MSFT"]  # Extract from prompt analysis
-    
-    # Get 5-minute data for short-term momentum (aggregated from 1-minute)
-    bars_5m = get_bar_data(
-        timeframe="5m",  # Custom aggregation: 5-minute bars from 1-minute data
-        columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-        min_bars=5,  # Need 5 bars for short-term momentum calculation
-        filters={{"tickers": target_tickers}}
-    )
-    
-    # Get 4-hour data for trend confirmation (aggregated from 1-hour)  
-    bars_4h = get_bar_data(
-        timeframe="4h",  # Custom aggregation: 4-hour bars from 1-hour data
-        columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-        min_bars=3,  # Need 3 bars for trend analysis (current + 2 previous for moving average)
-        filters={{"tickers": target_tickers}}
-    )
-    
-    if bars_5m is None or len(bars_5m) == 0 or bars_4h is None or len(bars_4h) == 0:
-        return instances
-    
-    # Convert to DataFrames for analysis
-    df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
-    df_4h = pd.DataFrame(bars_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
-    
-    if len(df_5m) == 0 or len(df_4h) == 0:
-        return instances
-    
-    # Analyze each ticker separately
-    for ticker in target_tickers:
-        ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
-        ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp')
-        
-        if len(ticker_5m) < 5 or len(ticker_4h) < 3:
-            continue
-        
-        # Calculate 5-minute momentum (RSI-like indicator)
-        ticker_5m['price_change'] = ticker_5m['close'].pct_change()
-        recent_momentum = ticker_5m['price_change'].tail(5).mean()
-        
-        # Calculate 4-hour trend (simple moving average)
-        ticker_4h['sma_3'] = ticker_4h['close'].rolling(3).mean()
-        current_price = ticker_4h['close'].iloc[-1]
-        current_sma = ticker_4h['sma_3'].iloc[-1]
-        
-        # Multi-timeframe strategy trigger: 5m momentum + 4h trend alignment
-        if recent_momentum > 0.01 and current_price > current_sma:  # Bullish on both timeframes
-            instances.append({{
-                'ticker': ticker,
-                'timestamp': int(ticker_5m['timestamp'].iloc[-1]),
-                'entry_price': float(current_price),
-                # CRITICAL: Include ALL calculated indicator values
-                'momentum_5m': float(recent_momentum),
-                'trend_4h': float(current_price / current_sma - 1),
-                'sma_3_4h': float(current_sma),
-                'price_change_5m': float(ticker_5m['price_change'].iloc[-1]),
-                'score': min(1.0, recent_momentum * 10 + (current_price / current_sma - 1))
-            }})
-        
-    return instances
-
-# Example 2: Volume breakout - return ALL breakouts, not just latest (BATCHED automatically)
+# Example 1: Volume Breakout - demonstrates returning ALL instances (critical concept)
 def strategy():
     instances = []
     
     bar_data = get_bar_data(
         timeframe="1d",
-        columns=["ticker", "timestamp", "volume"],
+        columns=["ticker", "timestamp", "close", "volume"],
         min_bars=20,  # Need 20 bars for volume average calculation
-        filters={{}}  # All tickers
+        filters={{"market_cap_min": 1000000000}}  # Large cap stocks
     )
     
     if bar_data is None or len(bar_data) == 0:
         return instances
     
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "volume"])
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
     df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
     
     # Calculate 20-day volume average
     df['volume_avg_20'] = df.groupby('ticker')['volume'].rolling(20).mean().reset_index(0, drop=True)
+    df = df.dropna()  # Remove rows with NaN values
     df['volume_ratio'] = df['volume'] / df['volume_avg_20']
     
-    # CORRECT: Find ALL volume breakouts (no .tail(1))
+    # CRITICAL: Find ALL volume breakouts (no .tail(1) or .groupby().last())
     breakouts = df[df['volume_ratio'] >= 2.0]  # Volume 2x average
     
     for _, row in breakouts.iterrows():
         instances.append({{
             'ticker': row['ticker'],
             'timestamp': int(row['timestamp']),
-            'entry_price': float(row.get('close', 0)),  # Use close as entry price
-            # CRITICAL: Include important indicator values that triggered the signal
-            'volume_ratio': float(row['volume_ratio']),
+            'entry_price': float(row['close']),
+            # CRITICAL: Include ALL calculated indicator values that triggered the signal
+            'volume_ratio': round(float(row['volume_ratio']), 3),
             'volume': int(row['volume']),
             'volume_avg_20': int(row['volume_avg_20']),
-            'volume_breakout_strength': float(row['volume_ratio'] - 2.0),  # How much above threshold
-            'score': min(1.0, (row['volume_ratio'] - 2.0) / 3.0)  # Higher ratio = higher score
+            'volume_breakout_strength': round(float(row['volume_ratio'] - 2.0), 3),
+            'score': round(min(1.0, (row['volume_ratio'] - 2.0) / 3.0), 3)
         }})
         
     return instances
 
-# Example 3: Sector-specific strategy using filters
+# Example 2: Multi-timeframe RSI + Trend Strategy - demonstrates proper indicator inclusion
 def strategy():
     instances = []
     
-    # Focus on technology stocks only
-    bar_data = get_bar_data(
-        timeframe="1d",
-        columns=["ticker", "timestamp", "open", "close", "volume"],
-        min_bars=5,  # Need 5 bars to calculate 5-day price change
-        filters={{"sector": "Technology"}}  # Filter to Technology sector only
-    )
-    
-    if bar_data is None or len(bar_data) == 0:
-        return instances
-    
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close", "volume"])
-    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-    
-    # Calculate 5-day price change for technology stocks
-    df['prev_close_5d'] = df.groupby('ticker')['close'].shift(5)
-    df = df.dropna()
-    df['change_5d_pct'] = ((df['close'] - df['prev_close_5d']) / df['prev_close_5d']) * 100
-    
-    # CRITICAL: Ensure numeric dtype for statistical operations
-    df['change_5d_pct'] = pd.to_numeric(df['change_5d_pct'], errors='coerce')
-    df = df.dropna(subset=['change_5d_pct'])
-    
-    # Find technology stocks with significant moves
-    qualifying_instances = df[df['change_5d_pct'] >= 10.0]  # 10%+ gain over 5 days
-    
-    for _, row in qualifying_instances.iterrows():
-        instances.append({{
-            'ticker': row['ticker'],
-            'timestamp': int(row['timestamp']),
-            'change_5d_pct': float(row['change_5d_pct']),
-            'entry_price': float(row['close']),
-            'score': min(1.0, row['change_5d_pct'] / 20.0)  # Normalized score
-        }})
-        
-    return instances
-
-# Example 4: RSI + MACD Strategy - DEMONSTRATES PROPER INDICATOR INCLUSION
-def strategy():
-    instances = []
-    
-    bar_data = get_bar_data(
+    # Get daily data for RSI calculation
+    bar_data_1d = get_bar_data(
         timeframe="1d",
         columns=["ticker", "timestamp", "close"],
-        min_bars=26,  # Need exactly 26 bars for MACD calculation (slow EMA period)
-        filters={{"market_cap_min": 1000000000}}  # Large cap only
+        min_bars=20,  # Need 20 bars for RSI calculation (14 + buffer)
+        filters={{"sector": "Technology"}}  # Filter to technology sector
     )
     
-    if bar_data is None or len(bar_data) == 0:
+    # Get hourly data for short-term trend
+    bar_data_1h = get_bar_data(
+        timeframe="1h",
+        columns=["ticker", "timestamp", "close"],
+        min_bars=5,   # Need 5 hours for short-term moving average
+        filters={{"sector": "Technology"}}
+    )
+    
+    if bar_data_1d is None or len(bar_data_1d) == 0 or bar_data_1h is None or len(bar_data_1h) == 0:
         return instances
     
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close"])
-    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+    df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
+    df_1h = pd.DataFrame(bar_data_1h, columns=["ticker", "timestamp", "close"])
     
-    # Calculate RSI (14-period)
+    # Calculate RSI for each ticker
     def calculate_rsi(prices, period=14):
         delta = prices.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -400,239 +304,84 @@ def strategy():
         rs = gain / loss
         return 100 - (100 / (1 + rs))
     
-    # Calculate MACD
-    def calculate_macd(prices):
-        ema_12 = prices.ewm(span=12).mean()
-        ema_26 = prices.ewm(span=26).mean()
-        macd_line = ema_12 - ema_26
-        signal_line = macd_line.ewm(span=9).mean()
-        histogram = macd_line - signal_line
-        return macd_line, signal_line, histogram, ema_12, ema_26
+    common_tickers = set(df_1d['ticker']).intersection(set(df_1h['ticker']))
+    
+    for ticker in common_tickers:
+        ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp')
+        ticker_1h = df_1h[df_1h['ticker'] == ticker].sort_values('timestamp')
         
-        # Apply calculations per ticker
-        for ticker in df['ticker'].unique():
-            ticker_data = df[df['ticker'] == ticker].copy()
-            if len(ticker_data) < 26:
-                continue
-                
-            # Calculate indicators
-            ticker_data['rsi'] = calculate_rsi(ticker_data['close'])
-            macd, signal, histogram, ema_12, ema_26 = calculate_macd(ticker_data['close'])
-            ticker_data['macd'] = macd
-            ticker_data['macd_signal'] = signal
-            ticker_data['macd_histogram'] = histogram
-            ticker_data['ema_12'] = ema_12
-            ticker_data['ema_26'] = ema_26
-            
-            # Strategy trigger: RSI oversold + MACD bullish crossover
-            latest = ticker_data.iloc[-1]
-            prev = ticker_data.iloc[-2]
-            
-            if (latest['rsi'] < 30 and  # RSI oversold
-                latest['macd'] > latest['macd_signal'] and  # MACD above signal
-                prev['macd'] <= prev['macd_signal']):  # Bullish crossover
-                
-                instances.append({{
-                    'ticker': ticker,
-                    'timestamp': int(latest['timestamp']),
-                    'entry_price': float(latest['close']),
-                    # CRITICAL: Include ALL calculated indicators - this is the key!
-                    'rsi': round(float(latest['rsi']), 2),
-                    'macd': round(float(latest['macd']), 4),
-                    'macd_signal': round(float(latest['macd_signal']), 4),
-                    'macd_histogram': round(float(latest['macd_histogram']), 4),
-                    'ema_12': round(float(latest['ema_12']), 2),
-                    'ema_26': round(float(latest['ema_26']), 2),
-                    'macd_crossover_strength': float(latest['macd'] - latest['macd_signal']),
-                    'score': min(1.0, (30 - latest['rsi']) / 20 + abs(latest['macd_histogram']) * 10)
-                }})
-    
-    return instances
-
-# Example 5: Scalping strategy using 1-minute and 5-minute timeframes
-def strategy():
-    instances = []
-    
-    # High-frequency scalping using minute-level data
-    target_tickers = ["AAPL", "TSLA", "NVDA"]  # High-volume stocks for scalping
-    
-    # Get 1-minute data for entry detection
-    bars_1m = get_bar_data(
-        timeframe="1m",  # Direct 1-minute table access (fastest)
-        columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-        min_bars=5,  # Need 5 minutes for momentum calculation
-        filters={{"tickers": target_tickers}}
-    )
-    
-    # Get 5-minute data for trend confirmation  
-    bars_5m = get_bar_data(
-        timeframe="5m",  # Aggregated from 1-minute data
-        columns=["ticker", "timestamp", "close"],
-        min_bars=2,   # Need 2 periods for micro-trend (current vs previous)
-        filters={{"tickers": target_tickers}}
-    )
-    
-    if bars_1m is None or len(bars_1m) == 0 or bars_5m is None or len(bars_5m) == 0:
-        return instances
-    
-    df_1m = pd.DataFrame(bars_1m, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
-    df_5m = pd.DataFrame(bars_5m, columns=["ticker", "timestamp", "close"])
-    
-    for ticker in target_tickers:
-        ticker_1m = df_1m[df_1m['ticker'] == ticker].sort_values('timestamp').tail(5)
-        ticker_5m = df_5m[df_5m['ticker'] == ticker].sort_values('timestamp')
-        
-        if len(ticker_1m) < 3 or len(ticker_5m) < 2:
+        if len(ticker_1d) < 15 or len(ticker_1h) < 5:
             continue
         
-        # 1-minute momentum: recent price action
-        recent_high = ticker_1m['high'].max()
-        current_price = ticker_1m['close'].iloc[-1]
-        momentum = (current_price / recent_high) - 1
+        # Calculate daily RSI
+        ticker_1d['rsi'] = calculate_rsi(ticker_1d['close'])
+        latest_1d = ticker_1d.iloc[-1]
         
-        # 5-minute trend confirmation
-        trend_up = ticker_5m['close'].iloc[-1] > ticker_5m['close'].iloc[-2]
+        # Calculate hourly trend (5-hour SMA)
+        ticker_1h['sma_5'] = ticker_1h['close'].rolling(5).mean()
+        latest_1h = ticker_1h.iloc[-1]
+        trend_strength = (latest_1h['close'] / latest_1h['sma_5']) - 1
         
-        # Volume spike detection (1-minute)
-        avg_volume = ticker_1m['volume'].mean()
-        current_volume = ticker_1m['volume'].iloc[-1]
-        volume_spike = current_volume > avg_volume * 1.5
-        
-        # Scalping strategy trigger: momentum + trend + volume
-        if momentum > 0.005 and trend_up and volume_spike:  # 0.5%+ momentum with confirmations
+        # Strategy trigger: RSI oversold + positive hourly trend
+        if latest_1d['rsi'] < 30 and trend_strength > 0.02:  # RSI < 30 + 2%+ above hourly SMA
             instances.append({{
                 'ticker': ticker,
-                'timestamp': int(ticker_1m['timestamp'].iloc[-1]),
-                'entry_price': float(current_price),
-                'momentum_1m': float(momentum),
-                'volume_ratio': float(current_volume / avg_volume),
-                'score': min(1.0, momentum * 100 + (current_volume / avg_volume - 1))
+                'timestamp': int(latest_1d['timestamp']),
+                'entry_price': float(latest_1d['close']),
+                # CRITICAL: Include ALL calculated indicators - essential for analysis
+                'rsi': round(float(latest_1d['rsi']), 2),
+                'trend_strength_1h': round(float(trend_strength), 3),
+                'sma_5_1h': round(float(latest_1h['sma_5']), 2),
+                'rsi_oversold_depth': round(float(30 - latest_1d['rsi']), 2),
+                'score': round(min(1.0, (30 - latest_1d['rsi']) / 20 + trend_strength), 3)
             }})
     
     return instances
 
-# Example 5: Multi-timeframe swing trading (4-hour and daily)
+# Example 3: Gap Strategy with Specific Tickers - demonstrates ticker filtering and gap calculation
 def strategy():
     instances = []
     
-    try:
-        # Swing trading using 4-hour and daily timeframes
-        bar_data_4h = get_bar_data(
-            timeframe="4h",  # Custom aggregation from 1-hour data
-            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=14,     # 14 periods for RSI calculation
-            filters={{"sector": "Technology", "market_cap_min": 1000000000}}  # Large-cap tech
-        )
-        
-        bar_data_1d = get_bar_data(
-            timeframe="1d",  # Daily data for longer-term trend
-            columns=["ticker", "timestamp", "close"],
-            min_bars=20,     # 20 days for moving average
-            filters={{"sector": "Technology", "market_cap_min": 1000000000}}
-        )
-        
-        if bar_data_4h is None or len(bar_data_4h) == 0 or bar_data_1d is None or len(bar_data_1d) == 0:
-            return instances
-        
-        df_4h = pd.DataFrame(bar_data_4h, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
-        df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
-        
-        # Get unique tickers from both datasets
-        common_tickers = set(df_4h['ticker']).intersection(set(df_1d['ticker']))
-        
-        for ticker in common_tickers:
-            ticker_4h = df_4h[df_4h['ticker'] == ticker].sort_values('timestamp').tail(14)
-            ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp').tail(20)
-            
-            if len(ticker_4h) < 10 or len(ticker_1d) < 15:
-                continue
-            
-            # Calculate 4-hour RSI (simplified)
-            price_changes = ticker_4h['close'].pct_change().dropna()
-            gains = price_changes.where(price_changes > 0, 0)
-            losses = -price_changes.where(price_changes < 0, 0)
-            avg_gain = gains.rolling(14).mean().iloc[-1]
-            avg_loss = losses.rolling(14).mean().iloc[-1]
-            rs = avg_gain / avg_loss if avg_loss > 0 else 100
-            rsi_4h = 100 - (100 / (1 + rs))
-            
-            # Calculate daily trend (20-day SMA)
-            sma_20 = ticker_1d['close'].rolling(20).mean().iloc[-1]
-            current_price = ticker_1d['close'].iloc[-1]
-            daily_trend = (current_price / sma_20) - 1
-            
-            # Swing trading strategy: oversold on 4h + uptrend on daily
-            if rsi_4h < 35 and daily_trend > 0.05:  # RSI oversold + 5%+ above SMA
-                instances.append({{
-                    'ticker': ticker,
-                    'timestamp': int(ticker_4h['timestamp'].iloc[-1]),
-                    'entry_price': float(current_price),
-                    'rsi_4h': float(rsi_4h),
-                    'daily_trend': float(daily_trend),
-                    'score': min(1.0, (35 - rsi_4h) / 35 + daily_trend)
-                }})
-        
-    return instances
-
-# Example 6: Weekly position trading with 2-week confirmation
-def strategy():
-    instances = []
+    target_tickers = ["AAPL", "TSLA", "NVDA"]  # Specific tickers from prompt
     
-        # Long-term position trading using weekly timeframes
-        bars_1w = get_bar_data(
-            timeframe="1w",  # Direct weekly table access
-            columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"],
-            min_bars=20,     # Need 20 weeks for high calculation and volume average
-            filters={{"market_cap_min": 10000000000}}  # Large-cap stocks only
-        )
-        
-        bars_2w = get_bar_data(
-            timeframe="2w",  # Custom aggregation from weekly data
-            columns=["ticker", "timestamp", "close"],
-            min_bars=3,      # Need 3 bi-weekly periods for trend calculation (current vs 2 periods ago)
-            filters={{"market_cap_min": 10000000000}}
-        )
-        
-        if bars_1w is None or len(bars_1w) == 0 or bars_2w is None or len(bars_2w) == 0:
-            return instances
-        
-        df_1w = pd.DataFrame(bars_1w, columns=["ticker", "timestamp", "open", "high", "low", "close", "volume"])
-        df_2w = pd.DataFrame(bars_2w, columns=["ticker", "timestamp", "close"])
-        
-        common_tickers = set(df_1w['ticker']).intersection(set(df_2w['ticker']))
-        
-        for ticker in common_tickers:
-            ticker_1w = df_1w[df_1w['ticker'] == ticker].sort_values('timestamp').tail(20)
-            ticker_2w = df_2w[df_2w['ticker'] == ticker].sort_values('timestamp').tail(3)
-            
-            if len(ticker_1w) < 15 or len(ticker_2w) < 3:
-                continue
-            
-            # Weekly breakout detection
-            recent_high_20w = ticker_1w['high'].max()
-            current_price = ticker_1w['close'].iloc[-1]
-            breakout_strength = (current_price / recent_high_20w) - 1
-            
-            # 2-week trend confirmation  
-            trend_2w = ticker_2w['close'].iloc[-1] / ticker_2w['close'].iloc[-3] - 1
-            
-            # Volume confirmation
-            avg_volume = ticker_1w['volume'].mean()
-            recent_volume = ticker_1w['volume'].iloc[-1]
-            volume_surge = recent_volume > avg_volume * 1.2
-            
-            # Position strategy: breakout + trend + volume
-            if breakout_strength > 0.02 and trend_2w > 0.1 and volume_surge:
-                instances.append({{
-                    'ticker': ticker,
-                    'timestamp': int(ticker_1w['timestamp'].iloc[-1]),
-                    'entry_price': float(current_price),
-                    'breakout_strength': float(breakout_strength),
-                    'trend_2w': float(trend_2w),
-                    'volume_ratio': float(recent_volume / avg_volume),
-                    'score': min(1.0, breakout_strength * 10 + trend_2w + (recent_volume / avg_volume - 1))
-                }})
-        
+    bar_data = get_bar_data(
+        timeframe="1d",
+        columns=["ticker", "timestamp", "open", "close"],
+        min_bars=2,  # Need 2 bars: previous close + current open
+        filters={{"tickers": target_tickers}}
+    )
+    
+    if bar_data is None or len(bar_data) == 0:
+        return instances
+    
+    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+    
+    # Calculate gaps: compare current open vs previous close
+    df['prev_close'] = df.groupby('ticker')['close'].shift(1)
+    df = df.dropna()  # Remove rows without previous close
+    df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
+    
+    # CRITICAL: Ensure numeric dtype for calculations
+    df['gap_percent'] = pd.to_numeric(df['gap_percent'], errors='coerce')
+    df = df.dropna(subset=['gap_percent'])
+    
+    # Find significant gaps (3%+ up or down)
+    significant_gaps = df[abs(df['gap_percent']) >= 3.0]
+    
+    for _, row in significant_gaps.iterrows():
+        instances.append({{
+            'ticker': row['ticker'],
+            'timestamp': int(row['timestamp']),
+            'entry_price': float(row['open']),
+            # CRITICAL: Include calculated values that define the signal
+            'gap_percent': round(float(row['gap_percent']), 3),
+            'prev_close': round(float(row['prev_close']), 2),
+            'gap_direction': 'up' if row['gap_percent'] > 0 else 'down',
+            'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
+            'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
+        }})
+    
     return instances
 ```
 
@@ -653,6 +402,7 @@ COMMON MISTAKES TO AVOID:
 
 THINGS TO NOTE:
 - BE CAREFUL WITH stop loss prices. The next day might gap above/below the stop loss price, which results in a loss greater than the stop. Ensure you properly account for this.
+
 PATTERN RECOGNITION:
 - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
   min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
@@ -701,6 +451,8 @@ RETURN FORMAT:
   * 'entry_price': float (price at instance time - open, close, etc.)
   * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
   * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
+- CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
+- NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
