@@ -221,9 +221,6 @@ CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
 CRITICAL: X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
 - X-minute bars may not align exactly with specific times like 15:45, 15:55
 - Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
-- For Friday afternoon patterns, look for the closest X-minute bars to target times
-- Example time range filtering:
-  afternoon_bars = df[(df['datetime_et'].dt.time >= time(15, 40)) & (df['datetime_et'].dt.time <= time(16, 0))]
 
 ERROR HANDLING NOTE:
 - The strategy executor automatically wraps your strategy function in try-except blocks
@@ -654,6 +651,8 @@ COMMON MISTAKES TO AVOID:
 ✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
 ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
 
+THINGS TO NOTE:
+- BE CAREFUL WITH stop loss prices. The next day might gap above/below the stop loss price, which results in a loss greater than the stop. Ensure you properly account for this.
 PATTERN RECOGNITION:
 - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
   min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
