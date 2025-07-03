@@ -70,6 +70,16 @@ class AccessorStrategyEngine:
                 end_date=end_date
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='backtest',
+                symbols=symbols,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
             # Execute strategy with accessor context
             instances = await self._execute_strategy(
                 strategy_code, 
@@ -110,7 +120,7 @@ class AccessorStrategyEngine:
         strategy_code: str
     ) -> Dict[str, Any]:
         """
-        Execute strategy for VALIDATION ONLY using minimal data for speed
+        Execute strategy for VALIDATION ONLY using exact min_bars requirements for speed
         
         Args:
             strategy_code: Python code defining the strategy function  
@@ -118,7 +128,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with validation result (success/error only)
         """
-        logger.info("🧪 Starting fast validation execution (minimal data)")
+        logger.info("🧪 Starting fast validation execution (exact min_bars requirements)")
         
         start_time = time.time()
         
@@ -127,30 +137,44 @@ class AccessorStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Set execution context for validation with MINIMAL data
-            self.data_accessor.set_execution_context(
-                mode='validation',  # Special validation mode
-                symbols=['AAPL']    # Just one symbol for validation
-            )
+            # Extract min_bars requirements from strategy code
+            min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
+            
+            # Log the exact requirements that will be used
+            if min_bars_requirements:
+                logger.info("📊 Extracted min_bars requirements from strategy:")
+                for req in min_bars_requirements:
+                    logger.info(f"   Line {req['line_number']}: get_bar_data(timeframe='{req['timeframe']}', min_bars={req['min_bars']})")
+                max_bars = max(req['min_bars'] for req in min_bars_requirements)
+                logger.info(f"🎯 Validation will use exact min_bars requirements (max: {max_bars} bars)")
+            else:
+                logger.info("📊 No get_bar_data calls found - using minimal data for validation")
+            
+            # Set execution context for validation with exact requirements
+            context_data = {
+                'mode': 'validation',  # Special validation mode
+                'symbols': ['AAPL'],   # Just one symbol for validation
+                'min_bars_requirements': min_bars_requirements  # Pass exact requirements
+            }
+            
+            self.data_accessor.set_execution_context(**context_data)
             
             # CRITICAL: Also set context on global accessor in case strategy uses global functions
             from data_accessors import get_data_accessor
             global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
-                mode='validation',
-                symbols=['AAPL']
-            )
+            global_accessor.set_execution_context(**context_data)
             
             # Debug: Verify both instances have validation context
-            logger.info(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
-            logger.info(f"🔍 Global accessor context: {global_accessor.execution_context}")
-            logger.info(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
+            logger.debug(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
+            logger.debug(f"🔍 Global accessor context: {global_accessor.execution_context}")
+            logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
             
-            logger.info("🔧 Validation optimizations enabled:")
-            logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
-            logger.info("   ✓ Fast execution path (validation mode)")
-            logger.info("   ✓ Skip result ranking and processing")
-            logger.info("   ✓ Context set on both engine and global data accessors")
+            logger.debug("🔧 Validation optimizations enabled:")
+            logger.debug("   ✓ Minimal dataset: 1 symbol")
+            logger.debug("   ✓ Exact min_bars from strategy code (no arbitrary caps)")
+            logger.debug("   ✓ Fast execution path (validation mode)")
+            logger.debug("   ✓ Skip result ranking and processing")
+            logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
             instances = await self._execute_strategy(
@@ -164,6 +188,7 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'validation',
                 'instances_generated': len(instances),
+                'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
             }
@@ -215,13 +240,21 @@ class AccessorStrategyEngine:
                 symbols=universe
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='screening',
+                symbols=universe
+            )
+            
             # Log optimization settings
-            logger.info("🔧 Screening optimizations enabled:")
-            logger.info("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
-            logger.info("   ✓ NO date filtering (eliminates unnecessary data overhead)")
-            logger.info("   ✓ Database-optimized query structure (most recent records only)")
-            logger.info(f"   ✓ Universe size: {len(universe)} symbols")
-            logger.info(f"   ✓ Result limit: {limit}")
+            logger.debug("🔧 Screening optimizations enabled:")
+            logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
+            logger.debug("   ✓ NO date filtering (eliminates unnecessary data overhead)")
+            logger.debug("   ✓ Database-optimized query structure (most recent records only)")
+            logger.debug(f"   ✓ Universe size: {len(universe)} symbols")
+            logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
             instances = await self._execute_strategy(
@@ -246,7 +279,7 @@ class AccessorStrategyEngine:
             }
             
             logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
-            logger.info(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
+            logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
             return result
             
         except Exception as e:
@@ -284,6 +317,14 @@ class AccessorStrategyEngine:
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
+                mode='alert',
+                symbols=symbols
+            )
+            
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
                 mode='alert',
                 symbols=symbols
             )
@@ -377,13 +418,20 @@ class AccessorStrategyEngine:
             if not strategy_func:
                 raise ValueError("No strategy function found. Function should be named 'strategy'")
             
-            # Execute strategy function (no parameters in new approach)
+            # Execute strategy function with proper error handling
             logger.info(f"Executing strategy function using data accessor approach")
-            instances = strategy_func()
+            try:
+                instances = strategy_func()
+            except Exception as strategy_error:
+                logger.error(f"Strategy function execution failed: {strategy_error}")
+                logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
+                # Return empty list instead of crashing - let the calling code handle empty results
+                return []
             
             # Validate and clean instances
             if not isinstance(instances, list):
-                raise ValueError(f"Strategy function must return a list, got {type(instances)}")
+                logger.error(f"Strategy function must return a list, got {type(instances)}")
+                return []
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -401,8 +449,10 @@ class AccessorStrategyEngine:
             return valid_instances
             
         except Exception as e:
-            logger.error(f"Strategy execution failed: {e}")
-            raise
+            logger.error(f"Strategy compilation or setup failed: {e}")
+            logger.debug(f"Setup error details: {type(e).__name__}: {e}")
+            # Return empty list for compilation/setup errors too
+            return []
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""

@@ -37,4 +37,4 @@ VALUES (
     'Add Stripe-related columns to users table for subscription management'
 ) ON CONFLICT (version) DO NOTHING;
 
-COMMIT; 
+COMMIT;

@@ -2,6 +2,7 @@ package server
 
 import (
 	"backend/internal/data"
+	"backend/internal/services"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
 	"backend/internal/services/securities"
@@ -22,6 +23,8 @@ var (
 	polygonInitMutex   sync.Mutex
 	alertsInitialized  bool
 	alertsInitMutex    sync.Mutex
+	workerMonitor      *services.WorkerMonitor
+	workerMonitorMutex sync.Mutex
 )
 
 // JobFunc represents a function that can be executed as a job
@@ -151,32 +154,11 @@ func updateSectorsJob(conn *data.Conn) error {
 var (
 	JobList = []*Job{
 		{
-			Name:           "UpdateDailyOHLCV",
-			Function:       marketdata.UpdateDailyOHLCV,
-			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
+			Name:           "UpdateAllOHLCV",
+			Function:       marketdata.UpdateAllOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},
-		{
-			Name:           "Update1MinuteOHLCV",
-			Function:       marketdata.Update1MinuteOHLCV,
-			Schedule:       []TimeOfDay{{Hour: 22, Minute: 0}}, // Run at 10:00 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "Update1HourOHLCV",
-			Function:       marketdata.Update1HourOHLCV,
-			Schedule:       []TimeOfDay{{Hour: 22, Minute: 15}}, // Run at 10:15 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "Update1WeekOHLCV",
-			Function:       marketdata.Update1WeekOHLCV,
-			Schedule:       []TimeOfDay{{Hour: 22, Minute: 30}}, // Run at 10:30 PM
-			RunOnInit:      true,
-			SkipOnWeekends: false, // Weekly data needs weekend updates
 		},
 		{
 			Name:           "InitAggregates",
@@ -234,6 +216,13 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 30}}, // Run at 9:30 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+		},
+		{
+			Name:           "StartWorkerMonitor",
+			Function:       startWorkerMonitor,
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 55}}, // Start before other services
+			RunOnInit:      true,
+			SkipOnWeekends: false, // Monitor should run 24/7
 		},
 	}
 )
@@ -606,5 +595,34 @@ func stopPolygonWebSocket() {
 func stopServicesJob(_ *data.Conn) error {
 	stopAlertLoop()
 	stopPolygonWebSocket()
+	stopWorkerMonitor()
 	return nil
+}
+
+// startWorkerMonitor starts the worker monitoring service
+func startWorkerMonitor(conn *data.Conn) error {
+	workerMonitorMutex.Lock()
+	defer workerMonitorMutex.Unlock()
+
+	if workerMonitor == nil {
+		workerMonitor = services.NewWorkerMonitor(conn)
+		workerMonitor.Start()
+		log.Println("✅ Worker monitor service started")
+	} else {
+		log.Println("⚠️ Worker monitor already running")
+	}
+
+	return nil
+}
+
+// stopWorkerMonitor stops the worker monitoring service
+func stopWorkerMonitor() {
+	workerMonitorMutex.Lock()
+	defer workerMonitorMutex.Unlock()
+
+	if workerMonitor != nil {
+		workerMonitor.Stop()
+		workerMonitor = nil
+		log.Println("✅ Worker monitor service stopped")
+	}
 }
