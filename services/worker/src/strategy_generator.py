@@ -218,7 +218,7 @@ CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
 - For market hours (like Friday 3:45-3:55 PM), convert to Eastern Time:
   df['datetime_et'] = pd.to_datetime(df['timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
 
-CRITICAL: X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
+X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
 - X-minute bars may not align exactly with specific times like 15:45, 15:55
 - Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
 
@@ -393,15 +393,14 @@ COMMON MISTAKES TO AVOID:
 - No 'score' field - score is required for ranking
 - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
+- Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
+into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
 ✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
 ✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
 ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
-
-THINGS TO NOTE:
-- BE CAREFUL WITH stop loss prices. The next day might gap above/below the stop loss price, which results in a loss greater than the stop. Ensure you properly account for this.
 
 PATTERN RECOGNITION:
 - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
@@ -434,6 +433,12 @@ DATA VALIDATION:
 - Use proper data type conversions (int, float, str)
 - Handle edge cases like division by zero
 
+**VERY IMPORTANT**: 
+BE EXTREMELY CAREFUL WITH stop loss prices. The next day might gap above/below the stop loss price, which results in a loss greater than the stop. 
+Ensure THIS IS PROPERLY ACCOUNTED FOR. You need to get the first price after the stop is triggered. IF THE STOP IS TRIGGERED, YOU SHOULD MAKE SURE 
+THAT THE STOCK DID NOT GAP PAST THE STOP LOSS PRICE. IF IT DID, YOU SHOULD USE THE NEXT DAY'S OPEN PRICE AS THE STOP LOSS PRICE.
+
+
 PRINTING DATA (REQUIRED): 
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
@@ -443,6 +448,7 @@ PLOTLY PLOT GENERATION:
 - Histograms of performance metrics, returns, etc 
 - Always show the plot using .show()
 - Almost always include plots in the strategy to help the user understand the data
+- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp), they cause JSON serialization errors
 
 RETURN FORMAT:
 - Return List[Dict] where each dict contains:
