@@ -546,7 +546,7 @@ var (
 			Function:      wrapWithContext(GetOHLCVData),
 			StatusMessage: "Getting Market data...",
 		},
-		"runIntradayAgent": {
+		/*"runIntradayAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runIntradayAgent",
 				Description: "Run an intraday agent to analyze the intraday price action of a specified stock.",
@@ -566,7 +566,7 @@ var (
 			},
 			Function:      wrapWithContext(RunIntradayAgent),
 			StatusMessage: "Running intraday agent...",
-		},
+		},*/
 		// ────────────────────────────────────────────────────────────────────
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
