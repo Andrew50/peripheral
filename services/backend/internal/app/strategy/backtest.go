@@ -11,11 +11,11 @@ import (
 
 // BacktestArgs represents arguments for backtesting (API compatibility)
 type BacktestArgs struct {
-	StrategyID    int   `json:"strategyId"`
-	Securities    []int `json:"securities"`
-	Start         int64 `json:"start"`
-	ReturnWindows []int `json:"returnWindows"`
-	FullResults   bool  `json:"fullResults"`
+	StrategyID int   `json:"strategyId"`
+	Securities []int `json:"securities"`
+	Start      int64 `json:"start"`
+
+	FullResults bool `json:"fullResults"`
 }
 
 // BacktestResult represents a single backtest instance (API compatibility)
@@ -35,12 +35,11 @@ type BacktestResult struct {
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances    int              `json:"totalInstances"`
-	PositiveInstances int              `json:"positiveInstances"`
-	DateRange         []string         `json:"dateRange"`
-	SymbolsProcessed  int              `json:"symbolsProcessed"`
-	Columns           []string         `json:"columns"`
-	ColumnSamples     map[string][]any `json:"columnSamples"`
+	TotalInstances    int      `json:"totalInstances"`
+	PositiveInstances int      `json:"positiveInstances"`
+	DateRange         []string `json:"dateRange"`
+	SymbolsProcessed  int      `json:"symbolsProcessed"`
+	Columns           []string `json:"columns"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
@@ -327,6 +326,5 @@ func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummar
 		DateRange:         []string(summary.DateRange),
 		SymbolsProcessed:  summary.SymbolsProcessed,
 		Columns:           []string{"ticker", "timestamp", "classification", "entry_price"},
-		ColumnSamples:     map[string][]any{},
 	}
 }

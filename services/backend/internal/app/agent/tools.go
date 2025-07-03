@@ -414,13 +414,6 @@ var (
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
-						"returnWindows": {
-							Type:        genai.TypeArray,                                                                                                                                                              // Changed from TypeInteger
-							Description: "A list of integers representing the specific forward return days (e.g., [1, 5, 20]) to calculate after each backtest result. If omitted, no future returns are calculated.", // Updated description
-							Items: &genai.Schema{ // Specify the type of elements in the array
-								Type: genai.TypeInteger,
-							},
-						},
 					},
 					Required: []string{"strategyId"},
 				},
