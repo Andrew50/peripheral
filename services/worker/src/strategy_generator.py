@@ -682,9 +682,10 @@ DATA VALIDATION:
 - Use proper data type conversions (int, float, str)
 - Handle edge cases like division by zero
 
-PRINTING DATA: 
+PRINTING DATA (IMPORTANT): 
 - Use print() to print useful data for the user
-- This should include things like number of instances, averages, medians, standard deviations, and other useful or interesting metrics.
+- This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
+
 
 RETURN FORMAT:
 - Return List[Dict] where each dict contains:
