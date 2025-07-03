@@ -3,8 +3,8 @@ export const PRICING_CONFIG = {
     // Stripe Price IDs - Update these with your actual Stripe price IDs
     PRICE_IDS: {
         starter: 'price_starter_monthly', // Replace with actual Stripe price ID
-        plus: 'price_plus_monthly',       // Replace with actual Stripe price ID
-        pro: 'price_pro_monthly'          // Replace with actual Stripe price ID
+        plus: 'price_1Rgsj1GCLCMUwjFlf4U6jMRt',       // Plus tier price ID
+        pro: 'price_1RgsiRGCLCMUwjFljLLknvSu'          // Pro tier price ID
     },
 
     // Plan configurations with pricing and features

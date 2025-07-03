@@ -501,6 +501,8 @@
 		padding: 2rem;
 		position: relative;
 		transition: all 0.3s ease;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.plan-card:hover {
@@ -577,6 +579,7 @@
 		list-style: none;
 		padding: 0;
 		margin-bottom: 2rem;
+		flex-grow: 1;
 	}
 
 	.plan-features li {
