@@ -1,5 +1,5 @@
 //stores.ts
-import { writable } from 'svelte/store';
+import { writable, derived, type Writable } from 'svelte/store';
 //export let currentTimestamp = writable(0);
 import type {
 	Settings,
@@ -10,8 +10,8 @@ import type {
 	AlertLog,
 	AlertData
 } from '$lib/utils/types/types';
-import type { Writable } from 'svelte/store';
 import { privateRequest } from '$lib/utils/helpers/backend';
+import { browser } from '$app/environment';
 
 // Define the Algo interface
 export interface Algo {
@@ -47,7 +47,72 @@ export const algos: Writable<Algo[]> = writable([]);
 export const isPublicViewing = writable(false);
 
 // Store for user's last used tickers
-export const userLastTickers: Writable<any[]> = writable([]);
+export const userLastTickers = writable<any[]>([]);
+
+// Subscription status store
+export interface SubscriptionStatus {
+	status: string;
+	isActive: boolean;
+	currentPlan: string;
+	hasCustomer: boolean;
+	hasSubscription: boolean;
+	currentPeriodEnd: number | null;
+	loading: boolean;
+	error: string;
+}
+
+export const subscriptionStatus = writable<SubscriptionStatus>({
+	status: 'inactive',
+	isActive: false,
+	currentPlan: '',
+	hasCustomer: false,
+	hasSubscription: false,
+	currentPeriodEnd: null,
+	loading: false,
+	error: ''
+});
+
+// Function to fetch and update subscription status
+export async function fetchSubscriptionStatus() {
+	console.log('fetchSubscriptionStatus called');
+
+	// Only fetch if we're in the browser and have auth
+	if (!browser) {
+		console.log('Not in browser, skipping fetch');
+		return;
+	}
+
+	try {
+		const authToken = sessionStorage.getItem('authToken');
+		if (!authToken) {
+			console.log('No auth token found, skipping fetch');
+			return;
+		}
+
+		console.log('Starting subscription status fetch with token:', authToken.substring(0, 20) + '...');
+		subscriptionStatus.update(s => ({ ...s, loading: true, error: '' }));
+
+		console.log('Making privateRequest to getSubscriptionStatus');
+		const response = await privateRequest<SubscriptionStatus>('getSubscriptionStatus', {});
+		console.log('Received subscription status response:', response);
+
+		subscriptionStatus.update(s => ({
+			...s,
+			...response,
+			loading: false,
+			error: ''
+		}));
+		console.log('Updated subscription status store successfully');
+	} catch (error) {
+		console.error('Failed to fetch subscription status:', error);
+		console.error('Error details:', error);
+		subscriptionStatus.update(s => ({
+			...s,
+			loading: false,
+			error: 'Failed to load subscription status'
+		}));
+	}
+}
 
 // Function to update user's last tickers when a ticker is selected
 export function updateUserLastTickers(selectedTicker: any) {

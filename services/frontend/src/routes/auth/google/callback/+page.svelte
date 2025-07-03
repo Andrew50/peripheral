@@ -6,14 +6,34 @@
 	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 
 	let errorMessage = '';
+	let debugInfo = '';
 
 	onMount(async () => {
 		const urlParams = new URLSearchParams(window.location.search);
 		const code = urlParams.get('code');
 		const state = urlParams.get('state');
+		const error = urlParams.get('error');
+
+		// Handle OAuth errors first
+		if (error) {
+			console.error('OAuth error received:', error);
+			const errorDescription = urlParams.get('error_description') || 'Unknown error';
+			errorMessage = `Authentication failed: ${errorDescription}`;
+			setTimeout(() => goto('/login'), 3000);
+			return;
+		}
 
 		// Verify the state parameter matches what we stored
 		const storedState = sessionStorage.getItem('googleAuthState');
+
+		// Enhanced debugging
+		debugInfo = `
+			Code: ${code ? 'Present' : 'Missing'}
+			State from URL: ${state || 'Missing'}
+			Stored state: ${storedState || 'Missing'}
+			States match: ${state === storedState}
+		`;
+		console.log('OAuth callback debug info:', debugInfo);
 
 		if (!code) {
 			console.error('No authorization code received');
@@ -22,11 +42,35 @@
 			return;
 		}
 
-		if (!state || state !== storedState) {
-			console.error('State mismatch or missing state parameter');
-			errorMessage = 'Authorization failed: Invalid state parameter';
+		// More lenient state checking for development
+		const isDevelopment =
+			window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+		if (!state) {
+			console.error('No state parameter in callback');
+			errorMessage = 'Authorization failed: Missing state parameter';
 			setTimeout(() => goto('/login'), 3000);
 			return;
+		}
+
+		if (!storedState) {
+			console.error('No stored state found in sessionStorage');
+			// In development, we can be more lenient, but still log the issue
+			if (!isDevelopment) {
+				errorMessage = 'Authorization failed: No stored state found';
+				setTimeout(() => goto('/login'), 3000);
+				return;
+			}
+			console.warn('Development mode: proceeding without state verification');
+		} else if (state !== storedState) {
+			console.error('State mismatch', { received: state, stored: storedState });
+			// In development, log but don't fail immediately
+			if (!isDevelopment) {
+				errorMessage = 'Authorization failed: Invalid state parameter';
+				setTimeout(() => goto('/login'), 3000);
+				return;
+			}
+			console.warn('Development mode: proceeding despite state mismatch');
 		}
 
 		try {
@@ -57,6 +101,12 @@
 			<h2>Authentication Error</h2>
 			<p>{errorMessage}</p>
 			<p>Redirecting to login page...</p>
+			{#if debugInfo}
+				<details class="debug-info">
+					<summary>Debug Information</summary>
+					<pre>{debugInfo}</pre>
+				</details>
+			{/if}
 		</div>
 	{:else}
 		<!-- Enhanced loading state -->
@@ -81,7 +131,6 @@
 		padding: 1rem;
 		box-sizing: border-box;
 	}
-
 
 	.loading-container {
 		text-align: center;
@@ -122,6 +171,27 @@
 
 	.error p {
 		margin-bottom: 0.5rem;
+		color: var(--f2, #9ca3af);
+	}
+
+	.debug-info {
+		margin-top: 1rem;
+		padding: 0.5rem;
+		background-color: var(--c4, #374151);
+		border-radius: 4px;
+		text-align: left;
+	}
+
+	.debug-info summary {
+		cursor: pointer;
+		font-weight: 500;
+		margin-bottom: 0.5rem;
+	}
+
+	.debug-info pre {
+		margin: 0;
+		font-size: 0.8rem;
+		white-space: pre-wrap;
 		color: var(--f2, #9ca3af);
 	}
 

@@ -136,6 +136,8 @@ export async function privateRequest<T>(
 		return {} as T; // Return empty data during SSR
 	}
 
+	console.log(`privateRequest called: func=${func}, args=`, args);
+
 	let authToken;
 	try {
 		authToken = sessionStorage.getItem('authToken');
@@ -150,6 +152,8 @@ export async function privateRequest<T>(
 		func: func,
 		args: args
 	};
+
+	console.log(`Making request to ${base_url}/private with payload:`, payload);
 	const response = await fetch(`${base_url}/private`, {
 		method: 'POST',
 		headers: headers,
@@ -160,6 +164,8 @@ export async function privateRequest<T>(
 		return Promise.reject(e);
 	});
 
+	console.log(`Response status: ${response.status} for func: ${func}`);
+
 	if (response.status === 401) {
 		// Redirect to login page for authentication errors
 		console.warn('Authentication required for:', func);
@@ -167,6 +173,7 @@ export async function privateRequest<T>(
 		throw new Error('Authentication required');
 	} else if (response.ok) {
 		const result = (await response.json()) as T;
+		console.log(`Success response for ${func}:`, result);
 
 		// Check if this is a cancellation response
 		if (
@@ -187,7 +194,7 @@ export async function privateRequest<T>(
 		return result;
 	} else {
 		const errorMessage = await response.text();
-		console.error('payload: ', payload, 'error: ', errorMessage);
+		console.error(`Error for ${func} - Status: ${response.status}, payload:`, payload, 'error:', errorMessage);
 		return Promise.reject(errorMessage);
 	}
 

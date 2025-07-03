@@ -21,6 +21,11 @@ spec:
           env:
             - name: ORIGIN
               value: "https://${INGRESS_HOST}"
+            - name: PUBLIC_STRIPE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_PUBLISHABLE_KEY
           resources:
             requests:
               cpu: 100m

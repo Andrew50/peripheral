@@ -16,6 +16,7 @@ require (
 	github.com/openai/openai-go v1.6.0
 	github.com/polygon-io/client-go v1.16.13
 	github.com/shopspring/decimal v1.2.0
+	github.com/stripe/stripe-go/v78 v78.12.0
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/trace v1.36.0
 	go.uber.org/zap v1.17.0

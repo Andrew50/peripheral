@@ -110,13 +110,27 @@ spec:
                 secretKeyRef:
                   name: telegram-secret
                   key: bot-token
-                  optional: true
             - name: TELEGRAM_CHAT_ID
               valueFrom:
                 secretKeyRef:
                   name: telegram-secret
                   key: chat-id
-                  optional: true
+            # Add Stripe secrets for billing
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_PUBLISHABLE_KEY
           resources:
             requests:
               cpu: "1000m"

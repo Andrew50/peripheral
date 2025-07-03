@@ -40,12 +40,12 @@
 		dispatchMenuChange,
 		menuWidth,
 		settings,
-		isPublicViewing as isPublicViewingStore,
+		isPublicViewing as isPublicViewingStore
 	} from '$lib/utils/stores/stores';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 
 	// Import Instance from types
-	import type { Instance} from '$lib/utils/types/types';
+	import type { Instance } from '$lib/utils/types/types';
 
 	// Add import near the top with other imports
 	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
@@ -61,6 +61,7 @@
 	// Import auth modal
 	import AuthModal from '$lib/components/authModal.svelte';
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
+	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
 
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
@@ -74,9 +75,7 @@
 
 	// TopBar functionality moved inline
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
-	import { 
-		initializeDefaultWatchlist
-	} from '$lib/features/watchlist/watchlistUtils';
+	import { initializeDefaultWatchlist } from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 
 	// Import mobile banner component
@@ -115,6 +114,7 @@
 
 	let bottomWindows: BottomWindow[] = [];
 	let nextWindowId = 1;
+	let activeTab = 'chart'; // For settings window
 
 	// Replay controls
 	let replaySpeed = 1.0;
@@ -308,91 +308,35 @@
 	};
 
 	onMount(() => {
-		// Load profile data FIRST, before doing anything else
-		const storedProfilePic = sessionStorage.getItem('profilePic') || '';
-		username = sessionStorage.getItem('username') || '';
+		if (!browser) return;
 
-		// Check if the stored profile pic is a real image URL or a generated SVG
-		if (storedProfilePic && !storedProfilePic.startsWith('data:image/svg+xml')) {
-			// It's a real image URL (like from Google)
-			profilePic = storedProfilePic;
-		} else if (storedProfilePic) {
-			// It's an SVG - use it directly
-			profilePic = storedProfilePic;
-		} else if (username) {
-			// Generate avatar based on username
-			const initial = username.charAt(0).toUpperCase();
-			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
-
-			// Store it for future use
-			sessionStorage.setItem('profilePic', profilePic);
-		} else {
-			// No username available, use a more visible question mark
-			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
+		// Initialize subscription status if user is authenticated
+		const authToken = sessionStorage.getItem('authToken');
+		const username = sessionStorage.getItem('username');
+		if (authToken && username && username !== 'Guest') {
+			fetchSubscriptionStatus();
 		}
 
-		// Reset error state
-		profilePicError = false;
+		updateChartWidth();
+		calculateCountdown();
 
-		// Set up a single menuWidth subscription
-		const unsubscribe = menuWidth.subscribe((width) => {
+		// Set up countdown timer
+		const countdownInterval = setInterval(calculateCountdown, 1000);
+
+		// Set up chart width recalculation
+		const resizeObserver = new ResizeObserver(() => {
 			updateChartWidth();
 		});
 
-		if (browser) {
-			document.title = 'Atlantis';
-			// Set initial state once
-			lastSidebarMenu = null;
-
-			// Calculate default sidebar width as 15% of screen width, but with constraints
-			const defaultSidebarWidth = Math.min(
-				window.innerWidth * 0.15, // 15% of screen width
-				600 // Maximum 600px (same as resize max)
-			);
-			const constrainedWidth = Math.max(defaultSidebarWidth, minWidth); // Ensure it's not smaller than minimum (120px)
-
-			menuWidth.set(constrainedWidth);
-			changeMenu('watchlist'); // Set watchlist as the default active menu
-
-			updateChartWidth();
-			window.addEventListener('resize', updateChartWidth);
-
-			// Add global keyboard event listener with stable function reference
-			document.addEventListener('keydown', keydownHandler);
-
-			// Add touch event listeners for additional overscroll prevention
-			document.addEventListener('touchstart', preventOverscroll, { passive: false });
-			document.addEventListener('touchmove', preventOverscroll, { passive: false });
-
-			// Listen for calendar events from TopBar
-			document.addEventListener('calendar-click', () => {
-				calendarVisible = true;
-			});
+		const container = document.querySelector('.main-content');
+		if (container) {
+			resizeObserver.observe(container);
 		}
 
-		initStores();
-
-		dispatchMenuChange.subscribe((menuName: string) => {
-			if (sidebarMenus.includes(menuName as Menu)) {
-				toggleMenu(menuName as Menu);
-			}
-		});
-
-		// Initialize watchlist functionality - select default watchlist on page load
-		setTimeout(() => {
-			const watchlistCleanup = initializeDefaultWatchlist();
-			// Store cleanup function for later use if needed
-		}, 100);
-
-		// Force profile display to update
-		currentProfileDisplay = calculateProfileDisplay();
-
-		// Force refresh of the profile icon
-		profileIconKey++;
-
-		// Clean up subscription on component destroy
+		// Cleanup function
 		return () => {
-			unsubscribe();
+			clearInterval(countdownInterval);
+			resizeObserver.disconnect();
 		};
 	});
 
@@ -920,7 +864,6 @@
 	$: isCustomTimeframe =
 		$activeChartInstance?.timeframe && !commonTimeframes.includes($activeChartInstance.timeframe);
 
-
 	// TopBar handler functions
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -982,9 +925,6 @@
 			queryChart(updatedInstance, true);
 		}
 	}
-
-
-
 
 	async function createPriceAlert() {
 		const inst = await queryInstanceInput('any', ['ticker'], {
@@ -1064,6 +1004,11 @@
 		} else {
 			countdown.set('Bar Closed');
 		}
+	}
+
+	function openBillingSettings() {
+		activeTab = 'billing';
+		openBottomWindow('settings');
 	}
 </script>
 
@@ -1230,7 +1175,7 @@
 					<!-- Right side - Sidebar Controls -->
 					{#if $menuWidth > 0}
 						<div class="top-bar-right">
-												{#if $activeMenu === 'alerts'}
+							{#if $activeMenu === 'alerts'}
 								<!-- Alert Controls -->
 								<div class="sidebar-controls">
 									<div class="alert-controls-right">
@@ -1341,8 +1286,6 @@
 			</div>
 		</div>
 
-
-
 		<!-- Sidebar toggle buttons -->
 		<div class="sidebar-buttons">
 			{#each sidebarMenus as menu}
@@ -1375,6 +1318,32 @@
 					/>
 				</svg>
 			</button>
+
+			<!-- Upgrade button - only show if user is authenticated but not subscribed -->
+			{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') !== 'Guest' && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+				<button
+					class="toggle-button upgrade-button"
+					on:click={openBillingSettings}
+					title="Upgrade to Pro"
+				>
+					<svg
+						class="upgrade-icon"
+						viewBox="0 0 24 24"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<path
+							d="M12 2L3.09 8.26L12 14L20.91 8.26L12 2ZM12 22L3.09 15.74L12 10L20.91 15.74L12 22Z"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					Upgrade
+				</button>
+			{/if}
+
 			<button
 				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
 				on:click={() => openBottomWindow('strategies')}
@@ -1390,7 +1359,6 @@
 		</div>
 
 		<div class="bottom-bar-right">
-
 			<!-- Replay buttons commented out -->
 			<!-- 
 			<button
@@ -1715,8 +1683,6 @@
 		gap: 8px;
 	}
 
-
-
 	.alert-controls-right {
 		display: flex;
 		align-items: center;
@@ -1724,10 +1690,6 @@
 		width: 100%;
 		padding-right: 8px;
 	}
-
-
-
-
 
 	.create-alert-btn {
 		padding: 6px 12px;
@@ -1744,5 +1706,28 @@
 	.create-alert-btn:hover {
 		background: rgba(255, 255, 255, 0.15);
 		border-color: rgba(255, 255, 255, 0.4);
+	}
+
+	/* Upgrade button styles */
+	.upgrade-button {
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+		color: white !important;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+		box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+		transition: all 0.3s ease;
+	}
+
+	.upgrade-button:hover {
+		background: linear-gradient(135deg, #7c93f0 0%, #8a59b8 100%) !important;
+		box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+		transform: translateY(-1px);
+	}
+
+	.upgrade-button .upgrade-icon {
+		width: 16px;
+		height: 16px;
+		stroke-width: 2.5;
 	}
 </style>
