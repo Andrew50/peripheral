@@ -194,8 +194,7 @@
 								min="1"
 								on:keypress={handleKeyPress}
 							/>
-						</div>
-					</div>  -->
+						</div> -->
 						<div class="setting-item">
 							<label for="dolvol">Show Dollar Volume</label>
 							<div class="toggle-container">
