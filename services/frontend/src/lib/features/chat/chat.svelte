@@ -1388,7 +1388,7 @@
 					strategies, and more. It can answer questions and perform tasks.
 				</p>
 				<p class="suggestions-header">
-					Ask Atlantis a question or to perform a task to get started.
+					Ask Peripheral a question or to perform a task to get started.
 				</p>
 			</div>
 		{:else}

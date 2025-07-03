@@ -183,13 +183,6 @@ var (
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "SimpleUpdateSecurities",
-			Function:       simpleSecuritiesUpdateJob,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
 			Name:           "UpdateSecurityDetails",
 			Function:       securityDetailUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Run at 9:00 PM

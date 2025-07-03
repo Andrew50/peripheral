@@ -3,7 +3,7 @@
 	import { writable, get } from 'svelte/store';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
-	import { queryChart } from '$lib/features/chart/interface';
+	import { queryChart, activeChartInstance } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/utils/stores/stores';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
@@ -130,13 +130,15 @@
 		scrollToRow(selectedRowIndex);
 	}
 
-	function scrollToRow(index: number) {
+	function scrollToRow(index: number, shouldQueryChart: boolean = true) {
 		const row = document.getElementById(`row-${index}`);
 		if (row) {
 			row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-			const currentList = get(list);
-			if (index >= 0 && index < currentList.length) {
-				queryChart(currentList[index]);
+			if (shouldQueryChart) {
+				const currentList = get(list);
+				if (index >= 0 && index < currentList.length) {
+					queryChart(currentList[index]);
+				}
 			}
 		}
 	}
@@ -400,6 +402,29 @@
 				if (col === 'change%extended') return 'change % extended';
 				if (col === 'market_cap') return 'market cap';
 				return 'price'; // Sensible fallback
+		}
+	}
+
+	// Add reactive synchronization with activeChartInstance
+	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
+		syncWatchlistWithActiveChart($activeChartInstance.ticker);
+	}
+
+	function syncWatchlistWithActiveChart(activeTicker: string) {
+		if (!activeTicker || !$list?.length) return;
+		
+		// Find the ticker in the current watchlist (case-insensitive)
+		const matchIndex = $list.findIndex(item => 
+			item.ticker?.toLowerCase() === activeTicker.toLowerCase()
+		);
+		
+		if (matchIndex !== -1 && matchIndex !== selectedRowIndex) {
+			// Update selection and scroll to the matched ticker (without querying chart)
+			selectedRowIndex = matchIndex;
+			// Use setTimeout to ensure DOM is updated before scrolling
+			setTimeout(() => {
+				scrollToRow(selectedRowIndex, false);
+			}, 0);
 		}
 	}
 </script>

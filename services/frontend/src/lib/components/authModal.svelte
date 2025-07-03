@@ -75,7 +75,7 @@
 				<!-- Feature requirement header -->
 				<div class="feature-header">
 					<h2 id="auth-modal-title">
-						{currentMode === 'login' ? 'Login to Atlantis' : 'Sign Up for Atlantis'}
+						{currentMode === 'login' ? 'Login to Peripheral' : 'Sign Up for Peripheral'}
 					</h2>
 				</div>
 

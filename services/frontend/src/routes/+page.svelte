@@ -5,7 +5,7 @@
 	import { onMount } from 'svelte';
 
 	if (browser) {
-		document.title = 'Atlantis';
+		document.title = 'Peripheral';
 	}
 
 	let email = '';
@@ -108,7 +108,7 @@
 						/>
 					</svg>
 					<h3>You're on the list!</h3>
-					<p>We'll notify you when Atlantis is ready to launch.</p>
+					<p>We'll notify you when Peripheral is ready to launch.</p>
 				</div>
 			{/if}
 		</div>
