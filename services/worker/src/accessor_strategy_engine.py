@@ -9,9 +9,13 @@ import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import datetime as dt 
 from typing import Any, Dict, List, Optional, Union, Tuple
 import json
 import time
+import io
+import contextlib
+import plotly 
 
 from data_accessors import DataAccessorProvider, get_bar_data, get_general_data
 from validator import SecurityValidator, SecurityError
@@ -70,8 +74,18 @@ class AccessorStrategyEngine:
                 end_date=end_date
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='backtest',
+                symbols=symbols,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, strategy_prints, strategy_plots = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='backtest'
             )
@@ -85,6 +99,9 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'backtest',
                 'instances': instances,
+                'symbols_processed': len(symbols),
+                'strategy_prints': strategy_prints,
+                'strategy_plots': strategy_plots,
                 'summary': {
                     'total_instances': len(instances),
                     'symbols_analyzed': len(symbols),
@@ -102,7 +119,9 @@ class AccessorStrategyEngine:
             return {
                 'success': False,
                 'error': str(e),
-                'execution_mode': 'backtest'
+                'execution_mode': 'backtest',
+                'strategy_prints': '',
+                'strategy_plots': []
             }
     
     async def execute_validation(
@@ -110,7 +129,7 @@ class AccessorStrategyEngine:
         strategy_code: str
     ) -> Dict[str, Any]:
         """
-        Execute strategy for VALIDATION ONLY using minimal data for speed
+        Execute strategy for VALIDATION ONLY using exact min_bars requirements for speed
         
         Args:
             strategy_code: Python code defining the strategy function  
@@ -118,7 +137,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with validation result (success/error only)
         """
-        logger.info("🧪 Starting fast validation execution (minimal data)")
+        logger.info("🧪 Starting fast validation execution (exact min_bars requirements)")
         
         start_time = time.time()
         
@@ -127,33 +146,47 @@ class AccessorStrategyEngine:
             if not self.validator.validate_code(strategy_code):
                 raise SecurityError("Strategy code validation failed")
             
-            # Set execution context for validation with MINIMAL data
-            self.data_accessor.set_execution_context(
-                mode='validation',  # Special validation mode
-                symbols=['AAPL']    # Just one symbol for validation
-            )
+            # Extract min_bars requirements from strategy code
+            min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
+            
+            # Log the exact requirements that will be used
+            if min_bars_requirements:
+                logger.info("📊 Extracted min_bars requirements from strategy:")
+                for req in min_bars_requirements:
+                    logger.info(f"   Line {req['line_number']}: get_bar_data(timeframe='{req['timeframe']}', min_bars={req['min_bars']})")
+                max_bars = max(req['min_bars'] for req in min_bars_requirements)
+                logger.info(f"🎯 Validation will use exact min_bars requirements (max: {max_bars} bars)")
+            else:
+                logger.info("📊 No get_bar_data calls found - using minimal data for validation")
+            
+            # Set execution context for validation with exact requirements
+            context_data = {
+                'mode': 'validation',  # Special validation mode
+                'symbols': ['AAPL'],   # Just one symbol for validation
+                'min_bars_requirements': min_bars_requirements  # Pass exact requirements
+            }
+            
+            self.data_accessor.set_execution_context(**context_data)
             
             # CRITICAL: Also set context on global accessor in case strategy uses global functions
             from data_accessors import get_data_accessor
             global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
-                mode='validation',
-                symbols=['AAPL']
-            )
+            global_accessor.set_execution_context(**context_data)
             
             # Debug: Verify both instances have validation context
-            logger.info(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
-            logger.info(f"🔍 Global accessor context: {global_accessor.execution_context}")
-            logger.info(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
+            logger.debug(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
+            logger.debug(f"🔍 Global accessor context: {global_accessor.execution_context}")
+            logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
             
-            logger.info("🔧 Validation optimizations enabled:")
-            logger.info("   ✓ Minimal dataset: 1 symbol, 2 bars maximum")
-            logger.info("   ✓ Fast execution path (validation mode)")
-            logger.info("   ✓ Skip result ranking and processing")
-            logger.info("   ✓ Context set on both engine and global data accessors")
+            logger.debug("🔧 Validation optimizations enabled:")
+            logger.debug("   ✓ Minimal dataset: 1 symbol")
+            logger.debug("   ✓ Exact min_bars from strategy code (no arbitrary caps)")
+            logger.debug("   ✓ Fast execution path (validation mode)")
+            logger.debug("   ✓ Skip result ranking and processing")
+            logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
-            instances = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation'
             )
@@ -164,6 +197,7 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'validation',
                 'instances_generated': len(instances),
+                'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
             }
@@ -178,6 +212,7 @@ class AccessorStrategyEngine:
                 'success': False,
                 'error': str(e),
                 'execution_mode': 'validation',
+                'strategy_prints': '',
                 'execution_time_ms': int(execution_time)
             }
 
@@ -215,16 +250,24 @@ class AccessorStrategyEngine:
                 symbols=universe
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='screening',
+                symbols=universe
+            )
+            
             # Log optimization settings
-            logger.info("🔧 Screening optimizations enabled:")
-            logger.info("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
-            logger.info("   ✓ NO date filtering (eliminates unnecessary data overhead)")
-            logger.info("   ✓ Database-optimized query structure (most recent records only)")
-            logger.info(f"   ✓ Universe size: {len(universe)} symbols")
-            logger.info(f"   ✓ Result limit: {limit}")
+            logger.debug("🔧 Screening optimizations enabled:")
+            logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
+            logger.debug("   ✓ NO date filtering (eliminates unnecessary data overhead)")
+            logger.debug("   ✓ Database-optimized query structure (most recent records only)")
+            logger.debug(f"   ✓ Universe size: {len(universe)} symbols")
+            logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='screening'
             )
@@ -246,7 +289,7 @@ class AccessorStrategyEngine:
             }
             
             logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
-            logger.info(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
+            logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
             return result
             
         except Exception as e:
@@ -288,8 +331,16 @@ class AccessorStrategyEngine:
                 symbols=symbols
             )
             
+            # CRITICAL: Also set context on global accessor in case strategy uses global functions
+            from data_accessors import get_data_accessor
+            global_accessor = get_data_accessor()
+            global_accessor.set_execution_context(
+                mode='alert',
+                symbols=symbols
+            )
+            
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='alert'
             )
@@ -349,7 +400,7 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         execution_mode: str
-    ) -> List[Dict]:
+    ) -> Tuple[List[Dict], str, List[Dict]]:
         """Execute the strategy function with data accessor context"""
         
         # Validate strategy code before execution
@@ -377,13 +428,25 @@ class AccessorStrategyEngine:
             if not strategy_func:
                 raise ValueError("No strategy function found. Function should be named 'strategy'")
             
-            # Execute strategy function (no parameters in new approach)
+            # Execute strategy function with proper error handling and stdout capture
             logger.info(f"Executing strategy function using data accessor approach")
-            instances = strategy_func()
+            strategy_prints = ""
+            try:
+                # Capture stdout and plots during strategy execution
+                stdout_buffer = io.StringIO()
+                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
+                    instances = strategy_func()
+                strategy_prints = stdout_buffer.getvalue()
+            except Exception as strategy_error:
+                logger.error(f"Strategy function execution failed: {strategy_error}")
+                logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
+                # Return empty list and any captured output instead of crashing
+                return [], "", []
             
             # Validate and clean instances
             if not isinstance(instances, list):
-                raise ValueError(f"Strategy function must return a list, got {type(instances)}")
+                logger.error(f"Strategy function must return a list, got {type(instances)}")
+                return []
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -398,25 +461,66 @@ class AccessorStrategyEngine:
                     valid_instances.append(instance)
             
             logger.info(f"Strategy returned {len(valid_instances)} valid instances")
-            return valid_instances
+            logger.info(f"Strategy captured {len(self.plots_collection)} plots")
+            return valid_instances, strategy_prints, self.plots_collection
             
         except Exception as e:
-            logger.error(f"Strategy execution failed: {e}")
-            raise
+            logger.error(f"Strategy compilation or setup failed: {e}")
+            logger.debug(f"Setup error details: {type(e).__name__}: {e}")
+            # Return empty list for compilation/setup errors too
+            return [], "", []
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""
         
+        # Initialize plots collection for this execution
+        self.plots_collection = []
+        
         # Create bound methods that use this engine's data accessor
         def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, 
                               aggregate_mode=False, extended_hours=False):
-            return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
-                                                  aggregate_mode, extended_hours)
+            try:
+                return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
+                                                      aggregate_mode, extended_hours)
+            except Exception as e:
+                logger.error(f"Data accessor error in get_bar_data(timeframe={timeframe}, min_bars={min_bars}): {e}")
+                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                raise  # Re-raise to maintain error propagation
         
         def bound_get_general_data(columns=None, filters=None):
-            return self.data_accessor.get_general_data(columns=columns, filters=filters)
+            try:
+                return self.data_accessor.get_general_data(columns=columns, filters=filters)
+            except Exception as e:
+                logger.error(f"Data accessor error in get_general_data(columns={columns}, filters={filters}): {e}")
+                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                raise  # Re-raise to maintain error propagation
         
         safe_globals = {
+            # Built-ins for safe execution (including __import__ for import statements)
+            '__builtins__': {
+                'print': print,
+                '__import__': __import__,
+                'len': len,
+                'range': range,
+                'enumerate': enumerate,
+                'float': float,
+                'int': int,
+                'str': str,
+                'abs': abs,
+                'max': max,
+                'min': min,
+                'round': round,
+                'sum': sum,
+                'list': list,
+                'dict': dict,
+                'tuple': tuple,
+                'set': set,
+                'sorted': sorted,
+                'reversed': reversed,
+                'any': any,
+                'all': all,
+            },
+            
             # Standard imports
             'pd': pd,
             'numpy': np,
@@ -427,30 +531,10 @@ class AccessorStrategyEngine:
             'get_bar_data': bound_get_bar_data,
             'get_general_data': bound_get_general_data,
             
-            # Utility functions
-            'len': len,
-            'range': range,
-            'enumerate': enumerate,
-            'float': float,
-            'int': int,
-            'str': str,
-            'abs': abs,
-            'max': max,
-            'min': min,
-            'round': round,
-            'sum': sum,
-            'list': list,
-            'dict': dict,
-            'tuple': tuple,
-            'set': set,
-            'sorted': sorted,
-            'reversed': reversed,
-            'any': any,
-            'all': all,
-            
-            # Math and datetime
-            'datetime': datetime,
+            # Math and datetime - make datetime module fully available
+            'datetime': dt,
             'timedelta': timedelta,
+            'time': dt.time,
             
             # Execution mode info
             'execution_mode': execution_mode,
@@ -463,7 +547,195 @@ class AccessorStrategyEngine:
             }
         }
         
+        # Add plotly imports if available
+        try:
+            import plotly.graph_objects as go
+            import plotly.express as px
+            from plotly.subplots import make_subplots
+            
+            safe_globals.update({
+                'plotly': {
+                    'graph_objects': go,
+                    'express': px,
+                    'subplots': {'make_subplots': make_subplots}
+                },
+                'go': go,
+                'px': px,
+                'make_subplots': make_subplots
+            })
+        except ImportError:
+            logger.warning("Plotly not available - plot capture disabled")
+        
         return safe_globals
+    
+    def _plotly_capture_context(self):
+        """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
+        
+        try:
+            import plotly.graph_objects as go
+            import plotly.express as px
+            from plotly.subplots import make_subplots
+        except ImportError:
+            # Return a no-op context manager if plotly not available
+            return contextlib.nullcontext()
+        
+        # Store original methods
+        original_figure_show = go.Figure.show
+        original_make_subplots = make_subplots
+        
+        # Create capture function
+        def capture_plot(fig, *args, **kwargs):
+            """Capture plot instead of showing it - extract only essential data"""
+            try:
+                # Extract essential plot data matching agent prompt format
+                plot_data = {
+                    'chart_type': self._extract_chart_type(fig),
+                    'data': self._extract_plot_data(fig),
+                    'title': self._extract_plot_title(fig),
+                    'layout': self._extract_minimal_layout(fig)
+                }
+                self.plots_collection.append(plot_data)
+            except Exception as e:
+                logger.warning(f"Failed to capture plot data: {e}")
+                # Fallback to basic plot info
+                fallback_plot = {
+                    'chart_type': 'line',
+                    'data': [],
+                    'title': 'Plot Capture Failed',
+                    'layout': {'xaxis': {'title': ''}, 'yaxis': {'title': ''}}
+                }
+                self.plots_collection.append(fallback_plot)
+        
+        # Create wrapped make_subplots that returns figures with captured show
+        def captured_make_subplots(*args, **kwargs):
+            fig = original_make_subplots(*args, **kwargs)
+            # Monkey patch the show method on this specific figure instance
+            fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
+            return fig
+        
+        @contextlib.contextmanager
+        def patch_context():
+            try:
+                # Apply patches
+                go.Figure.show = capture_plot
+                
+                # Patch make_subplots in the module where it was imported
+                plotly.subplots.make_subplots = captured_make_subplots
+                
+                yield
+                
+            finally:
+                # Restore original methods
+                go.Figure.show = original_figure_show
+                plotly.subplots.make_subplots = original_make_subplots
+        
+        return patch_context()
+
+    def _extract_chart_type(self, fig) -> str:
+        """Extract chart type from plotly figure"""
+        try:
+            if not fig.data:
+                return 'line'
+            
+            # Get the type from the first trace
+            trace_type = getattr(fig.data[0], 'type', 'scatter')
+            
+            # Map plotly trace types to standard chart types
+            type_mapping = {
+                'scatter': 'line' if getattr(fig.data[0], 'mode', '') == 'lines' else 'scatter',
+                'line': 'line',
+                'bar': 'bar',
+                'histogram': 'histogram',
+                'heatmap': 'heatmap',
+                'box': 'bar',  # Fallback
+                'violin': 'bar',  # Fallback
+                'pie': 'bar',  # Fallback
+                'candlestick': 'line',  # Fallback
+                'ohlc': 'line'  # Fallback
+            }
+            
+            return type_mapping.get(trace_type, 'line')
+        except Exception:
+            return 'line'
+
+    def _extract_plot_data(self, fig) -> list:
+        """Extract trace data from plotly figure"""
+        try:
+            data = []
+            for trace in fig.data:
+                trace_data = {
+                    'name': getattr(trace, 'name', ''),
+                    'type': getattr(trace, 'type', 'scatter')
+                }
+                
+                # Extract coordinate data
+                if hasattr(trace, 'x') and trace.x is not None:
+                    trace_data['x'] = list(trace.x)
+                if hasattr(trace, 'y') and trace.y is not None:
+                    trace_data['y'] = list(trace.y)
+                if hasattr(trace, 'z') and trace.z is not None:
+                    trace_data['z'] = list(trace.z)
+                
+                # Add mode for scatter plots
+                if hasattr(trace, 'mode'):
+                    trace_data['mode'] = trace.mode
+                
+                data.append(trace_data)
+            
+            return data
+        except Exception:
+            return []
+
+    def _extract_plot_title(self, fig) -> str:
+        """Extract title from plotly figure"""
+        try:
+            if hasattr(fig, 'layout') and hasattr(fig.layout, 'title'):
+                if hasattr(fig.layout.title, 'text') and fig.layout.title.text:
+                    return str(fig.layout.title.text)
+            return 'Untitled Plot'
+        except Exception:
+            return 'Untitled Plot'
+
+    def _extract_minimal_layout(self, fig) -> dict:
+        """Extract minimal layout information from plotly figure"""
+        try:
+            layout = {}
+            
+            if hasattr(fig, 'layout'):
+                # Extract axis titles
+                if hasattr(fig.layout, 'xaxis') and hasattr(fig.layout.xaxis, 'title'):
+                    if hasattr(fig.layout.xaxis.title, 'text'):
+                        layout['xaxis'] = {'title': str(fig.layout.xaxis.title.text) if fig.layout.xaxis.title.text else ''}
+                    else:
+                        layout['xaxis'] = {'title': ''}
+                else:
+                    layout['xaxis'] = {'title': ''}
+                
+                if hasattr(fig.layout, 'yaxis') and hasattr(fig.layout.yaxis, 'title'):
+                    if hasattr(fig.layout.yaxis.title, 'text'):
+                        layout['yaxis'] = {'title': str(fig.layout.yaxis.title.text) if fig.layout.yaxis.title.text else ''}
+                    else:
+                        layout['yaxis'] = {'title': ''}
+                else:
+                    layout['yaxis'] = {'title': ''}
+                
+                # Extract dimensions if explicitly set
+                if hasattr(fig.layout, 'width') and fig.layout.width:
+                    layout['width'] = fig.layout.width
+                if hasattr(fig.layout, 'height') and fig.layout.height:
+                    layout['height'] = fig.layout.height
+            else:
+                layout = {
+                    'xaxis': {'title': ''},
+                    'yaxis': {'title': ''}
+                }
+            
+            return layout
+        except Exception:
+            return {
+                'xaxis': {'title': ''},
+                'yaxis': {'title': ''}
+            }
 
     def _validate_strategy_code(self, strategy_code: str) -> bool:
         """Basic validation of strategy code"""

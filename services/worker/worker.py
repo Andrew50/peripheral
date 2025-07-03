@@ -54,6 +54,9 @@ class StrategyWorker:
         self.redis_client = self._init_redis()
         logger.info("✅ Redis connection established")
         
+        # Clean up any stale heartbeats from previous instances
+        self._cleanup_stale_heartbeats()
+        
         # Initialize Database connection  
         logger.info("🗄️ Connecting to Database...")
         self.db_conn = self._init_database()
@@ -78,6 +81,12 @@ class StrategyWorker:
             signal_name = signal.Signals(signum).name
             logger.error(f"🚨 Received signal {signal_name} ({signum}) - initiating graceful shutdown")
             self.shutdown_requested = True
+            
+            # Clean up heartbeat on shutdown
+            try:
+                self._cleanup_heartbeat()
+            except Exception as e:
+                logger.error(f"❌ Error during signal cleanup: {e}")
             
             # Log the current stack trace to help debug
             logger.error(f"📄 Signal received at:")
@@ -519,11 +528,12 @@ class StrategyWorker:
         # Set start time for uptime tracking
         self._start_time = time.time()
         
-        # Track last queue status log time and heartbeat time
+        # Start asynchronous heartbeat thread
+        self._start_heartbeat_thread()
+        
+        # Track last queue status log time
         last_status_log = time.time()
-        last_heartbeat = time.time()
         status_log_interval = 600  # Log queue status every 10 minutes when idle
-        heartbeat_interval = 60    # Send heartbeat every minute
         
         # Track statistics
         tasks_processed = 0
@@ -550,15 +560,11 @@ class StrategyWorker:
                         logger.info("🛑 Shutdown requested during idle period")
                         break
                     
-                    # Periodically log queue status when idle and send heartbeat
+                    # Periodically log queue status when idle
                     current_time = time.time()
                     if current_time - last_status_log > status_log_interval:
                         self.log_queue_status()
                         last_status_log = current_time
-                    
-                    if current_time - last_heartbeat > heartbeat_interval:
-                        self._publish_heartbeat()
-                        last_heartbeat = current_time
                     
                     continue
                 
@@ -572,7 +578,7 @@ class StrategyWorker:
                     normal_tasks_processed += 1
                     
                 # Parse task
-                logger.info(f"📦 Received {queue_type} task (Total: P:{priority_tasks_processed}/N:{normal_tasks_processed})")
+                logger.debug(f"📦 Received {queue_type} task (Total: P:{priority_tasks_processed}/N:{normal_tasks_processed})")
                 
                 try:
                     task_data = json.loads(task_message)
@@ -585,7 +591,7 @@ class StrategyWorker:
                 args = task_data.get('args', {})
                 priority = task_data.get('priority', 'normal')
 
-                logger.info(f"🎯 Processing {task_type} task {task_id} from {queue_type} queue (Priority: {priority})")
+                logger.info(f"🎯 Processing {task_type} task {task_id}")
                 tasks_processed += 1
                 
                 # Validate task data
@@ -601,18 +607,28 @@ class StrategyWorker:
 
                 try:
                     # Set task status to running
-                    logger.info(f"▶️ Starting execution of {task_type} task {task_id}")
+                    logger.debug(f"▶️ Starting execution of {task_type} task {task_id}")
+                    
+                    # Track current task for heartbeat monitoring
+                    self._current_task_id = task_id
+                    
                     self._set_task_result(task_id, "running", {
                         "worker_id": self.worker_id,
                         "queue_type": queue_type,
                         "priority": priority,
-                        "started_at": datetime.utcnow().isoformat()
+                        "started_at": datetime.utcnow().isoformat(),
+                        "original_task": {
+                            "task_type": task_type,
+                            "args": args,
+                            "priority": priority,
+                            "queue_type": queue_type
+                        }
                     })
                     
                     start_time = time.time()
                     
                     # Execute the task with comprehensive error handling
-                    logger.info(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
+                    logger.debug(f"🔧 Executing {task_type} with args: {json.dumps(args, indent=2)}")
                     
                     result = None
                     try:
@@ -635,6 +651,9 @@ class StrategyWorker:
                         logger.error(f"💥 Task {task_id} execution failed: {exec_error}")
                         logger.error(f"📄 Execution traceback: {traceback.format_exc()}")
                         raise exec_error
+                    finally:
+                        # Clear current task tracking
+                        self._current_task_id = None
                     
                     # Validate result
                     if result is None:
@@ -658,6 +677,8 @@ class StrategyWorker:
                     logger.info(f"✅ Completed {task_type} task {task_id} from {queue_type} queue in {execution_time:.2f}s")
                     
                 except SecurityError as e:
+                    # Clear current task tracking
+                    self._current_task_id = None
                     # Security validation error
                     error_result = {
                         "error": f"Security validation failed: {str(e)}",
@@ -669,6 +690,8 @@ class StrategyWorker:
                     logger.error(f"🚨 Security error in task {task_id}: {e}")
                     
                 except Exception as e:
+                    # Clear current task tracking
+                    self._current_task_id = None
                     # General error - log and set error status
                     error_result = {
                         "error": str(e),
@@ -693,6 +716,10 @@ class StrategyWorker:
         # Cleanup
         logger.info(f"🧹 Cleaning up worker {self.worker_id}...")
         logger.info(f"📊 Final stats - Total: {tasks_processed}, Priority: {priority_tasks_processed}, Normal: {normal_tasks_processed}")
+        
+        # Stop heartbeat thread
+        self._stop_heartbeat_thread()
+        
         self.redis_client.close()
         if self.db_conn:
             self.db_conn.close()
@@ -709,7 +736,7 @@ class StrategyWorker:
             self._publish_progress(task_id, "initialization", "Fetching strategy code from database...")
         
         strategy_code = self._fetch_strategy_code(strategy_id)
-        logger.info(f"Fetched strategy code from database for strategy_id: {strategy_id}")
+        logger.debug(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
         if task_id:
             self._publish_progress(task_id, "validation", "Validating strategy code security...")
@@ -725,13 +752,13 @@ class StrategyWorker:
         # Determine target symbols (strategies will fetch their own data via accessors)
         if securities_filter:
             target_symbols = securities_filter
-            logger.info(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
+            logger.debug(f"Using securities filter as target symbols: {len(target_symbols)} symbols")
         elif symbols_input:
             target_symbols = symbols_input
-            logger.info(f"Using provided symbols: {len(target_symbols)} symbols")
+            logger.debug(f"Using provided symbols: {len(target_symbols)} symbols")
         else:
             target_symbols = []  # Let strategy determine its own symbols
-            logger.info("No symbols specified - strategy will determine requirements")
+            logger.debug("No symbols specified - strategy will determine requirements")
         
         if task_id:
             self._publish_progress(task_id, "symbols", f"Prepared {len(target_symbols)} symbols for analysis", 
@@ -877,7 +904,7 @@ class StrategyWorker:
                 raise Exception("Strategy creation timed out after 5 minutes")
             
             logger.info(f"📥 Strategy generator returned result type: {type(result)}")
-            logger.info(f"📊 Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
+            logger.debug(f"📊 Result keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
             
             if task_id:
                 if result.get("success"):
@@ -990,7 +1017,7 @@ class StrategyWorker:
             channel = "worker_task_updates"
             message_json = json.dumps(progress_update)
             
-            logger.info(f"📡 Publishing progress update for {task_id}: {stage} - {message}")
+            logger.debug(f"📡 Publishing progress update for {task_id}: {stage} - {message}")
             logger.debug(f"   📤 Channel: {channel}")
             logger.debug(f"   📄 Message: {message_json}")
             
@@ -998,7 +1025,7 @@ class StrategyWorker:
             logger.debug(f"   👥 Subscribers notified: {result}")
             
             if result == 0:
-                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+                logger.debug(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
             else:
                 logger.debug(f"✅ Progress update published successfully to {result} subscribers")
             
@@ -1006,21 +1033,76 @@ class StrategyWorker:
             logger.error(f"❌ Failed to publish progress for {task_id}: {e}")
             logger.error(f"📄 Full traceback: {traceback.format_exc()}")
     
+    def _start_heartbeat_thread(self):
+        """Start the asynchronous heartbeat thread"""
+        self._heartbeat_stop_event = threading.Event()
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
+        logger.info("💓 Started asynchronous heartbeat thread (5s interval - ultra-fast monitoring)")
+    
+    def _stop_heartbeat_thread(self):
+        """Stop the heartbeat thread"""
+        if hasattr(self, '_heartbeat_stop_event'):
+            self._heartbeat_stop_event.set()
+        if hasattr(self, '_heartbeat_thread'):
+            self._heartbeat_thread.join(timeout=5)
+            logger.info("💓 Stopped heartbeat thread")
+        
+        # Clean up heartbeat key from Redis
+        self._cleanup_heartbeat()
+    
+    def _cleanup_heartbeat(self):
+        """Clean up worker heartbeat from Redis on shutdown"""
+        try:
+            heartbeat_key = f"worker_heartbeat:{self.worker_id}"
+            self.redis_client.delete(heartbeat_key)
+            logger.info(f"🧹 Cleaned up heartbeat key for worker {self.worker_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to cleanup heartbeat: {e}")
+    
+    def _heartbeat_loop(self):
+        """Asynchronous heartbeat loop - runs in separate thread"""
+        heartbeat_interval = 5  # Send heartbeat every 5 seconds for near-instant detection
+        
+        while not self._heartbeat_stop_event.is_set():
+            try:
+                self._publish_heartbeat()
+            except Exception as e:
+                logger.error(f"❌ Heartbeat thread error: {e}")
+                # Don't stop the thread on errors, just continue
+            
+            # Wait for next heartbeat or stop signal
+            self._heartbeat_stop_event.wait(heartbeat_interval)
+
     def _publish_heartbeat(self):
         """Publish worker heartbeat for monitoring"""
         try:
+            # Get current active task if any
+            active_task = getattr(self, '_current_task_id', None)
+            
             heartbeat = {
                 "worker_id": self.worker_id,
                 "status": "alive",
-                "timestamp": datetime.utcnow().isoformat(),
-                "uptime_seconds": time.time() - getattr(self, '_start_time', time.time())
+                "timestamp": datetime.utcnow().isoformat() + "Z",  # Add timezone for RFC3339 compatibility
+                "uptime_seconds": time.time() - getattr(self, '_start_time', time.time()),
+                "active_task": active_task,
+                "queue_stats": self.get_queue_stats(),
+                "heartbeat_interval": 5,   # Signal the 5-second interval to monitor
+                "monitor_timeout": 10      # Expected timeout threshold (2 missed heartbeats)
             }
             
-            # Publish heartbeat to Redis
-            channel = "worker_heartbeat"
+            # Store heartbeat in Redis with short expiration for monitoring
+            heartbeat_key = f"worker_heartbeat:{self.worker_id}"
             heartbeat_json = json.dumps(heartbeat)
             
+            # Store with 30 second expiration (6x the heartbeat interval for safety)
+            # This ensures stale heartbeats are cleaned up quickly if worker dies
+            self.redis_client.setex(heartbeat_key, 30, heartbeat_json)
+            
+            # Also publish to channel for real-time monitoring
+            channel = "worker_heartbeat"
             self.redis_client.publish(channel, heartbeat_json)
+            
             logger.debug(f"💓 Published heartbeat for worker {self.worker_id}")
             
         except Exception as e:
@@ -1034,26 +1116,46 @@ class StrategyWorker:
                 "task_id": task_id,
                 "status": status,
                 "data": data,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "worker_id": self.worker_id  # Track which worker handled this task
             }
             
             # Store result with 24 hour expiration
             result_key = f"task_result:{task_id}"
             result_json = json.dumps(result)
             
-            logger.info(f"💾 Setting task result for {task_id}: {status}")
+            logger.debug(f"💾 Setting task result for {task_id}: {status}")
             logger.debug(f"   🔑 Key: {result_key}")
             logger.debug(f"   📄 Data: {result_json[:200]}...")
             
             self.redis_client.setex(result_key, 86400, result_json)
             logger.debug(f"✅ Task result stored successfully")
             
+            # Track task assignment for failure recovery
+            if status == "running":
+                # Store which worker is handling this task
+                assignment_key = f"task_assignment:{task_id}"
+                assignment_data = {
+                    "worker_id": self.worker_id,
+                    "task_id": task_id,
+                    "started_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "running"
+                }
+                self.redis_client.setex(assignment_key, 7200, json.dumps(assignment_data))  # 2 hour expiration
+                logger.debug(f"📋 Task assignment tracked for {task_id} -> worker {self.worker_id}")
+            elif status in ["completed", "error"]:
+                # Remove task assignment when task is finished
+                assignment_key = f"task_assignment:{task_id}"
+                self.redis_client.delete(assignment_key)
+                logger.debug(f"🗑️ Task assignment cleared for {task_id}")
+            
             # Publish task update for real-time notifications
             update_message = {
                 "task_id": task_id,
                 "status": status,
                 "result": data,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "worker_id": self.worker_id
             }
             
             if status == "error":
@@ -1063,7 +1165,7 @@ class StrategyWorker:
             channel = "worker_task_updates"
             update_json = json.dumps(update_message)
             
-            logger.info(f"📡 Publishing task update for {task_id}: {status}")
+            logger.debug(f"📡 Publishing task update for {task_id}: {status}")
             logger.debug(f"   📤 Channel: {channel}")
             logger.debug(f"   📄 Update: {update_json[:200]}...")
             
@@ -1071,7 +1173,7 @@ class StrategyWorker:
             logger.debug(f"   👥 Subscribers notified: {subscribers}")
             
             if subscribers == 0:
-                logger.warning(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
+                logger.debug(f"⚠️ No subscribers listening to channel '{channel}' for task {task_id}")
             else:
                 logger.debug(f"✅ Task update published successfully to {subscribers} subscribers")
             
@@ -1106,10 +1208,10 @@ class StrategyWorker:
                 "normal_queue_length": normal_length,
                 "total_pending_tasks": priority_length + normal_length,
                 "worker_id": self.worker_id,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat() + "Z"
             }
             
-            logger.info(f"Queue stats: Priority={priority_length}, Normal={normal_length}, Total={priority_length + normal_length}")
+            logger.debug(f"Queue stats: Priority={priority_length}, Normal={normal_length}, Total={priority_length + normal_length}")
             return stats
             
         except Exception as e:
@@ -1117,19 +1219,28 @@ class StrategyWorker:
             return {
                 "error": str(e),
                 "worker_id": self.worker_id,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat() + "Z"
             }
 
     def log_queue_status(self):
         """Log current queue status for monitoring"""
         stats = self.get_queue_stats()
         if "error" not in stats:
-            logger.info(f"[QUEUE STATUS] Worker {self.worker_id}: "
+            logger.debug(f"[QUEUE STATUS] Worker {self.worker_id}: "
                        f"Priority Queue: {stats['priority_queue_length']} tasks, "
                        f"Normal Queue: {stats['normal_queue_length']} tasks, "
                        f"Total: {stats['total_pending_tasks']} tasks")
         else:
             logger.error(f"[QUEUE STATUS] Failed to get queue status: {stats['error']}")
+
+    def _cleanup_stale_heartbeats(self):
+        """Clean up any stale heartbeats from previous instances"""
+        try:
+            heartbeat_key = f"worker_heartbeat:{self.worker_id}"
+            self.redis_client.delete(heartbeat_key)
+            logger.info(f"🧹 Cleaned up heartbeat key for worker {self.worker_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to cleanup stale heartbeats: {e}")
 
 
 # Utility functions for adding tasks to queue
@@ -1147,7 +1258,7 @@ def add_backtest_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
             "end_date": end_date,
             "securities": securities
         },
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat() + "Z"
     }
     # Backtest tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
@@ -1164,7 +1275,7 @@ def add_screening_task(redis_client: redis.Redis, task_id: str, strategy_ids: Li
             "universe": universe,
             "limit": limit
         },
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat() + "Z"
     }
     # Screening tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
@@ -1180,7 +1291,7 @@ def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
             "strategy_id": strategy_id,
             "symbols": symbols
         },
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat() + "Z"
     }
     # Alert tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
@@ -1197,7 +1308,7 @@ def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: i
             "prompt": prompt,
             "strategy_id": strategy_id
         },
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.utcnow().isoformat() + "Z",
         "priority": "high"  # Mark as high priority
     }
     # Strategy creation/editing tasks go to PRIORITY queue
@@ -1212,7 +1323,7 @@ def add_task_with_priority(redis_client: redis.Redis, task_id: str, task_type: s
         "task_id": task_id,
         "task_type": task_type,
         "args": args,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.utcnow().isoformat() + "Z",
         "priority": priority
     }
     
@@ -1241,7 +1352,7 @@ def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:
         stats = {
             "priority_queue_length": redis_client.llen('strategy_queue_priority'),
             "normal_queue_length": redis_client.llen('strategy_queue'),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
         stats["total_pending_tasks"] = stats["priority_queue_length"] + stats["normal_queue_length"]
         
@@ -1250,7 +1361,7 @@ def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:
     except Exception as e:
         return {
             "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
 
 
@@ -1298,6 +1409,8 @@ if __name__ == "__main__":
     
     logger.info("🎬 WORKER STARTUP INITIATED")
     logger.info("🔧 Priority Queue System: ENABLED")
+    logger.info("💓 Ultra-Fast Heartbeat System: 5s interval, async monitoring")
+    logger.info("🛡️ Worker Monitor: 10s timeout, near-instant task recovery")
     logger.info("📋 Supported Task Types: backtest, screening, alert, create_strategy")
     
     try:

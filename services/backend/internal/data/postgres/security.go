@@ -26,6 +26,16 @@ func GetSecurityID(conn *data.Conn, ticker string, timestamp time.Time) (int, er
 	return securityID, nil
 }
 
+// GetCurrentSecurityID gets the currently active security ID for a ticker (where maxDate IS NULL)
+func GetCurrentSecurityID(conn *data.Conn, ticker string) (int, error) {
+	var securityID int
+	err := conn.DB.QueryRow(context.Background(), "SELECT securityId from securities where ticker = $1 and maxDate is NULL", ticker).Scan(&securityID)
+	if err != nil {
+		return 0, fmt.Errorf("43333ngb %v", err)
+	}
+	return securityID, nil
+}
+
 // GetTicker performs operations related to GetTicker functionality.
 func GetTicker(conn *data.Conn, securityID int, timestamp time.Time) (string, error) {
 	var ticker string
