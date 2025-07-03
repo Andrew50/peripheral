@@ -3,12 +3,7 @@
 	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
 	import { writable } from 'svelte/store';
 	import { onMount } from 'svelte';
-
-	// Price IDs for different plans (these would come from your Stripe dashboard)
-	const PRICE_IDS = {
-		starter: 'price_starter_monthly', // Replace with actual Stripe price ID
-		pro: 'price_pro_monthly' // Replace with actual Stripe price ID
-	};
+	import { getStripePrice } from '$lib/config/pricing';
 
 	let subscriptionStatus = writable('inactive');
 	let currentPlan = writable('');
@@ -36,7 +31,7 @@
 		try {
 			const response = await privateRequest<{ sessionId: string; url: string }>(
 				'createCheckoutSession',
-				{ priceId }
+				{ priceId: getStripePrice(priceId as 'starter' | 'plus' | 'pro') }
 			);
 
 			await redirectToCheckout(response.sessionId);
@@ -69,12 +64,12 @@
 </script>
 
 <svelte:head>
-	<title>Billing - Atlantis Trading</title>
+	<title>Pricing - Atlantis Trading</title>
 </svelte:head>
 
-<div class="billing-container">
-	<div class="billing-header">
-		<h1>Billing & Subscription</h1>
+<div class="pricing-container">
+	<div class="pricing-header">
+		<h1>Pricing & Plans</h1>
 		<p>Manage your subscription and billing information</p>
 	</div>
 
@@ -84,7 +79,7 @@
 		</div>
 	{/if}
 
-	<div class="billing-content">
+	<div class="pricing-content">
 		<!-- Current Subscription Status -->
 		<div class="current-plan-card">
 			<h2>Current Plan</h2>
@@ -131,7 +126,7 @@
 						</ul>
 						<button
 							class="btn btn-primary"
-							on:click={() => handleUpgrade(PRICE_IDS.starter)}
+							on:click={() => handleUpgrade('starter')}
 							disabled={isLoading}
 						>
 							{isLoading ? 'Loading...' : 'Choose Starter'}
@@ -158,7 +153,7 @@
 						</ul>
 						<button
 							class="btn btn-primary"
-							on:click={() => handleUpgrade(PRICE_IDS.pro)}
+							on:click={() => handleUpgrade('pro')}
 							disabled={isLoading}
 						>
 							{isLoading ? 'Loading...' : 'Choose Pro'}
@@ -171,26 +166,26 @@
 </div>
 
 <style>
-	.billing-container {
+	.pricing-container {
 		max-width: 1200px;
 		margin: 0 auto;
 		padding: 2rem;
 		font-family: 'Inter', sans-serif;
 	}
 
-	.billing-header {
+	.pricing-header {
 		text-align: center;
 		margin-bottom: 3rem;
 	}
 
-	.billing-header h1 {
+	.pricing-header h1 {
 		font-size: 2.5rem;
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 0.5rem;
 	}
 
-	.billing-header p {
+	.pricing-header p {
 		font-size: 1.1rem;
 		color: var(--text-secondary);
 	}

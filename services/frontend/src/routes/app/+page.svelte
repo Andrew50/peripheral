@@ -114,7 +114,7 @@
 
 	let bottomWindows: BottomWindow[] = [];
 	let nextWindowId = 1;
-	let activeTab = 'chart'; // For settings window
+	let activeTab: 'chart' | 'format' | 'account' | 'appearance' | 'pricing' = 'chart'; // For settings window
 
 	// Replay controls
 	let replaySpeed = 1.0;
@@ -1006,9 +1006,8 @@
 		}
 	}
 
-	function openBillingSettings() {
-		activeTab = 'billing';
-		openBottomWindow('settings');
+	function openPricingSettings() {
+		goto('/pricing');
 	}
 </script>
 
@@ -1319,11 +1318,26 @@
 				</svg>
 			</button>
 
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
+				on:click={() => openBottomWindow('strategies')}
+			>
+				Strategies
+			</button>
+			<button
+				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
+				on:click={() => openBottomWindow('screener')}
+			>
+				Screener
+			</button>
+		</div>
+
+		<div class="bottom-bar-right">
 			<!-- Upgrade button - only show if user is authenticated but not subscribed -->
 			{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') !== 'Guest' && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
 				<button
 					class="toggle-button upgrade-button"
-					on:click={openBillingSettings}
+					on:click={openPricingSettings}
 					title="Upgrade to Pro"
 				>
 					<svg
@@ -1344,21 +1358,6 @@
 				</button>
 			{/if}
 
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
-				on:click={() => openBottomWindow('strategies')}
-			>
-				Strategies
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
-				on:click={() => openBottomWindow('screener')}
-			>
-				Screener
-			</button>
-		</div>
-
-		<div class="bottom-bar-right">
 			<!-- Replay buttons commented out -->
 			<!-- 
 			<button
@@ -1472,7 +1471,7 @@
 				<div class="settings-content">
 					{#if showSettingsPopup}
 						{#await import('$lib/features/settings/settings.svelte') then module}
-							<svelte:component this={module.default} />
+							<svelte:component this={module.default} initialTab={activeTab} />
 						{/await}
 					{/if}
 				</div>

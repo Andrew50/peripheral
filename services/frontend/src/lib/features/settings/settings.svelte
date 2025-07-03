@@ -9,12 +9,12 @@
 	import { onMount } from 'svelte';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 	import { logout } from '$lib/auth';
-	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
+	import { redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
 	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' | 'billing' = 'chart';
+	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
 
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
@@ -25,36 +25,10 @@
 	let deleteConfirmationText = '';
 	let deletingAccount = false;
 
-	// Price IDs for different plans (these would come from your Stripe dashboard)
-	const PRICE_IDS = {
-		starter: 'price_starter_monthly', // Replace with actual Stripe price ID
-		pro: 'price_pro_monthly' // Replace with actual Stripe price ID
-	};
-
 	// Function to determine if the current user is a guest
 	const isGuestAccount = (): boolean => {
 		return username === 'Guest';
 	};
-
-	// Handle subscription upgrade
-	async function handleUpgrade(priceId: string) {
-		subscriptionStatus.update((s) => ({ ...s, loading: true, error: '' }));
-
-		try {
-			const response = await privateRequest<{ sessionId: string; url: string }>(
-				'createCheckoutSession',
-				{ priceId }
-			);
-			await redirectToCheckout(response.sessionId);
-		} catch (error) {
-			console.error('Error creating checkout session:', error);
-			subscriptionStatus.update((s) => ({
-				...s,
-				loading: false,
-				error: 'Failed to start checkout process. Please try again.'
-			}));
-		}
-	}
 
 	// Handle manage subscription
 	async function handleManageSubscription() {
@@ -192,12 +166,6 @@
 				on:click={() => (activeTab = 'appearance')}
 			>
 				Appearance
-			</button>
-			<button
-				class="tab-button {activeTab === 'billing' ? 'active' : ''}"
-				on:click={() => (activeTab = 'billing')}
-			>
-				Billing
 			</button>
 		</div>
 
@@ -419,6 +387,60 @@
 						</div>
 					</div>
 
+					<!-- Subscription Status Section -->
+					<div class="settings-section">
+						<h3>Subscription Status</h3>
+						{#if $subscriptionStatus.loading}
+							<div class="loading-message">Loading subscription information...</div>
+						{:else if $subscriptionStatus.error}
+							<div class="error-message">{$subscriptionStatus.error}</div>
+						{:else}
+							<div class="subscription-card">
+								<div class="current-plan-display">
+									<div class="plan-tier">
+										{#if !$subscriptionStatus.isActive}
+											<span class="tier-badge free">Free</span>
+										{:else if $subscriptionStatus.currentPlan === 'Plus'}
+											<span class="tier-badge plus">Plus</span>
+										{:else if $subscriptionStatus.currentPlan === 'Pro'}
+											<span class="tier-badge pro">Pro</span>
+										{:else}
+											<span class="tier-badge unknown">Unknown</span>
+										{/if}
+									</div>
+									<div class="plan-details">
+										{#if !$subscriptionStatus.isActive}
+											<p class="plan-status">You're currently on the free plan</p>
+										{:else}
+											<p class="plan-status">Active subscription</p>
+											{#if $subscriptionStatus.currentPeriodEnd}
+												<p class="renewal-info">
+													Renews on {new Date(
+														$subscriptionStatus.currentPeriodEnd * 1000
+													).toLocaleDateString()}
+												</p>
+											{/if}
+										{/if}
+									</div>
+								</div>
+								<div class="subscription-actions">
+									{#if $subscriptionStatus.isActive}
+										<button
+											class="btn btn-manage"
+											on:click={handleManageSubscription}
+											disabled={$subscriptionStatus.loading}
+										>
+											{$subscriptionStatus.loading ? 'Loading...' : 'Manage Subscription'}
+										</button>
+									{/if}
+									<button class="btn btn-view-plans" on:click={() => goto('/pricing')}>
+										View Plans & Pricing
+									</button>
+								</div>
+							</div>
+						{/if}
+					</div>
+
 					<div class="account-actions">
 						<button class="logout-button" on:click={() => logout('/')}>Logout</button>
 					</div>
@@ -441,103 +463,6 @@
 							</button>
 						</div>
 					</div>
-				</div>
-			{:else if activeTab === 'billing'}
-				<div class="settings-section">
-					<h3>Subscription & Billing</h3>
-
-					{#if $subscriptionStatus.loading}
-						<div class="loading-message">Loading subscription information...</div>
-					{:else if $subscriptionStatus.error}
-						<div class="error-message">{$subscriptionStatus.error}</div>
-					{:else}
-						<!-- Current Subscription Status -->
-						<div class="current-plan-card">
-							<h4>Current Plan</h4>
-							{#if $subscriptionStatus.isActive}
-								<div class="plan-active">
-									<div class="plan-badge active">Active</div>
-									<h5>{$subscriptionStatus.currentPlan || 'Pro'} Plan</h5>
-									{#if $subscriptionStatus.currentPeriodEnd}
-										<p class="renewal-date">
-											Renews on {new Date(
-												$subscriptionStatus.currentPeriodEnd * 1000
-											).toLocaleDateString()}
-										</p>
-									{/if}
-								</div>
-								<button
-									class="btn btn-secondary"
-									on:click={handleManageSubscription}
-									disabled={$subscriptionStatus.loading}
-								>
-									{$subscriptionStatus.loading ? 'Loading...' : 'Manage Subscription'}
-								</button>
-							{:else}
-								<div class="plan-inactive">
-									<div class="plan-badge inactive">No Active Subscription</div>
-									<p>Choose a plan to unlock premium features</p>
-								</div>
-
-								<!-- Available Plans -->
-								<div class="plans-section">
-									<h4>Choose Your Plan</h4>
-									<div class="plans-grid">
-										<!-- Starter Plan -->
-										<div class="plan-card">
-											<div class="plan-header">
-												<h5>Starter</h5>
-												<div class="plan-price">
-													<span class="price">$19</span>
-													<span class="period">/month</span>
-												</div>
-											</div>
-											<ul class="plan-features">
-												<li>Real-time market data</li>
-												<li>Basic charts and analytics</li>
-												<li>5 watchlists</li>
-												<li>Email support</li>
-											</ul>
-											<button
-												class="btn btn-primary"
-												on:click={() => handleUpgrade(PRICE_IDS.starter)}
-												disabled={$subscriptionStatus.loading}
-											>
-												{$subscriptionStatus.loading ? 'Loading...' : 'Choose Starter'}
-											</button>
-										</div>
-
-										<!-- Pro Plan -->
-										<div class="plan-card featured">
-											<div class="plan-header">
-												<div class="popular-badge">Most Popular</div>
-												<h5>Pro</h5>
-												<div class="plan-price">
-													<span class="price">$49</span>
-													<span class="period">/month</span>
-												</div>
-											</div>
-											<ul class="plan-features">
-												<li>Everything in Starter</li>
-												<li>Advanced analytics</li>
-												<li>Unlimited watchlists</li>
-												<li>AI-powered insights</li>
-												<li>Priority support</li>
-												<li>Strategy backtesting</li>
-											</ul>
-											<button
-												class="btn btn-primary"
-												on:click={() => handleUpgrade(PRICE_IDS.pro)}
-												disabled={$subscriptionStatus.loading}
-											>
-												{$subscriptionStatus.loading ? 'Loading...' : 'Choose Pro'}
-											</button>
-										</div>
-									</div>
-								</div>
-							{/if}
-						</div>
-					{/if}
 				</div>
 			{/if}
 
@@ -1227,190 +1152,109 @@
 		}
 	}
 
-	/* Billing section styles */
-	.current-plan-card {
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 8px;
-		padding: 1.5rem;
-		margin-bottom: 2rem;
-	}
-
-	.plan-active,
-	.plan-inactive {
-		margin-bottom: 1.5rem;
-	}
-
-	.plan-badge {
-		display: inline-block;
-		padding: 0.25rem 0.75rem;
-		border-radius: 4px;
-		font-size: 0.75rem;
-		font-weight: 600;
-		margin-bottom: 0.5rem;
-	}
-
-	.plan-badge.active {
-		background: rgba(34, 197, 94, 0.2);
-		color: #22c55e;
-	}
-
-	.plan-badge.inactive {
-		background: rgba(239, 68, 68, 0.2);
-		color: #ef4444;
-	}
-
-	.renewal-date {
-		font-size: 0.875rem;
-		color: var(--f2);
-		margin: 0.5rem 0 0 0;
-	}
-
-	.plans-section {
-		margin-top: 2rem;
-	}
-
-	.plans-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1.5rem;
-		margin-top: 1rem;
-	}
-
-	.plan-card {
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 8px;
-		padding: 1.5rem;
-		position: relative;
-		transition: all 0.2s ease;
-	}
-
-	.plan-card:hover {
-		border-color: rgba(255, 255, 255, 0.15);
-	}
-
-	.plan-card.featured {
-		border-color: var(--c3);
-	}
-
-	.popular-badge {
-		position: absolute;
-		top: -8px;
-		left: 50%;
-		transform: translateX(-50%);
-		background: var(--c3);
-		color: white;
-		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.25rem 0.75rem;
-		border-radius: 12px;
-	}
-
-	.plan-header {
-		margin-bottom: 1rem;
-	}
-
-	.plan-header h5 {
-		margin: 0 0 0.5rem 0;
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.plan-price {
-		display: flex;
-		align-items: baseline;
-		gap: 0.25rem;
-	}
-
-	.plan-price .price {
-		font-size: 2rem;
-		font-weight: 700;
-		color: var(--f1);
-	}
-
-	.plan-price .period {
-		font-size: 0.875rem;
-		color: var(--f2);
-	}
-
-	.plan-features {
-		list-style: none;
-		padding: 0;
-		margin: 0 0 1.5rem 0;
-	}
-
-	.plan-features li {
-		padding: 0.375rem 0;
-		color: var(--f2);
-		font-size: 0.875rem;
-		position: relative;
-		padding-left: 1.25rem;
-	}
-
-	.plan-features li::before {
-		content: '✓';
-		position: absolute;
-		left: 0;
-		color: #22c55e;
-		font-weight: bold;
-	}
-
-	.btn {
-		padding: 0.75rem 1.5rem;
-		border-radius: 6px;
-		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		border: none;
-		width: 100%;
-		text-align: center;
-	}
-
-	.btn:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-
-	.btn-primary {
-		background: var(--c3);
-		color: white;
-	}
-
-	.btn-primary:hover:not(:disabled) {
-		background: var(--c3-hover);
-	}
-
-	.btn-secondary {
-		background: rgba(255, 255, 255, 0.1);
-		color: var(--f1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.btn-secondary:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.2);
-	}
-
 	.loading-message {
 		text-align: center;
 		color: var(--f2);
 		padding: 2rem;
 	}
 
-	h4,
-	h5 {
-		margin: 0 0 1rem 0;
-		color: var(--f1);
+	/* Subscription status styles */
+	.subscription-card {
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.current-plan-display {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 1.5rem;
+	}
+
+	@media (max-width: 768px) {
+		.current-plan-display {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+		}
+	}
+
+	.tier-badge {
+		display: inline-block;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.875rem;
 		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
 	}
 
-	h4 {
-		font-size: 1.125rem;
+	.tier-badge.free {
+		background: rgba(156, 163, 175, 0.2);
+		color: #9ca3af;
+		border: 1px solid rgba(156, 163, 175, 0.3);
 	}
 
-	h5 {
+	.tier-badge.plus {
+		background: rgba(59, 130, 246, 0.2);
+		color: #3b82f6;
+		border: 1px solid rgba(59, 130, 246, 0.3);
+	}
+
+	.tier-badge.pro {
+		background: rgba(168, 85, 247, 0.2);
+		color: #a855f7;
+		border: 1px solid rgba(168, 85, 247, 0.3);
+	}
+
+	.tier-badge.unknown {
+		background: rgba(239, 68, 68, 0.2);
+		color: #ef4444;
+		border: 1px solid rgba(239, 68, 68, 0.3);
+	}
+
+	.plan-details {
+		flex: 1;
+	}
+
+	.plan-status {
+		margin: 0 0 0.25rem 0;
+		color: var(--f1);
 		font-size: 1rem;
+		font-weight: 500;
+	}
+
+	.renewal-info {
+		margin: 0;
+		color: var(--f2);
+		font-size: 0.875rem;
+	}
+
+	.subscription-actions {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.btn-manage {
+		background: var(--c3);
+		color: white;
+	}
+
+	.btn-manage:hover:not(:disabled) {
+		background: var(--c3-hover);
+	}
+
+	.btn-view-plans {
+		background: transparent;
+		color: var(--f1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	.btn-view-plans:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.1);
 	}
 </style>

@@ -34,7 +34,7 @@ func StripeCreateCheckoutSession(userID int, priceID, userEmail string) (*stripe
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 		Mode:               stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		SuccessURL:         stripe.String(fmt.Sprintf("%s/app?session_id={CHECKOUT_SESSION_ID}", frontendURL)),
-		CancelURL:          stripe.String(fmt.Sprintf("%s/billing", frontendURL)),
+		CancelURL:          stripe.String(fmt.Sprintf("%s/pricing", frontendURL)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				Price:    stripe.String(priceID),
@@ -60,7 +60,7 @@ func StripeCreatePortalSession(stripeCustomerID string) (*stripe.BillingPortalSe
 
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripe.String(stripeCustomerID),
-		ReturnURL: stripe.String(fmt.Sprintf("%s/billing", frontendURL)),
+		ReturnURL: stripe.String(fmt.Sprintf("%s/pricing", frontendURL)),
 	}
 
 	return billingportalsession.New(params)
