@@ -460,6 +460,9 @@ class AccessorStrategyEngine:
                     
                     valid_instances.append(instance)
             
+            # Ensure all instances are JSON serializable
+            valid_instances = self._ensure_json_serializable(valid_instances)
+            
             logger.info(f"Strategy returned {len(valid_instances)} valid instances")
             logger.info(f"Strategy captured {len(self.plots_collection)} plots")
             return valid_instances, strategy_prints, self.plots_collection
@@ -658,6 +661,58 @@ class AccessorStrategyEngine:
         except Exception:
             return 'line'
 
+    def _make_json_serializable(self, value):
+        """Recursively convert numpy/pandas types to native Python types for JSON serialization"""
+        import numpy as np
+        import pandas as pd
+        
+        # Handle None and basic types
+        if value is None or isinstance(value, (str, bool)):
+            return value
+        
+        # Handle numpy/pandas scalar types
+        if isinstance(value, np.integer):
+            return int(value)
+        elif isinstance(value, np.floating):
+            return float(value)
+        elif isinstance(value, np.bool_):
+            return bool(value)
+        elif isinstance(value, (np.datetime64, pd.Timestamp)):
+            # Convert datetime to Unix timestamp (int)
+            if isinstance(value, pd.Timestamp):
+                return int(value.timestamp())
+            else:
+                return int(pd.Timestamp(value).timestamp())
+        elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
+            # Handle pandas nullable integer types
+            return int(value.item()) if pd.notna(value) else None
+        elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
+            # Handle pandas nullable float types
+            return float(value.item()) if pd.notna(value) else None
+        elif hasattr(value, 'item'):  # Other numpy scalars
+            return value.item()
+        elif pd.isna(value):
+            # Handle pandas NA values
+            return None
+        elif isinstance(value, (int, float)):
+            # Native Python types are already serializable
+            return value
+        
+        # Handle nested structures
+        elif isinstance(value, list):
+            return [self._make_json_serializable(item) for item in value]
+        elif isinstance(value, tuple):
+            return [self._make_json_serializable(item) for item in value]
+        elif isinstance(value, dict):
+            return {key: self._make_json_serializable(val) for key, val in value.items()}
+        
+        # Fallback for unknown types - try to convert to string
+        else:
+            try:
+                return str(value)
+            except Exception:
+                return None
+
     def _extract_plot_data(self, fig) -> list:
         """Extract trace data from plotly figure"""
         try:
@@ -668,13 +723,13 @@ class AccessorStrategyEngine:
                     'type': getattr(trace, 'type', 'scatter')
                 }
                 
-                # Extract coordinate data
+                # Extract coordinate data and make JSON serializable
                 if hasattr(trace, 'x') and trace.x is not None:
-                    trace_data['x'] = list(trace.x)
+                    trace_data['x'] = self._make_json_serializable(list(trace.x))
                 if hasattr(trace, 'y') and trace.y is not None:
-                    trace_data['y'] = list(trace.y)
+                    trace_data['y'] = self._make_json_serializable(list(trace.y))
                 if hasattr(trace, 'z') and trace.z is not None:
-                    trace_data['z'] = list(trace.z)
+                    trace_data['z'] = self._make_json_serializable(list(trace.z))
                 
                 # Add mode for scatter plots
                 if hasattr(trace, 'mode'):
@@ -719,11 +774,11 @@ class AccessorStrategyEngine:
                 else:
                     layout['yaxis'] = {'title': ''}
                 
-                # Extract dimensions if explicitly set
+                # Extract dimensions if explicitly set and make JSON serializable
                 if hasattr(fig.layout, 'width') and fig.layout.width:
-                    layout['width'] = fig.layout.width
+                    layout['width'] = self._make_json_serializable(fig.layout.width)
                 if hasattr(fig.layout, 'height') and fig.layout.height:
-                    layout['height'] = fig.layout.height
+                    layout['height'] = self._make_json_serializable(fig.layout.height)
             else:
                 layout = {
                     'xaxis': {'title': ''},
@@ -741,6 +796,47 @@ class AccessorStrategyEngine:
         """Basic validation of strategy code"""
         # Use the security validator
         return self.validator.validate_code(strategy_code)
+    
+    def _ensure_json_serializable(self, instances: List[Dict]) -> List[Dict]:
+        """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
+        import numpy as np
+        import pandas as pd
+        
+        serializable_instances = []
+        
+        for instance in instances:
+            serializable_instance = {}
+            for key, value in instance.items():
+                # Convert numpy/pandas types to native Python types
+                if isinstance(value, np.integer):
+                    serializable_instance[key] = int(value)
+                elif isinstance(value, np.floating):
+                    serializable_instance[key] = float(value)
+                elif isinstance(value, np.bool_):
+                    serializable_instance[key] = bool(value)
+                elif isinstance(value, (np.datetime64, pd.Timestamp)):
+                    # Convert datetime to Unix timestamp (int)
+                    if isinstance(value, pd.Timestamp):
+                        serializable_instance[key] = int(value.timestamp())
+                    else:
+                        serializable_instance[key] = int(pd.Timestamp(value).timestamp())
+                elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
+                    # Handle pandas nullable integer types
+                    serializable_instance[key] = int(value.item()) if pd.notna(value) else None
+                elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
+                    # Handle pandas nullable float types
+                    serializable_instance[key] = float(value.item()) if pd.notna(value) else None
+                elif hasattr(value, 'item'):  # Other numpy scalars
+                    serializable_instance[key] = value.item()
+                elif pd.isna(value):
+                    # Handle pandas NA values
+                    serializable_instance[key] = None
+                else:
+                    serializable_instance[key] = value
+            
+            serializable_instances.append(serializable_instance)
+        
+        return serializable_instances
 
     def _rank_screening_results(self, instances: List[Dict], limit: int) -> List[Dict]:
         """Rank screening results by score or other criteria and convert to WorkerRankedResult format"""
