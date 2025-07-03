@@ -131,7 +131,7 @@ class SecurityValidator:
             "datetime", "time", "decimal", "fractions", "collections",
             "itertools", "functools", "operator", "copy", "json", "re",
             "string", "textwrap", "calendar", "bisect", "heapq", "array",
-            "typing",  # For type annotations like List[Dict]
+            "typing", "plotly", "plotly.subplots", "subplots", "make_subplots", "px", "graph_objects", "express" # For type annotations like List[Dict]
         }
 
         # Forbidden attributes (comprehensive dunder and internal attributes)

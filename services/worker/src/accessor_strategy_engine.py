@@ -15,6 +15,7 @@ import json
 import time
 import io
 import contextlib
+import plotly 
 
 from data_accessors import DataAccessorProvider, get_bar_data, get_general_data
 from validator import SecurityValidator, SecurityError
@@ -84,7 +85,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, strategy_prints = await self._execute_strategy(
+            instances, strategy_prints, strategy_plots = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='backtest'
             )
@@ -98,7 +99,9 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'backtest',
                 'instances': instances,
+                'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
+                'strategy_plots': strategy_plots,
                 'summary': {
                     'total_instances': len(instances),
                     'symbols_analyzed': len(symbols),
@@ -117,7 +120,8 @@ class AccessorStrategyEngine:
                 'success': False,
                 'error': str(e),
                 'execution_mode': 'backtest',
-                'strategy_prints': ''
+                'strategy_prints': '',
+                'strategy_plots': []
             }
     
     async def execute_validation(
@@ -182,7 +186,7 @@ class AccessorStrategyEngine:
             logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
-            instances,  _ = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation'
             )
@@ -263,7 +267,7 @@ class AccessorStrategyEngine:
             logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
-            instances, _ = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='screening'
             )
@@ -336,7 +340,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, _ = await self._execute_strategy(
+            instances, _, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='alert'
             )
@@ -396,7 +400,7 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         execution_mode: str
-    ) -> Tuple[List[Dict], str]:
+    ) -> Tuple[List[Dict], str, List[Dict]]:
         """Execute the strategy function with data accessor context"""
         
         # Validate strategy code before execution
@@ -428,16 +432,16 @@ class AccessorStrategyEngine:
             logger.info(f"Executing strategy function using data accessor approach")
             strategy_prints = ""
             try:
-                # Capture stdout during strategy execution
+                # Capture stdout and plots during strategy execution
                 stdout_buffer = io.StringIO()
-                with contextlib.redirect_stdout(stdout_buffer):
+                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
                     instances = strategy_func()
                 strategy_prints = stdout_buffer.getvalue()
             except Exception as strategy_error:
                 logger.error(f"Strategy function execution failed: {strategy_error}")
                 logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
                 # Return empty list and any captured output instead of crashing
-                return [], ""
+                return [], "", []
             
             # Validate and clean instances
             if not isinstance(instances, list):
@@ -457,16 +461,20 @@ class AccessorStrategyEngine:
                     valid_instances.append(instance)
             
             logger.info(f"Strategy returned {len(valid_instances)} valid instances")
-            return valid_instances, strategy_prints
+            logger.info(f"Strategy captured {len(self.plots_collection)} plots")
+            return valid_instances, strategy_prints, self.plots_collection
             
         except Exception as e:
             logger.error(f"Strategy compilation or setup failed: {e}")
             logger.debug(f"Setup error details: {type(e).__name__}: {e}")
             # Return empty list for compilation/setup errors too
-            return [], ""
+            return [], "", []
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""
+        
+        # Initialize plots collection for this execution
+        self.plots_collection = []
         
         # Create bound methods that use this engine's data accessor
         def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, 
@@ -528,7 +536,6 @@ class AccessorStrategyEngine:
             'timedelta': timedelta,
             'time': dt.time,
             
-            
             # Execution mode info
             'execution_mode': execution_mode,
             
@@ -540,7 +547,195 @@ class AccessorStrategyEngine:
             }
         }
         
+        # Add plotly imports if available
+        try:
+            import plotly.graph_objects as go
+            import plotly.express as px
+            from plotly.subplots import make_subplots
+            
+            safe_globals.update({
+                'plotly': {
+                    'graph_objects': go,
+                    'express': px,
+                    'subplots': {'make_subplots': make_subplots}
+                },
+                'go': go,
+                'px': px,
+                'make_subplots': make_subplots
+            })
+        except ImportError:
+            logger.warning("Plotly not available - plot capture disabled")
+        
         return safe_globals
+    
+    def _plotly_capture_context(self):
+        """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
+        
+        try:
+            import plotly.graph_objects as go
+            import plotly.express as px
+            from plotly.subplots import make_subplots
+        except ImportError:
+            # Return a no-op context manager if plotly not available
+            return contextlib.nullcontext()
+        
+        # Store original methods
+        original_figure_show = go.Figure.show
+        original_make_subplots = make_subplots
+        
+        # Create capture function
+        def capture_plot(fig, *args, **kwargs):
+            """Capture plot instead of showing it - extract only essential data"""
+            try:
+                # Extract essential plot data matching agent prompt format
+                plot_data = {
+                    'chart_type': self._extract_chart_type(fig),
+                    'data': self._extract_plot_data(fig),
+                    'title': self._extract_plot_title(fig),
+                    'layout': self._extract_minimal_layout(fig)
+                }
+                self.plots_collection.append(plot_data)
+            except Exception as e:
+                logger.warning(f"Failed to capture plot data: {e}")
+                # Fallback to basic plot info
+                fallback_plot = {
+                    'chart_type': 'line',
+                    'data': [],
+                    'title': 'Plot Capture Failed',
+                    'layout': {'xaxis': {'title': ''}, 'yaxis': {'title': ''}}
+                }
+                self.plots_collection.append(fallback_plot)
+        
+        # Create wrapped make_subplots that returns figures with captured show
+        def captured_make_subplots(*args, **kwargs):
+            fig = original_make_subplots(*args, **kwargs)
+            # Monkey patch the show method on this specific figure instance
+            fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
+            return fig
+        
+        @contextlib.contextmanager
+        def patch_context():
+            try:
+                # Apply patches
+                go.Figure.show = capture_plot
+                
+                # Patch make_subplots in the module where it was imported
+                plotly.subplots.make_subplots = captured_make_subplots
+                
+                yield
+                
+            finally:
+                # Restore original methods
+                go.Figure.show = original_figure_show
+                plotly.subplots.make_subplots = original_make_subplots
+        
+        return patch_context()
+
+    def _extract_chart_type(self, fig) -> str:
+        """Extract chart type from plotly figure"""
+        try:
+            if not fig.data:
+                return 'line'
+            
+            # Get the type from the first trace
+            trace_type = getattr(fig.data[0], 'type', 'scatter')
+            
+            # Map plotly trace types to standard chart types
+            type_mapping = {
+                'scatter': 'line' if getattr(fig.data[0], 'mode', '') == 'lines' else 'scatter',
+                'line': 'line',
+                'bar': 'bar',
+                'histogram': 'histogram',
+                'heatmap': 'heatmap',
+                'box': 'bar',  # Fallback
+                'violin': 'bar',  # Fallback
+                'pie': 'bar',  # Fallback
+                'candlestick': 'line',  # Fallback
+                'ohlc': 'line'  # Fallback
+            }
+            
+            return type_mapping.get(trace_type, 'line')
+        except Exception:
+            return 'line'
+
+    def _extract_plot_data(self, fig) -> list:
+        """Extract trace data from plotly figure"""
+        try:
+            data = []
+            for trace in fig.data:
+                trace_data = {
+                    'name': getattr(trace, 'name', ''),
+                    'type': getattr(trace, 'type', 'scatter')
+                }
+                
+                # Extract coordinate data
+                if hasattr(trace, 'x') and trace.x is not None:
+                    trace_data['x'] = list(trace.x)
+                if hasattr(trace, 'y') and trace.y is not None:
+                    trace_data['y'] = list(trace.y)
+                if hasattr(trace, 'z') and trace.z is not None:
+                    trace_data['z'] = list(trace.z)
+                
+                # Add mode for scatter plots
+                if hasattr(trace, 'mode'):
+                    trace_data['mode'] = trace.mode
+                
+                data.append(trace_data)
+            
+            return data
+        except Exception:
+            return []
+
+    def _extract_plot_title(self, fig) -> str:
+        """Extract title from plotly figure"""
+        try:
+            if hasattr(fig, 'layout') and hasattr(fig.layout, 'title'):
+                if hasattr(fig.layout.title, 'text') and fig.layout.title.text:
+                    return str(fig.layout.title.text)
+            return 'Untitled Plot'
+        except Exception:
+            return 'Untitled Plot'
+
+    def _extract_minimal_layout(self, fig) -> dict:
+        """Extract minimal layout information from plotly figure"""
+        try:
+            layout = {}
+            
+            if hasattr(fig, 'layout'):
+                # Extract axis titles
+                if hasattr(fig.layout, 'xaxis') and hasattr(fig.layout.xaxis, 'title'):
+                    if hasattr(fig.layout.xaxis.title, 'text'):
+                        layout['xaxis'] = {'title': str(fig.layout.xaxis.title.text) if fig.layout.xaxis.title.text else ''}
+                    else:
+                        layout['xaxis'] = {'title': ''}
+                else:
+                    layout['xaxis'] = {'title': ''}
+                
+                if hasattr(fig.layout, 'yaxis') and hasattr(fig.layout.yaxis, 'title'):
+                    if hasattr(fig.layout.yaxis.title, 'text'):
+                        layout['yaxis'] = {'title': str(fig.layout.yaxis.title.text) if fig.layout.yaxis.title.text else ''}
+                    else:
+                        layout['yaxis'] = {'title': ''}
+                else:
+                    layout['yaxis'] = {'title': ''}
+                
+                # Extract dimensions if explicitly set
+                if hasattr(fig.layout, 'width') and fig.layout.width:
+                    layout['width'] = fig.layout.width
+                if hasattr(fig.layout, 'height') and fig.layout.height:
+                    layout['height'] = fig.layout.height
+            else:
+                layout = {
+                    'xaxis': {'title': ''},
+                    'yaxis': {'title': ''}
+                }
+            
+            return layout
+        except Exception:
+            return {
+                'xaxis': {'title': ''},
+                'yaxis': {'title': ''}
+            }
 
     def _validate_strategy_code(self, strategy_code: str) -> bool:
         """Basic validation of strategy code"""

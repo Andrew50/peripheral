@@ -102,18 +102,21 @@ class StrategyGenerator:
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
-🔍 FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
-✅ get_bar_data(timeframe, columns, min_bars, filters) → numpy.ndarray
-✅ get_general_data(columns, filters) → pandas.DataFrame
+ALLOWED IMPORTS: 
+- pandas, numpy, datetime, math, plotly
 
-❌ DO NOT USE - THESE FUNCTIONS DO NOT EXIST:
+FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
+- get_bar_data(timeframe, columns, min_bars, filters) → numpy.ndarray
+- get_general_data(columns, filters) → pandas.DataFrame
+
+These functions are automatically available in the execution environment.
+
+❌ THESE FUNCTIONS DO NOT EXIST:
 get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
-
-📋 NOTE: get_bar_data() and get_general_data() are automatically available in the execution environment.
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
-- Use data accessor functions with filters (NOT deprecated tickers parameter):
+- Use data accessor functions with filters:
   * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
      
@@ -142,7 +145,6 @@ AVAILABLE FILTERS (use in filters parameter):
 - sector: "{sectors_str}"
 - industry: "{industries_str}"
 - primary_exchange: "{exchanges_str}"
-- locale: "{locales_str}" (us=United States, ca=Canada, mx=Mexico)
 - market_cap_min: float (e.g., 1000000000 for $1B minimum)
 - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
@@ -638,12 +640,13 @@ def strategy():
 ```
 
 COMMON MISTAKES TO AVOID:
-❌ qualifying_instances = df[condition].groupby('ticker').tail(1)  # WRONG - limits to 1 per ticker
-❌ latest_df = df.groupby('ticker').last()  # WRONG - only latest data
-❌ df.drop_duplicates(subset=['ticker'])  # WRONG - removes valid instances
-❌ 'signal': True  # WRONG - unnecessary field, if returned it inherently met criteria
-❌ No 'score' field  # WRONG - score is required for ranking
-❌ aggregate_mode=True for individual stock patterns  # WRONG - use only for market-wide calculations
+- qualifying_instances = df[condition].groupby('ticker').tail(1) - limits to 1 per ticker
+- latest_df = df.groupby('ticker').last() - only latest data
+- df.drop_duplicates(subset=['ticker']) - this removes valid instances
+- 'signal': True - unnecessary field, if returned it inherently met criteria
+- No 'score' field - score is required for ranking
+- aggregate_mode=True for individual stock patterns - use only for market-wide calculations
+- using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
@@ -670,7 +673,7 @@ TICKER EXTRACTION FROM PROMPTS:
 - Common ticker patterns: AAPL, TSLA, AMZN, GOOGL, MSFT, NVDA
 
 SECURITY RULES:
-- Only use whitelisted imports: pandas, numpy, datetime, math
+- Only use whitelisted imports
 - CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
 - No file operations, network access, or dangerous functions
 - No exec, eval, or dynamic code execution
@@ -682,18 +685,23 @@ DATA VALIDATION:
 - Use proper data type conversions (int, float, str)
 - Handle edge cases like division by zero
 
-PRINTING DATA (IMPORTANT): 
+PRINTING DATA (REQUIRED): 
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
 
+PLOTLY PLOT GENERATION:
+- Use plotly to generate plots of useful visualizations of the data
+- Histograms of performance metrics, returns, etc 
+- Always show the plot using .show()
+- Almost always include plots in the strategy to help the user understand the data
 
 RETURN FORMAT:
 - Return List[Dict] where each dict contains:
   * 'ticker': str (e.g., "MRNA", "AAPL")
   * 'timestamp': int (Unix timestamp)
   * 'entry_price': float (price at instance time - open, close, etc.)
-  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance)
-  * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc.)
+  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
+  * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
 - DO NOT include 'signal': True - it's redundant
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
