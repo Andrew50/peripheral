@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union, Tuple
 import json
 import time
+import io
+import contextlib
 
 from data_accessors import DataAccessorProvider, get_bar_data, get_general_data
 from validator import SecurityValidator, SecurityError
@@ -81,7 +83,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, strategy_prints = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='backtest'
             )
@@ -95,6 +97,7 @@ class AccessorStrategyEngine:
                 'success': True,
                 'execution_mode': 'backtest',
                 'instances': instances,
+                'strategy_prints': strategy_prints,
                 'summary': {
                     'total_instances': len(instances),
                     'symbols_analyzed': len(symbols),
@@ -112,7 +115,8 @@ class AccessorStrategyEngine:
             return {
                 'success': False,
                 'error': str(e),
-                'execution_mode': 'backtest'
+                'execution_mode': 'backtest',
+                'strategy_prints': ''
             }
     
     async def execute_validation(
@@ -177,7 +181,7 @@ class AccessorStrategyEngine:
             logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
-            instances = await self._execute_strategy(
+            instances,  _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation'
             )
@@ -203,6 +207,7 @@ class AccessorStrategyEngine:
                 'success': False,
                 'error': str(e),
                 'execution_mode': 'validation',
+                'strategy_prints': '',
                 'execution_time_ms': int(execution_time)
             }
 
@@ -257,7 +262,7 @@ class AccessorStrategyEngine:
             logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='screening'
             )
@@ -330,7 +335,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances = await self._execute_strategy(
+            instances, _ = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='alert'
             )
@@ -390,7 +395,7 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         execution_mode: str
-    ) -> List[Dict]:
+    ) -> Tuple[List[Dict], str]:
         """Execute the strategy function with data accessor context"""
         
         # Validate strategy code before execution
@@ -418,15 +423,20 @@ class AccessorStrategyEngine:
             if not strategy_func:
                 raise ValueError("No strategy function found. Function should be named 'strategy'")
             
-            # Execute strategy function with proper error handling
+            # Execute strategy function with proper error handling and stdout capture
             logger.info(f"Executing strategy function using data accessor approach")
+            strategy_prints = ""
             try:
-                instances = strategy_func()
+                # Capture stdout during strategy execution
+                stdout_buffer = io.StringIO()
+                with contextlib.redirect_stdout(stdout_buffer):
+                    instances = strategy_func()
+                strategy_prints = stdout_buffer.getvalue()
             except Exception as strategy_error:
                 logger.error(f"Strategy function execution failed: {strategy_error}")
                 logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
-                # Return empty list instead of crashing - let the calling code handle empty results
-                return []
+                # Return empty list and any captured output instead of crashing
+                return [], ""
             
             # Validate and clean instances
             if not isinstance(instances, list):
@@ -446,13 +456,13 @@ class AccessorStrategyEngine:
                     valid_instances.append(instance)
             
             logger.info(f"Strategy returned {len(valid_instances)} valid instances")
-            return valid_instances
+            return valid_instances, strategy_prints
             
         except Exception as e:
             logger.error(f"Strategy compilation or setup failed: {e}")
             logger.debug(f"Setup error details: {type(e).__name__}: {e}")
             # Return empty list for compilation/setup errors too
-            return []
+            return [], ""
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""

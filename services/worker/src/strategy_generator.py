@@ -667,7 +667,7 @@ PATTERN RECOGNITION:
 TICKER EXTRACTION FROM PROMPTS:
 - If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
 - If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
-- Common ticker patterns: AAPL, MRNA, TSLA, AMZN, GOOGL, MSFT, NVDA
+- Common ticker patterns: AAPL, TSLA, AMZN, GOOGL, MSFT, NVDA
 
 SECURITY RULES:
 - Only use whitelisted imports: pandas, numpy, datetime, math
@@ -681,6 +681,10 @@ DATA VALIDATION:
 - Check for None/empty data at every step
 - Use proper data type conversions (int, float, str)
 - Handle edge cases like division by zero
+
+PRINTING DATA: 
+- Use print() to print useful data for the user
+- This should include things like number of instances, averages, medians, standard deviations, and other useful or interesting metrics.
 
 RETURN FORMAT:
 - Return List[Dict] where each dict contains:

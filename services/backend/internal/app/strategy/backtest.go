@@ -45,8 +45,9 @@ type BacktestSummary struct {
 
 // BacktestResponse represents the complete backtest response (API compatibility)
 type BacktestResponse struct {
-	Instances []BacktestResult `json:"instances"`
-	Summary   BacktestSummary  `json:"summary"`
+	Instances      []BacktestResult `json:"instances"`
+	Summary        BacktestSummary  `json:"summary"`
+	StrategyPrints string           `json:"strategyPrints,omitempty"`
 }
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
@@ -58,6 +59,7 @@ type WorkerBacktestResult struct {
 	Summary            WorkerSummary          `json:"summary"`
 	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
 	ExecutionTimeMs    int                    `json:"execution_time_ms"`
+	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
 	ErrorMessage       string                 `json:"error_message,omitempty"`
 }
 
@@ -139,8 +141,9 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	summary := convertWorkerSummaryToBacktestSummary(result.Summary)
 
 	response := BacktestResponse{
-		Instances: instances,
-		Summary:   summary,
+		Instances:      instances,
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
 	}
 
 	// Cache the results
