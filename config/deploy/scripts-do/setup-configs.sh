@@ -19,9 +19,9 @@ set -Eeuo pipefail
 : "${STRIPE_WEBHOOK_SECRET:?Missing STRIPE_WEBHOOK_SECRET}"
 : "${STRIPE_PUBLISHABLE_KEY:?Missing STRIPE_PUBLISHABLE_KEY}"
 
-# Optional Telegram secrets (for monitoring alerts)
-TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-} 
-TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-} 
+# Optional Telegram secrets (for monitoring alerts) - already base64 encoded
+TELEGRAM_BOT_TOKEN_B64=${TELEGRAM_BOT_TOKEN_B64:-} 
+TELEGRAM_CHAT_ID_B64=${TELEGRAM_CHAT_ID_B64:-} 
 : "${CONFIG_DIR:?Missing CONFIG_DIR}" 
 : "${TMP_DIR:?Missing TMP_DIR}"
 : "${INGRESS_HOST:?Error: INGRESS_HOST environment variable is required.}"
@@ -43,9 +43,8 @@ STRIPE_SECRET_B64=$(echo -n "$STRIPE_SECRET_KEY" | base64 -w 0)
 STRIPE_WEBHOOK_B64=$(echo -n "$STRIPE_WEBHOOK_SECRET" | base64 -w 0)
 STRIPE_PUBLISHABLE_B64=$(echo -n "$STRIPE_PUBLISHABLE_KEY" | base64 -w 0)
 
-# Encode Telegram secrets (may be empty)
-TELEGRAM_BOT_TOKEN_B64=$(echo -n "$TELEGRAM_BOT_TOKEN" | base64 -w 0)
-TELEGRAM_CHAT_ID_B64=$(echo -n "$TELEGRAM_CHAT_ID" | base64 -w 0)
+# Telegram secrets are already base64 encoded from GitHub secrets
+# No need to encode them again
 
 export DB_B64 REDIS_B64 POLYGON_B64 GEMINI_B64 GOOGLE_ID_B64 GOOGLE_SECRET_B64 JWT_B64 CLOUDFLARE_TOKEN_B64 TELEGRAM_BOT_TOKEN_B64 TELEGRAM_CHAT_ID_B64 OPENAI_B64 STRIPE_SECRET_B64 STRIPE_WEBHOOK_B64 STRIPE_PUBLISHABLE_B64
 

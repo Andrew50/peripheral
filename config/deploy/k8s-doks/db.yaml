@@ -36,6 +36,10 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: PGDATA                    # ← new: tell Postgres where to keep its cluster 
               value: /home/postgres/pgdata/data
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 120"]
           resources:
             requests:
               cpu: 100m

@@ -52,9 +52,9 @@ on:
         required: true
       CLOUDFLARE_TUNNEL_TOKEN:
         required: true
-      TELEGRAM_BOT_TOKEN:
+      TELEGRAM_BOT_TOKEN_B64:
         required: true
-      TELEGRAM_CHAT_ID:
+      TELEGRAM_CHAT_ID_B64:
         required: true
       OPENAI_API_KEY:
         required: true
@@ -88,8 +88,8 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
@@ -151,8 +151,8 @@ jobs:
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
-          echo "TELEGRAM_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
-          echo "TELEGRAM_CHAT_ID: [$(if [ -n "$TELEGRAM_CHAT_ID" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"

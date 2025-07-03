@@ -34,7 +34,7 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 	log.Printf("Found %d active tickers to process", len(tickers))
 
 	// FIXED: Reduce concurrent workers from 10 to 3 to prevent lock contention
-	const maxWorkers = 3
+	const maxWorkers = 1
 	semaphore := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 	var completed int64
