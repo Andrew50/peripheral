@@ -13,7 +13,11 @@ RUN npm install
 # Copy the rest of the code
 COPY . .
 
-# Build the application
+# Accept build argument for environment
+ARG VITE_ENVIRONMENT=development
+ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
+
+# Build the application with environment variable
 RUN npm run build
 
 # Production stage
