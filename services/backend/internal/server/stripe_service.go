@@ -28,7 +28,7 @@ func init() {
 
 // StripeCreateCheckoutSession creates a new Stripe Checkout session for subscription
 func StripeCreateCheckoutSession(userID int, priceID, userEmail string) (*stripe.CheckoutSession, error) {
-	frontendURL := getStripeEnvOrDefault("FRONTEND_URL", "https://atlantis.trading")
+	frontendURL := getStripeEnvOrDefault("FRONTEND_URL", "https://peripheral.io")
 
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
@@ -56,7 +56,7 @@ func StripeCreateCheckoutSession(userID int, priceID, userEmail string) (*stripe
 
 // StripeCreatePortalSession creates a new Stripe billing portal session
 func StripeCreatePortalSession(stripeCustomerID string) (*stripe.BillingPortalSession, error) {
-	frontendURL := getStripeEnvOrDefault("FRONTEND_URL", "https://atlantis.trading")
+	frontendURL := getStripeEnvOrDefault("FRONTEND_URL", "https://peripheral.io")
 
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripe.String(stripeCustomerID),
