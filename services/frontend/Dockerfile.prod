@@ -13,11 +13,13 @@ RUN npm install
 # Copy the rest of the code
 COPY . .
 
-# Accept build argument for environment
+# Accept build arguments for environment and Stripe key
 ARG VITE_ENVIRONMENT=development
+ARG VITE_PUBLIC_STRIPE_KEY
 ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
+ENV VITE_PUBLIC_STRIPE_KEY=$VITE_PUBLIC_STRIPE_KEY
 
-# Build the application with environment variable
+# Build the application with environment variables
 RUN npm run build
 
 # Production stage
