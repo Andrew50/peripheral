@@ -2,6 +2,7 @@
 package agent
 
 import (
+	"backend/internal/app/strategy"
 	"backend/internal/data"
 	"context"
 	"encoding/json"
@@ -326,44 +327,57 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 }
 
+// TableInstructionData holds the parameters for generating a table from cached data
+type BacktestTableChunkData struct {
+	StrategyID int      `json:"strategyId"` // strategyId
+	Columns    []string `json:"columns"`    // Internal column names to include
+}
+
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	var backtestResults *strategy.BacktestResponse
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
-			// Attempt to parse the instruction content
-			instructionBytes, err := json.Marshal(chunk.Content)
+			// Convert chunk.Content to JSON bytes then unmarshal to struct
+			contentBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
-				// Replace with an error chunk
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not process table instruction: %v]", err),
+					Content: fmt.Sprintf("[Internal Error: Could not marshal chunk content: %v]", err),
 				})
 				continue
 			}
 
-			var instructionData TableInstructionData
-			if err := json.Unmarshal(instructionBytes, &instructionData); err != nil {
-				// Replace with an error chunk
+			var chunkContent BacktestTableChunkData
+			err = json.Unmarshal(contentBytes, &chunkContent)
+			if err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not parse table instruction: %v]", err),
+					Content: fmt.Sprintf("[Internal Error: Could not parse backtest table chunk: %v]", err),
 				})
 				continue
 			}
-
-			// Generate the actual table chunk
-			tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, instructionData)
+			if backtestResults == nil {
+				backtestResults, err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
+				if err != nil {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type:    "text",
+						Content: fmt.Sprintf("[Internal Error: Could not get backtest results: %v]", err),
+					})
+					continue
+				}
+			}
+			/*tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, backtestResults)
 			if err != nil {
-				// Replace with an error chunk
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not generate table: %v]", err),
+					Content: fmt.Sprintf("[Internal Error: Could not generate backtest table: %v]", err),
 				})
-			} else {
-				processedChunks = append(processedChunks, *tableChunk)
-			}
+				continue
+			}*/
+			//processedChunks = append(processedChunks, *tableChunk)
 		} else {
 			// Keep non-instruction chunks as they are
 			processedChunks = append(processedChunks, chunk)

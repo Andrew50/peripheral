@@ -96,12 +96,13 @@ class DataAccessorProvider:
 
     def get_bar_data(self, timeframe: str = "1d", columns: List[str] = None, 
                      min_bars: int = 1, filters: Dict[str, any] = None, 
-                     aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
+                     aggregate_mode: bool = False, extended_hours: bool = False,
+                     start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
         
         Args:
-            timeframe: Data timeframe ('1d', '1h', '5m', etc.')
+            timeframe: Data timeframe ('1d', '1h', '5m', etc.)
             columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
             filters: Dict of filtering criteria for securities table fields:
@@ -116,6 +117,8 @@ class DataAccessorProvider:
             aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
             extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                            Only affects intraday timeframes - daily and above ignore this parameter
+            start_date: Optional start date for filtering data (datetime object)
+            end_date: Optional end date for filtering data (datetime object)
                            
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -160,10 +163,10 @@ class DataAccessorProvider:
             
             if should_batch:
                 logger.info(f"🔄 Using batched data fetching for large dataset")
-                return self._get_bar_data_batched(timeframe, columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_batched(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
             else:
                 # Use original method for smaller datasets or when aggregate_mode is True
-                return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
                 
         except Exception as e:
             logger.error(f"Error in get_bar_data: {e}")
@@ -189,7 +192,8 @@ class DataAccessorProvider:
         return False
     
     def _get_bar_data_batched(self, timeframe: str = "1d", columns: List[str] = None, 
-                            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                            start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """Get bar data using batching approach for large datasets"""
         try:
             batch_size = 1000
@@ -239,7 +243,9 @@ class DataAccessorProvider:
                         columns=columns,
                         min_bars=min_bars,
                         filters=batch_filters,
-                        extended_hours=extended_hours
+                        extended_hours=extended_hours,
+                        start_date=start_date,
+                        end_date=end_date
                     )
                     
                     if batch_result is not None and len(batch_result) > 0:
@@ -393,7 +399,8 @@ class DataAccessorProvider:
             }
     
     def _get_bar_data_single(self, timeframe: str = "1d", columns: List[str] = None, 
-                           min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                           min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                           start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
@@ -412,6 +419,8 @@ class DataAccessorProvider:
                     - active: bool (default True if not specified)
             extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                            Only affects intraday timeframes - daily and above ignore this parameter
+            start_date: Optional start date for filtering data (datetime object)
+            end_date: Optional end date for filtering data (datetime object)
             
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -461,7 +470,7 @@ class DataAccessorProvider:
             if isinstance(timeframe_config, dict):
                 # Custom aggregation needed
                 return self._get_aggregated_bar_data(
-                    timeframe_config, columns, min_bars, filters, extended_hours
+                    timeframe_config, columns, min_bars, filters, extended_hours, start_date, end_date
                 )
             else:
                 # Direct table access
@@ -478,10 +487,31 @@ class DataAccessorProvider:
             if not safe_columns:
                 return np.array([])
             
-            # Determine date range based on execution context
+            # Determine date range - check direct parameters first, then execution context
             context = self.execution_context
             
-            if context.get('start_date') and context.get('end_date'):
+            # Priority 1: Direct date parameters from function call
+            if start_date and end_date:
+                # Convert datetime objects to Unix timestamps
+                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
+                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s AND EXTRACT(EPOCH FROM o.timestamp) <= %s"
+                date_params = [start_timestamp, end_timestamp]
+                logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
+            elif start_date:
+                # Only start date provided
+                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s"
+                date_params = [start_timestamp]
+                logger.info(f"📅 Using direct start date filter: {start_date}")
+            elif end_date:
+                # Only end date provided
+                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) <= %s"
+                date_params = [end_timestamp]
+                logger.info(f"📅 Using direct end date filter: {end_date}")
+            # Priority 2: Execution context date range
+            elif context.get('start_date') and context.get('end_date'):
                 # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
                 timeframe_delta = self._get_timeframe_delta(timeframe)
                 start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
@@ -1079,7 +1109,8 @@ class DataAccessorProvider:
             return pd.DataFrame()
 
     def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], columns: List[str] = None, 
-                                min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                                min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                                start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get aggregated OHLCV data by combining base timeframe data into custom intervals
         
@@ -1107,7 +1138,7 @@ class DataAccessorProvider:
                 base_interval_minutes = 7 * 24 * 60  # 1-week source
             else:
                 # Fallback to daily data
-                return self._get_bar_data_single("1d", columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_single("1d", columns, min_bars, filters, extended_hours, start_date, end_date)
             
             # Calculate how many base intervals we need to get enough aggregated bars
             base_bars_needed = min_bars * (interval_minutes // base_interval_minutes)
@@ -1126,7 +1157,7 @@ class DataAccessorProvider:
             base_data = self._get_bar_data_single(
                 source_timeframe,
                 ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"],
-                base_bars_needed, filters, extended_hours
+                base_bars_needed, filters, extended_hours, start_date, end_date
             )
             
             if base_data is None or len(base_data) == 0:
@@ -1287,14 +1318,15 @@ def get_data_accessor() -> DataAccessorProvider:
     return _data_accessor
 
 def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
-                 aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
+                 aggregate_mode: bool = False, extended_hours: bool = False,
+                 start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
     """
     Global function for strategy access to bar data with intelligent batching
     
     Args:
         timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-        columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
-        min_bars: Minimum number of bars required per security
+        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+        min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
         filters: Dict of filtering criteria for securities table fields:
                 - tickers: List[str] (e.g., ['AAPL', 'MRNA']) (None = all active securities)
                 - sector: str (e.g., 'Technology', 'Healthcare')
@@ -1307,6 +1339,8 @@ def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int
         aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
         extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                        Only affects intraday timeframes - daily and above ignore this parameter
+        start_date: Optional start date for filtering data (datetime object)
+        end_date: Optional end date for filtering data (datetime object)
         
     Returns:
         numpy.ndarray with requested bar data
@@ -1314,7 +1348,7 @@ def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int
     accessor = get_data_accessor()
     
     # Use new API directly
-    return accessor.get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours)
+    return accessor.get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date)
 
 def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) -> pd.DataFrame:
     """
@@ -1380,36 +1414,6 @@ def get_price_data(symbol: str, timeframe: str = "1d", days: int = 30, extended_
         timeframe=timeframe,
         filters={'tickers': [symbol]},
         min_bars=min_bars,
-        extended_hours=extended_hours
-    )
-
-
-def get_historical_data(symbol: str, timeframe: str = "1d", periods: int = 30, 
-                       offset: int = 0, extended_hours: bool = False) -> np.ndarray:
-    """
-    Legacy function: Get historical price data with lag/offset
-    
-    Args:
-        symbol: Ticker symbol (e.g., 'AAPL')
-        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-        periods: Number of periods to fetch
-        offset: Number of periods to offset (lag) - currently not implemented
-        extended_hours: If True, include premarket and after-hours data for intraday timeframes
-        
-    Returns:
-        numpy.ndarray with historical OHLCV data
-        
-    Note:
-        The offset parameter is not currently implemented in the underlying system.
-        This function delegates to get_bar_data() for now.
-    """
-    if offset > 0:
-        logger.warning(f"get_historical_data: offset parameter ({offset}) is not implemented, ignoring")
-
-    return get_bar_data(
-        timeframe=timeframe,
-        filters={'tickers': [symbol]},
-        min_bars=periods,
         extended_hours=extended_hours
     )
 

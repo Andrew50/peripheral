@@ -106,7 +106,7 @@ ALLOWED IMPORTS:
 - pandas, numpy, datetime, math, plotly
 
 FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
-- get_bar_data(timeframe, columns, min_bars, filters) → numpy.ndarray
+- get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
 - get_general_data(columns, filters) → pandas.DataFrame
 
 These functions are automatically available in the execution environment.
@@ -119,6 +119,8 @@ CRITICAL REQUIREMENTS:
 - Use data accessor functions with filters:
   * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
      Columns: ticker, timestamp, open, high, low, close, volume
+  * get_bar_data(timeframe="5m", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> numpy array
+     For precise date filtering - essential for multi-timeframe strategies and exact stop loss timing
      
      SUPPORTED TIMEFRAMES:
      • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
@@ -398,12 +400,18 @@ COMMON MISTAKES TO AVOID:
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
 - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
+- ❌ BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
+- ❌ BAD STOP LOSS: exit_price = stop_loss_price  # Wrong when gap occurs
+- ❌ NO DATE FILTERING: Using only daily data for precise stop timing
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
 ✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
 ✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
 ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
+✅ GOOD STOP LOSS: if open <= stop: exit_price = open  # CORRECT - handles gaps
+✅ GOOD STOP LOSS: Check gap first, then intraday  # CORRECT - proper order
+✅ DATE FILTERING: get_bar_data(start_date=day_start, end_date=day_end)  # CORRECT - precise timing
 
 PATTERN RECOGNITION:
 - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
@@ -436,10 +444,29 @@ DATA VALIDATION:
 - Use proper data type conversions (int, float, str)
 - Handle edge cases like division by zero
 
-**VERY IMPORTANT**: 
-BE EXTREMELY CAREFUL WITH stop loss prices. The next day might gap above/below the stop loss price, which results in a loss greater than the stop. 
-Ensure THIS IS PROPERLY ACCOUNTED FOR. You need to get the first price after the stop is triggered. IF THE STOP IS TRIGGERED, YOU SHOULD MAKE SURE 
-THAT THE STOCK DID NOT GAP PAST THE STOP LOSS PRICE. IF IT DID, YOU SHOULD USE THE NEXT DAY'S OPEN PRICE AS THE STOP LOSS PRICE.
+**CRITICAL STOP LOSS IMPLEMENTATION**: 
+BE EXTREMELY CAREFUL WITH stop loss prices. Markets can gap through stops, resulting in much worse exits than expected.
+
+REQUIRED STOP LOSS PATTERN:
+```python
+# Step 1: Check for overnight gaps FIRST
+if day_open <= stop_loss_price:
+    exit_price = day_open  # ✅ Use actual gap-down price, NOT stop price
+    exit_reason = 'gap_below_stop'
+# Step 2: Only then check intraday stop hits
+elif day_low <= stop_loss_price:
+    exit_price = stop_loss_price  # ✅ Safe - no gap occurred
+    exit_reason = 'intraday_stop_hit'
+```
+
+ENHANCED PRECISION WITH DATE FILTERING:
+For exact stop timing, use multi-timeframe analysis:
+1. Daily data identifies potential stop days
+2. Use start_date/end_date to get intraday bars for specific days
+3. Walk through intraday bars to find exact stop hit timing
+4. Always check gap-down scenarios first before intraday analysis
+
+Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
 
 
 PRINTING DATA (REQUIRED): 
