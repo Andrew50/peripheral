@@ -132,10 +132,13 @@ CRITICAL REQUIREMENTS:
      - Position Trading: Use "1d", "1w", "2w"
      - Multi-timeframe: Combine different intervals for confirmation
      
-     IMPORTANT: min_bars cannot exceed 10,000 - use minimum needed:
-       - 1 bar: Simple current patterns (volume spikes, price thresholds)
-       - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
-       - 20+ bars: Technical indicators (moving averages, RSI)
+     Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
+        - This cannot exceed 10,000. Use the minimum needed.
+        - 1 bar: Simple current patterns (volume spikes, price thresholds)
+        - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
+        - 20+ bars: Technical indicators (moving averages, RSI)
+        - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
+
   * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
      Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
   * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
@@ -451,7 +454,7 @@ PLOTLY PLOT GENERATION:
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp), they cause JSON serialization errors
 
 RETURN FORMAT:
-- Return List[Dict] where each dict contains:
+- *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (e.g., "MRNA", "AAPL")
   * 'timestamp': int (Unix timestamp)
   * 'entry_price': float (price at instance time - open, close, etc.)
@@ -460,6 +463,7 @@ RETURN FORMAT:
 - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
+- ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
     
@@ -628,18 +632,13 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 # For editing - keep it minimal
                 user_prompt = f"""EDIT REQUEST: {prompt}
 
-CURRENT STRATEGY: {existing_strategy.get('name', 'Strategy')}
-{self._get_code_summary(existing_strategy.get('pythonCode', ''))}
+                CURRENT STRATEGY: {existing_strategy.get('name', 'Strategy')}
+                {self._get_code_summary(existing_strategy.get('pythonCode', ''))}
 
-Generate the updated strategy function."""
+            Generate the updated strategy function."""
             else:
-                # For new strategy - extract tickers and enhance prompt
-                extracted_tickers = self._extract_tickers_from_prompt(prompt)
-                ticker_context = ""
-                if extracted_tickers:
-                    ticker_context = f"\n\nDETECTED TICKERS: {extracted_tickers} - Use filters={{'tickers': {extracted_tickers}}} in your data accessor calls."
-                
-                user_prompt = f"""CREATE STRATEGY: {prompt}{ticker_context}"""
+
+                user_prompt = f"""CREATE STRATEGY: {prompt}"""
 
             
             # Add retry-specific guidance with error context
@@ -664,29 +663,15 @@ Generate the updated strategy function."""
                 try:
                     logger.info(f"Attempting generation with model: {model_name}")
                     
-                    # Adjust parameters for o3 models (similar to o1, they don't support temperature/max_tokens the same way)
-                    if model_name.startswith("o3"):
-                        # Set a timeout for the OpenAI API call to prevent hanging
-                        logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 180s)")
-                        
-                        # Use the timeout parameter for OpenAI API calls
-                        response = self.openai_client.responses.create(
-                            model=model_name,
-                            input=f"{user_prompt}",
-                            instructions=f"{system_instruction}",
-                            user=f"user:{userID}",
-                            timeout=180.0  # 3 minute timeout for o3 model
-                        )
-                    else:
-                        logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
-                        
-                        response = self.openai_client.responses.create(
-                            model=model_name,
-                            input=f"{user_prompt}",
-                            instructions=f"{system_instruction}",
-                            user=f"user:{userID}",
-                            timeout=120.0  # 2 minute timeout for other models
-                        )
+                    logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
+                    
+                    response = self.openai_client.responses.create(
+                        model=model_name,
+                        input=f"{user_prompt}",
+                        instructions=f"{system_instruction}",
+                        user=f"user:{userID}",
+                        timeout=120.0  # 2 minute timeout for other models
+                    )
                     
                     strategy_code = response.output_text
                     # Extract Python code from response
@@ -997,32 +982,3 @@ Generate the updated strategy function."""
                     logger.debug("🔌 Database connection closed")
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}") 
-
-    def _extract_tickers_from_prompt(self, prompt: str) -> List[str]:
-        """Extract ticker symbols from user prompt"""
-        import re
-        
-        # Common ticker patterns - look for 2-5 uppercase letters
-        ticker_pattern = r'\b[A-Z]{2,5}\b'
-        potential_tickers = re.findall(ticker_pattern, prompt.upper())
-        
-        # Known common tickers for validation
-        known_tickers = {
-            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 
-            'MRNA', 'PFIZER', 'JNJ', 'V', 'JPM', 'UNH', 'HD', 'PG', 'MA', 'DIS',
-            'ADBE', 'PYPL', 'INTC', 'CRM', 'VZ', 'KO', 'NKE', 'T', 'NFLX', 'ABT',
-            'XOM', 'TMO', 'CVX', 'ACN', 'COST', 'AVGO', 'TXN', 'LLY', 'WMT', 'DHR',
-            'NEE', 'BMY', 'QCOM', 'HON', 'UPS', 'LOW', 'AMD', 'ORCL', 'MDT', 'IBM',
-            'LMT', 'AMT', 'SPGI', 'PFE', 'RTX', 'SBUX', 'CAT', 'DE', 'AXP', 'GS',
-            'BLK', 'MMM', 'BKNG', 'ADP', 'TJX', 'CHTR', 'VRTX', 'ISRG', 'SYK', 'NOW'
-        }
-        
-        # Filter to known tickers and remove common words that match pattern
-        exclude_words = {'STOCK', 'STOCKS', 'TRADE', 'TRADES', 'PRICE', 'MARKET', 'DATA', 'TIME', 'WHEN', 'WHERE', 'WHAT', 'WITH'}
-        
-        valid_tickers = []
-        for ticker in potential_tickers:
-            if ticker in known_tickers and ticker not in exclude_words:
-                valid_tickers.append(ticker)
-        
-        return list(set(valid_tickers))  # Remove duplicates
