@@ -3,7 +3,7 @@
 	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
 	import { writable } from 'svelte/store';
 	import { onMount } from 'svelte';
-	import { getStripePrice } from '$lib/config/pricing';
+	import { getStripePrice, PRICING_CONFIG, formatPrice } from '$lib/config/pricing';
 
 	let subscriptionStatus = writable('inactive');
 	let currentPlan = writable('');
@@ -17,6 +17,12 @@
 		currentPeriodEnd: null
 	};
 
+	// Get available plans from pricing config
+	const plans = PRICING_CONFIG.PLANS;
+	const paidPlans = Object.entries(plans).filter(
+		([key, plan]) => key !== 'free' && 'priceId' in plan && plan.priceId
+	);
+
 	onMount(() => {
 		// In a real implementation, you'd fetch user subscription status from backend
 		// For now, we'll use mock data
@@ -29,9 +35,14 @@
 		error.set('');
 
 		try {
+			// Validate that this is a paid plan (not free/starter)
+			if (priceId !== 'plus' && priceId !== 'pro') {
+				throw new Error('Invalid plan: Only paid plans can create checkout sessions');
+			}
+
 			const response = await privateRequest<{ sessionId: string; url: string }>(
 				'createCheckoutSession',
-				{ priceId: getStripePrice(priceId as 'starter' | 'plus' | 'pro') }
+				{ priceId: getStripePrice(priceId as 'plus' | 'pro') }
 			);
 
 			await redirectToCheckout(response.sessionId);
@@ -109,56 +120,32 @@
 			<div class="plans-section">
 				<h2>Choose Your Plan</h2>
 				<div class="plans-grid">
-					<!-- Starter Plan -->
-					<div class="plan-card">
-						<div class="plan-header">
-							<h3>Starter</h3>
-							<div class="plan-price">
-								<span class="price">$19</span>
-								<span class="period">/month</span>
+					{#each paidPlans as [planKey, plan]}
+						<div class="plan-card" class:featured={'popular' in plan && plan.popular}>
+							<div class="plan-header">
+								{#if 'popular' in plan && plan.popular}
+									<div class="popular-badge">Most Popular</div>
+								{/if}
+								<h3>{plan.name}</h3>
+								<div class="plan-price">
+									<span class="price">{formatPrice(plan.price)}</span>
+									<span class="period">{plan.period}</span>
+								</div>
 							</div>
+							<ul class="plan-features">
+								{#each plan.features as feature}
+									<li>{feature}</li>
+								{/each}
+							</ul>
+							<button
+								class="btn btn-primary"
+								on:click={() => handleUpgrade(planKey)}
+								disabled={isLoading}
+							>
+								{isLoading ? 'Loading...' : plan.cta}
+							</button>
 						</div>
-						<ul class="plan-features">
-							<li>Real-time market data</li>
-							<li>Basic charts and analytics</li>
-							<li>5 watchlists</li>
-							<li>Email support</li>
-						</ul>
-						<button
-							class="btn btn-primary"
-							on:click={() => handleUpgrade('starter')}
-							disabled={isLoading}
-						>
-							{isLoading ? 'Loading...' : 'Choose Starter'}
-						</button>
-					</div>
-
-					<!-- Pro Plan -->
-					<div class="plan-card featured">
-						<div class="plan-header">
-							<div class="popular-badge">Most Popular</div>
-							<h3>Pro</h3>
-							<div class="plan-price">
-								<span class="price">$49</span>
-								<span class="period">/month</span>
-							</div>
-						</div>
-						<ul class="plan-features">
-							<li>Everything in Starter</li>
-							<li>Advanced analytics</li>
-							<li>Unlimited watchlists</li>
-							<li>AI-powered insights</li>
-							<li>Priority support</li>
-							<li>Strategy backtesting</li>
-						</ul>
-						<button
-							class="btn btn-primary"
-							on:click={() => handleUpgrade('pro')}
-							disabled={isLoading}
-						>
-							{isLoading ? 'Loading...' : 'Choose Pro'}
-						</button>
-					</div>
+					{/each}
 				</div>
 			</div>
 		{/if}
