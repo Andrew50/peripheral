@@ -36,6 +36,10 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: PGDATA                    # ← new: tell Postgres where to keep its cluster 
               value: /home/postgres/pgdata/data
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/app/graceful-shutdown.sh"]
           resources:
             requests:
               cpu: 100m
@@ -50,7 +54,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodSeconds: 90
+      terminationGracePeriodSeconds: 150
 
 ---
 apiVersion: v1

@@ -52,9 +52,10 @@ services:
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+    shm_size: 2g
     deploy:
       resources:
         limits:
@@ -70,11 +71,11 @@ services:
         condition: service_healthy
     volumes:
       - ../../services/frontend:/app
-      - ../../services/frontend/node_modules:/app/node_modules
       - /app/node_modules
     environment:
       - WATCHPACK_POLLING=true #enable polling
       - BACKEND_URL=http://backend:5058
+      - VITE_ENVIRONMENT=development
     ports:
       - "5173:5173"
     restart: unless-stopped

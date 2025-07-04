@@ -24,67 +24,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# Add connection pool management
-class ConnectionPoolManager:
-    _instance = None
-    _lock = threading.Lock()
-    
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if not self._initialized:
-            self.pool = None
-            self.max_connections = 10  # Limit per worker
-            self.connection_timeout = 30
-            self.retry_attempts = 3
-            self.retry_delay = 1
-            self._initialized = True
-    
-    @contextmanager
-    def get_connection(self):
-        """Get database connection with retry logic and timeout"""
-        connection = None
-        for attempt in range(self.retry_attempts):
-            try:
-                connection = psycopg2.connect(
-                    host=os.getenv('DB_HOST', 'localhost'),
-                    port=os.getenv('DB_PORT', '5432'),
-                    user=os.getenv('DB_USER', 'postgres'),
-                    password=os.getenv('DB_PASSWORD', ''),
-                    database=os.getenv('POSTGRES_DB', 'postgres'),
-                    connect_timeout=self.connection_timeout,
-                    application_name=f'worker_{os.getpid()}'
-                )
-                yield connection
-                break
-            except psycopg2.OperationalError as e:
-                if "recovery mode" in str(e) and attempt < self.retry_attempts - 1:
-                    logging.warning(f"Database in recovery mode, retrying in {self.retry_delay}s (attempt {attempt + 1}/{self.retry_attempts})")
-                    time.sleep(self.retry_delay)
-                    self.retry_delay *= 2  # Exponential backoff
-                    continue
-                else:
-                    raise
-            except Exception as e:
-                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
-                if attempt < self.retry_attempts - 1:
-                    time.sleep(self.retry_delay)
-                    continue
-                else:
-                    raise
-            finally:
-                if connection:
-                    connection.close()
-
-# Global connection pool instance
-connection_pool = ConnectionPoolManager()
-
 class DataAccessorProvider:
     """Provides optimized data accessor functions for strategy execution"""
     
@@ -104,29 +43,66 @@ class DataAccessorProvider:
             'end_date': None
         }
         
+    @contextmanager
     def get_connection(self):
-        """Get database connection using pooled connection with retry logic"""
-        # Use the global connection pool instead of direct connection
-        return connection_pool.get_connection()
-    
+        """Get database connection with retry logic and timeout"""
+        connection = None
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                connection = psycopg2.connect(
+                    host=self.db_config['host'],
+                    port=self.db_config['port'],
+                    user=self.db_config['user'],
+                    password=self.db_config['password'],
+                    database=self.db_config['database'],
+                    connect_timeout=30,
+                    application_name=f'worker_{os.getpid()}'
+                )
+                yield connection
+                break
+            except psycopg2.OperationalError as e:
+                if "recovery mode" in str(e) and attempt < max_retries - 1:
+                    logging.warning(f"Database in recovery mode, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+            finally:
+                if connection:
+                    connection.close()
+
     def set_execution_context(self, mode: str, symbols: List[str] = None, 
-                             start_date: datetime = None, end_date: datetime = None):
+                             start_date: datetime = None, end_date: datetime = None,
+                             min_bars_requirements: List[Dict] = None):
         """Set execution context for data fetching strategy"""
         self.execution_context = {
             'mode': mode,
             'symbols': symbols,
             'start_date': start_date,
-            'end_date': end_date
+            'end_date': end_date,
+            'min_bars_requirements': min_bars_requirements or []
         }
 
     def get_bar_data(self, timeframe: str = "1d", columns: List[str] = None, 
                      min_bars: int = 1, filters: Dict[str, any] = None, 
-                     aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
+                     aggregate_mode: bool = False, extended_hours: bool = False,
+                     start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
         
         Args:
-            timeframe: Data timeframe ('1d', '1h', '5m', etc.')
+            timeframe: Data timeframe ('1d', '1h', '5m', etc.)
             columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
             min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
             filters: Dict of filtering criteria for securities table fields:
@@ -141,6 +117,8 @@ class DataAccessorProvider:
             aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
             extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                            Only affects intraday timeframes - daily and above ignore this parameter
+            start_date: Optional start date for filtering data (datetime object)
+            end_date: Optional end date for filtering data (datetime object)
                            
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -185,10 +163,10 @@ class DataAccessorProvider:
             
             if should_batch:
                 logger.info(f"🔄 Using batched data fetching for large dataset")
-                return self._get_bar_data_batched(timeframe, columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_batched(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
             else:
                 # Use original method for smaller datasets or when aggregate_mode is True
-                return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
                 
         except Exception as e:
             logger.error(f"Error in get_bar_data: {e}")
@@ -214,7 +192,8 @@ class DataAccessorProvider:
         return False
     
     def _get_bar_data_batched(self, timeframe: str = "1d", columns: List[str] = None, 
-                            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                            start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """Get bar data using batching approach for large datasets"""
         try:
             batch_size = 1000
@@ -264,7 +243,9 @@ class DataAccessorProvider:
                         columns=columns,
                         min_bars=min_bars,
                         filters=batch_filters,
-                        extended_hours=extended_hours
+                        extended_hours=extended_hours,
+                        start_date=start_date,
+                        end_date=end_date
                     )
                     
                     if batch_result is not None and len(batch_result) > 0:
@@ -363,7 +344,7 @@ class DataAccessorProvider:
     def get_available_filter_values(self) -> Dict[str, List[str]]:
         """Get all available values for filter fields from the database"""
         try:
-            with connection_pool.get_connection() as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 filter_values = {}
@@ -418,7 +399,8 @@ class DataAccessorProvider:
             }
     
     def _get_bar_data_single(self, timeframe: str = "1d", columns: List[str] = None, 
-                           min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                           min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                           start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get OHLCV bar data as numpy array with context-aware date ranges
         
@@ -437,6 +419,8 @@ class DataAccessorProvider:
                     - active: bool (default True if not specified)
             extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                            Only affects intraday timeframes - daily and above ignore this parameter
+            start_date: Optional start date for filtering data (datetime object)
+            end_date: Optional end date for filtering data (datetime object)
             
         Returns:
             numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
@@ -486,7 +470,7 @@ class DataAccessorProvider:
             if isinstance(timeframe_config, dict):
                 # Custom aggregation needed
                 return self._get_aggregated_bar_data(
-                    timeframe_config, columns, min_bars, filters, extended_hours
+                    timeframe_config, columns, min_bars, filters, extended_hours, start_date, end_date
                 )
             else:
                 # Direct table access
@@ -503,27 +487,58 @@ class DataAccessorProvider:
             if not safe_columns:
                 return np.array([])
             
-            # Determine date range based on execution context
+            # Determine date range - check direct parameters first, then execution context
             context = self.execution_context
             
-            if context['start_date'] and context['end_date']:
+            # Priority 1: Direct date parameters from function call
+            if start_date and end_date:
+                # Convert datetime objects to Unix timestamps
+                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
+                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s AND EXTRACT(EPOCH FROM o.timestamp) <= %s"
+                date_params = [start_timestamp, end_timestamp]
+                logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
+            elif start_date:
+                # Only start date provided
+                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s"
+                date_params = [start_timestamp]
+                logger.info(f"📅 Using direct start date filter: {start_date}")
+            elif end_date:
+                # Only end date provided
+                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
+                date_filter = "EXTRACT(EPOCH FROM o.timestamp) <= %s"
+                date_params = [end_timestamp]
+                logger.info(f"📅 Using direct end date filter: {end_date}")
+            # Priority 2: Execution context date range
+            elif context.get('start_date') and context.get('end_date'):
                 # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
                 timeframe_delta = self._get_timeframe_delta(timeframe)
-                start_with_buffer = context['start_date'] - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
+                start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
-                date_params = [start_with_buffer, context['end_date']]
-            elif context['mode'] == 'validation':
-                # Validation mode: Ultra-minimal data for fast validation
-                # Force minimal bars and recent data only
+                date_params = [start_with_buffer, context.get('end_date')]
+            elif context.get('mode') == 'validation':
+                # Validation mode: Use exact min_bars requirements for accurate validation
+                # No arbitrary caps - respect the strategy's actual needs
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '7 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - INTERVAL '30 days' FROM {} WHERE securityid = o.securityid)".format(table_name)  # nosec B608
                 date_params = []
-                # Override min_bars to be reasonable for validation, but respect strategy needs
-                if min_bars > 100:  # Set reasonable upper limit for validation
-                    original_min_bars = min_bars
-                    min_bars = 100  # Maximum 100 bars for validation
-                    logger.info(f"🧪 Validation mode: limiting min_bars from {original_min_bars} to {min_bars} for performance")
-            elif context['mode'] == 'screening':
+                
+                # Check if this specific min_bars matches any requirement from the strategy code
+                min_bars_requirements = context.get('min_bars_requirements', [])
+                matching_requirement = None
+                for req in min_bars_requirements:
+                    if req.get('timeframe') == timeframe and req.get('min_bars') == min_bars:
+                        matching_requirement = req
+                        break
+                
+                if matching_requirement:
+                    logger.info(f"🧪 Validation mode: using exact min_bars={min_bars} for {timeframe} (from line {matching_requirement['line_number']})")
+                else:
+                    logger.info(f"🧪 Validation mode: using min_bars={min_bars} for {timeframe} (no arbitrary caps applied)")
+                
+                # No min_bars override - use the strategy's exact requirements
+            elif context.get('mode') == 'screening':
                 # Screening mode: NO date filtering - let ROW_NUMBER() get exact amount
                 # This is much more efficient than date filtering because:
                 # 1. Gets exactly min_bars per security (no more, no less)
@@ -653,7 +668,7 @@ class DataAccessorProvider:
                     select_columns.append(f"o.{col}")
             
             # Build the complete query
-            if context['mode'] == 'backtest' or (not context['start_date'] and not context['end_date'] and context['mode'] != 'screening'):
+            if context.get('mode') == 'backtest' or (not context.get('start_date') and not context.get('end_date') and context.get('mode') != 'screening'):
                 # For backtest mode or when no specific dates and not screening: get all data in range, don't limit per security
                 # Build parameterized query components
                 select_clause = ', '.join(select_columns)
@@ -705,7 +720,7 @@ class DataAccessorProvider:
                 final_select_clause = ', '.join(final_columns)
                 
                 # Optimize ordering for screening mode - prioritize most recent data
-                if context['mode'] == 'screening':
+                if context.get('mode') == 'screening':
                     # For screening, order by most recent timestamp first within each security
                     # This ensures we get the absolute latest data for screening decisions
                     order_by_columns = []
@@ -1094,7 +1109,8 @@ class DataAccessorProvider:
             return pd.DataFrame()
 
     def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], columns: List[str] = None, 
-                                min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False) -> np.ndarray:
+                                min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
+                                start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
         """
         Get aggregated OHLCV data by combining base timeframe data into custom intervals
         
@@ -1122,7 +1138,7 @@ class DataAccessorProvider:
                 base_interval_minutes = 7 * 24 * 60  # 1-week source
             else:
                 # Fallback to daily data
-                return self._get_bar_data_single("1d", columns, min_bars, filters, extended_hours)
+                return self._get_bar_data_single("1d", columns, min_bars, filters, extended_hours, start_date, end_date)
             
             # Calculate how many base intervals we need to get enough aggregated bars
             base_bars_needed = min_bars * (interval_minutes // base_interval_minutes)
@@ -1141,7 +1157,7 @@ class DataAccessorProvider:
             base_data = self._get_bar_data_single(
                 source_timeframe,
                 ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"],
-                base_bars_needed, filters, extended_hours
+                base_bars_needed, filters, extended_hours, start_date, end_date
             )
             
             if base_data is None or len(base_data) == 0:
@@ -1302,14 +1318,15 @@ def get_data_accessor() -> DataAccessorProvider:
     return _data_accessor
 
 def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int = 1, filters: Dict[str, any] = None,
-                 aggregate_mode: bool = False, extended_hours: bool = False) -> np.ndarray:
+                 aggregate_mode: bool = False, extended_hours: bool = False,
+                 start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> np.ndarray:
     """
     Global function for strategy access to bar data with intelligent batching
     
     Args:
         timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-        columns: Desired columns (None = default: ticker, timestamp, open, high, low, close, volume)
-        min_bars: Minimum number of bars required per security
+        columns: Desired columns (None = all: ticker, timestamp, open, high, low, close, volume)
+        min_bars: Minimum number of bars of the specified timeframe required for a single calculation to be made
         filters: Dict of filtering criteria for securities table fields:
                 - tickers: List[str] (e.g., ['AAPL', 'MRNA']) (None = all active securities)
                 - sector: str (e.g., 'Technology', 'Healthcare')
@@ -1322,6 +1339,8 @@ def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int
         aggregate_mode: If True, disables batching for aggregate calculations (use with caution)
         extended_hours: If True, include premarket and after-hours data for intraday timeframes (seconds, minutes, hours)
                        Only affects intraday timeframes - daily and above ignore this parameter
+        start_date: Optional start date for filtering data (datetime object)
+        end_date: Optional end date for filtering data (datetime object)
         
     Returns:
         numpy.ndarray with requested bar data
@@ -1329,7 +1348,7 @@ def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int
     accessor = get_data_accessor()
     
     # Use new API directly
-    return accessor.get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours)
+    return accessor.get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date)
 
 def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) -> pd.DataFrame:
     """
@@ -1395,36 +1414,6 @@ def get_price_data(symbol: str, timeframe: str = "1d", days: int = 30, extended_
         timeframe=timeframe,
         filters={'tickers': [symbol]},
         min_bars=min_bars,
-        extended_hours=extended_hours
-    )
-
-
-def get_historical_data(symbol: str, timeframe: str = "1d", periods: int = 30, 
-                       offset: int = 0, extended_hours: bool = False) -> np.ndarray:
-    """
-    Legacy function: Get historical price data with lag/offset
-    
-    Args:
-        symbol: Ticker symbol (e.g., 'AAPL')
-        timeframe: Data timeframe ('1d', '1h', '5m', etc.)
-        periods: Number of periods to fetch
-        offset: Number of periods to offset (lag) - currently not implemented
-        extended_hours: If True, include premarket and after-hours data for intraday timeframes
-        
-    Returns:
-        numpy.ndarray with historical OHLCV data
-        
-    Note:
-        The offset parameter is not currently implemented in the underlying system.
-        This function delegates to get_bar_data() for now.
-    """
-    if offset > 0:
-        logger.warning(f"get_historical_data: offset parameter ({offset}) is not implemented, ignoring")
-
-    return get_bar_data(
-        timeframe=timeframe,
-        filters={'tickers': [symbol]},
-        min_bars=periods,
         extended_hours=extended_hours
     )
 

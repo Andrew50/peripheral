@@ -27,8 +27,8 @@ jobs:
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #      k8s_context: 'stage-cluster'
       k8s_namespace: 'stage'
-      google_redirect_url: 'https://stage.atlantis.trading/auth/google/callback'
-      ingress_host: 'stage.atlantis.trading'
+      google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
+      ingress_host: 'stage.peripheral.io'
       #public_base_url: '/'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -41,6 +41,9 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.STAGE_JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.STAGE_CLOUDFLARE_TUNNEL_TOKEN }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_DEV_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_STAGE_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_DEV_PUBLISHABLE_KEY }}

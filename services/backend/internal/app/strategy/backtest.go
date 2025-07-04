@@ -6,47 +6,60 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
+const BacktestCacheKey = "backtest:userID:%d:strategyID:%d"
+
 // BacktestArgs represents arguments for backtesting (API compatibility)
 type BacktestArgs struct {
-	StrategyID    int   `json:"strategyId"`
-	Securities    []int `json:"securities"`
-	Start         int64 `json:"start"`
-	ReturnWindows []int `json:"returnWindows"`
-	FullResults   bool  `json:"fullResults"`
+	StrategyID int   `json:"strategyId"`
+	Securities []int `json:"securities"`
+	Start      int64 `json:"start"`
+
+	FullResults bool `json:"fullResults"`
 }
 
 // BacktestResult represents a single backtest instance (API compatibility)
 type BacktestResult struct {
 	Ticker          string             `json:"ticker"`
-	SecurityID      int                `json:"securityId"`
+	SecurityID      int                `json:"securityId,omitempty"`
 	Timestamp       int64              `json:"timestamp"`
-	Open            float64            `json:"open"`
-	High            float64            `json:"high"`
-	Low             float64            `json:"low"`
-	Close           float64            `json:"close"`
-	Volume          int64              `json:"volume"`
+	Open            float64            `json:"open,omitempty"`
+	High            float64            `json:"high,omitempty"`
+	Low             float64            `json:"low,omitempty"`
+	Close           float64            `json:"close,omitempty"`
+	Volume          int64              `json:"volume,omitempty"`
 	Classification  bool               `json:"classification"`
 	FutureReturns   map[string]float64 `json:"futureReturns,omitempty"`
 	StrategyResults map[string]any     `json:"strategyResults,omitempty"`
+	Instance        map[string]any     `json:"instance,omitempty"`
 }
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances    int              `json:"totalInstances"`
-	PositiveInstances int              `json:"positiveInstances"`
-	DateRange         []string         `json:"dateRange"`
-	SymbolsProcessed  int              `json:"symbolsProcessed"`
-	Columns           []string         `json:"columns"`
-	ColumnSamples     map[string][]any `json:"columnSamples"`
+	TotalInstances    int      `json:"totalInstances"`
+	PositiveInstances int      `json:"positiveInstances,omitempty"`
+	DateRange         []string `json:"dateRange"`
+	SymbolsProcessed  int      `json:"symbolsProcessed"`
+	Columns           []string `json:"columns"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
 type BacktestResponse struct {
-	Instances []BacktestResult `json:"instances"`
-	Summary   BacktestSummary  `json:"summary"`
+	Instances      []BacktestResult `json:"instances,omitempty"`
+	Summary        BacktestSummary  `json:"summary"`
+	StrategyPrints string           `json:"strategyPrints,omitempty"`
+	StrategyPlots  []StrategyPlot   `json:"strategyPlots,omitempty"`
+}
+
+// StrategyPlot represents a captured plotly plot with essential data only
+type StrategyPlot struct {
+	ChartType string           `json:"chart_type"` // "line", "bar", "scatter", "histogram", "heatmap"
+	Data      []map[string]any `json:"data"`       // Array of trace objects with x/y/z data arrays
+	Title     string           `json:"title"`      // Chart title
+	Layout    map[string]any   `json:"layout"`     // Minimal layout (axis labels, dimensions)
 }
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
@@ -54,21 +67,13 @@ type WorkerBacktestResult struct {
 	Success            bool                   `json:"success"`
 	StrategyID         int                    `json:"strategy_id"`
 	ExecutionMode      string                 `json:"execution_mode"`
-	Instances          []WorkerInstance       `json:"instances"`
+	Instances          []map[string]any       `json:"instances"`
 	Summary            WorkerSummary          `json:"summary"`
 	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
 	ExecutionTimeMs    int                    `json:"execution_time_ms"`
+	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
+	StrategyPlots      []StrategyPlot         `json:"strategy_plots,omitempty"`
 	ErrorMessage       string                 `json:"error_message,omitempty"`
-}
-
-// WorkerInstance represents a worker instance result
-type WorkerInstance struct {
-	Ticker          string                 `json:"ticker"`
-	Timestamp       int64                  `json:"timestamp"`
-	Classification  bool                   `json:"classification"`
-	EntryPrice      float64                `json:"entry_price,omitempty"`
-	StrategyResults map[string]interface{} `json:"strategy_results,omitempty"`
-	FutureReturn    float64                `json:"future_return,omitempty"`
 }
 
 // WorkerSummary represents worker summary statistics
@@ -114,7 +119,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	log.Printf("Starting complete backtest for strategy %d using new worker architecture", args.StrategyID)
+	log.Printf("Starting complete backtest for strategy %d", args.StrategyID)
 
 	// Verify strategy exists and user has permission
 	var strategyExists bool
@@ -136,15 +141,16 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	// Convert worker result to BacktestResponse format for API compatibility
 	instances := convertWorkerInstancesToBacktestResults(result.Instances)
-	summary := convertWorkerSummaryToBacktestSummary(result.Summary)
+	summary := convertWorkerSummaryToBacktestSummary(result.Summary, result.Instances)
 
 	response := BacktestResponse{
-		Instances: instances,
-		Summary:   summary,
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
+		StrategyPlots:  result.StrategyPlots,
 	}
 
 	// Cache the results
-	if err := SaveBacktestToCache(ctx, conn, userID, args.StrategyID, response); err != nil {
+	if err := SetBacktestToCache(ctx, conn, userID, args.StrategyID, response); err != nil {
 		log.Printf("Warning: Failed to cache backtest results: %v", err)
 		// Don't return error, just log warning
 	}
@@ -267,49 +273,36 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 }
 
 // convertWorkerInstancesToBacktestResults converts worker instances to API format
-func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []BacktestResult {
+func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestResult {
 	results := make([]BacktestResult, len(instances))
 
 	for i, instance := range instances {
-		// Convert timestamp properly - Python worker returns Unix timestamps in seconds
-		timestamp := instance.Timestamp
+		// Extract ticker (required field)
+		ticker, _ := instance["ticker"].(string)
 
-		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
-		// Check if timestamp is in seconds (reasonable range for Unix timestamps)
-		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
-			// Convert seconds to milliseconds
-			timestamp = timestamp * 1000
-		}
-
-		// Extract entry price from strategy results or use EntryPrice field
-		entryPrice := instance.EntryPrice
-		if entryPrice == 0 && instance.StrategyResults != nil {
-			if price, ok := instance.StrategyResults["entry_price"].(float64); ok {
-				entryPrice = price
-			} else if price, ok := instance.StrategyResults["open"].(float64); ok {
-				entryPrice = price
-			} else if price, ok := instance.StrategyResults["close"].(float64); ok {
-				entryPrice = price
+		// Extract timestamp and convert properly - Python worker returns Unix timestamps in seconds
+		var timestamp int64
+		if ts, ok := instance["timestamp"]; ok {
+			switch v := ts.(type) {
+			case int64:
+				timestamp = v
+			case float64:
+				timestamp = int64(v)
+			case int:
+				timestamp = int64(v)
 			}
 		}
 
-		results[i] = BacktestResult{
-			Ticker:          instance.Ticker,
-			SecurityID:      0, // Will be populated if needed
-			Timestamp:       timestamp,
-			Open:            entryPrice,
-			High:            entryPrice,
-			Low:             entryPrice,
-			Close:           entryPrice,
-			Volume:          0,
-			Classification:  true, // Since instance was returned, it met criteria
-			FutureReturns:   map[string]float64{},
-			StrategyResults: instance.StrategyResults,
+		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
+		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
+			timestamp = timestamp * 1000
 		}
 
-		// Add future return if available
-		if instance.FutureReturn != 0 {
-			results[i].FutureReturns["1d"] = instance.FutureReturn
+		results[i] = BacktestResult{
+			Ticker:         ticker,
+			Timestamp:      timestamp,
+			Classification: true,     // Since instance was returned, it met criteria
+			Instance:       instance, // Include the complete original instance
 		}
 	}
 
@@ -317,13 +310,277 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 }
 
 // convertWorkerSummaryToBacktestSummary converts worker summary to API format
-func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummary {
-	return BacktestSummary{
-		TotalInstances:    summary.TotalInstances,
-		PositiveInstances: summary.PositiveInstances,
-		DateRange:         []string(summary.DateRange),
-		SymbolsProcessed:  summary.SymbolsProcessed,
-		Columns:           []string{"ticker", "timestamp", "classification", "entry_price"},
-		ColumnSamples:     map[string][]any{},
+func convertWorkerSummaryToBacktestSummary(summary WorkerSummary, instances []map[string]any) BacktestSummary {
+	// Extract unique column names from instances
+	columnSet := make(map[string]bool)
+	for _, instance := range instances {
+		for key := range instance {
+			columnSet[key] = true
+		}
 	}
+	// Convert to sorted slice for consistent output
+	columns := make([]string, 0, len(columnSet))
+	for column := range columnSet {
+		columns = append(columns, column)
+	}
+
+	return BacktestSummary{
+		TotalInstances:   summary.TotalInstances,
+		DateRange:        []string(summary.DateRange),
+		SymbolsProcessed: summary.SymbolsProcessed,
+		Columns:          columns,
+	}
+}
+
+type InstanceFilter struct {
+	Column   string      `json:"column"`
+	Operator string      `json:"operator"`
+	Value    interface{} `json:"value"`
+}
+type GetBacktestInstancesArgs struct {
+	StrategyID int              `json:"strategyId"`
+	Filters    []InstanceFilter `json:"filters"`
+}
+
+func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) ([]BacktestResult, error) {
+	var args GetBacktestInstancesArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+
+	backtestResponse, err := GetBacktestData(ctx, conn, userID, args.StrategyID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting backtest data: %v", err)
+	}
+
+	if len(args.Filters) == 0 {
+		if len(backtestResponse.Instances) > 20 {
+			return backtestResponse.Instances[:20], nil
+		}
+		return backtestResponse.Instances, nil
+	}
+
+	filteredInstances := FilterInstances(backtestResponse.Instances, args.Filters)
+
+	return filteredInstances, nil
+}
+
+func FilterInstances(instances []BacktestResult, filters []InstanceFilter) []BacktestResult {
+	if len(filters) == 0 {
+		return instances
+	}
+
+	var filtered []BacktestResult
+	for _, instance := range instances {
+		if matchesAllFilters(instance, filters) {
+			filtered = append(filtered, instance)
+		}
+	}
+	return filtered
+}
+
+// matchesAllFilters checks if an instance matches all provided filters (AND logic)
+func matchesAllFilters(instance BacktestResult, filters []InstanceFilter) bool {
+	for _, filter := range filters {
+		if !matchesFilter(instance, filter) {
+			return false
+		}
+	}
+	return true
+}
+
+// matchesFilter checks if an instance matches a single filter
+func matchesFilter(instance BacktestResult, filter InstanceFilter) bool {
+	// Extract the value from the instance
+	instanceValue := extractValueFromInstanceColumn(instance, filter.Column)
+	if instanceValue == nil {
+		return false // Field doesn't exist or is nil
+	}
+	// Apply the operator
+	return applyOperator(instanceValue, filter.Operator, filter.Value)
+}
+
+// extractValueFromInstanceColumn gets the value of a field from a BacktestResult
+func extractValueFromInstanceColumn(instance BacktestResult, column string) interface{} {
+	// Check structured fields first
+	switch column {
+	case "ticker":
+		return instance.Ticker
+	case "timestamp":
+		return instance.Timestamp
+	case "open":
+		return instance.Open
+	case "high":
+		return instance.High
+	case "low":
+		return instance.Low
+	case "close":
+		return instance.Close
+	case "volume":
+		return instance.Volume
+	case "classification":
+		return instance.Classification
+	}
+
+	// Check dynamic fields in Instance map
+	if instance.Instance != nil {
+		if value, exists := instance.Instance[column]; exists {
+			return value
+		}
+	}
+
+	// Check StrategyResults map
+	if instance.StrategyResults != nil {
+		if value, exists := instance.StrategyResults[column]; exists {
+			return value
+		}
+	}
+
+	// Check FutureReturns map
+	if instance.FutureReturns != nil {
+		if value, exists := instance.FutureReturns[column]; exists {
+			return value
+		}
+	}
+
+	return nil
+}
+
+// applyOperator applies the comparison operator between instanceValue and filterValue
+func applyOperator(instanceValue interface{}, operator string, filterValue interface{}) bool {
+	switch operator {
+	case "eq":
+		return compareEqual(instanceValue, filterValue)
+	case "gt", "gte", "lt", "lte":
+		return compareNumbers(instanceValue, filterValue, operator)
+	case "contains":
+		return compareContains(instanceValue, filterValue)
+	case "in":
+		return compareIn(instanceValue, filterValue)
+	default:
+		return false
+	}
+}
+
+// compareEqual checks equality with type conversion
+func compareEqual(instanceValue, filterValue interface{}) bool {
+	// Handle string comparisons
+	if instStr, ok := instanceValue.(string); ok {
+		if filtStr, ok := filterValue.(string); ok {
+			return instStr == filtStr
+		}
+	}
+
+	// Handle numeric comparisons using unified function
+	if compareNumbers(instanceValue, filterValue, "eq") {
+		return true
+	}
+
+	// Handle boolean comparisons
+	if instBool, ok := instanceValue.(bool); ok {
+		if filtBool, ok := filterValue.(bool); ok {
+			return instBool == filtBool
+		}
+	}
+
+	// Fallback to direct comparison
+	return instanceValue == filterValue
+}
+
+// compareNumbers performs numeric comparison based on operator
+func compareNumbers(instanceValue, filterValue interface{}, operator string) bool {
+	instNum, instIsNum := convertToFloat64(instanceValue)
+	filtNum, filtIsNum := convertToFloat64(filterValue)
+	if !instIsNum || !filtIsNum {
+		return false
+	}
+
+	switch operator {
+	case "gt":
+		return instNum > filtNum
+	case "gte":
+		return instNum >= filtNum
+	case "lt":
+		return instNum < filtNum
+	case "lte":
+		return instNum <= filtNum
+	case "eq":
+		return instNum == filtNum
+	default:
+		return false
+	}
+}
+
+// compareContains checks if instanceValue contains filterValue (for strings)
+func compareContains(instanceValue, filterValue interface{}) bool {
+	instStr, instOk := instanceValue.(string)
+	filtStr, filtOk := filterValue.(string)
+	if instOk && filtOk && len(filtStr) > 0 {
+		return strings.Contains(instStr, filtStr)
+	}
+	return false
+}
+
+// compareIn checks if instanceValue is in the filterValue array
+func compareIn(instanceValue, filterValue interface{}) bool {
+	// filterValue should be an array/slice
+	switch filtArray := filterValue.(type) {
+	case []interface{}:
+		for _, val := range filtArray {
+			if compareEqual(instanceValue, val) {
+				return true
+			}
+		}
+	case []string:
+		instStr, ok := instanceValue.(string)
+		if ok {
+			for _, val := range filtArray {
+				if instStr == val {
+					return true
+				}
+			}
+		}
+	case []float64:
+		instNum, ok := convertToFloat64(instanceValue)
+		if ok {
+			for _, val := range filtArray {
+				if instNum == val {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// convertToFloat64 attempts to convert various numeric types to float64
+func convertToFloat64(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
+func GetBacktestData(ctx context.Context, conn *data.Conn, userID int, strategyID int) (*BacktestResponse, error) {
+	response, err := GetBacktestFromCache(ctx, conn, userID, strategyID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting backtest from cache: %v", err)
+	}
+	return response, nil
 }

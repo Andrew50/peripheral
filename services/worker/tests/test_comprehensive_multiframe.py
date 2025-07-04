@@ -419,7 +419,7 @@ def test_backend_functions():
                 content = f.read()
                 
             scheduled_jobs = 0
-            job_names = ['Update1MinuteOHLCV', 'Update1HourOHLCV', 'Update1WeekOHLCV']
+            job_names = ['UpdateAllOHLCV']  # Updated to use the new consolidated function
             
             for job_name in job_names:
                 if job_name in content:
@@ -450,7 +450,7 @@ def test_backend_functions():
             print("    ❌ Polygon API file not found")
             api_functions = 0
         
-        success = files_exist >= 2 and scheduled_jobs >= 2 and api_functions >= 2
+        success = files_exist >= 2 and scheduled_jobs >= 1 and api_functions >= 2
         if success:
             print("✅ Backend function integration test PASSED")
         else:

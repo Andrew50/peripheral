@@ -12,15 +12,21 @@
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
 	import { showAuthModal } from '$lib/stores/authModal';
-	import { addInstanceToWatchlist as addToWatchlist, selectWatchlist, createNewWatchlist, deleteWatchlist, addToVisibleTabs, visibleWatchlistIds, initializeVisibleWatchlists } from './watchlistUtils';
+	import {
+		addInstanceToWatchlist as addToWatchlist,
+		selectWatchlist,
+		createNewWatchlist,
+		deleteWatchlist,
+		addToVisibleTabs,
+		visibleWatchlistIds,
+		initializeVisibleWatchlists
+	} from './watchlistUtils';
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
 	}
 
 	let container: HTMLDivElement;
-
-
 
 	function deleteItem(item: WatchlistItem) {
 		if (!item.watchlistItemId) {
@@ -36,7 +42,6 @@
 		);
 	}
 
-
 	// Helper function to get first letter of watchlist name
 	function getWatchlistInitial(name: string): string {
 		return name.charAt(0).toUpperCase();
@@ -49,21 +54,20 @@
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
 	let showDropdown = false;
-	
+
 	// Track visible watchlists for tabs in fixed order
-	
+
 	// Get all visible watchlists in their fixed positions
 	$: visibleWatchlists = $visibleWatchlistIds
 		.slice(0, 3) // Show max 3 tabs
-		.map(id => $watchlists?.find(w => w.watchlistId === id))
+		.map((id) => $watchlists?.find((w) => w.watchlistId === id))
 		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
-
 
 	function newWatchlist() {
 		if (newWatchlistName === '') return;
 
 		createNewWatchlist(newWatchlistName)
-			.then((newWatchlistId: number) => {	
+			.then((newWatchlistId: number) => {
 				newWatchlistName = '';
 				showWatchlistInput = false;
 			})
@@ -138,7 +142,7 @@
 		showWatchlistInput = false;
 		newWatchlistName = '';
 		const watchlistId = parseInt(watchlistIdString);
-		
+
 		// Use our switchToWatchlist function for consistent behavior
 		switchToWatchlist(watchlistId);
 	}
@@ -165,26 +169,31 @@
 		// Use switchToWatchlist for consistency
 		switchToWatchlist(parseInt(value, 10));
 		showDropdown = false;
-		
+
 		// Reset select value to placeholder
 		target.value = '';
 	}
 
 	// Keep currentWatchlistId in sync with the global store
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
-	
+
 	// Initialize visible watchlists when watchlists and currentWatchlistId are available
-	$: if ($watchlists && $watchlists.length > 0 && currentWatchlistId && $visibleWatchlistIds.length === 0) {
+	$: if (
+		$watchlists &&
+		$watchlists.length > 0 &&
+		currentWatchlistId &&
+		$visibleWatchlistIds.length === 0
+	) {
 		initializeVisibleWatchlists($watchlists, currentWatchlistId);
 	}
-	
+
 	// Handle direct tab switching - maintain fixed positions
 	function switchToWatchlist(watchlistId: number) {
 		if (watchlistId === currentWatchlistId) return;
-		
+
 		// Check if this watchlist is already visible
 		const isVisible = $visibleWatchlistIds.includes(watchlistId);
-		
+
 		if (isVisible) {
 			// Just switch - no reordering for visible tabs
 			selectWatchlist(String(watchlistId));
@@ -193,10 +202,10 @@
 			addToVisibleTabs(watchlistId);
 			selectWatchlist(String(watchlistId));
 		}
-		
+
 		showDropdown = false; // Close dropdown after selection
 	}
-	
+
 	// Close dropdown when clicking outside
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as HTMLElement;
@@ -204,17 +213,16 @@
 			showDropdown = false;
 		}
 	}
-	
+
 	// Initialize recent watchlists on mount
 	onMount(() => {
 		// Set up click outside listener
 		document.addEventListener('click', handleClickOutside);
-		
+
 		return () => {
 			document.removeEventListener('click', handleClickOutside);
 		};
 	});
-
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
@@ -268,24 +276,24 @@
 						{watchlist.watchlistName}
 					</button>
 				{/each}
-				
+
 				<!-- More button for dropdown -->
 				<div class="dropdown-wrapper">
 					<button
 						class="more-button"
 						title="More Watchlists"
-						on:click={() => showDropdown = !showDropdown}
+						on:click={() => (showDropdown = !showDropdown)}
 					>
 						⋯
 					</button>
-					
+
 					{#if showDropdown}
 						<div class="watchlist-dropdown">
-							<select 
+							<select
 								class="dropdown-select default-select"
 								value=""
 								on:change={handleWatchlistChange}
-								on:blur={() => showDropdown = false}
+								on:blur={() => (showDropdown = false)}
 							>
 								<option value="" disabled>Select Watchlist</option>
 								{#if Array.isArray($watchlists)}
@@ -413,8 +421,6 @@
 		color: #ffffff;
 		font-weight: normal;
 	}
-
-
 
 	.dropdown-wrapper {
 		position: relative;
@@ -642,5 +648,4 @@
 		color: #4a80f0;
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
-
 </style>

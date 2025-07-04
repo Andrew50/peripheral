@@ -48,9 +48,6 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 {#if visible}
 	<div
 		class="auth-modal-overlay"
@@ -75,7 +72,7 @@
 				<!-- Feature requirement header -->
 				<div class="feature-header">
 					<h2 id="auth-modal-title">
-						{currentMode === 'login' ? 'Login to Atlantis' : 'Sign Up for Atlantis'}
+						{currentMode === 'login' ? 'Login to Peripheral' : 'Sign Up for Peripheral'}
 					</h2>
 				</div>
 

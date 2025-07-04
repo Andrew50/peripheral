@@ -99,12 +99,12 @@ func InitConn(inContainer bool) (*Conn, func()) {
 				}
 
 				// Configure connection pool with better defaults
-				poolConfig.MaxConns = 25                               // Increase max connections
-				poolConfig.MinConns = 5                                // Increase minimum connections
-				poolConfig.MaxConnLifetime = 1 * time.Hour             // Maximum lifetime of a connection
-				poolConfig.MaxConnIdleTime = 30 * time.Minute          // Maximum idle time for a connection
-				poolConfig.HealthCheckPeriod = 30 * time.Second        // More frequent health checks
-				poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second // Shorter connection timeout
+				poolConfig.MaxConns = 15                                // FIXED: Reduced from 25 to prevent overwhelming DB
+				poolConfig.MinConns = 3                                 // FIXED: Reduced from 5 for lighter footprint
+				poolConfig.MaxConnLifetime = 30 * time.Minute           // FIXED: Reduced from 1 hour to prevent stale connections
+				poolConfig.MaxConnIdleTime = 10 * time.Minute           // FIXED: Reduced from 30 minutes to close idle connections faster
+				poolConfig.HealthCheckPeriod = 1 * time.Minute          // FIXED: Reduced from 30 seconds for more frequent health checks
+				poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // FIXED: Increased from 5 seconds for slower connections
 
 				// Create the connection pool with our custom configuration
 				dbConn, err := pgxpool.ConnectConfig(ctx, poolConfig)

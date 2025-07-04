@@ -131,7 +131,7 @@ class SecurityValidator:
             "datetime", "time", "decimal", "fractions", "collections",
             "itertools", "functools", "operator", "copy", "json", "re",
             "string", "textwrap", "calendar", "bisect", "heapq", "array",
-            "typing",  # For type annotations like List[Dict]
+            "typing", "plotly", "plotly.subplots", "subplots", "make_subplots", "px", "graph_objects", "express" # For type annotations like List[Dict]
         }
 
         # Forbidden attributes (comprehensive dunder and internal attributes)
@@ -162,6 +162,125 @@ class SecurityValidator:
         
         # Data accessor function names
         self.data_accessor_functions = {"get_bar_data", "get_general_data"}
+
+    def extract_min_bars_requirements(self, code: str) -> List[Dict[str, Any]]:
+        """
+        Extract min_bars requirements from all get_bar_data() calls in strategy code.
+        
+        Args:
+            code: Strategy code to analyze
+            
+        Returns:
+            List of dictionaries with call info:
+            [
+                {
+                    'function': 'get_bar_data',
+                    'timeframe': '1d',
+                    'min_bars': 20,
+                    'line_number': 15
+                },
+                ...
+            ]
+        """
+        requirements = []
+        
+        try:
+            # Parse the code into an AST
+            tree = ast.parse(code)
+            
+            # Walk through all nodes in the AST
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    # Check if this is a get_bar_data call
+                    func_name = None
+                    if isinstance(node.func, ast.Name):
+                        func_name = node.func.id
+                    elif isinstance(node.func, ast.Attribute):
+                        func_name = node.func.attr
+                    
+                    if func_name == 'get_bar_data':
+                        # Extract parameters from the call
+                        call_info = self._extract_get_bar_data_params(node)
+                        if call_info:
+                            requirements.append(call_info)
+                            
+        except SyntaxError as e:
+            logger.warning(f"Failed to parse strategy code for min_bars extraction: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error extracting min_bars requirements: {e}")
+            
+        return requirements
+
+    def _extract_get_bar_data_params(self, call_node: ast.Call) -> Optional[Dict[str, Any]]:
+        """
+        Extract parameters from a get_bar_data() call node.
+        
+        Args:
+            call_node: AST Call node representing get_bar_data()
+            
+        Returns:
+            Dictionary with extracted parameters or None if extraction fails
+        """
+        try:
+            call_info = {
+                'function': 'get_bar_data',
+                'timeframe': '1d',  # default
+                'min_bars': 1,      # default
+                'line_number': getattr(call_node, 'lineno', 0)
+            }
+            
+            # Extract positional arguments
+            if len(call_node.args) >= 1:
+                # First arg is timeframe
+                timeframe = self._extract_string_value(call_node.args[0])
+                if timeframe:
+                    call_info['timeframe'] = timeframe
+                    
+            if len(call_node.args) >= 3:
+                # Third arg is min_bars (second is columns)
+                min_bars = self._extract_int_value(call_node.args[2])
+                if min_bars is not None:
+                    call_info['min_bars'] = min_bars
+            
+            # Extract keyword arguments
+            for keyword in call_node.keywords:
+                if keyword.arg == 'timeframe':
+                    timeframe = self._extract_string_value(keyword.value)
+                    if timeframe:
+                        call_info['timeframe'] = timeframe
+                elif keyword.arg == 'min_bars':
+                    min_bars = self._extract_int_value(keyword.value)
+                    if min_bars is not None:
+                        call_info['min_bars'] = min_bars
+            
+            return call_info
+            
+        except Exception as e:
+            logger.debug(f"Failed to extract parameters from get_bar_data call: {e}")
+            return None
+
+    def _extract_string_value(self, node: ast.AST) -> Optional[str]:
+        """Extract string value from AST node if possible."""
+        try:
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                return node.value
+            elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+                return node.s
+        except:
+            pass
+        return None
+
+    def _extract_int_value(self, node: ast.AST) -> Optional[int]:
+        """Extract integer value from AST node if possible."""
+        try:
+            if isinstance(node, ast.Constant) and isinstance(node.value, int):
+                return node.value
+            elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+                if isinstance(node.n, int):
+                    return node.n
+        except:
+            pass
+        return None
 
     def validate_code(self, code: str) -> bool:
         """
@@ -229,13 +348,19 @@ class SecurityValidator:
     def _check_strategy_compliance(self, tree: ast.AST, code: str) -> bool:
         """Check DataFrame strategy compliance requirements"""
         
-        # Check for required strategy function
-        strategy_functions = self._find_strategy_functions(tree)
-        if not strategy_functions:
-            raise StrategyComplianceError("No valid strategy function found. Must define exactly one non-private function.")
+        # Find all functions
+        all_functions = self._find_strategy_functions(tree)
+        if not all_functions:
+            raise StrategyComplianceError("No valid strategy function found. Must define at least one non-private function.")
         
+        # Look for the main strategy function specifically
+        strategy_functions = [func for func in all_functions if func.name == 'strategy']
+        
+        if not strategy_functions:
+            raise StrategyComplianceError("No 'strategy' function found. Must define a function named 'strategy'.")
+            
         if len(strategy_functions) > 1:
-            raise StrategyComplianceError("Only one strategy function is allowed")
+            raise StrategyComplianceError("Only one 'strategy' function is allowed")
             
         func_node = strategy_functions[0]
         

@@ -132,7 +132,7 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 	}
 	prompt := ""
 
-	prompt += fmt.Sprintf("\n%s", searchTextResult)
+	prompt += fmt.Sprintf("\n%s\n", searchTextResult)
 
 	nyLoc, _ := time.LoadLocation("America/New_York")
 	for _, ticker := range tickers {

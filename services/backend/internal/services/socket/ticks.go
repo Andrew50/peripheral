@@ -481,7 +481,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, err
 			}
 			referencePrice = prevCloseSlice[0].GetPrice()
-		} else {
+		} else { // IF EXTENDED HOURS
 			// Check if we're in after-hours (post 4:00 PM) or pre-market
 			easternLocation, err := time.LoadLocation("America/New_York")
 			if err != nil {
@@ -504,12 +504,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				}
 				referencePrice = closePrice
 			} else {
-				// Pre-market, use daily open
-				dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, queryTime)
+				// Pre-market, use previous day's close (same as regular hours logic)
+				// This ensures consistent extended hours % calculation from previous session close
+				prevCloseSlice, err := getPrevCloseData(conn, securityID, queryTime.UnixNano()/1e6)
 				if err != nil {
-					return nil, fmt.Errorf("error getting daily open: %v", err)
+					return nil, fmt.Errorf("error getting previous close: %v", err)
 				}
-				referencePrice = dailyOpen
+				referencePrice = prevCloseSlice[0].GetPrice()
 			}
 		}
 

@@ -38,12 +38,7 @@
 		LineStyleOptions,
 		LineWidth
 	} from 'lightweight-charts';
-	import {
-
-		calculateSingleADR,
-		calculateVWAP,
-		calculateMultipleSMAs
-	} from './indicators';
+	import { calculateSingleADR, calculateVWAP, calculateMultipleSMAs } from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import { onMount, onDestroy } from 'svelte';
@@ -226,6 +221,9 @@
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
 
+	// Track previous security ID to avoid unnecessary stream changes
+	let previousSecurityId: number | null = null;
+
 	// Why Moving popup state (declare early to avoid TDZ)
 	let whyMovingTicker: string = '';
 	let whyMovingTrigger: number = 0;
@@ -278,10 +276,9 @@
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
 	let isSwitchingTickers = false; // Track chart switching overlay state
-	let isLoadingAdditionalData = false; // Track if back or forward loading 
+	let isLoadingAdditionalData = false; // Track if back or forward loading
 	let latestLoadToken = 0;
-	let activeTickerChangeRequestAbort: AbortController | null = null; 
-
+	let activeTickerChangeRequestAbort: AbortController | null = null;
 
 	// Add type definitions at the top
 	interface Alert {
@@ -367,7 +364,6 @@
 		});
 	}
 
-
 	// Helper function to clear quote lines
 	function clearQuoteLines() {
 		if (bidLine && askLine) {
@@ -389,348 +385,363 @@
 		}
 	}
 
-	function processChartDataResponse(response: { bars: BarData[]; isEarliestData: boolean }, inst: ChartQueryDispatch, visibleRange: any): void {
+	function processChartDataResponse(
+		response: { bars: BarData[]; isEarliestData: boolean },
+		inst: ChartQueryDispatch,
+		visibleRange: any
+	): void {
 		const barDataList = response.bars;
-				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-					queuedLoad = null;
-					return;
+		if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+			queuedLoad = null;
+			return;
+		}
+		let newCandleData = barDataList.map((bar) => ({
+			time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+			open: bar.open,
+			high: bar.high,
+			low: bar.low,
+			close: bar.close
+		}));
+		let newVolumeData: any;
+		if (get(settings).dolvol) {
+			newVolumeData = barDataList.map((bar) => ({
+				time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+				value: (bar.volume * (bar.close + bar.open)) / 2,
+				color: bar.close > bar.open ? '#089981' : '#ef5350'
+			}));
+		} else {
+			newVolumeData = barDataList.map((bar) => ({
+				time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+				value: bar.volume,
+				color: bar.close > bar.open ? '#089981' : '#ef5350'
+			}));
+		}
+		if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
+			const earliestCandleTime = chartCandleSeries.data()[0]?.time;
+			if (
+				typeof earliestCandleTime === 'number' &&
+				newCandleData[newCandleData.length - 1].time <= earliestCandleTime
+			) {
+				newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
+				newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
+			}
+		} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
+			// Forward loading: append new data to existing data
+			const existingData = chartCandleSeries.data();
+			const existingVolumeData = chartVolumeSeries.data();
+
+			if (existingData.length > 0 && newCandleData.length > 0) {
+				const latestCandleTime = existingData[existingData.length - 1]?.time;
+
+				// Find the first new candle that comes after the latest existing candle
+				let startIndex = 0;
+				for (let i = 0; i < newCandleData.length; i++) {
+					if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
+						startIndex = i;
+						break;
+					}
 				}
-				let newCandleData = barDataList.map((bar) => ({
-					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-					open: bar.open,
-					high: bar.high,
-					low: bar.low,
-					close: bar.close
-				}));
-				let newVolumeData: any;
-				if (get(settings).dolvol) {
-					newVolumeData = barDataList.map((bar) => ({
-						time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-						value: (bar.volume * (bar.close + bar.open)) / 2,
-						color: bar.close > bar.open ? '#089981' : '#ef5350'
-					}));
+				// Only append truly new data
+				if (startIndex < newCandleData.length) {
+					newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
+					newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
 				} else {
-					newVolumeData = barDataList.map((bar) => ({
-						time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-						value: bar.volume,
-						color: bar.close > bar.open ? '#089981' : '#ef5350'
-					}));
+					newCandleData = existingData as any;
+					newVolumeData = existingVolumeData as any;
 				}
-				if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
-					const earliestCandleTime = chartCandleSeries.data()[0]?.time;
-					if (
-						typeof earliestCandleTime === 'number' &&
-						newCandleData[newCandleData.length - 1].time <= earliestCandleTime
-					) {
-						newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
-						newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
-					}
-				} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
-					// Forward loading: append new data to existing data
-					const existingData = chartCandleSeries.data();
-					const existingVolumeData = chartVolumeSeries.data();
-					
-					
-					if (existingData.length > 0 && newCandleData.length > 0) {
-						const latestCandleTime = existingData[existingData.length - 1]?.time;
-						
-						// Find the first new candle that comes after the latest existing candle
-						let startIndex = 0;
-						for (let i = 0; i < newCandleData.length; i++) {
-							if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
-								startIndex = i;
-								break;
-							}
+			}
+		} else if (inst.requestType === 'loadNewTicker') {
+			if (inst.includeLastBar == false && !$streamInfo.replayActive) {
+				newCandleData = newCandleData.slice(0, newCandleData.length - 1);
+				newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
+			}
+
+			// Only release streams if securityId is changing
+			const currentSecurityId =
+				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId;
+
+			if (previousSecurityId !== currentSecurityId) {
+				releaseFast();
+				releaseQuote();
+			}
+			drawingMenuProps.update((v) => ({
+				...v,
+				chartCandleSeries: chartCandleSeries,
+				securityId: Number(inst.securityId)
+			}));
+			for (const line of $drawingMenuProps.horizontalLines) {
+				chartCandleSeries.removePriceLine(line.line);
+			}
+			if (!$isPublicViewing) {
+				privateRequest<HorizontalLine[]>('getHorizontalLines', {
+					securityId: inst.securityId
+				}).then((res: HorizontalLine[]) => {
+					if (res !== null && res.length > 0) {
+						for (const line of res) {
+							addHorizontalLine(
+								line.price,
+								currentChartInstance.securityId,
+								line.id,
+								line.color || '#FFFFFF',
+								(line.lineWidth || 1) as LineWidth
+							);
 						}
-						// Only append truly new data
-						if (startIndex < newCandleData.length) {
-							newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
-							newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
+					}
+				});
+			}
+		}
+		// Check if we reach end of avaliable data
+		if (inst.timestamp == 0) {
+			chartLatestDataReached = true;
+		}
+		if (barDataList.length < (inst.bars ?? 0)) {
+			if (inst.direction == 'backward') {
+				chartEarliestDataReached = response.isEarliestData;
+			} else if (inst.direction == 'forward') {
+				chartLatestDataReached = true;
+			}
+		}
+		queuedLoad = () => {
+			// Add SEC filings request when loading new ticker
+			chartCandleSeries.setData(newCandleData);
+			chartVolumeSeries.setData(newVolumeData);
+			if (inst.direction == 'backward') {
+				if (
+					arrowSeries &&
+					inst &&
+					typeof inst === 'object' &&
+					'trades' in inst &&
+					Array.isArray(inst.trades)
+				) {
+					const markersByTime = new Map<
+						number,
+						{
+							entries: Array<{ price: number; isLong: boolean }>;
+							exits: Array<{ price: number; isLong: boolean }>;
+						}
+					>();
+
+					// Process all trades
+					inst.trades.forEach((trade: Trade) => {
+						const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
+						const roundedTime =
+							Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
+						if (!markersByTime.has(roundedTime)) {
+							markersByTime.set(roundedTime, { entries: [], exits: [] });
+						}
+
+						// Determine if this is an entry or exit based on trade type
+						const isEntry = trade.type === 'Buy' || trade.type === 'Short';
+						const isLong = trade.type === 'Buy' || trade.type === 'Sell';
+
+						if (isEntry) {
+							markersByTime.get(roundedTime)?.entries.push({
+								price: trade.price,
+								isLong: isLong
+							});
 						} else {
-							newCandleData = existingData as any;
-							newVolumeData = existingVolumeData as any;
+							markersByTime.get(roundedTime)?.exits.push({
+								price: trade.price,
+								isLong: isLong
+							});
 						}
-					}
-				}  else if (inst.requestType === 'loadNewTicker') {
-					if (inst.includeLastBar == false && !$streamInfo.replayActive) {
-						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
-						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
-					}
-					releaseFast();
-					releaseQuote();
-					drawingMenuProps.update((v) => ({
-						...v,
-						chartCandleSeries: chartCandleSeries,
-						securityId: Number(inst.securityId)
+					});
+
+					// Convert to format for ArrowMarkersPaneView
+					const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
+						time: time as UTCTimestamp,
+						entries: data.entries,
+						exits: data.exits
 					}));
-					for (const line of $drawingMenuProps.horizontalLines) {
-						chartCandleSeries.removePriceLine(line.line);
-					}
-					if (!$isPublicViewing) {
-						privateRequest<HorizontalLine[]>('getHorizontalLines', {
-							securityId: inst.securityId
-						}).then((res: HorizontalLine[]) => {
-							if (res !== null && res.length > 0) {
-								for (const line of res) {
-									addHorizontalLine(
-										line.price,
-										currentChartInstance.securityId,
-										line.id,
-										line.color || '#FFFFFF',
-										(line.lineWidth || 1) as LineWidth
-									);
-								}
-							}
-						});
-					}
+					// Sort markers by timestamp (time) in ascending order
+					markers.sort((a, b) => a.time - b.time);
+
+					arrowSeries.setData(markers);
 				}
-				// Check if we reach end of avaliable data
-				if (inst.timestamp == 0) {
-					chartLatestDataReached = true;
-				}
-				if (barDataList.length < (inst.bars ?? 0)) {
-					if (inst.direction == 'backward') {
-						chartEarliestDataReached = response.isEarliestData;
-					} else if (inst.direction == 'forward') {
-						chartLatestDataReached = true;
-					}
-				}
-				queuedLoad = () => {
-					// Add SEC filings request when loading new ticker
-					chartCandleSeries.setData(newCandleData);
-					chartVolumeSeries.setData(newVolumeData);
-					if (inst.direction == 'backward') {
-						if (
-							arrowSeries &&
-							inst &&
-							typeof inst === 'object' &&
-							'trades' in inst &&
-							Array.isArray(inst.trades)
-						) {
-							const markersByTime = new Map<
-								number,
-								{
-									entries: Array<{ price: number; isLong: boolean }>;
-									exits: Array<{ price: number; isLong: boolean }>;
-								}
-							>();
-
-							// Process all trades
-							inst.trades.forEach((trade: Trade) => {
-								const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-								const roundedTime =
-									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-
-								if (!markersByTime.has(roundedTime)) {
-									markersByTime.set(roundedTime, { entries: [], exits: [] });
-								}
-
-								// Determine if this is an entry or exit based on trade type
-								const isEntry = trade.type === 'Buy' || trade.type === 'Short';
-								const isLong = trade.type === 'Buy' || trade.type === 'Sell';
-
-								if (isEntry) {
-									markersByTime.get(roundedTime)?.entries.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								} else {
-									markersByTime.get(roundedTime)?.exits.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								}
-							});
-
-							// Convert to format for ArrowMarkersPaneView
-							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
-								time: time as UTCTimestamp,
-								entries: data.entries,
-								exits: data.exits
-							}));
-							// Sort markers by timestamp (time) in ascending order
-							markers.sort((a, b) => a.time - b.time);
-
-							arrowSeries.setData(markers);
+			}
+			try {
+				const barsWithEvents = response.bars; // Use the original response with events
+				if (barsWithEvents.length > 0 && barsWithEvents) {
+					const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
+					barsWithEvents.forEach((bar) => {
+						if (bar.events && bar.events.length > 0) {
+							allEventsRaw.push(...bar.events);
 						}
-					}
-					try {
-						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents.length > 0 && barsWithEvents) {
-							const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
-							barsWithEvents.forEach((bar) => {
-								if (bar.events && bar.events.length > 0) {
-									allEventsRaw.push(...bar.events);
+					});
+
+					// Check if new raw events exist
+					if (allEventsRaw && allEventsRaw.length > 0) {
+						const eventsByTime = new Map<
+							number,
+							Array<{
+								type: string;
+								title: string;
+								url?: string;
+								value?: string;
+								exDate?: string;
+								payoutDate?: string;
+							}>
+						>();
+
+						// Iterate through bars, using bar.time as the key
+						barsWithEvents.forEach((bar) => {
+							if (bar.events && bar.events.length > 0) {
+								const barTime = bar.time as number; // Already EST seconds
+
+								if (!eventsByTime.has(barTime)) {
+									eventsByTime.set(barTime, []);
 								}
-							});
 
-							// Check if new raw events exist
-							if (allEventsRaw && allEventsRaw.length > 0) {
-								const eventsByTime = new Map<
-									number,
-									Array<{
-										type: string;
-										title: string;
-										url?: string;
-										value?: string;
-										exDate?: string;
-										payoutDate?: string;
-									}>
-								>();
+								// Process each event attached to this bar
+								bar.events.forEach((event) => {
+									// Parse the JSON string in event.value into an object
+									let valueObj: EventValue = {};
+									try {
+										valueObj = JSON.parse(event.value);
+									} catch (e) {
+										console.error('Failed to parse event value:', e, event.value);
+									}
 
-								// Iterate through bars, using bar.time as the key
-								barsWithEvents.forEach((bar) => {
-									if (bar.events && bar.events.length > 0) {
-										const barTime = bar.time as number; // Already EST seconds
-
-										if (!eventsByTime.has(barTime)) {
-											eventsByTime.set(barTime, []);
-										}
-
-										// Process each event attached to this bar
-										bar.events.forEach((event) => {
-											// Parse the JSON string in event.value into an object
-											let valueObj: EventValue = {};
-											try {
-												valueObj = JSON.parse(event.value);
-											} catch (e) {
-												console.error('Failed to parse event value:', e, event.value);
-											}
-
-											// Create proper event object based on type and add to the map using barTime
-											if (event.type === 'sec_filing') {
-												eventsByTime.get(barTime)?.push({
-													type: 'sec_filing',
-													title: valueObj.type || 'SEC Filing',
-													url: valueObj.url
-												});
-											} else if (event.type === 'split') {
-												eventsByTime.get(barTime)?.push({
-													type: 'split',
-													title: `Split: ${valueObj.ratio || 'unknown'}`,
-													value: valueObj.ratio
-												});
-											} else if (event.type === 'dividend') {
-												const amount =
-													typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
-												eventsByTime.get(barTime)?.push({
-													type: 'dividend',
-													title: `Dividend: $${amount}`,
-													value: amount,
-													exDate: valueObj.exDate || 'Unknown',
-													payoutDate: valueObj.payDate || 'Unknown'
-												});
-											}
+									// Create proper event object based on type and add to the map using barTime
+									if (event.type === 'sec_filing') {
+										eventsByTime.get(barTime)?.push({
+											type: 'sec_filing',
+											title: valueObj.type || 'SEC Filing',
+											url: valueObj.url
+										});
+									} else if (event.type === 'split') {
+										eventsByTime.get(barTime)?.push({
+											type: 'split',
+											title: `Split: ${valueObj.ratio || 'unknown'}`,
+											value: valueObj.ratio
+										});
+									} else if (event.type === 'dividend') {
+										const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
+										eventsByTime.get(barTime)?.push({
+											type: 'dividend',
+											title: `Dividend: $${amount}`,
+											value: amount,
+											exDate: valueObj.exDate || 'Unknown',
+											payoutDate: valueObj.payDate || 'Unknown'
 										});
 									}
 								});
-
-								// Process the newly fetched events
-								let newEventData: EventMarker[] = [];
-								eventsByTime.forEach((eventsList, time) => {
-									newEventData.push({
-										time: time as UTCTimestamp,
-										events: eventsList
-									});
-								});
-
-								// Get existing events ONLY if loading additional data
-								const existingEventData =
-									inst.requestType === 'loadAdditionalData'
-										? (eventSeries.data() as EventMarker[])
-										: [];
-
-								// Combine using a Map to handle potential overlaps/updates
-								const combinedEventsMap = new Map<number, EventMarker>();
-								existingEventData.forEach((event) =>
-									combinedEventsMap.set(event.time as number, event)
-								);
-								newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
-
-								let finalEventData = Array.from(combinedEventsMap.values());
-
-								// Sort the combined data by time
-								finalEventData.sort((a, b) => (a.time as number) - (b.time as number));
-
-								// Adjust events to trading days using the combined candle data
-								// Ensure newCandleData exists and is an array before spreading
-								const candleDataForAdjustment = Array.isArray(newCandleData)
-									? [...newCandleData]
-									: [];
-								finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
-
-								// Set the final data
-								eventSeries.setData(finalEventData);
-							}
-						}
-					} catch (error) {
-						console.warn('Failed to process chart events from bars:', error);
-						// Avoid clearing events on error during additional load
-						if (inst.requestType !== 'loadAdditionalData') {
-							eventSeries.setData([]);
-						}
-					}
-					queuedLoad = null;
-
-					// Fix the SMA data type issues
-					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
-					const sma10Data = smaResults.get(10);
-					const sma20Data = smaResults.get(20);
-
-					if (sma10Data) {
-						sma10Series.setData([...sma10Data] as Array<
-							WhitespaceData<Time> | { time: UTCTimestamp; value: number }
-						>);
-					}
-					if (sma20Data) {
-						sma20Series.setData([...sma20Data] as Array<
-							WhitespaceData<Time> | { time: UTCTimestamp; value: number }
-						>);
-					}
-
-					if (/^\d+$/.test(inst.timeframe ?? '')) {
-						vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
-					} else {
-						vwapSeries.setData([]);
-					}
-					if (inst.requestType == 'loadNewTicker') {
-						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
-						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
-					}
-					// Hide chart switching overlay when loading completes
-					if (inst.requestType === 'loadNewTicker') {
-						isSwitchingTickers = false;
-					}
-					// Trigger Why Moving popup only for new ticker loads
-					if (inst.requestType === 'loadNewTicker') {
-						whyMovingTicker = inst.ticker ?? '';
-						whyMovingTrigger = Date.now();
-					}
-
-					// Apply time scale reset and right offset for new ticker loads after all data is processed
-					if (inst.requestType === 'loadNewTicker' && chart && inst.direction === 'backward') {
-						// Use requestAnimationFrame to ensure chart has processed the data
-						requestAnimationFrame(() => {
-							chart.timeScale().resetTimeScale();
-							if (inst.timestamp === 0) {
-								chart.timeScale().applyOptions({
-									rightOffset: 10  // Live data gets right margin
-								});
-							} else {
-								chart.timeScale().applyOptions({
-									rightOffset: 0   // Historical data gets no right margin
-								});
 							}
 						});
+
+						// Process the newly fetched events
+						let newEventData: EventMarker[] = [];
+						eventsByTime.forEach((eventsList, time) => {
+							newEventData.push({
+								time: time as UTCTimestamp,
+								events: eventsList
+							});
+						});
+
+						// Get existing events ONLY if loading additional data
+						const existingEventData =
+							inst.requestType === 'loadAdditionalData'
+								? (eventSeries.data() as EventMarker[])
+								: [];
+
+						// Combine using a Map to handle potential overlaps/updates
+						const combinedEventsMap = new Map<number, EventMarker>();
+						existingEventData.forEach((event) =>
+							combinedEventsMap.set(event.time as number, event)
+						);
+						newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
+
+						let finalEventData = Array.from(combinedEventsMap.values());
+
+						// Sort the combined data by time
+						finalEventData.sort((a, b) => (a.time as number) - (b.time as number));
+
+						// Adjust events to trading days using the combined candle data
+						// Ensure newCandleData exists and is an array before spreading
+						const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
+						finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
+
+						// Set the final data
+						eventSeries.setData(finalEventData);
 					}
-				};
-				if (
-					inst.direction == 'backward' ||
-					inst.requestType == 'loadNewTicker' ||
-					inst.direction == 'forward'
-				) {
-					queuedLoad();
 				}
+			} catch (error) {
+				console.warn('Failed to process chart events from bars:', error);
+				// Avoid clearing events on error during additional load
+				if (inst.requestType !== 'loadAdditionalData') {
+					eventSeries.setData([]);
+				}
+			}
+			queuedLoad = null;
+
+			// Fix the SMA data type issues
+			const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
+			const sma10Data = smaResults.get(10);
+			const sma20Data = smaResults.get(20);
+
+			if (sma10Data) {
+				sma10Series.setData([...sma10Data] as Array<
+					WhitespaceData<Time> | { time: UTCTimestamp; value: number }
+				>);
+			}
+			if (sma20Data) {
+				sma20Series.setData([...sma20Data] as Array<
+					WhitespaceData<Time> | { time: UTCTimestamp; value: number }
+				>);
+			}
+
+			if (/^\d+$/.test(inst.timeframe ?? '')) {
+				vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
+			} else {
+				vwapSeries.setData([]);
+			}
+
+			// Only set up new streams if the securityId actually changed
+			const currentSecurityId =
+				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId;
+
+			if (inst.requestType == 'loadNewTicker' && previousSecurityId !== currentSecurityId) {
+				releaseFast();
+				releaseQuote();
+				releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
+				releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
+				previousSecurityId = currentSecurityId;
+			}
+			// Hide chart switching overlay when loading completes
+			if (inst.requestType === 'loadNewTicker') {
+				isSwitchingTickers = false;
+			}
+			// Trigger Why Moving popup only for new ticker loads
+			if (inst.requestType === 'loadNewTicker') {
+				whyMovingTicker = inst.ticker ?? '';
+				whyMovingTrigger = Date.now();
+			}
+
+			// Apply time scale reset and right offset for new ticker loads after all data is processed
+			if (inst.requestType === 'loadNewTicker' && chart && inst.direction === 'backward') {
+				// Use requestAnimationFrame to ensure chart has processed the data
+				requestAnimationFrame(() => {
+					chart.timeScale().resetTimeScale();
+					if (inst.timestamp === 0) {
+						chart.timeScale().applyOptions({
+							rightOffset: 10 // Live data gets right margin
+						});
+					} else {
+						chart.timeScale().applyOptions({
+							rightOffset: 0 // Historical data gets no right margin
+						});
+					}
+				});
+			}
+		};
+		if (
+			inst.direction == 'backward' ||
+			inst.requestType == 'loadNewTicker' ||
+			inst.direction == 'forward'
+		) {
+			queuedLoad();
+		}
 	}
 
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
@@ -747,7 +758,6 @@
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
-
 		} else if (inst.requestType === 'loadAdditionalData') {
 			isLoadingAdditionalData = true;
 		}
@@ -763,33 +773,40 @@
 		) {
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
-		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
-			securityId: inst.securityId,
-			timeframe: inst.timeframe,
-			timestamp: inst.timestamp,
-			direction: inst.direction,
-			bars: inst.bars,
-			extendedhours: inst.extendedHours,
-			isreplay: $streamInfo.replayActive,
-			includeSECFilings: get(settings).showFilings
-		}, false, false, signal)
+		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>(
+			'getChartData',
+			{
+				securityId: inst.securityId,
+				timeframe: inst.timeframe,
+				timestamp: inst.timestamp,
+				direction: inst.direction,
+				bars: inst.bars,
+				extendedhours: inst.extendedHours,
+				isreplay: $streamInfo.replayActive,
+				includeSECFilings: get(settings).showFilings
+			},
+			false,
+			false,
+			signal
+		)
 			.then((response) => {
 				if (thisRequestTickerIncrementCount !== latestLoadToken) return;
 
 				processChartDataResponse(response, inst, visibleRange);
 			})
 			.catch((error: Error) => {
-				if (error?.name === 'AbortError' || thisRequestTickerIncrementCount !== latestLoadToken) return;
+				if (error?.name === 'AbortError' || thisRequestTickerIncrementCount !== latestLoadToken)
+					return;
 				console.error(error);
 				isLoadingAdditionalData = false;
 				isSwitchingTickers = false;
 			})
 			.finally(() => {
 				if (thisRequestTickerIncrementCount === latestLoadToken) {
-					isLoadingAdditionalData = false;	
+					isLoadingAdditionalData = false;
 					isSwitchingTickers = false;
 				}
-			})
+			});
 	}
 	function updateLatestQuote(data: QuoteData) {
 		if (!data?.bidPrice || !data?.askPrice) {
@@ -1275,7 +1292,10 @@
 		});
 	}
 
-	function change(newReq: ChartQueryDispatch, preloadedResponse?: { bars: BarData[]; isEarliestData: boolean }) {
+	function change(
+		newReq: ChartQueryDispatch,
+		preloadedResponse?: { bars: BarData[]; isEarliestData: boolean }
+	) {
 		// Reset pending updates when changing charts
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
@@ -1816,7 +1836,6 @@
 
 			latestCrosshairPositionTime = barToUse.time as number;
 			latestCrosshairPositionY = param && param.point ? param.point.y : 0;
-
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
 			if (selectedEvent) {
@@ -1968,12 +1987,9 @@
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
 
-
-
 		const loadDefaultChart = async () => {
 			// Check if preloaded data is available
 			if (defaultChartData) {
-
 				// Use server-side preloaded data
 				const chartQueryDispatch: ChartQueryDispatch = {
 					ticker: defaultChartData.ticker,
@@ -1988,12 +2004,12 @@
 					requestType: 'loadNewTicker',
 					includeLastBar: true
 				};
-				
+
 				const preloadedResponse = {
 					bars: defaultChartData.chartData.bars,
 					isEarliestData: defaultChartData.chartData.isEarliestData || false
 				};
-				
+
 				change(chartQueryDispatch, preloadedResponse);
 				return;
 			}
@@ -2044,7 +2060,6 @@
 			// Clean up global shift key listeners
 			document.removeEventListener('keydown', handleGlobalKeyDown);
 			document.removeEventListener('keyup', handleGlobalKeyUp);
-
 		};
 	});
 

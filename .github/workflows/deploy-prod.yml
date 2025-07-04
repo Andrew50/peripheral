@@ -27,9 +27,9 @@ jobs:
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #k8s_context: 'prod-cluster'
       k8s_namespace: 'prod'
-      google_redirect_url: 'https://atlantis.trading/auth/google/callback'
-      ingress_host: 'atlantis.trading'
-      #      public_base_url: 'https://atlantis.trading'
+      google_redirect_url: 'https://peripheral.io/auth/google/callback'
+      ingress_host: 'peripheral.io'
+      #      public_base_url: 'https://peripheral.io'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -41,5 +41,9 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_PROD_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}

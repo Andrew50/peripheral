@@ -29,10 +29,10 @@
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
-				<Chart 
-					width={width / $settings.chartColumns} 
+				<Chart
+					width={width / $settings.chartColumns}
 					chartId={i + j * $settings.chartColumns}
-					defaultChartData={(i + j * $settings.chartColumns) === 0 ? defaultChartData : null}
+					defaultChartData={i + j * $settings.chartColumns === 0 ? defaultChartData : null}
 				/>
 			{/each}
 		</div>

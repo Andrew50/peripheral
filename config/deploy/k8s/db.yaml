@@ -26,13 +26,17 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: PGDATA                    # ← new: tell Postgres where to keep its cluster
               value: /home/postgres/pgdata/data
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/app/graceful-shutdown.sh"]
           resources:
             requests:
-              cpu: 1000m
-              memory: 2000Mi
+              cpu: 2000m
+              memory: 4000Mi
             limits:
-              cpu: 5000m
-              memory: 10000Mi
+              cpu: 8000m
+              memory: 16000Mi
           volumeMounts:
             - name: db-pvc
               mountPath: /home/postgres/pgdata
@@ -40,7 +44,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodSeconds: 90
+      terminationGracePeriodSeconds: 150
 
 ---
 apiVersion: v1
