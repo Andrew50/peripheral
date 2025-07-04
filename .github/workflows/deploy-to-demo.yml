@@ -27,9 +27,9 @@ jobs:
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #k8s_context: 'prod-cluster'
       k8s_namespace: 'demo'
-      google_redirect_url: 'https://demo.atlantis.trading/auth/google/callback'
-      ingress_host: 'demo.atlantis.trading'
-      #      public_base_url: 'https://atlantis.trading'
+      google_redirect_url: 'https://demo.peripheral.io/auth/google/callback'
+      ingress_host: 'demo.peripheral.io'
+      #      public_base_url: 'https://peripheral.io'
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
