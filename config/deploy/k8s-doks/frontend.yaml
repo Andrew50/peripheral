@@ -25,6 +25,12 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          env:
+            - name: PUBLIC_STRIPE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_PUBLISHABLE_KEY
 ---
 apiVersion: v1
 kind: Service

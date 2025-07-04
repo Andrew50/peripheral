@@ -9,6 +9,8 @@
 	import { onMount } from 'svelte';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 	import { logout } from '$lib/auth';
+	import { redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
+	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -23,16 +25,37 @@
 	let deleteConfirmationText = '';
 	let deletingAccount = false;
 
-	// Function to determine if the current user is a guest
-	const isGuestAccount = (): boolean => {
-		return username === 'Guest';
-	};
+	// Handle manage subscription
+	async function handleManageSubscription() {
+		subscriptionStatus.update((s) => ({ ...s, loading: true, error: '' }));
 
-	function updateLayout() {
+		try {
+			const response = await privateRequest<{ url: string }>('createCustomerPortal', {});
+			redirectToCustomerPortal(response.url);
+		} catch (error) {
+			console.error('Error opening customer portal:', error);
+			subscriptionStatus.update((s) => ({
+				...s,
+				loading: false,
+				error: 'Failed to open subscription management. Please try again.'
+			}));
+		}
+	}
+
+	// Initialize component
+	async function initializeComponent() {
+		await fetchSubscriptionStatus();
+	}
+
+	// Run initialization on mount
+	onMount(() => {
+		initializeComponent();
+	});
+
+	function saveSettings() {
 		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
 			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
-				settings.set(tempSettings); 
-
+				settings.set(tempSettings);
 				errorMessage = '';
 			});
 		} else {
@@ -40,21 +63,22 @@
 		}
 	}
 
-	function handleKeyPress(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			updateLayout();
-		}
+	function resetSettings() {
+		tempSettings = { ...get(settings) };
+		saveSettings();
 	}
 
-
+	function handleKeyPress(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			saveSettings();
+		}
+	}
 
 	// Generate initial avatar SVG from username
 	function generateInitialAvatar(username: string) {
 		const initial = username.charAt(0).toUpperCase();
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
 	}
-
-
 
 	// Function to handle account deletion
 	async function handleDeleteAccount() {
@@ -82,359 +106,245 @@
 </script>
 
 <div class="settings-panel">
-	{#if isGuestAccount()}
-		<!-- Simplified view for guest users -->
-		<div class="settings-header">
-			<h2>Settings</h2>
-		</div>
-		<div class="settings-content guest-only-content">
-			<div class="profile-section guest-profile">
-				<div class="profile-picture-container">
-					<div class="profile-picture">
-						<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
-					</div>
-					<div class="username-display">
-						{username}
-					</div>
-				</div>
+	<!-- Full settings view for all authenticated users -->
+	<div class="tabs">
+		<button
+			class="tab {activeTab === 'chart' ? 'active' : ''}"
+			on:click={() => (activeTab = 'chart')}
+		>
+			Chart
+		</button>
+		<button
+			class="tab {activeTab === 'format' ? 'active' : ''}"
+			on:click={() => (activeTab = 'format')}
+		>
+			Format
+		</button>
+		<button
+			class="tab {activeTab === 'account' ? 'active' : ''}"
+			on:click={() => (activeTab = 'account')}
+		>
+			Account
+		</button>
+		<button
+			class="tab {activeTab === 'appearance' ? 'active' : ''}"
+			on:click={() => (activeTab = 'appearance')}
+		>
+			Appearance
+		</button>
+	</div>
 
-				<div class="guest-account-notice">
-					<p>
-						You're currently using a guest account. Create your own account to save your preferences
-						and data.
-					</p>
-					<button class="create-account-button" on:click={() => goto('/signup')}> Create Your Account </button>
-				</div>
-			</div>
-
-			<div class="account-actions">
-				<button class="logout-button" on:click={() => logout('/')}>Logout</button>
-			</div>
-		</div>
-	{:else}
-		<!-- Full settings panel for registered users -->
-		<div class="settings-tabs">
-			<button
-				class="tab-button {activeTab === 'account' ? 'active' : ''}"
-				on:click={() => (activeTab = 'account')}
-			>
-				Account
-			</button>
-			<button
-				class="tab-button {activeTab === 'chart' ? 'active' : ''}"
-				on:click={() => (activeTab = 'chart')}
-			>
-				Chart
-			</button>
-			<button
-				class="tab-button {activeTab === 'format' ? 'active' : ''}"
-				on:click={() => (activeTab = 'format')}
-			>
-				Format
-			</button>
-
-			<button
-				class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
-				on:click={() => (activeTab = 'appearance')}
-			>
-				Appearance
-			</button>
-		</div>
-
-		<div class="settings-content">
-			{#if activeTab === 'chart'}
-				<div class="settings-section">
-					<h3>Chart Layout</h3>
-					<div class="settings-grid">
-						<!--<div class="setting-item">
-							<label for="chartRows">Chart Rows</label>
-							<input
-								type="number"
-								id="chartRows"
-								bind:value={tempSettings.chartRows}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-
-						<div class="setting-item">
-							<label for="chartColumns">Chart Columns</label>
-							<input
-								type="number"
-								id="chartColumns"
-								bind:value={tempSettings.chartColumns}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>  -->
-						<div class="setting-item">
-							<label for="dolvol">Show Dollar Volume</label>
-							<div class="toggle-container">
-								<select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-
-						<div class="setting-item">
-							<label for="showFilings">Show SEC Filings</label>
-							<div class="toggle-container">
-								<select
-									id="showFilings"
-									bind:value={tempSettings.showFilings}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div class="settings-section">
-					<h3>Technical Indicators</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="adrPeriod">Average Range Period</label>
-							<input
-								type="number"
-								id="adrPeriod"
-								bind:value={tempSettings.adrPeriod}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-				</div>
-			{:else if activeTab === 'format'}
-				<div class="settings-section">
-					<h3>Display Options</h3>
-					<div class="settings-grid">			
-					</div>
-				</div>
+	<div class="settings-content">
+		<!-- Chart Settings Tab -->
+		{#if activeTab === 'chart'}
+			<div class="chart-settings">
+				<h3>Chart Settings</h3>
 
 				<div class="settings-section">
-					<!--<h3>Time & Sales</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="filterTaS">Show trades less than 100 shares</label>
-							<div class="toggle-container">
-								<select
-									id="filterTaS"
-									bind:value={tempSettings.filterTaS}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-
-						<div class="setting-item">
-							<label for="divideTaS">Divide Time and Sales by 100</label>
-							<div class="toggle-container">
-								<select
-									id="divideTaS"
-									bind:value={tempSettings.divideTaS}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-					</div> -->
-				</div>
-				
-			{:else if activeTab === 'appearance'}
-				<div class="settings-section">
-					<h3>Color Scheme</h3>
-					<div class="setting-item wide">
-						<label for="colorScheme">Choose a color scheme</label>
-						<div class="toggle-container">
-							<select
-								id="colorScheme"
-								bind:value={tempSettings.colorScheme}
-								on:keypress={handleKeyPress}
-							>
-								<option value="default">Default</option>
-								<option value="dark-blue">Dark Blue</option>
-								<option value="midnight">Midnight</option>
-								<option value="forest">Forest</option>
-								<option value="sunset">Sunset</option>
-								<option value="grayscale">Grayscale</option>
-							</select>
-						</div>
-					</div>
-
-					<!-- Color scheme preview -->
-					<div class="color-scheme-preview">
-						<h4>Preview</h4>
-						<div
-							class="color-preview-container"
-							style="background-color: {colorSchemes[tempSettings.colorScheme].c2};"
-						>
-							<div
-								class="preview-header"
-								style="background-color: {colorSchemes[tempSettings.colorScheme]
-									.c1}; border-bottom: 1px solid {colorSchemes[tempSettings.colorScheme].c3};"
-							>
-								<div
-									class="preview-title"
-									style="color: {colorSchemes[tempSettings.colorScheme].f1};"
-								>
-									Chart Window
-								</div>
-							</div>
-							<div class="preview-content">
-								<div
-									class="preview-section"
-									style="background-color: {colorSchemes[tempSettings.colorScheme]
-										.c2}; border: 1px solid {colorSchemes[tempSettings.colorScheme].c4};"
-								>
-									<div
-										class="preview-text"
-										style="color: {colorSchemes[tempSettings.colorScheme].f1};"
-									>
-										Primary Text
-									</div>
-									<div
-										class="preview-text"
-										style="color: {colorSchemes[tempSettings.colorScheme].f2};"
-									>
-										Secondary Text
-									</div>
-								</div>
-								<div class="preview-buttons">
-									<button
-										class="preview-button"
-										style="background-color: {colorSchemes[tempSettings.colorScheme]
-											.c3}; color: white;"
-									>
-										Action Button
-									</button>
-									<div class="preview-indicators">
-										<span style="color: {colorSchemes[tempSettings.colorScheme].colorUp};"
-											>▲ +2.45%</span
-										>
-										<span style="color: {colorSchemes[tempSettings.colorScheme].colorDown};"
-											>▼ -1.23%</span
-										>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="info-message">
-						Color scheme changes will be applied immediately but must be saved using the "Apply
-						Changes" button to persist across sessions.
-					</div>
-				</div>
-			{:else if activeTab === 'account'}
-				<div class="settings-section">
-					<h3>Account Information</h3>
-
-					<div class="profile-section">
-						<div class="profile-picture-container">
-							<div class="profile-picture">
-								{#if profilePic}
-									<img
-										src={profilePic}
-										alt="Profile"
-										class="profile-image"
-										on:error={() => {
-											profilePic = generateInitialAvatar(username);
-										}}
-									/>
-								{:else if username}
-									<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
-								{:else}
-									<div class="profile-placeholder">?</div>
-								{/if}
-							</div>
-							<div class="username-display">
-								{username || 'User'}
-							</div>
-						</div>
-
-						
-					</div>
-
-					<div class="account-actions">
-						<button class="logout-button" on:click={() => logout('/')}>Logout</button>
-					</div>
-
-					<div class="danger-zone">
-						<h3>Danger Zone</h3>
-						<div class="delete-account-section">
-							<div class="warning-message">
-								<p>
-									Permanently delete your account and all associated data. This action cannot be
-									undone.
-								</p>
-							</div>
-
-							<button
-								class="delete-account-button"
-								on:click={() => (showDeleteConfirmation = true)}
-							>
-								Delete Account
-							</button>
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			{#if errorMessage}
-				<div class="error-message">{errorMessage}</div>
-			{/if}
-
-			<div class="settings-actions">
-				<button class="apply-button" on:click={updateLayout}>Apply Changes</button>
-			</div>
-
-			{#if showDeleteConfirmation}
-				<div class="confirmation-modal-overlay">
-					<div class="confirmation-modal">
-						<h3>Delete Account</h3>
-						<p>
-							This will permanently delete your account and all associated data. This action cannot
-							be undone.
-						</p>
-						<p class="confirmation-instruction">
-							Type <strong>DELETE</strong> to confirm.
-						</p>
-
+					<h4>Chart Layout</h4>
+					<label class="setting-item">
+						<span>Chart Rows:</span>
 						<input
-							type="text"
-							bind:value={deleteConfirmationText}
-							placeholder="Type DELETE to confirm"
-							class="confirmation-input"
+							type="number"
+							bind:value={tempSettings.chartRows}
+							min="1"
+							on:keypress={handleKeyPress}
 						/>
+					</label>
 
-						<div class="confirmation-actions">
-							<button class="cancel-button" on:click={() => (showDeleteConfirmation = false)}>
-								Cancel
-							</button>
-							<button
-								class="confirm-delete-button"
-								disabled={deleteConfirmationText !== 'DELETE'}
-								on:click={handleDeleteAccount}
-							>
-								{#if deletingAccount}
-									<span class="loader"></span>
-								{:else}
-									Delete My Account
-								{/if}
-							</button>
+					<label class="setting-item">
+						<span>Chart Columns:</span>
+						<input
+							type="number"
+							bind:value={tempSettings.chartColumns}
+							min="1"
+							on:keypress={handleKeyPress}
+						/>
+					</label>
+
+					<label class="setting-item">
+						<span>Show Dollar Volume:</span>
+						<input type="checkbox" bind:checked={tempSettings.dolvol} />
+					</label>
+
+					<label class="setting-item">
+						<span>Show SEC Filings:</span>
+						<input type="checkbox" bind:checked={tempSettings.showFilings} />
+					</label>
+				</div>
+
+				<div class="settings-section">
+					<h4>Technical Indicators</h4>
+					<label class="setting-item">
+						<span>Average Range Period:</span>
+						<input
+							type="number"
+							bind:value={tempSettings.adrPeriod}
+							min="1"
+							on:keypress={handleKeyPress}
+						/>
+					</label>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Format Settings Tab -->
+		{#if activeTab === 'format'}
+			<div class="format-settings">
+				<h3>Format Settings</h3>
+
+				<div class="settings-section">
+					<h4>Time & Sales</h4>
+					<label class="setting-item">
+						<span>Show trades less than 100 shares:</span>
+						<input type="checkbox" bind:checked={tempSettings.filterTaS} />
+					</label>
+
+					<label class="setting-item">
+						<span>Divide Time and Sales by 100:</span>
+						<input type="checkbox" bind:checked={tempSettings.divideTaS} />
+					</label>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Account Settings Tab -->
+		{#if activeTab === 'account'}
+			<div class="account-settings">
+				<h3>Account Settings</h3>
+
+				<div class="profile-section">
+					<div class="profile-picture-container">
+						<div class="profile-picture">
+							<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
+						</div>
+						<div class="username-display">
+							{username}
 						</div>
 					</div>
 				</div>
-			{/if}
+
+				<!-- Subscription Management -->
+				<div class="subscription-section">
+					<h4>Subscription</h4>
+					{#if $subscriptionStatus.loading}
+						<p>Loading subscription information...</p>
+					{:else if $subscriptionStatus.error}
+						<p class="error-text">{$subscriptionStatus.error}</p>
+					{:else if $subscriptionStatus.isActive}
+						<div class="subscription-info">
+							<p class="subscription-status">Status: <span class="active">Active</span></p>
+							{#if $subscriptionStatus.planName}
+								<p>Plan: {$subscriptionStatus.planName}</p>
+							{/if}
+							{#if $subscriptionStatus.nextBillingDate}
+								<p>
+									Next billing: {new Date($subscriptionStatus.nextBillingDate).toLocaleDateString()}
+								</p>
+							{/if}
+							<button class="manage-subscription-button" on:click={handleManageSubscription}>
+								Manage Subscription
+							</button>
+						</div>
+					{:else}
+						<div class="subscription-info">
+							<p class="subscription-status">Status: <span class="inactive">Free Plan</span></p>
+							<p>Upgrade to access premium features</p>
+							<button class="upgrade-button" on:click={() => goto('/pricing')}> View Plans </button>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Account Actions -->
+				<div class="account-actions">
+					<button class="logout-button" on:click={() => logout('/')}>Logout</button>
+
+					<!-- Delete Account Section -->
+					<div class="danger-zone">
+						<h4>Danger Zone</h4>
+						<div class="delete-account-section">
+							<p>Permanently delete your account and all associated data.</p>
+
+							{#if !showDeleteConfirmation}
+								<button class="delete-button" on:click={() => (showDeleteConfirmation = true)}>
+									Delete Account
+								</button>
+							{:else}
+								<div class="delete-confirmation">
+									<p class="warning-text">
+										⚠️ This action cannot be undone. All your data will be permanently deleted.
+									</p>
+									<p>Type <strong>DELETE</strong> to confirm:</p>
+									<input
+										type="text"
+										bind:value={deleteConfirmationText}
+										placeholder="Type DELETE here"
+										class="delete-input"
+									/>
+									<div class="delete-buttons">
+										<button
+											class="cancel-button"
+											on:click={() => {
+												showDeleteConfirmation = false;
+												deleteConfirmationText = '';
+											}}
+										>
+											Cancel
+										</button>
+										<button
+											class="confirm-delete-button"
+											disabled={deleteConfirmationText !== 'DELETE' || deletingAccount}
+											on:click={handleDeleteAccount}
+										>
+											{deletingAccount ? 'Deleting...' : 'Delete Account'}
+										</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Appearance Settings Tab -->
+		{#if activeTab === 'appearance'}
+			<div class="appearance-settings">
+				<h3>Appearance Settings</h3>
+
+				<div class="settings-section">
+					<h4>Color Scheme</h4>
+					<div class="color-scheme-grid">
+						{#each Object.entries(colorSchemes) as [key, scheme]}
+							<button
+								class="color-scheme-option {tempSettings.colorScheme === key ? 'selected' : ''}"
+								on:click={() => {
+									tempSettings.colorScheme = key;
+									applyColorScheme(key);
+								}}
+							>
+								<div class="color-preview">
+									<div class="color-bar" style="background-color: {scheme.primary}"></div>
+									<div class="color-bar" style="background-color: {scheme.secondary}"></div>
+									<div class="color-bar" style="background-color: {scheme.accent}"></div>
+								</div>
+								<span class="scheme-name">{scheme.name}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Settings Actions -->
+		<div class="settings-actions">
+			<button class="save-button" on:click={saveSettings}>Save Settings</button>
+			<button class="reset-button" on:click={resetSettings}>Reset to Default</button>
 		</div>
+	</div>
+
+	{#if errorMessage}
+		<div class="error-message">{errorMessage}</div>
 	{/if}
 </div>
 
@@ -443,320 +353,123 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		width: 100%;
-		max-width: 95vw;
-		max-height: 92vh;
-		color: var(--f1);
 		background-color: var(--c1);
-		border-radius: 8px;
-		overflow: hidden;
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-		margin: 0 auto;
-		position: relative;
-		min-width: 800px;
-		min-height: 600px;
+		color: var(--f1);
+		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 	}
 
-	.settings-tabs {
+	.tabs {
 		display: flex;
-		background-color: var(--c2);
 		border-bottom: 1px solid var(--c3);
-		height: 56px;
-		min-height: 56px;
+		background-color: var(--c2);
 	}
 
-	.tab-button {
-		padding: 0 20px;
-		background: transparent;
+	.tab {
+		padding: 1rem 1.5rem;
+		background: none;
 		border: none;
 		color: var(--f2);
-		font-size: 0.9375rem;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		position: relative;
-		text-align: center;
-		height: 100%;
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		font-size: 0.9375rem;
 		font-weight: 500;
-		letter-spacing: 0.2px;
+		transition: all 0.2s ease;
+		border-bottom: 3px solid transparent;
 	}
 
-	.tab-button:hover {
+	.tab:hover {
 		background-color: rgba(255, 255, 255, 0.05);
 		color: var(--f1);
 	}
 
-	.tab-button.active {
-		color: var(--f1);
-		font-weight: 600;
-	}
-
-	.tab-button.active::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 100%;
-		height: 3px;
-		background-color: var(--c3);
+	.tab.active {
+		color: var(--c3);
+		border-bottom-color: var(--c3);
+		background-color: rgba(255, 255, 255, 0.03);
 	}
 
 	.settings-content {
 		flex: 1;
-		padding: 1.75rem 2rem;
+		padding: 2rem;
 		overflow-y: auto;
-		overflow-x: hidden;
+	}
+
+	.chart-settings,
+	.format-settings,
+	.account-settings,
+	.appearance-settings {
+		max-width: 600px;
 	}
 
 	.settings-section {
 		margin-bottom: 2rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-		padding-bottom: 1.75rem;
+		padding: 1.5rem;
+		background-color: rgba(255, 255, 255, 0.03);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
-	.settings-section:last-child {
-		border-bottom: none;
-		margin-bottom: 0;
-		padding-bottom: 0;
-	}
-
-	h3 {
-		margin: 0 0 1.25rem 0;
-		font-size: 1.125rem;
-		font-weight: 600;
+	.settings-section h4 {
+		margin: 0 0 1rem 0;
 		color: var(--f1);
-		position: relative;
-		padding-bottom: 0.5rem;
-	}
-
-	h3::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 40px;
-		height: 2px;
-		background-color: var(--c3);
-	}
-
-	.settings-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 0.875rem;
-	}
-
-	@media (min-width: 600px) {
-		.settings-grid {
-			grid-template-columns: 1fr 1fr;
-			gap: 1.25rem;
-		}
-	}
-
-	@media (min-width: 1200px) {
-		.settings-grid {
-			grid-template-columns: 1fr 1fr 1fr;
-			gap: 1.5rem;
-		}
+		font-size: 1rem;
+		font-weight: 600;
 	}
 
 	.setting-item {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 1rem 1.25rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		transition: border-color 0.2s ease;
-	}
-
-	.setting-item:hover {
-		border-color: rgba(255, 255, 255, 0.12);
-	}
-
-	.setting-item.wide {
-		grid-column: 1 / -1;
-	}
-
-	label {
+		margin-bottom: 1rem;
 		font-size: 0.9375rem;
+	}
+
+	.setting-item span {
 		color: var(--f2);
-		margin-right: 1rem;
-		font-weight: 500;
+		flex-grow: 1;
 	}
 
-	input[type='number'] {
-		width: 90px;
-		padding: 0.625rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+	.setting-item select,
+	.setting-item input[type='number'] {
+		padding: 0.5rem;
+		background-color: var(--c2);
+		border: 1px solid var(--c3);
 		border-radius: 4px;
 		color: var(--f1);
-		font-size: 0.9375rem;
-		text-align: center;
-		transition: all 0.2s ease;
-	}
-
-	input[type='number']:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
-	}
-
-	input[type='text'] {
-		padding: 0.625rem 0.875rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-		min-width: 250px;
-		transition: all 0.2s ease;
-	}
-
-	input[type='text']:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
-	}
-
-	.toggle-container select {
-		padding: 0.625rem 0.875rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
+		font-size: 0.875rem;
 		min-width: 120px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' fill='none'%3E%3Cpath fill='%23999' d='M0 0h12L6 6 0 0z'/%3E%3C/svg%3E");
-		background-repeat: no-repeat;
-		background-position: right 12px center;
-		padding-right: 36px;
 	}
 
-	.toggle-container select:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
+	.setting-item input[type='checkbox'] {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--c3);
 	}
 
-	.info-message {
-		padding: 1.25rem;
-		background-color: rgba(59, 130, 246, 0.05);
-		border-radius: 6px;
-		color: var(--f2);
-		font-size: 0.9375rem;
-		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
-		margin-top: 1.5rem;
-	}
-
-	.account-actions {
-		margin-top: 2rem;
-		display: flex;
-		justify-content: center;
-	}
-
-	.error-message {
-		margin: 1.25rem 0;
-		padding: 1rem 1.25rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border-radius: 6px;
-		font-size: 0.9375rem;
-		text-align: center;
-		border: 1px solid rgba(239, 68, 68, 0.2);
-	}
-
-	.settings-actions {
-		margin-top: 2rem;
-		display: flex;
-		justify-content: flex-end;
-		position: sticky;
-		bottom: 0;
-		background-color: var(--c1);
-		padding: 1.25rem 0 0 0;
-		border-top: 1px solid rgba(255, 255, 255, 0.05);
-	}
-
-	.apply-button {
-		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
-		color: white;
-		border: none;
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-	}
-
-	.apply-button:hover {
-		background-color: var(--c3-hover);
-	}
-
-	.logout-button {
-		padding: 0.75rem 1.5rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.logout-button:hover {
-		background-color: rgba(239, 68, 68, 0.2);
-	}
-
-	/* Profile section styles */
 	.profile-section {
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-
-	@media (min-width: 768px) {
-		.profile-section {
-			flex-direction: row;
-			align-items: flex-start;
-		}
-
-		.profile-picture-container {
-			flex: 0 0 auto;
-		}
-
-
+		margin-bottom: 2rem;
+		padding: 1.5rem;
+		background-color: rgba(255, 255, 255, 0.03);
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		text-align: center;
 	}
 
 	.profile-picture-container {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.875rem;
+		gap: 1rem;
 	}
 
 	.profile-picture {
-		width: 100px;
-		height: 100px;
+		width: 80px;
+		height: 80px;
 		border-radius: 50%;
 		overflow: hidden;
-		background-color: var(--c2);
+		border: 3px solid var(--c3);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border: 2px solid var(--c3);
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 	}
 
 	.profile-image {
@@ -765,113 +478,47 @@
 		object-fit: cover;
 	}
 
-	.profile-placeholder {
-		font-size: 2.5rem;
-		color: var(--f2);
-		font-weight: bold;
-	}
-
 	.username-display {
-		font-size: 1.125rem;
+		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--f1);
 	}
 
-
-
-	/* Color scheme preview styles */
-	.color-scheme-preview {
-		margin-top: 1.75rem;
-		margin-bottom: 1.75rem;
-	}
-
-	.color-scheme-preview h4 {
-		margin: 0 0 1rem 0;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.color-preview-container {
-		border-radius: 8px;
-		overflow: hidden;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.preview-header {
-		padding: 0.875rem 1.25rem;
-		display: flex;
-		align-items: center;
-	}
-
-	.preview-title {
-		font-size: 1rem;
-		font-weight: 600;
-	}
-
-	.preview-content {
+	.subscription-section {
+		margin-bottom: 2rem;
 		padding: 1.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.preview-section {
-		padding: 1.25rem;
+		background-color: rgba(255, 255, 255, 0.03);
 		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
-	.preview-text {
-		margin-bottom: 1rem;
-		font-size: 0.9375rem;
-	}
-
-	.preview-buttons {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.preview-button {
-		padding: 0.625rem 1.25rem;
-		border: none;
-		border-radius: 4px;
-		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.preview-indicators {
-		display: flex;
-		gap: 1.25rem;
-		font-size: 0.875rem;
+	.subscription-section h4 {
+		margin: 0 0 1rem 0;
+		color: var(--f1);
+		font-size: 1rem;
 		font-weight: 600;
 	}
 
-	.guest-account-notice {
-		background-color: rgba(59, 130, 246, 0.05);
-		border-radius: 6px;
-		padding: 1.25rem;
-		margin-bottom: 1.5rem;
-		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
+	.subscription-info {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 
-	.guest-account-notice p {
-		color: var(--f2);
-		margin: 0;
-		font-size: 0.9375rem;
+	.subscription-status {
+		font-weight: 600;
 	}
 
-	.create-account-button {
+	.subscription-status .active {
+		color: var(--success-color, #10b981);
+	}
+
+	.subscription-status .inactive {
+		color: var(--warning-color, #f59e0b);
+	}
+
+	.manage-subscription-button,
+	.upgrade-button {
 		padding: 0.75rem 1.5rem;
 		background-color: var(--c3);
 		color: white;
@@ -881,60 +528,37 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
+		align-self: flex-start;
 		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-		width: fit-content;
 	}
 
-	.create-account-button:hover {
+	.manage-subscription-button:hover,
+	.upgrade-button:hover {
 		background-color: var(--c3-hover);
 	}
 
-	/* Guest mode styles */
-	.settings-header {
-		padding: 1.5rem 2rem;
-		border-bottom: 1px solid var(--c3);
-		background-color: var(--c2);
-	}
-
-	.settings-header h2 {
-		margin: 0;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.guest-only-content {
+	.account-actions {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 2rem;
-		height: 100%;
-	}
-
-	.guest-profile {
-		width: 100%;
-		max-width: 500px;
-		margin: 0 auto;
-		padding: 2rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		text-align: center;
-	}
-
-	.guest-account-notice {
-		width: 100%;
-		margin-top: 2rem;
-		padding: 1.5rem;
-		background-color: rgba(59, 130, 246, 0.05);
-		border-radius: 6px;
-		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
 		gap: 1.5rem;
+	}
+
+	.logout-button {
+		padding: 0.75rem 1.5rem;
+		background-color: var(--secondary-button-bg, #6b7280);
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		align-self: flex-start;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+	}
+
+	.logout-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
 	}
 
 	.danger-zone {
@@ -953,95 +577,58 @@
 		gap: 1rem;
 	}
 
-	.warning-message {
-		color: var(--f2);
-		font-size: 0.9375rem;
-	}
-
-	.delete-account-button {
+	.delete-button {
 		padding: 0.75rem 1.5rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.delete-account-button:hover {
-		background-color: rgba(239, 68, 68, 0.2);
-	}
-
-	.confirmation-modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background-color: rgba(0, 0, 0, 0.5);
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.confirmation-modal {
-		background-color: var(--c1);
-		padding: 2rem;
-		border-radius: 8px;
-		width: 100%;
-		max-width: 400px;
-	}
-
-	.confirmation-modal h3 {
-		margin-top: 0;
-		margin-bottom: 1rem;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.confirmation-instruction {
-		margin-bottom: 1.5rem;
-		font-size: 0.9375rem;
-		color: var(--f2);
-	}
-
-	.confirmation-input {
-		width: 100%;
-		padding: 0.75rem;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-	}
-
-	.confirmation-actions {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.cancel-button {
-		padding: 0.75rem 1.5rem;
-		background-color: rgba(255, 255, 255, 0.1);
-		color: var(--f1);
+		background-color: #dc2626;
+		color: white;
 		border: none;
 		border-radius: 4px;
 		font-size: 0.9375rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 	}
 
-	.cancel-button:hover {
-		background-color: rgba(255, 255, 255, 0.2);
+	.delete-button:hover {
+		background-color: #b91c1c;
 	}
 
-	.confirm-delete-button {
+	.delete-confirmation {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		width: 100%;
+		max-width: 400px;
+	}
+
+	.warning-text {
+		color: #fbbf24;
+		font-weight: 600;
+		text-align: center;
+	}
+
+	.delete-input {
+		padding: 0.75rem;
+		background-color: var(--c2);
+		border: 1px solid #dc2626;
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		width: 100%;
+		text-align: center;
+	}
+
+	.delete-buttons {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+	}
+
+	.cancel-button {
 		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
+		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -1051,30 +638,135 @@
 		transition: background-color 0.2s;
 	}
 
-	.confirm-delete-button:hover {
-		background-color: var(--c3-hover);
+	.cancel-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.confirm-delete-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.confirm-delete-button:hover:not(:disabled) {
+		background-color: #b91c1c;
 	}
 
 	.confirm-delete-button:disabled {
-		background-color: rgba(59, 130, 246, 0.3);
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
-	.loader {
-		border: 4px solid rgba(255, 255, 255, 0.3);
-		border-top: 4px solid var(--c3);
-		border-radius: 50%;
-		width: 24px;
-		height: 24px;
-		animation: spin 1s linear infinite;
+	.color-scheme-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+		gap: 1rem;
 	}
 
-	@keyframes spin {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
+	.color-scheme-option {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 1rem;
+		background-color: var(--c2);
+		border: 2px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		gap: 0.75rem;
+	}
+
+	.color-scheme-option:hover {
+		background-color: rgba(255, 255, 255, 0.05);
+	}
+
+	.color-scheme-option.selected {
+		border-color: var(--c3);
+		background-color: rgba(255, 255, 255, 0.03);
+	}
+
+	.color-preview {
+		display: flex;
+		width: 60px;
+		height: 20px;
+		border-radius: 4px;
+		overflow: hidden;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.color-bar {
+		flex: 1;
+	}
+
+	.scheme-name {
+		font-size: 0.875rem;
+		color: var(--f2);
+		font-weight: 500;
+	}
+
+	.settings-actions {
+		display: flex;
+		gap: 1rem;
+		margin-top: 2rem;
+		padding-top: 2rem;
+		border-top: 1px solid var(--c3);
+	}
+
+	.save-button,
+	.reset-button {
+		padding: 0.75rem 1.5rem;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+	}
+
+	.save-button {
+		background-color: var(--c3);
+		color: white;
+	}
+
+	.save-button:hover {
+		background-color: var(--c3-hover);
+	}
+
+	.reset-button {
+		background-color: var(--secondary-button-bg, #6b7280);
+		color: white;
+	}
+
+	.reset-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.error-message {
+		margin-top: 1rem;
+		padding: 1rem;
+		background-color: rgba(239, 68, 68, 0.1);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		border-radius: 4px;
+		color: #fca5a5;
+		font-size: 0.875rem;
+		text-align: center;
+	}
+
+	.error-text {
+		color: #fca5a5;
+	}
+
+	h3 {
+		margin: 0 0 1.5rem 0;
+		color: var(--f1);
+		font-size: 1.5rem;
+		font-weight: 600;
 	}
 </style>

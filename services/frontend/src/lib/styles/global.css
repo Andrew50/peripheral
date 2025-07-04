@@ -36,6 +36,7 @@ html {
 @import './select.css';
 @import './glass.css';
 @import './responsive.css';
+@import './landing.css';
 
 /* Global responsive settings */
 * {

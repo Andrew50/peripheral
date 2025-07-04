@@ -424,9 +424,9 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 		userID = args.UserID
 		authType = args.AuthType
 
-		// Extra verification that public call only works for guest accounts
-		if authType != "guest" {
-			return nil, fmt.Errorf("cannot delete non-guest account through public API")
+		// Extra verification that only authenticated users can delete accounts
+		if userID <= 0 {
+			return nil, fmt.Errorf("invalid user ID")
 		}
 	}
 

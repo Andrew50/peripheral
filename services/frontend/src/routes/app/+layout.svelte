@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { isPublicViewing as isPublicViewingStore } from '$lib/utils/stores/stores';
 	import type { AuthLayoutData } from '$lib/auth';
-	
+
 	export let data: AuthLayoutData;
 
 	// Set up client-side state based on server-provided data
@@ -30,4 +30,4 @@
 	});
 </script>
 
-<slot /> 
+<slot />

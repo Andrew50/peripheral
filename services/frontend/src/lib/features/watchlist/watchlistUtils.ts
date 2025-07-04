@@ -19,11 +19,14 @@ interface WatchlistItem extends Instance {
 export const visibleWatchlistIds = writable<number[]>([]);
 
 // Function to initialize visible watchlists
-export function initializeVisibleWatchlists(watchlistsArray: Watchlist[], currentWatchlistId: number) {
+export function initializeVisibleWatchlists(
+	watchlistsArray: Watchlist[],
+	currentWatchlistId: number
+) {
 	if (watchlistsArray && watchlistsArray.length > 0 && currentWatchlistId) {
 		const currentIds = get(visibleWatchlistIds);
 		if (currentIds.length === 0) {
-			visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map(w => w.watchlistId));
+			visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map((w) => w.watchlistId));
 		}
 	}
 }
@@ -33,12 +36,16 @@ function updateWatchlistStores(newItem: WatchlistItem, targetWatchlistId: number
 	currentWatchlistItems.update((v: WatchlistItem[]) => {
 		const currentItems = Array.isArray(v) ? v : [];
 		// Check if item already exists to avoid duplicates
-		if (!currentItems.find(item => item.securityId === newItem.securityId || item.ticker === newItem.ticker)) {
+		if (
+			!currentItems.find(
+				(item) => item.securityId === newItem.securityId || item.ticker === newItem.ticker
+			)
+		) {
 			return [...currentItems, newItem];
 		}
 		return currentItems;
 	});
-	
+
 	// Also update flagWatchlist if this is the flag watchlist
 	if (targetWatchlistId === flagWatchlistId) {
 		// Import flagWatchlist here to avoid circular dependency
@@ -46,7 +53,11 @@ function updateWatchlistStores(newItem: WatchlistItem, targetWatchlistId: number
 			flagWatchlist.update((v: WatchlistItem[]) => {
 				const currentItems = Array.isArray(v) ? v : [];
 				// Check if item already exists to avoid duplicates
-				if (!currentItems.find(item => item.securityId === newItem.securityId || item.ticker === newItem.ticker)) {
+				if (
+					!currentItems.find(
+						(item) => item.securityId === newItem.securityId || item.ticker === newItem.ticker
+					)
+				) {
 					return [...currentItems, newItem];
 				}
 				return currentItems;
@@ -101,12 +112,12 @@ export function createNewWatchlist(watchlistName: string): Promise<number> {
 			}
 			return [w, ...v];
 		});
-		
+
 		// Automatically select the new watchlist
 		selectWatchlist(String(newId));
 		// Add the new watchlist to the front of visible tabs
 		addToVisibleTabs(newId);
-		
+
 		return newId;
 	});
 }
@@ -158,8 +169,12 @@ export function initializeDefaultWatchlist() {
 	return unsubscribeWatchlists;
 }
 
-export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?: number, ticker?: string) {
-    console.log('addInstanceToWatchlist', securityId, currentWatchlistId);
+export function addInstanceToWatchlist(
+	currentWatchlistId?: number,
+	securityId?: number,
+	ticker?: string
+) {
+	console.log('addInstanceToWatchlist', securityId, currentWatchlistId);
 	if (get(isPublicViewing)) {
 		showAuthModal('watchlists', 'signup');
 		return;
@@ -168,11 +183,11 @@ export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?:
 	// If securityId is provided, skip the query input and directly add to watchlist
 	if (securityId && currentWatchlistId) {
 		const targetWatchlistId = currentWatchlistId;
-		
+
 		// Check if the security is already in the current list
 		const aList = get(currentWatchlistItems);
 		const empty = !Array.isArray(aList);
-		
+
 		if (!empty && aList.find((l: WatchlistItem) => l.securityId === securityId)) {
 			console.log('Security already in watchlist');
 			return;
@@ -181,43 +196,47 @@ export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?:
 		privateRequest<number>('newWatchlistItem', {
 			watchlistId: targetWatchlistId,
 			securityId: securityId
-		}).then((watchlistItemId: number) => {
-			// If we have ticker information, use it directly to avoid unnecessary API call
-			if (ticker) {
-				const newItem = { 
-					securityId: securityId,
-					watchlistItemId: watchlistItemId,
-					ticker: ticker
-				} as WatchlistItem;
-				
-				updateWatchlistStores(newItem, targetWatchlistId);
-				console.log(`Added ${ticker} to watchlist`);
-			} else {
-				// Only make API call if we don't have ticker information
-				publicRequest<WatchlistItem>('getSecurityDetails', { securityId: securityId }).then((securityDetails: WatchlistItem) => {
-					const newItem = { 
-						...securityDetails, 
-						watchlistItemId: watchlistItemId,
-						securityId: securityId
-					};
-					
-					updateWatchlistStores(newItem, targetWatchlistId);
-					console.log(`Added ${securityDetails.ticker || 'security'} to watchlist`);
-				}).catch((error) => {
-					console.error('Error fetching security details:', error);
-					// Final fallback: add with minimal info
-					const newItem = { 
+		})
+			.then((watchlistItemId: number) => {
+				// If we have ticker information, use it directly to avoid unnecessary API call
+				if (ticker) {
+					const newItem = {
 						securityId: securityId,
 						watchlistItemId: watchlistItemId,
-						ticker: `Security-${securityId}` // Fallback ticker
+						ticker: ticker
 					} as WatchlistItem;
-					
+
 					updateWatchlistStores(newItem, targetWatchlistId);
-				});
-			}
-		}).catch((error) => {
-			console.error('Error adding to watchlist:', error);
-		});
+					console.log(`Added ${ticker} to watchlist`);
+				} else {
+					// Only make API call if we don't have ticker information
+					publicRequest<WatchlistItem>('getSecurityDetails', { securityId: securityId })
+						.then((securityDetails: WatchlistItem) => {
+							const newItem = {
+								...securityDetails,
+								watchlistItemId: watchlistItemId,
+								securityId: securityId
+							};
+
+							updateWatchlistStores(newItem, targetWatchlistId);
+							console.log(`Added ${securityDetails.ticker || 'security'} to watchlist`);
+						})
+						.catch((error) => {
+							console.error('Error fetching security details:', error);
+							// Final fallback: add with minimal info
+							const newItem = {
+								securityId: securityId,
+								watchlistItemId: watchlistItemId,
+								ticker: `Security-${securityId}` // Fallback ticker
+							} as WatchlistItem;
+
+							updateWatchlistStores(newItem, targetWatchlistId);
+						});
+				}
+			})
+			.catch((error) => {
+				console.error('Error adding to watchlist:', error);
+			});
 		return;
 	}
 
@@ -229,7 +248,7 @@ export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?:
 				console.error('No current watchlist ID available');
 				return;
 			}
-			
+
 			const targetWatchlistId = currentWatchlistId;
 			const aList = get(currentWatchlistItems);
 			const empty = !Array.isArray(aList);
@@ -248,15 +267,15 @@ export function addInstanceToWatchlist(currentWatchlistId?: number, securityId?:
 			});
 		}
 	);
-} 
+}
 // Add new watchlist to front of visible tabs
 export function addToVisibleTabs(newWatchlistId: number) {
 	if (!newWatchlistId) return;
-	
-	visibleWatchlistIds.update(ids => {
+
+	visibleWatchlistIds.update((ids) => {
 		// If it's already visible, do nothing
 		if (ids.includes(newWatchlistId)) return ids;
-		
+
 		// Add to front and keep max 3 tabs
 		return [newWatchlistId, ...ids].slice(0, 3);
 	});
