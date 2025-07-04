@@ -9,6 +9,7 @@
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { page } from '$app/stores';
 
 	const dispatch = createEventDispatcher();
 
@@ -19,6 +20,10 @@
 	let errorMessage = writable('');
 	let loading = false;
 	let isLoaded = false;
+
+	// Deep linking parameters
+	let redirectPlan: string | null = null;
+	let redirectType: string | null = null;
 
 	// Update error message display
 	let errorMessageText = '';
@@ -35,6 +40,11 @@
 		if (browser) {
 			document.title = loginMenu ? 'Login - Peripheral' : 'Sign Up - Peripheral';
 			isLoaded = true;
+
+			// Check for redirect parameters
+			const urlParams = new URLSearchParams(window.location.search);
+			redirectPlan = urlParams.get('plan');
+			redirectType = urlParams.get('redirect');
 		}
 	});
 
@@ -60,6 +70,21 @@
 		goto('/');
 	}
 
+	// Handle successful authentication with deep linking
+	function handleAuthSuccess(user: LoginResponse) {
+		// Dispatch success event for modal usage
+		dispatch('authSuccess', { type: loginMenu ? 'login' : 'signup', user });
+
+		// Handle deep linking
+		if (redirectType === 'checkout' && redirectPlan) {
+			// Redirect to pricing page with plan parameter to trigger checkout
+			goto(`/pricing?upgrade=${redirectPlan}`);
+		} else {
+			// Default redirect to app
+			goto('/app');
+		}
+	}
+
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
@@ -70,10 +95,7 @@
 				setAuthSessionStorage(r.token, r.profilePic, r.username);
 			}
 
-			// Dispatch success event for modal usage
-			dispatch('authSuccess', { type: 'login', user: r });
-
-			goto('/app');
+			handleAuthSuccess(r);
 		} catch (error) {
 			let displayError = 'Login failed. Please try again.';
 			if (typeof error === 'string') {
@@ -116,6 +138,12 @@
 		try {
 			// Get and log the current origin
 			const currentOrigin = window.location.origin;
+
+			// Store redirect parameters for after Google auth
+			if (redirectPlan && redirectType) {
+				sessionStorage.setItem('redirectPlan', redirectPlan);
+				sessionStorage.setItem('redirectType', redirectType);
+			}
 
 			// Pass the current origin to the backend
 			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {

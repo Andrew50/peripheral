@@ -6,7 +6,6 @@
 	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 
 	let errorMessage = '';
-	let debugInfo = '';
 
 	onMount(async () => {
 		const urlParams = new URLSearchParams(window.location.search);
@@ -17,8 +16,7 @@
 		// Handle OAuth errors first
 		if (error) {
 			console.error('OAuth error received:', error);
-			const errorDescription = urlParams.get('error_description') || 'Unknown error';
-			errorMessage = `Authentication failed: ${errorDescription}`;
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 			return;
 		}
@@ -26,18 +24,9 @@
 		// Verify the state parameter matches what we stored
 		const storedState = sessionStorage.getItem('googleAuthState');
 
-		// Enhanced debugging
-		debugInfo = `
-			Code: ${code ? 'Present' : 'Missing'}
-			State from URL: ${state || 'Missing'}
-			Stored state: ${storedState || 'Missing'}
-			States match: ${state === storedState}
-		`;
-		console.log('OAuth callback debug info:', debugInfo);
-
 		if (!code) {
 			console.error('No authorization code received');
-			errorMessage = 'Authorization failed: No code received';
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 			return;
 		}
@@ -48,7 +37,7 @@
 
 		if (!state) {
 			console.error('No state parameter in callback');
-			errorMessage = 'Authorization failed: Missing state parameter';
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 			return;
 		}
@@ -57,7 +46,7 @@
 			console.error('No stored state found in sessionStorage');
 			// In development, we can be more lenient, but still log the issue
 			if (!isDevelopment) {
-				errorMessage = 'Authorization failed: No stored state found';
+				errorMessage = 'Authentication failed. Please try again.';
 				setTimeout(() => goto('/login'), 3000);
 				return;
 			}
@@ -66,7 +55,7 @@
 			console.error('State mismatch', { received: state, stored: storedState });
 			// In development, log but don't fail immediately
 			if (!isDevelopment) {
-				errorMessage = 'Authorization failed: Invalid state parameter';
+				errorMessage = 'Authentication failed. Please try again.';
 				setTimeout(() => goto('/login'), 3000);
 				return;
 			}
@@ -86,10 +75,23 @@
 			// Clean up stored state
 			sessionStorage.removeItem('googleAuthState');
 
-			goto('/app');
+			// Handle deep linking from stored parameters
+			const redirectPlan = sessionStorage.getItem('redirectPlan');
+			const redirectType = sessionStorage.getItem('redirectType');
+
+			if (redirectType === 'checkout' && redirectPlan) {
+				// Clean up stored redirect parameters
+				sessionStorage.removeItem('redirectPlan');
+				sessionStorage.removeItem('redirectType');
+				// Redirect to pricing page with plan parameter to trigger checkout
+				goto(`/pricing?upgrade=${redirectPlan}`);
+			} else {
+				// Default redirect to app
+				goto('/app');
+			}
 		} catch (error) {
 			console.error('Google authentication failed:', error);
-			errorMessage = typeof error === 'string' ? error : 'Authentication failed';
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 		}
 	});
@@ -101,12 +103,6 @@
 			<h2>Authentication Error</h2>
 			<p>{errorMessage}</p>
 			<p>Redirecting to login page...</p>
-			{#if debugInfo}
-				<details class="debug-info">
-					<summary>Debug Information</summary>
-					<pre>{debugInfo}</pre>
-				</details>
-			{/if}
 		</div>
 	{:else}
 		<!-- Enhanced loading state -->
@@ -171,27 +167,6 @@
 
 	.error p {
 		margin-bottom: 0.5rem;
-		color: var(--f2, #9ca3af);
-	}
-
-	.debug-info {
-		margin-top: 1rem;
-		padding: 0.5rem;
-		background-color: var(--c4, #374151);
-		border-radius: 4px;
-		text-align: left;
-	}
-
-	.debug-info summary {
-		cursor: pointer;
-		font-weight: 500;
-		margin-bottom: 0.5rem;
-	}
-
-	.debug-info pre {
-		margin: 0;
-		font-size: 0.8rem;
-		white-space: pre-wrap;
 		color: var(--f2, #9ca3af);
 	}
 

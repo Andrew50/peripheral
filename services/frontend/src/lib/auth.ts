@@ -38,22 +38,15 @@ export interface GoogleCallbackResponse {
  * Centralized logout function that clears all auth data
  * and redirects to the specified path
  */
-export function logout(redirectPath: string = '/') {
+export function logout(redirectPath: string = '/login') {
 	if (!browser) return;
-	
-	// Clear cookies by setting them to expire
-	const expiredCookie = 'path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
-	document.cookie = `authToken=; ${expiredCookie}`;
-	document.cookie = `profilePic=; ${expiredCookie}`;
-	document.cookie = `username=; ${expiredCookie}`;
-	
-	// Clear sessionStorage
+
+	// Clear all session data
 	sessionStorage.removeItem('authToken');
-	sessionStorage.removeItem('profilePic');
 	sessionStorage.removeItem('username');
-	sessionStorage.removeItem('isGuestSession');
-	
-	// Redirect
+	sessionStorage.removeItem('profilePic');
+
+	// Redirect to specified path
 	goto(redirectPath);
 }
 
@@ -62,9 +55,9 @@ export function logout(redirectPath: string = '/') {
  */
 export function setAuthCookies(token: string, profilePic: string, username: string) {
 	if (!browser) return;
-	
+
 	const cookieOptions = 'path=/; max-age=21600; SameSite=Strict'; // 6 hours
-	
+
 	document.cookie = `authToken=${token}; ${cookieOptions}`;
 	document.cookie = `profilePic=${encodeURIComponent(profilePic || '')}; ${cookieOptions}`;
 	document.cookie = `username=${encodeURIComponent(username || '')}; ${cookieOptions}`;
@@ -75,7 +68,7 @@ export function setAuthCookies(token: string, profilePic: string, username: stri
  */
 export function setAuthSessionStorage(token: string, profilePic: string, username: string) {
 	if (!browser) return;
-	
+
 	sessionStorage.setItem('authToken', token);
 	sessionStorage.setItem('profilePic', profilePic || '');
 	sessionStorage.setItem('username', username || '');

@@ -20,45 +20,73 @@
 	let feedbackMessage = '';
 	let feedbackType: 'success' | 'error' | '' = '';
 
-	// Show confirmation modal for upgrades
-	let showConfirmation = false;
-	let pendingUpgrade: { plan: string; price: number; planName: string } | null = null;
-
 	// Component loading state
 	let isLoaded = false;
 
-	// Function to determine if the current user is a guest
-	const isGuestAccount = (): boolean => {
-		if (!browser) return true;
-		const username = sessionStorage.getItem('username');
-		return username === 'Guest' || !username;
+	// Function to determine if the current user is authenticated
+	const isAuthenticated = (): boolean => {
+		if (!browser) return false;
+		const authToken = sessionStorage.getItem('authToken');
+		return !!authToken;
+	};
+	const validateAuthentication = async (): Promise<boolean> => {
+		console.log('🔍 [validateAuthentication] Starting validation...');
+
+		if (!browser) {
+			console.log('🔍 [validateAuthentication] Not in browser, returning false');
+			return false;
+		}
+
+		const authToken = sessionStorage.getItem('authToken');
+		if (!authToken) {
+			console.log('🔍 [validateAuthentication] No auth token found');
+			return false;
+		}
+
+		console.log(
+			'🔍 [validateAuthentication] Found token, verifying with backend. Token preview:',
+			authToken.substring(0, 20) + '...'
+		);
+
+		try {
+			// Make a lightweight request to verify the token is still valid
+			console.log('🔍 [validateAuthentication] Making verifyAuth request...');
+			await privateRequest('verifyAuth', {});
+			console.log('✅ [validateAuthentication] Token is valid!');
+			return true;
+		} catch (error) {
+			console.log('❌ [validateAuthentication] Token is invalid:', error);
+			// Token is invalid, clear it
+			console.log('🧹 [validateAuthentication] Clearing invalid auth data...');
+			sessionStorage.removeItem('authToken');
+			sessionStorage.removeItem('profilePic');
+			sessionStorage.removeItem('username');
+			return false;
+		}
 	};
 
 	// Initialize component
 	async function initializeComponent() {
-		if (!isGuestAccount()) {
+		const isAuth = isAuthenticated();
+
+		if (isAuth) {
 			await fetchSubscriptionStatus();
+			console.log('📊 [initializeComponent] Subscription status fetch completed');
+		} else {
+			console.log(
+				'ℹ️ [initializeComponent] User not authenticated, skipping subscription status fetch'
+			);
 		}
 	}
 
 	// Enhanced upgrade handler with individual loading states
 	async function handleUpgrade(planKey: 'plus' | 'pro') {
 		// Check if user is authenticated before allowing upgrade
-		if (isGuestAccount()) {
-			goto('/login');
-			return;
-		}
+		const isValidAuth = await validateAuthentication();
 
-		const plan = getPlan(planKey);
-
-		// Show confirmation for expensive plans
-		if (plan.price >= 100) {
-			pendingUpgrade = {
-				plan: planKey,
-				price: plan.price,
-				planName: plan.name
-			};
-			showConfirmation = true;
+		if (!isValidAuth) {
+			// Redirect to signup with plan information for deep linking
+			goto(`/signup?plan=${planKey}&redirect=checkout`);
 			return;
 		}
 
@@ -68,8 +96,13 @@
 	// Process the actual upgrade
 	async function processUpgrade(planKey: 'plus' | 'pro') {
 		// Double-check authentication before processing payment
-		if (isGuestAccount()) {
-			goto('/login');
+		const isValidAuth = await validateAuthentication();
+
+		if (!isValidAuth) {
+			console.log(
+				'❌ [processUpgrade] Authentication failed during payment, redirecting to signup'
+			);
+			goto(`/signup?plan=${planKey}&redirect=checkout`);
 			return;
 		}
 
@@ -93,7 +126,7 @@
 				await redirectToCheckout(response.sessionId);
 			}, 1000);
 		} catch (error) {
-			console.error('Error creating checkout session:', error);
+			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
 			feedbackType = 'error';
 			loadingStates[planKey] = false;
@@ -103,7 +136,8 @@
 	// Enhanced manage subscription with individual loading
 	async function handleManageSubscription() {
 		// Check if user is authenticated before allowing management
-		if (isGuestAccount()) {
+		const isValidAuth = await validateAuthentication();
+		if (!isValidAuth) {
 			goto('/login');
 			return;
 		}
@@ -128,21 +162,6 @@
 		}
 	}
 
-	// Confirm upgrade
-	function confirmUpgrade() {
-		if (pendingUpgrade) {
-			processUpgrade(pendingUpgrade.plan as 'plus' | 'pro');
-			showConfirmation = false;
-			pendingUpgrade = null;
-		}
-	}
-
-	// Cancel upgrade
-	function cancelUpgrade() {
-		showConfirmation = false;
-		pendingUpgrade = null;
-	}
-
 	// Clear feedback message after timeout
 	function clearFeedback() {
 		setTimeout(() => {
@@ -163,13 +182,48 @@
 	}
 
 	// Run initialization on mount
-	onMount(() => {
+	onMount(async () => {
 		if (browser) {
 			document.title = 'Pricing & Plans - Peripheral';
 			isLoaded = true;
+
+			// Check for upgrade parameter from deep linking
+			const urlParams = new URLSearchParams(window.location.search);
+			const upgradePlan = urlParams.get('upgrade');
+
+			// If upgrade parameter exists and user is authenticated, trigger checkout
+			if (upgradePlan) {
+				console.log('🎯 [onMount] Upgrade parameter found, validating authentication...');
+				const isValidAuth = await validateAuthentication();
+				console.log('🔍 [onMount] Auto-upgrade authentication result:', isValidAuth);
+
+				if (isValidAuth) {
+					console.log(
+						'✅ [onMount] Auto-upgrade authentication confirmed, scheduling upgrade trigger'
+					);
+					// Small delay to ensure component is fully loaded
+					setTimeout(() => {
+						console.log('⏰ [onMount] Auto-upgrade timeout triggered, calling handleUpgrade');
+						if (upgradePlan === 'plus' || upgradePlan === 'pro') {
+							handleUpgrade(upgradePlan);
+						} else {
+							console.log('❌ [onMount] Invalid upgrade plan:', upgradePlan);
+						}
+					}, 500);
+				} else {
+					console.log(
+						'❌ [onMount] Auto-upgrade authentication failed, user will need to authenticate manually'
+					);
+				}
+			} else {
+				console.log('ℹ️ [onMount] No upgrade parameter found, normal pricing page load');
+			}
+		} else {
+			console.log('🖥️ [onMount] Not in browser environment (SSR)');
 		}
-		// Initialize component for both authenticated and guest users
-		// Guest users can view pricing, but will be redirected to login when attempting to upgrade
+
+		console.log('🔧 [onMount] Starting component initialization...');
+		// Initialize component
 		initializeComponent();
 	});
 </script>
@@ -227,7 +281,7 @@
 					<div class="landing-loader"></div>
 					<span>Loading subscription information...</span>
 				</div>
-			{:else if $subscriptionStatus.error && !isGuestAccount()}
+			{:else if $subscriptionStatus.error && isAuthenticated()}
 				<div class="error-message">{$subscriptionStatus.error}</div>
 			{:else}
 				<!-- Available Plans -->
@@ -236,12 +290,12 @@
 						<!-- Free Plan -->
 						<div
 							class="plan-card landing-glass-card {!$subscriptionStatus.isActive &&
-							!isGuestAccount()
+							isAuthenticated()
 								? 'current-plan'
 								: ''}"
 						>
 							<div class="plan-header">
-								{#if !$subscriptionStatus.isActive && !isGuestAccount()}
+								{#if !$subscriptionStatus.isActive && isAuthenticated()}
 									<div class="current-badge">Current Plan</div>
 								{/if}
 								<h3>{getPlan('free').name}</h3>
@@ -255,7 +309,7 @@
 									<li>{feature}</li>
 								{/each}
 							</ul>
-							{#if !$subscriptionStatus.isActive && !isGuestAccount()}
+							{#if !$subscriptionStatus.isActive && isAuthenticated()}
 								<button class="landing-button primary full-width current" disabled>
 									Current Plan
 								</button>
@@ -310,7 +364,7 @@
 									{#if loadingStates.plus}
 										<div class="landing-loader"></div>
 									{:else}
-										{isGuestAccount() ? 'Sign Up to Upgrade' : getPlan('plus').cta}
+										{getPlan('plus').cta}
 									{/if}
 								</button>
 							{/if}
@@ -362,7 +416,7 @@
 									{#if loadingStates.pro}
 										<div class="landing-loader"></div>
 									{:else}
-										{isGuestAccount() ? 'Sign Up to Upgrade' : getPlan('pro').cta}
+										{getPlan('pro').cta}
 									{/if}
 								</button>
 							{/if}
@@ -373,42 +427,6 @@
 		</div>
 	</div>
 </div>
-
-<!-- Confirmation Modal -->
-{#if showConfirmation && pendingUpgrade}
-	<div
-		class="modal-overlay"
-		on:click={cancelUpgrade}
-		on:keydown={(e) => e.key === 'Escape' && cancelUpgrade()}
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="modal-title"
-		tabindex="-1"
-	>
-		<div
-			class="modal-content landing-glass-card"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-		>
-			<div class="modal-header">
-				<h3 id="modal-title">Confirm Upgrade</h3>
-			</div>
-			<div class="modal-body">
-				<p>You're about to upgrade to the <strong>{pendingUpgrade.planName}</strong> plan.</p>
-				<p class="price-info">Price: <strong>{formatPrice(pendingUpgrade.price)}/month</strong></p>
-				<p class="billing-info">
-					You'll be redirected to Stripe's secure checkout to complete your subscription.
-				</p>
-			</div>
-			<div class="modal-actions">
-				<button class="landing-button secondary" on:click={cancelUpgrade}>Cancel</button>
-				<button class="landing-button primary" on:click={confirmUpgrade}
-					>Continue to Checkout</button
-				>
-			</div>
-		</div>
-	</div>
-{/if}
 
 <style>
 	/* Pricing-specific styles that build on landing system */
@@ -604,97 +622,6 @@
 		border: 1px solid rgba(34, 197, 94, 0.3);
 	}
 
-	/* Modal Styles */
-	.modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background: rgba(0, 0, 0, 0.7);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		animation: fadeIn 0.2s ease-out;
-	}
-
-	.modal-content {
-		max-width: 500px;
-		width: 90%;
-		max-height: 90vh;
-		overflow-y: auto;
-		animation: scaleIn 0.2s ease-out;
-	}
-
-	.modal-header {
-		padding: 1.5rem 1.5rem 0;
-		border-bottom: 1px solid var(--landing-border);
-	}
-
-	.modal-header h3 {
-		margin: 0 0 1rem 0;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--landing-text-primary);
-	}
-
-	.modal-body {
-		padding: 1.5rem;
-	}
-
-	.modal-body p {
-		margin: 0 0 1rem 0;
-		color: var(--landing-text-secondary);
-		line-height: 1.5;
-	}
-
-	.modal-body p:last-child {
-		margin-bottom: 0;
-	}
-
-	.price-info {
-		font-size: 1.1rem;
-		color: var(--landing-text-primary) !important;
-	}
-
-	.billing-info {
-		font-size: 0.9rem;
-		color: var(--landing-text-muted) !important;
-	}
-
-	.modal-actions {
-		padding: 0 1.5rem 1.5rem;
-		display: flex;
-		gap: 1rem;
-		justify-content: flex-end;
-	}
-
-	.modal-actions .landing-button {
-		width: auto;
-		min-width: 120px;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	@keyframes scaleIn {
-		from {
-			opacity: 0;
-			transform: scale(0.9);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
-	}
-
 	@media (max-width: 640px) {
 		.pricing-content {
 			padding: 0 1rem;
@@ -702,14 +629,6 @@
 
 		.plan-card {
 			padding: 1.5rem;
-		}
-
-		.modal-actions {
-			flex-direction: column;
-		}
-
-		.modal-actions .landing-button {
-			width: 100%;
 		}
 	}
 </style>

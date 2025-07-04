@@ -313,7 +313,7 @@
 		// Initialize subscription status if user is authenticated
 		const authToken = sessionStorage.getItem('authToken');
 		const username = sessionStorage.getItem('username');
-		if (authToken && username && username !== 'Guest') {
+		if (authToken && username) {
 			fetchSubscriptionStatus();
 		}
 
@@ -1009,6 +1009,11 @@
 	function openPricingSettings() {
 		goto('/pricing');
 	}
+
+	// Add user authentication check
+	if (browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username')) {
+		connect();
+	}
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
@@ -1334,7 +1339,7 @@
 
 		<div class="bottom-bar-right">
 			<!-- Upgrade button - only show if user is authenticated but not subscribed -->
-			{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') !== 'Guest' && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+			{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
 				<button
 					class="toggle-button upgrade-button"
 					on:click={openPricingSettings}

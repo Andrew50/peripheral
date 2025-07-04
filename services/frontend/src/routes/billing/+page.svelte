@@ -9,17 +9,8 @@
 
 	// Initialize component
 	async function initializeComponent() {
-		if (!isGuestAccount()) {
-			await fetchSubscriptionStatus();
-		}
+		await fetchSubscriptionStatus();
 	}
-
-	// Function to determine if the current user is a guest
-	const isGuestAccount = (): boolean => {
-		if (!browser) return true;
-		const username = sessionStorage.getItem('username');
-		return username === 'Guest' || !username;
-	};
 
 	// Handle subscription upgrade
 	async function handleUpgrade(priceId: string) {
@@ -60,11 +51,6 @@
 
 	// Run initialization on mount
 	onMount(() => {
-		// Check if user is authenticated
-		if (isGuestAccount()) {
-			goto('/login');
-			return;
-		}
 		initializeComponent();
 	});
 </script>
