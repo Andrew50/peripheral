@@ -2,14 +2,14 @@
 <script lang="ts">
 	import { publicRequest } from '$lib/utils/helpers/backend';
 	import '$lib/styles/global.css';
+	import '$lib/styles/landing.css';
 	import { browser } from '$app/environment';
 	import type { LoginResponse } from '$lib/auth';
 	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
-
-	import Header from '$lib/components/header.svelte';
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
+	import { page } from '$app/stores';
 
 	const dispatch = createEventDispatcher();
 
@@ -19,6 +19,11 @@
 	let password = '';
 	let errorMessage = writable('');
 	let loading = false;
+	let isLoaded = false;
+
+	// Deep linking parameters
+	let redirectPlan: string | null = null;
+	let redirectType: string | null = null;
 
 	// Update error message display
 	let errorMessageText = '';
@@ -30,6 +35,18 @@
 	$: if (loginMenu !== undefined) {
 		errorMessage.set('');
 	}
+
+	onMount(() => {
+		if (browser) {
+			document.title = loginMenu ? 'Login - Peripheral' : 'Sign Up - Peripheral';
+			isLoaded = true;
+
+			// Check for redirect parameters
+			const urlParams = new URLSearchParams(window.location.search);
+			redirectPlan = urlParams.get('plan');
+			redirectType = urlParams.get('redirect');
+		}
+	});
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
@@ -49,6 +66,25 @@
 		// If not in modal mode, let the default link behavior happen
 	}
 
+	function navigateToHome() {
+		goto('/');
+	}
+
+	// Handle successful authentication with deep linking
+	function handleAuthSuccess(user: LoginResponse) {
+		// Dispatch success event for modal usage
+		dispatch('authSuccess', { type: loginMenu ? 'login' : 'signup', user });
+
+		// Handle deep linking
+		if (redirectType === 'checkout' && redirectPlan) {
+			// Redirect to pricing page with plan parameter to trigger checkout
+			goto(`/pricing?upgrade=${redirectPlan}`);
+		} else {
+			// Default redirect to app
+			goto('/app');
+		}
+	}
+
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
@@ -59,10 +95,7 @@
 				setAuthSessionStorage(r.token, r.profilePic, r.username);
 			}
 
-			// Dispatch success event for modal usage
-			dispatch('authSuccess', { type: 'login', user: r });
-
-			goto('/app');
+			handleAuthSuccess(r);
 		} catch (error) {
 			let displayError = 'Login failed. Please try again.';
 			if (typeof error === 'string') {
@@ -106,6 +139,12 @@
 			// Get and log the current origin
 			const currentOrigin = window.location.origin;
 
+			// Store redirect parameters for after Google auth
+			if (redirectPlan && redirectType) {
+				sessionStorage.setItem('redirectPlan', redirectPlan);
+				sessionStorage.setItem('redirectType', redirectType);
+			}
+
 			// Pass the current origin to the backend
 			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
 				redirectOrigin: currentOrigin
@@ -125,25 +164,72 @@
 	}
 </script>
 
-<div class="page-wrapper">
-	<Header />
-	<div class="auth-container">
-		<div class="auth-card">
-			<form
-				on:submit|preventDefault={() => {
-					if (loginMenu) {
-						signIn(email, password);
-					} else {
-						signUp(email, password);
-					}
-				}}
-				class="auth-form"
+<!-- Use landing page design system -->
+<div class="landing-background landing-reset">
+	<!-- Background Effects -->
+	<div class="landing-background-animation">
+		<div class="landing-gradient-orb landing-orb-1"></div>
+		<div class="landing-gradient-orb landing-orb-2"></div>
+		<div class="landing-gradient-orb landing-orb-3"></div>
+		<div class="landing-static-gradient"></div>
+	</div>
+
+	<!-- Header -->
+	<header class="landing-header">
+		<div class="landing-header-content">
+			<div class="logo-section">
+				<img
+					src="/atlantis_logo_transparent.png"
+					alt="Peripheral Logo"
+					class="landing-logo"
+					on:click={navigateToHome}
+					style="cursor: pointer;"
+				/>
+			</div>
+			<nav class="landing-nav">
+				<button class="landing-button secondary" on:click={navigateToHome}> ← Back to Home </button>
+			</nav>
+		</div>
+	</header>
+
+	<!-- Main Auth Content -->
+	<div class="landing-container centered" style="padding-top: 120px;">
+		<div class="auth-container">
+			<div
+				class="landing-glass-card auth-card"
+				class:landing-fade-in={true}
+				class:loaded={isLoaded}
 			>
-				<div class="form-group">
-					<button class="gsi-material-button" on:click={handleGoogleLogin} type="button">
-						<div class="gsi-material-button-state"></div>
-						<div class="gsi-material-button-content-wrapper">
-							<div class="gsi-material-button-icon">
+				<!-- Header -->
+				<div class="auth-header">
+					<h1 class="auth-title">
+						{loginMenu ? 'Welcome back' : 'Get started'}
+					</h1>
+					<p class="landing-subtitle">
+						{loginMenu ? 'Sign in to your account' : 'Create your account to start trading'}
+					</p>
+				</div>
+
+				<!-- Auth Form -->
+				<form
+					on:submit|preventDefault={() => {
+						if (loginMenu) {
+							signIn(email, password);
+						} else {
+							signUp(email, password);
+						}
+					}}
+					class="landing-form"
+				>
+					<!-- Google Login Button -->
+					<div class="landing-form-group">
+						<button
+							class="google-login-button"
+							on:click={handleGoogleLogin}
+							type="button"
+							disabled={loading}
+						>
+							<div class="google-icon">
 								<svg
 									version="1.1"
 									xmlns="http://www.w3.org/2000/svg"
@@ -170,357 +256,196 @@
 									<path fill="none" d="M0 0h48v48H0z"></path>
 								</svg>
 							</div>
-							<span class="gsi-material-button-contents">Continue with Google</span>
-							<span style="display: none;">Sign in with Google</span>
-						</div>
-					</button>
+							<span>Continue with Google</span>
+						</button>
+					</div>
+
+					<!-- Divider -->
+					<div class="auth-divider">
+						<span>or</span>
+					</div>
+
+					<!-- Email Input -->
+					<div class="landing-form-group">
+						<input
+							type="email"
+							id="email"
+							bind:value={email}
+							required
+							on:keydown={handleKeydown}
+							placeholder="Email"
+							class="landing-input"
+							disabled={loading}
+						/>
+					</div>
+
+					<!-- Password Input -->
+					<div class="landing-form-group">
+						<input
+							type="password"
+							id="password"
+							bind:value={password}
+							required
+							on:keydown={handleKeydown}
+							placeholder="Password"
+							class="landing-input"
+							disabled={loading}
+						/>
+					</div>
+
+					<!-- Error Message -->
+					{#if errorMessageText}
+						<p class="landing-text-error">{errorMessageText}</p>
+					{/if}
+
+					<!-- Submit Button -->
+					<div class="landing-form-group">
+						<button
+							type="submit"
+							class="landing-button primary large full-width"
+							disabled={loading}
+						>
+							{#if loading}
+								<div class="landing-loader"></div>
+							{:else}
+								{loginMenu ? 'Sign In' : 'Create Account'}
+							{/if}
+						</button>
+					</div>
+				</form>
+
+				<!-- Toggle Auth Mode -->
+				<div class="auth-toggle">
+					{#if loginMenu}
+						<p>
+							Don't have an account?
+							<a href="/signup" on:click={handleToggleMode} class="landing-link">Sign Up</a>
+						</p>
+					{:else}
+						<p>
+							Already have an account?
+							<a href="/login" on:click={handleToggleMode} class="landing-link">Sign In</a>
+						</p>
+					{/if}
 				</div>
-
-				<div class="form-group">
-					<input
-						type="email"
-						id="email"
-						bind:value={email}
-						required
-						on:keydown={handleKeydown}
-						placeholder="Email"
-					/>
-				</div>
-
-				<div class="form-group">
-					<input
-						type="password"
-						id="password"
-						bind:value={password}
-						required
-						on:keydown={handleKeydown}
-						placeholder="Password"
-					/>
-				</div>
-
-				{#if errorMessageText}
-					<p class="error">{errorMessageText}</p>
-				{/if}
-
-				<div class="form-group">
-					<button type="submit" class="submit-button" disabled={loading}>
-						{#if loading}
-							<span class="loader"></span>
-						{:else}
-							{loginMenu ? 'Sign In' : 'Create Account'}
-						{/if}
-					</button>
-				</div>
-			</form>
-
-			<!-- Only show the toggle when appropriate -->
-			{#if loginMenu}
-				<p class="toggle-auth">
-					Don't have an account?
-					<a href="/signup" on:click={handleToggleMode}>Sign Up</a>
-				</p>
-			{:else}
-				<p class="toggle-auth">
-					Already have an account?
-					<a href="/login" on:click={handleToggleMode}>Sign In</a>
-				</p>
-			{/if}
+			</div>
 		</div>
 	</div>
 </div>
 
 <style>
-	.page-wrapper {
-		min-height: 100vh;
-		min-width: 100vw;
-		background: var(--ui-bg-base);
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		overflow-y: auto;
-	}
-
+	/* Auth-specific styles that build on landing system */
 	.auth-container {
-		min-height: 100vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: clamp(1rem, 3vw, 2rem);
-		padding-top: calc(60px + clamp(1rem, 3vw, 2rem));
-		box-sizing: border-box;
+		width: 100%;
+		max-width: 450px;
+		margin: 0 auto;
 	}
 
 	.auth-card {
-		background: var(--ui-bg-element-darker);
-		border: 1px solid var(--ui-border);
-		border-radius: clamp(8px, 1vw, 12px);
-		width: 100%;
-		margin: auto;
-		max-width: 450px;
-		padding: clamp(1.5rem, 4vw, 2.5rem);
-		box-shadow:
-			0 10px 25px rgba(0, 0, 0, 0.2),
-			0 4px 10px rgba(0, 0, 0, 0.1);
+		padding: 2.5rem;
 	}
 
-	.auth-form {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		width: 100%;
-		align-items: stretch;
-		margin: 0;
-		padding: 0;
+	.auth-header {
+		text-align: center;
+		margin-bottom: 2rem;
 	}
 
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		width: 100%;
-		align-items: stretch;
+	.auth-title {
+		font-size: 2rem;
+		font-weight: 700;
+		margin: 0 0 0.5rem 0;
+		color: var(--landing-text-primary);
 	}
 
-	input {
-		border: 1px solid rgba(255, 255, 255, 0.1);
+	/* Google Login Button */
+	.google-login-button {
+		width: 100%;
+		height: 48px;
 		background: rgba(255, 255, 255, 0.05);
-		color: #ffffff;
-		padding: 0 1rem;
+		border: 1px solid var(--landing-border);
 		border-radius: 8px;
-		font-size: 0.95rem;
+		color: var(--landing-text-primary);
 		font-family: 'Inter', sans-serif;
-		height: 48px;
-		width: 100%;
-		box-sizing: border-box;
-		transition: all 0.2s ease;
-		margin: 0;
-		display: block;
-	}
-
-	input::placeholder {
-		color: rgba(255, 255, 255, 0.5);
-	}
-
-	input:focus {
-		outline: none;
-		border-color: #3b82f6;
-		background: rgba(255, 255, 255, 0.08);
-		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-	}
-
-	.submit-button {
-		background: #3b82f6;
-		color: #ffffff;
-		padding: 0;
-		border: none;
-		border-radius: 8px;
-		font-weight: 600;
+		font-size: 0.95rem;
+		font-weight: 500;
 		cursor: pointer;
-		transition: background-color 0.2s ease;
-		font-family: 'Inter', sans-serif;
-		height: 48px;
-		width: 100%;
-		box-sizing: border-box;
-		font-size: 0.95rem;
-		margin: 0;
-		display: block;
+		transition: all 0.2s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		backdrop-filter: blur(5px);
 	}
 
-	.submit-button:hover:not(:disabled) {
-		background: #2563eb;
+	.google-login-button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: rgba(255, 255, 255, 0.2);
 	}
 
-	.submit-button:active {
-		background: #1d4ed8;
-	}
-
-	.submit-button:disabled {
-		background: #3b82f6;
+	.google-login-button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
 	}
 
-	.error {
-		color: #ef4444;
-		text-align: center;
-		font-size: 0.875rem;
-		font-family: 'Inter', sans-serif;
-		margin: 0.5rem 0;
-	}
-
-	.toggle-auth {
-		text-align: center;
-		color: rgba(255, 255, 255, 0.7);
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
-		font-size: 0.875rem;
-		font-family: 'Inter', sans-serif;
-	}
-
-	.toggle-auth a {
-		color: #3b82f6;
-		font-weight: 600;
-		text-decoration: none;
-		transition: color 0.2s ease;
-	}
-
-	.toggle-auth a:hover {
-		color: #2563eb;
-		text-decoration: underline;
-	}
-
-	.gsi-material-button {
-		-moz-user-select: none;
-		-webkit-user-select: none;
-		-ms-user-select: none;
-		-webkit-appearance: none;
-		background: rgba(255, 255, 255, 0.05);
-		background-image: none;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 8px;
-		box-sizing: border-box;
-		color: #ffffff;
-		cursor: pointer;
-		font-family: 'Inter', sans-serif;
-		height: 48px;
-		letter-spacing: normal;
-		outline: none;
-		overflow: hidden;
-		padding: 0;
-		position: relative;
-		text-align: center;
-		transition: all 0.2s ease;
-		vertical-align: middle;
-		white-space: nowrap;
-		width: 100%;
-		max-width: none;
-		min-width: auto;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin: 0;
-	}
-
-	.gsi-material-button .gsi-material-button-icon {
-		height: 20px;
-		margin-right: 8px;
-		min-width: 20px;
+	.google-icon {
 		width: 20px;
-	}
-
-	.gsi-material-button .gsi-material-button-content-wrapper {
-		align-items: center;
+		height: 20px;
 		display: flex;
-		flex-direction: row;
-		flex-wrap: nowrap;
-		height: 100%;
+		align-items: center;
 		justify-content: center;
+	}
+
+	/* Divider */
+	.auth-divider {
 		position: relative;
-		width: auto;
+		text-align: center;
+		margin: 1.5rem 0;
 	}
 
-	.gsi-material-button .gsi-material-button-contents {
-		flex-grow: 0;
-		font-family: 'Inter', sans-serif;
-		font-weight: 500;
-		font-size: 0.95rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		vertical-align: top;
-	}
-
-	.gsi-material-button .gsi-material-button-state {
-		-webkit-transition: opacity 0.218s;
-		transition: opacity 0.218s;
-		bottom: 0;
-		left: 0;
-		opacity: 0;
+	.auth-divider::before {
+		content: '';
 		position: absolute;
+		top: 50%;
+		left: 0;
 		right: 0;
-		top: 0;
+		height: 1px;
+		background: var(--landing-border);
 	}
 
-	.gsi-material-button:disabled {
-		cursor: default;
-		background-color: rgba(var(--rgb-bg-element-darker), 0.6);
-		border-color: rgba(var(--rgb-border), 0.4);
+	.auth-divider span {
+		background: var(--landing-glass-bg);
+		color: var(--landing-text-secondary);
+		padding: 0 1rem;
+		font-size: 0.875rem;
+		position: relative;
+		z-index: 1;
 	}
 
-	.gsi-material-button:disabled .gsi-material-button-state {
-		background-color: rgba(var(--rgb-text-primary), 0.1);
+	/* Auth Toggle */
+	.auth-toggle {
+		text-align: center;
+		margin-top: 2rem;
+		padding-top: 2rem;
+		border-top: 1px solid var(--landing-border);
+		color: var(--landing-text-secondary);
+		font-size: 0.875rem;
 	}
 
-	.gsi-material-button:disabled .gsi-material-button-contents {
-		opacity: 0.4;
-	}
-
-	.gsi-material-button:disabled .gsi-material-button-icon {
-		opacity: 0.4;
-	}
-
-	.gsi-material-button:not(:disabled):active .gsi-material-button-state,
-	.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
-		background-color: var(--text-primary);
-		opacity: 0.12;
-	}
-
-	.gsi-material-button:not(:disabled):hover {
-		background: rgba(255, 255, 255, 0.1);
-		border-color: rgba(255, 255, 255, 0.2);
-	}
-
-	.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
-		background-color: var(--text-primary);
-		opacity: 0.08;
-	}
-
-	.loader {
-		width: clamp(16px, 2vw, 18px);
-		height: clamp(16px, 2vw, 18px);
-		border: 2px solid rgba(var(--rgb-text-on-accent, 255, 255, 255), 0.7);
-		border-bottom-color: transparent;
-		border-radius: 50%;
-		display: inline-block;
-		animation: rotation 1s linear infinite;
-	}
-
-	@keyframes rotation {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
-	}
-
-	/* Mobile responsiveness */
+	/* Responsive Design */
 	@media (max-width: 480px) {
-		.auth-container {
-			padding: 1rem;
-			padding-top: calc(60px + 1rem);
-		}
-
 		.auth-card {
-			padding: 1.5rem;
-			border-radius: 8px;
+			padding: 2rem 1.5rem;
+			margin: 1rem;
 		}
 
-		.gsi-material-button .gsi-material-button-contents {
-			font-size: 0.9rem;
+		.auth-title {
+			font-size: 1.75rem;
 		}
 
-		input,
-		.submit-button {
+		.google-login-button,
+		.landing-input {
 			height: 44px;
 			font-size: 0.9rem;
-		}
-
-		.toggle-auth {
-			margin-top: 1rem;
-			padding-top: 1rem;
 		}
 	}
 </style>

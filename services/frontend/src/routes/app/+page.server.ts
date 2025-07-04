@@ -2,7 +2,7 @@ export const load = async ({ fetch }: { fetch: any }) => {
 	try {
 		// Get backend URL - handle both development and production
 		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
-		
+
 		// 1. Fetch SPY security ID
 		const securityResponse = await fetch(`${backendUrl}/public`, {
 			method: 'POST',
@@ -54,7 +54,7 @@ export const load = async ({ fetch }: { fetch: any }) => {
 		// 3. Return preloaded chart data
 		const defaultChartData = {
 			ticker: 'SPY',
-			timeframe: '1d', 
+			timeframe: '1d',
 			timestamp: 0,
 			securityId: securityId,
 			price: 0,
@@ -65,13 +65,15 @@ export const load = async ({ fetch }: { fetch: any }) => {
 		return {
 			defaultChartData
 		};
-
 	} catch (error) {
-		console.error('Chart preloading failed:', error instanceof Error ? error.message : String(error));
-		
+		console.error(
+			'Chart preloading failed:',
+			error instanceof Error ? error.message : String(error)
+		);
+
 		// Return null so client-side loading can take over as fallback
 		return {
 			defaultChartData: null
 		};
 	}
-}; 
+};

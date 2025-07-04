@@ -543,7 +543,7 @@
 		// Create new abort controller for this request
 		currentAbortController = new AbortController();
 
-				// Note: Create a temporary user message for immediate UI feedback
+		// Note: Create a temporary user message for immediate UI feedback
 		// The backend will provide the actual message ID, but we need something for the UI
 		const userMessage: Message = {
 			message_id: 'temp_' + Date.now(), // Temporary ID for UI only
@@ -706,7 +706,7 @@
 				let errorMessageId = 'temp_error_' + Date.now();
 				let shouldUpdateUserMessage = false;
 				let shouldReloadConversations = false;
-				
+
 				// Try to extract backend response data from error
 				if (error.response && typeof error.response === 'object') {
 					if (error.response.message_id) {
@@ -756,7 +756,7 @@
 			let errorMessageId = 'temp_error_' + Date.now();
 			let shouldUpdateUserMessage = false;
 			let shouldReloadConversations = false;
-			
+
 			// Try to extract backend response data from error
 			if (error.response && typeof error.response === 'object') {
 				if (error.response.message_id) {
@@ -1632,8 +1632,7 @@
 										>
 											<polyline points="23 4 23 10 17 10"></polyline>
 											<polyline points="1 20 1 14 7 14"></polyline>
-											<path
-												d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"
+											<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"
 											></path>
 										</svg>
 										Try again

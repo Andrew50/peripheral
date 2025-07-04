@@ -31,16 +31,18 @@
 	position: absolute;
 	inset: 0;
 	border-radius: inherit;
-	background: linear-gradient(to bottom,
-			rgba(255, 255, 255, 0.06) 0%,
-			rgba(255, 255, 255, 0.02) 30%,
-			rgba(255, 255, 255, 0) 60%);
+	background: linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.06) 0%,
+		rgba(255, 255, 255, 0.02) 30%,
+		rgba(255, 255, 255, 0) 60%
+	);
 	pointer-events: none;
 	z-index: 0;
 }
 
 /* Ensure content appears above the glass overlay */
-.glass>* {
+.glass > * {
 	position: relative;
 	z-index: 1;
 }
@@ -85,10 +87,12 @@
 }
 
 .glass--light-theme::before {
-	background: linear-gradient(to bottom,
-			rgba(255, 255, 255, 0.2) 0%,
-			rgba(255, 255, 255, 0.08) 30%,
-			rgba(255, 255, 255, 0) 60%);
+	background: linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.2) 0%,
+		rgba(255, 255, 255, 0.08) 30%,
+		rgba(255, 255, 255, 0) 60%
+	);
 }
 
 /* Responsive glass adjustments */

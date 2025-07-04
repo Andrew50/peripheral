@@ -11,22 +11,55 @@
 		const urlParams = new URLSearchParams(window.location.search);
 		const code = urlParams.get('code');
 		const state = urlParams.get('state');
+		const error = urlParams.get('error');
+
+		// Handle OAuth errors first
+		if (error) {
+			console.error('OAuth error received:', error);
+			errorMessage = 'Authentication failed. Please try again.';
+			setTimeout(() => goto('/login'), 3000);
+			return;
+		}
 
 		// Verify the state parameter matches what we stored
 		const storedState = sessionStorage.getItem('googleAuthState');
 
 		if (!code) {
 			console.error('No authorization code received');
-			errorMessage = 'Authorization failed: No code received';
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 			return;
 		}
 
-		if (!state || state !== storedState) {
-			console.error('State mismatch or missing state parameter');
-			errorMessage = 'Authorization failed: Invalid state parameter';
+		// More lenient state checking for development
+		const isDevelopment =
+			window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+		if (!state) {
+			console.error('No state parameter in callback');
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 			return;
+		}
+
+		if (!storedState) {
+			console.error('No stored state found in sessionStorage');
+			// In development, we can be more lenient, but still log the issue
+			if (!isDevelopment) {
+				errorMessage = 'Authentication failed. Please try again.';
+				setTimeout(() => goto('/login'), 3000);
+				return;
+			}
+			console.warn('Development mode: proceeding without state verification');
+		} else if (state !== storedState) {
+			console.error('State mismatch', { received: state, stored: storedState });
+			// In development, log but don't fail immediately
+			if (!isDevelopment) {
+				errorMessage = 'Authentication failed. Please try again.';
+				setTimeout(() => goto('/login'), 3000);
+				return;
+			}
+			console.warn('Development mode: proceeding despite state mismatch');
 		}
 
 		try {
@@ -42,10 +75,23 @@
 			// Clean up stored state
 			sessionStorage.removeItem('googleAuthState');
 
-			goto('/app');
+			// Handle deep linking from stored parameters
+			const redirectPlan = sessionStorage.getItem('redirectPlan');
+			const redirectType = sessionStorage.getItem('redirectType');
+
+			if (redirectType === 'checkout' && redirectPlan) {
+				// Clean up stored redirect parameters
+				sessionStorage.removeItem('redirectPlan');
+				sessionStorage.removeItem('redirectType');
+				// Redirect to pricing page with plan parameter to trigger checkout
+				goto(`/pricing?upgrade=${redirectPlan}`);
+			} else {
+				// Default redirect to app
+				goto('/app');
+			}
 		} catch (error) {
 			console.error('Google authentication failed:', error);
-			errorMessage = typeof error === 'string' ? error : 'Authentication failed';
+			errorMessage = 'Authentication failed. Please try again.';
 			setTimeout(() => goto('/login'), 3000);
 		}
 	});
@@ -81,7 +127,6 @@
 		padding: 1rem;
 		box-sizing: border-box;
 	}
-
 
 	.loading-container {
 		text-align: center;

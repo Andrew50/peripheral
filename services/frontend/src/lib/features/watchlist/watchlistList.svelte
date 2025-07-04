@@ -412,12 +412,12 @@
 
 	function syncWatchlistWithActiveChart(activeTicker: string) {
 		if (!activeTicker || !$list?.length) return;
-		
+
 		// Find the ticker in the current watchlist (case-insensitive)
-		const matchIndex = $list.findIndex(item => 
-			item.ticker?.toLowerCase() === activeTicker.toLowerCase()
+		const matchIndex = $list.findIndex(
+			(item) => item.ticker?.toLowerCase() === activeTicker.toLowerCase()
 		);
-		
+
 		if (matchIndex !== -1 && matchIndex !== selectedRowIndex) {
 			// Update selection and scroll to the matched ticker (without querying chart)
 			selectedRowIndex = matchIndex;
@@ -876,7 +876,7 @@
 		min-width: 40px;
 		text-align: left;
 	}
-	
+
 	.delete-button {
 		opacity: 0;
 		transition: none;
@@ -894,7 +894,7 @@
 		height: 20px;
 		margin: auto;
 	}
-	
+
 	.delete-button:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: var(--text-secondary);

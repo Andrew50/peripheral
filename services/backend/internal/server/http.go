@@ -142,6 +142,11 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"retryMessage":              agent.RetryMessage,
 	"getWhyMoving":              agent.GetWhyMoving,
 	"setConversationVisibility": agent.SetConversationVisibility,
+
+	// --- billing / stripe -----------------------------------------------------
+	"createCheckoutSession": CreateCheckoutSession,
+	"createCustomerPortal":  CreateCustomerPortal,
+	"getSubscriptionStatus": GetSubscriptionStatus,
 }
 
 // Private functions that support context cancellation
@@ -774,6 +779,7 @@ func StartServer(conn *data.Conn) {
 	http.HandleFunc("/ws", WSHandler(conn))
 	http.HandleFunc("/upload", privateUploadHandler(conn))
 	http.HandleFunc("/healthz", HealthCheck())
+	http.HandleFunc("/billing/webhook", stripeWebhookHandler(conn))
 
 	server := &http.Server{
 		Addr:    ":5058",

@@ -90,8 +90,6 @@
 	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
 
-
-
 .sidebar-buttons {
 	position: fixed;
 	top: 40px;
