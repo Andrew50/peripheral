@@ -117,14 +117,8 @@
 				{ priceId }
 			);
 
-			// Show success message briefly before redirect
-			feedbackMessage = 'Redirecting to secure checkout...';
-			feedbackType = 'success';
-
-			// Small delay for user feedback
-			setTimeout(async () => {
-				await redirectToCheckout(response.sessionId);
-			}, 1000);
+			// Redirect immediately to checkout
+			await redirectToCheckout(response.sessionId);
 		} catch (error) {
 			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
@@ -148,12 +142,9 @@
 
 		try {
 			const response = await privateRequest<{ url: string }>('createCustomerPortal', {});
-			feedbackMessage = 'Redirecting to customer portal...';
-			feedbackType = 'success';
 
-			setTimeout(() => {
-				redirectToCustomerPortal(response.url);
-			}, 500);
+			// Redirect immediately to customer portal
+			redirectToCustomerPortal(response.url);
 		} catch (error) {
 			console.error('Error opening customer portal:', error);
 			feedbackMessage = 'Failed to open customer portal. Please try again.';
