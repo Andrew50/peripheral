@@ -29,14 +29,9 @@ build_service() {
   # Add environment-specific build args for frontend
   if [[ "$srv" == "frontend" ]]; then
     build_args="$build_args --build-arg VITE_ENVIRONMENT=${ENVIRONMENT:-development}"
-    
-    # Add Stripe publishable key for frontend builds
-    if [[ -n "${STRIPE_PUBLISHABLE_KEY:-}" ]]; then
-      build_args="$build_args --build-arg VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY}"
-      echo "Building frontend with VITE_ENVIRONMENT=${ENVIRONMENT:-development} and Stripe key"
-    else
-      echo "Building frontend with VITE_ENVIRONMENT=${ENVIRONMENT:-development} (no Stripe key provided)"
-    fi
+    build_args="$build_args --build-arg VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY}"
+    echo "Building frontend with VITE_ENVIRONMENT=${ENVIRONMENT:-development}"
+    echo "Building frontend with VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY:0:10}..." # Only show first 10 chars for security
   fi
   
   # Use BuildKit with caching and optimizations
