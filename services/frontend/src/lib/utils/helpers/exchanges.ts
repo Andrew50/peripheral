@@ -6,8 +6,7 @@ export const exchangeMicToName: Record<string, string> = {
 	BATS: 'CBOE',
 	IEXG: 'IEX',
 	EDGX: 'CBOE',
-	EDGA: 'CBOE',
-
+	EDGA: 'CBOE'
 };
 
 export function getExchangeName(micCode: string | null | undefined): string {
@@ -15,4 +14,4 @@ export function getExchangeName(micCode: string | null | undefined): string {
 		return 'N/A';
 	}
 	return exchangeMicToName[micCode] || micCode; // Return code if not found
-} 
+}

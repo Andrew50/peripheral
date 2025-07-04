@@ -102,7 +102,7 @@ export async function validateInput(
 				const combined = [...recentSecurities];
 				if (Array.isArray(popularTickers)) {
 					for (const popular of popularTickers) {
-						if (!combined.some(cached => cached.ticker === popular.ticker)) {
+						if (!combined.some((cached) => cached.ticker === popular.ticker)) {
 							combined.push(popular);
 						}
 					}

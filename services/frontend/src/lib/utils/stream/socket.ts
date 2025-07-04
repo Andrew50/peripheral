@@ -66,14 +66,14 @@ let isConnecting = false;
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
-	| 'fast-regular'
-	| 'fast-extended'
-	| 'slow-regular'
-	| 'slow-extended'
-	| 'close-regular'
-	| 'close-extended'
-	| 'quote'
-	| 'all'; //all trades
+		| 'fast-regular'
+		| 'fast-extended'
+		| 'slow-regular'
+		| 'slow-extended'
+		| 'close-regular'
+		| 'close-extended'
+		| 'quote'
+		| 'all'; //all trades
 
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
@@ -206,7 +206,10 @@ export function connect() {
 				handleTimestampUpdate(data.timestamp);
 			} else {
 				// Also feed data to the new streamHub system
-				if ((channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) && data.price !== undefined) {
+				if (
+					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) &&
+					data.price !== undefined
+				) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
 						const tickData: any = {
@@ -225,7 +228,10 @@ export function connect() {
 				}
 
 				// Handle close data for the hub (both regular and extended)
-				if ((channelName.includes('-close-regular') || channelName.includes('-close-extended')) && data.price !== undefined) {
+				if (
+					(channelName.includes('-close-regular') || channelName.includes('-close-extended')) &&
+					data.price !== undefined
+				) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
 						const tickData: any = {
@@ -341,7 +347,15 @@ export function sendChatQuery(
 
 		if (socket?.readyState === WebSocket.OPEN) {
 			// Connection is open, send immediately
-			sendChatQueryNow(requestId, query, context, activeChartContext, conversationId, resolve, reject);
+			sendChatQueryNow(
+				requestId,
+				query,
+				context,
+				activeChartContext,
+				conversationId,
+				resolve,
+				reject
+			);
 		} else {
 			// Cancel any existing pending chat request
 			if (pendingChatRequest) {
@@ -420,11 +434,11 @@ function sendChatQueryNow(
 
 // Process pending chat request when connection is restored
 function processPendingChatRequest() {
-	if (!pendingChatRequest) return; 
+	if (!pendingChatRequest) return;
 
 	// Clear the timeout since we're processing now
 	clearTimeout(pendingChatRequest.timeoutId);
-	
+
 	// Send the pending request
 	sendChatQueryNow(
 		pendingChatRequest.requestId,
@@ -435,10 +449,9 @@ function processPendingChatRequest() {
 		pendingChatRequest.resolve,
 		pendingChatRequest.reject
 	);
-	
+
 	// Clear the pending request
 	pendingChatRequest = null;
-	
 }
 
 // Cancel a chat query by request ID

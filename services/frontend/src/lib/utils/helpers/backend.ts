@@ -194,7 +194,12 @@ export async function privateRequest<T>(
 		return result;
 	} else {
 		const errorMessage = await response.text();
-		console.error(`Error for ${func} - Status: ${response.status}, payload:`, payload, 'error:', errorMessage);
+		console.error(
+			`Error for ${func} - Status: ${response.status}, payload:`,
+			payload,
+			'error:',
+			errorMessage
+		);
 		return Promise.reject(errorMessage);
 	}
 

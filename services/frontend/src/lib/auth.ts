@@ -72,4 +72,4 @@ export function setAuthSessionStorage(token: string, profilePic: string, usernam
 	sessionStorage.setItem('authToken', token);
 	sessionStorage.setItem('profilePic', profilePic || '');
 	sessionStorage.setItem('username', username || '');
-} 
+}

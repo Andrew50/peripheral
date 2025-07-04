@@ -29,7 +29,7 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/bin/sh", "-c", "sleep 120"]
+                command: ["/app/graceful-shutdown.sh"]
           resources:
             requests:
               cpu: 2000m
@@ -44,7 +44,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodSeconds: 90
+      terminationGracePeriodSeconds: 150
 
 ---
 apiVersion: v1

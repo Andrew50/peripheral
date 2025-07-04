@@ -89,14 +89,17 @@ export async function fetchSubscriptionStatus() {
 			return;
 		}
 
-		console.log('Starting subscription status fetch with token:', authToken.substring(0, 20) + '...');
-		subscriptionStatus.update(s => ({ ...s, loading: true, error: '' }));
+		console.log(
+			'Starting subscription status fetch with token:',
+			authToken.substring(0, 20) + '...'
+		);
+		subscriptionStatus.update((s) => ({ ...s, loading: true, error: '' }));
 
 		console.log('Making privateRequest to getSubscriptionStatus');
 		const response = await privateRequest<SubscriptionStatus>('getSubscriptionStatus', {});
 		console.log('Received subscription status response:', response);
 
-		subscriptionStatus.update(s => ({
+		subscriptionStatus.update((s) => ({
 			...s,
 			...response,
 			loading: false,
@@ -106,7 +109,7 @@ export async function fetchSubscriptionStatus() {
 	} catch (error) {
 		console.error('Failed to fetch subscription status:', error);
 		console.error('Error details:', error);
-		subscriptionStatus.update(s => ({
+		subscriptionStatus.update((s) => ({
 			...s,
 			loading: false,
 			error: 'Failed to load subscription status'
@@ -116,9 +119,9 @@ export async function fetchSubscriptionStatus() {
 
 // Function to update user's last tickers when a ticker is selected
 export function updateUserLastTickers(selectedTicker: any) {
-	userLastTickers.update(tickers => {
+	userLastTickers.update((tickers) => {
 		// Remove the ticker if it already exists
-		const filtered = tickers.filter(t => t.ticker !== selectedTicker.ticker);
+		const filtered = tickers.filter((t) => t.ticker !== selectedTicker.ticker);
 		// Add the selected ticker to the top
 		return [selectedTicker, ...filtered.slice(0, 2)]; // Keep only top 3
 	});
@@ -240,34 +243,40 @@ function initStoresWithAuth() {
 					alertLogs.set([]);
 				});
 
-			privateRequest<Watchlist[]>('getWatchlists', {}).then((list: Watchlist[]) => {
-				watchlists.set(list || []);
-				const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
-				if (flagWatch === undefined) {
-					privateRequest<number>('newWatchlist', { watchlistName: 'flag' }).then((newId: number) => {
-						flagWatchlistId = newId;
-						watchlists.update(currentList => {
-							const newList = currentList || [];
-							return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
-						});
-					}).catch(err => {
-						console.error("Error creating flag watchlist:", err);
-					});
-				} else {
-					flagWatchlistId = flagWatch.watchlistId;
-				}
-			}).catch(err => {
-				console.error("Error fetching watchlists:", err);
-				watchlists.set([]);
-			});
+			privateRequest<Watchlist[]>('getWatchlists', {})
+				.then((list: Watchlist[]) => {
+					watchlists.set(list || []);
+					const flagWatch = list?.find((v: Watchlist) => v.watchlistName === 'flag');
+					if (flagWatch === undefined) {
+						privateRequest<number>('newWatchlist', { watchlistName: 'flag' })
+							.then((newId: number) => {
+								flagWatchlistId = newId;
+								watchlists.update((currentList) => {
+									const newList = currentList || [];
+									return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
+								});
+							})
+							.catch((err) => {
+								console.error('Error creating flag watchlist:', err);
+							});
+					} else {
+						flagWatchlistId = flagWatch.watchlistId;
+					}
+				})
+				.catch((err) => {
+					console.error('Error fetching watchlists:', err);
+					watchlists.set([]);
+				});
 
 			// Load user's last tickers
-			privateRequest<any[]>('getUserLastTickers', {}).then((tickers: any[]) => {
-				userLastTickers.set(tickers || []);
-			}).catch((error) => {
-				console.warn('Failed to load user last tickers:', error);
-				userLastTickers.set([]);
-			});
+			privateRequest<any[]>('getUserLastTickers', {})
+				.then((tickers: any[]) => {
+					userLastTickers.set(tickers || []);
+				})
+				.catch((error) => {
+					console.warn('Failed to load user last tickers:', error);
+					userLastTickers.set([]);
+				});
 		});
 	} catch (error) {
 		console.warn('Failed to check public viewing mode, proceeding with auth initialization');
