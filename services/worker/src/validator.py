@@ -348,13 +348,19 @@ class SecurityValidator:
     def _check_strategy_compliance(self, tree: ast.AST, code: str) -> bool:
         """Check DataFrame strategy compliance requirements"""
         
-        # Check for required strategy function
-        strategy_functions = self._find_strategy_functions(tree)
-        if not strategy_functions:
-            raise StrategyComplianceError("No valid strategy function found. Must define exactly one non-private function.")
+        # Find all functions
+        all_functions = self._find_strategy_functions(tree)
+        if not all_functions:
+            raise StrategyComplianceError("No valid strategy function found. Must define at least one non-private function.")
         
+        # Look for the main strategy function specifically
+        strategy_functions = [func for func in all_functions if func.name == 'strategy']
+        
+        if not strategy_functions:
+            raise StrategyComplianceError("No 'strategy' function found. Must define a function named 'strategy'.")
+            
         if len(strategy_functions) > 1:
-            raise StrategyComplianceError("Only one strategy function is allowed")
+            raise StrategyComplianceError("Only one 'strategy' function is allowed")
             
         func_node = strategy_functions[0]
         

@@ -6,35 +6,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
-// SaveBacktestToCache saves the results of a backtest to Redis.
-func SaveBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, results interface{}) error {
-	if results == nil {
-		return fmt.Errorf("cannot save nil backtest results")
-	}
+func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, response BacktestResponse) error {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
 
-	// Construct the cache key
-	cacheKey := fmt.Sprintf("user:%d:backtest:%d:results", userID, strategyID)
-
-	// Serialize the results to JSON
-	serializedResults, err := json.Marshal(results)
+	cacheData, err := json.Marshal(response)
 	if err != nil {
-		////fmt.Printf("Failed to serialize backtest results for strategy %d: %v\n", strategyID, err)
-		return fmt.Errorf("failed to serialize backtest results: %w", err)
+		return fmt.Errorf("error marshaling backtest response: %v", err)
 	}
+	cachedDataTTL := 8 * time.Hour
+	return conn.Cache.Set(ctx, cacheKey, cacheData, cachedDataTTL).Err()
+}
 
-	// Define an expiration time (e.g., 24 hours)
-	expiration := 24 * time.Hour
+func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, strategyID int) (*BacktestResponse, error) {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
 
-	// Save to Redis
-	////fmt.Printf("Saving backtest results for strategy %d to cache key: %s\n", strategyID, cacheKey)
-	err = conn.Cache.Set(ctx, cacheKey, serializedResults, expiration).Err()
+	cacheData, err := conn.Cache.Get(ctx, cacheKey).Result()
 	if err != nil {
-		////fmt.Printf("Failed to save backtest results to Redis for strategy %d: %v\n", strategyID, err)
-		return fmt.Errorf("failed to save backtest results to cache: %w", err)
+		if err == redis.Nil {
+			// Cache miss - run backtest and cache result
+			rawArgs := json.RawMessage(fmt.Sprintf(`{"strategyId": %d}`, strategyID))
+			backtestResponse, err := RunBacktest(ctx, conn, userID, rawArgs)
+			if err != nil {
+				return nil, fmt.Errorf("error running backtest: %v", err)
+			}
+			return backtestResponse.(*BacktestResponse), nil
+		}
+		return nil, fmt.Errorf("error getting backtest cache: %v", err)
 	}
 
-	////fmt.Printf("Successfully saved backtest results for strategy %d to Redis.\n", strategyID)
-	return nil
+	// Cache hit - unmarshal and return
+	var response BacktestResponse
+	if err := json.Unmarshal([]byte(cacheData), &response); err != nil {
+		// Cache corruption - delete corrupted entry and return error
+		conn.Cache.Del(ctx, cacheKey)
+		return nil, fmt.Errorf("error unmarshaling cached backtest data: %v", err)
+	}
+
+	return &response, nil
+}
+func InvalidateBacktestInstancesCache(ctx context.Context, conn *data.Conn, userID int, strategyID int) error {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
+
+	return conn.Cache.Del(ctx, cacheKey).Err()
 }

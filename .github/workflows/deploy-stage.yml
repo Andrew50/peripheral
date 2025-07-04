@@ -27,8 +27,8 @@ jobs:
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #      k8s_context: 'stage-cluster'
       k8s_namespace: 'stage'
-      google_redirect_url: 'https://stage.atlantis.trading/auth/google/callback'
-      ingress_host: 'stage.atlantis.trading'
+      google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
+      ingress_host: 'stage.peripheral.io'
       #public_base_url: '/'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
