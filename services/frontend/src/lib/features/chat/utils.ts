@@ -4,7 +4,7 @@ import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
 
 // Centralized ticker formatting regex pattern
-const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9]{1,5})-(\d+)\$\$/g;
+const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9.]{1,6})-(\d+)\$\$/g;
 
 // Function to parse markdown content and make links open in new tabs
 export function parseMarkdown(content: string): string {
@@ -75,9 +75,20 @@ export function formatChipDate(timestampMs?: number): string {
 	}
 	try {
 		const date = new Date(timestampMs);
-		const year = date.getFullYear();
-		const month = (date.getMonth() + 1).toString().padStart(2, '0');
-		const day = date.getDate().toString().padStart(2, '0');
+		
+		// Format the date in EST timezone
+		const estDate = new Intl.DateTimeFormat('en-US', {
+			timeZone: 'America/New_York',
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit'
+		}).formatToParts(date);
+		
+		// Extract parts and format as YYYY-MM-DD
+		const year = estDate.find(part => part.type === 'year')?.value || '';
+		const month = estDate.find(part => part.type === 'month')?.value || '';
+		const day = estDate.find(part => part.type === 'day')?.value || '';
+		
 		return ` (${year}-${month}-${day})`; // Add leading space
 	} catch (e) {
 		console.error('Error formatting chip date:', e);

@@ -11,42 +11,52 @@ import (
 
 // BacktestArgs represents arguments for backtesting (API compatibility)
 type BacktestArgs struct {
-	StrategyID    int   `json:"strategyId"`
-	Securities    []int `json:"securities"`
-	Start         int64 `json:"start"`
-	ReturnWindows []int `json:"returnWindows"`
-	FullResults   bool  `json:"fullResults"`
+	StrategyID int   `json:"strategyId"`
+	Securities []int `json:"securities"`
+	Start      int64 `json:"start"`
+
+	FullResults bool `json:"fullResults"`
 }
 
 // BacktestResult represents a single backtest instance (API compatibility)
 type BacktestResult struct {
 	Ticker          string             `json:"ticker"`
-	SecurityID      int                `json:"securityId"`
+	SecurityID      int                `json:"securityId,omitempty"`
 	Timestamp       int64              `json:"timestamp"`
-	Open            float64            `json:"open"`
-	High            float64            `json:"high"`
-	Low             float64            `json:"low"`
-	Close           float64            `json:"close"`
-	Volume          int64              `json:"volume"`
+	Open            float64            `json:"open,omitempty"`
+	High            float64            `json:"high,omitempty"`
+	Low             float64            `json:"low,omitempty"`
+	Close           float64            `json:"close,omitempty"`
+	Volume          int64              `json:"volume,omitempty"`
 	Classification  bool               `json:"classification"`
 	FutureReturns   map[string]float64 `json:"futureReturns,omitempty"`
 	StrategyResults map[string]any     `json:"strategyResults,omitempty"`
+	Instance        map[string]any     `json:"instance,omitempty"`
 }
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances    int              `json:"totalInstances"`
-	PositiveInstances int              `json:"positiveInstances"`
-	DateRange         []string         `json:"dateRange"`
-	SymbolsProcessed  int              `json:"symbolsProcessed"`
-	Columns           []string         `json:"columns"`
-	ColumnSamples     map[string][]any `json:"columnSamples"`
+	TotalInstances    int      `json:"totalInstances"`
+	PositiveInstances int      `json:"positiveInstances"`
+	DateRange         []string `json:"dateRange"`
+	SymbolsProcessed  int      `json:"symbolsProcessed"`
+	Columns           []string `json:"columns"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
 type BacktestResponse struct {
-	Instances []BacktestResult `json:"instances"`
-	Summary   BacktestSummary  `json:"summary"`
+	Instances      []BacktestResult `json:"instances"`
+	Summary        BacktestSummary  `json:"summary"`
+	StrategyPrints string           `json:"strategyPrints,omitempty"`
+	StrategyPlots  []StrategyPlot   `json:"strategyPlots,omitempty"`
+}
+
+// StrategyPlot represents a captured plotly plot with essential data only
+type StrategyPlot struct {
+	ChartType string           `json:"chart_type"` // "line", "bar", "scatter", "histogram", "heatmap"
+	Data      []map[string]any `json:"data"`       // Array of trace objects with x/y/z data arrays
+	Title     string           `json:"title"`      // Chart title
+	Layout    map[string]any   `json:"layout"`     // Minimal layout (axis labels, dimensions)
 }
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
@@ -54,21 +64,13 @@ type WorkerBacktestResult struct {
 	Success            bool                   `json:"success"`
 	StrategyID         int                    `json:"strategy_id"`
 	ExecutionMode      string                 `json:"execution_mode"`
-	Instances          []WorkerInstance       `json:"instances"`
+	Instances          []map[string]any       `json:"instances"`
 	Summary            WorkerSummary          `json:"summary"`
 	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
 	ExecutionTimeMs    int                    `json:"execution_time_ms"`
+	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
+	StrategyPlots      []StrategyPlot         `json:"strategy_plots,omitempty"`
 	ErrorMessage       string                 `json:"error_message,omitempty"`
-}
-
-// WorkerInstance represents a worker instance result
-type WorkerInstance struct {
-	Ticker          string                 `json:"ticker"`
-	Timestamp       int64                  `json:"timestamp"`
-	Classification  bool                   `json:"classification"`
-	EntryPrice      float64                `json:"entry_price,omitempty"`
-	StrategyResults map[string]interface{} `json:"strategy_results,omitempty"`
-	FutureReturn    float64                `json:"future_return,omitempty"`
 }
 
 // WorkerSummary represents worker summary statistics
@@ -136,11 +138,13 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	// Convert worker result to BacktestResponse format for API compatibility
 	instances := convertWorkerInstancesToBacktestResults(result.Instances)
-	summary := convertWorkerSummaryToBacktestSummary(result.Summary)
+	summary := convertWorkerSummaryToBacktestSummary(result.Summary, result.Instances)
 
 	response := BacktestResponse{
-		Instances: instances,
-		Summary:   summary,
+		Instances:      instances,
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
+		StrategyPlots:  result.StrategyPlots,
 	}
 
 	// Cache the results
@@ -267,49 +271,36 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 }
 
 // convertWorkerInstancesToBacktestResults converts worker instances to API format
-func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []BacktestResult {
+func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestResult {
 	results := make([]BacktestResult, len(instances))
 
 	for i, instance := range instances {
-		// Convert timestamp properly - Python worker returns Unix timestamps in seconds
-		timestamp := instance.Timestamp
+		// Extract ticker (required field)
+		ticker, _ := instance["ticker"].(string)
 
-		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
-		// Check if timestamp is in seconds (reasonable range for Unix timestamps)
-		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
-			// Convert seconds to milliseconds
-			timestamp = timestamp * 1000
-		}
-
-		// Extract entry price from strategy results or use EntryPrice field
-		entryPrice := instance.EntryPrice
-		if entryPrice == 0 && instance.StrategyResults != nil {
-			if price, ok := instance.StrategyResults["entry_price"].(float64); ok {
-				entryPrice = price
-			} else if price, ok := instance.StrategyResults["open"].(float64); ok {
-				entryPrice = price
-			} else if price, ok := instance.StrategyResults["close"].(float64); ok {
-				entryPrice = price
+		// Extract timestamp and convert properly - Python worker returns Unix timestamps in seconds
+		var timestamp int64
+		if ts, ok := instance["timestamp"]; ok {
+			switch v := ts.(type) {
+			case int64:
+				timestamp = v
+			case float64:
+				timestamp = int64(v)
+			case int:
+				timestamp = int64(v)
 			}
 		}
 
-		results[i] = BacktestResult{
-			Ticker:          instance.Ticker,
-			SecurityID:      0, // Will be populated if needed
-			Timestamp:       timestamp,
-			Open:            entryPrice,
-			High:            entryPrice,
-			Low:             entryPrice,
-			Close:           entryPrice,
-			Volume:          0,
-			Classification:  true, // Since instance was returned, it met criteria
-			FutureReturns:   map[string]float64{},
-			StrategyResults: instance.StrategyResults,
+		// Convert from seconds to milliseconds if needed (for JavaScript Date compatibility)
+		if timestamp > 0 && timestamp < 4000000000 { // Less than year 2096 in seconds
+			timestamp = timestamp * 1000
 		}
 
-		// Add future return if available
-		if instance.FutureReturn != 0 {
-			results[i].FutureReturns["1d"] = instance.FutureReturn
+		results[i] = BacktestResult{
+			Ticker:         ticker,
+			Timestamp:      timestamp,
+			Classification: true,     // Since instance was returned, it met criteria
+			Instance:       instance, // Include the complete original instance
 		}
 	}
 
@@ -317,13 +308,25 @@ func convertWorkerInstancesToBacktestResults(instances []WorkerInstance) []Backt
 }
 
 // convertWorkerSummaryToBacktestSummary converts worker summary to API format
-func convertWorkerSummaryToBacktestSummary(summary WorkerSummary) BacktestSummary {
+func convertWorkerSummaryToBacktestSummary(summary WorkerSummary, instances []map[string]any) BacktestSummary {
+	// Extract unique column names from instances
+	columnSet := make(map[string]bool)
+	for _, instance := range instances {
+		for key := range instance {
+			columnSet[key] = true
+		}
+	}
+	// Convert to sorted slice for consistent output
+	columns := make([]string, 0, len(columnSet))
+	for column := range columnSet {
+		columns = append(columns, column)
+	}
+
 	return BacktestSummary{
 		TotalInstances:    summary.TotalInstances,
 		PositiveInstances: summary.PositiveInstances,
 		DateRange:         []string(summary.DateRange),
 		SymbolsProcessed:  summary.SymbolsProcessed,
-		Columns:           []string{"ticker", "timestamp", "classification", "entry_price"},
-		ColumnSamples:     map[string][]any{},
+		Columns:           columns,
 	}
 }

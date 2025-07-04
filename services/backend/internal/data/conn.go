@@ -106,9 +106,6 @@ func InitConn(inContainer bool) (*Conn, func()) {
 				poolConfig.HealthCheckPeriod = 1 * time.Minute          // FIXED: Reduced from 30 seconds for more frequent health checks
 				poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // FIXED: Increased from 5 seconds for slower connections
 
-				// FIXED: Add application-level settings for better performance
-				poolConfig.ConnConfig.PreferSimpleProtocol = true // Use simple protocol for better performance
-
 				// Create the connection pool with our custom configuration
 				dbConn, err := pgxpool.ConnectConfig(ctx, poolConfig)
 				if err != nil {

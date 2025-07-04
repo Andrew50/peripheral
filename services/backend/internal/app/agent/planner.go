@@ -698,11 +698,12 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 			})
 		}
 	}
+	est, _ := time.LoadLocation("America/New_York")
 	messages = append(messages, responses.ResponseInputItemUnionParam{
 		OfMessage: &responses.EasyInputMessageParam{
 			Role: responses.EasyInputMessageRoleSystem,
 			Content: responses.EasyInputMessageContentUnionParam{
-				OfString: openai.String(fmt.Sprintf("CURRENT DATE (EST/Market Time): %s\n CURRENT TIME: %s\n CURRENT TIME IN SECONDS: %d", time.Now().Format("2006-01-02 15:04:05"), time.Now().Format("15:04:05"), time.Now().Unix())),
+				OfString: openai.String(fmt.Sprintf("CURRENT DATE (EST/Market Time): %s\n CURRENT TIME IN SECONDS: %d", time.Now().In(est).Format("2006-01-02 15:04:05"), time.Now().In(est).Unix())),
 			},
 		},
 	})

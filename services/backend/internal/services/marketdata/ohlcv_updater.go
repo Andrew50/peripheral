@@ -73,7 +73,7 @@ func getActiveTickers(conn *data.Conn) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // Increased timeout
 	defer cancel()
 
-	query := `SELECT ticker FROM securities WHERE maxDate IS NULL ORDER BY ticker`
+	query := `SELECT ticker FROM securities WHERE maxDate IS NULL`
 	rows, err := conn.DB.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error querying active tickers: %w", err)
@@ -146,9 +146,9 @@ func processTickerAllTimeframes(conn *data.Conn, ticker string) error {
 		tableName  string
 	}{
 		{"1-minute", "minute", 1, "ohlcv_1m"},
-		{"1-hour", "hour", 1, "ohlcv_1h"},
+		//{"1-hour", "hour", 1, "ohlcv_1h"},
 		{"1-day", "day", 1, "ohlcv_1d"},
-		{"1-week", "week", 1, "ohlcv_1w"},
+		//{"1-week", "week", 1, "ohlcv_1w"},
 	}
 
 	for _, tf := range timeframes {
@@ -158,9 +158,9 @@ func processTickerAllTimeframes(conn *data.Conn, ticker string) error {
 			return fmt.Errorf("error getting latest date for %s %s: %w", ticker, tf.name, err)
 		}
 
-		// If fromDate is nil, start from 2008 (Polygon's data availability)
+		// If fromDate is nil, start from 1 year ago
 		if fromDate == nil {
-			startDate := time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC)
+			startDate := time.Now().AddDate(-1, 0, 0) // 1 year ago
 			fromDate = &startDate
 		} else {
 			// Start from the day after the latest data
