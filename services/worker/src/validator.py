@@ -37,20 +37,9 @@ class SecurityValidator:
             ast.FunctionDef: self._check_function_definition,
             ast.AsyncFunctionDef: self._check_async_function_definition,
             ast.ClassDef: self._check_class_definition,
-            ast.For: self._check_for_loop,
             ast.While: self._check_while_loop,
-            ast.With: self._check_with_statement,
-            ast.Try: self._check_try_statement,
-            ast.Raise: self._check_raise_statement,
-            ast.Delete: self._check_delete_statement,
             ast.Global: self._check_global_statement,
             ast.Nonlocal: self._check_nonlocal_statement,
-            # ast.Exec removed - doesn't exist in Python 3.x
-            ast.Lambda: self._check_lambda,
-            ast.ListComp: self._check_comprehension,
-            ast.DictComp: self._check_comprehension,
-            ast.SetComp: self._check_comprehension,
-            ast.GeneratorExp: self._check_comprehension,
         }
 
         # Forbidden built-in functions (only truly dangerous ones)
@@ -278,6 +267,146 @@ class SecurityValidator:
             elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
                 if isinstance(node.n, int):
                     return node.n
+        except:
+            pass
+        return None
+
+    def extract_ticker_filters(self, code: str) -> List[Dict[str, Any]]:
+        """
+        Extract ticker and other filter requirements from all get_bar_data() and get_general_data() calls.
+        
+        Args:
+            code: Strategy code to analyze
+            
+        Returns:
+            List of dictionaries with filter info:
+            [
+                {
+                    'function': 'get_bar_data',
+                    'filters': {
+                        'tickers': ['AAPL', 'MSFT'],
+                        'sector': 'Technology',
+                        'market_cap_min': 1000000000
+                    },
+                    'line_number': 15
+                },
+                ...
+            ]
+        """
+        filters = []
+        
+        try:
+            # Parse the code into an AST
+            tree = ast.parse(code)
+            
+            # Walk through all nodes in the AST
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    # Check if this is a get_bar_data or get_general_data call
+                    func_name = None
+                    if isinstance(node.func, ast.Name):
+                        func_name = node.func.id
+                    elif isinstance(node.func, ast.Attribute):
+                        func_name = node.func.attr
+                    
+                    if func_name in ['get_bar_data', 'get_general_data']:
+                        # Extract filters from the call
+                        filter_info = self._extract_filter_params(node)
+                        if filter_info:
+                            filters.append(filter_info)
+                            
+        except SyntaxError as e:
+            logger.warning(f"Failed to parse strategy code for filter extraction: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error extracting filter requirements: {e}")
+            
+        return filters
+
+    def _extract_filter_params(self, call_node: ast.Call) -> Optional[Dict[str, Any]]:
+        """
+        Extract filter parameters from a get_bar_data() or get_general_data() call node.
+        
+        Args:
+            call_node: AST Call node representing the function call
+            
+        Returns:
+            Dictionary with extracted filter parameters or None if extraction fails
+        """
+        try:
+            # Get function name
+            func_name = None
+            if isinstance(call_node.func, ast.Name):
+                func_name = call_node.func.id
+            elif isinstance(call_node.func, ast.Attribute):
+                func_name = call_node.func.attr
+            
+            filter_info = {
+                'function': func_name,
+                'filters': {},
+                'line_number': getattr(call_node, 'lineno', 0)
+            }
+            
+            # Look for filters parameter in both args and kwargs
+            filters_node = None
+            
+            # Check keyword arguments first
+            for keyword in call_node.keywords:
+                if keyword.arg == 'filters':
+                    filters_node = keyword.value
+                    break
+            
+            # If no filters in kwargs, check positional args based on function signature
+            if not filters_node and len(call_node.args) >= 3:
+                # filters is the 3rd parameter in both functions
+                filters_node = call_node.args[2]
+            
+            if filters_node:
+                # Extract filter values from the dict
+                if isinstance(filters_node, ast.Dict):
+                    for key, value in zip(filters_node.keys, filters_node.values):
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                            filter_key = key.value
+                            filter_value = self._extract_filter_value(value)
+                            if filter_value is not None:
+                                filter_info['filters'][filter_key] = filter_value
+            
+            return filter_info if filter_info['filters'] else None
+            
+        except Exception as e:
+            logger.debug(f"Failed to extract filter parameters: {e}")
+            return None
+
+    def _extract_filter_value(self, node: ast.AST) -> Any:
+        """Extract filter value from AST node"""
+        try:
+            if isinstance(node, ast.Constant):
+                # Direct values (strings, numbers, etc.)
+                return node.value
+            elif isinstance(node, ast.List):
+                # List of values
+                values = []
+                for elt in node.elts:
+                    if isinstance(elt, ast.Constant):
+                        values.append(elt.value)
+                return values if values else None
+            elif isinstance(node, ast.Name):
+                # Variable reference - can't determine actual value
+                return f"<variable: {node.id}>"
+            elif isinstance(node, ast.Dict):
+                # Nested dictionary
+                nested_dict = {}
+                for k, v in zip(node.keys, node.values):
+                    if isinstance(k, ast.Constant):
+                        nested_value = self._extract_filter_value(v)
+                        if nested_value is not None:
+                            nested_dict[k.value] = nested_value
+                return nested_dict if nested_dict else None
+            elif isinstance(node, ast.Call):
+                # Function call - can't determine actual value
+                return "<function call>"
+            elif isinstance(node, ast.BinOp):
+                # Binary operation - can't determine actual value
+                return "<expression>"
         except:
             pass
         return None
@@ -521,7 +650,6 @@ class SecurityValidator:
             (r'file\s*\(', "file() function is forbidden"),
             # Input/Output
             (r'input\s*\(', "input() function is forbidden"),
-            # Note: print() is now allowed as it's in allowed_functions list
             # System access patterns
             (r'import\s+os\b', "Importing os module is forbidden"),
             (r'import\s+sys\b', "Importing sys module is forbidden"),
@@ -658,30 +786,9 @@ class SecurityValidator:
         """Check class definitions (forbidden)"""
         raise SecurityError("Class definitions are not allowed in strategies")
 
-    def _check_for_loop(self, node: ast.For) -> bool:
-        """Check for loops (allowed but monitored)"""
-        return True
-
     def _check_while_loop(self, node: ast.While) -> bool:
         """Check while loops (potentially dangerous)"""
         logger.warning("While loops detected - ensure they terminate to avoid infinite loops")
-        return True
-
-    def _check_with_statement(self, node: ast.With) -> bool:
-        """Check with statements (context managers)"""
-        return True
-
-    def _check_try_statement(self, node: ast.Try) -> bool:
-        """Check try statements"""
-        return True
-
-    def _check_raise_statement(self, node: ast.Raise) -> bool:
-        """Check raise statements"""
-        return True
-
-    def _check_delete_statement(self, node: ast.Delete) -> bool:
-        """Check delete statements (potentially dangerous)"""
-        logger.warning("Delete statements detected - use with caution")
         return True
 
     def _check_global_statement(self, node: ast.Global) -> bool:
@@ -691,19 +798,6 @@ class SecurityValidator:
     def _check_nonlocal_statement(self, node: ast.Nonlocal) -> bool:
         """Check nonlocal statements (forbidden)"""
         raise SecurityError("Nonlocal statements are not allowed in strategies")
-
-    def _check_exec_statement(self, node) -> bool:
-        """Check exec statements (forbidden) - not applicable in Python 3.x"""
-        # ast.Exec doesn't exist in Python 3.x, so this is not needed
-        return True
-
-    def _check_lambda(self, node: ast.Lambda) -> bool:
-        """Check lambda expressions (allowed but monitored)"""
-        return True
-
-    def _check_comprehension(self, node: Union[ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp]) -> bool:
-        """Check comprehensions (allowed but monitored)"""
-        return True
 
     def validate_instance_fields(self, instances: List[Dict[str, Any]]) -> bool:
         """
