@@ -424,7 +424,7 @@ var (
 		"getBacktestInstances": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getBacktestInstances",
-				Description: "Get the instances of a backtest for a specified strategy. Use this to look at the instances of a backtest for a specified strategy if the user refers to a backtest instance. Limited to 20 instances. Use filters to get the specific instances the user might be looking for or that you want to analyze.",
+				Description: "Get the instances of a backtest for a specified strategy. Use this to look at the instances of a backtest for a specified strategy if the user refers to a backtest instance. Filters are required to get the specific instances the user might be looking for or that you want to analyze. Limited to 20 instances. ",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
