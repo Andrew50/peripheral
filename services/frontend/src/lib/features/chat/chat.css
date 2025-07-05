@@ -469,8 +469,9 @@
 
 .suggested-query-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.08);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .chat-input-wrapper {
@@ -1000,8 +1001,9 @@ button[data-ticker].ticker-button:hover,
 
 .suggestion-chip:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary);
+	border-color: #fff;
 }
 
 .suggestion-chip kbd {
