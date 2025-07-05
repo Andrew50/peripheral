@@ -82,6 +82,11 @@ export type TableData = {
 	caption?: string;
 	headers: string[];
 	rows: any[][];
+	// Pagination state
+	currentPage?: number;
+	rowsPerPage?: number;
+	totalRows?: number;
+	totalPages?: number;
 };
 
 export type PlotData = {
