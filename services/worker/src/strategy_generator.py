@@ -488,6 +488,7 @@ RETURN FORMAT:
   * 'entry_price': float (price at instance time - open, close, etc.)
   * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
   * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
+  * Order these fields logically that would make it best for the reader to understand the table of instances.
 - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant

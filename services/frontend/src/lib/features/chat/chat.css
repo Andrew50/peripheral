@@ -469,8 +469,9 @@
 
 .suggested-query-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.08);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .chat-input-wrapper {
@@ -740,8 +741,9 @@ button[data-ticker].ticker-button:hover,
 .message-content button[data-ticker]:hover,
 .chunk-text button[data-ticker]:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 /* Ticker buttons inherit size from table headers */
@@ -1000,8 +1002,9 @@ button[data-ticker].ticker-button:hover,
 
 .suggestion-chip:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary);
+	border-color: #fff;
 }
 
 .suggestion-chip kbd {
@@ -1068,8 +1071,9 @@ button[data-ticker].ticker-button:hover,
 .edit-btn:hover,
 .retry-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .copy-btn svg,
@@ -1150,8 +1154,9 @@ button[data-ticker].ticker-button:hover,
 
 .error-retry-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .error-retry-btn svg {

@@ -520,6 +520,28 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			backtestColumns := backtestResultsMap[chunkContent.StrategyID].Summary.Columns
 			// Ensure "ticker" is the first column
 			tickerIdx := -1
+			timestampIdx := -1
+			for i, col := range backtestColumns {
+				if col == "ticker" {
+					tickerIdx = i
+				}
+				if col == "timestamp" {
+					timestampIdx = i
+				}
+			}
+			// If both ticker and timestamp exist, merge them into ticker and remove timestamp
+			if tickerIdx >= 0 && timestampIdx >= 0 {
+				// Remove timestamp from columns
+				newColumns := make([]string, 0, len(backtestColumns)-1)
+				for _, col := range backtestColumns {
+					if col != "timestamp" {
+						newColumns = append(newColumns, col)
+					}
+				}
+				backtestColumns = newColumns
+			}
+			// Recompute tickerIdx after possible column change
+			tickerIdx = -1
 			for i, col := range backtestColumns {
 				if col == "ticker" {
 					tickerIdx = i
@@ -539,8 +561,53 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			rows := make([]map[string]any, 0, len(instances))
 			for _, instance := range instances {
 				row := make(map[string]any)
-				for _, column := range backtestColumns {
-					row[column] = instance.Instance[column]
+				// If both ticker and timestamp exist, merge them
+				if tickerIdx >= 0 && timestampIdx >= 0 {
+					tickerVal, okTicker := instance.Instance["ticker"].(string)
+					timestampVal, okTimestamp := instance.Instance["timestamp"]
+					var timestampMs string
+					if okTimestamp {
+						switch v := timestampVal.(type) {
+						case int64:
+							timestampMs = fmt.Sprintf("%d", v*1000)
+						case int:
+							timestampMs = fmt.Sprintf("%d", v*1000)
+						case float64:
+							timestampMs = fmt.Sprintf("%d", int64(v*1000))
+						case float32:
+							timestampMs = fmt.Sprintf("%d", int64(v*1000))
+						case string:
+							// Try to parse string to int
+							var tsInt int64
+							_, err := fmt.Sscanf(v, "%d", &tsInt)
+							if err == nil {
+								timestampMs = fmt.Sprintf("%d", tsInt*1000)
+							} else {
+								timestampMs = v
+							}
+						default:
+							timestampMs = ""
+						}
+					}
+					if okTicker && timestampMs != "" {
+						row["ticker"] = "$$" + tickerVal + "-" + timestampMs + "$$"
+					} else if okTicker {
+						row["ticker"] = "$$" + tickerVal + "$$"
+					}
+					// Copy other columns except timestamp
+					for _, column := range backtestColumns {
+						if column == "ticker" {
+							continue
+						}
+						if column == "timestamp" {
+							continue
+						}
+						row[column] = instance.Instance[column]
+					}
+				} else {
+					for _, column := range backtestColumns {
+						row[column] = instance.Instance[column]
+					}
 				}
 				rows = append(rows, row)
 			}
