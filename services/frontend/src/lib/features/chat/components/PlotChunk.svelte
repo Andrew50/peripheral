@@ -346,10 +346,6 @@
 		}
 	}
 
-	// ... existing code ...
-	$: if (plotData) {
-		console.log('PlotChunk plotData:', plotData);
-	}
 </script>
 
 <div class="chunk-plot-container">
