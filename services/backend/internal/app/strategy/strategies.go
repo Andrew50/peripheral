@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"backend/internal/data"
+	"backend/internal/app/limits"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -486,7 +487,41 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	_, err := conn.DB.Exec(context.Background(), `
+	// Get current alert status before doing anything
+	var currentActive bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT COALESCE(isalertactive, false) 
+		FROM strategies 
+		WHERE strategyid = $1 AND userid = $2`,
+		args.StrategyID, userID).Scan(&currentActive)
+	if err != nil {
+		return nil, fmt.Errorf("error checking current alert status: %v", err)
+	}
+
+	// If the alert is already in the desired state, return early
+	if currentActive == args.Active {
+		log.Printf("Strategy %d alert is already %v, no action needed", args.StrategyID, args.Active)
+		return map[string]interface{}{
+			"success":     true,
+			"strategyId":  args.StrategyID,
+			"alertActive": args.Active,
+			"message":     "Alert status unchanged",
+		}, nil
+	}
+
+	// If enabling the alert, check if user can create more strategy alerts
+	if args.Active {
+		allowed, remaining, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeStrategyAlert, 0)
+		if err != nil {
+			return nil, fmt.Errorf("checking strategy alert limits: %w", err)
+		}
+		if !allowed {
+			return nil, fmt.Errorf("strategy alert limit reached - you have %d strategy alerts remaining", remaining)
+		}
+	}
+
+	// Update the alert status
+	_, err = conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
 		SET isalertactive = $1 
 		WHERE strategyid = $2 AND userid = $3`,
@@ -494,6 +529,29 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 
 	if err != nil {
 		return nil, fmt.Errorf("error updating alert status: %v", err)
+	}
+
+	// Update the strategy alert counter based on the change
+	if args.Active && !currentActive {
+		// Enabling alert - increment counter
+		if err := limits.RecordUsage(conn, userID, limits.UsageTypeStrategyAlert, 1, map[string]interface{}{
+			"strategyId": args.StrategyID,
+			"action":     "enabled",
+		}); err != nil {
+			// If we can't record usage, rollback the alert activation
+			conn.DB.Exec(context.Background(), `
+				UPDATE strategies 
+				SET isalertactive = false 
+				WHERE strategyid = $1 AND userid = $2`,
+				args.StrategyID, userID)
+			return nil, fmt.Errorf("recording strategy alert usage: %w", err)
+		}
+	} else if !args.Active && currentActive {
+		// Disabling alert - decrement counter
+		if err := limits.DecrementActiveStrategyAlerts(conn, userID, 1); err != nil {
+			// Log the error but don't fail the operation since the alert is already disabled
+			log.Printf("Warning: failed to decrement active strategy alerts counter for user %d: %v", userID, err)
+		}
 	}
 
 	log.Printf("Strategy %d alert status updated to: %v", args.StrategyID, args.Active)
@@ -515,6 +573,17 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 		return nil, err
 	}
 
+	// Check if the strategy has an active alert before deleting
+	var isAlertActive bool
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT COALESCE(isalertactive, false) 
+		FROM strategies 
+		WHERE strategyid = $1 AND userid = $2`,
+		args.StrategyID, userID).Scan(&isAlertActive)
+	if err != nil {
+		return nil, fmt.Errorf("error checking strategy alert status: %v", err)
+	}
+
 	result, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`, args.StrategyID, userID)
@@ -526,6 +595,14 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
 		return nil, fmt.Errorf("strategy not found or you don't have permission to delete it")
+	}
+
+	// If the strategy had an active alert, decrement the counter
+	if isAlertActive {
+		if err := limits.DecrementActiveStrategyAlerts(conn, userID, 1); err != nil {
+			// Log the error but don't fail the deletion since the strategy is already removed
+			log.Printf("Warning: failed to decrement active strategy alerts counter for user %d: %v", userID, err)
+		}
 	}
 
 	return map[string]interface{}{"success": true}, nil
