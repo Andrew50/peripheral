@@ -88,8 +88,8 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	return returnedID, nil
 }
 
-// GetConversationMessages retrieves all messages for a conversation
-func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
+// GetConversationMessagesRaw retrieves all messages for a conversation
+func GetConversationMessagesRaw(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
 	// First verify the user owns this conversation
 	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
 		return nil, err
@@ -361,7 +361,7 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 			return "", "", fmt.Errorf("failed to set active conversation ID: %w", err)
 		}
 		// Generate better title asynchronously and send via websocket
-		go generateTitleAsync(conn, userID, query, conversationID)
+		go generateConversationTitleAsync(conn, userID, query, conversationID)
 	}
 
 	// Save to database
@@ -373,8 +373,8 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	return conversationID, messageID, nil
 }
 
-// generateTitleAsync generates a title in the background and sends it via websocket
-func generateTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
+// generateConversationTitleAsync generates a title in the background and sends it via websocket
+func generateConversationTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

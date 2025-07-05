@@ -86,22 +86,22 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 
 	// Check if user has usage allowance for queries (skip for user ID 0 which is public access)
-		allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
-		if err != nil {
-			return nil, fmt.Errorf("error checking usage limits: %w", err)
-		}
-		if !allowed {
-			return QueryResponse{
-				ContentChunks: []ContentChunk{{
-					Type: "text",
-					Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
-				}},
-				Suggestions:    []string{"View Pricing Plans", "Add Credits"},
-				ConversationID: query.ConversationID,
-				MessageID:      "", // Will be generated
-				Timestamp:      time.Now(),
-			}, nil
-		}
+	allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking usage limits: %w", err)
+	}
+	if !allowed {
+		return QueryResponse{
+			ContentChunks: []ContentChunk{{
+				Type:    "text",
+				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+			}},
+			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
+			ConversationID: query.ConversationID,
+			MessageID:      "", // Will be generated
+			Timestamp:      time.Now(),
+		}, nil
+	}
 	// Save pending message using the provided conversation ID
 	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
@@ -179,7 +179,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}
 		switch v := result.(type) {
 		case DirectAnswer:
-			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
 			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
 			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
 			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
@@ -187,18 +186,24 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
+			// process content chunks for storing in db
+
+			chunksForDB := processContentChunksForDB(ctx, conn, userID, v.ContentChunks)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+
 			if err != nil {
 				return QueryResponse{
-					ContentChunks:  []ContentChunk{},
-					Suggestions:    []string{},
+					ContentChunks:  v.ContentChunks,
+					Suggestions:    v.Suggestions,
 					ConversationID: conversationID,
 					MessageID:      messageID,
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
+			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
 
 			// Record usage for successful query (skip for user ID 0 which is public access)
 			metadata := map[string]interface{}{
@@ -315,18 +320,16 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
 				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
-				// Process any table instructions in the content chunks
-				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-
 				// For final response, combine all results for storage
 				allResults := append(activeResults, discardedResults...)
-
+				// process content chunks for storing in db
+				chunksForDB := processContentChunksForDB(ctx, conn, userID, finalResponse.ContentChunks)
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
 					return QueryResponse{
-						ContentChunks:  []ContentChunk{},
-						Suggestions:    []string{},
+						ContentChunks:  chunksForDB,
+						Suggestions:    finalResponse.Suggestions,
 						ConversationID: conversationID,
 						MessageID:      messageID,
 						Timestamp:      time.Now(),
@@ -334,19 +337,21 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 
 				// Record usage for successful query (skip for user ID 0 which is public access)
-					metadata := map[string]interface{}{
-						"query":           query.Query,
-						"conversation_id": conversationID,
-						"message_id":      messageID,
-						"token_count":     totalTokenCounts.TotalTokenCount,
-						"result_type":     "final_response",
-						"function_count":  len(allResults),
-					}
-					if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
-						// Log error but don't fail the request
-						fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
-					}
+				metadata := map[string]interface{}{
+					"query":           query.Query,
+					"conversation_id": conversationID,
+					"message_id":      messageID,
+					"token_count":     totalTokenCounts.TotalTokenCount,
+					"result_type":     "final_response",
+					"function_count":  len(allResults),
+				}
+				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+					// Log error but don't fail the request
+					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+				}
 
+				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 				return QueryResponse{
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
@@ -377,13 +382,104 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
-	StrategyID int         `json:"strategyID"` // strategyId
-	Columns    interface{} `json:"columns"`    // Internal column names as either []string or string
-	Caption    string      `json:"caption"`    // Table title
+	StrategyID int         `json:"strategyID"`        // strategyId
+	Columns    interface{} `json:"columns"`           // Internal column names as either []string or string
+	Caption    string      `json:"caption"`           // Table title
+	NumRows    int         `json:"numRows,omitempty"` // Number of rows in the table
 }
 type BacktestPlotChunkData struct {
-	StrategyID int `json:"strategyID"`
-	PlotID     int `json:"plotID"`
+	StrategyID int    `json:"strategyID"`
+	PlotID     int    `json:"plotID"`
+	ChartType  string `json:"chartType,omitempty"`
+	ChartTitle string `json:"chartTitle,omitempty"`
+	Length     int    `json:"length,omitempty"`
+	XAxisTitle string `json:"xAxisTitle,omitempty"`
+	YAxisTitle string `json:"yAxisTitle,omitempty"`
+}
+
+func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+
+	for _, chunk := range inputChunks {
+		if chunk.Type == "backtest_table" {
+			var backtestTableChunkContent BacktestTableChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest table chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestTableChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest table chunk format]",
+				})
+				continue
+			}
+			// Get backtest results for this strategy
+			if backtestResultsMap[backtestTableChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestTableChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			if backtestTableChunkContent.Columns == "all" {
+				// Store all columns from the backtest results
+				backtestTableChunkContent.Columns = backtestResultsMap[backtestTableChunkContent.StrategyID].Summary.Columns
+				chunk.Content = backtestTableChunkContent
+			} else {
+				// store only columns specified
+				chunk.Content = backtestTableChunkContent
+			}
+			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestTableChunkContent.StrategyID].Instances)
+
+			processedChunks = append(processedChunks, chunk)
+		} else if chunk.Type == "backtest_plot" {
+			var backtestPlotChunkContent BacktestPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest plot chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestPlotChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest plot chunk format]",
+				})
+				continue
+			}
+			if backtestResultsMap[backtestPlotChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestPlotChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
+			for _, plot := range strategyPlots {
+				if plot.PlotID == backtestPlotChunkContent.PlotID {
+					chunk.Content = BacktestPlotChunkData{
+						StrategyID: backtestPlotChunkContent.StrategyID,
+						ChartType:  plot.ChartType,
+						ChartTitle: plot.Title,
+						Length:     plot.Length,
+						XAxisTitle: plot.Layout["xaxis"].(map[string]any)["title"].(string),
+						YAxisTitle: plot.Layout["yaxis"].(map[string]any)["title"].(string),
+					}
+					processedChunks = append(processedChunks, chunk)
+					break
+				}
+			}
+		} else {
+			processedChunks = append(processedChunks, chunk)
+		}
+	}
+	return processedChunks
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.

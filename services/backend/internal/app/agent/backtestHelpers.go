@@ -15,11 +15,11 @@ type InstanceFilter struct {
 	Value    interface{} `json:"value"`
 }
 type GetBacktestInstancesArgs struct {
-	StrategyID int              `json:"strategyId"`
+	StrategyID int              `json:"strategyID"`
 	Filters    []InstanceFilter `json:"filters"`
 }
 
-func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) ([]strategy.BacktestInstanceRow, error) {
+func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args GetBacktestInstancesArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)

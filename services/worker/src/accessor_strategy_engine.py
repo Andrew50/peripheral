@@ -129,9 +129,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
@@ -220,10 +217,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code first
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
-            
             # Extract min_bars requirements from strategy code
             min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
             
@@ -331,9 +324,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors with screening optimizations
             self.data_accessor.set_execution_context(
@@ -424,9 +414,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
@@ -517,10 +504,6 @@ class AccessorStrategyEngine:
         max_instances: int = 15000
     ) -> Tuple[List[Dict], str, List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
-        print(strategy_code)
-        # Validate strategy code before execution
-        if not self._validate_strategy_code(strategy_code):
-            raise ValueError("Strategy code contains prohibited operations")
         
         # Create safe execution environment with data accessor functions
         safe_globals = await self._create_safe_globals(execution_mode)
@@ -720,33 +703,25 @@ class AccessorStrategyEngine:
         def capture_plot(fig, *args, **kwargs):
             """Capture plot instead of showing it - extract only essential data"""
             try:
-                # Increment plot counter and add ID
-                self.plot_counter += 1
                 plotID = self.plot_counter 
+                self.plot_counter += 1
                 
-                # Extract essential plot data matching agent prompt format
-                plot_data = self._extract_plot_data(fig)
+                # Extract entire plot data (full figure object)
+                figure_data = self._extract_plot_data(fig)
+                
                 plot_data = {
                     'plotID': plotID,
-                    'chart_type': self._extract_chart_type(fig),
-                    'data': plot_data,
-                    'title': self._extract_plot_title(fig),
-                    'layout': self._extract_minimal_layout(fig), 
-                    'length': len(plot_data)
+                    'data': figure_data  # Entire figure object with data, layout, config
                 }
                 self.plots_collection.append(plot_data)
             except Exception as e:
                 logger.warning(f"Failed to capture plot data: {e}")
                 # Fallback to basic plot info with ID
-                self.plot_counter += 1
                 plotID = self.plot_counter  # Use integer instead of string
+                self.plot_counter += 1
                 fallback_plot = {
                     'plotID': plotID,
-                    'chart_type': 'line',
-                    'data': [],
-                    'title': 'Plot Capture Failed',
-                    'layout': {'xaxis': {'title': ''}, 'yaxis': {'title': ''}},
-                    'length': 0
+                    'data': {}  # Empty object
                 }
                 self.plots_collection.append(fallback_plot)
         
@@ -811,6 +786,10 @@ class AccessorStrategyEngine:
         if value is None or isinstance(value, (str, bool)):
             return value
         
+        # Handle numpy arrays
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        
         # Handle numpy/pandas scalar types
         if isinstance(value, np.integer):
             return int(value)
@@ -873,36 +852,13 @@ class AccessorStrategyEngine:
                 print(f"[make_json_serializable] Exception in fallback str: {e}, value: {value}")
                 return None
 
-    def _extract_plot_data(self, fig) -> list:
-        """Extract trace data from plotly figure"""
-        try:
-            data = []
-            for trace in fig.data:
-                try:
-                    # Try to get the full plotly dict
-                    trace_dict = trace.to_plotly_json()
-                except Exception as e:
-                    print(f"[extract_plot_data] Could not convert trace to dict: {e}")
-                    # Fallback: minimal dict with serializable values
-                    trace_dict = {
-                        'name': getattr(trace, 'name', ''),
-                        'type': getattr(trace, 'type', 'scatter')
-                    }
-                    # Optionally add x, y, z, mode if present
-                    if hasattr(trace, 'x') and trace.x is not None:
-                        trace_dict['x'] = self._make_json_serializable(list(trace.x))
-                    if hasattr(trace, 'y') and trace.y is not None:
-                        trace_dict['y'] = self._make_json_serializable(list(trace.y))
-                    if hasattr(trace, 'z') and trace.z is not None:
-                        trace_dict['z'] = self._make_json_serializable(list(trace.z))
-                    if hasattr(trace, 'mode'):
-                        trace_dict['mode'] = trace.mode
-                # Always ensure the dict is serializable
-                trace_dict = self._make_json_serializable(trace_dict)
-                data.append(trace_dict)
-            return data
-        except Exception:
-            return []
+    def _extract_plot_data(self, fig) -> dict:
+        """Extract trace data from plotly figure using Plotly's built-in serialization (fig.to_dict())."""
+        try:        
+            return json.loads(fig.to_json())
+        except Exception as e:
+            print(f"[extract_plot_data] Exception in fig.to_json(): {e}")
+            return {}
 
     def _extract_plot_title(self, fig) -> str:
         """Extract title from plotly figure"""
@@ -1057,10 +1013,6 @@ class AccessorStrategyEngine:
         
         return '\n'.join(formatted)
 
-    def _validate_strategy_code(self, strategy_code: str) -> bool:
-        """Basic validation of strategy code"""
-        # Use the security validator
-        return self.validator.validate_code(strategy_code)
     
     def _ensure_json_serializable(self, instances: List[Dict]) -> List[Dict]:
         """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""

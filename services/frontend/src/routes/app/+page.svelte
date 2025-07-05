@@ -151,6 +151,11 @@
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
 
+	// Set isPublicViewing store based on server-side data
+	$: if (layoutData?.isPublicViewing !== undefined) {
+		isPublicViewingStore.set(layoutData.isPublicViewing);
+	}
+
 	// Import connect
 	import { connect } from '$lib/utils/stream/socket';
 
