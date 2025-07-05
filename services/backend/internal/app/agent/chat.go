@@ -161,7 +161,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}
 		switch v := result.(type) {
 		case DirectAnswer:
-			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
 			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
 			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
 			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
@@ -171,16 +170,19 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			allResults := append(activeResults, discardedResults...)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, v.ContentChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+
 			if err != nil {
 				return QueryResponse{
-					ContentChunks:  []ContentChunk{},
-					Suggestions:    []string{},
+					ContentChunks:  v.ContentChunks,
+					Suggestions:    v.Suggestions,
 					ConversationID: conversationID,
 					MessageID:      messageID,
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
+			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
 
 			return QueryResponse{
 				ContentChunks:  processedChunks,
@@ -284,24 +286,23 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
 				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
-				// Process any table instructions in the content chunks
-				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-
 				// For final response, combine all results for storage
 				allResults := append(activeResults, discardedResults...)
 
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, finalResponse.ContentChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
 					return QueryResponse{
-						ContentChunks:  []ContentChunk{},
-						Suggestions:    []string{},
+						ContentChunks:  finalResponse.ContentChunks,
+						Suggestions:    finalResponse.Suggestions,
 						ConversationID: conversationID,
 						MessageID:      messageID,
 						Timestamp:      time.Now(),
 					}, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
 
+				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 				return QueryResponse{
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
