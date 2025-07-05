@@ -361,7 +361,7 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 			return "", "", fmt.Errorf("failed to set active conversation ID: %w", err)
 		}
 		// Generate better title asynchronously and send via websocket
-		go generateTitleAsync(conn, userID, query, conversationID)
+		go generateConversationTitleAsync(conn, userID, query, conversationID)
 	}
 
 	// Save to database
@@ -373,8 +373,8 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	return conversationID, messageID, nil
 }
 
-// generateTitleAsync generates a title in the background and sends it via websocket
-func generateTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
+// generateConversationTitleAsync generates a title in the background and sends it via websocket
+func generateConversationTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
