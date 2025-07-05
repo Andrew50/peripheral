@@ -77,8 +77,18 @@
 		'#4ade80' // green-400
 	];
 
+	// Add a function to format field names in hovertemplate
+	function formatFieldName(field: string): string {
+		return field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
+
+		// Format field names in hovertemplate for user-friendly tooltips
+		if (processedTrace.hovertemplate) {
+			processedTrace.hovertemplate = processedTrace.hovertemplate.replace(/([a-zA-Z_]+)=/g, (match, p1) => `${formatFieldName(p1)}=`);
+		}
 
 		// Add hover styling for trace names
 		processedTrace.hoverlabel = {
@@ -334,6 +344,11 @@
 				}
 			};
 		}
+	}
+
+	// ... existing code ...
+	$: if (plotData) {
+		console.log('PlotChunk plotData:', plotData);
 	}
 </script>
 
