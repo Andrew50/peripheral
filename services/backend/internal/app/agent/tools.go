@@ -421,6 +421,29 @@ var (
 			Function:      strategy.RunBacktest,
 			StatusMessage: "Running backtest...",
 		},
+		"getBacktestInstances": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getBacktestInstances",
+				Description: "Get the instances of a backtest for a specified strategy. Use this to get the instances of a backtest for a specified strategy.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {Type: genai.TypeInteger, Description: "The ID of the strategy to get instances for."},
+						"filters": {
+							Type: genai.TypeArray,
+							Properties: map[string]*genai.Schema{
+								"column":   {Type: genai.TypeString, Description: "The column to filter on. e.g. 'ticker', 'timestamp', 'classification', 'volume', 'classification', 'score'."},
+								"operator": {Type: genai.TypeString, Description: "The operator to use for the filter. e.g. 'eq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in'."},
+								"value":    {Type: genai.TypeString, Description: "The value to compare to. The value within the column will be compared using the operator to this value."},
+							},
+						},
+					},
+					Required: []string{"strategyId"},
+				},
+			},
+			Function:      GetBacktestInstances,
+			StatusMessage: "Scanning backtest instances...",
+		},
 		"run_screener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "run_screener",
@@ -486,7 +509,7 @@ var (
 			Function:      wrapWithContext(helpers.GetLastPrice),
 			StatusMessage: "Getting current price of {ticker}...",
 		},
-		"getPriceAtTime": {
+		/*"getPriceAtTime": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getPriceAtTime",
 				Description: "Get the price of a stock at a specific time.",
@@ -502,8 +525,8 @@ var (
 			},
 			Function:      wrapWithContext(GetStockPriceAtTime),
 			StatusMessage: "Getting price at time...",
-		},
-		"getStockChange": {
+		},*/
+		/*"getStockChange": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockChange",
 				Description: "Returns the change and percent change in the price of a stock between two specific times.",
@@ -545,7 +568,7 @@ var (
 			},
 			Function:      wrapWithContext(GetOHLCVData),
 			StatusMessage: "Getting Market data...",
-		},
+		},*/
 		/*"runIntradayAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runIntradayAgent",
