@@ -81,7 +81,6 @@ class StrategyGenerator:
                 if key not in db_values or not db_values[key]:
                     raise ValueError(f"Database returned empty {key} list")
             
-            logger.info(f"✅ Fetched current filter values: {len(db_values['sectors'])} sectors, {len(db_values['industries'])} industries")
             return db_values
             
         except Exception as e:
@@ -103,7 +102,8 @@ class StrategyGenerator:
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
 ALLOWED IMPORTS: 
-- pandas, numpy, datetime, math, plotly
+- pandas, numpy, datetime, math, plotly. 
+- for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
 FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
 - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
@@ -497,7 +497,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
         try:
-            logger.info(f"Creating strategy for user {user_id}, prompt: {prompt[:100]}...")
             
             # Check if this is an edit operation
             is_edit = strategy_id != -1
@@ -511,8 +510,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                         "error": f"Strategy {strategy_id} not found for user {user_id}"
                     }
             
-            # Generate strategy code with retry logic
-            logger.info("Generating strategy code with OpenAI o3...")
             strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
             
             if not strategy_code:
@@ -688,7 +685,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             for model_name, max_tokens in models_to_try:
                 try:
-                    logger.info(f"Attempting generation with model: {model_name}")
                     
                     logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
                     
