@@ -49,7 +49,7 @@ type ChunkPlot struct {
 
 // Generic chunk: only two required keys
 type AtlantisContentChunk struct {
-	Type    string      `json:"type"    jsonschema:"enum=text,enum=table,enum=backtest_table,enum=plot,required"`
+	Type    string      `json:"type"    jsonschema:"enum=text,enum=table,enum=backtest_table,enum=backtest_plot,required"`
 	Content interface{} `json:"content" jsonschema:"required"`
 }
 

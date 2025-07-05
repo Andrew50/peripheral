@@ -29,7 +29,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: demo.atlantis.trading #${INGRESS_HOST}
+    - host: demo.peripheral.io #${INGRESS_HOST}
       http:
         paths:
           - path: /private
@@ -67,7 +67,7 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    - host: www.demo.atlantis.trading #${INGRESS_HOST}
+    - host: www.demo.peripheral.io #${INGRESS_HOST}
       http:
         paths:
           - path: /private
