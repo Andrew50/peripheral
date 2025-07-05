@@ -1014,10 +1014,6 @@ class AccessorStrategyEngine:
         
         return '\n'.join(formatted)
 
-    def _validate_strategy_code(self, strategy_code: str) -> bool:
-        """Basic validation of strategy code"""
-        # Use the security validator
-        return self.validator.validate_code(strategy_code)
     
     def _ensure_json_serializable(self, instances: List[Dict]) -> List[Dict]:
         """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
