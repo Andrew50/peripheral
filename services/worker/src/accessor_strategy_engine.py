@@ -217,10 +217,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code first
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
-            
             # Extract min_bars requirements from strategy code
             min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
             
