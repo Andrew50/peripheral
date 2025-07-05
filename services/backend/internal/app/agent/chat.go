@@ -7,9 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type Stage string
@@ -329,38 +332,41 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
-	StrategyID int      `json:"strategyId"` // strategyId
-	Columns    []string `json:"columns"`    // Internal column names to include
+	StrategyID int         `json:"strategyID"` // strategyId
+	Columns    interface{} `json:"columns"`    // Internal column names as either []string or string
+	Caption    string      `json:"caption"`    // Table title
+}
+type BacktestPlotChunkData struct {
+	StrategyID int `json:"strategyID"`
+	PlotID     int `json:"plotID"`
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResults *strategy.BacktestResponse
+	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
-			// Convert chunk.Content to JSON bytes then unmarshal to struct
+			var chunkContent BacktestTableChunkData
 			contentBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not marshal chunk content: %v]", err),
+					Content: "[Internal Error: Could not marshal backtest table chunk content]",
 				})
 				continue
 			}
-
-			var chunkContent BacktestTableChunkData
-			err = json.Unmarshal(contentBytes, &chunkContent)
-			if err != nil {
+			if err := json.Unmarshal(contentBytes, &chunkContent); err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not parse backtest table chunk: %v]", err),
+					Content: "[Internal Error: Invalid backtest table chunk format]",
 				})
 				continue
 			}
-			if backtestResults == nil {
-				backtestResults, err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
+			if backtestResultsMap[chunkContent.StrategyID] == nil {
+				backtestResultsMap[chunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -369,15 +375,114 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 					continue
 				}
 			}
-			/*tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, backtestResults)
+			backtestInstances := backtestResultsMap[chunkContent.StrategyID].Instances
+			backtestColumns := backtestResultsMap[chunkContent.StrategyID].Summary.Columns
+			// Ensure "ticker" is the first column
+			tickerIdx := -1
+			for i, col := range backtestColumns {
+				if col == "ticker" {
+					tickerIdx = i
+					break
+				}
+			}
+			if tickerIdx > 0 {
+				// Move "ticker" to the front
+				backtestColumns = append([]string{"ticker"}, append(backtestColumns[:tickerIdx], backtestColumns[tickerIdx+1:]...)...)
+			}
+			// Get first 100 instances, or all if less than 100
+			instances := backtestInstances
+			if len(backtestInstances) > 100 {
+				instances = backtestInstances[:100]
+			}
+			// flatten instances into rows using original columns
+			rows := make([]map[string]any, 0, len(instances))
+			for _, instance := range instances {
+				row := make(map[string]any)
+				for _, column := range backtestColumns {
+					row[column] = instance.Instance[column]
+				}
+				rows = append(rows, row)
+			}
+			// Now, create display columns for headers and output
+			displayColumns := make([]string, len(backtestColumns))
+			c := cases.Title(language.Und)
+			for i, column := range backtestColumns {
+				words := strings.Split(column, "_")
+				for j, word := range words {
+					words[j] = c.String(strings.TrimSpace(word))
+				}
+				displayColumns[i] = strings.Join(words, " ")
+			}
+			// Remap row keys to display columns
+			for i, row := range rows {
+				newRow := make(map[string]any)
+				for j, column := range backtestColumns {
+					displayCol := displayColumns[j]
+					newRow[displayCol] = row[column]
+				}
+				rows[i] = newRow
+			}
+			// Convert rows to [][]any for table output
+			finalRows := make([][]any, len(rows))
+			for i, row := range rows {
+				valueRow := make([]any, len(displayColumns))
+				for j, displayCol := range displayColumns {
+					valueRow[j] = row[displayCol]
+				}
+				finalRows[i] = valueRow
+			}
+			chunk.Type = "table"
+			chunk.Content = map[string]any{
+				"strategyID": chunkContent.StrategyID,
+				"caption":    chunkContent.Caption,
+				"headers":    displayColumns,
+				"rows":       finalRows,
+			}
+			processedChunks = append(processedChunks, chunk)
+		} else if chunk.Type == "backtest_plot" {
+			var chunkContent BacktestPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not generate backtest table: %v]", err),
+					Content: "[Internal Error: Could not marshal backtest plot chunk content]",
 				})
 				continue
-			}*/
-			//processedChunks = append(processedChunks, *tableChunk)
+			}
+			if err := json.Unmarshal(contentBytes, &chunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest plot chunk format]",
+				})
+				continue
+			}
+			strategyID := chunkContent.StrategyID
+			plotID := chunkContent.PlotID
+			if backtestResultsMap[strategyID] == nil {
+				backtestResultsMap[strategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID)
+				if err != nil {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type:    "text",
+						Content: fmt.Sprintf("[Internal Error: Could not get backtest results: %v]", err),
+					})
+					continue
+				}
+			}
+			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
+			for _, plot := range strategyPlots {
+				if plot.PlotID == plotID {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type: "plot",
+						Content: map[string]any{
+							"chart_type": plot.ChartType,
+							"data":       plot.Data,
+							"title":      plot.Title,
+							"layout":     plot.Layout,
+						},
+					})
+					break
+				}
+			}
 		} else {
 			// Keep non-instruction chunks as they are
 			processedChunks = append(processedChunks, chunk)
