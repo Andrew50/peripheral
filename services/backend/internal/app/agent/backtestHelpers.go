@@ -15,7 +15,7 @@ type InstanceFilter struct {
 	Value    interface{} `json:"value"`
 }
 type GetBacktestInstancesArgs struct {
-	StrategyID int              `json:"strategyId"`
+	StrategyID int              `json:"strategyID"`
 	Filters    []InstanceFilter `json:"filters"`
 }
 
