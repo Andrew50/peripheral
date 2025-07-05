@@ -495,7 +495,6 @@ class DataAccessorProvider:
                 # Use direct datetime comparison with timezone-aware timestamps
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_date, end_date]
-                logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
             elif start_date:
                 # Only start date provided
                 date_filter = "o.timestamp >= %s"
@@ -620,7 +619,6 @@ class DataAccessorProvider:
             # Handle ticker-specific filtering
             if tickers is not None and len(tickers) > 0:
                 # Convert ticker symbols to security IDs and add to filter
-                logger.info(f"Converting ticker symbols {tickers} to security IDs")
                 security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
