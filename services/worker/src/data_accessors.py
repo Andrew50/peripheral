@@ -492,31 +492,28 @@ class DataAccessorProvider:
             
             # Priority 1: Direct date parameters from function call
             if start_date and end_date:
-                # Convert datetime objects to Unix timestamps
-                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
-                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
-                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s AND EXTRACT(EPOCH FROM o.timestamp) <= %s"
-                date_params = [start_timestamp, end_timestamp]
+                # Use direct datetime comparison with timezone-aware timestamps
+                date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
+                date_params = [start_date, end_date]
                 logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
             elif start_date:
                 # Only start date provided
-                start_timestamp = start_date.timestamp() if hasattr(start_date, 'timestamp') else start_date
-                date_filter = "EXTRACT(EPOCH FROM o.timestamp) >= %s"
-                date_params = [start_timestamp]
+                date_filter = "o.timestamp >= %s"
+                date_params = [start_date]
                 logger.info(f"📅 Using direct start date filter: {start_date}")
             elif end_date:
                 # Only end date provided
-                end_timestamp = end_date.timestamp() if hasattr(end_date, 'timestamp') else end_date
-                date_filter = "EXTRACT(EPOCH FROM o.timestamp) <= %s"
-                date_params = [end_timestamp]
+                date_filter = "o.timestamp <= %s"
+                date_params = [end_date]
                 logger.info(f"📅 Using direct end date filter: {end_date}")
             # Priority 2: Execution context date range
             elif context.get('start_date') and context.get('end_date'):
                 # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
                 timeframe_delta = self._get_timeframe_delta(timeframe)
-                start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars) #TODO: This is a buffer for the data to be available, but it is not a good idea to have a buffer for the data to be available.
+                start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars)
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [start_with_buffer, context.get('end_date')]
+                logger.info(f"📅 Using execution context date filter: {start_with_buffer} to {context.get('end_date')}")
             elif context.get('mode') == 'validation':
                 # Validation mode: Use exact min_bars requirements for accurate validation
                 # No arbitrary caps - respect the strategy's actual needs
@@ -546,10 +543,12 @@ class DataAccessorProvider:
                 # 3. Database optimizer handles getting most recent records efficiently
                 date_filter = "TRUE"  # No date restriction, rely on ROW_NUMBER LIMIT
                 date_params = []
+                logger.info("📅 Screening mode: no date filtering (using ROW_NUMBER optimization)")
             else:
                 # No specific date range: get ALL available data
                 date_filter = "TRUE"  # No date restriction
                 date_params = []
+                logger.info("📅 No date filtering: retrieving all available data")
             
             # Handle security filtering
             security_filter_parts = []
@@ -663,6 +662,7 @@ class DataAccessorProvider:
                 elif col == "ticker":
                     select_columns.append("s.ticker")
                 elif col == "timestamp":
+                    # Return timestamp as Unix timestamp (integer) for backward compatibility
                     select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint as timestamp")
                 else:
                     select_columns.append(f"o.{col}")
