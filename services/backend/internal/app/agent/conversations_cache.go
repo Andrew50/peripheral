@@ -149,7 +149,7 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	}
 
 	// Convert DB messages to chat messages
-	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData := convertDBMessagesToConversationData(conn, userID, messages)
 
 	// Set conversation ID
 	conversationData.ConversationID = activeConversationID
@@ -256,7 +256,7 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 	}
 
 	// Convert DB messages to the format expected by frontend
-	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData := convertDBMessagesToConversationData(conn, userID, messages)
 
 	// Set conversation ID
 	conversationData.ConversationID = conversationID
