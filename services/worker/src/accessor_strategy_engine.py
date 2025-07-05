@@ -703,9 +703,8 @@ class AccessorStrategyEngine:
         def capture_plot(fig, *args, **kwargs):
             """Capture plot instead of showing it - extract only essential data"""
             try:
-                # Increment plot counter and add ID
-                self.plot_counter += 1
                 plotID = self.plot_counter 
+                self.plot_counter += 1
                 
                 # Extract entire plot data (full figure object)
                 figure_data = self._extract_plot_data(fig)
@@ -718,8 +717,8 @@ class AccessorStrategyEngine:
             except Exception as e:
                 logger.warning(f"Failed to capture plot data: {e}")
                 # Fallback to basic plot info with ID
-                self.plot_counter += 1
                 plotID = self.plot_counter  # Use integer instead of string
+                self.plot_counter += 1
                 fallback_plot = {
                     'plotID': plotID,
                     'data': {}  # Empty object
