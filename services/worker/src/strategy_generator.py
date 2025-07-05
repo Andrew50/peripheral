@@ -478,7 +478,8 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - Histograms of performance metrics, returns, etc 
 - Always show the plot using .show()
 - Almost always include plots in the strategy to help the user understand the data
-- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp), they cause JSON serialization errors
+- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
+- Do not worry about the styling of the plot, just ensure the data is correct and serialisable.
 
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:

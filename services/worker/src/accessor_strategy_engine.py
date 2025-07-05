@@ -724,15 +724,12 @@ class AccessorStrategyEngine:
                 self.plot_counter += 1
                 plotID = self.plot_counter 
                 
-                # Extract essential plot data matching agent prompt format
-                plot_data = self._extract_plot_data(fig)
+                # Extract entire plot data (full figure object)
+                figure_data = self._extract_plot_data(fig)
+                
                 plot_data = {
                     'plotID': plotID,
-                    'chart_type': self._extract_chart_type(fig),
-                    'data': plot_data,
-                    'title': self._extract_plot_title(fig),
-                    'layout': self._extract_minimal_layout(fig), 
-                    'length': len(plot_data)
+                    'data': figure_data  # Entire figure object with data, layout, config
                 }
                 self.plots_collection.append(plot_data)
             except Exception as e:
@@ -742,11 +739,7 @@ class AccessorStrategyEngine:
                 plotID = self.plot_counter  # Use integer instead of string
                 fallback_plot = {
                     'plotID': plotID,
-                    'chart_type': 'line',
-                    'data': [],
-                    'title': 'Plot Capture Failed',
-                    'layout': {'xaxis': {'title': ''}, 'yaxis': {'title': ''}},
-                    'length': 0
+                    'data': {}  # Empty object
                 }
                 self.plots_collection.append(fallback_plot)
         
@@ -811,6 +804,10 @@ class AccessorStrategyEngine:
         if value is None or isinstance(value, (str, bool)):
             return value
         
+        # Handle numpy arrays
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        
         # Handle numpy/pandas scalar types
         if isinstance(value, np.integer):
             return int(value)
@@ -873,36 +870,13 @@ class AccessorStrategyEngine:
                 print(f"[make_json_serializable] Exception in fallback str: {e}, value: {value}")
                 return None
 
-    def _extract_plot_data(self, fig) -> list:
-        """Extract trace data from plotly figure"""
-        try:
-            data = []
-            for trace in fig.data:
-                try:
-                    # Try to get the full plotly dict
-                    trace_dict = trace.to_plotly_json()
-                except Exception as e:
-                    print(f"[extract_plot_data] Could not convert trace to dict: {e}")
-                    # Fallback: minimal dict with serializable values
-                    trace_dict = {
-                        'name': getattr(trace, 'name', ''),
-                        'type': getattr(trace, 'type', 'scatter')
-                    }
-                    # Optionally add x, y, z, mode if present
-                    if hasattr(trace, 'x') and trace.x is not None:
-                        trace_dict['x'] = self._make_json_serializable(list(trace.x))
-                    if hasattr(trace, 'y') and trace.y is not None:
-                        trace_dict['y'] = self._make_json_serializable(list(trace.y))
-                    if hasattr(trace, 'z') and trace.z is not None:
-                        trace_dict['z'] = self._make_json_serializable(list(trace.z))
-                    if hasattr(trace, 'mode'):
-                        trace_dict['mode'] = trace.mode
-                # Always ensure the dict is serializable
-                trace_dict = self._make_json_serializable(trace_dict)
-                data.append(trace_dict)
-            return data
-        except Exception:
-            return []
+    def _extract_plot_data(self, fig) -> dict:
+        """Extract trace data from plotly figure using Plotly's built-in serialization (fig.to_dict())."""
+        try:        
+            return json.loads(fig.to_json())
+        except Exception as e:
+            print(f"[extract_plot_data] Exception in fig.to_json(): {e}")
+            return {}
 
     def _extract_plot_title(self, fig) -> str:
         """Extract title from plotly figure"""
