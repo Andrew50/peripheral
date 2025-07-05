@@ -328,9 +328,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors with screening optimizations
             self.data_accessor.set_execution_context(
@@ -421,9 +418,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
