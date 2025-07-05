@@ -605,20 +605,65 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 		// Add assistant message from content chunks
 		assistantContent := ""
 		for _, chunk := range msg.ContentChunks {
-			switch v := chunk.Content.(type) {
-			case string:
-				assistantContent += v
-			case map[string]interface{}:
-				// For table data or other structured content, convert to a simple text representation
-				jsonData, err := json.Marshal(v)
-				if err == nil {
-					assistantContent += fmt.Sprintf("[Table data: %s]", string(jsonData))
-				} else {
-					assistantContent += "[Table data]"
+			switch chunk.Type {
+			case "table":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Table data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Table data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+			case "backtest_table":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Backtest table data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Backtest table data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+
+			case "backtest_plot", "plot":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Plot data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Plot data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+			case "text":
+				switch v := chunk.Content.(type) {
+				case string:
+					assistantContent += v
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
 				}
 			default:
-				// Handle any other type by converting to string
-				assistantContent += fmt.Sprintf("%v", v)
+				switch v := chunk.Content.(type) {
+				case string:
+					assistantContent += v
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
 			}
 		}
 		if assistantContent == "" {

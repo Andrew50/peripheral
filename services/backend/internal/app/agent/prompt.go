@@ -151,21 +151,76 @@ func _buildConversationContext(messages []ChatMessage) string {
 		context.WriteString("Assistant: ")
 		if len(messages[i].ContentChunks) > 0 {
 			for _, chunk := range messages[i].ContentChunks {
-				// Safely handle different content types
-				switch v := chunk.Content.(type) {
-				case string:
-					context.WriteString(v)
-				case map[string]interface{}:
-					// For table data or other structured content, convert to a simple text representation
-					jsonData, err := json.Marshal(v)
-					if err == nil {
-						context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
-					} else {
-						context.WriteString("[Table data]")
+				switch chunk.Type {
+				case "table":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Table data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "backtest_table":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Backtest table data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Backtest table data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "plot":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Plot data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Plot data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "backtest_plot":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Backtest plot data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Backtest plot data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "text":
+					switch v := chunk.Content.(type) {
+					case string:
+						context.WriteString(v)
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
 					}
 				default:
-					// Handle any other type by converting to string
-					context.WriteString(fmt.Sprintf("%v", v))
+					switch v := chunk.Content.(type) {
+					case string:
+						context.WriteString(v)
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
 				}
 			}
 		} else {
