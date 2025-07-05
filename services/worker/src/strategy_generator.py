@@ -473,7 +473,7 @@ PRINTING DATA (REQUIRED):
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
 
-PLOTLY PLOT GENERATION:
+PLOTLY PLOT GENERATION (REQUIRED):
 - Use plotly to generate plots of useful visualizations of the data
 - Histograms of performance metrics, returns, etc 
 - Always show the plot using .show()
