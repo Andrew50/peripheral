@@ -424,21 +424,25 @@ var (
 		"getBacktestInstances": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getBacktestInstances",
-				Description: "Get the instances of a backtest for a specified strategy. Use this to get the instances of a backtest for a specified strategy.",
+				Description: "Get the instances of a backtest for a specified strategy. Use this to look at the instances of a backtest for a specified strategy if the user refers to a backtest instance. Limited to 20 instances. Use filters to get the specific instances the user might be looking for or that you want to analyze.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"strategyId": {Type: genai.TypeInteger, Description: "The ID of the strategy to get instances for."},
+						"strategyID": {Type: genai.TypeInteger, Description: "The ID of the strategy to get instances for."},
 						"filters": {
 							Type: genai.TypeArray,
-							Properties: map[string]*genai.Schema{
-								"column":   {Type: genai.TypeString, Description: "The column to filter on. e.g. 'ticker', 'timestamp', 'classification', 'volume', 'classification', 'score'."},
-								"operator": {Type: genai.TypeString, Description: "The operator to use for the filter. e.g. 'eq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in'."},
-								"value":    {Type: genai.TypeString, Description: "The value to compare to. The value within the column will be compared using the operator to this value."},
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"column":   {Type: genai.TypeString, Description: "The name of the column to filter on. e.g. 'ticker', 'timestamp', 'classification', 'volume', 'classification', 'score'."},
+									"operator": {Type: genai.TypeString, Description: "The operator to use for the filter. e.g. 'eq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in'."},
+									"value":    {Type: genai.TypeUnspecified, Description: "The value to compare to. The value within the column will be compared using the operator to this value."},
+								},
 							},
+							Required: []string{"column", "operator", "value"},
 						},
 					},
-					Required: []string{"strategyId"},
+					Required: []string{"strategyID", "filters"},
 				},
 			},
 			Function:      GetBacktestInstances,
