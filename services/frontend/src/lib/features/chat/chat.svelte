@@ -1428,33 +1428,14 @@
 							: ''}"
 					>
 						{#if message.isLoading}
-							<!-- Always show the current status message at top with dropdown toggle -->
-							<div class="loading-status-container">
-								<p class="loading-status">{$functionStatusStore?.userMessage || 'Thinking...'}</p>
-								{#if isProcessingMessage && processingTimeline.length > 1}
-									<button
-										class="timeline-dropdown-toggle"
-										on:click={() => (showTimelineDropdown = !showTimelineDropdown)}
-										aria-label={showTimelineDropdown ? 'Hide timeline' : 'Show timeline'}
-									>
-										<svg
-											viewBox="0 0 24 24"
-											width="14"
-											height="14"
-											class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
-										>
-											<path
-												d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"
-												fill="currentColor"
-											/>
-										</svg>
-									</button>
-								{/if}
-							</div>
-
-							<!-- Show timeline below if we have relevant timeline data and dropdown is open -->
-							{#if isProcessingMessage && processingTimeline.length > 1 && showTimelineDropdown}
-								<MessageTimeline timeline={processingTimeline} />
+							<!-- Show timeline with current status (always show if processing) -->
+							{#if isProcessingMessage}
+								<MessageTimeline 
+									timeline={processingTimeline} 
+									currentStatus={$functionStatusStore?.userMessage || 'Thinking...'}
+									{showTimelineDropdown}
+									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
+								/>
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
