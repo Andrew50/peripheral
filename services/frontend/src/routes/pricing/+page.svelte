@@ -4,16 +4,32 @@
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
-	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
-	import { PRICING_CONFIG, getStripePrice, getPlan, formatPrice } from '$lib/config/pricing';
+	import {
+		subscriptionStatus,
+		fetchSubscriptionStatus,
+		fetchUserUsage
+	} from '$lib/utils/stores/stores';
+	import {
+		fetchPricingConfiguration,
+		getPlan,
+		getCreditProduct,
+		getStripePriceForPlan,
+		getStripePriceForCreditProduct,
+		formatPrice,
+		type DatabasePlan,
+		type DatabaseCreditProduct
+	} from '$lib/config/pricing';
 	import '$lib/styles/global.css';
 	import '$lib/styles/landing.css';
 
 	// Individual loading states for better UX
-	let loadingStates = {
+	let loadingStates: Record<string, boolean> = {
 		plus: false,
 		pro: false,
-		manage: false
+		manage: false,
+		credits100: false,
+		credits250: false,
+		credits1000: false
 	};
 
 	// Success/error feedback
@@ -23,12 +39,31 @@
 	// Component loading state
 	let isLoaded = false;
 
+	// Pricing data state
+	let plans: DatabasePlan[] = [];
+	let creditProducts: DatabaseCreditProduct[] = [];
+	let pricingLoading = true;
+	let pricingError = '';
+
 	// Function to determine if the current user is authenticated
 	const isAuthenticated = (): boolean => {
 		if (!browser) return false;
 		const authToken = sessionStorage.getItem('authToken');
 		return !!authToken;
 	};
+
+	// Helper function to safely check if a plan is the current plan (only when authenticated)
+	// This implements a conservative approach: only highlight current plan when user is logged in
+	// and subscription data is fully loaded without errors
+	const isCurrentPlan = (planDisplayName: string): boolean => {
+		return (
+			isAuthenticated() &&
+			$subscriptionStatus.currentPlan === planDisplayName &&
+			!$subscriptionStatus.loading &&
+			!$subscriptionStatus.error
+		);
+	};
+
 	const validateAuthentication = async (): Promise<boolean> => {
 		console.log('🔍 [validateAuthentication] Starting validation...');
 
@@ -65,9 +100,39 @@
 		}
 	};
 
+	// Load pricing configuration
+	async function loadPricingConfiguration() {
+		try {
+			pricingLoading = true;
+			pricingError = '';
+
+			const config = await fetchPricingConfiguration();
+			plans = config.plans
+				.filter((plan) => plan.is_active)
+				.sort((a, b) => a.sort_order - b.sort_order);
+			console.log(config.creditProducts);
+			creditProducts = config.creditProducts
+				.filter((product) => product.is_active)
+				.sort((a, b) => a.sort_order - b.sort_order);
+
+			console.log('✅ [loadPricingConfiguration] Pricing configuration loaded:', {
+				plans,
+				creditProducts
+			});
+		} catch (error) {
+			console.error('❌ [loadPricingConfiguration] Failed to load pricing configuration:', error);
+			pricingError = 'Failed to load pricing information. Please refresh the page.';
+		} finally {
+			pricingLoading = false;
+		}
+	}
+
 	// Initialize component
 	async function initializeComponent() {
 		const isAuth = isAuthenticated();
+
+		// Load pricing configuration first
+		await loadPricingConfiguration();
 
 		if (isAuth) {
 			await fetchSubscriptionStatus();
@@ -93,6 +158,26 @@
 		await processUpgrade(planKey);
 	}
 
+	// Enhanced credit purchase handler
+	async function handleCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+		// Check if user is authenticated before allowing purchase
+		const isValidAuth = await validateAuthentication();
+
+		if (!isValidAuth) {
+			goto('/login');
+			return;
+		}
+
+		// Check if user has active subscription
+		if (!$subscriptionStatus.isActive) {
+			feedbackMessage = 'Active subscription required to purchase credits';
+			feedbackType = 'error';
+			return;
+		}
+
+		await processCreditPurchase(creditKey);
+	}
+
 	// Process the actual upgrade
 	async function processUpgrade(planKey: 'plus' | 'pro') {
 		// Double-check authentication before processing payment
@@ -111,25 +196,58 @@
 		feedbackType = '';
 
 		try {
-			const priceId = getStripePrice(planKey);
+			const priceId = await getStripePriceForPlan(planKey);
+			if (!priceId) {
+				throw new Error(`No Stripe price ID found for plan: ${planKey}`);
+			}
+
 			const response = await privateRequest<{ sessionId: string; url: string }>(
 				'createCheckoutSession',
 				{ priceId }
 			);
 
-			// Show success message briefly before redirect
-			feedbackMessage = 'Redirecting to secure checkout...';
-			feedbackType = 'success';
-
-			// Small delay for user feedback
-			setTimeout(async () => {
-				await redirectToCheckout(response.sessionId);
-			}, 1000);
+			// Redirect immediately to checkout
+			await redirectToCheckout(response.sessionId);
 		} catch (error) {
 			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
 			feedbackType = 'error';
 			loadingStates[planKey] = false;
+		}
+	}
+
+	// Process credit purchase
+	async function processCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+		loadingStates[creditKey] = true;
+		feedbackMessage = '';
+		feedbackType = '';
+
+		try {
+			const creditProduct = await getCreditProduct(creditKey);
+			if (!creditProduct) {
+				throw new Error(`Credit product not found: ${creditKey}`);
+			}
+
+			const priceId = await getStripePriceForCreditProduct(creditKey);
+			if (!priceId) {
+				throw new Error(`No Stripe price ID found for credit product: ${creditKey}`);
+			}
+
+			const response = await privateRequest<{ sessionId: string; url: string }>(
+				'createCreditCheckoutSession',
+				{
+					priceId: priceId,
+					creditAmount: creditProduct.credit_amount
+				}
+			);
+
+			// Redirect immediately to checkout
+			await redirectToCheckout(response.sessionId);
+		} catch (error) {
+			console.error('❌ [processCreditPurchase] Error creating credit checkout session:', error);
+			feedbackMessage = 'Failed to start checkout. Please try again.';
+			feedbackType = 'error';
+			loadingStates[creditKey] = false;
 		}
 	}
 
@@ -148,12 +266,9 @@
 
 		try {
 			const response = await privateRequest<{ url: string }>('createCustomerPortal', {});
-			feedbackMessage = 'Redirecting to customer portal...';
-			feedbackType = 'success';
 
-			setTimeout(() => {
-				redirectToCustomerPortal(response.url);
-			}, 500);
+			// Redirect immediately to customer portal
+			redirectToCustomerPortal(response.url);
 		} catch (error) {
 			console.error('Error opening customer portal:', error);
 			feedbackMessage = 'Failed to open customer portal. Please try again.';
@@ -187,45 +302,142 @@
 			document.title = 'Pricing & Plans - Peripheral';
 			isLoaded = true;
 
-			// Check for upgrade parameter from deep linking
-			const urlParams = new URLSearchParams(window.location.search);
-			const upgradePlan = urlParams.get('upgrade');
+			// Async initialization function
+			async function init() {
+				// Check for Stripe checkout success session_id parameter
+				const urlParams = new URLSearchParams(window.location.search);
+				const sessionId = urlParams.get('session_id');
+				const creditsPurchased = urlParams.get('credits_purchased');
 
-			// If upgrade parameter exists and user is authenticated, trigger checkout
-			if (upgradePlan) {
-				console.log('🎯 [onMount] Upgrade parameter found, validating authentication...');
-				const isValidAuth = await validateAuthentication();
-				console.log('🔍 [onMount] Auto-upgrade authentication result:', isValidAuth);
+				if (sessionId) {
+					console.log(
+						'🎯 [pricing onMount] Stripe checkout success detected, session_id:',
+						sessionId
+					);
 
-				if (isValidAuth) {
-					console.log(
-						'✅ [onMount] Auto-upgrade authentication confirmed, scheduling upgrade trigger'
-					);
-					// Small delay to ensure component is fully loaded
-					setTimeout(() => {
-						console.log('⏰ [onMount] Auto-upgrade timeout triggered, calling handleUpgrade');
-						if (upgradePlan === 'plus' || upgradePlan === 'pro') {
-							handleUpgrade(upgradePlan);
-						} else {
-							console.log('❌ [onMount] Invalid upgrade plan:', upgradePlan);
-						}
-					}, 500);
-				} else {
-					console.log(
-						'❌ [onMount] Auto-upgrade authentication failed, user will need to authenticate manually'
-					);
+					// Clear the session_id from URL for cleaner UX
+					urlParams.delete('session_id');
+					const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
+					window.history.replaceState({}, '', newUrl);
+
+					// Defer verification until after page is fully loaded
+					// This ensures verification happens AFTER the redirect to the pricing page
+					setTimeout(async () => {
+						console.log(
+							'⏰ [pricing onMount] Deferred verification starting for session:',
+							sessionId
+						);
+						await verifyAndUpdateSubscriptionStatus(sessionId);
+					}, 100); // Small delay to ensure page is fully rendered
+					return; // Exit early since we handled checkout verification
 				}
-			} else {
-				console.log('ℹ️ [onMount] No upgrade parameter found, normal pricing page load');
+
+				if (creditsPurchased) {
+					console.log(
+						'🎯 [pricing onMount] Credit purchase success detected, session_id:',
+						creditsPurchased
+					);
+
+					// Clear the credits_purchased from URL for cleaner UX
+					urlParams.delete('credits_purchased');
+					const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
+					window.history.replaceState({}, '', newUrl);
+
+					// Refresh user usage and show success message
+					await fetchUserUsage();
+					feedbackMessage = 'Credits purchased successfully!';
+					feedbackType = 'success';
+					return;
+				}
+
+				// Check for upgrade parameter from deep linking
+				const upgradePlan = urlParams.get('upgrade');
+
+				// If upgrade parameter exists and user is authenticated, trigger checkout
+				if (upgradePlan) {
+					console.log('🎯 [onMount] Upgrade parameter found, validating authentication...');
+					const isValidAuth = await validateAuthentication();
+					console.log('🔍 [onMount] Auto-upgrade authentication result:', isValidAuth);
+
+					if (isValidAuth) {
+						console.log(
+							'✅ [onMount] Auto-upgrade authentication confirmed, scheduling upgrade trigger'
+						);
+						// Small delay to ensure component is fully loaded
+						setTimeout(() => {
+							console.log('⏰ [onMount] Auto-upgrade timeout triggered, calling handleUpgrade');
+							if (upgradePlan === 'plus' || upgradePlan === 'pro') {
+								handleUpgrade(upgradePlan);
+							} else {
+								console.log('❌ [onMount] Invalid upgrade plan:', upgradePlan);
+							}
+						}, 500);
+					} else {
+						console.log(
+							'❌ [onMount] Auto-upgrade authentication failed, user will need to authenticate manually'
+						);
+					}
+				} else {
+					console.log('ℹ️ [onMount] No upgrade parameter found, normal pricing page load');
+				}
+
+				// Initialize component for normal flow
+				initializeComponent();
 			}
+
+			// Start async initialization
+			init();
 		} else {
 			console.log('🖥️ [onMount] Not in browser environment (SSR)');
 		}
 
-		console.log('🔧 [onMount] Starting component initialization...');
-		// Initialize component
-		initializeComponent();
+		console.log('🔧 [onMount] Component mount completed');
 	});
+
+	// Stripe-recommended pattern: verify checkout session and update subscription status
+	async function verifyAndUpdateSubscriptionStatus(sessionId: string) {
+		console.log(
+			'🔍 [pricing verifyAndUpdateSubscriptionStatus] Starting verification for session:',
+			sessionId
+		);
+
+		try {
+			// Verify the checkout session directly with Stripe via our backend
+			const verificationResult = await privateRequest<{
+				status: string;
+				isActive: boolean;
+				currentPlan: string;
+				hasCustomer: boolean;
+				hasSubscription: boolean;
+				currentPeriodEnd: number | null;
+				subscriptionCreditsRemaining: number;
+				purchasedCreditsRemaining: number;
+				totalCreditsRemaining: number;
+				subscriptionCreditsAllocated: number;
+			}>('verifyCheckoutSession', { sessionId });
+			console.log(
+				'✅ [pricing verifyAndUpdateSubscriptionStatus] Verification result:',
+				verificationResult
+			);
+
+			// Refresh subscription status to ensure UI is up to date
+			await fetchSubscriptionStatus();
+
+			console.log(
+				'🎉 [pricing verifyAndUpdateSubscriptionStatus] Subscription verification completed'
+			);
+		} catch (error) {
+			console.error(
+				'❌ [pricing verifyAndUpdateSubscriptionStatus] Error verifying checkout session:',
+				error
+			);
+			// Fallback to simple refresh
+			console.log(
+				'🔄 [pricing verifyAndUpdateSubscriptionStatus] Falling back to simple subscription refresh'
+			);
+			await fetchSubscriptionStatus();
+		}
+	}
 </script>
 
 <svelte:head>
@@ -276,7 +488,14 @@
 				</div>
 			{/if}
 
-			{#if $subscriptionStatus.loading}
+			{#if pricingLoading}
+				<div class="loading-message">
+					<div class="landing-loader"></div>
+					<span>Loading pricing information...</span>
+				</div>
+			{:else if pricingError}
+				<div class="error-message">{pricingError}</div>
+			{:else if $subscriptionStatus.loading}
 				<div class="loading-message">
 					<div class="landing-loader"></div>
 					<span>Loading subscription information...</span>
@@ -287,140 +506,116 @@
 				<!-- Available Plans -->
 				<div class="plans-section">
 					<div class="plans-grid">
-						<!-- Free Plan -->
-						<div
-							class="plan-card landing-glass-card {!$subscriptionStatus.isActive &&
-							isAuthenticated()
-								? 'current-plan'
-								: ''}"
-						>
-							<div class="plan-header">
-								{#if !$subscriptionStatus.isActive && isAuthenticated()}
-									<div class="current-badge">Current Plan</div>
-								{/if}
-								<h3>{getPlan('free').name}</h3>
-								<div class="plan-price">
-									<span class="price">{formatPrice(getPlan('free').price)}</span>
-									<span class="period">{getPlan('free').period}</span>
-								</div>
-							</div>
-							<ul class="plan-features">
-								{#each getPlan('free').features as feature}
-									<li>{feature}</li>
-								{/each}
-							</ul>
-							{#if !$subscriptionStatus.isActive && isAuthenticated()}
-								<button class="landing-button primary full-width current" disabled>
-									Current Plan
-								</button>
-							{:else if $subscriptionStatus.isActive}
-								<button class="landing-button secondary full-width" disabled>
-									Downgrade not available
-								</button>
-							{:else}
-								<button class="landing-button secondary full-width" disabled> Free Plan </button>
-							{/if}
-						</div>
-
-						<!-- Plus Plan -->
-						<div
-							class="plan-card landing-glass-card {$subscriptionStatus.currentPlan === 'Plus'
-								? 'current-plan'
-								: ''}"
-						>
-							<div class="plan-header">
-								{#if $subscriptionStatus.currentPlan === 'Plus'}
-									<div class="current-badge">Current Plan</div>
-								{/if}
-								<h3>{getPlan('plus').name}</h3>
-								<div class="plan-price">
-									<span class="price">{formatPrice(getPlan('plus').price)}</span>
-									<span class="period">{getPlan('plus').period}</span>
-								</div>
-							</div>
-							<ul class="plan-features">
-								{#each getPlan('plus').features as feature}
-									<li>{feature}</li>
-								{/each}
-							</ul>
-							{#if $subscriptionStatus.currentPlan === 'Plus'}
-								<button
-									class="landing-button secondary full-width"
-									on:click={handleManageSubscription}
-									disabled={loadingStates.manage}
-								>
-									{#if loadingStates.manage}
-										<div class="landing-loader"></div>
-									{:else}
-										Manage Subscription
+						{#each plans as plan}
+							<div
+								class="plan-card landing-glass-card {isCurrentPlan(plan.display_name)
+									? 'current-plan'
+									: ''} {plan.is_popular ? 'featured' : ''}"
+							>
+								<div class="plan-header">
+									{#if isCurrentPlan(plan.display_name)}
+										<div class="current-badge">Current Plan</div>
+									{:else if plan.is_popular}
+										<div class="popular-badge">Most Popular</div>
 									{/if}
-								</button>
-							{:else}
+									<h3>{plan.display_name}</h3>
+									<div class="plan-price">
+										<span class="price">{formatPrice(plan.price_cents)}</span>
+										<span class="period">/{plan.billing_period}</span>
+									</div>
+								</div>
+								<ul class="plan-features">
+									{#each plan.features as feature}
+										<li>{feature}</li>
+									{/each}
+								</ul>
+								{#if isCurrentPlan(plan.display_name)}
+									<button
+										class="landing-button secondary full-width"
+										on:click={handleManageSubscription}
+										disabled={loadingStates.manage}
+									>
+										{#if loadingStates.manage}
+											<div class="landing-loader"></div>
+										{:else}
+											Manage Subscription
+										{/if}
+									</button>
+								{:else if plan.plan_name.toLowerCase() === 'free'}
+									{#if !$subscriptionStatus.isActive && isAuthenticated()}
+										<button class="landing-button primary full-width current" disabled>
+											Current Plan
+										</button>
+									{:else if $subscriptionStatus.isActive}
+										<button class="landing-button secondary full-width" disabled>
+											Downgrade not available
+										</button>
+									{:else}
+										<button class="landing-button secondary full-width" disabled>
+											Free Plan
+										</button>
+									{/if}
+								{:else}
+									<button
+										class="landing-button primary full-width"
+										on:click={() => handleUpgrade(plan.plan_name.toLowerCase())}
+										disabled={loadingStates[plan.plan_name.toLowerCase()]}
+									>
+										{#if loadingStates[plan.plan_name.toLowerCase()]}
+											<div class="landing-loader"></div>
+										{:else}
+											Choose {plan.display_name}
+										{/if}
+									</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Credit Products Section -->
+				<div class="credits-section">
+					<div class="credits-header">
+						<h2 class="landing-subtitle">Add More Credits</h2>
+						<p class="credits-description">
+							Purchase additional credits to extend your usage beyond your monthly allocation.
+						</p>
+					</div>
+					<div class="credits-grid">
+						{#each creditProducts as product}
+							<div
+								class="credit-card landing-glass-card {!$subscriptionStatus.isActive
+									? 'disabled'
+									: ''} {product.is_popular ? 'featured' : ''}"
+								title={!$subscriptionStatus.isActive
+									? 'Active subscription required to purchase credits'
+									: ''}
+							>
+								<div class="credit-header">
+									{#if product.is_popular}
+										<div class="popular-badge">Best Value</div>
+									{/if}
+									<h3>{product.display_name}</h3>
+									<div class="credit-price">
+										<span class="price">{formatPrice(product.price_cents)}</span>
+									</div>
+									<p class="credit-description">{product.description || ''}</p>
+								</div>
 								<button
 									class="landing-button primary full-width"
-									on:click={() => handleUpgrade('plus')}
-									disabled={loadingStates.plus}
+									on:click={() => handleCreditPurchase(product.product_key)}
+									disabled={loadingStates[product.product_key] || !$subscriptionStatus.isActive}
 								>
-									{#if loadingStates.plus}
+									{#if loadingStates[product.product_key]}
 										<div class="landing-loader"></div>
+									{:else if !$subscriptionStatus.isActive}
+										Subscription Required
 									{:else}
-										{getPlan('plus').cta}
+										Purchase {product.credit_amount} Credits
 									{/if}
 								</button>
-							{/if}
-						</div>
-
-						<!-- Pro Plan -->
-						<div
-							class="plan-card landing-glass-card featured {$subscriptionStatus.currentPlan ===
-							'Pro'
-								? 'current-plan'
-								: ''}"
-						>
-							<div class="plan-header">
-								{#if $subscriptionStatus.currentPlan !== 'Pro'}
-									<div class="popular-badge">Most Popular</div>
-								{/if}
-								{#if $subscriptionStatus.currentPlan === 'Pro'}
-									<div class="current-badge">Current Plan</div>
-								{/if}
-								<h3>{getPlan('pro').name}</h3>
-								<div class="plan-price">
-									<span class="price">{formatPrice(getPlan('pro').price)}</span>
-									<span class="period">{getPlan('pro').period}</span>
-								</div>
 							</div>
-							<ul class="plan-features">
-								{#each getPlan('pro').features as feature}
-									<li>{feature}</li>
-								{/each}
-							</ul>
-							{#if $subscriptionStatus.currentPlan === 'Pro'}
-								<button
-									class="landing-button secondary full-width"
-									on:click={handleManageSubscription}
-									disabled={loadingStates.manage}
-								>
-									{#if loadingStates.manage}
-										<div class="landing-loader"></div>
-									{:else}
-										Manage Subscription
-									{/if}
-								</button>
-							{:else}
-								<button
-									class="landing-button primary full-width"
-									on:click={() => handleUpgrade('pro')}
-									disabled={loadingStates.pro}
-								>
-									{#if loadingStates.pro}
-										<div class="landing-loader"></div>
-									{:else}
-										{getPlan('pro').cta}
-									{/if}
-								</button>
-							{/if}
-						</div>
+						{/each}
 					</div>
 				</div>
 			{/if}
@@ -532,9 +727,22 @@
 		border-color: var(--landing-accent-blue);
 	}
 
+	/* Conservative current plan highlighting - subtle visual indicators */
 	.plan-card.current-plan {
 		border-color: var(--landing-success);
-		background: rgba(34, 197, 94, 0.05);
+		background: rgba(34, 197, 94, 0.02);
+		position: relative;
+	}
+
+	.plan-card.current-plan::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--landing-success);
+		border-radius: 8px 8px 0 0;
 	}
 
 	.popular-badge {
@@ -550,6 +758,7 @@
 		border-radius: 12px;
 	}
 
+	/* Subtle current plan badge - smaller and less prominent than popular badge */
 	.current-badge {
 		position: absolute;
 		top: -8px;
@@ -557,10 +766,11 @@
 		transform: translateX(-50%);
 		background: var(--landing-success);
 		color: white;
-		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.25rem 0.75rem;
-		border-radius: 12px;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		padding: 0.1875rem 0.625rem;
+		border-radius: 10px;
+		opacity: 0.9;
 	}
 
 	.plan-header {
@@ -630,5 +840,112 @@
 		.plan-card {
 			padding: 1.5rem;
 		}
+	}
+
+	/* Credit Products Styles */
+	.credits-section {
+		margin-bottom: 3rem;
+	}
+
+	.credits-header {
+		text-align: center;
+		margin-bottom: 2rem;
+	}
+
+	.credits-description {
+		color: var(--landing-text-secondary);
+		font-size: 1.1rem;
+		max-width: 600px;
+		margin: 0 auto;
+		line-height: 1.6;
+	}
+
+	.credits-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 2rem;
+		margin-top: 2rem;
+	}
+
+	@media (max-width: 1024px) {
+		.credits-grid {
+			grid-template-columns: 1fr;
+			max-width: 450px;
+			margin: 2rem auto 0;
+		}
+	}
+
+	.credit-card {
+		padding: 2rem;
+		position: relative;
+		transition: all 0.3s ease;
+		display: flex;
+		flex-direction: column;
+		min-height: 250px;
+	}
+
+	.credit-card:hover {
+		transform: translateY(-5px);
+		border-color: var(--landing-border-focus);
+	}
+
+	.credit-card.featured {
+		border-color: var(--landing-accent-blue);
+	}
+
+	.credit-card.disabled {
+		opacity: 0.6;
+		background: rgba(255, 255, 255, 0.02);
+		border-color: rgba(255, 255, 255, 0.05);
+		cursor: not-allowed;
+	}
+
+	.credit-card.disabled:hover {
+		transform: none;
+		border-color: rgba(255, 255, 255, 0.05);
+	}
+
+	.credit-card.disabled h3,
+	.credit-card.disabled .price,
+	.credit-card.disabled .credit-description {
+		color: var(--landing-text-secondary);
+		opacity: 0.7;
+	}
+
+	.credit-card.disabled .popular-badge {
+		opacity: 0.5;
+	}
+
+	.credit-header {
+		text-align: center;
+		margin-bottom: 2rem;
+		flex-grow: 1;
+	}
+
+	.credit-header h3 {
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: var(--landing-text-primary);
+		margin-bottom: 1rem;
+	}
+
+	.credit-price {
+		display: flex;
+		align-items: baseline;
+		justify-content: center;
+		gap: 0.25rem;
+		margin-bottom: 1rem;
+	}
+
+	.credit-price .price {
+		font-size: 2.5rem;
+		font-weight: 700;
+		color: var(--landing-text-primary);
+	}
+
+	.credit-description {
+		color: var(--landing-text-secondary);
+		font-size: 0.9375rem;
+		line-height: 1.5;
 	}
 </style>

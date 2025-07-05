@@ -4,6 +4,7 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/services/alerts"
+	"backend/internal/app/limits"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -144,6 +145,15 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("price, securityId and ticker are required")
 	}
 
+	// Check if user can create more alerts
+	allowed, remaining, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeAlert, 0)
+	if err != nil {
+		return nil, fmt.Errorf("checking alert limits: %w", err)
+	}
+	if !allowed {
+		return nil, fmt.Errorf("alert limit reached - you have %d alerts remaining", remaining)
+	}
+
 	// Determine direction relative to the last trade
 	lastTrade, err := polygon.GetLastTrade(conn.Polygon, *args.Ticker, true)
 	if err != nil {
@@ -158,6 +168,17 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		RETURNING alertId`,
 		userID, *args.Price, dir, *args.SecurityID).Scan(&alertID); err != nil {
 		return nil, fmt.Errorf("inserting alert: %w", err)
+	}
+
+	// Increment the active alerts counter
+	if err := limits.RecordUsage(conn, userID, limits.UsageTypeAlert, 1, map[string]interface{}{
+		"alertId": alertID,
+		"ticker":  *args.Ticker,
+		"price":   *args.Price,
+	}); err != nil {
+		// If we can't record usage, we should rollback the alert creation
+		conn.DB.Exec(context.Background(), `DELETE FROM alerts WHERE alertId = $1`, alertID)
+		return nil, fmt.Errorf("recording alert usage: %w", err)
 	}
 
 	newAlert := Alert{
@@ -195,6 +216,18 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("invalid args: %w", err)
 	}
 
+	// Check if the alert was active before deleting
+	var wasActive bool
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT active FROM alerts WHERE alertId = $1 AND userId = $2`,
+		args.AlertID, userID).Scan(&wasActive)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("alert not found or permission denied")
+		}
+		return nil, fmt.Errorf("checking alert status: %w", err)
+	}
+
 	tag, err := conn.DB.Exec(context.Background(),
 		`DELETE FROM alerts WHERE alertId = $1 AND userId = $2`,
 		args.AlertID, userID)
@@ -205,6 +238,15 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 		return nil, fmt.Errorf("alert not found or permission denied")
 	}
 
-	alerts.RemoveAlert(args.AlertID)
+	// Only decrement the counter if the alert was active
+	if wasActive {
+		if err := limits.DecrementActiveAlerts(conn, userID, 1); err != nil {
+			// Log the error but don't fail the deletion since the alert is already removed
+			fmt.Printf("Warning: failed to decrement active alerts counter for user %d: %v\n", userID, err)
+		}
+	}
+
+	// Remove from memory without decrementing counter (already handled above if needed)
+	alerts.RemoveAlertFromMemory(args.AlertID)
 	return nil, nil
 }

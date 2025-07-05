@@ -14,7 +14,7 @@ concurrency:
 jobs:
   check-source-branch:
     name: Verify Source Branch
-    runs-on: [ubuntu-latest, self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     outputs:
       branch_check_passed: ${{ steps.branch_check.outputs.passed }}
     steps:

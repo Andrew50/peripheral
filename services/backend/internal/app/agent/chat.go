@@ -2,6 +2,7 @@
 package agent
 
 import (
+	"backend/internal/app/limits"
 	"backend/internal/app/strategy"
 	"backend/internal/data"
 	"context"
@@ -84,6 +85,23 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		getDefaultSystemPromptTokenCount(conn)
 	}
 
+	// Check if user has usage allowance for queries (skip for user ID 0 which is public access)
+	allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking usage limits: %w", err)
+	}
+	if !allowed {
+		return QueryResponse{
+			ContentChunks: []ContentChunk{{
+				Type:    "text",
+				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+			}},
+			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
+			ConversationID: query.ConversationID,
+			MessageID:      "", // Will be generated
+			Timestamp:      time.Now(),
+		}, nil
+	}
 	// Save pending message using the provided conversation ID
 	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
@@ -183,6 +201,19 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
 			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
+
+			// Record usage for successful query (skip for user ID 0 which is public access)
+			metadata := map[string]interface{}{
+				"query":           query.Query,
+				"conversation_id": conversationID,
+				"message_id":      messageID,
+				"token_count":     totalTokenCounts.TotalTokenCount,
+				"result_type":     "direct_answer",
+			}
+			if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+				// Log error but don't fail the request
+				fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+			}
 
 			return QueryResponse{
 				ContentChunks:  processedChunks,
@@ -299,6 +330,20 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 						MessageID:      messageID,
 						Timestamp:      time.Now(),
 					}, fmt.Errorf("error updating pending message to completed: %w", err)
+				}
+
+				// Record usage for successful query (skip for user ID 0 which is public access)
+				metadata := map[string]interface{}{
+					"query":           query.Query,
+					"conversation_id": conversationID,
+					"message_id":      messageID,
+					"token_count":     totalTokenCounts.TotalTokenCount,
+					"result_type":     "final_response",
+					"function_count":  len(allResults),
+				}
+				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+					// Log error but don't fail the request
+					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
 				}
 
 				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks

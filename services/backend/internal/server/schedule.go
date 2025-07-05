@@ -217,6 +217,7 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: false, // Monitor should run 24/7
 		},
+
 	}
 )
 

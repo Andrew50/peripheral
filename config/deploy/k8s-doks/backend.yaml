@@ -109,6 +109,9 @@ spec:
             # Add Google redirect URL
             - name: GOOGLE_REDIRECT_URL
               value: ${GOOGLE_REDIRECT_URL}
+            # Add frontend URL for Stripe redirects
+            - name: FRONTEND_URL
+              value: https://${INGRESS_HOST}
             # Add Telegram secrets for alerts
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:

@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"backend/internal/app/limits"
 	"backend/internal/data"
 	"context"
 	"encoding/json"
@@ -90,6 +91,9 @@ type WorkerSummary struct {
 // DateRangeField can handle both string and []string from JSON
 type DateRangeField []string
 
+// ProgressCallback is a function type for sending progress updates during backtest execution
+type ProgressCallback func(message string)
+
 func (d *DateRangeField) UnmarshalJSON(data []byte) error {
 	// Try to unmarshal as []string first
 	var stringSlice []string
@@ -120,11 +124,22 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	log.Printf("Starting complete backtest for strategy %d", args.StrategyID)
+	log.Printf("Starting complete backtest for strategy %d using new worker architecture", args.StrategyID)
+
+	// Check if user has sufficient credits for backtest
+	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
+	// For now, backtests cost 1 credit regardless of size
+	allowed, remainingCredits, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking credit usage limits: %v", err)
+	}
+	if !allowed {
+		return nil, fmt.Errorf("insufficient credits to run backtest. You have %d credits remaining. Please add more credits to your account", remainingCredits)
+	}
 
 	// Verify strategy exists and user has permission
 	var strategyExists bool
-	err := conn.DB.QueryRow(context.Background(), `
+	err = conn.DB.QueryRow(context.Background(), `
 		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
 		args.StrategyID, userID).Scan(&strategyExists)
 	if err != nil {
@@ -173,6 +188,20 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		log.Printf("Warning: Failed to cache backtest results: %v", err)
 		// Don't return error, just log warning
 	}
+
+	// Record credit usage for successful backtest
+	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
+	// For now, backtests cost 1 credit regardless of size
+	metadata := map[string]interface{}{
+		"strategy_id":       args.StrategyID,
+		"instances_found":   len(result.Instances),
+		"symbols_processed": responseWithInstances.Summary.SymbolsProcessed,
+		"operation_type":    "backtest",
+	}
+	if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+		log.Printf("Warning: Failed to record credit usage for backtest: %v", err)
+		// Don't fail the request since backtest was successful
+	}
 	// Remove plot data from response but keep it in cached version
 	for i := range responseWithInstances.StrategyPlots {
 		responseWithInstances.StrategyPlots[i].Data = []map[string]any{}
@@ -220,9 +249,6 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strate
 
 	return result, nil
 }
-
-// ProgressCallback is a function type for sending progress updates during backtest execution
-type ProgressCallback func(message string)
 
 // waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
 func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
