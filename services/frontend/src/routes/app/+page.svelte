@@ -47,8 +47,6 @@
 	// Import Instance from types
 	import type { Instance } from '$lib/utils/types/types';
 
-	// Add import near the top with other imports
-	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -75,7 +73,6 @@
 
 	// TopBar functionality moved inline
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
-	import { initializeDefaultWatchlist } from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 
 	// Import mobile banner component
@@ -205,6 +202,9 @@
 				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
+	}
+	$: if ($menuWidth !== undefined) {
+		updateChartWidth();
 	}
 
 	// Track the last auto-input trigger to prevent rapid successive calls
