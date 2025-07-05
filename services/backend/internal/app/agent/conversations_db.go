@@ -356,6 +356,10 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 		}
 		conversationID = newConversationID
 
+		err = SetActiveConversationIDCached(ctx, conn, userID, conversationID)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to set active conversation ID: %w", err)
+		}
 		// Generate better title asynchronously and send via websocket
 		go generateTitleAsync(conn, userID, query, conversationID)
 	}
