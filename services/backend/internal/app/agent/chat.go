@@ -186,9 +186,12 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
+			// process content chunks for storing in db
+
+			chunksForDB := processContentChunksForDB(ctx, conn, userID, v.ContentChunks)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, v.ContentChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
 
 			if err != nil {
 				return QueryResponse{
@@ -319,12 +322,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 				// For final response, combine all results for storage
 				allResults := append(activeResults, discardedResults...)
-
+				// process content chunks for storing in db
+				chunksForDB := processContentChunksForDB(ctx, conn, userID, finalResponse.ContentChunks)
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, finalResponse.ContentChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
 					return QueryResponse{
-						ContentChunks:  finalResponse.ContentChunks,
+						ContentChunks:  chunksForDB,
 						Suggestions:    finalResponse.Suggestions,
 						ConversationID: conversationID,
 						MessageID:      messageID,
@@ -378,13 +382,104 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
-	StrategyID int         `json:"strategyID"` // strategyId
-	Columns    interface{} `json:"columns"`    // Internal column names as either []string or string
-	Caption    string      `json:"caption"`    // Table title
+	StrategyID int         `json:"strategyID"`        // strategyId
+	Columns    interface{} `json:"columns"`           // Internal column names as either []string or string
+	Caption    string      `json:"caption"`           // Table title
+	NumRows    int         `json:"numRows,omitempty"` // Number of rows in the table
 }
 type BacktestPlotChunkData struct {
-	StrategyID int `json:"strategyID"`
-	PlotID     int `json:"plotID"`
+	StrategyID int    `json:"strategyID"`
+	PlotID     int    `json:"plotID"`
+	ChartType  string `json:"chartType,omitempty"`
+	ChartTitle string `json:"chartTitle,omitempty"`
+	Length     int    `json:"length,omitempty"`
+	XAxisTitle string `json:"xAxisTitle,omitempty"`
+	YAxisTitle string `json:"yAxisTitle,omitempty"`
+}
+
+func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+
+	for _, chunk := range inputChunks {
+		if chunk.Type == "backtest_table" {
+			var backtestTableChunkContent BacktestTableChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest table chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestTableChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest table chunk format]",
+				})
+				continue
+			}
+			// Get backtest results for this strategy
+			if backtestResultsMap[backtestTableChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestTableChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			if backtestTableChunkContent.Columns == "all" {
+				// Store all columns from the backtest results
+				backtestTableChunkContent.Columns = backtestResultsMap[backtestTableChunkContent.StrategyID].Summary.Columns
+				chunk.Content = backtestTableChunkContent
+			} else {
+				// store only columns specified
+				chunk.Content = backtestTableChunkContent
+			}
+			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestTableChunkContent.StrategyID].Instances)
+
+			processedChunks = append(processedChunks, chunk)
+		} else if chunk.Type == "backtest_plot" {
+			var backtestPlotChunkContent BacktestPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest plot chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestPlotChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest plot chunk format]",
+				})
+				continue
+			}
+			if backtestResultsMap[backtestPlotChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestPlotChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
+			for _, plot := range strategyPlots {
+				if plot.PlotID == backtestPlotChunkContent.PlotID {
+					chunk.Content = BacktestPlotChunkData{
+						StrategyID: backtestPlotChunkContent.StrategyID,
+						ChartType:  plot.ChartType,
+						ChartTitle: plot.Title,
+						Length:     plot.Length,
+						XAxisTitle: plot.Layout["xaxis"].(map[string]any)["title"].(string),
+						YAxisTitle: plot.Layout["yaxis"].(map[string]any)["title"].(string),
+					}
+					processedChunks = append(processedChunks, chunk)
+					break
+				}
+			}
+		} else {
+			processedChunks = append(processedChunks, chunk)
+		}
+	}
+	return processedChunks
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
