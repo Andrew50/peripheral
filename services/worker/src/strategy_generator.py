@@ -429,7 +429,6 @@ PATTERN RECOGNITION:
 TICKER EXTRACTION FROM PROMPTS:
 - If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
 - If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
-- Common ticker patterns: AAPL, TSLA, AMZN, GOOGL, MSFT, NVDA
 
 SECURITY RULES:
 - Only use whitelisted imports
@@ -472,6 +471,7 @@ Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_dat
 PRINTING DATA (REQUIRED): 
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
+- This should SUPER comprehensive. The user will not have access to the data other than what is printed. 
 
 PLOTLY PLOT GENERATION (REQUIRED):
 - Use plotly to generate plots of useful visualizations of the data
@@ -483,8 +483,8 @@ PLOTLY PLOT GENERATION (REQUIRED):
 
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
-  * 'ticker': str (e.g., "MRNA", "AAPL")
-  * 'timestamp': int (Unix timestamp)
+  * 'ticker': str (required) (e.g., "MRNA", "AAPL")
+  * 'timestamp': int (required) (Unix timestamp, NOT datetime or timestamptz)
   * 'entry_price': float (price at instance time - open, close, etc.)
   * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
   * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
