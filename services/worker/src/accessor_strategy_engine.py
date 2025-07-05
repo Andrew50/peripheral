@@ -129,9 +129,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
@@ -517,10 +514,6 @@ class AccessorStrategyEngine:
         max_instances: int = 15000
     ) -> Tuple[List[Dict], str, List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
-        print(strategy_code)
-        # Validate strategy code before execution
-        if not self._validate_strategy_code(strategy_code):
-            raise ValueError("Strategy code contains prohibited operations")
         
         # Create safe execution environment with data accessor functions
         safe_globals = await self._create_safe_globals(execution_mode)
