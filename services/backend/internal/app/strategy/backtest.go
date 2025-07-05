@@ -12,24 +12,19 @@ import (
 
 const BacktestCacheKey = "backtest:userID:%d:strategyID:%d"
 
-// BacktestArgs represents arguments for backtesting (API compatibility)
-type BacktestArgs struct {
-	StrategyID int   `json:"strategyId"`
-	Securities []int `json:"securities"`
-	Start      int64 `json:"start"`
-
-	FullResults bool `json:"fullResults"`
+// RunBacktestArgs represents arguments for backtesting (API compatibility)
+type RunBacktestArgs struct {
+	StrategyID  int   `json:"strategyId"`
+	Securities  []int `json:"securities"`
+	Start       int64 `json:"start"`
+	FullResults bool  `json:"fullResults"`
 }
 
-// BacktestResult represents a single backtest instance (API compatibility)
-type BacktestResult struct {
+// BacktestInstanceRow represents a single backtest instance (API compatibility)
+type BacktestInstanceRow struct {
 	Ticker          string             `json:"ticker"`
 	SecurityID      int                `json:"securityId,omitempty"`
 	Timestamp       int64              `json:"timestamp"`
-	Open            float64            `json:"open,omitempty"`
-	High            float64            `json:"high,omitempty"`
-	Low             float64            `json:"low,omitempty"`
-	Close           float64            `json:"close,omitempty"`
 	Volume          int64              `json:"volume,omitempty"`
 	Classification  bool               `json:"classification"`
 	FutureReturns   map[string]float64 `json:"futureReturns,omitempty"`
@@ -48,18 +43,20 @@ type BacktestSummary struct {
 
 // BacktestResponse represents the complete backtest response (API compatibility)
 type BacktestResponse struct {
-	Instances      []BacktestResult `json:"instances,omitempty"`
-	Summary        BacktestSummary  `json:"summary"`
-	StrategyPrints string           `json:"strategyPrints,omitempty"`
-	StrategyPlots  []StrategyPlot   `json:"strategyPlots,omitempty"`
+	Instances      []BacktestInstanceRow `json:"instances,omitempty"`
+	Summary        BacktestSummary       `json:"summary"`
+	StrategyPrints string                `json:"strategyPrints,omitempty"`
+	StrategyPlots  []StrategyPlot        `json:"strategyPlots,omitempty"`
 }
 
-// StrategyPlot represents a captured plotly plot with essential data only
+// StrategyPlot represents a captured plotly plot
 type StrategyPlot struct {
-	ChartType string           `json:"chart_type"` // "line", "bar", "scatter", "histogram", "heatmap"
-	Data      []map[string]any `json:"data"`       // Array of trace objects with x/y/z data arrays
-	Title     string           `json:"title"`      // Chart title
-	Layout    map[string]any   `json:"layout"`     // Minimal layout (axis labels, dimensions)
+	ChartType string           `json:"chart_type"`       // "line", "bar", "scatter", "histogram", "heatmap"
+	Data      []map[string]any `json:"data,omitempty"`   // Array of trace objects with x/y/z data arrays
+	Length    int              `json:"length"`           // Length of the data array
+	Title     string           `json:"title"`            // Chart title
+	Layout    map[string]any   `json:"layout,omitempty"` // Minimal layout (axis labels, dimensions)
+	PlotID    int              `json:"plotID"`           // Plot ID for the chart
 }
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
@@ -114,7 +111,7 @@ func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.
 
 // RunBacktestWithProgress executes a complete strategy backtest with optional progress callbacks
 func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage, progressCallback ProgressCallback) (any, error) {
-	var args BacktestArgs
+	var args RunBacktestArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
@@ -139,25 +136,29 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		return nil, fmt.Errorf("error executing worker backtest: %v", err)
 	}
 
-	// Convert worker result to BacktestResponse format for API compatibility
-	instances := convertWorkerInstancesToBacktestResults(result.Instances)
 	summary := convertWorkerSummaryToBacktestSummary(result.Summary, result.Instances)
 
+	responseWithInstances := BacktestResponse{
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
+		StrategyPlots:  result.StrategyPlots,
+		Instances:      convertWorkerInstancesToBacktestResults(result.Instances),
+	}
+	// Cache the results
+	if err := SetBacktestToCache(ctx, conn, userID, args.StrategyID, responseWithInstances); err != nil {
+		log.Printf("Warning: Failed to cache backtest results: %v", err)
+		// Don't return error, just log warning
+	}
+
+	// Remove data from plots to save memory
+	for i := range result.StrategyPlots {
+		result.StrategyPlots[i].Data = nil
+	}
 	response := BacktestResponse{
 		Summary:        summary,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  result.StrategyPlots,
 	}
-
-	// Cache the results
-	if err := SetBacktestToCache(ctx, conn, userID, args.StrategyID, response); err != nil {
-		log.Printf("Warning: Failed to cache backtest results: %v", err)
-		// Don't return error, just log warning
-	}
-
-	log.Printf("Complete backtest finished for strategy %d: %d instances found",
-		args.StrategyID, len(instances))
-
 	return response, nil
 }
 
@@ -273,8 +274,8 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 }
 
 // convertWorkerInstancesToBacktestResults converts worker instances to API format
-func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestResult {
-	results := make([]BacktestResult, len(instances))
+func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestInstanceRow {
+	results := make([]BacktestInstanceRow, len(instances))
 
 	for i, instance := range instances {
 		// Extract ticker (required field)
@@ -298,7 +299,7 @@ func convertWorkerInstancesToBacktestResults(instances []map[string]any) []Backt
 			timestamp = timestamp * 1000
 		}
 
-		results[i] = BacktestResult{
+		results[i] = BacktestInstanceRow{
 			Ticker:         ticker,
 			Timestamp:      timestamp,
 			Classification: true,     // Since instance was returned, it met criteria
@@ -342,7 +343,7 @@ type GetBacktestInstancesArgs struct {
 	Filters    []InstanceFilter `json:"filters"`
 }
 
-func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) ([]BacktestResult, error) {
+func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) ([]BacktestInstanceRow, error) {
 	var args GetBacktestInstancesArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -365,12 +366,12 @@ func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawA
 	return filteredInstances, nil
 }
 
-func FilterInstances(instances []BacktestResult, filters []InstanceFilter) []BacktestResult {
+func FilterInstances(instances []BacktestInstanceRow, filters []InstanceFilter) []BacktestInstanceRow {
 	if len(filters) == 0 {
 		return instances
 	}
 
-	var filtered []BacktestResult
+	var filtered []BacktestInstanceRow
 	for _, instance := range instances {
 		if matchesAllFilters(instance, filters) {
 			filtered = append(filtered, instance)
@@ -380,7 +381,7 @@ func FilterInstances(instances []BacktestResult, filters []InstanceFilter) []Bac
 }
 
 // matchesAllFilters checks if an instance matches all provided filters (AND logic)
-func matchesAllFilters(instance BacktestResult, filters []InstanceFilter) bool {
+func matchesAllFilters(instance BacktestInstanceRow, filters []InstanceFilter) bool {
 	for _, filter := range filters {
 		if !matchesFilter(instance, filter) {
 			return false
@@ -390,7 +391,7 @@ func matchesAllFilters(instance BacktestResult, filters []InstanceFilter) bool {
 }
 
 // matchesFilter checks if an instance matches a single filter
-func matchesFilter(instance BacktestResult, filter InstanceFilter) bool {
+func matchesFilter(instance BacktestInstanceRow, filter InstanceFilter) bool {
 	// Extract the value from the instance
 	instanceValue := extractValueFromInstanceColumn(instance, filter.Column)
 	if instanceValue == nil {
@@ -401,21 +402,13 @@ func matchesFilter(instance BacktestResult, filter InstanceFilter) bool {
 }
 
 // extractValueFromInstanceColumn gets the value of a field from a BacktestResult
-func extractValueFromInstanceColumn(instance BacktestResult, column string) interface{} {
+func extractValueFromInstanceColumn(instance BacktestInstanceRow, column string) interface{} {
 	// Check structured fields first
 	switch column {
 	case "ticker":
 		return instance.Ticker
 	case "timestamp":
 		return instance.Timestamp
-	case "open":
-		return instance.Open
-	case "high":
-		return instance.High
-	case "low":
-		return instance.Low
-	case "close":
-		return instance.Close
 	case "volume":
 		return instance.Volume
 	case "classification":

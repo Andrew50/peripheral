@@ -880,7 +880,6 @@ class StrategyWorker:
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for strategy creation")
             
-            logger.info(f"✅ Input validation passed")
             
             # Publish progress update
             if task_id:
