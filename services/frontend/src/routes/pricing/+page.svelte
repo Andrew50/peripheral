@@ -4,7 +4,11 @@
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
-	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
+	import {
+		subscriptionStatus,
+		fetchSubscriptionStatus,
+		fetchUserUsage
+	} from '$lib/utils/stores/stores';
 	import {
 		fetchPricingConfiguration,
 		getPlan,
@@ -19,7 +23,7 @@
 	import '$lib/styles/landing.css';
 
 	// Individual loading states for better UX
-	let loadingStates = {
+	let loadingStates: Record<string, boolean> = {
 		plus: false,
 		pro: false,
 		manage: false,
