@@ -878,17 +878,28 @@ class AccessorStrategyEngine:
         try:
             data = []
             for trace in fig.data:
-                # Print the original trace data as a dict for debugging
                 try:
-                    original_trace_dict = trace.to_plotly_json()
+                    # Try to get the full plotly dict
+                    trace_dict = trace.to_plotly_json()
                 except Exception as e:
                     print(f"[extract_plot_data] Could not convert trace to dict: {e}")
-                    original_trace_dict = None
-                trace_data = original_trace_dict if original_trace_dict else {
-                    'name': getattr(trace, 'name', ''),
-                    'type': getattr(trace, 'type', 'scatter')
-                }
-                data.append(trace_data)
+                    # Fallback: minimal dict with serializable values
+                    trace_dict = {
+                        'name': getattr(trace, 'name', ''),
+                        'type': getattr(trace, 'type', 'scatter')
+                    }
+                    # Optionally add x, y, z, mode if present
+                    if hasattr(trace, 'x') and trace.x is not None:
+                        trace_dict['x'] = self._make_json_serializable(list(trace.x))
+                    if hasattr(trace, 'y') and trace.y is not None:
+                        trace_dict['y'] = self._make_json_serializable(list(trace.y))
+                    if hasattr(trace, 'z') and trace.z is not None:
+                        trace_dict['z'] = self._make_json_serializable(list(trace.z))
+                    if hasattr(trace, 'mode'):
+                        trace_dict['mode'] = trace.mode
+                # Always ensure the dict is serializable
+                trace_dict = self._make_json_serializable(trace_dict)
+                data.append(trace_dict)
             return data
         except Exception:
             return []
