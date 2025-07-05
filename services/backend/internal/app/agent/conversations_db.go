@@ -88,8 +88,8 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	return returnedID, nil
 }
 
-// GetConversationMessages retrieves all messages for a conversation
-func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
+// GetConversationMessagesRaw retrieves all messages for a conversation
+func GetConversationMessagesRaw(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
 	// First verify the user owns this conversation
 	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
 		return nil, err

@@ -428,7 +428,7 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	}
 
 	// Get the raw messages
-	messagesInterface, err := GetConversationMessages(context.Background(), conn, args.ConversationID, userID)
+	messagesInterface, err := GetConversationMessagesRaw(context.Background(), conn, args.ConversationID, userID)
 	if err != nil {
 		return nil, err
 	}

@@ -517,7 +517,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-	conversationHistory, err := GetConversationMessages(ctx, conn, conversationID, userID)
+	conversationHistory, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}

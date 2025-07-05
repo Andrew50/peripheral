@@ -20,7 +20,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
 	if err == nil && activeConversationID != "" {
 		// Load conversation messages from database
-		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, activeConversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
@@ -325,7 +325,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 
 	// Load conversation messages from database if conversationID is provided
 	if conversationID != "" {
-		messagesInterface, err := GetConversationMessages(ctx, conn, conversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {

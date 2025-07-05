@@ -137,7 +137,7 @@ func GetActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID
 	}
 
 	// Cache miss or ID mismatch - load from database
-	messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+	messagesInterface, err := GetConversationMessagesRaw(ctx, conn, activeConversationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load active conversation from database: %w", err)
 	}
@@ -234,7 +234,7 @@ func UpdateMessageInActiveConversationCache(ctx context.Context, conn *data.Conn
 // SwitchActiveConversationWithCache switches to a different conversation and updates cache
 func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, userID int, conversationID string) (*ConversationData, error) {
 	// Verify the conversation exists and belongs to the user
-	messagesInterface, err := GetConversationMessages(ctx, conn, conversationID, userID)
+	messagesInterface, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to access conversation: %w", err)
 	}
@@ -242,7 +242,7 @@ func SwitchActiveConversationWithCache(ctx context.Context, conn *data.Conn, use
 	// Type assert to get the actual messages
 	messages, ok := messagesInterface.([]DBConversationMessage)
 	if !ok {
-		return nil, fmt.Errorf("unexpected type returned from GetConversationMessages")
+		return nil, fmt.Errorf("unexpected type returned from GetConversationMessagesRaw")
 	}
 
 	// Clear old cached conversation
