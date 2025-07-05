@@ -59,6 +59,16 @@ export interface SubscriptionStatus {
 	currentPeriodEnd: number | null;
 	loading: boolean;
 	error: string;
+	// Credit information
+	subscriptionCreditsRemaining?: number;
+	purchasedCreditsRemaining?: number;
+	totalCreditsRemaining?: number;
+	subscriptionCreditsAllocated?: number;
+	// Alert information
+	activeAlerts?: number;
+	alertsLimit?: number;
+	activeStrategyAlerts?: number;
+	strategyAlertsLimit?: number;
 }
 
 export const subscriptionStatus = writable<SubscriptionStatus>({
@@ -69,8 +79,16 @@ export const subscriptionStatus = writable<SubscriptionStatus>({
 	hasSubscription: false,
 	currentPeriodEnd: null,
 	loading: false,
-	error: ''
+	error: '',
+	subscriptionCreditsRemaining: 0,
+	purchasedCreditsRemaining: 0,
+	totalCreditsRemaining: 0,
+	subscriptionCreditsAllocated: 0
 });
+
+// Cache for subscription data to prevent unnecessary API calls
+let lastFetchTime = 0;
+const CACHE_DURATION = 30000; // 30 seconds
 
 // Function to fetch and update subscription status
 export async function fetchSubscriptionStatus() {
@@ -114,6 +132,53 @@ export async function fetchSubscriptionStatus() {
 			loading: false,
 			error: 'Failed to load subscription status'
 		}));
+	}
+}
+
+// Function to fetch user usage separately (for more frequent updates)
+export async function fetchUserUsage() {
+	console.log('fetchUserUsage called');
+
+	// Only fetch if we're in the browser and have auth
+	if (!browser) {
+		console.log('Not in browser, skipping fetch');
+		return;
+	}
+
+	try {
+		const authToken = sessionStorage.getItem('authToken');
+		if (!authToken) {
+			console.log('No auth token found, skipping fetch');
+			return;
+		}
+
+		console.log('Making privateRequest to getUserUsageStats');
+		const response = await privateRequest<{
+			subscription_credits_remaining: number;
+			purchased_credits_remaining: number;
+			total_credits_remaining: number;
+			subscription_credits_allocated: number;
+			active_alerts: number;
+			alerts_limit: number;
+			active_strategy_alerts: number;
+			strategy_alerts_limit: number;
+		}>('getUserUsageStats', {});
+		console.log('Received user usage response:', response);
+
+		subscriptionStatus.update((s) => ({
+			...s,
+			subscriptionCreditsRemaining: response.subscription_credits_remaining,
+			purchasedCreditsRemaining: response.purchased_credits_remaining,
+			totalCreditsRemaining: response.total_credits_remaining,
+			subscriptionCreditsAllocated: response.subscription_credits_allocated,
+			activeAlerts: response.active_alerts,
+			alertsLimit: response.alerts_limit,
+			activeStrategyAlerts: response.active_strategy_alerts,
+			strategyAlertsLimit: response.strategy_alerts_limit
+		}));
+		console.log('Updated usage in subscription status store successfully');
+	} catch (error) {
+		console.error('Failed to fetch user usage:', error);
 	}
 }
 
@@ -357,4 +422,53 @@ export function handleTimestampUpdate(serverTimestamp: number) {
 			lastUpdateTime: now
 		};
 	});
+}
+
+// Function to fetch combined subscription status and usage in a single call
+export async function fetchCombinedSubscriptionAndUsage(forceRefresh = false) {
+	console.log('fetchCombinedSubscriptionAndUsage called');
+
+	// Only fetch if we're in the browser and have auth
+	if (!browser) {
+		console.log('Not in browser, skipping fetch');
+		return;
+	}
+
+	// Check cache if not forcing refresh
+	if (!forceRefresh && Date.now() - lastFetchTime < CACHE_DURATION) {
+		console.log('Using cached subscription data');
+		return;
+	}
+
+	try {
+		const authToken = sessionStorage.getItem('authToken');
+		if (!authToken) {
+			console.log('No auth token found, skipping fetch');
+			return;
+		}
+
+		console.log('Making privateRequest to getCombinedSubscriptionAndUsage');
+		subscriptionStatus.update((s) => ({ ...s, loading: true, error: '' }));
+
+		const response = await privateRequest<SubscriptionStatus>('getCombinedSubscriptionAndUsage', {});
+		console.log('Received combined subscription and usage response:', response);
+
+		subscriptionStatus.update((s) => ({
+			...s,
+			...response,
+			loading: false,
+			error: ''
+		}));
+
+		// Update cache timestamp
+		lastFetchTime = Date.now();
+		console.log('Updated subscription status store with combined data successfully');
+	} catch (error) {
+		console.error('Failed to fetch combined subscription and usage:', error);
+		subscriptionStatus.update((s) => ({
+			...s,
+			loading: false,
+			error: 'Failed to load subscription and usage data'
+		}));
+	}
 }

@@ -132,7 +132,12 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 		//log.Printf("Failed to disable alert with ID %d: %v", alert.AlertID, err)
 		return fmt.Errorf("failed to disable alert: %v", err)
 	}
-	RemoveAlert(alert.AlertID)
+
+	// Remove alert from memory and decrement counter
+	if err := RemoveAlert(conn, alert.AlertID); err != nil {
+		// Log the error but don't fail the dispatch since the alert has already been processed
+		log.Printf("Warning: %v", err)
+	}
 
 	return nil
 }

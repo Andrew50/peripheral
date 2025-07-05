@@ -5,6 +5,7 @@
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { startPricingPreload } from '$lib/utils/pricing-loader';
 
 	if (browser) {
 		document.title = 'Peripheral - Professional Trading Platform';
@@ -14,6 +15,9 @@
 
 	onMount(() => {
 		if (browser) {
+			// Start preloading pricing configuration early
+			startPricingPreload(); //this checks if its already been loaded so wont double load
+
 			// Smooth scroll effect and animations
 			isLoaded = true;
 			document.body.classList.add('loaded');

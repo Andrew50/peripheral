@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"backend/internal/data"
+	"backend/internal/app/limits"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -118,9 +119,20 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	log.Printf("Starting complete backtest for strategy %d using new worker architecture", args.StrategyID)
 
+	// Check if user has sufficient credits for backtest
+	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
+	// For now, backtests cost 1 credit regardless of size
+	allowed, remainingCredits, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking credit usage limits: %v", err)
+	}
+	if !allowed {
+		return nil, fmt.Errorf("insufficient credits to run backtest. You have %d credits remaining. Please add more credits to your account", remainingCredits)
+	}
+
 	// Verify strategy exists and user has permission
 	var strategyExists bool
-	err := conn.DB.QueryRow(context.Background(), `
+	err = conn.DB.QueryRow(context.Background(), `
 		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
 		args.StrategyID, userID).Scan(&strategyExists)
 	if err != nil {
@@ -151,6 +163,20 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	if err := SaveBacktestToCache(ctx, conn, userID, args.StrategyID, response); err != nil {
 		log.Printf("Warning: Failed to cache backtest results: %v", err)
 		// Don't return error, just log warning
+	}
+
+	// Record credit usage for successful backtest
+	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
+	// For now, backtests cost 1 credit regardless of size
+	metadata := map[string]interface{}{
+		"strategy_id":     args.StrategyID,
+		"instances_found": len(instances),
+		"symbols_processed": response.Summary.SymbolsProcessed,
+		"operation_type":  "backtest",
+	}
+	if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+		log.Printf("Warning: Failed to record credit usage for backtest: %v", err)
+		// Don't fail the request since backtest was successful
 	}
 
 	log.Printf("Complete backtest finished for strategy %d: %d instances found",

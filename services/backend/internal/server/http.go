@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"backend/internal/app/limits"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -42,6 +43,7 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getSecurityIDFromTickerTimestamp": helpers.GetSecurityIDFromTickerTimestamp,
 	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
+	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -128,6 +130,8 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		// TODO: replace with real auth logic
 		return nil, nil
 	},
+	
+	// --- pricing / billing ----------------------------------------------------
 	"getUserConversation":        agent.GetUserConversation,
 	"getSuggestedQueries":        agent.GetSuggestedQueries,
 	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestions,
@@ -144,9 +148,17 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"setConversationVisibility": agent.SetConversationVisibility,
 
 	// --- billing / stripe -----------------------------------------------------
-	"createCheckoutSession": CreateCheckoutSession,
-	"createCustomerPortal":  CreateCustomerPortal,
-	"getSubscriptionStatus": GetSubscriptionStatus,
+	"createCheckoutSession":       CreateCheckoutSession,
+	"createCreditCheckoutSession": CreateCreditCheckoutSession,
+	"createCustomerPortal":        CreateCustomerPortal,
+	"getSubscriptionStatus":       GetSubscriptionStatus,
+	"getCombinedSubscriptionAndUsage": GetCombinedSubscriptionAndUsage,
+	"verifyCheckoutSession":       VerifyCheckoutSession,
+
+	// --- usage credits and tracking -------------------------------------------
+	"getUserUsageStats": func(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+		return limits.GetUserUsageStats(conn, userID, rawArgs)
+	},
 }
 
 // Private functions that support context cancellation

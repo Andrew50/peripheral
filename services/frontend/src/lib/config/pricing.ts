@@ -1,101 +1,228 @@
-// Centralized pricing configuration with environment-aware Stripe price IDs
+// Database-driven pricing configuration
+import { browser } from '$app/environment';
+import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 
-// Environment detection - uses build-time environment variable injection
-function getEnvironment(): 'production' | 'development' {
-	// Use Vite's environment variable injection at build time
-	// This is much more reliable than runtime URL detection
-	const environment = (import.meta as any).env?.VITE_ENVIRONMENT || (import.meta as any).env?.MODE || 'development';
-	return environment === 'prod' ? 'production' : 'development';
+// Database-driven pricing configuration
+export interface DatabasePlan {
+	id: number;
+	plan_name: string;
+	stripe_price_id_test?: string;
+	stripe_price_id_live?: string;
+	display_name: string;
+	description?: string;
+	price_cents: number;
+	billing_period: string;
+	credits_per_billing_period: number;
+	alerts_limit: number;
+	strategy_alerts_limit: number;
+	features: string[];
+	is_active: boolean;
+	is_popular: boolean;
+	sort_order: number;
+	created_at: string;
+	updated_at: string;
 }
 
-// Environment-specific Stripe Price IDs
-// Note: Only paid tiers (plus, pro) have Stripe price IDs since free tier doesn't use Stripe
-const STRIPE_PRICE_IDS = {
-	development: {
-		// Test mode price IDs for local, staging, demo environments
-		plus: 'price_1RhAuSGCLCMUwjFlh3wPqWyo',  // Test Plus price ID
-		pro: 'price_1RhAucGCLCMUwjFli0rmWtIe'   // Test Pro price ID
-	},
-	production: {
-		// Live mode price IDs for production
-		plus: 'price_1Rgsj1GCLCMUwjFlf4U6jMRt',   // Your current live Plus price ID
-		pro: 'price_1RgsiRGCLCMUwjFljLLknvSu'     // Your current live Pro price ID
-	}
-};
+export interface DatabaseCreditProduct {
+	id: number;
+	product_key: string;
+	stripe_price_id_test?: string;
+	stripe_price_id_live?: string;
+	display_name: string;
+	description?: string;
+	credit_amount: number;
+	price_cents: number;
+	is_active: boolean;
+	is_popular: boolean;
+	sort_order: number;
+	created_at: string;
+	updated_at: string;
+}
 
-export const PRICING_CONFIG = {
-	// Plan configurations with pricing and features
-	PLANS: {
-		free: {
-			name: 'Free',
-			price: 0,
-			period: '/month',
-			description: 'Basic access to get started',
-			features: ['Delayed charting', '5 queries', 'Watchlists'],
-			cta: 'Current Plan',
-			disabled: true
-		},
-		plus: {
-			name: 'Plus',
-			price: 99,
-			period: '/month',
-			description: 'Perfect for active traders',
-			features: [
-				'Realtime charting',
-				'250 queries',
-				'5 strategy alerts',
-				'Single strategy screening',
-				'100 news or price alerts'
-			],
-			cta: 'Choose Plus',
-			priceId: 'plus' // References environment-specific price ID
-		},
-		pro: {
-			name: 'Pro',
-			price: 199,
-			period: '/month',
-			description: 'Advanced features for professional traders',
-			features: [
-				'Sub 1 minute charting',
-				'Multi chart',
-				'1000 queries',
-				'20 strategy alerts',
-				'Multi strategy screening',
-				'400 alerts',
-				'Watchlist alerts'
-			],
-			cta: 'Choose Pro',
-			priceId: 'pro', // References environment-specific price ID
-			popular: true
+export interface PricingConfiguration {
+	plans: DatabasePlan[];
+	creditProducts: DatabaseCreditProduct[];
+	environment: string;
+}
+
+interface CachedPricingData {
+	config: PricingConfiguration;
+	timestamp: number;
+}
+
+// Session storage keys
+const PRICING_CACHE_KEY = 'pricing_configuration';
+const PRICING_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 1 day in milliseconds
+
+// Global pricing configuration store
+let pricingConfig: PricingConfiguration | null = null;
+let configPromise: Promise<PricingConfiguration> | null = null;
+
+// Check if cached pricing data is still valid
+function isCachedPricingValid(): boolean {
+	if (!browser) return false;
+
+	const cached = sessionStorage.getItem(PRICING_CACHE_KEY);
+	if (!cached) return false;
+
+	try {
+		const data: CachedPricingData = JSON.parse(cached);
+		const now = Date.now();
+		return (now - data.timestamp) < PRICING_CACHE_EXPIRY;
+	} catch {
+		return false;
+	}
+}
+
+// Get cached pricing data
+function getCachedPricing(): PricingConfiguration | null {
+	if (!browser) return null;
+
+	try {
+		const cached = sessionStorage.getItem(PRICING_CACHE_KEY);
+		if (!cached) return null;
+
+		const data: CachedPricingData = JSON.parse(cached);
+		return data.config;
+	} catch {
+		return null;
+	}
+}
+
+// Cache pricing data in session storage
+function cachePricingData(config: PricingConfiguration): void {
+	if (!browser) return;
+
+	try {
+		const data: CachedPricingData = {
+			config,
+			timestamp: Date.now()
+		};
+		sessionStorage.setItem(PRICING_CACHE_KEY, JSON.stringify(data));
+	} catch (error) {
+		console.warn('Failed to cache pricing data:', error);
+	}
+}
+
+// Clear cached pricing data
+function clearCachedPricing(): void {
+	if (!browser) return;
+	sessionStorage.removeItem(PRICING_CACHE_KEY);
+}
+
+// Fetch pricing configuration from the database
+export async function fetchPricingConfiguration(): Promise<PricingConfiguration> {
+	// Return cached config if available
+	if (pricingConfig) {
+		return pricingConfig;
+	}
+
+	// Check session storage cache first
+	if (isCachedPricingValid()) {
+		const cached = getCachedPricing();
+		if (cached) {
+			pricingConfig = cached;
+			return cached;
 		}
 	}
-} as const;
 
-// Helper function to get plan by key
-export function getPlan(planKey: keyof typeof PRICING_CONFIG.PLANS) {
-	return PRICING_CONFIG.PLANS[planKey];
-}
-
-// Helper function to get environment-appropriate Stripe price ID
-// Note: Only for paid tiers (plus, pro) - free tier doesn't use Stripe
-export function getStripePrice(planKey: 'plus' | 'pro'): string {
-	const environment = getEnvironment();
-	const priceId = STRIPE_PRICE_IDS[environment][planKey];
-
-	// Debug logging for development
-	if (environment === 'development') {
-		console.log(`[Stripe] Using ${environment} price ID for ${planKey}: ${priceId}`);
+	// Return existing promise if already fetching
+	if (configPromise) {
+		return configPromise;
 	}
 
-	return priceId;
+	// Create new fetch promise
+	configPromise = (async () => {
+		try {
+			if (!browser) {
+				throw new Error('Pricing configuration not available during server-side rendering');
+			}
+
+			// Always use public endpoint for pricing configuration
+			const config = await publicRequest<PricingConfiguration>('getPublicPricingConfiguration', {});
+
+			// Cache the result in memory and session storage
+			pricingConfig = config;
+			cachePricingData(config);
+			return config;
+		} catch (error) {
+			console.error('Failed to fetch pricing configuration from API:', error);
+			throw error;
+		} finally {
+			configPromise = null;
+		}
+	})();
+
+	return configPromise;
 }
 
-// Helper function to format price
-export function formatPrice(price: number): string {
-	return `$${price}`;
+// Preload pricing configuration (call this early in the app lifecycle)
+export async function preloadPricingConfiguration(): Promise<void> {
+	if (!browser) return;
+
+	try {
+		// Check if we already have valid cached data
+		if (isCachedPricingValid()) {
+			const cached = getCachedPricing();
+			if (cached) {
+				pricingConfig = cached;
+				return;
+			}
+		}
+
+		// Fetch fresh data in the background
+		await fetchPricingConfiguration();
+	} catch (error) {
+		console.warn('Failed to preload pricing configuration:', error);
+		// Don't throw - this is a background operation
+	}
 }
 
-// Helper function to get current environment (for debugging)
-export function getCurrentEnvironment(): string {
-	return getEnvironment();
+// Clear cached configuration (useful for testing or when config changes)
+export function clearPricingCache(): void {
+	pricingConfig = null;
+	configPromise = null;
+	clearCachedPricing();
 }
+
+// Get plan by key from database configuration
+export async function getPlan(planKey: string): Promise<DatabasePlan | null> {
+	const config = await fetchPricingConfiguration();
+	return config.plans.find(plan => plan.plan_name.toLowerCase() === planKey.toLowerCase()) || null;
+}
+
+// Get credit product by key from database configuration
+export async function getCreditProduct(productKey: string): Promise<DatabaseCreditProduct | null> {
+	const config = await fetchPricingConfiguration();
+	return config.creditProducts.find(product => product.product_key === productKey) || null;
+}
+
+// Get Stripe price ID for a plan based on environment
+export async function getStripePriceForPlan(planKey: string): Promise<string | null> {
+	const plan = await getPlan(planKey);
+	if (!plan) return null;
+
+	const config = await fetchPricingConfiguration();
+	const environment = config.environment;
+
+	return environment === 'test' ? plan.stripe_price_id_test || null : plan.stripe_price_id_live || null;
+}
+
+// Get Stripe price ID for a credit product based on environment
+export async function getStripePriceForCreditProduct(productKey: string): Promise<string | null> {
+	const product = await getCreditProduct(productKey);
+	if (!product) return null;
+
+	const config = await fetchPricingConfiguration();
+	const environment = config.environment;
+
+	return environment === 'test' ? product.stripe_price_id_test || null : product.stripe_price_id_live || null;
+}
+
+// Format price from cents to display format
+export function formatPrice(cents: number): string {
+	if (cents === 0) return 'Free';
+	return `$${(cents / 100).toFixed(2)}`;
+}
+
+

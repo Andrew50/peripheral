@@ -10,7 +10,7 @@
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 	import { logout } from '$lib/auth';
 	import { redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
-	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
+	import { subscriptionStatus, fetchCombinedSubscriptionAndUsage } from '$lib/utils/stores/stores';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -44,7 +44,7 @@
 
 	// Initialize component
 	async function initializeComponent() {
-		await fetchSubscriptionStatus();
+		await fetchCombinedSubscriptionAndUsage();
 	}
 
 	// Run initialization on mount
@@ -234,12 +234,14 @@
 					{:else if $subscriptionStatus.isActive}
 						<div class="subscription-info">
 							<p class="subscription-status">Status: <span class="active">Active</span></p>
-							{#if $subscriptionStatus.planName}
-								<p>Plan: {$subscriptionStatus.planName}</p>
+							{#if $subscriptionStatus.currentPlan}
+								<p>Plan: {$subscriptionStatus.currentPlan}</p>
 							{/if}
-							{#if $subscriptionStatus.nextBillingDate}
+							{#if $subscriptionStatus.currentPeriodEnd}
 								<p>
-									Next billing: {new Date($subscriptionStatus.nextBillingDate).toLocaleDateString()}
+									Next billing: {new Date(
+										$subscriptionStatus.currentPeriodEnd * 1000
+									).toLocaleDateString()}
 								</p>
 							{/if}
 							<button class="manage-subscription-button" on:click={handleManageSubscription}>
@@ -251,6 +253,83 @@
 							<p class="subscription-status">Status: <span class="inactive">Free Plan</span></p>
 							<p>Upgrade to access premium features</p>
 							<button class="upgrade-button" on:click={() => goto('/pricing')}> View Plans </button>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Usage Information -->
+				<div class="subscription-section">
+					<h4>Usage & Limits</h4>
+					{#if $subscriptionStatus.loading}
+						<p>Loading usage information...</p>
+					{:else if $subscriptionStatus.error}
+						<p class="error-text">{$subscriptionStatus.error}</p>
+					{:else}
+						<div class="usage-info">
+							<!-- Credits Section -->
+							<div class="usage-section">
+								<h5>Credits</h5>
+								<div class="usage-item">
+									<span class="usage-label">Total Credits:</span>
+									<span class="usage-value">{$subscriptionStatus.totalCreditsRemaining || 0}</span>
+								</div>
+								<div class="usage-item">
+									<span class="usage-label">Subscription Credits:</span>
+									<span class="usage-value"
+										>{$subscriptionStatus.subscriptionCreditsRemaining || 0}</span
+									>
+								</div>
+								<div class="usage-item">
+									<span class="usage-label">Purchased Credits:</span>
+									<span class="usage-value"
+										>{$subscriptionStatus.purchasedCreditsRemaining || 0}</span
+									>
+								</div>
+								{#if $subscriptionStatus.isActive}
+									<div class="usage-item">
+										<span class="usage-label">Monthly Allocation:</span>
+										<span class="usage-value"
+											>{$subscriptionStatus.subscriptionCreditsAllocated || 0}</span
+										>
+									</div>
+								{/if}
+							</div>
+
+							<!-- Alerts Section -->
+							<div class="usage-section">
+								<h5>Alerts</h5>
+								<div class="usage-item">
+									<span class="usage-label">Active Alerts:</span>
+									<span class="usage-value">
+										{$subscriptionStatus.activeAlerts || 0}
+										{#if $subscriptionStatus.alertsLimit !== undefined}
+											/ {$subscriptionStatus.alertsLimit}
+										{/if}
+									</span>
+								</div>
+								<div class="usage-item">
+									<span class="usage-label">Strategy Alerts:</span>
+									<span class="usage-value">
+										{$subscriptionStatus.activeStrategyAlerts || 0}
+										{#if $subscriptionStatus.strategyAlertsLimit !== undefined}
+											/ {$subscriptionStatus.strategyAlertsLimit}
+										{/if}
+									</span>
+								</div>
+							</div>
+
+							<!-- Purchase Credits Button -->
+							{#if $subscriptionStatus.isActive}
+								<button
+									class="upgrade-button"
+									on:click={() => goto('/pricing')}
+									style="margin-top: 1rem;"
+								>
+									Purchase More Credits
+								</button>
+							{:else}
+								<p class="upgrade-note">Upgrade to a paid plan to purchase additional credits</p>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -768,5 +847,87 @@
 		color: var(--f1);
 		font-size: 1.5rem;
 		font-weight: 600;
+	}
+
+	/* Credits Information Styles */
+	.credits-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.credit-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.credit-item:last-child {
+		border-bottom: none;
+	}
+
+	.credit-label {
+		color: var(--f2);
+		font-size: 0.9375rem;
+	}
+
+	.credit-value {
+		color: var(--f1);
+		font-weight: 600;
+		font-size: 1rem;
+	}
+
+	.upgrade-note {
+		color: var(--f2);
+		font-size: 0.875rem;
+		font-style: italic;
+		margin-top: 0.5rem;
+	}
+
+	/* Usage Information Styles */
+	.usage-info {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.usage-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.usage-section h5 {
+		margin: 0;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		font-weight: 600;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		padding-bottom: 0.5rem;
+	}
+
+	.usage-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.usage-item:last-child {
+		border-bottom: none;
+	}
+
+	.usage-label {
+		color: var(--f2);
+		font-size: 0.9375rem;
+	}
+
+	.usage-value {
+		color: var(--f1);
+		font-weight: 600;
+		font-size: 1rem;
 	}
 </style>
