@@ -313,8 +313,9 @@
 	};
 
 	onMount(() => {
-		if (!browser) return;
 
+		if (!browser) return;
+		initStores();
 		// Async initialization function
 		async function init() {
 			// Check for Stripe checkout success session_id parameter
