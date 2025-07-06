@@ -125,7 +125,6 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 
 	// Verify webhook signature - try multiple possible secrets
 	var event stripe.Event
-	var err error
 	
 	// Try primary webhook secret
 	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")

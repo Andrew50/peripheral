@@ -44,33 +44,23 @@ class StrategyWorker:
     def __init__(self):
         self.worker_id = f"worker_{threading.get_ident()}"
         self.shutdown_requested = False
-        logger.info(f"🚀 Initializing Strategy Worker {self.worker_id}")
         
         # Set up signal handlers for graceful shutdown
         self._setup_signal_handlers()
         
         # Initialize Redis connection
-        logger.info("📡 Connecting to Redis...")
         self.redis_client = self._init_redis()
-        logger.info("✅ Redis connection established")
-        
         # Clean up any stale heartbeats from previous instances
         self._cleanup_stale_heartbeats()
-        
         # Initialize Database connection  
-        logger.info("🗄️ Connecting to Database...")
         self.db_conn = self._init_database()
-        logger.info("✅ Database connection established")
         
         # Import the new data accessor
-        logger.info("📊 Initializing components...")
         self.data_accessor = DataAccessorProvider()
         
         self.strategy_engine = AccessorStrategyEngine()
         self.security_validator = SecurityValidator()
         self.strategy_generator = StrategyGenerator()
-        
-        logger.info(f"✅ Strategy worker {self.worker_id} initialized successfully")
         
         # Log initial queue status
         self.log_queue_status()
@@ -104,15 +94,12 @@ class StrategyWorker:
             # SIGSEGV might not be available on all platforms
             pass
         
-        logger.info("✅ Signal handlers set up for graceful shutdown")
         
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
         redis_host = os.environ.get("REDIS_HOST", "cache")
         redis_port = int(os.environ.get("REDIS_PORT", "6379"))
         redis_password = os.environ.get("REDIS_PASSWORD", "")
-        
-        logger.info(f"🔗 Connecting to Redis at {redis_host}:{redis_port}")
         
         client = redis.Redis(
             host=redis_host,
@@ -127,7 +114,6 @@ class StrategyWorker:
         # Test connection
         try:
             client.ping()
-            logger.info(f"✅ Redis connection successful")
             
             # Test queue access
             self._test_queue_access(client)
@@ -141,23 +127,18 @@ class StrategyWorker:
     def _test_queue_access(self, redis_client: redis.Redis):
         """Test access to both priority and normal queues"""
         try:
-            logger.info("🧪 Testing queue access...")
             
             # Test priority queue
             priority_length = redis_client.llen('strategy_queue_priority')
-            logger.info(f"   🔥 Priority queue length: {priority_length}")
             
             # Test normal queue
             normal_length = redis_client.llen('strategy_queue')
-            logger.info(f"   📄 Normal queue length: {normal_length}")
+            logger.info(f"   📄 Normal queue length: {normal_length + priority_length}")
             
             # Test publish capability
             test_channel = "worker_test_channel"
             test_message = {"test": "message", "timestamp": datetime.utcnow().isoformat()}
             subscribers = redis_client.publish(test_channel, json.dumps(test_message))
-            logger.info(f"   📡 Publish test - subscribers: {subscribers}")
-            
-            logger.info("✅ Queue access test completed successfully")
             
         except Exception as e:
             logger.error(f"❌ Queue access test failed: {e}")
@@ -180,7 +161,6 @@ class StrategyWorker:
                 password=db_password,
                 cursor_factory=RealDictCursor
             )
-            logger.info("Database connection established")
             return connection
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
@@ -201,7 +181,6 @@ class StrategyWorker:
             except Exception:
                 logger.debug("Error closing database connection (expected during reconnection)")
             self.db_conn = self._init_database()
-            logger.info("Database connection restored")
         except Exception as e:
             logger.error(f"Unexpected error testing database connection: {e}")
             # For other errors, don't reconnect to avoid infinite loops
@@ -237,7 +216,6 @@ class StrategyWorker:
                     except Exception:
                         logger.debug("Error closing database connection (expected during reconnection)")
                     self.db_conn = self._init_database()
-                    logger.info(f"Database reconnected on attempt {attempt + 1}")
                 else:
                     logger.error(f"Failed to fetch strategy code after {max_retries} attempts")
                     raise
@@ -523,7 +501,6 @@ class StrategyWorker:
     def run(self):
         """Main queue processing loop with priority queue support"""
         logger.info(f"🎯 Strategy worker {self.worker_id} starting queue processing...")
-        logger.info("🔍 Queue Processing Order: 1) Priority Queue (strategy_queue_priority), 2) Normal Queue (strategy_queue)")
         
         # Set start time for uptime tracking
         self._start_time = time.time()
@@ -1037,7 +1014,6 @@ class StrategyWorker:
         self._heartbeat_stop_event = threading.Event()
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
-        logger.info("💓 Started asynchronous heartbeat thread (5s interval - ultra-fast monitoring)")
     
     def _stop_heartbeat_thread(self):
         """Stop the heartbeat thread"""
@@ -1376,70 +1352,24 @@ def clear_queue(redis_client: redis.Redis, queue_name: str) -> int:
 
 
 if __name__ == "__main__":
-    # Print startup banner
-    print("=" * 80)
-    print("🚀 ATLANTIS STRATEGY WORKER STARTING UP")
-    print("=" * 80)
-    print(f"📅 Startup Time: {datetime.utcnow().isoformat()}")
-    print(f"🐍 Python Version: {sys.version}")
-    print(f"🏷️  Worker Process ID: {os.getpid()}")
-    print("=" * 80)
-    
-    # Force flush to ensure we see the startup message
-    sys.stdout.flush()
-    
-    # Check environment variables
-    print("🔧 Environment Check:")
-    env_vars = [
-        "DB_HOST", "DB_USER", "DB_PASSWORD", "POSTGRES_DB",
-        "REDIS_HOST", "REDIS_PORT", "OPENAI_API_KEY"
-    ]
-    
-    for var in env_vars:
-        value = os.getenv(var, "NOT_SET")
-        if var in ["DB_PASSWORD", "OPENAI_API_KEY"]:
-            # Don't show sensitive values
-            display_value = "***SET***" if value != "NOT_SET" else "NOT_SET"
-        else:
-            display_value = value
-        print(f"   {var}: {display_value}")
-    
-    sys.stdout.flush()
-    
-    logger.info("🎬 WORKER STARTUP INITIATED")
-    logger.info("🔧 Priority Queue System: ENABLED")
-    logger.info("💓 Ultra-Fast Heartbeat System: 5s interval, async monitoring")
-    logger.info("🛡️ Worker Monitor: 10s timeout, near-instant task recovery")
-    logger.info("📋 Supported Task Types: backtest, screening, alert, create_strategy")
     
     try:
         # Initialize and start worker
-        print("🏗️ Initializing worker...")
-        sys.stdout.flush()
-        logger.info("🏗️ Initializing worker...")
         
         worker = StrategyWorker()
         
-        print("✅ Worker initialized successfully!")
-        sys.stdout.flush()
         logger.info("🎯 Starting main processing loop...")
         
         worker.run()
         
     except KeyboardInterrupt:
         logger.info("🛑 Received keyboard interrupt - shutting down gracefully")
-        print("\n🛑 Worker shutdown requested by user")
         
     except Exception as e:
         error_msg = f"💥 FATAL ERROR during worker startup: {e}"
         logger.error(error_msg)
         logger.error(f"📄 Full traceback: {traceback.format_exc()}")
-        print(error_msg)
-        print(f"📄 Full traceback: {traceback.format_exc()}")
-        sys.stdout.flush()
         raise
         
     finally:
         logger.info("🏁 Worker process ending")
-        print("🏁 Worker process ended")
-        sys.stdout.flush()

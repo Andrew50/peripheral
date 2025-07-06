@@ -45,7 +45,6 @@ class WorkerReloadHandler(FileSystemEventHandler):
 
 def start_worker():
     """Start the worker process"""
-    print("Starting worker...")
     # Validate that we're running the expected Python executable and script
     python_exe = sys.executable
     worker_script = "worker.py"

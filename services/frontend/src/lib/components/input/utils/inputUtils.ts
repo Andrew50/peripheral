@@ -2,7 +2,6 @@ import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { allKeys, type InstanceAttributes } from './inputTypes';
 export { capitalize, formatTimeframe, detectInputTypeSync };
 import { type Instance } from '$lib/utils/types/types';
-import { parse } from 'date-fns';
 import { get } from 'svelte/store';
 import { userLastTickers } from '$lib/utils/stores/stores';
 let isLoadingSecurities = false;
@@ -141,4 +140,7 @@ export async function validateInput(
 		const regex = /^\d{1,3}[yqmwhds]?$/i;
 		return { inputValid: regex.test(inputString), securities: [] };
 	}
+
+	// Default case for unknown input types
+	return { inputValid: false, securities: [] };
 }

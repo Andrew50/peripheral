@@ -9,9 +9,11 @@ COPY init/ /docker-entrypoint-initdb.d/
 
 # Copy PostgreSQL configuration
 COPY config/prod.conf /etc/postgresql/postgresql.conf
+# Set environment variable to enable data checksums during initdb
+ENV POSTGRES_INITDB_ARGS="--data-checksums"
 
 # Create directories for migrations and app scripts
-RUN mkdir -p /migrations /app
+RUN mkdir -p /migrations /app /app/scripts
 
 # Copy migration files
 COPY migrations/*.sql /migrations/
@@ -24,6 +26,10 @@ COPY scripts/health-monitor.sh /app/health-monitor.sh
 COPY scripts/recovery-restore.sh /app/recovery-restore.sh
 COPY scripts/recovery-reset.sh /app/recovery-reset.sh
 COPY scripts/graceful-shutdown.sh /app/graceful-shutdown.sh
+
+COPY scripts/capture-logs.sh /app/capture-logs.sh
+
+
 
 # Make all scripts executable
 RUN chmod +x /app/*.sh
