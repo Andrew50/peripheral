@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { startPricingPreload } from '$lib/utils/pricing-loader';
+	import { showAuthModal } from '$lib/stores/authModal';
 
 	if (browser) {
 		document.title = 'Peripheral';
@@ -12,6 +13,31 @@
 	let isHeaderVisible = true;
 	let isHeaderTransparent = true;
 	let prevScrollY = 0;
+
+	// Chat interface state
+	let chatInput = '';
+	let chatInputRef: HTMLTextAreaElement;
+
+	function handleChatSubmit() {
+		if (!chatInput.trim()) return;
+		
+		// Show auth modal when user tries to send a message
+		showAuthModal('conversations', 'signup');
+	}
+
+	function adjustChatTextarea() {
+		if (!chatInputRef) return;
+		chatInputRef.style.height = 'auto';
+		chatInputRef.offsetHeight;
+		chatInputRef.style.height = `${chatInputRef.scrollHeight}px`;
+	}
+
+	function handleChatKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			handleChatSubmit();
+		}
+	}
 
 	function handleScroll() {
 		const currentY = window.scrollY;
@@ -110,19 +136,35 @@
 				Peripheral is the terminal to envision and execute your trading ideas.<br />
 			</p>
 			<div class="hero-actions">
-				<button class="cta-button primary" on:click={navigateToSignup}>
-					Start Trading
-					<svg class="arrow-icon" viewBox="0 0 24 24" fill="none">
-						<path
-								d="M5 12H19M19 12L12 5M19 12L12 19"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-						/>
-					</svg>
-				</button>
-				<button class="cta-button secondary" on:click={navigateToApp}> View Demo </button>
+				<div class="hero-chat-container">
+					<div class="hero-chat-messages">
+						<div class="hero-chat-placeholder">
+							<p>Ask me anything about trading, market analysis, or investment strategies...</p>
+						</div>
+					</div>
+					<div class="hero-chat-input-container">
+						<textarea
+							class="hero-chat-input"
+							placeholder="Ask anything..."
+							bind:value={chatInput}
+							bind:this={chatInputRef}
+							rows="1"
+							on:input={adjustChatTextarea}
+							on:keydown={handleChatKeydown}
+						></textarea>
+						<button
+							class="hero-chat-send"
+							on:click={handleChatSubmit}
+							disabled={!chatInput.trim()}
+						>
+							<svg viewBox="0 0 18 18" class="send-icon">
+								<path
+									d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
+								/>
+							</svg>
+						</button>
+					</div>
+				</div>
 			</div>
 		</div>
 	</section>
@@ -369,25 +411,16 @@
 		border: 1px solid var(--color-primary);
 	}
 
-	.nav-button.secondary:hover {
-		background: var(--color-primary);
-		color: var(--color-light);
-	}
 
 	.nav-button.primary {
 		background: rgb(0, 0, 0);
 		color: #f5f9ff;
 	}
 
-	.nav-button.primary:hover {
-		background: var(--color-accent);
-		color: var(--color-dark);
-		border: 1px solid var(--color-accent);
-	}
 
 	.nav-button.primary:hover,
 	.nav-button.secondary:hover {
-		transform: translateY(-3px);
+		transform: translateY(-1px);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 	}
 
@@ -456,8 +489,9 @@
 		z-index: 10;
 		min-height: 100vh;
 		display: flex;
-		align-items: flex-start;
-		justify-content: center;
+		flex-direction: column;
+		justify-content: flex-start;
+		align-items: center;
 		padding: 3rem 2rem 4rem;
 		text-align: center;
 		width: 100%;
@@ -471,6 +505,9 @@
 		opacity: 0;
 		transform: translateY(30px);
 		transition: all 1s ease;
+		display: flex;
+		flex-direction: column;
+		flex: 1;
 	}
 
 	.hero-section.loaded .hero-content {
@@ -546,6 +583,7 @@
 		gap: 1rem;
 		justify-content: center;
 		flex-wrap: wrap;
+		margin-top: auto;
 	}
 
 	.cta-button {
@@ -1112,6 +1150,152 @@
 		/* Slightly crisper blur */
 		filter: blur(28px);
 		border-radius: inherit; /* match parent radius */
+	}
+
+	/* Hero Chat Interface */
+	.hero-chat-container {
+		width: 100%;
+		max-width: 500px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.hero-chat-messages {
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 16px;
+		padding: 1.5rem;
+		max-height: 300px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		min-height: 120px;
+	}
+
+	.hero-chat-placeholder {
+		text-align: center;
+		color: rgba(255, 255, 255, 0.7);
+		font-size: 1rem;
+		line-height: 1.5;
+	}
+
+	.hero-chat-input-container {
+		position: relative;
+		display: flex;
+		align-items: flex-end;
+		gap: 0.75rem;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 20px;
+		padding: 1.25rem 1.125rem;
+		transition: all 0.3s ease;
+		min-height: 120px;
+	}
+
+	.hero-chat-input-container:focus-within {
+		border-color: rgba(255, 255, 255, 0.4);
+		background: rgba(255, 255, 255, 0.15);
+	}
+
+	.hero-chat-input {
+		flex: 1;
+		background: none;
+		border: none;
+		outline: none;
+		color: var(--color-dark);
+		font-size: 1rem;
+		line-height: 1.5;
+		resize: none;
+		max-height: 120px;
+		overflow-y: auto;
+		font-family: inherit;
+		min-height: 48px;
+		padding: 0;
+		text-align: left;
+		vertical-align: top;
+		display: block;
+		align-self: flex-start;
+	}
+
+	.hero-chat-input::placeholder {
+		color: rgba(11, 46, 51, 0.6);
+		text-align: left;
+		vertical-align: top;
+		line-height: 1.5;
+	}
+
+	.hero-chat-input:focus {
+		text-align: left;
+	}
+
+	.hero-chat-send {
+		background: var(--color-primary);
+		border: none;
+		border-radius: 50%;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		flex-shrink: 0;
+	}
+
+	.hero-chat-send:hover:not(:disabled) {
+		background: var(--color-dark);
+		transform: scale(1.05);
+	}
+
+	.hero-chat-send:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.hero-chat-send .send-icon {
+		width: 18px;
+		height: 18px;
+		fill: white;
+	}
+
+	/* Responsive adjustments for hero chat */
+	@media (max-width: 768px) {
+		.hero-chat-container {
+			max-width: 100%;
+		}
+
+		.hero-chat-messages {
+			max-height: 250px;
+			padding: 1rem;
+		}
+
+		.hero-chat-input {
+			font-size: 0.9rem;
+		}
+
+		.hero-chat-send {
+			width: 32px;
+			height: 32px;
+		}
+
+		.hero-chat-send .send-icon {
+			width: 14px;
+			height: 14px;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.hero-chat-messages {
+			max-height: 200px;
+			padding: 0.75rem;
+		}
+
+		.hero-chat-input {
+			font-size: 0.85rem;
+		}
 	}
 
 </style>
