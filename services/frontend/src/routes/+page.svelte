@@ -4,6 +4,7 @@
 		import { goto } from '$app/navigation';
 		import { startPricingPreload } from '$lib/utils/pricing-loader';
 		import { showAuthModal } from '$lib/stores/authModal';
+		import { createChart } from 'lightweight-charts';
 
 		if (browser) {
 			document.title = 'Peripheral';
@@ -17,6 +18,7 @@
 		// Chat interface state
 		let chatInput = '';
 		let chatInputRef: HTMLTextAreaElement;
+		let chartContainerRef: HTMLDivElement;
 
 		function handleChatSubmit() {
 			if (!chatInput.trim()) return;
@@ -63,6 +65,34 @@
 				// Only set loaded state for animation
 				isLoaded = true;
 				document.body.classList.add('loaded');
+
+				/* --- Initialise lightweight chart in hero --- */
+				if (chartContainerRef) {
+					const chart = createChart(chartContainerRef, {
+						width: chartContainerRef.clientWidth,
+						height: chartContainerRef.clientHeight,
+						layout: { background: { color: 'transparent' }, textColor: '#0B2E33', attributionLogo: false },
+						grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+						timeScale: { visible: true },
+					});
+
+					const series = chart.addAreaSeries({
+						lineColor: '#4F7C82',
+						topColor: 'rgba(79,124,130,0.35)',
+						bottomColor: 'rgba(79,124,130,0.00)'
+					});
+
+					const now = Math.floor(Date.now() / 1000);
+					const data = Array.from({ length: 200 }, (_, i) => ({
+						time: (now - (200 - i) * 60) as any,
+						value: 100 + Math.sin(i / 4) * 3 + (Math.random() * 2 - 1)
+					}));
+					series.setData(data);
+
+					new ResizeObserver(() => {
+						chart.applyOptions({ width: chartContainerRef!.clientWidth });
+					}).observe(chartContainerRef);
+				}
 			}
 		});
 
@@ -165,6 +195,7 @@
 							</button>
 						</div>
 					</div>
+					<div class="hero-chart-container" bind:this={chartContainerRef}></div>
 				</div>
 			</div>
 		</section>
@@ -242,6 +273,8 @@
 				</div>
 			</div>
 			<div class="footer-bottom">
+				<p>Charts powered by <a href="https://tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a></p>
+				
 				<p>2025 Atlantis Labs, Inc.</p>
 			</div>
 			<div class="footer-brand">Peripheral</div>
@@ -424,17 +457,6 @@
 			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 		}
 
-		/* Pill icon (hidden by default) */
-		.pill-icon {
-			display: none;
-			position: absolute;
-			left: 50%;
-			top: 50%;
-			transform: translate(-50%, -50%);
-			color: var(--color-dark);
-			z-index: 10;
-		}
-
 		/* Pill state styles */
 		#site-header {
 			position: fixed;
@@ -474,9 +496,6 @@
 			display: none;
 		}
 
-		#site-header.pill .pill-icon {
-			display: block;
-		}
 
 		#site-header.pill:hover {
 			background: rgba(184, 227, 233, 0.95);
@@ -530,12 +549,13 @@
 		}
 
 		.hero-title {
-			font-size: clamp(3.5rem, 8vw, 6rem);
+			font-size: clamp(2.7rem, 4vw, 5rem);
 			font-weight: 800;
 			margin: 0 0 1.5rem 0;
 			letter-spacing: -0.02em;
 			line-height: 1.1;
 			color: var(--color-dark);
+			text-shadow: 0 2px 12px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.01);
 		}
 
 		.gradient-text {
@@ -573,8 +593,9 @@
 		.hero-subtitle {
 			font-size: clamp(1.1rem, 3vw, 1.5rem);
 			color: rgba(245, 249, 255, 0.85);
-			margin-bottom: 3rem;
+			margin-bottom: 1.5rem;
 			line-height: 1.6;
+			margin-top: 0;
 			font-weight: 400;
 		}
 
@@ -583,68 +604,9 @@
 			gap: 1rem;
 			justify-content: center;
 			flex-wrap: wrap;
-			margin-top: auto;
+			margin-top: 0;
 		}
 
-		.cta-button {
-			padding: 1rem 2rem;
-			border: none;
-			border-radius: 12px;
-			font-size: 1rem;
-			font-weight: 600;
-			cursor: pointer;
-			transition: all 0.3s ease;
-			display: inline-flex;
-			align-items: center;
-			gap: 0.5rem;
-			text-decoration: none;
-			background: transparent;
-			white-space: nowrap;
-		}
-
-		.cta-button.primary {
-			background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-			color: #f5f9ff;
-			border: 1px solid transparent;
-		}
-
-		.cta-button.primary:hover {
-			background: linear-gradient(135deg, #2563eb 0%, #5b21b6 100%);
-			transform: translateY(-2px);
-			box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
-		}
-
-		.cta-button.secondary {
-			color: #f5f9ff;
-			border: 1px solid rgba(255, 255, 255, 0.3);
-			background: rgba(255, 255, 255, 0.05);
-		}
-
-		.cta-button.secondary:hover {
-			background: rgba(255, 255, 255, 0.1);
-			border-color: rgba(255, 255, 255, 0.5);
-		}
-
-		.cta-button.outline {
-			color: #3b82f6;
-			border: 2px solid #3b82f6;
-			background: transparent;
-		}
-
-		.cta-button.outline:hover {
-			background: rgba(59, 130, 246, 0.1);
-			transform: translateY(-1px);
-		}
-
-		.cta-button.large {
-			padding: 1.25rem 2.5rem;
-			font-size: 1.1rem;
-		}
-
-		.arrow-icon {
-			width: 20px;
-			height: 20px;
-		}
 
 		/* Subsections Section */
 		.subsections-section {
@@ -766,12 +728,6 @@
 			gap: 2rem;
 		}
 
-		.footer-sections-right {
-			display: flex;
-			flex-direction: row;
-			gap: 2rem;
-			justify-content: flex-start;
-		}
 
 		.footer-section {
 			margin-bottom: 0;
@@ -844,8 +800,16 @@
 			color: var(--color-primary);
 			font-size: 0.9rem;
 			display: flex;
-			align-items: flex-end;
+			flex-direction: column;
+			align-items: flex-start;
+			row-gap: 0.25rem;
 			padding: 0 2rem;
+		}
+
+		/* Ensure footer link inherits branding colour and removes default blue */
+		.footer-bottom a {
+			color: inherit;
+			text-decoration: none;
 		}
 
 		/* Responsive Design */
@@ -880,12 +844,7 @@
 				align-items: center;
 			}
 
-			.cta-button {
-				width: 100%;
-				max-width: 300px;
-				justify-content: center;
-			}
-
+			
 			.subsection {
 				flex-direction: column;
 				gap: 2rem;
@@ -923,11 +882,6 @@
 				flex-direction: column;
 				align-items: stretch;
 			}
-			.footer-sections-right {
-				flex-direction: column;
-				gap: 1.2rem;
-				align-items: stretch;
-			}
 		}
 
 		@media (max-width: 480px) {
@@ -948,10 +902,6 @@
 
 			.footer-content {
 				flex-direction: column;
-			}
-			.footer-sections-right {
-				flex-direction: column;
-				gap: 1rem;
 			}
 		}
 
@@ -1129,12 +1079,14 @@
 
 		/* Hero Chat Interface */
 		.hero-chat-container {
+			flex: 1;
 			width: 100%;
 			max-width: 500px;
-			margin: 0 auto;
 			display: flex;
 			flex-direction: column;
 			gap: 1rem;
+			margin: 0;
+			min-height: 500px;
 		}
 
 		.hero-chat-messages {
@@ -1142,12 +1094,12 @@
 			border: 1px solid rgba(255, 255, 255, 0.2);
 			border-radius: 16px;
 			padding: 1.5rem;
-			max-height: 300px;
 			overflow-y: auto;
 			display: flex;
 			flex-direction: column;
 			gap: 1rem;
 			min-height: 120px;
+			flex: 1;
 		}
 
 		.hero-chat-placeholder {
@@ -1167,7 +1119,8 @@
 			border-radius: 20px;
 			padding: 1.25rem 1.125rem;
 			transition: all 0.3s ease;
-			min-height: 120px;
+			min-height: 60px;
+			margin-top: auto;
 		}
 
 		.hero-chat-input-container:focus-within {
@@ -1190,7 +1143,6 @@
 			min-height: 48px;
 			padding: 0;
 			text-align: left;
-			vertical-align: top;
 			display: block;
 			align-self: flex-start;
 		}
@@ -1236,6 +1188,17 @@
 			fill: white;
 		}
 
+		/* Mini chart next to chat */
+		.hero-chart-container {
+			flex: 1;
+			width: 100%;
+			max-width: 400px;
+			height: 300px;
+			border-radius: 16px;
+			background: rgba(255, 255, 255, 0.1);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+
 		/* Responsive adjustments for hero chat */
 		@media (max-width: 768px) {
 			.hero-chat-container {
@@ -1243,7 +1206,6 @@
 			}
 
 			.hero-chat-messages {
-				max-height: 250px;
 				padding: 1rem;
 			}
 
@@ -1260,6 +1222,11 @@
 				width: 14px;
 				height: 14px;
 			}
+
+			.hero-chart-container {
+				max-width: 100%;
+				height: 260px;
+			}
 		}
 
 		@media (max-width: 480px) {
@@ -1270,6 +1237,35 @@
 
 			.hero-chat-input {
 				font-size: 0.85rem;
+			}
+		}
+
+		/* ================================================
+		   Desktop layout: split chat & chart 50/50
+		   ================================================ */
+		@media (min-width: 1024px) {
+			.hero-content {
+				max-width: 75vw;
+			}
+
+			/* Arrange chat & chart side-by-side with 40/60 split */
+			.hero-actions {
+				display: grid;
+				grid-template-columns: 40% 60%;
+				gap: 2rem;
+				justify-content: center;
+			}
+
+			.hero-chat-container {
+				width: 100%; /* full width of its grid cell */
+				max-width: none;
+			}
+
+			.hero-chart-container {
+				width: 100%;
+				max-width: none;
+				height: 100%;
+				min-height: 65vh;
 			}
 		}
 
