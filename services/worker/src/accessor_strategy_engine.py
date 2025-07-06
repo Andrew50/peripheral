@@ -8,19 +8,85 @@ import asyncio
 import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-import datetime as dt 
+from datetime import datetime as dt, timedelta
+import datetime
 from typing import Any, Dict, List, Optional, Union, Tuple
 import json
 import time
 import io
 import contextlib
-import plotly 
+import plotly
+import traceback
+import linecache
+import sys 
 
 from data_accessors import DataAccessorProvider, get_bar_data, get_general_data
 from validator import SecurityValidator, SecurityError
 
 logger = logging.getLogger(__name__)
+
+
+class TrackedList(list):
+    """List that tracks total instances across all TrackedList objects"""
+    _global_instance_count = 0
+    _max_instances = 15000
+    _limit_reached = False
+    
+    @classmethod
+    def reset_counter(cls, max_instances=15000):
+        """Reset global counter for new strategy execution"""
+        cls._global_instance_count = 0
+        cls._max_instances = max_instances
+        cls._limit_reached = False
+        logger.debug(f"Reset instance counter, max_instances: {max_instances}")
+    
+    @classmethod
+    def is_limit_reached(cls):
+        """Check if the instance limit was reached during execution"""
+        return cls._limit_reached
+    
+    def _check_and_update_limit(self, additional_count=1):
+        """Check if adding items would exceed limit and update counter if not"""
+        new_count = TrackedList._global_instance_count + additional_count
+        
+        if new_count > TrackedList._max_instances:
+            # Set flag that limit was reached but don't raise exception
+            if not TrackedList._limit_reached:
+                TrackedList._limit_reached = True
+                logger.warning(f"Instance limit reached: {TrackedList._global_instance_count}/{TrackedList._max_instances}. Stopping instance collection.")
+            return False  # Don't add more instances
+        
+        # Log warning when approaching limit (90% threshold)
+        if new_count > TrackedList._max_instances * 0.9 and not TrackedList._limit_reached:
+            logger.warning(f"Approaching instance limit: {new_count}/{TrackedList._max_instances}")
+        
+        TrackedList._global_instance_count = new_count
+        return True  # OK to add instances
+    
+    def append(self, item):
+        if self._check_and_update_limit(1):
+            super().append(item)
+    
+    def extend(self, items):
+        items_list = list(items) if not isinstance(items, list) else items
+        if len(items_list) == 0:
+            return
+        
+        if self._check_and_update_limit(len(items_list)):
+            super().extend(items_list)
+    
+    def insert(self, index, item):
+        if self._check_and_update_limit(1):
+            super().insert(index, item)
+    
+    def __iadd__(self, other):
+        other_list = list(other) if not isinstance(other, list) else other
+        if len(other_list) == 0:
+            return self
+        
+        if self._check_and_update_limit(len(other_list)):
+            return super().__iadd__(other_list)
+        return self
 
 
 class AccessorStrategyEngine:
@@ -41,8 +107,9 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         symbols: List[str], 
-        start_date: datetime, 
-        end_date: datetime,
+        start_date: dt, 
+        end_date: dt,
+        max_instances: int = 15000,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -62,9 +129,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
@@ -85,11 +149,13 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, strategy_prints, strategy_plots = await self._execute_strategy(
+            instances, strategy_prints, strategy_plots, error = await self._execute_strategy(
                 strategy_code, 
-                execution_mode='backtest'
+                execution_mode='backtest',
+                max_instances=max_instances
             )
-            
+            if error: 
+                raise error
             # Calculate performance metrics
             performance = self._calculate_performance_metrics(instances)
             
@@ -102,6 +168,8 @@ class AccessorStrategyEngine:
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
                 'strategy_plots': strategy_plots,
+                'instance_limit_reached': TrackedList.is_limit_reached(),
+                'max_instances_configured': max_instances,
                 'summary': {
                     'total_instances': len(instances),
                     'symbols_analyzed': len(symbols),
@@ -115,10 +183,17 @@ class AccessorStrategyEngine:
             return result
             
         except Exception as e:
+            # Get detailed error information
+            error_info = self._get_detailed_error_info(e, strategy_code)
+            detailed_error_msg = self._format_detailed_error(error_info)
+            
             logger.error(f"Backtest execution failed: {e}")
+            logger.error(detailed_error_msg)
+            
             return {
                 'success': False,
                 'error': str(e),
+                'error_details': error_info,
                 'execution_mode': 'backtest',
                 'strategy_prints': '',
                 'strategy_plots': []
@@ -142,10 +217,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code first
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
-            
             # Extract min_bars requirements from strategy code
             min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
             
@@ -186,17 +257,21 @@ class AccessorStrategyEngine:
             logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
-            instances, _, _ = await self._execute_strategy(
+            instances, _, _, error = await self._execute_strategy(
                 strategy_code, 
-                execution_mode='validation'
+                execution_mode='validation',
+                max_instances=1000  # Lower limit for validation
             )
-            
+            if error: 
+                raise error
             execution_time = (time.time() - start_time) * 1000
             
             result = {
                 'success': True,
                 'execution_mode': 'validation',
                 'instances_generated': len(instances),
+                'instance_limit_reached': TrackedList.is_limit_reached(),
+                'max_instances_configured': 1000,  # Validation uses lower limit
                 'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
@@ -207,10 +282,18 @@ class AccessorStrategyEngine:
             
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
+            
+            # Get detailed error information
+            error_info = self._get_detailed_error_info(e, strategy_code)
+            detailed_error_msg = self._format_detailed_error(error_info)
+            
             logger.error(f"❌ Validation failed: {e}")
+            logger.error(detailed_error_msg)
+            
             return {
                 'success': False,
                 'error': str(e),
+                'error_details': error_info,
                 'execution_mode': 'validation',
                 'strategy_prints': '',
                 'execution_time_ms': int(execution_time)
@@ -221,6 +304,7 @@ class AccessorStrategyEngine:
         strategy_code: str, 
         universe: List[str], 
         limit: int = 100,
+        max_instances: int = 15000,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -240,9 +324,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors with screening optimizations
             self.data_accessor.set_execution_context(
@@ -267,11 +348,13 @@ class AccessorStrategyEngine:
             logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
-            instances, _, _ = await self._execute_strategy(
+            instances, _, _, error = await self._execute_strategy(
                 strategy_code, 
-                execution_mode='screening'
+                execution_mode='screening',
+                max_instances=max_instances
             )
-            
+            if error: 
+                raise error
             # Rank and limit results
             ranked_results = self._rank_screening_results(instances, limit)
             
@@ -283,6 +366,8 @@ class AccessorStrategyEngine:
                 'ranked_results': ranked_results,
                 'universe_size': len(universe),
                 'results_returned': len(ranked_results),
+                'instance_limit_reached': TrackedList.is_limit_reached(),
+                'max_instances_configured': max_instances,
                 'execution_time_ms': int(execution_time),  # Convert to integer for Go compatibility
                 'optimization_enabled': True,
                 'data_strategy': 'minimal_recent'
@@ -293,10 +378,17 @@ class AccessorStrategyEngine:
             return result
             
         except Exception as e:
+            # Get detailed error information
+            error_info = self._get_detailed_error_info(e, strategy_code)
+            detailed_error_msg = self._format_detailed_error(error_info)
+            
             logger.error(f"❌ Screening execution failed: {e}")
+            logger.error(detailed_error_msg)
+            
             return {
                 'success': False,
                 'error': str(e),
+                'error_details': error_info,
                 'execution_mode': 'screening'
             }
     
@@ -304,6 +396,7 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         symbols: List[str],
+        max_instances: int = 15000,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -321,9 +414,6 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Validate strategy code
-            if not self.validator.validate_code(strategy_code):
-                raise SecurityError("Strategy code validation failed")
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
@@ -340,11 +430,13 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, _, _ = await self._execute_strategy(
+            instances, _, _, error = await self._execute_strategy(
                 strategy_code, 
-                execution_mode='alert'
+                execution_mode='alert',
+                max_instances=max_instances
             )
-            
+            if error: 
+                raise error
             # Convert instances to alerts
             alerts = self._convert_instances_to_alerts(instances)
             
@@ -356,6 +448,8 @@ class AccessorStrategyEngine:
                 'alerts': alerts,
                 'signals': {inst['ticker']: inst for inst in instances},  # All instances are signals
                 'symbols_processed': len(symbols),
+                'instance_limit_reached': TrackedList.is_limit_reached(),
+                'max_instances_configured': max_instances,
                 'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
             }
             
@@ -363,10 +457,17 @@ class AccessorStrategyEngine:
             return result
             
         except Exception as e:
+            # Get detailed error information
+            error_info = self._get_detailed_error_info(e, strategy_code)
+            detailed_error_msg = self._format_detailed_error(error_info)
+            
             logger.error(f"Alert execution failed: {e}")
+            logger.error(detailed_error_msg)
+            
             return {
                 'success': False,
                 'error': str(e),
+                'error_details': error_info,
                 'execution_mode': 'alert'
             }
     
@@ -380,7 +481,7 @@ class AccessorStrategyEngine:
                 'symbol': instance['ticker'],
                 'type': 'strategy_signal',
                 'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': dt.now().isoformat(),
                 'data': instance
             }
             
@@ -399,13 +500,10 @@ class AccessorStrategyEngine:
     async def _execute_strategy(
         self, 
         strategy_code: str, 
-        execution_mode: str
-    ) -> Tuple[List[Dict], str, List[Dict]]:
+        execution_mode: str,
+        max_instances: int = 15000
+    ) -> Tuple[List[Dict], str, List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
-        
-        # Validate strategy code before execution
-        if not self._validate_strategy_code(strategy_code):
-            raise ValueError("Strategy code contains prohibited operations")
         
         # Create safe execution environment with data accessor functions
         safe_globals = await self._create_safe_globals(execution_mode)
@@ -428,6 +526,9 @@ class AccessorStrategyEngine:
             if not strategy_func:
                 raise ValueError("No strategy function found. Function should be named 'strategy'")
             
+            # Reset instance counter for this execution
+            TrackedList.reset_counter(max_instances=max_instances)
+            
             # Execute strategy function with proper error handling and stdout capture
             logger.info(f"Executing strategy function using data accessor approach")
             strategy_prints = ""
@@ -437,16 +538,26 @@ class AccessorStrategyEngine:
                 with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
                     instances = strategy_func()
                 strategy_prints = stdout_buffer.getvalue()
+                
+                # Check if instance limit was reached during execution
+                if TrackedList.is_limit_reached():
+                    logger.warning(f"Strategy execution completed with instance limit reached. Total instances: {TrackedList._global_instance_count}")
+                
             except Exception as strategy_error:
+                # Get detailed error information
+                error_info = self._get_detailed_error_info(strategy_error, strategy_code)
+                detailed_error_msg = self._format_detailed_error(error_info)
+                
                 logger.error(f"Strategy function execution failed: {strategy_error}")
-                logger.debug(f"Strategy error details: {type(strategy_error).__name__}: {strategy_error}")
+                logger.error(detailed_error_msg)
+                
                 # Return empty list and any captured output instead of crashing
-                return [], "", []
+                return [], "", [], strategy_error
             
             # Validate and clean instances
             if not isinstance(instances, list):
                 logger.error(f"Strategy function must return a list, got {type(instances)}")
-                return []
+                return [], "", [], "Strategy function must return a list"
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -456,35 +567,43 @@ class AccessorStrategyEngine:
                     if 'ticker' not in instance:
                         continue
                     if 'timestamp' not in instance:
-                        instance['timestamp'] = datetime.now().isoformat()
+                        instance['timestamp'] = dt.now().isoformat()
                     
                     valid_instances.append(instance)
             
             # Ensure all instances are JSON serializable
             valid_instances = self._ensure_json_serializable(valid_instances)
             
-            logger.info(f"Strategy returned {len(valid_instances)} valid instances")
+            # Log results with limit information
+            limit_msg = " (limit reached)" if TrackedList.is_limit_reached() else ""
+            logger.info(f"Strategy returned {len(valid_instances)} valid instances{limit_msg}")
             logger.info(f"Strategy captured {len(self.plots_collection)} plots")
-            return valid_instances, strategy_prints, self.plots_collection
+            return valid_instances, strategy_prints, self.plots_collection, None
             
         except Exception as e:
+            # Get detailed error information for compilation/setup errors
+            error_info = self._get_detailed_error_info(e, strategy_code)
+            detailed_error_msg = self._format_detailed_error(error_info)
+            
             logger.error(f"Strategy compilation or setup failed: {e}")
-            logger.debug(f"Setup error details: {type(e).__name__}: {e}")
+            logger.error(detailed_error_msg)
+            
             # Return empty list for compilation/setup errors too
-            return [], "", []
+            return [], "", [], e
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""
         
         # Initialize plots collection for this execution
         self.plots_collection = []
+        self.plot_counter = 0
         
         # Create bound methods that use this engine's data accessor
         def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, 
-                              aggregate_mode=False, extended_hours=False):
+                              aggregate_mode=False, extended_hours=False, start_date=None, end_date=None):
             try:
                 return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
-                                                      aggregate_mode, extended_hours)
+                                                      aggregate_mode, extended_hours, start_date, end_date)
             except Exception as e:
                 logger.error(f"Data accessor error in get_bar_data(timeframe={timeframe}, min_bars={min_bars}): {e}")
                 logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
@@ -514,7 +633,7 @@ class AccessorStrategyEngine:
                 'min': min,
                 'round': round,
                 'sum': sum,
-                'list': list,
+                'list': TrackedList,
                 'dict': dict,
                 'tuple': tuple,
                 'set': set,
@@ -535,19 +654,13 @@ class AccessorStrategyEngine:
             'get_general_data': bound_get_general_data,
             
             # Math and datetime - make datetime module fully available
-            'datetime': dt,
+            'datetime': datetime,
+            'dt': dt,
             'timedelta': timedelta,
             'time': dt.time,
             
             # Execution mode info
             'execution_mode': execution_mode,
-            
-            # Helper function to create instances
-            'create_instance': lambda ticker, timestamp, **kwargs: {
-                'ticker': ticker,
-                'timestamp': timestamp,
-                **kwargs
-            }
         }
         
         # Add plotly imports if available
@@ -590,22 +703,25 @@ class AccessorStrategyEngine:
         def capture_plot(fig, *args, **kwargs):
             """Capture plot instead of showing it - extract only essential data"""
             try:
-                # Extract essential plot data matching agent prompt format
+                plotID = self.plot_counter 
+                self.plot_counter += 1
+                
+                # Extract entire plot data (full figure object)
+                figure_data = self._extract_plot_data(fig)
+                
                 plot_data = {
-                    'chart_type': self._extract_chart_type(fig),
-                    'data': self._extract_plot_data(fig),
-                    'title': self._extract_plot_title(fig),
-                    'layout': self._extract_minimal_layout(fig)
+                    'plotID': plotID,
+                    'data': figure_data  # Entire figure object with data, layout, config
                 }
                 self.plots_collection.append(plot_data)
             except Exception as e:
                 logger.warning(f"Failed to capture plot data: {e}")
-                # Fallback to basic plot info
+                # Fallback to basic plot info with ID
+                plotID = self.plot_counter  # Use integer instead of string
+                self.plot_counter += 1
                 fallback_plot = {
-                    'chart_type': 'line',
-                    'data': [],
-                    'title': 'Plot Capture Failed',
-                    'layout': {'xaxis': {'title': ''}, 'yaxis': {'title': ''}}
+                    'plotID': plotID,
+                    'data': {}  # Empty object
                 }
                 self.plots_collection.append(fallback_plot)
         
@@ -670,6 +786,10 @@ class AccessorStrategyEngine:
         if value is None or isinstance(value, (str, bool)):
             return value
         
+        # Handle numpy arrays
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        
         # Handle numpy/pandas scalar types
         if isinstance(value, np.integer):
             return int(value)
@@ -678,11 +798,29 @@ class AccessorStrategyEngine:
         elif isinstance(value, np.bool_):
             return bool(value)
         elif isinstance(value, (np.datetime64, pd.Timestamp)):
-            # Convert datetime to Unix timestamp (int)
-            if isinstance(value, pd.Timestamp):
+            # Convert datetime to Unix timestamp (int), handle NaT values
+            try:
+                if isinstance(value, pd.Timestamp):
+                    if pd.isna(value):
+                        return None
+                    else:
+                        return int(value.timestamp())
+                else:
+                    ts = pd.Timestamp(value)
+                    if pd.isna(ts):
+                        return None
+                    else:
+                        return int(ts.timestamp())
+            except (ValueError, TypeError, OverflowError) as e:
+                print(f"[make_json_serializable] Exception converting datetime: {e}, value: {value}")
+                return None
+        elif isinstance(value, dt):
+            # Handle Python datetime objects from database
+            try:
                 return int(value.timestamp())
-            else:
-                return int(pd.Timestamp(value).timestamp())
+            except (ValueError, TypeError, OverflowError) as e:
+                print(f"[make_json_serializable] Exception converting datetime.datetime: {e}, value: {value}")
+                return None
         elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
             # Handle pandas nullable integer types
             return int(value.item()) if pd.notna(value) else None
@@ -710,36 +848,17 @@ class AccessorStrategyEngine:
         else:
             try:
                 return str(value)
-            except Exception:
+            except Exception as e:
+                print(f"[make_json_serializable] Exception in fallback str: {e}, value: {value}")
                 return None
 
-    def _extract_plot_data(self, fig) -> list:
-        """Extract trace data from plotly figure"""
-        try:
-            data = []
-            for trace in fig.data:
-                trace_data = {
-                    'name': getattr(trace, 'name', ''),
-                    'type': getattr(trace, 'type', 'scatter')
-                }
-                
-                # Extract coordinate data and make JSON serializable
-                if hasattr(trace, 'x') and trace.x is not None:
-                    trace_data['x'] = self._make_json_serializable(list(trace.x))
-                if hasattr(trace, 'y') and trace.y is not None:
-                    trace_data['y'] = self._make_json_serializable(list(trace.y))
-                if hasattr(trace, 'z') and trace.z is not None:
-                    trace_data['z'] = self._make_json_serializable(list(trace.z))
-                
-                # Add mode for scatter plots
-                if hasattr(trace, 'mode'):
-                    trace_data['mode'] = trace.mode
-                
-                data.append(trace_data)
-            
-            return data
-        except Exception:
-            return []
+    def _extract_plot_data(self, fig) -> dict:
+        """Extract trace data from plotly figure using Plotly's built-in serialization (fig.to_dict())."""
+        try:        
+            return json.loads(fig.to_json())
+        except Exception as e:
+            print(f"[extract_plot_data] Exception in fig.to_json(): {e}")
+            return {}
 
     def _extract_plot_title(self, fig) -> str:
         """Extract title from plotly figure"""
@@ -792,10 +911,108 @@ class AccessorStrategyEngine:
                 'yaxis': {'title': ''}
             }
 
-    def _validate_strategy_code(self, strategy_code: str) -> bool:
-        """Basic validation of strategy code"""
-        # Use the security validator
-        return self.validator.validate_code(strategy_code)
+    def _get_detailed_error_info(self, error: Exception, strategy_code: str) -> Dict[str, Any]:
+        """Extract detailed error information including line numbers and code context"""
+        try:
+            # Get the full traceback
+            tb = traceback.format_exc()
+            
+            # Get the exception info
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            
+            error_info = {
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'full_traceback': tb,
+                'line_number': None,
+                'code_context': None,
+                'function_name': None,
+                'file_name': None
+            }
+            
+            if exc_traceback:
+                # Walk through the traceback to find the strategy code execution
+                tb_frame = exc_traceback
+                while tb_frame:
+                    frame = tb_frame.tb_frame
+                    filename = frame.f_code.co_filename
+                    line_number = tb_frame.tb_lineno
+                    function_name = frame.f_code.co_name
+                    
+                    # Look for the exec frame or strategy function
+                    if ('<string>' in filename or 
+                        'strategy' in function_name.lower() or
+                        tb_frame.tb_next is None):  # Last frame
+                        
+                        error_info['line_number'] = line_number
+                        error_info['function_name'] = function_name
+                        error_info['file_name'] = filename
+                        
+                        # Try to get code context from strategy_code
+                        if '<string>' in filename:
+                            # This is from our exec'd strategy code
+                            try:
+                                code_lines = strategy_code.split('\n')
+                                if 1 <= line_number <= len(code_lines):
+                                    # Get context around the error line
+                                    start_line = max(1, line_number - 3)
+                                    end_line = min(len(code_lines), line_number + 3)
+                                    
+                                    context_lines = []
+                                    for i in range(start_line, end_line + 1):
+                                        line_content = code_lines[i - 1]  # Convert to 0-based indexing
+                                        marker = ">>> " if i == line_number else "    "
+                                        context_lines.append(f"{marker}{i:3d}: {line_content}")
+                                    
+                                    error_info['code_context'] = '\n'.join(context_lines)
+                            except Exception as ctx_error:
+                                error_info['code_context'] = f"Could not extract code context: {ctx_error}"
+                        
+                        break
+                    
+                    tb_frame = tb_frame.tb_next
+            
+            return error_info
+            
+        except Exception as e:
+            # Fallback error info
+            return {
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'full_traceback': traceback.format_exc(),
+                'extraction_error': f"Could not extract detailed error info: {e}"
+            }
+    
+    def _format_detailed_error(self, error_info: Dict[str, Any]) -> str:
+        """Format detailed error information for logging"""
+        formatted = [
+            f"❌ STRATEGY EXECUTION ERROR: {error_info['error_type']}",
+            f"📄 Error Message: {error_info['error_message']}",
+        ]
+        
+        if error_info.get('line_number'):
+            formatted.append(f"📍 Line Number: {error_info['line_number']}")
+        
+        if error_info.get('function_name'):
+            formatted.append(f"🔧 Function: {error_info['function_name']}")
+        
+        if error_info.get('code_context'):
+            formatted.extend([
+                "📋 Code Context:",
+                error_info['code_context']
+            ])
+        
+        if error_info.get('full_traceback'):
+            formatted.extend([
+                "🔍 Full Traceback:",
+                error_info['full_traceback']
+            ])
+            
+        if error_info.get('extraction_error'):
+            formatted.append(f"⚠️ Error Info Extraction Issue: {error_info['extraction_error']}")
+        
+        return '\n'.join(formatted)
+
     
     def _ensure_json_serializable(self, instances: List[Dict]) -> List[Dict]:
         """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
@@ -815,11 +1032,29 @@ class AccessorStrategyEngine:
                 elif isinstance(value, np.bool_):
                     serializable_instance[key] = bool(value)
                 elif isinstance(value, (np.datetime64, pd.Timestamp)):
-                    # Convert datetime to Unix timestamp (int)
-                    if isinstance(value, pd.Timestamp):
+                    # Convert datetime to Unix timestamp (int), handle NaT values
+                    try:
+                        if isinstance(value, pd.Timestamp):
+                            if pd.isna(value):
+                                serializable_instance[key] = None
+                            else:
+                                serializable_instance[key] = int(value.timestamp())
+                        else:
+                            ts = pd.Timestamp(value)
+                            if pd.isna(ts):
+                                serializable_instance[key] = None
+                            else:
+                                serializable_instance[key] = int(ts.timestamp())
+                    except (ValueError, TypeError, OverflowError):
+                        # Handle invalid timestamps
+                        serializable_instance[key] = None
+                elif isinstance(value, dt):
+                    # Handle Python datetime objects from database
+                    try:
                         serializable_instance[key] = int(value.timestamp())
-                    else:
-                        serializable_instance[key] = int(pd.Timestamp(value).timestamp())
+                    except (ValueError, TypeError, OverflowError):
+                        # Handle invalid datetime objects
+                        serializable_instance[key] = None
                 elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
                     # Handle pandas nullable integer types
                     serializable_instance[key] = int(value.item()) if pd.notna(value) else None

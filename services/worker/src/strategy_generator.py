@@ -81,7 +81,6 @@ class StrategyGenerator:
                 if key not in db_values or not db_values[key]:
                     raise ValueError(f"Database returned empty {key} list")
             
-            logger.info(f"✅ Fetched current filter values: {len(db_values['sectors'])} sectors, {len(db_values['industries'])} industries")
             return db_values
             
         except Exception as e:
@@ -102,14 +101,14 @@ class StrategyGenerator:
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
-ALLOWED IMPORTS: 
-- pandas, numpy, datetime, math, plotly
+Allowed imports: 
+- pandas, numpy, datetime, math, plotly. 
+- for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
-FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
+FUNCTION VALIDATION - Only these functions exist, automatically available in the execution environment:
 - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
 - get_general_data(columns, filters) → pandas.DataFrame
 
-These functions are automatically available in the execution environment.
 
 ❌ THESE FUNCTIONS DO NOT EXIST:
 get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
@@ -125,13 +124,13 @@ CRITICAL REQUIREMENTS:
      SUPPORTED TIMEFRAMES:
      • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
      • Custom aggregations: "5m", "10m", "15m", "30m" (from 1-minute data)
-                           "2h", "4h", "6h", "8h", "12h" (from 1-hour data)  
-                           "2w", "3w", "4w" (from 1-week data)
+                           "2h", "4h", "6h", "8h" (from 1-hour data)  
+                           "2w", "3w" (from 1-week data)
      
      TIMEFRAME SELECTION GUIDE:
      - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
      - Swing Trading: Use "1h", "4h", "1d" 
-     - Position Trading: Use "1d", "1w", "2w"
+     - Position Trading: Use "1d", "1w"
      - Multi-timeframe: Combine different intervals for confirmation
      
      Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
@@ -400,9 +399,9 @@ COMMON MISTAKES TO AVOID:
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
 - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
-- ❌ BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
-- ❌ BAD STOP LOSS: exit_price = stop_loss_price  # Wrong when gap occurs
-- ❌ NO DATE FILTERING: Using only daily data for precise stop timing
+- BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
+- NO DATE FILTERING: Using only daily data for precise stop timing
+- Appending instances only after exit is determined – always record the entry as an instance, even when you can’t yet determine an exit.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
@@ -429,7 +428,6 @@ PATTERN RECOGNITION:
 TICKER EXTRACTION FROM PROMPTS:
 - If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
 - If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
-- Common ticker patterns: AAPL, TSLA, AMZN, GOOGL, MSFT, NVDA
 
 SECURITY RULES:
 - Only use whitelisted imports
@@ -472,32 +470,35 @@ Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_dat
 PRINTING DATA (REQUIRED): 
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
+- This should SUPER comprehensive. The user will not have access to the data other than what is printed. 
 
-PLOTLY PLOT GENERATION:
+PLOTLY PLOT GENERATION (REQUIRED):
 - Use plotly to generate plots of useful visualizations of the data
 - Histograms of performance metrics, returns, etc 
 - Always show the plot using .show()
 - Almost always include plots in the strategy to help the user understand the data
-- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp), they cause JSON serialization errors
-
+- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
+- Do not worry about the styling of the plot, just ensure the data is correct and serialisable.
+- You should plot equity curves of the strategy over time.
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
-  * 'ticker': str (e.g., "MRNA", "AAPL")
-  * 'timestamp': int (Unix timestamp)
+  * 'ticker': str (required) (e.g., "MRNA", "AAPL")
+  * 'timestamp': int (required) (Unix timestamp, NOT datetime or timestamptz)
   * 'entry_price': float (price at instance time - open, close, etc.)
   * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
   * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
+  * Order these fields logically that would make it best for the reader to understand the table of instances.
 - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
+- Instance should STILL be added even if exits have not occured. Both closed and open trades should be returned.
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
         try:
-            logger.info(f"Creating strategy for user {user_id}, prompt: {prompt[:100]}...")
             
             # Check if this is an edit operation
             is_edit = strategy_id != -1
@@ -511,8 +512,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                         "error": f"Strategy {strategy_id} not found for user {user_id}"
                     }
             
-            # Generate strategy code with retry logic
-            logger.info("Generating strategy code with OpenAI o3...")
             strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
             
             if not strategy_code:
@@ -688,7 +687,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             for model_name, max_tokens in models_to_try:
                 try:
-                    logger.info(f"Attempting generation with model: {model_name}")
                     
                     logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
                     

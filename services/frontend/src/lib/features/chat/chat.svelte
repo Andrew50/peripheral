@@ -42,7 +42,6 @@
 		sendChatQuery
 	} from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
-	import { generateSharedConversationLink } from './chatHelpers';
 	import { showAuthModal } from '$lib/stores/authModal';
 	import type { ConversationSummary } from './interface';
 
@@ -82,12 +81,10 @@
 	let messagesContainer: HTMLDivElement;
 	let initialSuggestions: string[] = [];
 
-	// State for table expansion
-	let tableExpansionStates: { [key: string]: boolean } = {};
-
 	import type { SortState } from './interface';
 
 	let tableSortStates: { [key: string]: SortState } = {};
+	let tablePaginationStates: { [key: string]: { currentPage: number; rowsPerPage: number } } = {};
 
 	// Chat history
 	let messagesStore = writable<Message[]>([]); // Wrap messages in a writable store
@@ -898,13 +895,28 @@
 		return null;
 	}
 
-	// Function to toggle table expansion state
-	function toggleTableExpansion(tableKey: string) {
-		if (!(tableKey in tableExpansionStates)) {
-			tableExpansionStates[tableKey] = false; // Default to collapsed if not set
+
+
+	// Function to navigate to a specific page
+	function goToPage(tableKey: string, pageNumber: number, totalPages: number) {
+		if (pageNumber >= 1 && pageNumber <= totalPages) {
+			tablePaginationStates[tableKey].currentPage = pageNumber;
+			tablePaginationStates = { ...tablePaginationStates }; // Trigger reactivity
 		}
-		tableExpansionStates[tableKey] = !tableExpansionStates[tableKey];
-		tableExpansionStates = { ...tableExpansionStates }; // Trigger reactivity
+	}
+
+	// Function to go to next page
+	function nextPage(tableKey: string, currentPage: number, totalPages: number) {
+		if (currentPage < totalPages) {
+			goToPage(tableKey, currentPage + 1, totalPages);
+		}
+	}
+
+	// Function to go to previous page
+	function previousPage(tableKey: string, currentPage: number, totalPages: number) {
+		if (currentPage > 1) {
+			goToPage(tableKey, currentPage - 1, totalPages);
+		}
 	}
 
 	// Function to sort table data
@@ -930,31 +942,43 @@
 			const valA = a[columnIndex];
 			const valB = b[columnIndex];
 
-			// Basic comparison, can be enhanced for types
+			// Handle null/undefined values
+			if (valA == null && valB == null) return 0;
+			if (valA == null) return 1;
+			if (valB == null) return -1;
+
 			let comparison = 0;
+			
+			// Check if both values are already numbers
 			if (typeof valA === 'number' && typeof valB === 'number') {
 				comparison = valA - valB;
 			} else {
-				// Attempt numeric conversion for strings that look like numbers
-				const numA = Number(String(valA).replace(/[^0-9.-]+/g, ''));
-				const numB = Number(String(valB).replace(/[^0-9.-]+/g, ''));
-
-				if (!isNaN(numA) && !isNaN(numB)) {
+				// Convert to strings for comparison
+				const strA = String(valA).trim();
+				const strB = String(valB).trim();
+				
+				// Check if both strings represent numbers (more strict check)
+				const numA = parseFloat(strA);
+				const numB = parseFloat(strB);
+				
+				// Only treat as numbers if the entire string is a valid number
+				if (!isNaN(numA) && !isNaN(numB) && strA === numA.toString() && strB === numB.toString()) {
 					comparison = numA - numB;
 				} else {
-					// Fallback to string comparison
-					const stringA = String(valA).toLowerCase();
-					const stringB = String(valB).toLowerCase();
-					if (stringA < stringB) {
-						comparison = -1;
-					} else if (stringA > stringB) {
-						comparison = 1;
-					}
+					// String comparison (case-insensitive)
+					const lowerA = strA.toLowerCase();
+					const lowerB = strB.toLowerCase();
+					comparison = lowerA.localeCompare(lowerB);
 				}
 			}
 
 			return newDirection === 'asc' ? comparison : comparison * -1;
 		});
+
+		// Reset to page 1 when sorting to avoid confusion
+		if (tablePaginationStates[tableKey]) {
+			tablePaginationStates[tableKey].currentPage = 1;
+		}
 
 		// Find the message containing this table and update its content_chunks
 		// This is necessary because tableData is a copy within the #each loop
@@ -1404,33 +1428,14 @@
 							: ''}"
 					>
 						{#if message.isLoading}
-							<!-- Always show the current status message at top with dropdown toggle -->
-							<div class="loading-status-container">
-								<p class="loading-status">{$functionStatusStore?.userMessage || 'Thinking...'}</p>
-								{#if isProcessingMessage && processingTimeline.length > 1}
-									<button
-										class="timeline-dropdown-toggle"
-										on:click={() => (showTimelineDropdown = !showTimelineDropdown)}
-										aria-label={showTimelineDropdown ? 'Hide timeline' : 'Show timeline'}
-									>
-										<svg
-											viewBox="0 0 24 24"
-											width="14"
-											height="14"
-											class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
-										>
-											<path
-												d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"
-												fill="currentColor"
-											/>
-										</svg>
-									</button>
-								{/if}
-							</div>
-
-							<!-- Show timeline below if we have relevant timeline data and dropdown is open -->
-							{#if isProcessingMessage && processingTimeline.length > 1 && showTimelineDropdown}
-								<MessageTimeline timeline={processingTimeline} />
+							<!-- Show timeline with current status (always show if processing) -->
+							{#if isProcessingMessage}
+								<MessageTimeline 
+									timeline={processingTimeline} 
+									currentStatus={$functionStatusStore?.userMessage || 'Thinking...'}
+									{showTimelineDropdown}
+									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
+								/>
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
@@ -1503,21 +1508,28 @@
 												{#if isTableData(chunk.content)}
 													{@const tableData = getTableData(chunk.content)}
 													{@const tableKey = message.message_id + '-' + index}
-													{@const isLongTable = tableData && tableData.rows.length > 5}
-													{@const isExpanded = tableExpansionStates[tableKey] === true}
 													{@const currentSort = tableSortStates[tableKey] || {
 														columnIndex: null,
 														direction: null
 													}}
 
 													{#if tableData}
+														{@const paginationState = tablePaginationStates[tableKey] || (tablePaginationStates[tableKey] = { currentPage: 1, rowsPerPage: 5 })}
+														{@const currentPage = paginationState.currentPage}
+														{@const rowsPerPage = paginationState.rowsPerPage}
+														{@const totalRows = tableData.rows.length}
+														{@const totalPages = Math.ceil(totalRows / rowsPerPage)}
+														{@const startIndex = (currentPage - 1) * rowsPerPage}
+														{@const endIndex = Math.min(startIndex + rowsPerPage, totalRows)}
+														{@const displayedRows = tableData.rows.slice(startIndex, endIndex)}
+
 														<div class="chunk-table-container">
 															{#if tableData.caption}
 																<div class="table-caption">
 																	{@html parseMarkdown(tableData.caption)}
 																</div>
 															{/if}
-															<div class="chunk-table {isExpanded ? 'expanded' : ''}">
+															<div class="chunk-table">
 																<table>
 																	<thead>
 																		<tr>
@@ -1549,39 +1561,76 @@
 																		</tr>
 																	</thead>
 																	<tbody>
-																		{#each tableData.rows as row, rowIndex}
-																			{#if rowIndex < 5 || isExpanded}
-																				<tr>
-																					{#if Array.isArray(row)}
-																						{#each row as cell}
-																							<td
-																								>{@html parseMarkdown(
-																									typeof cell === 'string' ? cell : String(cell)
-																								)}</td
-																							>
-																						{/each}
-																					{:else}
-																						<td colspan={tableData.headers.length}
-																							>Invalid row data: {typeof row === 'string'
-																								? row
-																								: String(row)}</td
+																		{#each displayedRows as row, rowIndex}
+																			<tr>
+																				{#if Array.isArray(row)}
+																					{#each row as cell}
+																						<td
+																							>{@html parseMarkdown(
+																								typeof cell === 'string' ? cell : String(cell)
+																							)}</td
 																						>
-																					{/if}
-																				</tr>
-																			{/if}
+																					{/each}
+																				{:else}
+																					<td colspan={tableData.headers.length}
+																						>Invalid row data: {typeof row === 'string'
+																							? row
+																							: String(row)}</td
+																					>
+																				{/if}
+																			</tr>
 																		{/each}
 																	</tbody>
 																</table>
 															</div>
-															{#if isLongTable}
-																<button
-																	class="table-toggle-btn glass glass--small glass--responsive"
-																	on:click={() => toggleTableExpansion(tableKey)}
-																>
-																	{isExpanded
-																		? 'Show less'
-																		: `Show more (${tableData.rows.length} rows)`}
-																</button>
+															
+															{#if totalPages > 1}
+																<div class="table-pagination">
+																	<div class="pagination-controls">
+																		
+																		<button
+																			class="pagination-btn glass glass--small {1 === currentPage ? 'active' : ''}"
+																			on:click={() => goToPage(tableKey, 1, totalPages)}
+																			title="First page"
+																		>
+																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+																				<path d="M18.41,16.59L13.82,12L18.41,7.41L17,6L11,12L17,18L18.41,16.59M6,6H8V18H6V6Z"/>
+																			</svg>
+																		</button>
+																		<button
+																			class="pagination-btn glass glass--small"
+																			on:click={() => previousPage(tableKey, currentPage, totalPages)}
+																			disabled={currentPage === 1}
+																			title="Previous page"
+																		>
+																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+																				<path d="M15.41,16.59L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.59Z"/>
+																			</svg>
+																		</button>
+																		<button
+																		class="pagination-btn glass glass--small"
+																		on:click={() => nextPage(tableKey, currentPage, totalPages)}
+																		disabled={currentPage === totalPages}
+																		title="Next page"
+																		>
+																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+																				<path d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z"/>
+																			</svg>
+																		</button>
+																		<button
+																			class="pagination-btn glass glass--small {totalPages === currentPage ? 'active' : ''}"
+																			on:click={() => goToPage(tableKey, totalPages, totalPages)}
+																			title="Last page"
+																		>
+																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+																				<path d="M5.59,7.41L10.18,12L5.59,16.59L7,18L13,12L7,6L5.59,7.41M16,6H18V18H16V6Z"/>
+																			</svg>
+																		</button>
+																	</div>
+																	<div class="pagination-info">
+																		Page {currentPage} of {totalPages}
+																	</div>
+																</div>
 															{/if}
 														</div>
 													{:else}

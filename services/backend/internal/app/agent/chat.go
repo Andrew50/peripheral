@@ -2,14 +2,18 @@
 package agent
 
 import (
+	"backend/internal/app/limits"
 	"backend/internal/app/strategy"
 	"backend/internal/data"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type Stage string
@@ -81,6 +85,23 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		getDefaultSystemPromptTokenCount(conn)
 	}
 
+	// Check if user has usage allowance for queries (skip for user ID 0 which is public access)
+	allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking usage limits: %w", err)
+	}
+	if !allowed {
+		return QueryResponse{
+			ContentChunks: []ContentChunk{{
+				Type:    "text",
+				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+			}},
+			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
+			ConversationID: query.ConversationID,
+			MessageID:      "", // Will be generated
+			Timestamp:      time.Now(),
+		}, nil
+	}
 	// Save pending message using the provided conversation ID
 	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
@@ -158,7 +179,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}
 		switch v := result.(type) {
 		case DirectAnswer:
-			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
 			totalTokenCounts.OutputTokenCount += int64(v.TokenCounts.OutputTokenCount)
 			totalTokenCounts.InputTokenCount += int64(v.TokenCounts.InputTokenCount)
 			totalTokenCounts.ThoughtsTokenCount += int64(v.TokenCounts.ThoughtsTokenCount)
@@ -166,17 +186,36 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 			// For DirectAnswer, combine all results for storage
 			allResults := append(activeResults, discardedResults...)
+			// process content chunks for storing in db
+
+			chunksForDB := processContentChunksForDB(ctx, conn, userID, v.ContentChunks)
 
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+
 			if err != nil {
 				return QueryResponse{
-					ContentChunks:  []ContentChunk{},
-					Suggestions:    []string{},
+					ContentChunks:  v.ContentChunks,
+					Suggestions:    v.Suggestions,
 					ConversationID: conversationID,
 					MessageID:      messageID,
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error updating pending message to completed: %w", err)
+			}
+			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
+
+			// Record usage for successful query (skip for user ID 0 which is public access)
+			metadata := map[string]interface{}{
+				"query":           query.Query,
+				"conversation_id": conversationID,
+				"message_id":      messageID,
+				"token_count":     totalTokenCounts.TotalTokenCount,
+				"result_type":     "direct_answer",
+			}
+			if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+				// Log error but don't fail the request
+				fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
 			}
 
 			return QueryResponse{
@@ -281,24 +320,38 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				totalTokenCounts.ThoughtsTokenCount += int64(finalResponse.TokenCounts.ThoughtsTokenCount)
 				totalTokenCounts.TotalTokenCount += int64(finalResponse.TokenCounts.TotalTokenCount)
 
-				// Process any table instructions in the content chunks
-				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
-
 				// For final response, combine all results for storage
 				allResults := append(activeResults, discardedResults...)
-
+				// process content chunks for storing in db
+				chunksForDB := processContentChunksForDB(ctx, conn, userID, finalResponse.ContentChunks)
 				// Update pending message to completed and get message data with timestamps
-				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, processedChunks, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
+				messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, finalResponse.Suggestions, totalTokenCounts)
 				if err != nil {
 					return QueryResponse{
-						ContentChunks:  []ContentChunk{},
-						Suggestions:    []string{},
+						ContentChunks:  chunksForDB,
+						Suggestions:    finalResponse.Suggestions,
 						ConversationID: conversationID,
 						MessageID:      messageID,
 						Timestamp:      time.Now(),
 					}, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
 
+				// Record usage for successful query (skip for user ID 0 which is public access)
+				metadata := map[string]interface{}{
+					"query":           query.Query,
+					"conversation_id": conversationID,
+					"message_id":      messageID,
+					"token_count":     totalTokenCounts.TotalTokenCount,
+					"result_type":     "final_response",
+					"function_count":  len(allResults),
+				}
+				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+					// Log error but don't fail the request
+					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+				}
+
+				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
+				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
 				return QueryResponse{
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
@@ -329,38 +382,132 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
-	StrategyID int      `json:"strategyId"` // strategyId
-	Columns    []string `json:"columns"`    // Internal column names to include
+	StrategyID int         `json:"strategyID"`        // strategyId
+	Columns    interface{} `json:"columns"`           // Internal column names as either []string or string
+	Caption    string      `json:"caption"`           // Table title
+	NumRows    int         `json:"numRows,omitempty"` // Number of rows in the table
+}
+type BacktestPlotChunkData struct {
+	StrategyID int    `json:"strategyID"`
+	PlotID     int    `json:"plotID"`
+	ChartType  string `json:"chartType,omitempty"`
+	ChartTitle string `json:"chartTitle,omitempty"`
+	Length     int    `json:"length,omitempty"`
+	XAxisTitle string `json:"xAxisTitle,omitempty"`
+	YAxisTitle string `json:"yAxisTitle,omitempty"`
+}
+
+func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+	processedChunks := make([]ContentChunk, 0, len(inputChunks))
+	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+
+	for _, chunk := range inputChunks {
+		if chunk.Type == "backtest_table" {
+			var backtestTableChunkContent BacktestTableChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest table chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestTableChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest table chunk format]",
+				})
+				continue
+			}
+			// Get backtest results for this strategy
+			if backtestResultsMap[backtestTableChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestTableChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			if backtestTableChunkContent.Columns == "all" {
+				// Store all columns from the backtest results
+				backtestTableChunkContent.Columns = backtestResultsMap[backtestTableChunkContent.StrategyID].Summary.Columns
+				chunk.Content = backtestTableChunkContent
+			} else {
+				// store only columns specified
+				chunk.Content = backtestTableChunkContent
+			}
+			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestTableChunkContent.StrategyID].Instances)
+
+			processedChunks = append(processedChunks, chunk)
+		} else if chunk.Type == "backtest_plot" {
+			var backtestPlotChunkContent BacktestPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal backtest plot chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &backtestPlotChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest plot chunk format]",
+				})
+				continue
+			}
+			if backtestResultsMap[backtestPlotChunkContent.StrategyID] == nil {
+				backtestResultsMap[backtestPlotChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID)
+				if err != nil {
+					continue
+				}
+			}
+			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
+			for _, plot := range strategyPlots {
+				if plot.PlotID == backtestPlotChunkContent.PlotID {
+					chunk.Content = BacktestPlotChunkData{
+						StrategyID: backtestPlotChunkContent.StrategyID,
+						ChartType:  plot.ChartType,
+						ChartTitle: plot.Title,
+						Length:     plot.Length,
+						XAxisTitle: plot.Layout["xaxis"].(map[string]any)["title"].(string),
+						YAxisTitle: plot.Layout["yaxis"].(map[string]any)["title"].(string),
+					}
+					processedChunks = append(processedChunks, chunk)
+					break
+				}
+			}
+		} else {
+			processedChunks = append(processedChunks, chunk)
+		}
+	}
+	return processedChunks
 }
 
 // processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResults *strategy.BacktestResponse
+	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
-			// Convert chunk.Content to JSON bytes then unmarshal to struct
+			var chunkContent BacktestTableChunkData
 			contentBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not marshal chunk content: %v]", err),
+					Content: "[Internal Error: Could not marshal backtest table chunk content]",
 				})
 				continue
 			}
-
-			var chunkContent BacktestTableChunkData
-			err = json.Unmarshal(contentBytes, &chunkContent)
-			if err != nil {
+			if err := json.Unmarshal(contentBytes, &chunkContent); err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not parse backtest table chunk: %v]", err),
+					Content: "[Internal Error: Invalid backtest table chunk format]",
 				})
 				continue
 			}
-			if backtestResults == nil {
-				backtestResults, err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
+			if backtestResultsMap[chunkContent.StrategyID] == nil {
+				backtestResultsMap[chunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -369,15 +516,181 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 					continue
 				}
 			}
-			/*tableChunk, err := GenerateBacktestTableFromInstruction(ctx, conn, userID, backtestResults)
+			backtestInstances := backtestResultsMap[chunkContent.StrategyID].Instances
+			backtestColumns := backtestResultsMap[chunkContent.StrategyID].Summary.Columns
+			// Ensure "ticker" is the first column
+			tickerIdx := -1
+			timestampIdx := -1
+			for i, col := range backtestColumns {
+				if col == "ticker" {
+					tickerIdx = i
+				}
+				if col == "timestamp" {
+					timestampIdx = i
+				}
+			}
+			// If both ticker and timestamp exist, merge them into ticker and remove timestamp
+			if tickerIdx >= 0 && timestampIdx >= 0 {
+				// Remove timestamp from columns
+				newColumns := make([]string, 0, len(backtestColumns)-1)
+				for _, col := range backtestColumns {
+					if col != "timestamp" {
+						newColumns = append(newColumns, col)
+					}
+				}
+				backtestColumns = newColumns
+			}
+			// Recompute tickerIdx after possible column change
+			tickerIdx = -1
+			for i, col := range backtestColumns {
+				if col == "ticker" {
+					tickerIdx = i
+					break
+				}
+			}
+			if tickerIdx > 0 {
+				// Move "ticker" to the front
+				backtestColumns = append([]string{"ticker"}, append(backtestColumns[:tickerIdx], backtestColumns[tickerIdx+1:]...)...)
+			}
+			// Get first 100 instances, or all if less than 100
+			instances := backtestInstances
+			/*if len(backtestInstances) > 100 {
+				instances = backtestInstances[:100]
+			}*/
+			// flatten instances into rows using original columns
+			rows := make([]map[string]any, 0, len(instances))
+			for _, instance := range instances {
+				row := make(map[string]any)
+				// If both ticker and timestamp exist, merge them
+				if tickerIdx >= 0 && timestampIdx >= 0 {
+					tickerVal, okTicker := instance.Instance["ticker"].(string)
+					timestampVal, okTimestamp := instance.Instance["timestamp"]
+					var timestampMs string
+					if okTimestamp {
+						switch v := timestampVal.(type) {
+						case int64:
+							timestampMs = fmt.Sprintf("%d", v*1000)
+						case int:
+							timestampMs = fmt.Sprintf("%d", v*1000)
+						case float64:
+							timestampMs = fmt.Sprintf("%d", int64(v*1000))
+						case float32:
+							timestampMs = fmt.Sprintf("%d", int64(v*1000))
+						case string:
+							// Try to parse string to int
+							var tsInt int64
+							_, err := fmt.Sscanf(v, "%d", &tsInt)
+							if err == nil {
+								timestampMs = fmt.Sprintf("%d", tsInt*1000)
+							} else {
+								timestampMs = v
+							}
+						default:
+							timestampMs = ""
+						}
+					}
+					if okTicker && timestampMs != "" {
+						row["ticker"] = "$$" + tickerVal + "-" + timestampMs + "$$"
+					} else if okTicker {
+						row["ticker"] = "$$" + tickerVal + "$$"
+					}
+					// Copy other columns except timestamp
+					for _, column := range backtestColumns {
+						if column == "ticker" {
+							continue
+						}
+						if column == "timestamp" {
+							continue
+						}
+						row[column] = instance.Instance[column]
+					}
+				} else {
+					for _, column := range backtestColumns {
+						row[column] = instance.Instance[column]
+					}
+				}
+				rows = append(rows, row)
+			}
+			// Now, create display columns for headers and output
+			displayColumns := make([]string, len(backtestColumns))
+			c := cases.Title(language.Und)
+			for i, column := range backtestColumns {
+				words := strings.Split(column, "_")
+				for j, word := range words {
+					words[j] = c.String(strings.TrimSpace(word))
+				}
+				displayColumns[i] = strings.Join(words, " ")
+			}
+			// Remap row keys to display columns
+			for i, row := range rows {
+				newRow := make(map[string]any)
+				for j, column := range backtestColumns {
+					displayCol := displayColumns[j]
+					newRow[displayCol] = row[column]
+				}
+				rows[i] = newRow
+			}
+			// Convert rows to [][]any for table output
+			finalRows := make([][]any, len(rows))
+			for i, row := range rows {
+				valueRow := make([]any, len(displayColumns))
+				for j, displayCol := range displayColumns {
+					valueRow[j] = row[displayCol]
+				}
+				finalRows[i] = valueRow
+			}
+			chunk.Type = "table"
+			chunk.Content = map[string]any{
+				"strategyID": chunkContent.StrategyID,
+				"caption":    chunkContent.Caption,
+				"headers":    displayColumns,
+				"rows":       finalRows,
+			}
+			processedChunks = append(processedChunks, chunk)
+		} else if chunk.Type == "backtest_plot" {
+			var chunkContent BacktestPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
 			if err != nil {
 				processedChunks = append(processedChunks, ContentChunk{
 					Type:    "text",
-					Content: fmt.Sprintf("[Internal Error: Could not generate backtest table: %v]", err),
+					Content: "[Internal Error: Could not marshal backtest plot chunk content]",
 				})
 				continue
-			}*/
-			//processedChunks = append(processedChunks, *tableChunk)
+			}
+			if err := json.Unmarshal(contentBytes, &chunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid backtest plot chunk format]",
+				})
+				continue
+			}
+			strategyID := chunkContent.StrategyID
+			plotID := chunkContent.PlotID
+			if backtestResultsMap[strategyID] == nil {
+				backtestResultsMap[strategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID)
+				if err != nil {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type:    "text",
+						Content: fmt.Sprintf("[Internal Error: Could not get backtest results: %v]", err),
+					})
+					continue
+				}
+			}
+			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
+			for _, plot := range strategyPlots {
+				if plot.PlotID == plotID {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type: "plot",
+						Content: map[string]any{
+							"chart_type": plot.ChartType,
+							"data":       plot.Data,
+							"title":      plot.Title,
+							"layout":     plot.Layout,
+						},
+					})
+					break
+				}
+			}
 		} else {
 			// Keep non-instruction chunks as they are
 			processedChunks = append(processedChunks, chunk)

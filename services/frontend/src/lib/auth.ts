@@ -56,7 +56,7 @@ export function logout(redirectPath: string = '/login') {
 export function setAuthCookies(token: string, profilePic: string, username: string) {
 	if (!browser) return;
 
-	const cookieOptions = 'path=/; max-age=21600; SameSite=Strict'; // 6 hours
+	const cookieOptions = 'path=/; max-age=21600; SameSite=Lax'; // 6 hours
 
 	document.cookie = `authToken=${token}; ${cookieOptions}`;
 	document.cookie = `profilePic=${encodeURIComponent(profilePic || '')}; ${cookieOptions}`;

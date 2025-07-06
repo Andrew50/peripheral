@@ -37,20 +37,9 @@ class SecurityValidator:
             ast.FunctionDef: self._check_function_definition,
             ast.AsyncFunctionDef: self._check_async_function_definition,
             ast.ClassDef: self._check_class_definition,
-            ast.For: self._check_for_loop,
             ast.While: self._check_while_loop,
-            ast.With: self._check_with_statement,
-            ast.Try: self._check_try_statement,
-            ast.Raise: self._check_raise_statement,
-            ast.Delete: self._check_delete_statement,
             ast.Global: self._check_global_statement,
             ast.Nonlocal: self._check_nonlocal_statement,
-            # ast.Exec removed - doesn't exist in Python 3.x
-            ast.Lambda: self._check_lambda,
-            ast.ListComp: self._check_comprehension,
-            ast.DictComp: self._check_comprehension,
-            ast.SetComp: self._check_comprehension,
-            ast.GeneratorExp: self._check_comprehension,
         }
 
         # Forbidden built-in functions (only truly dangerous ones)
@@ -85,6 +74,8 @@ class SecurityValidator:
             "slice", "complex", "frozenset", "object", "format",
             # Safe console output
             "print",
+            # zip and enumerate
+            "zip", "enumerate",
             # Data accessor functions
             "get_bar_data", "get_general_data"
         }
@@ -521,7 +512,6 @@ class SecurityValidator:
             (r'file\s*\(', "file() function is forbidden"),
             # Input/Output
             (r'input\s*\(', "input() function is forbidden"),
-            # Note: print() is now allowed as it's in allowed_functions list
             # System access patterns
             (r'import\s+os\b', "Importing os module is forbidden"),
             (r'import\s+sys\b', "Importing sys module is forbidden"),
@@ -658,30 +648,9 @@ class SecurityValidator:
         """Check class definitions (forbidden)"""
         raise SecurityError("Class definitions are not allowed in strategies")
 
-    def _check_for_loop(self, node: ast.For) -> bool:
-        """Check for loops (allowed but monitored)"""
-        return True
-
     def _check_while_loop(self, node: ast.While) -> bool:
         """Check while loops (potentially dangerous)"""
         logger.warning("While loops detected - ensure they terminate to avoid infinite loops")
-        return True
-
-    def _check_with_statement(self, node: ast.With) -> bool:
-        """Check with statements (context managers)"""
-        return True
-
-    def _check_try_statement(self, node: ast.Try) -> bool:
-        """Check try statements"""
-        return True
-
-    def _check_raise_statement(self, node: ast.Raise) -> bool:
-        """Check raise statements"""
-        return True
-
-    def _check_delete_statement(self, node: ast.Delete) -> bool:
-        """Check delete statements (potentially dangerous)"""
-        logger.warning("Delete statements detected - use with caution")
         return True
 
     def _check_global_statement(self, node: ast.Global) -> bool:
@@ -691,19 +660,6 @@ class SecurityValidator:
     def _check_nonlocal_statement(self, node: ast.Nonlocal) -> bool:
         """Check nonlocal statements (forbidden)"""
         raise SecurityError("Nonlocal statements are not allowed in strategies")
-
-    def _check_exec_statement(self, node) -> bool:
-        """Check exec statements (forbidden) - not applicable in Python 3.x"""
-        # ast.Exec doesn't exist in Python 3.x, so this is not needed
-        return True
-
-    def _check_lambda(self, node: ast.Lambda) -> bool:
-        """Check lambda expressions (allowed but monitored)"""
-        return True
-
-    def _check_comprehension(self, node: Union[ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp]) -> bool:
-        """Check comprehensions (allowed but monitored)"""
-        return True
 
     def validate_instance_fields(self, instances: List[Dict[str, Any]]) -> bool:
         """

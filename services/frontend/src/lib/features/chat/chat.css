@@ -469,8 +469,9 @@
 
 .suggested-query-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.08);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .chat-input-wrapper {
@@ -636,22 +637,22 @@
 
 .chunk-table {
 	overflow-x: auto;
-	margin-bottom: 0.5rem; /* Add space for toggle button */
+	margin-bottom: 0;
 }
 
 /* Add scrollbar styling for tables */
 .chunk-table::-webkit-scrollbar {
-	height: 6px;
+	height: 4px;
 }
 
 .chunk-table::-webkit-scrollbar-track {
 	background: var(--ui-bg-element, #333);
-	border-radius: 3px;
+	border-radius: 2px;
 }
 
 .chunk-table::-webkit-scrollbar-thumb {
 	background-color: var(--ui-border-darker, #555);
-	border-radius: 3px;
+	border-radius: 2px;
 }
 
 .chunk-table::-webkit-scrollbar-thumb:hover {
@@ -740,8 +741,9 @@ button[data-ticker].ticker-button:hover,
 .message-content button[data-ticker]:hover,
 .chunk-text button[data-ticker]:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 /* Ticker buttons inherit size from table headers */
@@ -798,29 +800,61 @@ button[data-ticker].ticker-button:hover,
 	scrollbar-color: var(--ui-border-darker, #555) var(--ui-bg-element, #333);
 }
 
-.table-toggle-btn {
-	/* Glass effect now provided by global .glass classes */
-	color: var(--text-primary, #fff);
-	padding: 0.3rem 0.8rem;
-	font-size: 0.7rem;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	margin-top: 0.25rem; /* Positive margin to avoid overlap with scrollbar */
-	display: inline-block;
-	/* Ensure immediate styling to prevent flash */
-	opacity: 1;
-	visibility: visible;
-	/* Fallback styling before glass effect loads */
-	background: rgba(255, 255, 255, 0.1);
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 8px;
+
+.table-pagination {
+	display: flex !important;
+	flex-direction: row !important;
+	justify-content: space-between !important;
+	align-items: center !important;
+	gap: 1rem;
+	margin-top: 0.75rem;
+	padding: 0.5rem 0;
+	width: 100%;
 }
 
-.table-toggle-btn:hover {
-	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
-	color: var(--text-primary, #fff);
+.pagination-info {
+	font-size: 0.75rem;
+	color: var(--text-secondary, #aaa);
+	text-align: right;
+	flex-shrink: 0;
 }
+
+.pagination-controls {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.25rem;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.pagination-btn {
+	/* Glass effect now provided by global .glass classes */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2rem;
+	height: 2rem;
+	padding: 0.25rem 0.5rem;
+	color: white;
+	font-size: 0.75rem;
+	font-weight: 500;
+	cursor: pointer;
+	outline: none;
+	border: none;
+	background: transparent;
+	text-decoration: none;
+	border-radius: 0.25rem;
+}
+
+
+.pagination-btn.active {
+	--glass-bg: rgba(255, 255, 255, 0.2);
+	--glass-border: rgba(255, 255, 255, 0.4);
+	color: var(--text-primary, #fff);
+	font-weight: 600;
+}
+
 
 .context-chips {
 	display: flex;
@@ -968,8 +1002,9 @@ button[data-ticker].ticker-button:hover,
 
 .suggestion-chip:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-border: #fff;
 	color: var(--text-primary);
+	border-color: #fff;
 }
 
 .suggestion-chip kbd {
@@ -1036,8 +1071,9 @@ button[data-ticker].ticker-button:hover,
 .edit-btn:hover,
 .retry-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .copy-btn svg,
@@ -1118,8 +1154,9 @@ button[data-ticker].ticker-button:hover,
 
 .error-retry-btn:hover {
 	--glass-bg: rgba(255, 255, 255, 0.1);
-	--glass-border: rgba(255, 255, 255, 0.3);
+	--glass-border: #fff;
 	color: var(--text-primary, #fff);
+	border-color: #fff;
 }
 
 .error-retry-btn svg {

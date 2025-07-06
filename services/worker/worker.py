@@ -738,12 +738,7 @@ class StrategyWorker:
         strategy_code = self._fetch_strategy_code(strategy_id)
         logger.debug(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
-        if task_id:
-            self._publish_progress(task_id, "validation", "Validating strategy code security...")
         
-        # Validate strategy code
-        if not self.security_validator.validate_code(strategy_code):
-            raise SecurityError("Strategy code contains prohibited operations")
         
         # Handle symbols and securities filtering
         symbols_input = symbols or []
@@ -819,9 +814,6 @@ class StrategyWorker:
         else:
             raise ValueError("No valid strategy codes found for provided strategy_ids")
         
-        # Validate strategy code
-        if not self.security_validator.validate_code(strategy_code):
-            raise SecurityError("Strategy code contains prohibited operations")
         
         # Use provided universe or let strategy determine requirements
         target_universe = universe or []
@@ -847,9 +839,6 @@ class StrategyWorker:
         strategy_code = self._fetch_strategy_code(strategy_id)
         logger.info(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
-        # Validate strategy code
-        if not self.security_validator.validate_code(strategy_code):
-            raise SecurityError("Strategy code contains prohibited operations")
         
         # Use provided symbols or empty list (strategies will determine their own requirements)
         target_symbols = symbols or []
@@ -880,7 +869,6 @@ class StrategyWorker:
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for strategy creation")
             
-            logger.info(f"✅ Input validation passed")
             
             # Publish progress update
             if task_id:

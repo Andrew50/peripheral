@@ -47,8 +47,6 @@
 	// Import Instance from types
 	import type { Instance } from '$lib/utils/types/types';
 
-	// Add import near the top with other imports
-	// import Screensaver from '$lib/features/screensaver/screensaver.svelte';
 
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
@@ -75,7 +73,6 @@
 
 	// TopBar functionality moved inline
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
-	import { initializeDefaultWatchlist } from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 
 	// Import mobile banner component
@@ -151,6 +148,11 @@
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
 
+	// Set isPublicViewing store based on server-side data
+	$: if (layoutData?.isPublicViewing !== undefined) {
+		isPublicViewingStore.set(layoutData.isPublicViewing);
+	}
+
 	// Import connect
 	import { connect } from '$lib/utils/stream/socket';
 
@@ -200,6 +202,9 @@
 				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
 			}
 		}
+	}
+	$: if ($menuWidth !== undefined) {
+		updateChartWidth();
 	}
 
 	// Track the last auto-input trigger to prevent rapid successive calls
@@ -308,14 +313,44 @@
 	};
 
 	onMount(() => {
-		if (!browser) return;
 
-		// Initialize subscription status if user is authenticated
-		const authToken = sessionStorage.getItem('authToken');
-		const username = sessionStorage.getItem('username');
-		if (authToken && username) {
-			fetchSubscriptionStatus();
+		if (!browser) return;
+		initStores();
+		// Async initialization function
+		async function init() {
+			// Check for Stripe checkout success session_id parameter
+			const urlParams = new URLSearchParams(window.location.search);
+			const sessionId = urlParams.get('session_id');
+
+			if (sessionId) {
+				console.log('🎯 [onMount] Stripe checkout success detected, session_id:', sessionId);
+
+				// Clear the session_id from URL for cleaner UX
+				urlParams.delete('session_id');
+				const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
+				window.history.replaceState({}, '', newUrl);
+
+				// Defer verification until after page is fully loaded
+				// This ensures verification happens AFTER the redirect to the app page
+				setTimeout(async () => {
+					console.log('⏰ [onMount] Deferred verification starting for session:', sessionId);
+					await verifyAndUpdateSubscriptionStatus(sessionId);
+				}, 100); // Small delay to ensure page is fully rendered
+			}
+
+			// Initialize subscription status if user is authenticated
+			const authToken = sessionStorage.getItem('authToken');
+			const username = sessionStorage.getItem('username');
+			if (authToken && username) {
+				// Only fetch if we haven't already triggered it above
+				if (!sessionId) {
+					fetchSubscriptionStatus();
+				}
+			}
 		}
+
+		// Start async initialization
+		init();
 
 		updateChartWidth();
 		calculateCountdown();
@@ -1010,9 +1045,47 @@
 		goto('/pricing');
 	}
 
-	// Add user authentication check
-	if (browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username')) {
-		connect();
+	// Stripe-recommended pattern: verify checkout session and update subscription status
+	async function verifyAndUpdateSubscriptionStatus(sessionId: string) {
+		console.log(
+			'🔍 [verifyAndUpdateSubscriptionStatus] Starting verification for session:',
+			sessionId
+		);
+
+		try {
+			// Verify the checkout session directly with Stripe via our backend
+			const verificationResult = await privateRequest<{
+				status: string;
+				isActive: boolean;
+				currentPlan: string;
+				hasCustomer: boolean;
+				hasSubscription: boolean;
+				currentPeriodEnd: number | null;
+				subscriptionCreditsRemaining: number;
+				purchasedCreditsRemaining: number;
+				totalCreditsRemaining: number;
+				subscriptionCreditsAllocated: number;
+			}>('verifyCheckoutSession', { sessionId });
+			console.log(
+				'✅ [verifyAndUpdateSubscriptionStatus] Verification result:',
+				verificationResult
+			);
+
+			// Refresh subscription status to ensure UI is up to date
+			await fetchSubscriptionStatus();
+
+			console.log('🎉 [verifyAndUpdateSubscriptionStatus] Subscription verification completed');
+		} catch (error) {
+			console.error(
+				'❌ [verifyAndUpdateSubscriptionStatus] Error verifying checkout session:',
+				error
+			);
+			// Fallback to simple refresh
+			console.log(
+				'🔄 [verifyAndUpdateSubscriptionStatus] Falling back to simple subscription refresh'
+			);
+			await fetchSubscriptionStatus();
+		}
 	}
 </script>
 

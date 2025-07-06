@@ -5,7 +5,7 @@ import { browser } from '$app/environment';
 export async function getStripe() {
 	if (!browser) return null;
 
-	const stripeKey = import.meta.env.VITE_PUBLIC_STRIPE_KEY || process.env.PUBLIC_STRIPE_KEY;
+	const stripeKey = import.meta.env.VITE_PUBLIC_STRIPE_KEY;
 	if (!stripeKey) {
 		console.warn('Stripe publishable key not found in environment variables');
 		return null;

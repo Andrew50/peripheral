@@ -4,6 +4,7 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/postgres"
 	"backend/internal/services/socket"
+	"backend/internal/app/limits"
 	"context"
 	"fmt"
 	"log"
@@ -46,8 +47,39 @@ func AddAlert(conn *data.Conn, alert Alert) {
 	alerts.Store(alert.AlertID, alert)
 }
 
-// RemoveAlert removes an alert from the in-memory store
-func RemoveAlert(alertID int) {
+// RemoveAlert removes an alert from the in-memory store and decrements the counter
+func RemoveAlert(conn *data.Conn, alertID int) error {
+	mu.Lock()
+	defer mu.Unlock()
+	
+	// Get the alert before removing it to access user information
+	if alertInterface, exists := alerts.Load(alertID); exists {
+		alert := alertInterface.(Alert)
+		
+		// Only decrement counter for real alerts (not system alerts like strategy processor)
+		if alert.UserID > 0 {
+			// Determine which counter to decrement based on alert type
+			if alert.AlertType == "strategy" {
+				// Decrement the active strategy alerts counter
+				if err := limits.DecrementActiveStrategyAlerts(conn, alert.UserID, 1); err != nil {
+					return fmt.Errorf("failed to decrement active strategy alerts counter for user %d: %w", alert.UserID, err)
+				}
+			} else {
+				// Decrement the active alerts counter for regular alerts (price, news, etc.)
+				if err := limits.DecrementActiveAlerts(conn, alert.UserID, 1); err != nil {
+					return fmt.Errorf("failed to decrement active alerts counter for user %d: %w", alert.UserID, err)
+				}
+			}
+		}
+	}
+	
+	alerts.Delete(alertID)
+	return nil
+}
+
+// RemoveAlertFromMemory removes an alert from the in-memory store without decrementing counters
+// This is used when the counter has already been decremented elsewhere
+func RemoveAlertFromMemory(alertID int) {
 	mu.Lock()
 	defer mu.Unlock()
 	alerts.Delete(alertID)
