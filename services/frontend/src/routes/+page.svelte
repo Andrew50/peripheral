@@ -104,7 +104,7 @@
 	<section class="hero-section" class:loaded={isLoaded}>
 		<div class="hero-content">
 			<h1 class="hero-title">
-				<span class="gradient-text">Peripheral</span>
+				The <span class="gradient-text">only</span> way to trade.
 			</h1>
 			<p class="hero-subtitle">
 				Peripheral is the terminal to envision and execute your trading ideas.<br />
@@ -155,14 +155,19 @@
 		</div>
 	</section>
 
+	<!-- Big Centered Tagline Section -->
+	<section class="tagline-section">
+		<div class="tagline-inner">
+			<p class="tagline-pretext">JUMP INTO</p>
+			<h2 class="tagline-text">The Final Trading Terminal.</h2>
+			<button class="tagline" on:click={navigateToSignup}>Get Started</button>
+		</div>
+	</section>
 
 	<!-- Footer -->
 	<footer class="landing-footer">
 		<div class="footer-content">
 			<div class="footer-section footer-left"> 
-				<p class="footer-description">The final trading terminal.</p>
-			</div>
-			<div class="footer-sections-right">
 				<div class="footer-section">
 					<h4 class="footer-title">Platform</h4>
 					<ul class="footer-links">
@@ -173,8 +178,9 @@
 				<div class="footer-section">
 					<h4 class="footer-title">Account</h4>
 					<ul class="footer-links">
-						<li><button on:click={navigateToLogin}>Login</button></li>
 						<li><button on:click={navigateToSignup}>Sign Up</button></li>
+						<li><a href="mailto:info@peripheral.io" class="footer-sales-link">Contact Sales</a></li>
+						<li><button on:click={navigateToLogin}>Login</button></li>
 					</ul>
 				</div>
 				<div class="footer-section">
@@ -189,13 +195,12 @@
 						<a href="https://www.linkedin.com/company/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="LinkedIn">
 							<img src="/InBug-White.png" alt="LinkedIn" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 						</a>
-
 					</div>
 				</div>
 			</div>
 		</div>
 		<div class="footer-bottom">
-			<p>Atlantis Labs, Inc. 2025</p>
+			<p>2025 Atlantis Labs, Inc.</p>
 		</div>
 		<div class="footer-brand">Peripheral</div>
 	</footer>
@@ -206,13 +211,17 @@
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 	
 	/* Ensure fonts load properly */
-	:global(html) {
+	:global(html), :global(body) {
+		margin: 0;
 		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
+		/* Prevent rubber-band / pull-to-refresh scrolling that lets the page scroll above the top */
+		overscroll-behavior-y: none;
+		overscroll-behavior-x: contain;
 	}
 
 	:global(body) {
-		background: var(--color-light);
+		background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
 		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 
@@ -303,7 +312,7 @@
 	}
 
 	.header-content {
-		padding: 0 2.5rem;
+		padding: 0 1rem;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -376,6 +385,12 @@
 		border: 1px solid var(--color-accent);
 	}
 
+	.nav-button.primary:hover,
+	.nav-button.secondary:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	}
+
 	/* Pill icon (hidden by default) */
 	.pill-icon {
 		display: none;
@@ -393,12 +408,12 @@
 		top: var(--header-top);
 		left: 50%;
 		transform: translateX(-50%);
-		width: 90vw;
+		width: 70vw;
 		max-width: 1400px;
 		height: var(--header-h);
-		background: #f5f9ff;
+		background: rgba(255,255,255,0.15); /* subtle frosted glass */
 		backdrop-filter: blur(16px);
-		border: 1px solid rgba(0,0,0,.08);
+		border: 1px solid rgba(255,255,255,0.25); /* soften border */
 		border-radius: 999px;
 		transition: all .4s cubic-bezier(.4,0,.2,1);
 		z-index: 1050;
@@ -441,12 +456,14 @@
 		z-index: 10;
 		min-height: 100vh;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: center;
-		padding: 8rem 2rem 4rem;
+		padding: 3rem 2rem 4rem;
 		text-align: center;
 		width: 100%;
 		flex-shrink: 0;
+		isolation: isolate;
+		border-radius: 4.5rem;
 	}
 
 	.hero-content {
@@ -481,6 +498,7 @@
 		margin: 0 0 1.5rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
+		color: var(--color-dark);
 	}
 
 	.gradient-text {
@@ -517,7 +535,7 @@
 
 	.hero-subtitle {
 		font-size: clamp(1.1rem, 3vw, 1.5rem);
-		color: #f5f9ff;
+		color: rgba(245, 249, 255, 0.85);
 		margin-bottom: 3rem;
 		line-height: 1.6;
 		font-weight: 400;
@@ -601,7 +619,8 @@
 	}
 
 	.subsections-content {
-		max-width: 1200px;
+		width: 80vw;
+		max-width: 1400px;
 		margin: 0 auto;
 		padding: 0 2rem;
 	}
@@ -692,17 +711,6 @@
 		flex-shrink: 0;
 	}
 
-	.cta-content {
-		max-width: 600px;
-		margin: 0 auto;
-	}
-
-	.cta-title {
-		font-size: clamp(2rem, 5vw, 3rem);
-		font-weight: 700;
-		margin: 0 0 1rem 0;
-		color: var(--color-dark);
-	}
 
 	.cta-subtitle {
 		font-size: 1.2rem;
@@ -731,31 +739,29 @@
 		margin-top: auto;
 	}
 
-	.footer-content, .footer-bottom, .footer-brand {
-
-		margin: 0 auto;
-		padding: 0 2rem;
-	}
-
 	.footer-content {
 		display: flex;
 		flex-direction: row;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 0;
+		justify-content: flex-start;
+		gap: 2rem;
+		padding: 0 2rem;
 	}
 
 	.footer-left {
-		flex: 1 1 0%;
-		min-width: 180px;
+		display: flex;
+		flex-direction: row;
+		gap: 2rem;
 	}
 
 	.footer-sections-right {
 		display: flex;
 		flex-direction: row;
 		gap: 2rem;
-		justify-content: flex-end;
-		align-items: flex-start;
+		justify-content: flex-start;
+	}
+
+	.footer-section {
+		margin-bottom: 0;
 	}
 
 	.footer-logo {
@@ -764,12 +770,6 @@
 		object-fit: contain;
 		max-width: 160px;
 		margin-bottom: 1rem;
-	}
-
-	.footer-description {
-		color: #f5f9ff;
-		font-size: 0.9rem;
-		line-height: 1.5;
 	}
 
 	.footer-title {
@@ -804,6 +804,17 @@
 		color: #f5f9ff;
 	}
 
+	.footer-links a {
+		color: #9ca3af;
+		text-decoration: none;
+		font-size: 0.9rem;
+		transition: color 0.3s ease;
+	}
+
+	.footer-links a:hover {
+		color: #f5f9ff;
+	}
+
 	.social-link {
 		color: #9ca3af;
 		text-decoration: none;
@@ -821,6 +832,7 @@
 		font-size: 0.9rem;
 		display: flex;
 		align-items: flex-end;
+		padding: 0 2rem;
 	}
 
 	/* Responsive Design */
@@ -936,7 +948,8 @@
 	}
 
 	#site-header.transparent {
-		background: transparent;
+		background: none;
+		backdrop-filter: none;
 		box-shadow: none;
 		border: none;
 	}
@@ -1000,6 +1013,105 @@
 	.footer-social-icon:hover img {
 		filter: none;
 		opacity: 1;
+	}
+
+	.tagline-section {
+		width: 100vw;
+		padding: 4rem 0 8rem 0;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		background: none;
+	}
+	.tagline-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	.tagline-text {
+		font-size: clamp(2.5rem, 7vw, 5rem);
+		font-weight: 900;
+		color: var(--color-dark);
+		text-align: center;
+		margin: 0;
+		letter-spacing: -0.04em;
+		line-height: 1.1;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	}
+	.tagline {
+		margin-top: 3rem;
+		font-size: 1.2rem;
+		padding: 1.1rem 2.5rem;
+		background: rgb(0, 0, 0);
+		color: #f5f9ff;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.1s ease;
+		box-shadow: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.tagline:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	}
+
+	.tagline-pretext {
+		font-size: 1.2rem;
+		font-weight: 500;
+		color: var(--color-primary);
+		margin: 0 0 0.5rem 0;
+		text-align: center;
+	}
+
+	/* Corner glow blooms */
+	:global(body)::before {
+		content: "";
+		position: fixed;
+		inset: 0;
+		pointer-events: none;
+		z-index: -1;
+		background:
+			radial-gradient(80rem 80rem at 0% 0%,
+				rgba(var(--color-accent-rgb,147,177,181),0.55) 0%,
+				rgba(var(--color-accent-rgb,147,177,181),0.35) 35%,
+				rgba(var(--color-accent-rgb,147,177,181),0.0) 70%),
+			radial-gradient(80rem 80rem at 100% 100%,
+				rgba(var(--color-dark-rgb,11,46,51),0.55) 0%,
+				rgba(var(--color-dark-rgb,11,46,51),0.35) 35%,
+				rgba(var(--color-dark-rgb,11,46,51),0.0) 70%);
+		filter: blur(120px);
+	}
+
+	/* Hero section halo */
+	.hero-section::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: -1;
+		/* Brighter hue – using primary brand colour */
+		--halo-rgb: 79,124,130;
+		/* Inner colour wash */
+		background: radial-gradient(ellipse at 50% 50%,
+			rgba(var(--halo-rgb),0.55) 0%,
+			rgba(var(--halo-rgb),0.25) 45%,
+			rgba(var(--halo-rgb),0.00) 70%);
+		/* Concentric steps */
+		box-shadow:
+			0 0 0 48px rgba(var(--halo-rgb),0.15),
+			0 0 0 96px rgba(var(--halo-rgb),0.10),
+			0 0 0 144px rgba(var(--halo-rgb),0.07),
+			0 0 0 192px rgba(var(--halo-rgb),0.04),
+			0 0 0 240px rgba(var(--halo-rgb),0.02);
+		/* Slightly crisper blur */
+		filter: blur(28px);
+		border-radius: inherit; /* match parent radius */
 	}
 
 </style>
