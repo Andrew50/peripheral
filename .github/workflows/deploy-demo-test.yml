@@ -40,6 +40,10 @@ on:
         required: true
       POLYGON_API_KEY:
         required: true
+      POLYGON_S3_KEY:
+        required: true
+      POLYGON_S3_SECRET:
+        required: true
       OPENAI_API_KEY:
         required: true
       GEMINI_FREE_KEYS:
@@ -81,6 +85,8 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
+      POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -149,6 +155,8 @@ jobs:
           echo "DB_ROOT_PASSWORD: [$(if [ -n "$DB_ROOT_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
           echo "REDIS_PASSWORD: [$(if [ -n "$REDIS_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
           echo "POLYGON_API_KEY: [$(if [ -n "$POLYGON_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_KEY: [$(if [ -n "$POLYGON_S3_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_SECRET: [$(if [ -n "$POLYGON_S3_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"

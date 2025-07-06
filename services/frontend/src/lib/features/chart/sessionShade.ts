@@ -228,10 +228,10 @@ export function createDetailedSessionHighlighter(): SessionHighlighter {
 				: typeof timestamp === 'string'
 					? timestamp
 					: new Date().setFullYear(
-							(timestamp as any).year,
-							(timestamp as any).month - 1,
-							(timestamp as any).day
-						)
+						(timestamp as any).year,
+						(timestamp as any).month - 1,
+						(timestamp as any).day
+					)
 		);
 
 		// Calculate time in minutes using UTC methods

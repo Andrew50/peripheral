@@ -284,6 +284,14 @@ func StartScheduler(conn *data.Conn) chan struct{} {
 		log.Printf("Error clearing job cache: %v", err)
 	}
 
+	// Ensure database is in a good state before starting the scheduler
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	
+	if err := marketdata.EnsureDBStateOnStartup(ctx, conn.DB); err != nil {
+		log.Fatalf("Database state verification failed: %v", err)
+	}
+
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)

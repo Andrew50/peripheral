@@ -8,5 +8,4 @@ RUN go mod download
 COPY . .
 RUN go build -o /usr/local/bin/jobctl ./cmd/jobctl
 ENV IN_CONTAINER=true
-ENV POLYGON_API_KEY="ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm"
 ENTRYPOINT ["air","-c",".air.toml"]
