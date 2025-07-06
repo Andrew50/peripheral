@@ -84,6 +84,16 @@ spec:
                 secretKeyRef:
                   name: polygon-secret
                   key: api-key
+            - name: POLYGON_S3_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: s3-key
+            - name: POLYGON_S3_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: polygon-secret
+                  key: s3-secret
             # Add Google OAuth credentials
             - name: GOOGLE_CLIENT_ID
               valueFrom:
