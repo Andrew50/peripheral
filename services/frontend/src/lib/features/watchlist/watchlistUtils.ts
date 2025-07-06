@@ -23,11 +23,9 @@ export function initializeVisibleWatchlists(
 	watchlistsArray: Watchlist[],
 	currentWatchlistId: number
 ) {
-	if (watchlistsArray && watchlistsArray.length > 0 && currentWatchlistId) {
-		const currentIds = get(visibleWatchlistIds);
-		if (currentIds.length === 0) {
-			visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map((w) => w.watchlistId));
-		}
+	if (watchlistsArray && watchlistsArray.length > 0) {
+		// Always set the first 3 watchlists as visible
+		visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map((w) => w.watchlistId));
 	}
 }
 // Helper function to update both stores when adding items

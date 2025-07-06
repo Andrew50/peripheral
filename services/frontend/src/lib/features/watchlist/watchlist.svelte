@@ -177,6 +177,11 @@
 	// Keep currentWatchlistId in sync with the global store
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
 
+	// Automatically select the first watchlist if none is selected
+	$: if ($watchlists && $watchlists.length > 0 && (!currentWatchlistId || isNaN(currentWatchlistId))) {
+		selectWatchlist(String($watchlists[0].watchlistId));
+	}
+
 	// Initialize visible watchlists when watchlists and currentWatchlistId are available
 	$: if (
 		$watchlists &&
