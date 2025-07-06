@@ -15,6 +15,8 @@ import (
 	"os"
 	"time"
 
+	"backend/internal/app/limits"
+
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/oauth2"
@@ -136,6 +138,12 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("error committing signup transaction: %v", err)
 	}
 	txClosed = true
+
+	// Allocate free plan credits for the new user (idempotent if called again)
+	if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+		// Propagate the error so signup fails clearly if free credits cannot be allocated
+		return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+	}
 
 	// Create modified login args with the email
 	loginArgs, err := json.Marshal(map[string]string{
@@ -356,6 +364,13 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 			log.Printf("ERROR: Failed to create Google user: %v", err)
 			return nil, fmt.Errorf("failed to create user: %v", err)
 		}
+
+		// Allocate free plan credits for the newly created Google user
+		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+			log.Printf("ERROR: Failed to allocate free credits for Google user %d: %v", userID, err)
+			return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+		}
+
 		log.Printf("Created new Google user with ID: %d", userID)
 	} else if authType == "password" {
 		// If this was a password user who is now using Google, update their account to link Google

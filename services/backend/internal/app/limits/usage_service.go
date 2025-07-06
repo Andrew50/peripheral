@@ -373,12 +373,19 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, planName string) erro
 			strategy_alerts_limit = $4
 		WHERE userId = $1`
 
-	_, err = conn.DB.Exec(ctx, updateQuery,
+	res, err := conn.DB.Exec(ctx, updateQuery,
 		userID, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
-
 	if err != nil {
 		return fmt.Errorf("error updating user credits: %v", err)
 	}
+
+	rows := res.RowsAffected()
+	if rows == 0 {
+		// This should never happen – it means we did not update the target row.
+		return fmt.Errorf("no rows updated when allocating credits (userID=%d, plan=%s)", userID, planName)
+	}
+
+	log.Printf("Allocated %d credits for user %d under plan '%s' (alerts:%d, strategyAlerts:%d)", creditsPerPeriod, userID, planName, alertsLimit, strategyAlertsLimit)
 
 	log.Printf("Updated credits for user %d to plan '%s': credits=%d, alerts=%d, strategy_alerts=%d",
 		userID, planName, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
