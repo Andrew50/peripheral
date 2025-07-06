@@ -125,18 +125,23 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 
 	// Verify webhook signature - try multiple possible secrets
 	var event stripe.Event
-	
+
 	// Try primary webhook secret
 	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 	if webhookSecret != "" {
 		event, err = webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), webhookSecret)
-		if err == nil {
-			// Successfully verified with primary secret
-		} else {
+		if err != nil {
 			log.Printf("Failed to verify with primary webhook secret: %v", err)
+			// Retry verification but ignore API version mismatch to accommodate newer Stripe API versions
+			event, err = webhook.ConstructEventWithOptions(payload, r.Header.Get("Stripe-Signature"), webhookSecret, webhook.ConstructEventOptions{
+				IgnoreAPIVersionMismatch: true,
+			})
+			if err == nil {
+				log.Printf("Successfully verified webhook signature by ignoring API version mismatch")
+			}
 		}
 	}
-	
+
 	if err != nil {
 		log.Printf("Error verifying Stripe webhook signature: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -144,6 +149,7 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	}
 
 	// Handle the event
+	log.Printf("Processing Stripe webhook event: %s", event.Type)
 	switch event.Type {
 	case "checkout.session.completed":
 		err = handleStripeCheckoutSessionCompleted(conn, event)
@@ -217,7 +223,7 @@ func handleCreditPurchase(conn *data.Conn, session stripe.CheckoutSession, userI
 	} else {
 		// Fallback: try to get credit amount from price ID
 		var priceID string
-		if len(session.LineItems.Data) > 0 {
+		if session.LineItems != nil && len(session.LineItems.Data) > 0 {
 			priceID = session.LineItems.Data[0].Price.ID
 		} else {
 			// If line items aren't expanded, fetch the session with expanded line items
@@ -227,7 +233,7 @@ func handleCreditPurchase(conn *data.Conn, session stripe.CheckoutSession, userI
 			if err != nil {
 				return fmt.Errorf("could not fetch expanded checkout session: %v", err)
 			}
-			if len(expandedSession.LineItems.Data) > 0 {
+			if expandedSession.LineItems != nil && len(expandedSession.LineItems.Data) > 0 {
 				priceID = expandedSession.LineItems.Data[0].Price.ID
 			}
 		}
@@ -255,7 +261,7 @@ func handleCreditPurchase(conn *data.Conn, session stripe.CheckoutSession, userI
 func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession, userID int) error {
 	// Get the price ID from the session line items to determine the plan
 	var priceID string
-	if len(session.LineItems.Data) > 0 {
+	if session.LineItems != nil && len(session.LineItems.Data) > 0 {
 		priceID = session.LineItems.Data[0].Price.ID
 	} else {
 		// If line items aren't expanded, we need to fetch the checkout session with expanded line items
@@ -264,10 +270,10 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 		expandedSession, err := checkoutsession.Get(session.ID, sessionParams)
 		if err != nil {
 			log.Printf("Warning: Could not fetch expanded checkout session %s: %v", session.ID, err)
-		} else if len(expandedSession.LineItems.Data) > 0 {
+		} else if expandedSession.LineItems != nil && len(expandedSession.LineItems.Data) > 0 {
 			priceID = expandedSession.LineItems.Data[0].Price.ID
 		}
-		
+
 		// If still no price ID, try to get it from the subscription
 		if priceID == "" && session.Subscription != nil {
 			subscriptionID := session.Subscription.ID
@@ -284,36 +290,47 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 	// Get plan name from price ID
 	planName, err := getPlanNameFromPriceID(conn, priceID)
 	if err != nil {
-		return fmt.Errorf("error getting plan name from price ID: %v", err)
+		log.Printf("Warning: plan not found for price ID %s: %v; using fallback plan name 'Unknown'", priceID, err)
+		planName = "Unknown" // Fallback so we can still mark the subscription active
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Update user with Stripe customer ID, subscription info, and plan name
+	// Safely grab customer and subscription IDs (objects may be nil)
+	var customerID string
+	if session.Customer != nil {
+		customerID = session.Customer.ID
+	}
+
+	var subscriptionID string
+	if session.Subscription != nil {
+		subscriptionID = session.Subscription.ID
+	}
+
+	// Update user with Stripe IDs and plan info. Use COALESCE-like updates where IDs may be blank.
 	_, err = conn.DB.Exec(ctx, `
 		UPDATE users 
-		SET stripe_customer_id = $1, 
-		    stripe_subscription_id = $2, 
+		SET stripe_customer_id = COALESCE(NULLIF($1, ''), stripe_customer_id),
+		    stripe_subscription_id = COALESCE(NULLIF($2, ''), stripe_subscription_id),
 		    subscription_status = 'active',
-		    subscription_plan = $4,
-		    stripe_price_id = $5,
+		    subscription_plan = $3,
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE userId = $3`,
-		session.Customer.ID,
-		session.Subscription.ID,
-		userID,
+		WHERE userId = $4`,
+		customerID,
+		subscriptionID,
 		planName,
-		priceID)
-
+		userID)
 	if err != nil {
 		return fmt.Errorf("error updating user subscription: %v", err)
 	}
 
-	// Update user credits based on the new plan
-	if err := limits.UpdateUserCreditsForPlan(conn, userID, planName); err != nil {
-		log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, planName, err)
-		// Don't fail the webhook since the subscription was successfully created
+	// Update user credits based on the new plan – only if we have a recognised plan
+	if planName != "Unknown" {
+		if err := limits.UpdateUserCreditsForPlan(conn, userID, planName); err != nil {
+			log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, planName, err)
+			// Don't fail the webhook since the subscription was successfully created
+		}
 	}
 
 	log.Printf("Successfully activated %s subscription for user %d (price ID: %s)", planName, userID, priceID)
@@ -340,12 +357,16 @@ func handleStripeSubscriptionDeleted(conn *data.Conn, event stripe.Event) error 
 		return fmt.Errorf("error finding user for canceled subscription: %v", err)
 	}
 
+	// Update to canceled status and clear subscription details
 	_, err = conn.DB.Exec(ctx, `
 		UPDATE users 
 		SET subscription_status = 'canceled',
+		    stripe_subscription_id = NULL,
+		    subscription_plan = NULL,
+		    current_period_end = NULL,
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE stripe_subscription_id = $1`,
-		subscription.ID)
+		WHERE userId = $1`,
+		userID)
 
 	if err != nil {
 		return fmt.Errorf("error updating user subscription status: %v", err)
@@ -369,7 +390,14 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Determine the correct status based on Stripe subscription state
 	status := string(subscription.Status)
+	if subscription.CancelAtPeriodEnd {
+		// If subscription is set to cancel at period end, mark it as canceling
+		// even though Stripe still shows status as "active"
+		log.Printf("Subscription %s has CancelAtPeriodEnd=true, overriding status from '%s' to 'canceling'", subscription.ID, status)
+		status = "canceling"
+	}
 	periodEnd := time.Unix(subscription.CurrentPeriodEnd, 0)
 
 	// Get the price ID from the subscription to determine plan
@@ -380,8 +408,8 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		var err error
 		planName, err = getPlanNameFromPriceID(conn, priceID)
 		if err != nil {
-			log.Printf("Warning: Error getting plan name from price ID %s: %v", priceID, err)
-			planName = "" // Clear planName so we use fallback update
+			log.Printf("Warning: plan not found for price ID %s: %v; using fallback plan name 'Unknown'", priceID, err)
+			planName = "Unknown"
 		}
 	}
 
@@ -402,11 +430,10 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 			UPDATE users 
 			SET subscription_status = $1,
 			    current_period_end = $2,
-			    subscription_plan = $4,
-			    stripe_price_id = $5,
+			    subscription_plan = $3,
 			    updated_at = CURRENT_TIMESTAMP
-			WHERE stripe_subscription_id = $3`,
-			status, periodEnd, subscription.ID, planName, priceID)
+			WHERE stripe_subscription_id = $4`,
+			status, periodEnd, planName, subscription.ID)
 
 		if err != nil {
 			return fmt.Errorf("error updating subscription: %v", err)
@@ -414,10 +441,12 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 
 		// Update user credits based on the plan and status
 		var targetPlan string
-		if status == "active" {
+		if status == "active" || status == "canceling" {
+			// Keep current plan credits for both active and canceling subscriptions
+			// (canceling subscriptions should retain access until period end)
 			targetPlan = planName
 		} else {
-			// For inactive statuses, reset to Free plan credits
+			// For truly inactive statuses (past_due, unpaid, etc.), reset to Free plan credits
 			targetPlan = "Free"
 		}
 
@@ -440,8 +469,8 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 			return fmt.Errorf("error updating subscription: %v", err)
 		}
 
-		// If subscription is not active, reset to Free plan
-		if status != "active" {
+		// If subscription is not active or canceling, reset to Free plan
+		if status != "active" && status != "canceling" {
 			if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 				log.Printf("Warning: Failed to reset user credits for user %d to Free plan: %v", userID, err)
 			}
@@ -508,9 +537,14 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		priceID = stripeSubscription.Items.Data[0].Price.ID
 		planName, err = getPlanNameFromPriceID(conn, priceID)
 		if err != nil {
-			log.Printf("Warning: Error getting plan name from price ID %s: %v", priceID, err)
-			planName = "" // Will use fallback update
+			log.Printf("Warning: plan not found for price ID %s: %v; using fallback plan name 'Unknown'", priceID, err)
+			planName = "Unknown"
 		}
+	}
+
+	// Ensure we have plan information - if not recognised just store 'Unknown' but continue
+	if planName == "" {
+		planName = "Unknown"
 	}
 
 	// Get user ID for credit updates
@@ -524,22 +558,16 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		return fmt.Errorf("error finding user for subscription: %v", err)
 	}
 
-	// Ensure we have plan information - return error if not found
-	if planName == "" {
-		return fmt.Errorf("could not determine plan name for subscription %s", invoice.Subscription.ID)
-	}
-
 	// Update subscription with current plan information
 	periodEnd := time.Unix(invoice.PeriodEnd, 0)
 	_, err = conn.DB.Exec(ctx, `
 		UPDATE users 
 		SET subscription_status = 'active',
 		    current_period_end = $2,
-		    subscription_plan = $4,
-		    stripe_price_id = $5,
+		    subscription_plan = $3,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID, periodEnd, userID, planName, priceID)
+		invoice.Subscription.ID, periodEnd, planName)
 
 	if err != nil {
 		return fmt.Errorf("error updating subscription with plan info: %v", err)
@@ -560,6 +588,10 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 func getStripeEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	// Provide a sensible default when working locally in test mode
+	if key == "FRONTEND_URL" && pricing.GetStripeEnvironment() == "test" {
+		return "http://localhost:5173"
 	}
 	return defaultValue
 }

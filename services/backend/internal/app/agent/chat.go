@@ -86,22 +86,23 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 
 	// Check if user has usage allowance for queries (skip for user ID 0 which is public access)
-		allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
-		if err != nil {
-			return nil, fmt.Errorf("error checking usage limits: %w", err)
-		}
-		if !allowed {
-			return QueryResponse{
-				ContentChunks: []ContentChunk{{
-					Type: "text",
-					Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
-				}},
-				Suggestions:    []string{"View Pricing Plans", "Add Credits"},
-				ConversationID: query.ConversationID,
-				MessageID:      "", // Will be generated
-				Timestamp:      time.Now(),
-			}, nil
-		}
+	allowed, _, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error checking usage limits: %w", err)
+	}
+	if !allowed {
+		return QueryResponse{
+			ContentChunks: []ContentChunk{{
+				Type:    "text",
+				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+			}},
+			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
+			ConversationID: query.ConversationID,
+			MessageID:      "", // Will be generated
+			Timestamp:      time.Now(),
+		}, nil
+	}
+
 	// Save pending message using the provided conversation ID
 	conversationID, messageID, err := SavePendingMessageToConversation(ctx, conn, userID, query.ConversationID, query.Query, query.Context)
 	if err != nil {
@@ -114,15 +115,30 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
 
-	// Set up cleanup function to remove pending message on error or cancellation
+	// ----- Acquire per-user chat lock ------------------------------------
+	lockKey := fmt.Sprintf("chat_lock:%d", userID)
+	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 15*time.Minute).Result()
+	if lockErr != nil {
+		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
+	}
+	if !locked {
+		// User already has an active chat
+		return QueryResponse{
+			ContentChunks: []ContentChunk{{
+				Type:    "text",
+				Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
+			}},
+			ConversationID: conversationID,
+			MessageID:      messageID,
+			Timestamp:      time.Now(),
+		}, nil
+	}
+	// Ensure lock is released
 	defer func() {
-		if ctx.Err() != nil {
-			// Context was cancelled, clean up the pending message
-			if cleanupErr := DeletePendingMessageInConversation(context.Background(), conn, userID, conversationID, query.Query); cleanupErr != nil {
-				fmt.Printf("Warning: failed to cleanup pending message after cancellation: %v\n", cleanupErr)
-			}
-		}
+		_ = conn.Cache.Del(context.Background(), lockKey).Err()
 	}()
+
+	// no credit deducted yet – will deduct on success
 
 	var executor *Executor
 	var activeResults []ExecuteResult
@@ -200,7 +216,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 
-			// Record usage for successful query (skip for user ID 0 which is public access)
+			// Record usage and deduct 1 credit now that chat completed successfully
 			metadata := map[string]interface{}{
 				"query":           query.Query,
 				"conversation_id": conversationID,
@@ -209,7 +225,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				"result_type":     "direct_answer",
 			}
 			if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
-				// Log error but don't fail the request
 				fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
 			}
 
@@ -333,19 +348,18 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					}, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
 
-				// Record usage for successful query (skip for user ID 0 which is public access)
-					metadata := map[string]interface{}{
-						"query":           query.Query,
-						"conversation_id": conversationID,
-						"message_id":      messageID,
-						"token_count":     totalTokenCounts.TotalTokenCount,
-						"result_type":     "final_response",
-						"function_count":  len(allResults),
-					}
-					if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
-						// Log error but don't fail the request
-						fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
-					}
+				// Record usage and deduct 1 credit now that chat completed successfully
+				usageMetadata := map[string]interface{}{
+					"query":           query.Query,
+					"conversation_id": conversationID,
+					"message_id":      messageID,
+					"token_count":     totalTokenCounts.TotalTokenCount,
+					"result_type":     "final_response",
+					"function_count":  len(allResults),
+				}
+				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, usageMetadata); err != nil {
+					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+				}
 
 				return QueryResponse{
 					ContentChunks:  processedChunks,

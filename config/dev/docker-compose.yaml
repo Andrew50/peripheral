@@ -61,6 +61,9 @@ services:
         limits:
           memory: 8g
           cpus: '4.0'
+    # Ensure Postgres receives a fast-shutdown signal and has ample time to finish
+    stop_signal: SIGINT # Fast shutdown -> abort current transactions, flush to disk
+    stop_grace_period: 1m # Wait 60 s before SIGKILL so Postgres can cleanly exit
   frontend:
     build:
       context: ../../services/frontend
@@ -72,10 +75,13 @@ services:
     volumes:
       - ../../services/frontend:/app
       - /app/node_modules
+    env_file:
+      - .env
     environment:
       - WATCHPACK_POLLING=true #enable polling
       - BACKEND_URL=http://backend:5058
       - VITE_ENVIRONMENT=development
+      - VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY}
     ports:
       - "5173:5173"
     restart: unless-stopped

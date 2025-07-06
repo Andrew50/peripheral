@@ -2,11 +2,12 @@ package server
 
 import (
 	"backend/internal/data"
-	"backend/internal/services"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
+	"backend/internal/services/subscriptions"
+	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
 	"log"
@@ -23,7 +24,7 @@ var (
 	polygonInitMutex   sync.Mutex
 	alertsInitialized  bool
 	alertsInitMutex    sync.Mutex
-	workerMonitor      *services.WorkerMonitor
+	workerMonitor      *worker_monitor.WorkerMonitor
 	workerMonitorMutex sync.Mutex
 )
 
@@ -150,6 +151,11 @@ func updateSectorsJob(conn *data.Conn) error {
 	return err                                                  // Return the error, if any
 }
 
+// Wrapper for yearly subscription credit update
+func updateYearlySubscriptionCreditsJob(conn *data.Conn) error {
+	return subscriptions.UpdateYearlySubscriptionCredits(conn)
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
@@ -217,7 +223,13 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: false, // Monitor should run 24/7
 		},
-
+		{
+			Name:           "UpdateYearlySubscriptionCredits",
+			Function:       updateYearlySubscriptionCreditsJob,
+			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Daily at 4:05 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+		},
 	}
 )
 
@@ -284,13 +296,8 @@ func StartScheduler(conn *data.Conn) chan struct{} {
 		log.Printf("Error clearing job cache: %v", err)
 	}
 
-	// Ensure database is in a good state before starting the scheduler
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-	
-	if err := marketdata.EnsureDBStateOnStartup(ctx, conn.DB); err != nil {
-		log.Fatalf("Database state verification failed: %v", err)
-	}
+	// NOTE: Removed early database state verification to avoid long blocking index builds on startup.
+	// The state check is now executed after the OHLCV update job completes.
 
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
@@ -510,6 +517,8 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Job completed successfully
 	log.Printf("✅ Job %s completed successfully in %v", jobName, duration)
 
+	// Post-processing placeholder for OHLCV job (previous DB state verification moved into per-timeframe cleanup).
+
 	// Update completion time
 	completionTime := time.Now()
 	job.ExecutionMutex.Lock()
@@ -607,7 +616,7 @@ func startWorkerMonitor(conn *data.Conn) error {
 	defer workerMonitorMutex.Unlock()
 
 	if workerMonitor == nil {
-		workerMonitor = services.NewWorkerMonitor(conn)
+		workerMonitor = worker_monitor.NewWorkerMonitor(conn)
 		workerMonitor.Start()
 		log.Println("✅ Worker monitor service started")
 	} else {
