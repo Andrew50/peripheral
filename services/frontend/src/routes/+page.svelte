@@ -1,24 +1,40 @@
 <script lang="ts">
-	import Header from '$lib/components/header.svelte';
-	import '$lib/styles/global.css';
-	import '$lib/styles/landing.css';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { startPricingPreload } from '$lib/utils/pricing-loader';
 
 	if (browser) {
-		document.title = 'Peripheral - Professional Trading Platform';
+		document.title = 'Peripheral';
 	}
 
 	let isLoaded = false;
+	let isHeaderVisible = true;
+	let isHeaderTransparent = true;
+	let prevScrollY = 0;
+
+	function handleScroll() {
+		const currentY = window.scrollY;
+		// Header visibility: show if at top, within 20px, or scrolling up
+		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
+			isHeaderVisible = true;
+		} else {
+			isHeaderVisible = false;
+		}
+		// Header transparency: transparent if < 30px from top
+		isHeaderTransparent = currentY < 30;
+		prevScrollY = currentY;
+	}
 
 	onMount(() => {
 		if (browser) {
 			// Start preloading pricing configuration early
-			startPricingPreload(); //this checks if its already been loaded so wont double load
-
-			// Smooth scroll effect and animations
+			startPricingPreload();
+			if (window.scrollY > 30) {
+				isHeaderVisible = false;
+				isHeaderTransparent = false;
+			} 
+			// Only set loaded state for animation
 			isLoaded = true;
 			document.body.classList.add('loaded');
 		}
@@ -40,102 +56,69 @@
 		goto('/app');
 	}
 
-	// Feature data
-	const features = [
+	function handleNavClick(event: Event) {
+		// Prevent pill click when clicking navigation buttons
+		event.stopPropagation();
+	}
+
+	// Subsections data
+	const subsections = [
 		{
-			icon: '📊',
-			title: 'Real-time Charting',
-			description:
-				'Sub-minute charting for all US stocks and ETFs with professional-grade analysis tools.',
-			highlights: ['Real-time data', 'Sub-minute precision', 'All US markets', 'Professional tools']
+			title: 'Transform ideas into edge in minutes',
+			description: 'From concept to execution, our platform turns your trading insights into profitable strategies faster than ever before.',
+			content: 'Whether you have a hunch about market patterns or a complex algorithmic strategy, Peripheral provides the tools to test, refine, and deploy your ideas with unprecedented speed and precision.'
 		},
 		{
-			icon: '👁️',
-			title: 'Smart Watchlists',
-			description:
-				'Create, manage, and monitor multiple watchlists with advanced screening and alert capabilities.',
-			highlights: ['Unlimited watchlists', 'Advanced screening', 'Bulk operations', 'Custom alerts']
+			title: 'Never miss a trade.',
+			description: 'Stay ahead of the market with instant access to live data, news, and analytics across all major exchanges.',
+			content: 'Our advanced data infrastructure delivers sub-minute precision for all US stocks and ETFs, combined with intelligent filtering and alerting systems that keep you informed of what matters most.'
 		},
 		{
-			icon: '🔔',
-			title: 'Intelligent Alerts',
-			description:
-				'Price, news, and strategy alerts with importance thresholds across all market instruments.',
-			highlights: ['Price alerts', 'News monitoring', 'Strategy triggers', 'Market-wide coverage']
-		},
-		{
-			icon: '📈',
-			title: 'Strategy Backtesting',
-			description:
-				'Test any strategy on any set of stocks with historical data going back to 2008.',
-			highlights: [
-				'Historical data since 2008',
-				'1-minute+ timeframes',
-				'Custom strategies',
-				'Performance metrics'
-			]
-		},
-		{
-			icon: '🔍',
-			title: 'Market Screening',
-			description:
-				'Screen all stocks in real-time using advanced filters and custom strategy conditions.',
-			highlights: ['Real-time screening', 'Custom filters', 'Strategy-based', 'Sortable results']
-		},
-		{
-			icon: '📰',
-			title: 'News Intelligence',
-			description:
-				'Access real-time and historical news with advanced filtering for stocks, ETFs, and markets.',
-			highlights: ['Real-time news', 'Historical archive', 'Smart filtering', 'Market context']
+			title: 'Built for serious traders',
+			description: 'Professional-grade tools designed for both individual traders and institutional-level strategies.',
+			content: 'From backtesting with historical data since 2008 to real-time screening and portfolio management, every feature is crafted to meet the demanding needs of serious market participants.'
 		}
 	];
 </script>
 
-<main class="landing-container">
-	<!-- Background Effects -->
-	<div class="background-animation">
-		<div class="gradient-orb orb-1"></div>
-		<div class="gradient-orb orb-2"></div>
-		<div class="gradient-orb orb-3"></div>
-		<div class="static-gradient"></div>
-	</div>
+<!-- Window scroll listener -->
+<svelte:window on:scroll={handleScroll} />
 
-	<!-- Navigation Header -->
-	<header class="landing-header">
-		<div class="header-content">
-			<div class="logo-section">
-				<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
-			</div>
-			<nav class="navigation">
-				<button class="nav-button secondary" on:click={navigateToLogin}>Login</button>
-				<button class="nav-button secondary" on:click={navigateToPricing}>Pricing</button>
-				<button class="nav-button primary" on:click={navigateToSignup}>Get Started</button>
-			</nav>
+<!-- Morphing pill header -->
+<header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
+	<nav class="header-content">
+		<div class="logo-section">
+			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<p class="logo-text">Peripheral</p>
 		</div>
-	</header>
+		<div class="navigation">
+			<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToPricing(); }}>Pricing</button>
+			<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToLogin(); }}>Login</button>
+			<button class="nav-button primary" on:click={(e) => { handleNavClick(e); navigateToSignup(); }}>Sign up</button>
+		</div>
+	</nav>
+</header>
 
+<main class="landing-container">
 	<!-- Hero Section -->
 	<section class="hero-section" class:loaded={isLoaded}>
 		<div class="hero-content">
-			<div class="hero-badge">PROFESSIONAL TRADING PLATFORM</div>
 			<h1 class="hero-title">
 				<span class="gradient-text">Peripheral</span>
 			</h1>
 			<p class="hero-subtitle">
-				The complete trading platform for serious traders.<br />
-				Real-time data, advanced analytics, and intelligent automation.
+				Peripheral is the terminal to envision and execute your trading ideas.<br />
 			</p>
 			<div class="hero-actions">
 				<button class="cta-button primary" on:click={navigateToSignup}>
 					Start Trading
 					<svg class="arrow-icon" viewBox="0 0 24 24" fill="none">
 						<path
-							d="M5 12H19M19 12L12 5M19 12L12 19"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
+								d="M5 12H19M19 12L12 5M19 12L12 19"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
 						/>
 					</svg>
 				</button>
@@ -144,118 +127,121 @@
 		</div>
 	</section>
 
-	<!-- Features Section -->
-	<section class="features-section">
-		<div class="features-content">
-			<div class="section-header">
-				<h2 class="section-title">Powerful Trading Features</h2>
-				<p class="section-subtitle">Everything you need to trade with confidence and precision</p>
-			</div>
-
-			<div class="features-grid">
-				{#each features as feature}
-					<div class="feature-card">
-						<div class="feature-icon">{feature.icon}</div>
-						<h3 class="feature-title">{feature.title}</h3>
-						<p class="feature-description">{feature.description}</p>
-						<ul class="feature-highlights">
-							{#each feature.highlights as highlight}
-								<li>{highlight}</li>
-							{/each}
-						</ul>
+	<!-- Subsections -->
+	<section class="subsections-section">
+		<div class="subsections-content">
+			{#each subsections as subsection, index}
+				<div class="subsection" class:reverse={index % 2 === 1}>
+					<div class="subsection-text">
+						<h2 class="subsection-title">{subsection.title}</h2>
+						<p class="subsection-description">{subsection.description}</p>
+						<p class="subsection-content">{subsection.content}</p>
 					</div>
-				{/each}
-			</div>
+					<div class="subsection-visual">
+						<div class="visual-placeholder">
+							<div class="visual-icon">
+								{#if index === 0}
+									⚡
+								{:else if index === 1}
+									📊
+								{:else}
+									🎯
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
+			{/each}
 		</div>
 	</section>
 
-	<!-- Call-to-Action Section -->
-	<section class="cta-section">
-		<div class="cta-content">
-			<h2 class="cta-title">Ready to elevate your trading?</h2>
-			<p class="cta-subtitle">Join the next generation of professional traders</p>
-			<div class="cta-actions">
-				<button class="cta-button primary large" on:click={navigateToSignup}>
-					Get Started Free
-				</button>
-				<button class="cta-button outline large" on:click={navigateToPricing}>
-					View Pricing
-				</button>
-			</div>
-		</div>
-	</section>
 
 	<!-- Footer -->
 	<footer class="landing-footer">
 		<div class="footer-content">
-			<div class="footer-section">
-				<img src="/atlantis_logo_transparent.png" alt="Peripheral" class="footer-logo" />
-				<p class="footer-description">Professional trading platform for serious traders</p>
+			<div class="footer-section footer-left"> 
+				<p class="footer-description">The final trading terminal.</p>
 			</div>
-			<div class="footer-section">
-				<h4 class="footer-title">Platform</h4>
-				<ul class="footer-links">
-					<li><button on:click={navigateToApp}>Trading App</button></li>
-					<li><button on:click={navigateToPricing}>Pricing</button></li>
-				</ul>
-			</div>
-			<div class="footer-section">
-				<h4 class="footer-title">Connect</h4>
-				<ul class="footer-links">
-					<li>
-						<a
-							href="https://twitter.com/peripheralio"
-							target="_blank"
-							rel="noopener noreferrer"
-							class="social-link">Twitter</a
-						>
-					</li>
-					<li>
-						<a
-							href="https://discord.gg/peripheral"
-							target="_blank"
-							rel="noopener noreferrer"
-							class="social-link">Discord</a
-						>
-					</li>
-					<li>
-						<a href="mailto:info@peripheral.io" class="social-link">Email</a>
-					</li>
-				</ul>
-			</div>
-			<div class="footer-section">
-				<h4 class="footer-title">Account</h4>
-				<ul class="footer-links">
-					<li><button on:click={navigateToLogin}>Login</button></li>
-					<li><button on:click={navigateToSignup}>Sign Up</button></li>
-				</ul>
+			<div class="footer-sections-right">
+				<div class="footer-section">
+					<h4 class="footer-title">Platform</h4>
+					<ul class="footer-links">
+						<li><button on:click={navigateToPricing}>Pricing</button></li>
+						<li><button on:click={navigateToApp}>Dashboard</button></li>
+					</ul>
+				</div>
+				<div class="footer-section">
+					<h4 class="footer-title">Account</h4>
+					<ul class="footer-links">
+						<li><button on:click={navigateToLogin}>Login</button></li>
+						<li><button on:click={navigateToSignup}>Sign Up</button></li>
+					</ul>
+				</div>
+				<div class="footer-section">
+					<h4 class="footer-title">Connect</h4>
+					<div class="footer-social-row">
+						<a href="https://twitter.com/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="X (Twitter)">
+							<img src="/x-logo-white.png" alt="X (Twitter)" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
+						</a>
+						<a href="https://discord.gg/peripheral" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="Discord">
+							<img src="/Discord-Symbol-White.png" alt="Discord" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
+						</a>
+						<a href="https://www.linkedin.com/company/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="LinkedIn">
+							<img src="/InBug-White.png" alt="LinkedIn" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
+						</a>
+
+					</div>
+				</div>
 			</div>
 		</div>
 		<div class="footer-bottom">
-			<p>2025 Atlantis Labs, Inc</p>
+			<p>Atlantis Labs, Inc. 2025</p>
 		</div>
+		<div class="footer-brand">Peripheral</div>
 	</footer>
 </main>
 
 <style>
+	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+	
+	/* Ensure fonts load properly */
+	:global(html) {
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
+	}
+
+	:global(body) {
+		background: var(--color-light);
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	}
+
+	:root {
+		--color-dark: #0B2E33;
+		--color-primary: #4F7C82;
+		--color-accent: #93B1B5;
+		--color-light: #B8E3E9;
+		--pill-size: 40px;
+		--header-h: 48px;
+		--header-top: 16px;
+	}
 
 	.landing-container {
 		position: relative;
 		width: 100%;
-		min-height: 100vh;
-		background: #0a0b0d;
-		color: #f9fafb;
+		background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
+		color: var(--color-dark);
 		font-family:
-			'Inter',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			Roboto,
-			sans-serif;
-		overflow-x: hidden;
+				'Geist',
+				'Inter',
+				-apple-system,
+				BlinkMacSystemFont,
+				'Segoe UI',
+				Roboto,
+				sans-serif;
 		display: flex;
 		flex-direction: column;
+		padding-top: var(--header-h);
 	}
 
 	/* Background Effects */
@@ -277,32 +263,6 @@
 		animation: float 20s ease-in-out infinite;
 	}
 
-	.orb-1 {
-		width: 400px;
-		height: 400px;
-		background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%);
-		top: -200px;
-		left: -200px;
-		animation-delay: 0s;
-	}
-
-	.orb-2 {
-		width: 600px;
-		height: 600px;
-		background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
-		top: 40%;
-		right: -300px;
-		animation-delay: -10s;
-	}
-
-	.orb-3 {
-		width: 500px;
-		height: 500px;
-		background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
-		bottom: -250px;
-		left: 20%;
-		animation-delay: -5s;
-	}
 
 	.static-gradient {
 		position: absolute;
@@ -310,24 +270,24 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: linear-gradient(135deg, #0a0b0d 0%, #111827 50%, #0a0b0d 100%);
+		background: var(--color-light);
 		z-index: -1;
 	}
 
 	@keyframes float {
-		0%,
-		100% {
-			transform: translate(0, 0) scale(1);
-		}
-		25% {
-			transform: translate(30px, -30px) scale(1.1);
-		}
-		50% {
-			transform: translate(-20px, 20px) scale(0.9);
-		}
-		75% {
-			transform: translate(20px, 10px) scale(1.05);
-		}
+			0%,
+			100% {
+					transform: translate(0, 0) scale(1);
+			}
+			25% {
+					transform: translate(30px, -30px) scale(1.1);
+			}
+			50% {
+					transform: translate(-20px, 20px) scale(0.9);
+			}
+			75% {
+					transform: translate(20px, 10px) scale(1.05);
+			}
 	}
 
 	/* Navigation Header */
@@ -337,71 +297,142 @@
 		left: 0;
 		right: 0;
 		z-index: 1000;
-		background: rgba(10, 11, 13, 0.8);
-		backdrop-filter: blur(20px);
+		background: var(--color-dark);
 		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		transition: all 0.3s ease;
 	}
 
 	.header-content {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: 1rem 2rem;
+		padding: 0 2.5rem;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		width: 100%;
+		height: 100%;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		position: relative;
 	}
 
 	.logo-section {
 		display: flex;
 		align-items: center;
+		gap: 0.5rem;
 	}
 
 	.logo-image {
-		height: 50px;
+		height: 32px;
 		width: auto;
 		object-fit: contain;
-		max-width: 200px;
+		max-width: 140px;
+	}
+
+	.logo-text {
+		color: var(--color-dark);
+		font-size: 1.25rem;
+		font-weight: 700;
+		margin: 0;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		letter-spacing: -0.02em;
 	}
 
 	.navigation {
 		display: flex;
-		gap: 1rem;
+		gap: 0.75rem;
 		align-items: center;
 	}
 
 	.nav-button {
-		padding: 0.75rem 1.5rem;
+		padding: 0.35rem 0.9rem;
 		border: none;
-		border-radius: 8px;
-		font-size: 0.9rem;
+		border-radius: 20px;
+		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.3s ease;
 		text-decoration: none;
 		background: transparent;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		white-space: nowrap;
 	}
 
 	.nav-button.secondary {
-		color: #9ca3af;
-		border: 1px solid transparent;
+		background: #00000000;
+		color: #000000;
+		border: 1px solid var(--color-primary);
 	}
 
 	.nav-button.secondary:hover {
-		color: #ffffff;
-		background: rgba(255, 255, 255, 0.1);
+		background: var(--color-primary);
+		color: var(--color-light);
 	}
 
 	.nav-button.primary {
-		background: #3b82f6;
-		color: #ffffff;
-		border: 1px solid #3b82f6;
+		background: rgb(0, 0, 0);
+		color: #f5f9ff;
 	}
 
 	.nav-button.primary:hover {
-		background: #2563eb;
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+		background: var(--color-accent);
+		color: var(--color-dark);
+		border: 1px solid var(--color-accent);
+	}
+
+	/* Pill icon (hidden by default) */
+	.pill-icon {
+		display: none;
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		color: var(--color-dark);
+		z-index: 10;
+	}
+
+	/* Pill state styles */
+	#site-header {
+		position: fixed;
+		top: var(--header-top);
+		left: 50%;
+		transform: translateX(-50%);
+		width: 90vw;
+		max-width: 1400px;
+		height: var(--header-h);
+		background: #f5f9ff;
+		backdrop-filter: blur(16px);
+		border: 1px solid rgba(0,0,0,.08);
+		border-radius: 999px;
+		transition: all .4s cubic-bezier(.4,0,.2,1);
+		z-index: 1050;
+		box-shadow: 0 4px 20px rgba(0,0,0,.1);
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		cursor: pointer;
+	}
+
+	#site-header.pill {
+		width: var(--pill-size);
+		height: var(--pill-size);
+		border-radius: 50%;
+		top: var(--header-top);
+		transform: translateX(-50%);
+		cursor: pointer;
+	}
+
+	#site-header.pill .header-content {
+		padding: 0;
+		justify-content: center;
+	}
+
+	#site-header.pill .logo-section,
+	#site-header.pill .navigation {
+		display: none;
+	}
+
+	#site-header.pill .pill-icon {
+		display: block;
+	}
+
+	#site-header.pill:hover {
+		background: rgba(184, 227, 233, 0.95);
+		transform: translateX(-50%) scale(1.05);
 	}
 
 	/* Hero Section */
@@ -454,12 +485,12 @@
 
 	.gradient-text {
 		background: linear-gradient(
-			135deg,
-			#3b82f6 0%,
-			#6366f1 25%,
-			#8b5cf6 50%,
-			#ec4899 75%,
-			#f59e0b 100%
+				135deg,
+				#3b82f6 0%,
+				#6366f1 25%,
+				#8b5cf6 50%,
+				#ec4899 75%,
+				#f59e0b 100%
 		);
 		background-size: 200% 200%;
 		-webkit-background-clip: text;
@@ -469,24 +500,24 @@
 	}
 
 	@keyframes gradient-shift {
-		0%,
-		100% {
-			background-position: 0% 50%;
-		}
-		25% {
-			background-position: 100% 50%;
-		}
-		50% {
-			background-position: 100% 100%;
-		}
-		75% {
-			background-position: 0% 100%;
-		}
+			0%,
+			100% {
+					background-position: 0% 50%;
+			}
+			25% {
+					background-position: 100% 50%;
+			}
+			50% {
+					background-position: 100% 100%;
+			}
+			75% {
+					background-position: 0% 100%;
+			}
 	}
 
 	.hero-subtitle {
 		font-size: clamp(1.1rem, 3vw, 1.5rem);
-		color: #9ca3af;
+		color: #f5f9ff;
 		margin-bottom: 3rem;
 		line-height: 1.6;
 		font-weight: 400;
@@ -517,7 +548,7 @@
 
 	.cta-button.primary {
 		background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-		color: #ffffff;
+		color: #f5f9ff;
 		border: 1px solid transparent;
 	}
 
@@ -528,7 +559,7 @@
 	}
 
 	.cta-button.secondary {
-		color: #ffffff;
+		color: #f5f9ff;
 		border: 1px solid rgba(255, 255, 255, 0.3);
 		background: rgba(255, 255, 255, 0.05);
 	}
@@ -559,8 +590,8 @@
 		height: 20px;
 	}
 
-	/* Features Section */
-	.features-section {
+	/* Subsections Section */
+	.subsections-section {
 		position: relative;
 		z-index: 10;
 		padding: 6rem 2rem;
@@ -569,92 +600,85 @@
 		flex-shrink: 0;
 	}
 
-	.features-content {
+	.subsections-content {
 		max-width: 1200px;
 		margin: 0 auto;
+		padding: 0 2rem;
 	}
 
-	.section-header {
-		text-align: center;
-		margin-bottom: 4rem;
+	.subsection {
+		display: flex;
+		align-items: center;
+		gap: 4rem;
+		margin-bottom: 6rem;
+		padding: 3rem 0;
 	}
 
-	.section-title {
-		font-size: clamp(2.5rem, 6vw, 3.5rem);
+	.subsection:last-child {
+		margin-bottom: 0;
+	}
+
+	.subsection.reverse {
+		flex-direction: row-reverse;
+	}
+
+	.subsection-text {
+		flex: 1;
+		max-width: 500px;
+	}
+
+	.subsection-title {
+		font-size: clamp(2rem, 5vw, 2.5rem);
 		font-weight: 700;
-		margin: 0 0 1rem 0;
-		color: #ffffff;
+		margin: 0 0 1.5rem 0;
+		color: var(--color-dark);
+		line-height: 1.2;
 	}
 
-	.section-subtitle {
+	.subsection-description {
 		font-size: 1.2rem;
-		color: #9ca3af;
-		font-weight: 400;
+		color: var(--color-primary);
+		font-weight: 500;
+		margin-bottom: 1.5rem;
+		line-height: 1.5;
 	}
 
-	.features-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-		gap: 2rem;
-		margin-top: 3rem;
-		width: 100%;
-		max-width: 100%;
+	.subsection-content {
+		font-size: 1rem;
+		color: var(--color-dark);
+		line-height: 1.7;
+		opacity: 0.8;
 	}
 
-	.feature-card {
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 16px;
-		padding: 2rem;
+	.subsection-visual {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 300px;
+	}
+
+	.visual-placeholder {
+		width: 200px;
+		height: 200px;
+		background: var(--color-accent);
+		border: 2px solid var(--color-primary);
+		border-radius: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		transition: all 0.3s ease;
 		backdrop-filter: blur(10px);
 	}
 
-	.feature-card:hover {
+	.visual-placeholder:hover {
 		transform: translateY(-5px);
-		border-color: rgba(59, 130, 246, 0.3);
-		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 	}
 
-	.feature-icon {
-		font-size: 3rem;
-		margin-bottom: 1.5rem;
-		display: block;
-	}
-
-	.feature-title {
-		font-size: 1.5rem;
-		font-weight: 600;
-		margin: 0 0 1rem 0;
-		color: #ffffff;
-	}
-
-	.feature-description {
-		color: #9ca3af;
-		line-height: 1.6;
-		margin-bottom: 1.5rem;
-	}
-
-	.feature-highlights {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-
-	.feature-highlights li {
-		color: #60a5fa;
-		margin-bottom: 0.5rem;
-		position: relative;
-		padding-left: 1.5rem;
-		font-size: 0.9rem;
-	}
-
-	.feature-highlights li::before {
-		content: '✓';
-		position: absolute;
-		left: 0;
-		color: #22c55e;
-		font-weight: bold;
+	.visual-icon {
+		font-size: 4rem;
+		opacity: 0.8;
 	}
 
 	/* CTA Section */
@@ -677,12 +701,12 @@
 		font-size: clamp(2rem, 5vw, 3rem);
 		font-weight: 700;
 		margin: 0 0 1rem 0;
-		color: #ffffff;
+		color: var(--color-dark);
 	}
 
 	.cta-subtitle {
 		font-size: 1.2rem;
-		color: #9ca3af;
+		color: var(--color-primary);
 		margin-bottom: 2.5rem;
 	}
 
@@ -697,25 +721,41 @@
 	.landing-footer {
 		position: relative;
 		z-index: 10;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--color-dark);
 		border-top: 1px solid rgba(255, 255, 255, 0.1);
-		padding: 3rem 2rem 1rem;
-		width: 100%;
+		width: 100vw;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 3rem 0 1rem 0;
 		flex-shrink: 0;
 		margin-top: auto;
 	}
 
-	.footer-content {
-		max-width: 1200px;
+	.footer-content, .footer-bottom, .footer-brand {
+
 		margin: 0 auto;
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 2rem;
+		padding: 0 2rem;
 	}
 
-	.footer-section {
+	.footer-content {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 0;
+	}
+
+	.footer-left {
+		flex: 1 1 0%;
+		min-width: 180px;
+	}
+
+	.footer-sections-right {
+		display: flex;
+		flex-direction: row;
+		gap: 2rem;
+		justify-content: flex-end;
+		align-items: flex-start;
 	}
 
 	.footer-logo {
@@ -727,13 +767,13 @@
 	}
 
 	.footer-description {
-		color: #9ca3af;
+		color: #f5f9ff;
 		font-size: 0.9rem;
 		line-height: 1.5;
 	}
 
 	.footer-title {
-		color: #ffffff;
+		color: var(--color-light);
 		font-size: 1.1rem;
 		font-weight: 600;
 		margin: 0 0 1rem 0;
@@ -761,7 +801,7 @@
 	}
 
 	.footer-links button:hover {
-		color: #ffffff;
+		color: #f5f9ff;
 	}
 
 	.social-link {
@@ -776,19 +816,17 @@
 	}
 
 	.footer-bottom {
-		max-width: 1200px;
-		margin: 2rem auto 0;
-		padding-top: 2rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
-		text-align: center;
-		color: #6b7280;
+		text-align: left;
+		color: var(--color-primary);
 		font-size: 0.9rem;
+		display: flex;
+		align-items: flex-end;
 	}
 
 	/* Responsive Design */
 	@media (max-width: 768px) {
 		.header-content {
-			padding: 1rem;
+			padding: 0 1rem;
 		}
 
 		.navigation {
@@ -796,8 +834,16 @@
 		}
 
 		.nav-button {
-			padding: 0.5rem 1rem;
+			padding: 0.4rem 1rem;
 			font-size: 0.8rem;
+		}
+
+		.logo-image {
+			height: 28px;
+		}
+
+		.logo-text {
+			font-size: 1.1rem;
 		}
 
 		.hero-section {
@@ -815,13 +861,32 @@
 			justify-content: center;
 		}
 
-		.features-grid {
-			grid-template-columns: 1fr;
-			gap: 1.5rem;
+		.subsection {
+			flex-direction: column;
+			gap: 2rem;
+			margin-bottom: 4rem;
+			padding: 2rem 0;
 		}
 
-		.feature-card {
-			padding: 1.5rem;
+		.subsection.reverse {
+			flex-direction: column;
+		}
+
+		.subsection-text {
+			max-width: 100%;
+		}
+
+		.subsection-visual {
+			min-height: 200px;
+		}
+
+		.visual-placeholder {
+			width: 150px;
+			height: 150px;
+		}
+
+		.visual-icon {
+			font-size: 3rem;
 		}
 
 		.cta-actions {
@@ -830,23 +895,38 @@
 		}
 
 		.footer-content {
-			grid-template-columns: repeat(2, 1fr);
-			text-align: center;
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.footer-sections-right {
+			flex-direction: column;
+			gap: 1.2rem;
+			align-items: stretch;
 		}
 	}
 
 	@media (max-width: 480px) {
-		.features-grid {
-			grid-template-columns: 1fr;
+		.subsection {
+			gap: 1.5rem;
+			margin-bottom: 3rem;
+			padding: 1.5rem 0;
 		}
 
-		.feature-card {
-			margin: 0 auto;
-			max-width: 100%;
+		.visual-placeholder {
+			width: 120px;
+			height: 120px;
+		}
+
+		.visual-icon {
+			font-size: 2.5rem;
 		}
 
 		.footer-content {
-			grid-template-columns: 1fr;
+			flex-direction: column;
+		}
+		.footer-sections-right {
+			flex-direction: column;
+			gap: 1rem;
 		}
 	}
 
@@ -855,13 +935,71 @@
 		box-sizing: border-box;
 	}
 
-	:global(body) {
-		margin: 0;
-		padding: 0;
-		overflow-x: hidden;
+	#site-header.transparent {
+		background: transparent;
+		box-shadow: none;
+		border: none;
 	}
 
-	:global(html) {
-		overflow-x: hidden;
+	#site-header.hidden-up {
+		transform: translateX(-50%) translateY(-120%);
+		opacity: 0;
+		pointer-events: none;
+		transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s cubic-bezier(.4,0,.2,1);
 	}
+
+	.footer-brand {
+		width: 100vw;
+		position: relative;
+		left: 50%;
+		transform: translateX(-50%);
+		text-align: center;
+		font-size: clamp(4rem, 14vw, 12rem);
+		font-weight: 900;
+		color: #f5f9ff;
+		padding: 0.5rem 0 0.5rem 0;
+		line-height: 1;
+		letter-spacing: -0.06em;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		z-index: 1;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	.footer-social-row {
+		display: flex;
+		gap: 0.3rem;
+		align-items: center;
+		justify-content: center;
+		margin-top: 0.5rem;
+	}
+
+	.footer-social-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		background: none;
+		border-radius: 50%;
+		transition: none;
+		font-size: 2rem;
+	}
+
+	.footer-social-icon:hover {
+		color: inherit;
+		background: none;
+	}
+
+	.footer-social-icon img {
+		filter: grayscale(1) brightness(0.8);
+		opacity: 0.7;
+		transition: filter 0.2s, opacity 0.2s;
+	}
+
+	.footer-social-icon:hover img {
+		filter: none;
+		opacity: 1;
+	}
+
 </style>
