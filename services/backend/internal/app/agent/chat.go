@@ -554,9 +554,9 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			}
 			// Get first 100 instances, or all if less than 100
 			instances := backtestInstances
-			if len(backtestInstances) > 100 {
+			/*if len(backtestInstances) > 100 {
 				instances = backtestInstances[:100]
-			}
+			}*/
 			// flatten instances into rows using original columns
 			rows := make([]map[string]any, 0, len(instances))
 			for _, instance := range instances {
