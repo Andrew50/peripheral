@@ -299,7 +299,7 @@
 	// Run initialization on mount
 	onMount(async () => {
 		if (browser) {
-			document.title = 'Pricing & Plans - Peripheral';
+			document.title = 'Pricing | Peripheral';
 			isLoaded = true;
 
 			// Async initialization function
