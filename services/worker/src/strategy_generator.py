@@ -124,13 +124,13 @@ CRITICAL REQUIREMENTS:
      SUPPORTED TIMEFRAMES:
      • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
      • Custom aggregations: "5m", "10m", "15m", "30m" (from 1-minute data)
-                           "2h", "4h", "6h", "8h", "12h" (from 1-hour data)  
-                           "2w", "3w", "4w" (from 1-week data)
+                           "2h", "4h", "6h", "8h" (from 1-hour data)  
+                           "2w", "3w" (from 1-week data)
      
      TIMEFRAME SELECTION GUIDE:
      - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
      - Swing Trading: Use "1h", "4h", "1d" 
-     - Position Trading: Use "1d", "1w", "2w"
+     - Position Trading: Use "1d", "1w"
      - Multi-timeframe: Combine different intervals for confirmation
      
      Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
@@ -399,8 +399,9 @@ COMMON MISTAKES TO AVOID:
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
 - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
-- ❌ BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
-- ❌ NO DATE FILTERING: Using only daily data for precise stop timing
+- BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
+- NO DATE FILTERING: Using only daily data for precise stop timing
+- Appending instances only after exit is determined – always record the entry as an instance, even when you can’t yet determine an exit.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
@@ -491,6 +492,7 @@ RETURN FORMAT:
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
+- Instance should STILL be added even if exits have not occured. Both closed and open trades should be returned.
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
     
