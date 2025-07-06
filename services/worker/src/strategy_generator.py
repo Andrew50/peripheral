@@ -101,15 +101,14 @@ class StrategyGenerator:
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
-ALLOWED IMPORTS: 
+Allowed imports: 
 - pandas, numpy, datetime, math, plotly. 
 - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
-FUNCTION VALIDATION - ONLY THESE FUNCTIONS EXIST:
+FUNCTION VALIDATION - Only these functions exist, automatically available in the execution environment:
 - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
 - get_general_data(columns, filters) → pandas.DataFrame
 
-These functions are automatically available in the execution environment.
 
 ❌ THESE FUNCTIONS DO NOT EXIST:
 get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
@@ -401,7 +400,6 @@ COMMON MISTAKES TO AVOID:
 - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
 - ❌ BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
-- ❌ BAD STOP LOSS: exit_price = stop_loss_price  # Wrong when gap occurs
 - ❌ NO DATE FILTERING: Using only daily data for precise stop timing
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
@@ -480,7 +478,7 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - Almost always include plots in the strategy to help the user understand the data
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
 - Do not worry about the styling of the plot, just ensure the data is correct and serialisable.
-
+- You should plot equity curves of the strategy over time.
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (required) (e.g., "MRNA", "AAPL")
