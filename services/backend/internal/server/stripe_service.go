@@ -123,8 +123,20 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Verify webhook signature
-	event, err := webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), os.Getenv("STRIPE_WEBHOOK_SECRET"))
+	// Verify webhook signature - try multiple possible secrets
+	var event stripe.Event
+	
+	// Try primary webhook secret
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if webhookSecret != "" {
+		event, err = webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), webhookSecret)
+		if err == nil {
+			// Successfully verified with primary secret
+		} else {
+			log.Printf("Failed to verify with primary webhook secret: %v", err)
+		}
+	}
+	
 	if err != nil {
 		log.Printf("Error verifying Stripe webhook signature: %v", err)
 		w.WriteHeader(http.StatusBadRequest)

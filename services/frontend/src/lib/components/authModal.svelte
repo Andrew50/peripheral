@@ -56,6 +56,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="auth-modal-title"
+		tabindex="-1"
 	>
 		<div class="auth-modal-container">
 			<div class="auth-modal-content">
