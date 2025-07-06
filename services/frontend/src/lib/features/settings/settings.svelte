@@ -507,7 +507,6 @@
 		flex-grow: 1;
 	}
 
-	.setting-item select,
 	.setting-item input[type='number'] {
 		padding: 0.5rem;
 		background-color: var(--c2);
@@ -847,36 +846,6 @@
 		color: var(--f1);
 		font-size: 1.5rem;
 		font-weight: 600;
-	}
-
-	/* Credits Information Styles */
-	.credits-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.credit-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.5rem 0;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-	}
-
-	.credit-item:last-child {
-		border-bottom: none;
-	}
-
-	.credit-label {
-		color: var(--f2);
-		font-size: 0.9375rem;
-	}
-
-	.credit-value {
-		color: var(--f1);
-		font-weight: 600;
-		font-size: 1rem;
 	}
 
 	.upgrade-note {

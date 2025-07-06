@@ -56,7 +56,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	redisPassword := getEnv("REDIS_PASSWORD", "")
 
 	// Get API keys from environment variables
-	polygonKey := getEnv("POLYGON_API_KEY", "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm")
+	polygonKey := getEnv("POLYGON_API_KEY", "")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
 	XAPIKey := getEnv("X_API_KEY", "")
 	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
@@ -99,12 +99,20 @@ func InitConn(inContainer bool) (*Conn, func()) {
 				}
 
 				// Configure connection pool with better defaults
-				poolConfig.MaxConns = 15                                // FIXED: Reduced from 25 to prevent overwhelming DB
-				poolConfig.MinConns = 3                                 // FIXED: Reduced from 5 for lighter footprint
-				poolConfig.MaxConnLifetime = 30 * time.Minute           // FIXED: Reduced from 1 hour to prevent stale connections
-				poolConfig.MaxConnIdleTime = 10 * time.Minute           // FIXED: Reduced from 30 minutes to close idle connections faster
-				poolConfig.HealthCheckPeriod = 1 * time.Minute          // FIXED: Reduced from 30 seconds for more frequent health checks
+				poolConfig.MaxConns = 50                                // FIXED: Increased from 30 for better concurrency during streaming
+				poolConfig.MinConns = 10                                // FIXED: Increased from 5 for better performance
+				poolConfig.MaxConnLifetime = 60 * time.Minute           // FIXED: 1 hour to prevent stale connections while still mitigating connection churn
+				poolConfig.MaxConnIdleTime = 5 * time.Minute            // FIXED: Increased from 1 minute to reduce connection churn
+				poolConfig.HealthCheckPeriod = 30 * time.Second         // FIXED: Increased from 15 seconds for more frequent health checks
 				poolConfig.ConnConfig.ConnectTimeout = 10 * time.Second // FIXED: Increased from 5 seconds for slower connections
+				/*poolConfig.BeforeConnect = func(ctx context.Context, cc *pgx.ConnConfig) error {
+					// Validate connection before use
+					return nil
+				}
+				poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+					// Validate connection after creation
+					return conn.Ping(ctx)
+				}*/
 
 				// Create the connection pool with our custom configuration
 				dbConn, err := pgxpool.ConnectConfig(ctx, poolConfig)

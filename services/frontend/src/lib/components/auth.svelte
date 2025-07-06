@@ -178,13 +178,14 @@
 	<header class="landing-header">
 		<div class="landing-header-content">
 			<div class="logo-section">
-				<img
-					src="/atlantis_logo_transparent.png"
-					alt="Peripheral Logo"
-					class="landing-logo"
+				<button
 					on:click={navigateToHome}
-					style="cursor: pointer;"
-				/>
+					on:keydown={(e) => e.key === 'Enter' && navigateToHome()}
+					class="logo-button"
+					aria-label="Navigate to home"
+				>
+					<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="landing-logo" />
+				</button>
 			</div>
 			<nav class="landing-nav">
 				<button class="landing-button secondary" on:click={navigateToHome}> ← Back to Home </button>
@@ -447,5 +448,25 @@
 			height: 44px;
 			font-size: 0.9rem;
 		}
+	}
+
+	.logo-button {
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		transition: opacity 0.2s ease;
+	}
+
+	.logo-button:hover {
+		opacity: 0.8;
+	}
+
+	.logo-button:focus {
+		outline: 2px solid var(--landing-accent-blue);
+		outline-offset: 2px;
+		border-radius: 4px;
 	}
 </style>

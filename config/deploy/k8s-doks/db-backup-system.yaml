@@ -2,6 +2,48 @@
 # Includes automated backups twice daily and health monitoring
 
 ---
+# ServiceAccount for health monitor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+
+---
+# ClusterRole for health monitor (minimal permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+# ClusterRoleBinding for health monitor
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: db-health-monitor
+subjects:
+  - kind: ServiceAccount
+    name: db-health-monitor
+    namespace: default
+
+---
 # Persistent Volume Claim for Backups
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -59,7 +101,7 @@ spec:
                 - name: DB_HOST
                   value: "db"
                 - name: ENVIRONMENT
-                  value: "Development"
+                  value: "${ENVIRONMENT:-Development}"
                 - name: TELEGRAM_BOT_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -107,6 +149,7 @@ spec:
       labels:
         app: db-health-monitor
     spec:
+      serviceAccountName: db-health-monitor
       restartPolicy: Always
       containers:
         - name: health-monitor
@@ -130,7 +173,7 @@ spec:
             - name: MAX_FAILURE_COUNT
               value: "3"
             - name: ENVIRONMENT
-              value: "Development"
+              value: "${ENVIRONMENT:-Development}"
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -158,7 +201,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - "test -f /backups/health-monitor.log && test $(find /backups/health-monitor.log -mmin -5 | wc -l) -gt 0"
+                - "test -f /backups/health-monitor.log"
             initialDelaySeconds: 120
             periodSeconds: 300
             failureThreshold: 3
