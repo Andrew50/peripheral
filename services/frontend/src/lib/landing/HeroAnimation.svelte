@@ -547,6 +547,7 @@
 			line-height: 1.1;
 			color: var(--color-dark);
 			text-shadow: 0 2px 12px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.01);
+            padding-top: var(--header-h);
     }
     .gradient-text {
 			background: linear-gradient(
