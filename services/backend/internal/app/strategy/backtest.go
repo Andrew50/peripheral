@@ -292,8 +292,6 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	metadata := map[string]interface{}{
 		"strategy_id":       args.StrategyID,
 		"instances_found":   len(result.Instances),
-		"strategy_id":       args.StrategyID,
-		"instances_found":   len(result.Instances),
 		"symbols_processed": responseWithInstances.Summary.SymbolsProcessed,
 		"operation_type":    "backtest",
 		"credits_consumed":  0, // Explicitly show no credits consumed
@@ -303,13 +301,9 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		// Don't fail the request since backtest was successful
 	}
 
-	// Remove data from plots to save memory
-	for i := range result.StrategyPlots {
-		result.StrategyPlots[i].Data = nil
-	}
-
-	// Update the response with cleaned plots
-	responseWithInstances.StrategyPlots = result.StrategyPlots
+	// No need to convert the cleaned plots for the API response here since
+	// responseWithInstances already contains the lightweight plots created earlier.
+	// result.StrategyPlots is only mutated to free memory before function return.
 	return responseWithInstances, nil
 }
 
