@@ -57,7 +57,7 @@ func GetRequestStartEndTime(
 	tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
 	tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay)) * time.Minute
 	totalTradingDays := totalDuration / tradingDurationPerDay
-	totalTradingDays += 3 //overestimate cause weekends
+	totalTradingDays += 6 //overestimate cause weekends
 	var queryStartTime, queryEndTime time.Time
 	if direction == "backward" {
 		queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
