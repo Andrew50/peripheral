@@ -3,8 +3,12 @@
 		import { onMount } from 'svelte';
 		import { goto } from '$app/navigation';
 		import { startPricingPreload } from '$lib/utils/pricing-loader';
-		import { showAuthModal } from '$lib/stores/authModal';
 		import { createChart } from 'lightweight-charts';
+		import { fade } from 'svelte/transition';
+		import type { TimelineEvent } from '$lib/landing/timeline';
+		import { createTimelineEvents, sampleQuery, totalScroll } from '$lib/landing/timeline';
+		import PlotChunk from '$lib/features/chat/components/PlotChunk.svelte';
+		import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
 
 		if (browser) {
 			document.title = 'Peripheral';
@@ -15,30 +19,175 @@
 		let isHeaderTransparent = true;
 		let prevScrollY = 0;
 
-		// Chat interface state
-		let chatInput = '';
-		let chatInputRef: HTMLTextAreaElement;
+		// Animation state management
+		let animationPhase = 'initial'; // 'initial', 'typing', 'submitted', 'complete'
+		let showHeroContent = false;
+		let animationInput = '';
+		let animationInputRef: HTMLTextAreaElement;
+		
+		let typewriterIndex = 0;
+		let typewriterInterval: NodeJS.Timeout;
+
+		// Control removal of the animation input bar after transition
+		let removeAnimationInput = false;
+
 		let chartContainerRef: HTMLDivElement;
 
-		function handleChatSubmit() {
-			if (!chatInput.trim()) return;
-			
-			// Show auth modal when user tries to send a message
-			showAuthModal('conversations', 'signup');
+		// Chat messages array to display inside hero chat, mimicking main chat structure
+		// ------ Content chunk support (text, table, plot) ------
+		type TableData = { caption?: string; headers: string[]; rows: any[][] };
+		type PlotData = {
+			chart_type: 'line' | 'bar' | 'scatter' | 'histogram' | 'heatmap';
+			data: any[];
+			[key: string]: any;
+		};
+		type ContentChunk = { type: 'text' | 'table' | 'plot'; content: string | TableData | PlotData };
+
+		interface ChatMessage {
+			message_id: string;
+			sender: 'user' | 'assistant';
+			text?: string; // optional – may be empty when using contentChunks
+			contentChunks: ContentChunk[];
 		}
 
-		function adjustChatTextarea() {
-			if (!chatInputRef) return;
-			chatInputRef.style.height = 'auto';
-			chatInputRef.offsetHeight;
-			chatInputRef.style.height = `${chatInputRef.scrollHeight}px`;
+		function isTableData(content: any): content is TableData {
+			return (
+				content &&
+				typeof content === 'object' &&
+				Array.isArray(content.headers) &&
+				Array.isArray(content.rows)
+			);
 		}
 
-		function handleChatKeydown(event: KeyboardEvent) {
-			if (event.key === 'Enter' && !event.shiftKey) {
-				event.preventDefault();
-				handleChatSubmit();
+		let chatMessages: ChatMessage[] = [];
+
+		// Data injected from +page.server.ts (defaultChartData)
+		export let data: { defaultChartData?: any };
+
+		let timelineProgress = 0; // 0 → 1
+		let timelineUnlocked = false; // true when normal page scrolling is active
+		/* Manage document scroll lock */
+		function setScrollLock(locked: boolean) {
+			document.documentElement.style.overflow = locked ? 'hidden' : '';
+			document.body.style.overflow = locked ? 'hidden' : '';
+		}
+
+
+		function addMessage(text: string) {
+			const msg: ChatMessage = {
+				message_id: 'hero_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+				sender: 'user',
+				text,
+				contentChunks: [{ type: 'text', content: text }]
+			};
+			chatMessages = [...chatMessages, msg];
+		}
+
+		function addAssistantMessage(text: string) {
+			const msg: ChatMessage = {
+				message_id: 'hero_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+				sender: 'assistant',
+				text,
+				contentChunks: [{ type: 'text', content: text }]
+			};
+			chatMessages = [...chatMessages, msg];
+		}
+
+		function removeLastMessage() {
+			chatMessages = chatMessages.slice(0, -1);
+		}
+
+		function setChartData() {
+				
+		}
+
+		// Added chart highlight stubs
+		function updateChartHighlight() {
+			// integrate chart highlight logic here
+		}
+
+		function resetChartHighlight() {
+			// reset chart highlight logic here
+		}
+
+		const timelineEvents: TimelineEvent[] = createTimelineEvents({
+			addUserMessage: addMessage,
+			addAssistantMessage,
+			removeLastMessage,
+			updateChartHighlight,
+			resetChartHighlight,
+		});
+
+		function evaluateTimeline() {
+			for (const evt of timelineEvents) {
+				if (!evt.fired && timelineProgress >= evt.trigger) {
+					evt.forward();
+					evt.fired = true;
+				} else if (evt.fired && timelineProgress < evt.trigger) {
+					evt.backward?.();
+					evt.fired = false;
+				}
 			}
+		}
+
+		function handleHeroWheel(e: WheelEvent) {
+			const atTop = window.scrollY === 0;
+			const delta = e.deltaY;
+			const deltaProgress = delta / totalScroll;
+
+			// Decide if we should hijack
+			const shouldIntercept = !timelineUnlocked || (timelineUnlocked && atTop && delta < 0);
+
+			if (!shouldIntercept) return; // allow normal scrolling
+
+			e.preventDefault();
+
+			// If we are re-entering the hero from top, lock scrolling again
+			if (timelineUnlocked && atTop && delta < 0) {
+				timelineUnlocked = false;
+				setScrollLock(true);
+			}
+
+			// Update progress (both directions)
+			timelineProgress = Math.min(1, Math.max(0, timelineProgress + deltaProgress));
+			evaluateTimeline();
+
+			// Unlock when progress reaches end and user scrolls downwards
+			if (!timelineUnlocked && timelineProgress >= 1 && delta > 0) {
+				timelineUnlocked = true;
+				setScrollLock(false);
+			}
+		}
+
+		function startTypewriterEffect() {
+			animationPhase = 'typing';
+			typewriterInterval = setInterval(() => {
+				if (typewriterIndex < sampleQuery.length) {
+					animationInput = sampleQuery.slice(0, typewriterIndex + 1);
+					typewriterIndex++;
+				} else {
+					clearInterval(typewriterInterval);
+					// Wait a moment, then submit
+					setTimeout(() => {
+						submitAnimationQuery();
+					}, 100);
+				}
+			}, 22); // Adjust typing speed here
+		}
+
+		function submitAnimationQuery() {
+			animationPhase = 'submitted';
+			// Wait for submit animation, then move input down and show hero content
+			setTimeout(() => {
+				animationPhase = 'complete';
+				showHeroContent = true;
+
+
+				// After CSS transition (~1.5s) remove the element from the DOM
+				setTimeout(() => {
+					removeAnimationInput = true;
+				}, 600);
+			}, 400);
 		}
 
 		function handleScroll() {
@@ -54,6 +203,11 @@
 			prevScrollY = currentY;
 		}
 
+		// ------- Hero chart legend state ---------
+		const currentTicker = 'SPY';
+		interface LegendData { open: number; high: number; low: number; close: number; }
+		let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0 };
+
 		onMount(() => {
 			if (browser) {
 				// Start preloading pricing configuration early
@@ -62,9 +216,20 @@
 					isHeaderVisible = false;
 					isHeaderTransparent = false;
 				} 
-				// Only set loaded state for animation
+				// Set loaded state for animation
 				isLoaded = true;
-				document.body.classList.add('loaded');
+
+				// Start the animation sequence after a short delay
+				setTimeout(() => {
+					startTypewriterEffect();
+				}, 0);
+
+				// Evaluate timeline once at mount to fire trigger 0 events
+				evaluateTimeline();
+
+				// Disable native scrolling & start intercepting wheel for hero timeline
+				setScrollLock(true);
+				window.addEventListener('wheel', handleHeroWheel as any, { passive: false });
 
 				/* --- Initialise lightweight chart in hero --- */
 				if (chartContainerRef) {
@@ -74,23 +239,76 @@
 						layout: { background: { color: 'transparent' }, textColor: '#0B2E33', attributionLogo: false },
 						grid: { vertLines: { visible: false }, horzLines: { visible: false } },
 						timeScale: { visible: true },
+						handleScroll: {
+							mouseWheel: false,
+							pressedMouseMove: true,
+							horzTouchDrag: true,
+							vertTouchDrag: true,
+						},
+						handleScale: {
+							mouseWheel: false,
+							pinch: true,
+						},
 					});
 
-					const series = chart.addAreaSeries({
-						lineColor: '#4F7C82',
-						topColor: 'rgba(79,124,130,0.35)',
-						bottomColor: 'rgba(79,124,130,0.00)'
+					const candleSeries = chart.addCandlestickSeries({
+						upColor: '#26a69a',
+						downColor: '#ef5350',
+						borderVisible: false,
+						wickUpColor: '#26a69a',
+						wickDownColor: '#ef5350',
 					});
 
 					const now = Math.floor(Date.now() / 1000);
-					const data = Array.from({ length: 200 }, (_, i) => ({
-						time: (now - (200 - i) * 60) as any,
-						value: 100 + Math.sin(i / 4) * 3 + (Math.random() * 2 - 1)
-					}));
-					series.setData(data);
+					const candleData = Array.from({ length: 200 }, (_, i) => {
+						const base = 100 + Math.sin(i / 4) * 3;
+						const open = base + (Math.random() - 0.5) * 2;
+						const close = open + (Math.random() - 0.5) * 4;
+						const high = Math.max(open, close) + Math.random() * 2;
+						const low = Math.min(open, close) - Math.random() * 2;
+
+						return {
+							time: (now - (200 - i) * 60) as any,
+							open,
+							high,
+							low,
+							close,
+						};
+					});
+					candleSeries.setData(candleData);
+
+					// Inject real SPY data from server, if available
+					if (data?.defaultChartData?.chartData?.bars?.length) {
+						const serverBars = data.defaultChartData.chartData.bars.map((bar: any) => ({
+							time: bar.time as any,
+							open: bar.open,
+							high: bar.high,
+							low: bar.low,
+							close: bar.close
+						}));
+						candleSeries.setData(serverBars);
+					}
+
+					// Initialise legend with latest bar
+					if (candleData.length) {
+						const lastBar = candleData[candleData.length - 1];
+						legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close };
+					}
+
+					// Subscribe to crosshair to update legend reactively
+					chart.subscribeCrosshairMove(param => {
+						if (!param || !param.seriesData) return;
+						const bar = param.seriesData.get(candleSeries);
+						if (bar && typeof bar === 'object' && 'open' in bar) {
+							legendData = { open: bar.open, high: bar.high, low: bar.low, close: bar.close } as any;
+						}
+					});
 
 					new ResizeObserver(() => {
-						chart.applyOptions({ width: chartContainerRef!.clientWidth });
+						chart.applyOptions({
+							width: chartContainerRef!.clientWidth,
+							height: chartContainerRef!.clientHeight,
+						});
 					}).observe(chartContainerRef);
 				}
 			}
@@ -110,11 +328,6 @@
 
 		function navigateToApp() {
 			goto('/app');
-		}
-
-		function handleNavClick(event: Event) {
-			// Prevent pill click when clicking navigation buttons
-			event.stopPropagation();
 		}
 
 		// Subsections data
@@ -148,9 +361,9 @@
 				<p class="logo-text">Peripheral</p>
 			</div>
 			<div class="navigation">
-				<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToPricing(); }}>Pricing</button>
-				<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToLogin(); }}>Login</button>
-				<button class="nav-button primary" on:click={(e) => { handleNavClick(e); navigateToSignup(); }}>Sign up</button>
+				<button class="nav-button secondary" on:click={navigateToPricing}>Pricing</button>
+				<button class="nav-button secondary" on:click={navigateToLogin}>Login</button>
+				<button class="nav-button primary" on:click={navigateToSignup}>Sign up</button>
 			</div>
 		</nav>
 	</header>
@@ -158,44 +371,126 @@
 	<main class="landing-container">
 		<!-- Hero Section -->
 		<section class="hero-section" class:loaded={isLoaded}>
-			<div class="hero-content">
+			<!-- Hero Header - Always Visible -->
+			<div class="hero-header">
 				<h1 class="hero-title">
-					The <span class="gradient-text">only</span> way to trade.
+					The <span class="gradient-text">best</span> way to trade.
 				</h1>
 				<p class="hero-subtitle">
 					Peripheral is the terminal to envision and execute your trading ideas.<br />
 				</p>
-				<div class="hero-actions">
-					<div class="hero-chat-container">
-						<div class="hero-chat-messages">
+			</div>
+
+			<!-- Animation Input Bar -->
+			{#if !removeAnimationInput}
+			<div class="animation-input-container" class:typing={animationPhase === 'typing'} class:submitted={animationPhase === 'submitted'} class:complete={animationPhase === 'complete'}>
+				<div class="animation-input-wrapper">
+					<textarea
+						class="animation-input"
+						bind:value={animationInput}
+						bind:this={animationInputRef}
+						readonly
+						rows="1"
+						class:typing-cursor={animationPhase === 'typing'}
+					></textarea>
+					<button
+						class="animation-send"
+						class:pulse={animationPhase === 'submitted'}
+					>
+						<svg viewBox="0 0 18 18" class="send-icon">
+							<path
+								d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
+							/>
+						</svg>
+					</button>
+				</div>
+			</div>
+			{/if}
+
+			<!-- Hero Actions - Revealed after animation -->
+			<div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
+				<div class="hero-chat-container">
+					<div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
+						{#if chatMessages.length === 0}
 							<div class="hero-chat-placeholder">
 								<p>Ask me anything about trading, market analysis, or investment strategies...</p>
 							</div>
-						</div>
-						<div class="hero-chat-input-container">
-							<textarea
-								class="hero-chat-input"
-								placeholder="Ask anything..."
-								bind:value={chatInput}
-								bind:this={chatInputRef}
-								rows="1"
-								on:input={adjustChatTextarea}
-								on:keydown={handleChatKeydown}
-							></textarea>
-							<button
-								class="hero-chat-send"
-								on:click={handleChatSubmit}
-								disabled={!chatInput.trim()}
-							>
-								<svg viewBox="0 0 18 18" class="send-icon">
-									<path
-										d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
-									/>
-								</svg>
-							</button>
-						</div>
+						{:else}
+							{#each chatMessages as msg (msg.message_id)}
+								<div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
+									{#if msg.sender === 'user'}
+										<div class="message user">
+											<div class="message-content">
+												<p>{msg.text}</p>
+											</div>
+										</div>
+									{:else}
+										{#if msg.contentChunks && msg.contentChunks.length > 0}
+											<div class="assistant-message">
+												{#each msg.contentChunks as chunk, idx}
+													{#if chunk.type === 'text'}
+														<p>{@html typeof chunk.content === 'string' ? chunk.content : String(chunk.content)}</p>
+													{:else if chunk.type === 'table'}
+														{#if isTableData(chunk.content)}
+															{@const tableData = chunk.content}
+															<div class="assistant-table">
+																<table>
+																	{#if tableData.caption}
+																		<caption>{@html tableData.caption}</caption>
+																	{/if}
+																	<thead>
+																		<tr>
+																			{#each tableData.headers as header}
+																				<th>{@html header}</th>
+																			{/each}
+																		</tr>
+																	</thead>
+																	<tbody>
+																		{#each tableData.rows as row}
+																			<tr>
+																				{#each row as cell}
+																					<td>{@html typeof cell === 'string' ? cell : String(cell)}</td>
+																				{/each}
+																			</tr>
+																		{/each}
+																	</tbody>
+																</table>
+															</div>
+														{:else}
+															<p>Invalid table data</p>
+														{/if}
+													{:else if chunk.type === 'plot'}
+														{#if isPlotData(chunk.content)}
+															{@const plotData = getPlotData(chunk.content)}
+															{#if plotData}
+																<PlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
+															{:else}
+																<p>Invalid plot data structure</p>
+															{/if}
+														{:else}
+															<p>Invalid plot data</p>
+														{/if}
+													{/if}
+												{/each}
+											</div>
+										{:else}
+											<p class="assistant-message">{msg.text}</p>
+										{/if}
+									{/if}
+								</div>
+							{/each}
+						{/if}
 					</div>
-					<div class="hero-chart-container" bind:this={chartContainerRef}></div>
+				</div>
+				<div class="hero-chart-container" bind:this={chartContainerRef}>
+					<!-- Legend overlay -->
+					<div class="hero-chart-legend">
+						<span class="ticker">{currentTicker}</span>
+						<span>O {legendData.open?.toFixed(2)}</span>
+						<span>H {legendData.high?.toFixed(2)}</span>
+						<span>L {legendData.low?.toFixed(2)}</span>
+						<span>C {legendData.close?.toFixed(2)}</span>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -274,7 +569,6 @@
 			</div>
 			<div class="footer-bottom">
 				<p>Charts powered by <a href="https://tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a></p>
-				
 				<p>2025 Atlantis Labs, Inc.</p>
 			</div>
 			<div class="footer-brand">Peripheral</div>
@@ -285,7 +579,11 @@
 		@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 		@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 		
-		/* Ensure fonts load properly */
+		/* Global styles */
+		:global(*) {
+			box-sizing: border-box;
+		}
+
 		:global(html), :global(body) {
 			margin: 0;
 			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -328,35 +626,7 @@
 			padding-top: var(--header-h);
 		}
 
-		/* Background Effects */
-		.background-animation {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			z-index: 0;
-			pointer-events: none;
-		}
 
-		.gradient-orb {
-			position: absolute;
-			border-radius: 50%;
-			filter: blur(100px);
-			opacity: 0.3;
-			animation: float 20s ease-in-out infinite;
-		}
-
-
-		.static-gradient {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: var(--color-light);
-			z-index: -1;
-		}
 
 		@keyframes float {
 				0%,
@@ -375,16 +645,6 @@
 		}
 
 		/* Navigation Header */
-		.landing-header {
-			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			z-index: 1000;
-			background: var(--color-dark);
-			border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-			transition: all 0.3s ease;
-		}
 
 		.header-content {
 			padding: 0 1rem;
@@ -439,17 +699,15 @@
 		}
 
 		.nav-button.secondary {
-			background: #00000000;
+			background: transparent;
 			color: #000000;
 			border: 1px solid var(--color-primary);
 		}
-
 
 		.nav-button.primary {
 			background: rgb(0, 0, 0);
 			color: #f5f9ff;
 		}
-
 
 		.nav-button.primary:hover,
 		.nav-button.secondary:hover {
@@ -457,7 +715,6 @@
 			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 		}
 
-		/* Pill state styles */
 		#site-header {
 			position: fixed;
 			top: var(--header-top);
@@ -468,7 +725,7 @@
 			height: var(--header-h);
 			background: #f5f9ff;
 			backdrop-filter: blur(16px);
-			border: 1px solid rgba(255,255,255,0.25); /* soften border */
+			border: 1px solid rgba(255,255,255,0.25);
 			border-radius: 999px;
 			transition: all .4s cubic-bezier(.4,0,.2,1);
 			z-index: 1050;
@@ -477,30 +734,6 @@
 			cursor: pointer;
 		}
 
-		#site-header.pill {
-			width: var(--pill-size);
-			height: var(--pill-size);
-			border-radius: 50%;
-			top: var(--header-top);
-			transform: translateX(-50%);
-			cursor: pointer;
-		}
-
-		#site-header.pill .header-content {
-			padding: 0;
-			justify-content: center;
-		}
-
-		#site-header.pill .logo-section,
-		#site-header.pill .navigation {
-			display: none;
-		}
-
-
-		#site-header.pill:hover {
-			background: rgba(184, 227, 233, 0.95);
-			transform: translateX(-50%) scale(1.05);
-		}
 
 		/* Hero Section */
 		.hero-section {
@@ -509,45 +742,16 @@
 			min-height: 100vh;
 			display: flex;
 			flex-direction: column;
-			justify-content: flex-start;
+			justify-content: space-between;
 			align-items: center;
-			padding: 3rem 2rem 4rem;
+			padding: 2rem 2rem 4rem;
+			padding-top: calc(var(--header-h) - 1rem);
 			text-align: center;
 			width: 100%;
 			flex-shrink: 0;
 			isolation: isolate;
 			border-radius: 4.5rem;
 		}
-
-		.hero-content {
-			max-width: 800px;
-			opacity: 0;
-			transform: translateY(30px);
-			transition: all 1s ease;
-			display: flex;
-			flex-direction: column;
-			flex: 1;
-		}
-
-		.hero-section.loaded .hero-content {
-			opacity: 1;
-			transform: translateY(0);
-		}
-
-		.hero-badge {
-			display: inline-block;
-			padding: 0.5rem 1.5rem;
-			background: rgba(59, 130, 246, 0.1);
-			border: 1px solid rgba(59, 130, 246, 0.3);
-			border-radius: 100px;
-			color: #60a5fa;
-			font-size: 0.8rem;
-			font-weight: 600;
-			letter-spacing: 1px;
-			text-transform: uppercase;
-			margin-bottom: 2rem;
-		}
-
 		.hero-title {
 			font-size: clamp(2.7rem, 4vw, 5rem);
 			font-weight: 800;
@@ -599,13 +803,6 @@
 			font-weight: 400;
 		}
 
-		.hero-actions {
-			display: flex;
-			gap: 1rem;
-			justify-content: center;
-			flex-wrap: wrap;
-			margin-top: 0;
-		}
 
 
 		/* Subsections Section */
@@ -700,7 +897,6 @@
 			opacity: 0.8;
 		}
 
-		/* Footer */
 		.landing-footer {
 			position: relative;
 			z-index: 10;
@@ -728,17 +924,8 @@
 			gap: 2rem;
 		}
 
-
 		.footer-section {
 			margin-bottom: 0;
-		}
-
-		.footer-logo {
-			height: 40px;
-			width: auto;
-			object-fit: contain;
-			max-width: 160px;
-			margin-bottom: 1rem;
 		}
 
 		.footer-title {
@@ -784,17 +971,6 @@
 			color: #f5f9ff;
 		}
 
-		.social-link {
-			color: #9ca3af;
-			text-decoration: none;
-			font-size: 0.9rem;
-			transition: color 0.3s ease;
-		}
-
-		.social-link:hover {
-			color: #ffffff;
-		}
-
 		.footer-bottom {
 			text-align: left;
 			color: var(--color-primary);
@@ -806,7 +982,6 @@
 			padding: 0 2rem;
 		}
 
-		/* Ensure footer link inherits branding colour and removes default blue */
 		.footer-bottom a {
 			color: inherit;
 			text-decoration: none;
@@ -836,12 +1011,37 @@
 			}
 
 			.hero-section {
-				padding: 6rem 1rem 3rem;
+				padding: 1rem 1rem 3rem;
+				padding-top: calc(var(--header-h) + 1rem);
 			}
 
 			.hero-actions {
 				flex-direction: column;
 				align-items: center;
+			}
+
+			/* Animation Input Bar - Mobile */
+			.animation-input-container {
+				width: 95vw;
+			}
+
+			.animation-input-wrapper {
+				padding: 0.75rem 1rem;
+				gap: 0.75rem;
+			}
+
+			.animation-input {
+				font-size: 1rem;
+			}
+
+			.animation-send {
+				width: 36px;
+				height: 36px;
+			}
+
+			.animation-send .send-icon {
+				width: 16px;
+				height: 16px;
 			}
 
 			
@@ -871,11 +1071,6 @@
 
 			.visual-icon {
 				font-size: 3rem;
-			}
-
-			.cta-actions {
-				flex-direction: column;
-				align-items: center;
 			}
 
 			.footer-content {
@@ -1074,7 +1269,173 @@
 				0 0 0 240px rgba(var(--halo-rgb),0.02);
 			/* Slightly crisper blur */
 			filter: blur(28px);
-			border-radius: inherit; /* match parent radius */
+			border-radius: 28px; /* match parent radius */
+		}
+
+		/* Hero Header - Always Visible */
+		.hero-header {
+			text-align: center;
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		/* Animation Input Bar */
+		.animation-input-container {
+			position: relative;
+			width: 90vw;
+			max-width: 800px;
+			opacity: 1;
+			transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+			z-index: 20;
+			margin-bottom: 1.5rem;
+		}
+
+		.animation-input-container.complete {
+			/* Fade out instead of dropping down */
+			opacity: 1;
+			transform: none;
+			pointer-events: none;
+			animation: containerFadeOut 0.4s 0.2s forwards ease;
+		}
+
+		.animation-input-container.submitted::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			border-radius: 28px; /* match input wrapper radius */
+			pointer-events: none;
+			border: 2px solid var(--color-primary);
+			box-shadow: 0 0 0 0 rgba(79,124,130,0.6);
+			animation: ringPulse 1s ease-out forwards;
+		}
+
+		@keyframes ringPulse {
+			/* Faster expansion (first 0.2s), longer hold (0.5s), then fade */
+			0%   { box-shadow: 0 0 0 0 rgba(79,124,130,0.6);   opacity: 1; }
+			20%  { box-shadow: 0 0 0 8px rgba(79,124,130,0.6); opacity: 1; }
+			70%  { box-shadow: 0 0 0 8px rgba(79,124,130,0.6); opacity: 1; }
+			100% { box-shadow: 0 0 0 8px rgba(79,124,130,0);  opacity: 0; }
+		}
+
+		/* Fade the entire container out once the ring pulse finishes */
+		@keyframes containerFadeOut {
+			0%   { opacity: 1; transform: scale(1); }
+			100% { opacity: 0; transform: scale(0.95); }
+		}
+
+		.animation-input-wrapper {
+			position: relative;
+			display: flex;
+			align-items: center;
+			gap: 1rem;
+			background: rgba(255, 255, 255, 0.95);
+			border: 2px solid rgba(79, 124, 130, 0.3);
+			border-radius: 28px;
+			padding: 1rem 1.5rem;
+			backdrop-filter: blur(20px);
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+			transition: all 0.3s ease;
+		}
+
+		.animation-input-wrapper:focus-within {
+			border-color: var(--color-primary);
+			box-shadow: 0 12px 48px rgba(79, 124, 130, 0.2);
+		}
+
+		.animation-input {
+			flex: 1;
+			background: none;
+			border: none;
+			outline: none;
+			color: var(--color-dark);
+			font-size: 1.1rem;
+			line-height: 1.5;
+			resize: none;
+			font-family: inherit;
+			font-weight: 500;
+			padding: 0;
+			min-height: 28px;
+		}
+
+		.animation-input::placeholder {
+			color: rgba(11, 46, 51, 0.5);
+		}
+
+		.animation-input.typing-cursor::after {
+			content: '|';
+			animation: blink 1s infinite;
+			margin-left: 2px;
+		}
+
+		@keyframes blink {
+			0%, 50% { opacity: 1; }
+			51%, 100% { opacity: 0; }
+		}
+
+		.animation-send {
+			background: var(--color-primary);
+			border: none;
+			border-radius: 50%;
+			width: 40px;
+			height: 40px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			flex-shrink: 0;
+		}
+
+		.animation-send:hover {
+			background: var(--color-dark);
+			transform: scale(1.05);
+		}
+
+		.animation-send.pulse {
+			animation: pulse 0.6s ease-in-out;
+		}
+
+		@keyframes pulse {
+			0% {
+				transform: scale(1);
+			}
+			50% {
+				transform: scale(1.2);
+				background: #10b981;
+			}
+			100% {
+				transform: scale(1);
+			}
+		}
+
+		.animation-send .send-icon {
+			width: 18px;
+			height: 18px;
+			fill: white;
+		}
+
+		/* Hero Actions - Initially hidden */
+		.hero-actions {
+			display: flex;
+			gap: 1rem;
+			justify-content: center;
+			flex-wrap: wrap;
+			opacity: 0;
+			transform: translateY(50px);
+			transition: all 1.2s ease;
+			pointer-events: none;
+			width: 100%;
+			max-width: 800px;
+			margin-top: 0;
+			/* Allow hero-actions to fill remaining vertical space */
+			flex: 1 1 auto;
+			height: 100%;
+		}
+
+		.hero-actions.show {
+			opacity: 1;
+			transform: translateY(0);
+			pointer-events: auto;
 		}
 
 		/* Hero Chat Interface */
@@ -1084,9 +1445,12 @@
 			max-width: 500px;
 			display: flex;
 			flex-direction: column;
-			gap: 1rem;
+			gap: 0; /* Remove gap since there's only the messages pane */
 			margin: 0;
-			min-height: 500px;
+			/* Fill available vertical space */
+			min-height: 350px;
+			height: 100%;
+			max-height: none;
 		}
 
 		.hero-chat-messages {
@@ -1100,6 +1464,8 @@
 			gap: 1rem;
 			min-height: 120px;
 			flex: 1;
+			justify-content: center;
+			align-items: center;
 		}
 
 		.hero-chat-placeholder {
@@ -1107,136 +1473,58 @@
 			color: rgba(255, 255, 255, 0.7);
 			font-size: 1rem;
 			line-height: 1.5;
+			width: 100%;
+			max-width: 90%;
 		}
 
-		.hero-chat-input-container {
-			position: relative;
-			display: flex;
-			align-items: flex-end;
-			gap: 0.75rem;
-			background: rgba(255, 255, 255, 0.1);
-			border: 1px solid rgba(255, 255, 255, 0.2);
-			border-radius: 20px;
-			padding: 1.25rem 1.125rem;
-			transition: all 0.3s ease;
-			min-height: 60px;
-			margin-top: auto;
-		}
-
-		.hero-chat-input-container:focus-within {
-			border-color: rgba(255, 255, 255, 0.4);
-			background: rgba(255, 255, 255, 0.15);
-		}
-
-		.hero-chat-input {
-			flex: 1;
-			background: none;
-			border: none;
-			outline: none;
-			color: var(--color-dark);
-			font-size: 1rem;
-			line-height: 1.5;
-			resize: none;
-			max-height: 120px;
-			overflow-y: auto;
-			font-family: inherit;
-			min-height: 48px;
-			padding: 0;
-			text-align: left;
-			display: block;
-			align-self: flex-start;
-		}
-
-		.hero-chat-input::placeholder {
-			color: rgba(11, 46, 51, 0.6);
-			text-align: left;
-			vertical-align: top;
-			line-height: 1.5;
-		}
-
-		.hero-chat-input:focus {
-			text-align: left;
-		}
-
-		.hero-chat-send {
-			background: var(--color-primary);
-			border: none;
-			border-radius: 50%;
-			width: 40px;
-			height: 40px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			cursor: pointer;
-			transition: all 0.2s ease;
-			flex-shrink: 0;
-		}
-
-		.hero-chat-send:hover:not(:disabled) {
-			background: var(--color-dark);
-			transform: scale(1.05);
-		}
-
-		.hero-chat-send:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-		}
-
-		.hero-chat-send .send-icon {
-			width: 18px;
-			height: 18px;
-			fill: white;
-		}
 
 		/* Mini chart next to chat */
 		.hero-chart-container {
 			flex: 1;
 			width: 100%;
 			max-width: 400px;
-			height: 300px;
+			height: 100%;
+			max-height: none;
 			border-radius: 16px;
 			background: rgba(255, 255, 255, 0.1);
 			border: 1px solid rgba(255, 255, 255, 0.2);
+			position: relative;
 		}
 
 		/* Responsive adjustments for hero chat */
 		@media (max-width: 768px) {
 			.hero-chat-container {
 				max-width: 100%;
+				min-height: 250px;
+				max-height: 300px;
 			}
 
 			.hero-chat-messages {
 				padding: 1rem;
 			}
 
-			.hero-chat-input {
-				font-size: 0.9rem;
-			}
-
-			.hero-chat-send {
-				width: 32px;
-				height: 32px;
-			}
-
-			.hero-chat-send .send-icon {
-				width: 14px;
-				height: 14px;
-			}
-
 			.hero-chart-container {
 				max-width: 100%;
 				height: 260px;
+				max-height: 300px;
 			}
 		}
 
 		@media (max-width: 480px) {
+			.hero-chat-container {
+				min-height: 200px;
+				max-height: 250px;
+			}
+
 			.hero-chat-messages {
-				max-height: 200px;
+				max-height: 120px;
 				padding: 0.75rem;
 			}
 
-			.hero-chat-input {
-				font-size: 0.85rem;
+
+			.hero-chart-container {
+				height: 200px;
+				max-height: 250px;
 			}
 		}
 
@@ -1244,29 +1532,90 @@
 		   Desktop layout: split chat & chart 50/50
 		   ================================================ */
 		@media (min-width: 1024px) {
-			.hero-content {
-				max-width: 75vw;
-			}
-
-			/* Arrange chat & chart side-by-side with 40/60 split */
 			.hero-actions {
+				max-width: 75vw;
 				display: grid;
 				grid-template-columns: 40% 60%;
 				gap: 2rem;
 				justify-content: center;
+				height: 100%;
 			}
 
 			.hero-chat-container {
 				width: 100%; /* full width of its grid cell */
 				max-width: none;
+				height: 100%;
+				max-height: none;
 			}
 
 			.hero-chart-container {
 				width: 100%;
 				max-width: none;
 				height: 100%;
-				min-height: 65vh;
+				max-height: none;
+				min-height: 350px;
 			}
+		}
+
+		/* When messages are present, align them to the top/left */
+		.hero-chat-messages.has-messages {
+			justify-content: flex-start;
+			align-items: stretch;
+			text-align: left;
+		}
+
+		/* Basic bubble styling mirroring chat.svelte */
+		.message-wrapper {
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			align-items: flex-end; /* user alignment */
+		}
+
+		.message.user {
+			background: linear-gradient(135deg, #0a84ff 0%, #007aff 100%);
+			color: #ffffff;
+			padding: 0.6rem 1rem;
+			border-radius: 1rem;
+			max-width: 80%;
+			font-size: 0.9rem;
+			border-bottom-right-radius: 0.25rem;
+			box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+			text-align: left;
+		}
+
+		.message-wrapper.assistant {
+			align-items: flex-start;
+		}
+
+		.assistant-message {
+			margin: 0;
+			font-size: 0.9rem;
+			color: var(--color-dark);
+			max-width: 80%;
+			text-align: left;
+		}
+
+		/* Force Inter font inside chat */
+		.hero-chat-container, .hero-chat-container * {
+			font-family: 'Geist';
+		}
+
+		.hero-chart-legend {
+			position: absolute;
+			top: 6px;
+			left: 6px;
+			background: none;
+			color: #000000;
+			padding: 4px 6px;
+			border-radius: 4px;
+			font-size: 0.8rem;
+			display: flex;
+			gap: 0.4rem;
+			pointer-events: none;
+		}
+		.hero-chart-legend .ticker {
+			font-weight: 700;
 		}
 
 	</style>
