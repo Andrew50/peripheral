@@ -174,25 +174,6 @@
 		<div class="landing-static-gradient"></div>
 	</div>
 
-	<!-- Header -->
-	<header class="landing-header">
-		<div class="landing-header-content">
-			<div class="logo-section">
-				<button
-					on:click={navigateToHome}
-					on:keydown={(e) => e.key === 'Enter' && navigateToHome()}
-					class="logo-button"
-					aria-label="Navigate to home"
-				>
-					<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="landing-logo" />
-				</button>
-			</div>
-			<nav class="landing-nav">
-				<button class="landing-button secondary" on:click={navigateToHome}> ← Back to Home </button>
-			</nav>
-		</div>
-	</header>
-
 	<!-- Main Auth Content -->
 	<div class="landing-container centered" style="padding-top: 120px;">
 		<div class="auth-container">

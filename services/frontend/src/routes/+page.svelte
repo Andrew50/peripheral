@@ -3,7 +3,16 @@
 		import { onMount } from 'svelte';
 		import { goto } from '$app/navigation';
 		import { startPricingPreload } from '$lib/utils/pricing-loader';
-		import { showAuthModal } from '$lib/stores/authModal';
+		import { createChart } from 'lightweight-charts';
+		import { fade } from 'svelte/transition';
+		import type { TimelineEvent } from '$lib/landing/timeline';
+		import { createTimelineEvents, sampleQuery, totalScroll } from '$lib/landing/timeline';
+		import PlotChunk from '$lib/features/chat/components/PlotChunk.svelte';
+		import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
+		import ChipSection from '$lib/landing/ChipSection.svelte';
+		import SiteHeader from '$lib/components/SiteHeader.svelte';
+		import SiteFooter from '$lib/components/SiteFooter.svelte';
+		import '$lib/styles/splash.css';
 
 		if (browser) {
 			document.title = 'Peripheral';
@@ -14,29 +23,165 @@
 		let isHeaderTransparent = true;
 		let prevScrollY = 0;
 
-		// Chat interface state
-		let chatInput = '';
-		let chatInputRef: HTMLTextAreaElement;
+		// Animation state management
+		let animationPhase = 'initial'; // 'initial', 'typing', 'submitted', 'complete'
+		let showHeroContent = false;
+		let animationInput = '';
+		let animationInputRef: HTMLTextAreaElement;
+		
+		let typewriterIndex = 0;
+		let typewriterInterval: NodeJS.Timeout;
 
-		function handleChatSubmit() {
-			if (!chatInput.trim()) return;
-			
-			// Show auth modal when user tries to send a message
-			showAuthModal('conversations', 'signup');
+		// Control removal of the animation input bar after transition
+		let removeAnimationInput = false;
+
+		let chartContainerRef: HTMLDivElement;
+
+		// Chat messages array to display inside hero chat, mimicking main chat structure
+		// ------ Content chunk support (text, table, plot) ------
+		type TableData = { caption?: string; headers: string[]; rows: any[][] };
+		type PlotData = {
+			chart_type: 'line' | 'bar' | 'scatter' | 'histogram' | 'heatmap';
+			data: any[];
+			[key: string]: any;
+		};
+		type ContentChunk = { type: 'text' | 'table' | 'plot'; content: string | TableData | PlotData };
+
+		interface ChatMessage {
+			message_id: string;
+			sender: 'user' | 'assistant';
+			text?: string; // optional – may be empty when using contentChunks
+			contentChunks: ContentChunk[];
 		}
 
-		function adjustChatTextarea() {
-			if (!chatInputRef) return;
-			chatInputRef.style.height = 'auto';
-			chatInputRef.offsetHeight;
-			chatInputRef.style.height = `${chatInputRef.scrollHeight}px`;
+		function isTableData(content: any): content is TableData {
+			return (
+				content &&
+				typeof content === 'object' &&
+				Array.isArray(content.headers) &&
+				Array.isArray(content.rows)
+			);
 		}
 
-		function handleChatKeydown(event: KeyboardEvent) {
-			if (event.key === 'Enter' && !event.shiftKey) {
-				event.preventDefault();
-				handleChatSubmit();
+		let chatMessages: ChatMessage[] = [];
+
+		// Data injected from +page.server.ts (defaultChartData)
+		export let data: { defaultChartData?: any };
+
+		let timelineProgress = 0; // 0 → 1
+		let timelineUnlocked = false; // true when normal page scrolling is active
+		/* Manage document scroll lock */
+		function setScrollLock(locked: boolean) {
+			document.documentElement.style.overflow = locked ? 'hidden' : '';
+			document.body.style.overflow = locked ? 'hidden' : '';
+		}
+
+
+		function addMessage(text: string) {
+			const msg: ChatMessage = {
+				message_id: 'hero_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+				sender: 'user',
+				text,
+				contentChunks: [{ type: 'text', content: text }]
+			};
+			chatMessages = [...chatMessages, msg];
+		}
+
+		function addAssistantMessage(text: string) {
+			const msg: ChatMessage = {
+				message_id: 'hero_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+				sender: 'assistant',
+				text,
+				contentChunks: [{ type: 'text', content: text }]
+			};
+			chatMessages = [...chatMessages, msg];
+		}
+
+		function removeLastMessage() {
+			chatMessages = chatMessages.slice(0, -1);
+		}
+
+		function setChartData() {
+				
+		}
+
+
+		const timelineEvents: TimelineEvent[] = createTimelineEvents({
+			addUserMessage: addMessage,
+			addAssistantMessage,
+			removeLastMessage,
+		});
+
+		function evaluateTimeline() {
+			for (const evt of timelineEvents) {
+				if (!evt.fired && timelineProgress >= evt.trigger) {
+					evt.forward();
+					evt.fired = true;
+				} else if (evt.fired && timelineProgress < evt.trigger) {
+					evt.backward?.();
+					evt.fired = false;
+				}
 			}
+		}
+
+		function handleHeroWheel(e: WheelEvent) {
+			const atTop = window.scrollY === 0;
+			const delta = e.deltaY;
+			const deltaProgress = delta / totalScroll;
+
+			// Decide if we should hijack
+			const shouldIntercept = !timelineUnlocked || (timelineUnlocked && atTop && delta < 0);
+
+			if (!shouldIntercept) return; // allow normal scrolling
+
+			e.preventDefault();
+
+			// If we are re-entering the hero from top, lock scrolling again
+			if (timelineUnlocked && atTop && delta < 0) {
+				timelineUnlocked = false;
+				setScrollLock(true);
+			}
+
+			// Update progress (both directions)
+			timelineProgress = Math.min(1, Math.max(0, timelineProgress + deltaProgress));
+			evaluateTimeline();
+
+			// Unlock when progress reaches end and user scrolls downwards
+			if (!timelineUnlocked && timelineProgress >= 1 && delta > 0) {
+				timelineUnlocked = true;
+				setScrollLock(false);
+			}
+		}
+
+		function startTypewriterEffect() {
+			animationPhase = 'typing';
+			typewriterInterval = setInterval(() => {
+				if (typewriterIndex < sampleQuery.length) {
+					animationInput = sampleQuery.slice(0, typewriterIndex + 1);
+					typewriterIndex++;
+				} else {
+					clearInterval(typewriterInterval);
+					// Wait a moment, then submit
+					setTimeout(() => {
+						submitAnimationQuery();
+					}, 100);
+				}
+			}, 22); // Adjust typing speed here
+		}
+
+		function submitAnimationQuery() {
+			animationPhase = 'submitted';
+			// Wait for submit animation, then move input down and show hero content
+			setTimeout(() => {
+				animationPhase = 'complete';
+				showHeroContent = true;
+
+
+				// After CSS transition (~1.5s) remove the element from the DOM
+				setTimeout(() => {
+					removeAnimationInput = true;
+				}, 600);
+			}, 400);
 		}
 
 		function handleScroll() {
@@ -52,6 +197,11 @@
 			prevScrollY = currentY;
 		}
 
+		// ------- Hero chart legend state ---------
+		const currentTicker = 'SPY';
+		interface LegendData { open: number; high: number; low: number; close: number; volume: number; }
+		let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0, volume: 0 };
+
 		onMount(() => {
 			if (browser) {
 				// Start preloading pricing configuration early
@@ -60,32 +210,146 @@
 					isHeaderVisible = false;
 					isHeaderTransparent = false;
 				} 
-				// Only set loaded state for animation
+				// Set loaded state for animation
 				isLoaded = true;
-				document.body.classList.add('loaded');
+
+				// Start the animation sequence after a short delay
+				setTimeout(() => {
+					startTypewriterEffect();
+				}, 0);
+
+				// Evaluate timeline once at mount to fire trigger 0 events
+				evaluateTimeline();
+
+				// Disable native scrolling & start intercepting wheel for hero timeline
+				setScrollLock(true);
+				window.addEventListener('wheel', handleHeroWheel as any, { passive: false });
+
+				/* --- Initialise lightweight chart in hero --- */
+				if (chartContainerRef) {
+					const chart = createChart(chartContainerRef, {
+						width: chartContainerRef.clientWidth,
+						height: chartContainerRef.clientHeight,
+						layout: { background: { color: 'transparent' }, textColor: '#0B2E33', attributionLogo: false },
+						grid: {
+							vertLines: {
+								visible: true,
+								color: 'rgba(11, 46, 51, 0.15)',
+								style: 1 
+							},
+							horzLines: {
+								visible: true,
+								color: 'rgba(11, 46, 51, 0.15)', 
+								style: 1 
+							}
+						},
+						timeScale: { visible: true },
+						handleScroll: {
+							mouseWheel: false,
+							pressedMouseMove: true,
+							horzTouchDrag: true,
+							vertTouchDrag: true,
+						},
+						handleScale: {
+							mouseWheel: false,
+							pinch: true,
+						}
+					});
+
+					// Candles (price)
+					const candleSeries = chart.addCandlestickSeries({
+						upColor: '#26a69a',
+						downColor: '#ef5350',
+						borderVisible: false,
+						wickUpColor: '#26a69a',
+						wickDownColor: '#ef5350',
+					});
+
+					// Volume histogram (shares traded) – mimic chart.svelte settings
+					const volumeSeries = chart.addHistogramSeries({
+						lastValueVisible: false,
+						priceLineVisible: false,
+						priceFormat: { type: 'volume' },
+						priceScaleId: ''
+					});
+					// Place volume at bottom 10 % and hide its own scale
+					volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.90, bottom: 0 }, visible: false });
+
+					const now = Math.floor(Date.now() / 1000);
+					const candleData = Array.from({ length: 200 }, (_, i) => {
+						const base = 100 + Math.sin(i / 4) * 3;
+						const open = base + (Math.random() - 0.5) * 2;
+						const close = open + (Math.random() - 0.5) * 4;
+						const high = Math.max(open, close) + Math.random() * 2;
+						const low = Math.min(open, close) - Math.random() * 2;
+						const volume = Math.floor(1000 + Math.random() * 9000);
+
+						return {
+							time: (now - (200 - i) * 60) as any,
+							open,
+							high,
+							low,
+							close,
+							volume,
+						};
+					});
+					candleSeries.setData(candleData);
+					// Random volume data mapped from candleData
+					volumeSeries.setData(
+						candleData.map((bar: any) => ({
+							time: bar.time,
+							value: bar.volume,
+							color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+						}))
+					);
+
+					// Inject real SPY data from server, if available
+					if (data?.defaultChartData?.chartData?.bars?.length) {
+						const serverBars = data.defaultChartData.chartData.bars.map((bar: any) => ({
+							time: bar.time as any,
+							open: bar.open,
+							high: bar.high,
+							low: bar.low,
+							close: bar.close,
+							volume: bar.volume ?? bar.v ?? bar.vol ?? 0
+						}));
+						candleSeries.setData(serverBars);
+						volumeSeries.setData(
+							serverBars.map((bar: any) => ({
+								time: bar.time,
+								value: bar.volume,
+								color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+							}))
+						);
+						// Ensure legend volume updated with latest server bar
+						if (serverBars.length) {
+							const lastBar = serverBars[serverBars.length - 1];
+							legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close, volume: lastBar.volume } as any;
+						}
+					}
+
+					// Subscribe to crosshair to update legend reactively
+					chart.subscribeCrosshairMove(param => {
+						if (!param || !param.seriesData) return;
+						const bar = param.seriesData.get(candleSeries);
+						const volBar = param.seriesData.get(volumeSeries);
+						if (bar && typeof bar === 'object' && 'open' in bar) {
+							const volumeVal = volBar && typeof volBar === 'object' && 'value' in volBar ? volBar.value : legendData.volume;
+							legendData = { open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volumeVal } as any;
+						}
+					});
+
+					new ResizeObserver(() => {
+						chart.applyOptions({
+							width: chartContainerRef!.clientWidth,
+							height: chartContainerRef!.clientHeight,
+						});
+					}).observe(chartContainerRef);
+				}
 			}
 		});
 
-		function navigateToLogin() {
-			goto('/login');
-		}
 
-		function navigateToSignup() {
-			goto('/signup');
-		}
-
-		function navigateToPricing() {
-			goto('/pricing');
-		}
-
-		function navigateToApp() {
-			goto('/app');
-		}
-
-		function handleNavClick(event: Event) {
-			// Prevent pill click when clicking navigation buttons
-			event.stopPropagation();
-		}
 
 		// Subsections data
 		const subsections = [
@@ -110,60 +374,127 @@
 	<!-- Window scroll listener -->
 	<svelte:window on:scroll={handleScroll} />
 
-	<!-- Morphing pill header -->
-	<header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
-		<nav class="header-content">
-			<div class="logo-section">
-				<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
-				<p class="logo-text">Peripheral</p>
-			</div>
-			<div class="navigation">
-				<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToPricing(); }}>Pricing</button>
-				<button class="nav-button secondary" on:click={(e) => { handleNavClick(e); navigateToLogin(); }}>Login</button>
-				<button class="nav-button primary" on:click={(e) => { handleNavClick(e); navigateToSignup(); }}>Sign up</button>
-			</div>
-		</nav>
-	</header>
+	<SiteHeader />
 
 	<main class="landing-container">
 		<!-- Hero Section -->
 		<section class="hero-section" class:loaded={isLoaded}>
-			<div class="hero-content">
+			<!-- Hero Header - Always Visible -->
+			<div class="hero-header">
 				<h1 class="hero-title">
-					The <span class="gradient-text">only</span> way to trade.
+					The <span class="gradient-text">best</span> way to trade.
 				</h1>
 				<p class="hero-subtitle">
 					Peripheral is the terminal to envision and execute your trading ideas.<br />
 				</p>
-				<div class="hero-actions">
-					<div class="hero-chat-container">
-						<div class="hero-chat-messages">
-							<div class="hero-chat-placeholder">
-								<p>Ask me anything about trading, market analysis, or investment strategies...</p>
-							</div>
-						</div>
-						<div class="hero-chat-input-container">
-							<textarea
-								class="hero-chat-input"
-								placeholder="Ask anything..."
-								bind:value={chatInput}
-								bind:this={chatInputRef}
-								rows="1"
-								on:input={adjustChatTextarea}
-								on:keydown={handleChatKeydown}
-							></textarea>
-							<button
-								class="hero-chat-send"
-								on:click={handleChatSubmit}
-								disabled={!chatInput.trim()}
-							>
-								<svg viewBox="0 0 18 18" class="send-icon">
-									<path
-										d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
-									/>
-								</svg>
-							</button>
-						</div>
+			</div>
+
+			<!-- Animation Input Bar -->
+			{#if !removeAnimationInput}
+			<div class="animation-input-container" class:typing={animationPhase === 'typing'} class:submitted={animationPhase === 'submitted'} class:complete={animationPhase === 'complete'}>
+				<div class="animation-input-wrapper">
+					<textarea
+						class="animation-input"
+						bind:value={animationInput}
+						bind:this={animationInputRef}
+						readonly
+						rows="1"
+						class:typing-cursor={animationPhase === 'typing'}
+					></textarea>
+					<button
+						class="animation-send"
+						class:pulse={animationPhase === 'submitted'}
+					>
+						<svg viewBox="0 0 18 18" class="send-icon">
+							<path
+								d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
+							/>
+						</svg>
+					</button>
+				</div>
+			</div>
+			{/if}
+
+			<!-- Hero Actions - Revealed after animation -->
+			<div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
+				<div class="hero-chat-container hero-widget" class:has-messages={chatMessages.length > 0}>
+					<div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
+						{#if chatMessages.length !== 0}
+							{#each chatMessages as msg (msg.message_id)}
+								<div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
+									{#if msg.sender === 'user'}
+										<div class="message user">
+											<div class="message-content">
+												<p>{msg.text}</p>
+											</div>
+										</div>
+									{:else}
+										{#if msg.contentChunks && msg.contentChunks.length > 0}
+											<div class="assistant-message">
+												{#each msg.contentChunks as chunk, idx}
+													{#if chunk.type === 'text'}
+														<p>{@html typeof chunk.content === 'string' ? chunk.content : String(chunk.content)}</p>
+													{:else if chunk.type === 'table'}
+														{#if isTableData(chunk.content)}
+															{@const tableData = chunk.content}
+															<div class="assistant-table">
+																<table>
+																	{#if tableData.caption}
+																		<caption>{@html tableData.caption}</caption>
+																	{/if}
+																	<thead>
+																		<tr>
+																			{#each tableData.headers as header}
+																				<th>{@html header}</th>
+																			{/each}
+																		</tr>
+																	</thead>
+																	<tbody>
+																		{#each tableData.rows as row}
+																			<tr>
+																				{#each row as cell}
+																					<td>{@html typeof cell === 'string' ? cell : String(cell)}</td>
+																				{/each}
+																			</tr>
+																		{/each}
+																	</tbody>
+																</table>
+															</div>
+														{:else}
+															<p>Invalid table data</p>
+														{/if}
+													{:else if chunk.type === 'plot'}
+														{#if isPlotData(chunk.content)}
+															{@const plotData = getPlotData(chunk.content)}
+															{#if plotData}
+																<PlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
+															{:else}
+																<p>Invalid plot data structure</p>
+															{/if}
+														{:else}
+															<p>Invalid plot data</p>
+														{/if}
+													{/if}
+												{/each}
+											</div>
+										{:else}
+											<p class="assistant-message">{msg.text}</p>
+										{/if}
+									{/if}
+								</div>
+							{/each}
+						{/if}
+					</div>
+				</div>
+				<div class="hero-chart-container hero-widget" bind:this={chartContainerRef}>
+					<!-- Legend overlay -->
+					<div class="hero-chart-legend">
+						<span class="ticker">{currentTicker}</span>
+						<span>O {legendData.open?.toFixed(2)}</span>
+						<span>H {legendData.high?.toFixed(2)}</span>
+						<span>L {legendData.low?.toFixed(2)}</span>
+						<span>C {legendData.close?.toFixed(2)}</span>
+						<span>V {legendData.volume?.toLocaleString()}</span>
 					</div>
 				</div>
 			</div>
@@ -196,63 +527,30 @@
 				{/each}
 			</div>
 		</section>
-
+		<!-- Ideas Chips Section -->
+		<ChipSection />
 		<!-- Big Centered Tagline Section -->
 		<section class="tagline-section">
 			<div class="tagline-inner">
 				<p class="tagline-pretext">JUMP INTO</p>
 				<h2 class="tagline-text">The Final Trading Terminal.</h2>
-				<button class="tagline" on:click={navigateToSignup}>Get Started</button>
+				<button class="tagline" on:click={() => goto('/signup')}>Get Started</button>
 			</div>
 		</section>
 
 		<!-- Footer -->
-		<footer class="landing-footer">
-			<div class="footer-content">
-				<div class="footer-section footer-left"> 
-					<div class="footer-section">
-						<h4 class="footer-title">Platform</h4>
-						<ul class="footer-links">
-							<li><button on:click={navigateToPricing}>Pricing</button></li>
-							<li><button on:click={navigateToApp}>Dashboard</button></li>
-						</ul>
-					</div>
-					<div class="footer-section">
-						<h4 class="footer-title">Account</h4>
-						<ul class="footer-links">
-							<li><button on:click={navigateToSignup}>Sign Up</button></li>
-							<li><a href="mailto:info@peripheral.io" class="footer-sales-link">Contact Sales</a></li>
-							<li><button on:click={navigateToLogin}>Login</button></li>
-						</ul>
-					</div>
-					<div class="footer-section">
-						<h4 class="footer-title">Connect</h4>
-						<div class="footer-social-row">
-							<a href="https://twitter.com/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="X (Twitter)">
-								<img src="/x-logo-white.png" alt="X (Twitter)" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
-							</a>
-							<a href="https://discord.gg/peripheral" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="Discord">
-								<img src="/Discord-Symbol-White.png" alt="Discord" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
-							</a>
-							<a href="https://www.linkedin.com/company/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="LinkedIn">
-								<img src="/InBug-White.png" alt="LinkedIn" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
-							</a>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="footer-bottom">
-				<p>2025 Atlantis Labs, Inc.</p>
-			</div>
-			<div class="footer-brand">Peripheral</div>
-		</footer>
+		<SiteFooter />
 	</main>
 
 	<style>
 		@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 		@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 		
-		/* Ensure fonts load properly */
+		/* Global styles */
+		:global(*) {
+			box-sizing: border-box;
+		}
+
 		:global(html), :global(body) {
 			margin: 0;
 			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -267,15 +565,6 @@
 			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		}
 
-		:root {
-			--color-dark: #0B2E33;
-			--color-primary: #4F7C82;
-			--color-accent: #93B1B5;
-			--color-light: #B8E3E9;
-			--pill-size: 40px;
-			--header-h: 48px;
-			--header-top: 16px;
-		}
 
 		.landing-container {
 			position: relative;
@@ -295,35 +584,7 @@
 			padding-top: var(--header-h);
 		}
 
-		/* Background Effects */
-		.background-animation {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			z-index: 0;
-			pointer-events: none;
-		}
 
-		.gradient-orb {
-			position: absolute;
-			border-radius: 50%;
-			filter: blur(100px);
-			opacity: 0.3;
-			animation: float 20s ease-in-out infinite;
-		}
-
-
-		.static-gradient {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: var(--color-light);
-			z-index: -1;
-		}
 
 		@keyframes float {
 				0%,
@@ -341,28 +602,6 @@
 				}
 		}
 
-		/* Navigation Header */
-		.landing-header {
-			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			z-index: 1000;
-			background: var(--color-dark);
-			border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-			transition: all 0.3s ease;
-		}
-
-		.header-content {
-			padding: 0 1rem;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			width: 100%;
-			height: 100%;
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			position: relative;
-		}
 
 		.logo-section {
 			display: flex;
@@ -386,102 +625,6 @@
 			letter-spacing: -0.02em;
 		}
 
-		.navigation {
-			display: flex;
-			gap: 0.75rem;
-			align-items: center;
-		}
-
-		.nav-button {
-			padding: 0.35rem 0.9rem;
-			border: none;
-			border-radius: 20px;
-			font-size: 0.8rem;
-			font-weight: 600;
-			cursor: pointer;
-			text-decoration: none;
-			background: transparent;
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			white-space: nowrap;
-		}
-
-		.nav-button.secondary {
-			background: #00000000;
-			color: #000000;
-			border: 1px solid var(--color-primary);
-		}
-
-
-		.nav-button.primary {
-			background: rgb(0, 0, 0);
-			color: #f5f9ff;
-		}
-
-
-		.nav-button.primary:hover,
-		.nav-button.secondary:hover {
-			transform: translateY(-1px);
-			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-		}
-
-		/* Pill icon (hidden by default) */
-		.pill-icon {
-			display: none;
-			position: absolute;
-			left: 50%;
-			top: 50%;
-			transform: translate(-50%, -50%);
-			color: var(--color-dark);
-			z-index: 10;
-		}
-
-		/* Pill state styles */
-		#site-header {
-			position: fixed;
-			top: var(--header-top);
-			left: 50%;
-			transform: translateX(-50%);
-			width: 75vw;
-			max-width: 1400px;
-			height: var(--header-h);
-			background: #f5f9ff;
-			backdrop-filter: blur(16px);
-			border: 1px solid rgba(255,255,255,0.25); /* soften border */
-			border-radius: 999px;
-			transition: all .4s cubic-bezier(.4,0,.2,1);
-			z-index: 1050;
-			box-shadow: 0 4px 20px rgba(0,0,0,.1);
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			cursor: pointer;
-		}
-
-		#site-header.pill {
-			width: var(--pill-size);
-			height: var(--pill-size);
-			border-radius: 50%;
-			top: var(--header-top);
-			transform: translateX(-50%);
-			cursor: pointer;
-		}
-
-		#site-header.pill .header-content {
-			padding: 0;
-			justify-content: center;
-		}
-
-		#site-header.pill .logo-section,
-		#site-header.pill .navigation {
-			display: none;
-		}
-
-		#site-header.pill .pill-icon {
-			display: block;
-		}
-
-		#site-header.pill:hover {
-			background: rgba(184, 227, 233, 0.95);
-			transform: translateX(-50%) scale(1.05);
-		}
 
 		/* Hero Section */
 		.hero-section {
@@ -490,52 +633,24 @@
 			min-height: 100vh;
 			display: flex;
 			flex-direction: column;
-			justify-content: flex-start;
+			justify-content: space-between;
 			align-items: center;
-			padding: 3rem 2rem 4rem;
+			padding: 2rem 2rem 4rem;
+			padding-top: calc(var(--header-h) - 1rem);
 			text-align: center;
 			width: 100%;
 			flex-shrink: 0;
 			isolation: isolate;
 			border-radius: 4.5rem;
 		}
-
-		.hero-content {
-			max-width: 800px;
-			opacity: 0;
-			transform: translateY(30px);
-			transition: all 1s ease;
-			display: flex;
-			flex-direction: column;
-			flex: 1;
-		}
-
-		.hero-section.loaded .hero-content {
-			opacity: 1;
-			transform: translateY(0);
-		}
-
-		.hero-badge {
-			display: inline-block;
-			padding: 0.5rem 1.5rem;
-			background: rgba(59, 130, 246, 0.1);
-			border: 1px solid rgba(59, 130, 246, 0.3);
-			border-radius: 100px;
-			color: #60a5fa;
-			font-size: 0.8rem;
-			font-weight: 600;
-			letter-spacing: 1px;
-			text-transform: uppercase;
-			margin-bottom: 2rem;
-		}
-
 		.hero-title {
-			font-size: clamp(3.5rem, 8vw, 6rem);
+			font-size: clamp(2.7rem, 4vw, 5rem);
 			font-weight: 800;
 			margin: 0 0 1.5rem 0;
 			letter-spacing: -0.02em;
 			line-height: 1.1;
 			color: var(--color-dark);
+			text-shadow: 0 2px 12px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.01);
 		}
 
 		.gradient-text {
@@ -573,78 +688,13 @@
 		.hero-subtitle {
 			font-size: clamp(1.1rem, 3vw, 1.5rem);
 			color: rgba(245, 249, 255, 0.85);
-			margin-bottom: 3rem;
+			margin-bottom: 1.5rem;
 			line-height: 1.6;
+			margin-top: 0;
 			font-weight: 400;
 		}
 
-		.hero-actions {
-			display: flex;
-			gap: 1rem;
-			justify-content: center;
-			flex-wrap: wrap;
-			margin-top: auto;
-		}
 
-		.cta-button {
-			padding: 1rem 2rem;
-			border: none;
-			border-radius: 12px;
-			font-size: 1rem;
-			font-weight: 600;
-			cursor: pointer;
-			transition: all 0.3s ease;
-			display: inline-flex;
-			align-items: center;
-			gap: 0.5rem;
-			text-decoration: none;
-			background: transparent;
-			white-space: nowrap;
-		}
-
-		.cta-button.primary {
-			background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-			color: #f5f9ff;
-			border: 1px solid transparent;
-		}
-
-		.cta-button.primary:hover {
-			background: linear-gradient(135deg, #2563eb 0%, #5b21b6 100%);
-			transform: translateY(-2px);
-			box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
-		}
-
-		.cta-button.secondary {
-			color: #f5f9ff;
-			border: 1px solid rgba(255, 255, 255, 0.3);
-			background: rgba(255, 255, 255, 0.05);
-		}
-
-		.cta-button.secondary:hover {
-			background: rgba(255, 255, 255, 0.1);
-			border-color: rgba(255, 255, 255, 0.5);
-		}
-
-		.cta-button.outline {
-			color: #3b82f6;
-			border: 2px solid #3b82f6;
-			background: transparent;
-		}
-
-		.cta-button.outline:hover {
-			background: rgba(59, 130, 246, 0.1);
-			transform: translateY(-1px);
-		}
-
-		.cta-button.large {
-			padding: 1.25rem 2.5rem;
-			font-size: 1.1rem;
-		}
-
-		.arrow-icon {
-			width: 20px;
-			height: 20px;
-		}
 
 		/* Subsections Section */
 		.subsections-section {
@@ -738,130 +788,12 @@
 			opacity: 0.8;
 		}
 
-		/* Footer */
-		.landing-footer {
-			position: relative;
-			z-index: 10;
-			background: var(--color-dark);
-			border-top: 1px solid rgba(255, 255, 255, 0.1);
-			width: 100vw;
-			left: 50%;
-			transform: translateX(-50%);
-			padding: 3rem 0 1rem 0;
-			flex-shrink: 0;
-			margin-top: auto;
-		}
 
-		.footer-content {
-			display: flex;
-			flex-direction: row;
-			justify-content: flex-start;
-			gap: 2rem;
-			padding: 0 2rem;
-		}
-
-		.footer-left {
-			display: flex;
-			flex-direction: row;
-			gap: 2rem;
-		}
-
-		.footer-sections-right {
-			display: flex;
-			flex-direction: row;
-			gap: 2rem;
-			justify-content: flex-start;
-		}
-
-		.footer-section {
-			margin-bottom: 0;
-		}
-
-		.footer-logo {
-			height: 40px;
-			width: auto;
-			object-fit: contain;
-			max-width: 160px;
-			margin-bottom: 1rem;
-		}
-
-		.footer-title {
-			color: var(--color-light);
-			font-size: 1.1rem;
-			font-weight: 600;
-			margin: 0 0 1rem 0;
-		}
-
-		.footer-links {
-			list-style: none;
-			padding: 0;
-			margin: 0;
-		}
-
-		.footer-links li {
-			margin-bottom: 0.5rem;
-		}
-
-		.footer-links button {
-			background: none;
-			border: none;
-			color: #9ca3af;
-			cursor: pointer;
-			font-size: 0.9rem;
-			padding: 0;
-			text-align: left;
-			transition: color 0.3s ease;
-		}
-
-		.footer-links button:hover {
-			color: #f5f9ff;
-		}
-
-		.footer-links a {
-			color: #9ca3af;
-			text-decoration: none;
-			font-size: 0.9rem;
-			transition: color 0.3s ease;
-		}
-
-		.footer-links a:hover {
-			color: #f5f9ff;
-		}
-
-		.social-link {
-			color: #9ca3af;
-			text-decoration: none;
-			font-size: 0.9rem;
-			transition: color 0.3s ease;
-		}
-
-		.social-link:hover {
-			color: #ffffff;
-		}
-
-		.footer-bottom {
-			text-align: left;
-			color: var(--color-primary);
-			font-size: 0.9rem;
-			display: flex;
-			align-items: flex-end;
-			padding: 0 2rem;
-		}
 
 		/* Responsive Design */
 		@media (max-width: 768px) {
-			.header-content {
-				padding: 0 1rem;
-			}
 
-			.navigation {
-				gap: 0.5rem;
-			}
 
-			.nav-button {
-				padding: 0.4rem 1rem;
-				font-size: 0.8rem;
-			}
 
 			.logo-image {
 				height: 28px;
@@ -872,7 +804,8 @@
 			}
 
 			.hero-section {
-				padding: 6rem 1rem 3rem;
+				padding: 1rem 1rem 3rem;
+				padding-top: calc(var(--header-h) + 1rem);
 			}
 
 			.hero-actions {
@@ -880,12 +813,31 @@
 				align-items: center;
 			}
 
-			.cta-button {
-				width: 100%;
-				max-width: 300px;
-				justify-content: center;
+			/* Animation Input Bar - Mobile */
+			.animation-input-container {
+				width: 95vw;
 			}
 
+			.animation-input-wrapper {
+				padding: 0.75rem 1rem;
+				gap: 0.75rem;
+			}
+
+			.animation-input {
+				font-size: 1rem;
+			}
+
+			.animation-send {
+				width: 36px;
+				height: 36px;
+			}
+
+			.animation-send .send-icon {
+				width: 16px;
+				height: 16px;
+			}
+
+			
 			.subsection {
 				flex-direction: column;
 				gap: 2rem;
@@ -914,19 +866,17 @@
 				font-size: 3rem;
 			}
 
-			.cta-actions {
-				flex-direction: column;
-				align-items: center;
-			}
 
-			.footer-content {
-				flex-direction: column;
-				align-items: stretch;
+
+			:root { --hero-widget-h: 220px; }
+			.hero-chat-container {
+				max-width: 100%;
+				min-height: 220px;
+				max-height: 260px;
 			}
-			.footer-sections-right {
-				flex-direction: column;
-				gap: 1.2rem;
-				align-items: stretch;
+			.hero-chart-container {
+				max-width: 100%;
+				height: var(--hero-widget-h);
 			}
 		}
 
@@ -946,12 +896,16 @@
 				font-size: 2.5rem;
 			}
 
-			.footer-content {
-				flex-direction: column;
+
+
+			:root { --hero-widget-h: 220px; }
+			.hero-chat-container {
+				min-height: 160px;
+				max-height: 220px;
 			}
-			.footer-sections-right {
-				flex-direction: column;
-				gap: 1rem;
+			.hero-chart-container {
+				height: var(--hero-widget-h);
+				max-height: 220px;
 			}
 		}
 
@@ -960,73 +914,8 @@
 			box-sizing: border-box;
 		}
 
-		#site-header.transparent {
-			background: none;
-			backdrop-filter: none;
-			box-shadow: none;
-			border: none;
-		}
 
-		#site-header.hidden-up {
-			transform: translateX(-50%) translateY(-120%);
-			opacity: 0;
-			pointer-events: none;
-			transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s cubic-bezier(.4,0,.2,1);
-		}
 
-		.footer-brand {
-			width: 100vw;
-			position: relative;
-			left: 50%;
-			transform: translateX(-50%);
-			text-align: center;
-			font-size: clamp(4rem, 14vw, 12rem);
-			font-weight: 900;
-			color: #f5f9ff;
-			padding: 0.5rem 0 0.5rem 0;
-			line-height: 1;
-			letter-spacing: -0.06em;
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			z-index: 1;
-			pointer-events: none;
-			user-select: none;
-		}
-
-		.footer-social-row {
-			display: flex;
-			gap: 0.3rem;
-			align-items: center;
-			justify-content: center;
-			margin-top: 0.5rem;
-		}
-
-		.footer-social-icon {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			width: 28px;
-			height: 28px;
-			background: none;
-			border-radius: 50%;
-			transition: none;
-			font-size: 2rem;
-		}
-
-		.footer-social-icon:hover {
-			color: inherit;
-			background: none;
-		}
-
-		.footer-social-icon img {
-			filter: grayscale(1) brightness(0.8);
-			opacity: 0.7;
-			transition: filter 0.2s, opacity 0.2s;
-		}
-
-		.footer-social-icon:hover img {
-			filter: none;
-			opacity: 1;
-		}
 
 		.tagline-section {
 			width: 100vw;
@@ -1124,89 +1013,110 @@
 				0 0 0 240px rgba(var(--halo-rgb),0.02);
 			/* Slightly crisper blur */
 			filter: blur(28px);
-			border-radius: inherit; /* match parent radius */
+			border-radius: 28px; /* match parent radius */
 		}
 
-		/* Hero Chat Interface */
-		.hero-chat-container {
-			width: 100%;
-			max-width: 500px;
-			margin: 0 auto;
-			display: flex;
-			flex-direction: column;
-			gap: 1rem;
-		}
-
-		.hero-chat-messages {
-			background: rgba(255, 255, 255, 0.1);
-			border: 1px solid rgba(255, 255, 255, 0.2);
-			border-radius: 16px;
-			padding: 1.5rem;
-			max-height: 300px;
-			overflow-y: auto;
-			display: flex;
-			flex-direction: column;
-			gap: 1rem;
-			min-height: 120px;
-		}
-
-		.hero-chat-placeholder {
+		/* Hero Header - Always Visible */
+		.hero-header {
 			text-align: center;
-			color: rgba(255, 255, 255, 0.7);
-			font-size: 1rem;
-			line-height: 1.5;
+			opacity: 1;
+			transform: translateY(0);
 		}
 
-		.hero-chat-input-container {
+		/* Animation Input Bar */
+		.animation-input-container {
+			position: relative;
+			width: 90vw;
+			max-width: 800px;
+			opacity: 1;
+			transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+			z-index: 20;
+			margin-bottom: 1.5rem;
+		}
+
+		.animation-input-container.complete {
+			/* Fade out instead of dropping down */
+			opacity: 1;
+			transform: none;
+			pointer-events: none;
+			animation: containerFadeOut 0.4s 0.2s forwards ease;
+		}
+
+		.animation-input-container.submitted::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			border-radius: 28px; /* match input wrapper radius */
+			pointer-events: none;
+			border: 2px solid var(--color-primary);
+			box-shadow: 0 0 0 0 rgba(79,124,130,0.6);
+			animation: ringPulse 1s ease-out forwards;
+		}
+
+		@keyframes ringPulse {
+			/* Faster expansion (first 0.2s), longer hold (0.5s), then fade */
+			0%   { box-shadow: 0 0 0 0 rgba(79,124,130,0.6);   opacity: 1; }
+			20%  { box-shadow: 0 0 0 8px rgba(79,124,130,0.6); opacity: 1; }
+			70%  { box-shadow: 0 0 0 8px rgba(79,124,130,0.6); opacity: 1; }
+			100% { box-shadow: 0 0 0 8px rgba(79,124,130,0);  opacity: 0; }
+		}
+
+		/* Fade the entire container out once the ring pulse finishes */
+		@keyframes containerFadeOut {
+			0%   { opacity: 1; transform: scale(1); }
+			100% { opacity: 0; transform: scale(0.95); }
+		}
+
+		.animation-input-wrapper {
 			position: relative;
 			display: flex;
-			align-items: flex-end;
-			gap: 0.75rem;
-			background: rgba(255, 255, 255, 0.1);
-			border: 1px solid rgba(255, 255, 255, 0.2);
-			border-radius: 20px;
-			padding: 1.25rem 1.125rem;
+			align-items: center;
+			gap: 1rem;
+			background: rgba(255, 255, 255, 0.95);
+			border: 2px solid rgba(79, 124, 130, 0.3);
+			border-radius: 28px;
+			padding: 1rem 1.5rem;
+			backdrop-filter: blur(20px);
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 			transition: all 0.3s ease;
-			min-height: 120px;
 		}
 
-		.hero-chat-input-container:focus-within {
-			border-color: rgba(255, 255, 255, 0.4);
-			background: rgba(255, 255, 255, 0.15);
+		.animation-input-wrapper:focus-within {
+			border-color: var(--color-primary);
+			box-shadow: 0 12px 48px rgba(79, 124, 130, 0.2);
 		}
 
-		.hero-chat-input {
+		.animation-input {
 			flex: 1;
 			background: none;
 			border: none;
 			outline: none;
 			color: var(--color-dark);
-			font-size: 1rem;
+			font-size: 1.1rem;
 			line-height: 1.5;
 			resize: none;
-			max-height: 120px;
-			overflow-y: auto;
 			font-family: inherit;
-			min-height: 48px;
+			font-weight: 500;
 			padding: 0;
-			text-align: left;
-			vertical-align: top;
-			display: block;
-			align-self: flex-start;
+			min-height: 28px;
 		}
 
-		.hero-chat-input::placeholder {
-			color: rgba(11, 46, 51, 0.6);
-			text-align: left;
-			vertical-align: top;
-			line-height: 1.5;
+		.animation-input::placeholder {
+			color: rgba(11, 46, 51, 0.5);
 		}
 
-		.hero-chat-input:focus {
-			text-align: left;
+		.animation-input.typing-cursor::after {
+			content: '|';
+			animation: blink 1s infinite;
+			margin-left: 2px;
 		}
 
-		.hero-chat-send {
+		@keyframes blink {
+			0%, 50% { opacity: 1; }
+			51%, 100% { opacity: 0; }
+		}
+
+		.animation-send {
 			background: var(--color-primary);
 			border: none;
 			border-radius: 50%;
@@ -1216,61 +1126,246 @@
 			align-items: center;
 			justify-content: center;
 			cursor: pointer;
-			transition: all 0.2s ease;
+			transition: all 0.3s ease;
 			flex-shrink: 0;
 		}
 
-		.hero-chat-send:hover:not(:disabled) {
+		.animation-send:hover {
 			background: var(--color-dark);
 			transform: scale(1.05);
 		}
 
-		.hero-chat-send:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
+		.animation-send.pulse {
+			animation: pulse 0.6s ease-in-out;
 		}
 
-		.hero-chat-send .send-icon {
+		@keyframes pulse {
+			0% {
+				transform: scale(1);
+			}
+			50% {
+				transform: scale(1.2);
+				background: #10b981;
+			}
+			100% {
+				transform: scale(1);
+			}
+		}
+
+		.animation-send .send-icon {
 			width: 18px;
 			height: 18px;
 			fill: white;
+		}
+
+		/* Hero Actions - Initially hidden */
+		.hero-actions {
+			display: flex;
+			gap: 1rem;
+			justify-content: center;
+			flex-wrap: wrap;
+			opacity: 0;
+			transform: translateY(50px);
+			transition: all 1.2s ease;
+			pointer-events: none;
+			width: 100%;
+			max-width: 800px;
+			margin-top: 0;
+			/* Allow hero-actions to fill remaining vertical space */
+			flex: 0 1 auto;
+			height: auto;
+		}
+
+		.hero-actions.show {
+			opacity: 1;
+			transform: translateY(0);
+			pointer-events: auto;
+		}
+
+		/* Hero Chat Interface */
+		.hero-chat-container {
+			flex: 1;
+			width: 100%;
+			max-width: 500px;
+			display: flex;
+			flex-direction: column;
+			gap: 0; /* Remove gap since there's only the messages pane */
+			margin: 0;
+			/* Fill available vertical space */
+			min-height: 280px;
+			height: var(--hero-widget-h);
+			max-height: none;
+		}
+
+		.hero-chat-messages {
+			background: var(--hero-widget-background-color);
+			border: 1px solid rgba(255, 255, 255, 1);
+			border-radius: 16px;
+			padding: 1.5rem;
+			overflow-y: auto;
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+			min-height: 120px;
+			flex: 1;
+			justify-content: center;
+			align-items: center;
+		}
+
+		.hero-chat-placeholder {
+			text-align: center;
+			color: rgba(255, 255, 255, 0.7);
+			font-size: 1rem;
+			line-height: 1.5;
+			width: 100%;
+			max-width: 90%;
+		}
+
+
+		/* Mini chart next to chat */
+		.hero-chart-container {
+			flex: 1;
+			width: 100%;
+			max-width: 400px;
+			height: var(--hero-widget-h);
+			max-height: none;
+			border-radius: 16px;
+			background: var(--hero-widget-background-color);
+			border: 1px solid var(--hero-widget-background-color);
+			position: relative;
 		}
 
 		/* Responsive adjustments for hero chat */
 		@media (max-width: 768px) {
 			.hero-chat-container {
 				max-width: 100%;
+				min-height: 220px;
+				max-height: 260px;
 			}
 
 			.hero-chat-messages {
-				max-height: 250px;
 				padding: 1rem;
 			}
 
-			.hero-chat-input {
-				font-size: 0.9rem;
-			}
-
-			.hero-chat-send {
-				width: 32px;
-				height: 32px;
-			}
-
-			.hero-chat-send .send-icon {
-				width: 14px;
-				height: 14px;
+			.hero-chart-container {
+				max-width: 100%;
+				height: var(--hero-widget-h);
+				max-height: 260px;
 			}
 		}
 
 		@media (max-width: 480px) {
+			.hero-chat-container {
+				min-height: 160px;
+				max-height: 220px;
+			}
+
 			.hero-chat-messages {
-				max-height: 200px;
+				max-height: 120px;
 				padding: 0.75rem;
 			}
 
-			.hero-chat-input {
-				font-size: 0.85rem;
+
+			.hero-chart-container {
+				height: var(--hero-widget-h);
+				max-height: 220px;
 			}
+		}
+
+		/* ================================================
+		   Desktop layout: split chat & chart 50/50
+		   ================================================ */
+		@media (min-width: 1024px) {
+			.hero-actions {
+				max-width: 75vw;
+				display: grid;
+				grid-template-columns: 40% 60%;
+				gap: 2rem;
+				justify-content: center;
+			}
+
+			.hero-chat-container {
+				width: 100%; /* full width of its grid cell */
+				max-width: none;
+				max-height: none;
+				min-height: 280px;
+				height: var(--hero-widget-h);
+			}
+
+			.hero-chart-container {
+				width: 100%;
+				max-width: none;
+				max-height: none;
+				min-height: 280px;
+				height: var(--hero-widget-h);
+			}
+		}
+
+		/* When messages are present, align them to the top/left */
+		.hero-chat-messages.has-messages {
+			justify-content: flex-start;
+			align-items: stretch;
+			text-align: left;
+		}
+
+		/* Basic bubble styling mirroring chat.svelte */
+		.message-wrapper {
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			align-items: flex-end; /* user alignment */
+		}
+
+		.message.user {
+			background: linear-gradient(135deg, #0a84ff 0%, #007aff 100%);
+			color: #ffffff;
+			padding: 0.6rem 1rem;
+			border-radius: 1rem;
+			max-width: 80%;
+			font-size: 0.9rem;
+			border-bottom-right-radius: 0.25rem;
+			box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+			text-align: left;
+		}
+
+		.message-wrapper.assistant {
+			align-items: flex-start;
+		}
+
+		.assistant-message {
+			margin: 0;
+			font-size: 0.9rem;
+			color: var(--color-dark);
+			max-width: 80%;
+			text-align: left;
+		}
+
+		/* Force Inter font inside chat */
+		.hero-chat-container, .hero-chat-container * {
+			font-family: 'Geist';
+		}
+
+		.hero-chart-legend {
+			position: absolute;
+			top: 6px;
+			left: 6px;
+			background: none;
+			color: #000000;
+			padding: 4px 6px;
+			border-radius: 4px;
+			font-size: 0.8rem;
+			display: flex;
+			gap: 0.4rem;
+			pointer-events: none;
+		}
+		.hero-chart-legend .ticker {
+			font-weight: 700;
+		}
+
+		/* Shared widget class */
+		.hero-widget {
+			/* Already uses variable – class mainly for semantics now */
+			height: var(--hero-widget-h);
 		}
 
 	</style>

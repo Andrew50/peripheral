@@ -19,8 +19,8 @@
 		type DatabasePlan,
 		type DatabaseCreditProduct
 	} from '$lib/config/pricing';
-	import '$lib/styles/global.css';
-	import '$lib/styles/landing.css';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 
 	// Individual loading states for better UX
 	let loadingStates: Record<string, boolean> = {
@@ -441,45 +441,19 @@
 </script>
 
 <svelte:head>
-	<title>Pricing & Plans - Peripheral</title>
+	<title>Pricing | Peripheral</title>
 </svelte:head>
-
+<SiteHeader />
 <!-- Use landing page design system -->
 <div class="landing-background landing-reset">
-	<!-- Background Effects -->
-	<div class="landing-background-animation">
-		<div class="landing-gradient-orb landing-orb-1"></div>
-		<div class="landing-gradient-orb landing-orb-2"></div>
-		<div class="landing-gradient-orb landing-orb-3"></div>
-		<div class="landing-static-gradient"></div>
-	</div>
-
-	<!-- Header -->
-	<header class="landing-header">
-		<div class="landing-header-content">
-			<div class="logo-section">
-				<button
-					on:click={navigateToHome}
-					on:keydown={(e) => e.key === 'Enter' && navigateToHome()}
-					class="logo-button"
-					aria-label="Navigate to home"
-				>
-					<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="landing-logo" />
-				</button>
-			</div>
-			<nav class="landing-nav">
-				<button class="landing-button secondary" on:click={navigateToHome}>← Back to Home</button>
-			</nav>
-		</div>
-	</header>
 
 	<!-- Main Pricing Content -->
 	<div class="landing-container" style="padding-top: 120px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
-				<h1 class="landing-title">Pricing & Plans</h1>
-				<p class="landing-subtitle">Choose the perfect plan for your trading needs</p>
+				<h1 class="landing-title">Stay</h1>
+				<p class="landing-subtitle">Leverage Peripheral's environment to envision, enhance, and execute your trading ideas.</p>
 			</div>
 
 			<!-- Feedback Messages -->
@@ -623,6 +597,8 @@
 		</div>
 	</div>
 </div>
+
+<SiteFooter />
 
 <style>
 	/* Pricing-specific styles that build on landing system */
