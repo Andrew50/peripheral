@@ -51,6 +51,7 @@
     margin: 0;
     color: var(--color-dark);
     position: relative;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   .chip-rows {
