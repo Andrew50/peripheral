@@ -46,12 +46,15 @@ send_backup_alert() {
         "INFO") emoji="ℹ️" ;;
     esac
     
+    # Get environment info consistently to avoid literal placeholder output
+    local env_info="${ENVIRONMENT:-Development}"
+    
     # Format message for Telegram
     local telegram_message="$emoji *Database Backup - $alert_type*
 
 *System:* PostgreSQL Backup System
 *Time:* $timestamp
-*Environment:* ${ENVIRONMENT:-Development}
+*Environment:* $env_info
 
 *Message:*
 $message
