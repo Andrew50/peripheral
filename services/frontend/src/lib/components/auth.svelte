@@ -165,7 +165,7 @@
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
-				{loginMenu ? 'Sign into Peripheral' : 'Research, analyze, and execute with Peripheral'}
+				{loginMenu ? 'Sign into Peripheral' : 'Execute with Peripheral'}
 			</h1>
 		</div>
 
@@ -382,26 +382,6 @@
 		margin: 1.5rem 0;
 	}
 
-	.auth-divider::before {
-		content: '';
-		position: absolute;
-		top: 50%;
-		left: 0;
-		right: 0;
-		height: 1px;
-		background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-		opacity: 0.3;
-	}
-
-	.auth-divider span {
-		background: rgba(255, 255, 255, 0.95);
-		color: var(--color-primary);
-		padding: 0 1rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-		position: relative;
-		z-index: 1;
-	}
 
 	.form-group {
 		width: 100%;
