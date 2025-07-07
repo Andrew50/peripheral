@@ -620,7 +620,6 @@ class DataAccessorProvider:
             # Handle ticker-specific filtering
             if tickers is not None and len(tickers) > 0:
                 # Convert ticker symbols to security IDs and add to filter
-                logger.info(f"Converting ticker symbols {tickers} to security IDs")
                 security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")

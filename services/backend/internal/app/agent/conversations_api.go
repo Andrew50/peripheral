@@ -134,15 +134,16 @@ func DeleteConversation(conn *data.Conn, userID int, args json.RawMessage) (inte
 }
 
 // Helper function to convert DB messages to ConversationData format
-func convertDBMessagesToConversationData(dbMessages []DBConversationMessage) *ConversationData {
+func convertDBMessagesToConversationData(conn *data.Conn, userID int, dbMessages []DBConversationMessage) *ConversationData {
 	var chatMessages []ChatMessage
 	var totalTokenCount int
 
 	for _, dbMsg := range dbMessages {
+		contentChunks := processContentChunksForTables(context.Background(), conn, userID, dbMsg.ContentChunks)
 		chatMsg := ChatMessage{
 			MessageID:        dbMsg.MessageID,
 			Query:            dbMsg.Query,
-			ContentChunks:    dbMsg.ContentChunks,
+			ContentChunks:    contentChunks,
 			ResponseText:     dbMsg.ResponseText,
 			FunctionCalls:    dbMsg.FunctionCalls,
 			ToolResults:      dbMsg.ToolResults,
@@ -428,7 +429,7 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	}
 
 	// Get the raw messages
-	messagesInterface, err := GetConversationMessages(context.Background(), conn, args.ConversationID, userID)
+	messagesInterface, err := GetConversationMessagesRaw(context.Background(), conn, args.ConversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +441,7 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	}
 
 	// Convert to the format expected by the frontend
-	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData := convertDBMessagesToConversationData(conn, userID, messages)
 	conversationData.ConversationID = args.ConversationID
 	conversationData.Title = title
 

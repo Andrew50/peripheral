@@ -17,7 +17,7 @@ func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strate
 	if err != nil {
 		return fmt.Errorf("error marshaling backtest response: %v", err)
 	}
-	cachedDataTTL := 8 * time.Hour
+	cachedDataTTL := 48 * time.Hour
 	return conn.Cache.Set(ctx, cacheKey, cacheData, cachedDataTTL).Err()
 }
 

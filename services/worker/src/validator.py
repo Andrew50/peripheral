@@ -74,6 +74,8 @@ class SecurityValidator:
             "slice", "complex", "frozenset", "object", "format",
             # Safe console output
             "print",
+            # zip and enumerate
+            "zip", "enumerate",
             # Data accessor functions
             "get_bar_data", "get_general_data"
         }

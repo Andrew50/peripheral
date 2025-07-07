@@ -1,0 +1,16 @@
+:root {
+	/* Splash (landing) page colour palette */
+	--color-dark: #0B2E33;
+	--color-primary: #4F7C82;
+	--color-accent: #93B1B5;
+	--color-light: #B8E3E9;
+
+	/* Layout & sizing tokens used by the landing page */
+	--pill-size: 40px;
+	--header-h: 48px;
+	--header-top: 16px;
+
+	/* Hero widget */
+	--hero-widget-h: clamp(320px, 55vw, 600px);
+	--hero-widget-background-color: #ededf1;
+} 

@@ -49,14 +49,20 @@ type BacktestResponse struct {
 	StrategyPlots  []StrategyPlot        `json:"strategyPlots,omitempty"`
 }
 
-// StrategyPlot represents a captured plotly plot
+// StrategyPlot represents a captured plotly plot (lightweight version for API response)
 type StrategyPlot struct {
-	ChartType string           `json:"chart_type"`       // "line", "bar", "scatter", "histogram", "heatmap"
-	Data      []map[string]any `json:"data,omitempty"`   // Array of trace objects with x/y/z data arrays
-	Length    int              `json:"length"`           // Length of the data array
-	Title     string           `json:"title"`            // Chart title
-	Layout    map[string]any   `json:"layout,omitempty"` // Minimal layout (axis labels, dimensions)
-	PlotID    int              `json:"plotID"`           // Plot ID for the chart
+	Data      []map[string]any `json:"data,omitempty"`      // traces of data
+	PlotID    int              `json:"plotID"`              // Plot ID for the chart
+	ChartType string           `json:"chartType,omitempty"` // "line", "bar", "scatter", "histogram", "heatmap"
+	Length    int              `json:"length,omitempty"`    // Length of the data array
+	Title     string           `json:"title,omitempty"`     // Chart title
+	Layout    map[string]any   `json:"layout,omitempty"`    // Minimal layout (axis labels, dimensions)
+}
+
+// StrategyPlotData represents the full plotly data for caching
+type StrategyPlotData struct {
+	PlotID int            `json:"plotID"`
+	Data   map[string]any `json:"data"` // Full plotly figure object
 }
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
@@ -69,7 +75,7 @@ type WorkerBacktestResult struct {
 	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
 	ExecutionTimeMs    int                    `json:"execution_time_ms"`
 	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
-	StrategyPlots      []StrategyPlot         `json:"strategy_plots,omitempty"`
+	StrategyPlots      []StrategyPlotData     `json:"strategy_plots,omitempty"`
 	ErrorMessage       string                 `json:"error_message,omitempty"`
 }
 
@@ -250,10 +256,30 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	summary := convertWorkerSummaryToBacktestSummary(result.Summary, result.Instances)
 
+	// Extract plot attributes and prepare lightweight plots for API response
+	lightweightPlots := make([]StrategyPlot, len(result.StrategyPlots))
+	fullPlotData := make([]StrategyPlotData, len(result.StrategyPlots))
+
+	for i, plot := range result.StrategyPlots {
+		// Store full data for caching
+		fullPlotData[i] = StrategyPlotData{
+			PlotID: plot.PlotID,
+			Data:   plot.Data,
+		}
+
+		// Create lightweight version for API response
+		lightweightPlots[i] = StrategyPlot{
+			PlotID: plot.PlotID,
+		}
+
+		// Extract metadata from the full plot data
+		extractPlotAttributes(&lightweightPlots[i], plot.Data)
+	}
+
 	responseWithInstances := BacktestResponse{
 		Summary:        summary,
 		StrategyPrints: result.StrategyPrints,
-		StrategyPlots:  result.StrategyPlots,
+		StrategyPlots:  lightweightPlots,
 		Instances:      convertWorkerInstancesToBacktestResults(result.Instances),
 	}
 	// Cache the results
@@ -264,6 +290,8 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	// Log backtest usage for analytics (no credit consumption)
 	metadata := map[string]interface{}{
+		"strategy_id":       args.StrategyID,
+		"instances_found":   len(result.Instances),
 		"strategy_id":       args.StrategyID,
 		"instances_found":   len(result.Instances),
 		"symbols_processed": responseWithInstances.Summary.SymbolsProcessed,
@@ -460,5 +488,115 @@ func convertWorkerSummaryToBacktestSummary(summary WorkerSummary, instances []ma
 		DateRange:        []string(summary.DateRange),
 		SymbolsProcessed: summary.SymbolsProcessed,
 		Columns:          columns,
+	}
+}
+
+// extractPlotAttributes extracts chart attributes from plotly JSON data
+func extractPlotAttributes(plot *StrategyPlot, plotData map[string]any) {
+	if plotData == nil {
+		return
+	}
+	// Safely convert plotData["data"] to []map[string]any
+	if dataSlice, ok := plotData["data"].([]interface{}); ok {
+		converted := make([]map[string]any, len(dataSlice))
+		for i, v := range dataSlice {
+			if m, ok := v.(map[string]any); ok {
+				converted[i] = m
+			} else {
+				converted[i] = nil // or handle error as needed
+			}
+		}
+		plot.Data = converted
+	}
+	// Extract chart title
+	if layout, ok := plotData["layout"].(map[string]any); ok {
+		if title, ok := layout["title"].(map[string]any); ok {
+			if titleText, ok := title["text"].(string); ok {
+				plot.Title = titleText
+			}
+		} else if titleStr, ok := layout["title"].(string); ok {
+			plot.Title = titleStr
+		}
+	}
+
+	// Extract chart type and length from data traces
+	if dataTraces, ok := plotData["data"].([]interface{}); ok && len(dataTraces) > 0 {
+		plot.Length = len(dataTraces)
+
+		// Get chart type from first trace
+		if firstTrace, ok := dataTraces[0].(map[string]any); ok {
+			if traceType, ok := firstTrace["type"].(string); ok {
+				plot.ChartType = mapPlotlyTypeToChartType(traceType, firstTrace)
+			}
+		}
+	}
+
+	// Extract minimal layout information
+	if layout, ok := plotData["layout"].(map[string]any); ok {
+		minimalLayout := make(map[string]any)
+
+		// Extract axis titles
+		if xaxis, ok := layout["xaxis"].(map[string]any); ok {
+			if xaxisTitle, ok := xaxis["title"].(map[string]any); ok {
+				if titleText, ok := xaxisTitle["text"].(string); ok {
+					minimalLayout["xaxis"] = map[string]any{"title": titleText}
+				}
+			} else if titleStr, ok := xaxis["title"].(string); ok {
+				minimalLayout["xaxis"] = map[string]any{"title": titleStr}
+			}
+		}
+
+		if yaxis, ok := layout["yaxis"].(map[string]any); ok {
+			if yaxisTitle, ok := yaxis["title"].(map[string]any); ok {
+				if titleText, ok := yaxisTitle["text"].(string); ok {
+					minimalLayout["yaxis"] = map[string]any{"title": titleText}
+				}
+			} else if titleStr, ok := yaxis["title"].(string); ok {
+				minimalLayout["yaxis"] = map[string]any{"title": titleStr}
+			}
+		}
+
+		// Extract dimensions
+		if width, ok := layout["width"]; ok {
+			minimalLayout["width"] = width
+		}
+		if height, ok := layout["height"]; ok {
+			minimalLayout["height"] = height
+		}
+
+		plot.Layout = minimalLayout
+	}
+}
+
+// mapPlotlyTypeToChartType converts plotly trace types to standard chart types
+func mapPlotlyTypeToChartType(traceType string, trace map[string]any) string {
+	switch traceType {
+	case "scatter":
+		if mode, ok := trace["mode"].(string); ok {
+			if mode == "lines" {
+				return "line"
+			}
+		}
+		return "scatter"
+	case "line":
+		return "line"
+	case "bar":
+		return "bar"
+	case "histogram":
+		return "histogram"
+	case "heatmap":
+		return "heatmap"
+	case "box":
+		return "bar" // Fallback
+	case "violin":
+		return "bar" // Fallback
+	case "pie":
+		return "bar" // Fallback
+	case "candlestick":
+		return "line" // Fallback
+	case "ohlc":
+		return "line" // Fallback
+	default:
+		return "line"
 	}
 }

@@ -1430,7 +1430,8 @@
 				background: {
 					type: ColorType.Solid,
 					color: '#0f0f0f'
-				}
+				},
+				attributionLogo: false
 			},
 			grid: {
 				vertLines: {

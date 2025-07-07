@@ -57,7 +57,7 @@ func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
 	if err == nil && activeConversationID != "" {
 		// Load conversation messages from database
-		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, activeConversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
