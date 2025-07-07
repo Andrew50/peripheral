@@ -695,10 +695,6 @@
 		flex-direction: column;
 	}
 
-	.plan-card:hover {
-		transform: translateY(-5px);
-		border-color: var(--landing-border-focus);
-	}
 
 	.plan-card.featured {
 		border-color: var(--landing-accent-blue);
