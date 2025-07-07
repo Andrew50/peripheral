@@ -1,23 +1,14 @@
--- Migration: 051_update_yearly_plan_prices
--- Description: Adjust yearly Plus and Pro subscription plan pricing (Plus → $1,020, Pro → $1,920)
+
+-- Migration: 051_change_securities_name_to_text
+-- Description: Change securities.name column to TEXT to store unlimited length company names
 
 BEGIN;
 
--- Update Pro Yearly pricing
-UPDATE subscription_plans
-SET price_cents = 192000,          -- $1,920.00 in cents
-    updated_at  = CURRENT_TIMESTAMP
-WHERE plan_name = 'Pro Yearly';
+ALTER TABLE securities
+    ALTER COLUMN name TYPE TEXT;
 
--- Update Plus Yearly pricing
-UPDATE subscription_plans
-SET price_cents = 102000,          -- $1,020.00 in cents
-    updated_at  = CURRENT_TIMESTAMP
-WHERE plan_name = 'Plus Yearly';
-
--- Record schema version
 INSERT INTO schema_versions (version, description)
-VALUES (51, 'Update yearly Plus and Pro plan prices to 1020 and 1920 USD')
-ON CONFLICT (version) DO NOTHING;
-
-COMMIT; 
+VALUES (
+    51,
+    'Change securities.name column to TEXT to store unlimited length company names'
+) ON CONFLICT (version) DO NOTHING;

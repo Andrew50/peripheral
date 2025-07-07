@@ -22,7 +22,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.accessor_strategy_engine import AccessorStrategyEngine
+from src.strategy_engine import AccessorStrategyEngine
 from src.validator import SecurityValidator, SecurityError
 from src.strategy_generator import StrategyGenerator
 from concurrent.futures import ThreadPoolExecutor
