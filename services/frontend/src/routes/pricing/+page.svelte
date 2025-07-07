@@ -190,7 +190,7 @@
 	}
 
 	// Enhanced credit purchase handler
-	async function handleCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+	async function handleCreditPurchase(creditKey: string) {
 		// Check if user is authenticated before allowing purchase
 		const isValidAuth = await validateAuthentication();
 
@@ -261,7 +261,7 @@
 	}
 
 	// Process credit purchase
-	async function processCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+	async function processCreditPurchase(creditKey: string) {
 		loadingStates[creditKey] = true;
 		feedbackMessage = '';
 		feedbackType = '';
@@ -543,11 +543,7 @@
 		}
 	}
 
-	// Helper function to update billing period when the toggle is changed
-	function toggleBillingPeriod(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		billingPeriod = input.checked ? 'year' : 'month';
-	}
+
 </script>
 
 <svelte:head>
@@ -555,6 +551,9 @@
 </svelte:head>
 <SiteHeader />
 <!-- Use landing page design system -->
+ <!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="landing-background landing-reset">
 
 	<!-- Main Pricing Content -->
@@ -563,7 +562,7 @@
 			<!-- Hero Section -->
 			<div class="pricing-hero">
 				<h1 class="landing-title">Frictionless Trading</h1>
-				<p class="landing-subtitle">Leverage Peripheral's environment to envision, enhance, and execute your trading ideas.</p>
+				<p class="landing-subtitle">Leverage Peripheral to envision, enhance, and execute your trading ideas.</p>
 			</div>
 
 			<!-- Feedback Messages -->
@@ -589,21 +588,20 @@
 				<div class="error-message">{$subscriptionStatus.error}</div>
 			{:else}
 				<!-- Billing Period Slider Toggle -->
-				<div class="billing-toggle">
-					<span class="toggle-label" on:click={() => (billingPeriod = 'month')}>
+				<div class="billing-slider" class:yearly={billingPeriod === 'year'}>
+					<div class="slider-background"></div>
+					<button 
+						class="slider-option {billingPeriod === 'month' ? 'active' : ''}" 
+						on:click={() => (billingPeriod = 'month')}
+					>
 						Billed Monthly
-					</span>
-					<label class="switch">
-						<input
-							type="checkbox"
-							checked={billingPeriod === 'year'}
-							on:change={toggleBillingPeriod}
-						/>
-						<span class="slider-switch"></span>
-					</label>
-					<span class="toggle-label" on:click={() => (billingPeriod = 'year')}>
+					</button>
+					<button 
+						class="slider-option {billingPeriod === 'year' ? 'active' : ''}" 
+						on:click={() => (billingPeriod = 'year')}
+					>
 						Billed Yearly
-					</span>
+					</button>
 				</div>
 
 				<!-- Available Plans -->
@@ -1135,62 +1133,65 @@
 		border-radius: 4px;
 	}
 
-	/* Billing Toggle Styles */
-	.billing-toggle {
+	/* Billing Slider Styles */
+	.billing-slider {
+		position: relative;
+		display: flex;
+		background: var(--color-dark);
+		border-radius: 25px;
+		padding: 4px;
+		margin: 0 auto 2rem;
+		width: fit-content;
+		overflow: hidden;
+	}
+
+	.slider-background {
+		position: absolute;
+		top: 4px;
+		left: 4px;
+		width: calc(50% - 4px);
+		height: calc(100% - 8px);
+		background: #f5f9ff;
+		border-radius: 21px;
+		transition: transform 0.2s ease;
+		z-index: 1;
+		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+	}
+
+	.billing-slider.yearly .slider-background {
+		transform: translateX(100%);
+	}
+
+	.slider-option {
+		position: relative;
+		z-index: 2;
+		background: none;
+		border: none;
+		padding: 0.875rem 2rem;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		border-radius: 16px;
+		min-width: 120px;
+		font-family: 'Inter', sans-serif;
+		color: #f5f9ff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.75rem;
-		margin-bottom: 1.5rem;
+		text-align: center;
+		white-space: nowrap;
+	}
+	.slider-option.active {
+		color: #000000;
 	}
 
-	.billing-toggle .toggle-label {
-		font-weight: 500;
-		color: var(--landing-text-primary);
-		cursor: pointer;
-		user-select: none;
-		font-size: 0.9375rem;
-	}
 
-	/* Switch slider */
-	.switch {
-		position: relative;
-		display: inline-block;
-		width: 52px;
-		height: 28px;
-	}
-
-	.switch input {
-		opacity: 0;
-		width: 0;
-		height: 0;
-	}
-
-	.slider-switch {
-		position: absolute;
-		cursor: pointer;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: var(--landing-border, rgba(255, 255, 255, 0.3));
-		transition: 0.2s;
-		border-radius: 9999px;
-	}
-
-	.slider-switch::before {
-		position: absolute;
-		content: '';
-		height: 22px;
-		width: 22px;
-		left: 3px;
-		top: 3px;
-		background: var(--landing-accent-blue);
-		transition: 0.2s;
-		border-radius: 50%;
-	}
-
-	.switch input:checked + .slider-switch::before {
-		transform: translateX(24px);
+	@media (max-width: 640px) {
+		.slider-option {
+			padding: 0.625rem 1rem;
+			font-size: 0.8125rem;
+			min-width: 90px;
+		}
 	}
 </style>
