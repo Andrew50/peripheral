@@ -21,6 +21,7 @@
 	} from '$lib/config/pricing';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import '$lib/styles/splash.css';
 
 	// Individual loading states for better UX
 	let loadingStates: Record<string, boolean> = {
