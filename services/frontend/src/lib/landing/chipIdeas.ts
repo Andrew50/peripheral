@@ -28,5 +28,8 @@ export const chipIdeas: ChipIdea[] = [
     { icon: "🎬", text: "Test buying puts on Netflix after a bad TV season release."},
     { icon: "💼", text: "Analyze relative performances of companies with high revenue per employee."},
     { icon: "🏆", text: "Analyze the 2 week and 1 month performance after stocks are added to the S&P 500."},
-
+    { icon: "📊", text: "Create a visual of the revenue and eps growth of AppLovin."},
+    { icon: "📈", text: "Analyze buying leaps on QQQ after a 10% market correction."},
+    { icon: "💰", text: "Examine the performance of crypto stocks after the GENIUS act was passed."},
+    { icon: "🗓️", text: "Compare the performance of stocks after the 2016 and 2024 elections."},
 ]; 
