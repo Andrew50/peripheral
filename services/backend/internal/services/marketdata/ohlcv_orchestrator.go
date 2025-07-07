@@ -126,28 +126,7 @@ END$$;`, tbl)
 		return fmt.Errorf("drop indexes: %w", err)
 	}
 
-	preCreateSQL := fmt.Sprintf(`DO $$
-DECLARE
-  chunk_start timestamptz;
-  chunk_end timestamptz;
-BEGIN
-  FOR i IN 0..2 LOOP
-    chunk_start := date_trunc('month', now() + interval '1 month' * i);
-    chunk_end := chunk_start + interval '1 month';
-    IF NOT EXISTS (
-      SELECT 1 FROM timescaledb_information.chunks 
-      WHERE hypertable_name = '%[1]s' 
-      AND range_start >= chunk_start 
-      AND range_end <= chunk_end
-    ) THEN
-      PERFORM create_chunk('%[1]s'::regclass, chunk_start, chunk_end);
-    END IF;
-  END LOOP;
-END$$;`, tbl)
-
-	if _, err := db.Exec(ctx, preCreateSQL); err != nil {
-		log.Printf("warning: pre-create chunks: %v", err)
-	}
+	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
 
 	// Create or clean staging table for two-step COPY.
 	stageTbl := tbl + "_stage"

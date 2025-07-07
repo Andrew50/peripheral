@@ -16,6 +16,7 @@ import psycopg2
 import threading
 from contextlib import contextmanager
 import time
+from zoneinfo import ZoneInfo
 try:
     from psycopg2.extras import RealDictCursor
 except ImportError:
@@ -494,17 +495,17 @@ class DataAccessorProvider:
             if start_date and end_date:
                 # Use direct datetime comparison with timezone-aware timestamps
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
-                date_params = [self._datetime_to_ns(start_date), self._datetime_to_ns(end_date)]
+                date_params = [self._normalize_est(start_date), self._normalize_est(end_date)]
                 logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
             elif start_date:
                 # Only start date provided
                 date_filter = "o.timestamp >= %s"
-                date_params = [self._datetime_to_ns(start_date)]
+                date_params = [self._normalize_est(start_date)]
                 logger.info(f"📅 Using direct start date filter: {start_date}")
             elif end_date:
                 # Only end date provided
                 date_filter = "o.timestamp <= %s"
-                date_params = [self._datetime_to_ns(end_date)]
+                date_params = [self._normalize_est(end_date)]
                 logger.info(f"📅 Using direct end date filter: {end_date}")
             # Priority 2: Execution context date range
             elif context.get('start_date') and context.get('end_date'):
@@ -512,13 +513,13 @@ class DataAccessorProvider:
                 timeframe_delta = self._get_timeframe_delta(timeframe)
                 start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars)
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
-                date_params = [self._datetime_to_ns(start_with_buffer), self._datetime_to_ns(context.get('end_date'))]
+                date_params = [self._normalize_est(start_with_buffer), self._normalize_est(context.get('end_date'))]
                 logger.info(f"📅 Using execution context date filter: {start_with_buffer} to {context.get('end_date')}")
             elif context.get('mode') == 'validation':
                 # Validation mode: Use exact min_bars requirements for accurate validation
                 # No arbitrary caps - respect the strategy's actual needs
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - 2592000000000000 FROM {} WHERE ticker = o.ticker)".format(table_name)  # nosec B608
+                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - interval '30 days' FROM {} WHERE ticker = o.ticker)".format(table_name)  # nosec B608
                 date_params = []
                 
                 # Check if this specific min_bars matches any requirement from the strategy code
@@ -644,13 +645,13 @@ class DataAccessorProvider:
                 # Filter to regular trading hours only (9:30 AM to 4:00 PM ET)
                 # Use PostgreSQL's EXTRACT function to get hour and minute in ET timezone
                 extended_hours_filter = """AND (
-                    EXTRACT(HOUR FROM to_timestamp(o.timestamp / 1000000000.0) AT TIME ZONE 'America/New_York') > 9 OR
-                    (EXTRACT(HOUR FROM to_timestamp(o.timestamp / 1000000000.0) AT TIME ZONE 'America/New_York') = 9 AND 
-                     EXTRACT(MINUTE FROM to_timestamp(o.timestamp / 1000000000.0) AT TIME ZONE 'America/New_York') >= 30)
+                    EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) > 9 OR
+                    (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) = 9 AND 
+                     EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE 'America/New_York')) >= 30)
                 ) AND (
-                    EXTRACT(HOUR FROM to_timestamp(o.timestamp / 1000000000.0) AT TIME ZONE 'America/New_York') < 16
+                    EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) < 16
                 ) AND (
-                    EXTRACT(DOW FROM to_timestamp(o.timestamp / 1000000000.0) AT TIME ZONE 'America/New_York') BETWEEN 1 AND 5
+                    EXTRACT(DOW FROM (o.timestamp AT TIME ZONE 'America/New_York')) BETWEEN 1 AND 5
                 )"""
             
             # Build column selection
@@ -661,8 +662,8 @@ class DataAccessorProvider:
                 elif col == "ticker":
                     select_columns.append("s.ticker")
                 elif col == "timestamp":
-                    # Convert bigint nanoseconds to seconds to keep legacy behaviour
-                    select_columns.append("(o.timestamp / 1000000000)::bigint AS timestamp")
+                    # Convert timestamptz to integer seconds since epoch for backward compatibility
+                    select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
                 else:
                     select_columns.append(f"o.{col}")
             
@@ -1305,12 +1306,19 @@ class DataAccessorProvider:
             logger.error(f"Error filtering columns: {e}")
             return np.array([])
 
-    def _datetime_to_ns(self, dt: datetime) -> int:
-        """Convert a timezone-aware/naive datetime to Unix time in *nanoseconds* (int)."""
+    def _normalize_est(self, dt: datetime):
+        """Return a timezone-aware datetime in America/New_York.
+
+        If the input is naive, assume it's already in Eastern time. If it has a
+        different tzinfo, convert it. No conversion to UTC is performed because
+        the DB stores market timestamps in EST/EDT.
+        """
         if dt is None:
             return None
-        # datetime.timestamp() returns float seconds – multiply by 1e9 to get ns.
-        return int(dt.timestamp() * 1_000_000_000)
+        eastern = ZoneInfo("America/New_York")
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=eastern)
+        return dt.astimezone(eastern)
 
 
 # Global instance for strategy execution

@@ -55,8 +55,8 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	rateLimiter := time.NewTicker(100 * time.Millisecond) // 10 requests per second
 	defer rateLimiter.Stop()
 
-	// Create a worker pool with semaphore to limit concurrent requests
-	maxWorkers := 5
+	// Create a worker pool with semaphore to limit concurrent requests (reduced to 3)
+	maxWorkers := 3
 
 	sem := make(chan struct{}, maxWorkers)
 	errChan := make(chan error, maxWorkers)
@@ -68,76 +68,79 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 			return "", nil
 		}
 
-		// Create HTTP client with timeout to prevent hanging
-		client := &http.Client{
-			Timeout: 10 * time.Second, // 10 second timeout
-		}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return "", fmt.Errorf("failed to create request: %v", err)
-		}
-		req.Header.Add("Authorization", "Bearer "+polygonKey)
+		maxAttempts := 3
+		delay := 1 * time.Second
+		var lastErr error
 
-		resp, err := client.Do(req)
-		if err != nil {
-			// Log timeout errors to console
-			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
-				log.Printf("Timeout error fetching image from %s: %v", url, err)
-			} else {
-				log.Printf("Network error fetching image from %s: %v", url, err)
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			// Create HTTP client with timeout to prevent hanging
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to create request: %v", err)
 			}
-			return "", fmt.Errorf("failed to fetch image: %v", err)
-		}
-		defer resp.Body.Close()
+			req.Header.Add("Authorization", "Bearer "+polygonKey)
 
-		// Check if the response status is OK
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("HTTP error %d fetching image from %s", resp.StatusCode, url)
-			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
-		}
-
-		imageData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("Error reading image data from %s: %v", url, err)
-			return "", fmt.Errorf("failed to read image data: %v", err)
-		}
-
-		// If no image data was returned, return empty string
-		if len(imageData) == 0 {
-			log.Printf("Empty image data received from %s", url)
-			return "", fmt.Errorf("empty image data received")
-		}
-
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			// Try to detect content type from image data
-			contentType = http.DetectContentType(imageData)
-
-			// If still empty, default to a safe type based on URL extension
-			if contentType == "" || contentType == "application/octet-stream" {
-				if strings.HasSuffix(strings.ToLower(url), ".svg") {
-					contentType = "image/svg+xml"
-				} else if strings.HasSuffix(strings.ToLower(url), ".png") {
-					contentType = "image/png"
+			resp, err := client.Do(req)
+			if err != nil {
+				// Log timeout or network errors
+				if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
+					log.Printf("Timeout error fetching image from %s (attempt %d/%d): %v", url, attempt, maxAttempts, err)
 				} else {
-					contentType = "image/jpeg"
+					log.Printf("Network error fetching image from %s (attempt %d/%d): %v", url, attempt, maxAttempts, err)
+				}
+				lastErr = err
+			} else {
+				// We got a response, check status code
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("HTTP error %d fetching image from %s (attempt %d/%d)", resp.StatusCode, url, attempt, maxAttempts)
+					lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+				} else {
+					// Success path
+					imageData, errRead := io.ReadAll(resp.Body)
+					resp.Body.Close()
+					if errRead != nil {
+						log.Printf("Error reading image data from %s: %v", url, errRead)
+						lastErr = errRead
+					} else if len(imageData) == 0 {
+						log.Printf("Empty image data received from %s", url)
+						lastErr = fmt.Errorf("empty image data")
+					} else {
+						contentType := resp.Header.Get("Content-Type")
+						if contentType == "" {
+							contentType = http.DetectContentType(imageData)
+							if contentType == "" || contentType == "application/octet-stream" {
+								if strings.HasSuffix(strings.ToLower(url), ".svg") {
+									contentType = "image/svg+xml"
+								} else if strings.HasSuffix(strings.ToLower(url), ".png") {
+									contentType = "image/png"
+								} else {
+									contentType = "image/jpeg"
+								}
+							}
+						}
+
+						if strings.HasPrefix(contentType, "data:") {
+							return "", fmt.Errorf("invalid content type: %s", contentType)
+						}
+
+						base64Data := base64.StdEncoding.EncodeToString(imageData)
+						if strings.HasPrefix(base64Data, "data:") {
+							return base64Data, nil
+						}
+						return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
+					}
 				}
 			}
+
+			// Prepare for next attempt if not last
+			if attempt < maxAttempts {
+				time.Sleep(delay)
+				delay *= 2 // Exponential backoff
+			}
 		}
 
-		// Ensure the content type doesn't already contain a data URL prefix
-		if strings.HasPrefix(contentType, "data:") {
-			return "", fmt.Errorf("invalid content type: %s", contentType)
-		}
-
-		base64Data := base64.StdEncoding.EncodeToString(imageData)
-
-		// Check if base64Data already contains a data URL prefix to prevent duplication
-		if strings.HasPrefix(base64Data, "data:") {
-			return base64Data, nil
-		}
-
-		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
+		return "", fmt.Errorf("failed to fetch image after %d attempts: %v", maxAttempts, lastErr)
 	}
 
 	// Worker function to process each security
@@ -192,7 +195,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 				 total_employees = NULLIF($16::BIGINT, 0),
 				 weighted_shares_outstanding = NULLIF($17::BIGINT, 0)
 			 WHERE securityid = $11`,
-			utils.NullString(truncateString(details.Name, 500)),
+			utils.NullString(details.Name),
 			utils.NullString(truncateString(string(details.Market), 50)),
 			utils.NullString(truncateString(string(details.Locale), 50)),
 			utils.NullString(truncateString(details.PrimaryExchange, 50)),

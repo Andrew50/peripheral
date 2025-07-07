@@ -130,7 +130,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		// Measure the time spent establishing the object stream from S3.
 		fetchStart := time.Now()
-		ctxObj, cancel := context.WithTimeout(b.ctx, 10*time.Minute)
+		ctxObj, cancel := context.WithTimeout(b.ctx, 15*time.Minute)
 		resp, err := b.s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(b.bucket), Key: aws.String(file)})
 		cancel()
 		b.fetchDur += time.Since(fetchStart)
@@ -227,20 +227,36 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		// -----------------------------------------------------------------
 		stageTable := fmt.Sprintf("%s_stage_%d", pw.table, pgc.PID())
 
-		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL)`, stageTable, pw.table)
+		// Staging table needs a bigint timestamp column because Polygon CSV files
+		// contain Unix *nanosecond* epoch values. The main hypertables now store
+		// a proper timestamptz, so we cannot use LIKE <main> anymore – instead
+		// define the minimal schema explicitly with a bigint timestamp column
+		// and no constraints.
+		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
+			ticker        text      NOT NULL,
+			volume        numeric,
+			open          numeric,
+			close         numeric,
+			high          numeric,
+			low           numeric,
+			"timestamp"  bigint     NOT NULL,
+			transactions  integer
+		)`, stageTable)
 		if _, err := c.Exec(ctx, createStageSQL); err != nil {
 			return fmt.Errorf("create staging table: %w", err)
 		}
 
 		// Step 1: COPY into staging table.
-		copySQL := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, timestamp, transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", stageTable)
+		copySQL := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", stageTable)
 		if _, err := pgc.CopyFrom(ctx, reader, copySQL); err != nil {
 			return err
 		}
 
 		// Step 2: Upsert into main table.
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume, open, close, high, low, "timestamp", transactions FROM %s
+SELECT ticker, volume, open, close, high, low,
+       to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
+       transactions FROM %s
 ON CONFLICT (ticker, "timestamp") DO UPDATE SET
     volume        = EXCLUDED.volume,
     open          = EXCLUDED.open,
@@ -505,7 +521,8 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 // -----------------------------------------------------------------------------
 
 func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, key, table string) error {
-	ctxObj, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	// Download object with generous timeout – single-file fallback path.
+	ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 
 	resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
@@ -520,23 +537,67 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 	}
 	defer gz.Close()
 
-	if err := copyCSV(ctx, db, table, gz); err != nil {
-		var pe *pgconn.PgError
-		if errors.As(err, &pe) && pe.Code == "23505" {
-			return nil // duplicates benign
+	// Two-step load: COPY into per-connection staging (bigint ts) then upsert converting to timestamptz.
+	return db.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
+		pgc := c.Conn().PgConn()
+
+		stageTable := fmt.Sprintf("%s_stage_%d", table, pgc.PID())
+
+		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
+			ticker        text      NOT NULL,
+			volume        numeric,
+			open          numeric,
+			close         numeric,
+			high          numeric,
+			low           numeric,
+			"timestamp"  bigint     NOT NULL,
+			transactions  integer
+		)`, stageTable)
+		if _, err := c.Exec(ctx, createStageSQL); err != nil {
+			return fmt.Errorf("create staging table: %w", err)
 		}
-		return err
-	}
-	return nil
+
+		copySQL := fmt.Sprintf(`COPY %s(ticker, volume, open, close, high, low, "timestamp", transactions)
+ FROM STDIN WITH (FORMAT csv, HEADER true)`, stageTable)
+		if _, err := pgc.CopyFrom(ctx, gz, copySQL); err != nil {
+			// UNIQUE violations are handled by the upsert step, so COPY should not hit them.
+			return err
+		}
+
+		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
+SELECT ticker, volume, open, close, high, low,
+       to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
+       transactions FROM %s
+ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+    volume        = EXCLUDED.volume,
+    open          = EXCLUDED.open,
+    close         = EXCLUDED.close,
+    high          = EXCLUDED.high,
+    low           = EXCLUDED.low,
+    transactions  = EXCLUDED.transactions`, table, stageTable)
+
+		if _, err := c.Exec(ctx, upsertSQL); err != nil {
+			return err
+		}
+
+		if _, err := c.Exec(ctx, fmt.Sprintf("TRUNCATE %s", stageTable)); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
+// copyCSV is no longer used but kept for reference; mark deprecated.
+// Deprecated: use the two-step staging load path instead.
 func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
-	return pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
+	pgErr := pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
 		pgc := c.Conn().PgConn()
-		sql := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, timestamp, transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", table)
+		sql := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", table)
 		_, err := pgc.CopyFrom(ctx, r, sql)
 		return err
 	})
+	return pgErr
 }
 
 // Failure bookkeeping --------------------------------------------------------
