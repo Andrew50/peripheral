@@ -1,6 +1,6 @@
 	<script lang="ts">
 		import { browser } from '$app/environment';
-		import { onMount } from 'svelte';
+		import { onMount, onDestroy } from 'svelte';
 		import { goto } from '$app/navigation';
 		import { startPricingPreload } from '$lib/utils/pricing-loader';
 		import { createChart } from 'lightweight-charts';
@@ -19,8 +19,6 @@
 		}
 
 		let isLoaded = false;
-		let isHeaderVisible = true;
-		let isHeaderTransparent = true;
 		let prevScrollY = 0;
 
 		// Animation state management
@@ -31,7 +29,8 @@
 		
 		let typewriterIndex = 0;
 		let typewriterInterval: NodeJS.Timeout;
-
+		let isHeaderVisible = true;
+		let isHeaderTransparent = true;
 		// Control removal of the animation input bar after transition
 		let removeAnimationInput = false;
 
@@ -69,12 +68,7 @@
 		export let data: { defaultChartData?: any };
 
 		let timelineProgress = 0; // 0 → 1
-		let timelineUnlocked = false; // true when normal page scrolling is active
-		/* Manage document scroll lock */
-		function setScrollLock(locked: boolean) {
-			document.documentElement.style.overflow = locked ? 'hidden' : '';
-			document.body.style.overflow = locked ? 'hidden' : '';
-		}
+
 
 
 		function addMessage(text: string) {
@@ -112,6 +106,14 @@
 			removeLastMessage,
 		});
 
+		function updateHeroProgress() {
+			if (!heroWrapper) return;
+			const rect = heroWrapper.getBoundingClientRect();
+			const travelled = Math.min(Math.max(-rect.top, 0), totalScroll);
+			timelineProgress = travelled/ totalScroll;
+			evaluateTimeline();
+			
+		}
 		function evaluateTimeline() {
 			for (const evt of timelineEvents) {
 				if (!evt.fired && timelineProgress >= evt.trigger) {
@@ -121,35 +123,6 @@
 					evt.backward?.();
 					evt.fired = false;
 				}
-			}
-		}
-
-		function handleHeroWheel(e: WheelEvent) {
-			const atTop = window.scrollY === 0;
-			const delta = e.deltaY;
-			const deltaProgress = delta / totalScroll;
-
-			// Decide if we should hijack
-			const shouldIntercept = !timelineUnlocked || (timelineUnlocked && atTop && delta < 0);
-
-			if (!shouldIntercept) return; // allow normal scrolling
-
-			e.preventDefault();
-
-			// If we are re-entering the hero from top, lock scrolling again
-			if (timelineUnlocked && atTop && delta < 0) {
-				timelineUnlocked = false;
-				setScrollLock(true);
-			}
-
-			// Update progress (both directions)
-			timelineProgress = Math.min(1, Math.max(0, timelineProgress + deltaProgress));
-			evaluateTimeline();
-
-			// Unlock when progress reaches end and user scrolls downwards
-			if (!timelineUnlocked && timelineProgress >= 1 && delta > 0) {
-				timelineUnlocked = true;
-				setScrollLock(false);
 			}
 		}
 
@@ -201,9 +174,12 @@
 		const currentTicker = 'SPY';
 		interface LegendData { open: number; high: number; low: number; close: number; volume: number; }
 		let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0, volume: 0 };
-
+		let heroWrapper: HTMLElement; 
 		onMount(() => {
+
 			if (browser) {
+				updateHeroProgress();
+				window.addEventListener('scroll', updateHeroProgress, { passive: true });
 				// Start preloading pricing configuration early
 				startPricingPreload();
 				if (window.scrollY > 30) {
@@ -221,9 +197,6 @@
 				// Evaluate timeline once at mount to fire trigger 0 events
 				evaluateTimeline();
 
-				// Disable native scrolling & start intercepting wheel for hero timeline
-				setScrollLock(true);
-				window.addEventListener('wheel', handleHeroWheel as any, { passive: false });
 
 				/* --- Initialise lightweight chart in hero --- */
 				if (chartContainerRef) {
@@ -348,6 +321,11 @@
 				}
 			}
 		});
+		onDestroy(() => {
+			if (browser) {
+				window.removeEventListener('scroll', updateHeroProgress);
+			}
+		});
 
 
 
@@ -377,129 +355,132 @@
 	<SiteHeader />
 
 	<main class="landing-container">
-		<!-- Hero Section -->
-		<section class="hero-section" class:loaded={isLoaded}>
-			<!-- Hero Header - Always Visible -->
-			<div class="hero-header">
-				<h1 class="hero-title">
-					The <span class="gradient-text">best</span> way to trade.
-				</h1>
-				<p class="hero-subtitle">
-					Peripheral is the terminal to envision and execute your trading ideas.<br />
-				</p>
-			</div>
-
-			<!-- Animation Input Bar -->
-			{#if !removeAnimationInput}
-			<div class="animation-input-container" class:typing={animationPhase === 'typing'} class:submitted={animationPhase === 'submitted'} class:complete={animationPhase === 'complete'}>
-				<div class="animation-input-wrapper">
-					<textarea
-						class="animation-input"
-						bind:value={animationInput}
-						bind:this={animationInputRef}
-						readonly
-						rows="1"
-						class:typing-cursor={animationPhase === 'typing'}
-					></textarea>
-					<button
-						class="animation-send"
-						class:pulse={animationPhase === 'submitted'}
-					>
-						<svg viewBox="0 0 18 18" class="send-icon">
-							<path
-								d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
-							/>
-						</svg>
-					</button>
-				</div>
-			</div>
-			{/if}
-
-			<!-- Hero Actions - Revealed after animation -->
-			<div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
-				<div class="hero-chat-container hero-widget" class:has-messages={chatMessages.length > 0}>
-					<div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
-						{#if chatMessages.length !== 0}
-							{#each chatMessages as msg (msg.message_id)}
-								<div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
-									{#if msg.sender === 'user'}
-										<div class="message user">
-											<div class="message-content">
-												<p>{msg.text}</p>
-											</div>
-										</div>
-									{:else}
-										{#if msg.contentChunks && msg.contentChunks.length > 0}
-											<div class="assistant-message">
-												{#each msg.contentChunks as chunk, idx}
-													{#if chunk.type === 'text'}
-														<p>{@html typeof chunk.content === 'string' ? chunk.content : String(chunk.content)}</p>
-													{:else if chunk.type === 'table'}
-														{#if isTableData(chunk.content)}
-															{@const tableData = chunk.content}
-															<div class="assistant-table">
-																<table>
-																	{#if tableData.caption}
-																		<caption>{@html tableData.caption}</caption>
-																	{/if}
-																	<thead>
-																		<tr>
-																			{#each tableData.headers as header}
-																				<th>{@html header}</th>
-																			{/each}
-																		</tr>
-																	</thead>
-																	<tbody>
-																		{#each tableData.rows as row}
-																			<tr>
-																				{#each row as cell}
-																					<td>{@html typeof cell === 'string' ? cell : String(cell)}</td>
-																				{/each}
-																			</tr>
-																		{/each}
-																	</tbody>
-																</table>
-															</div>
-														{:else}
-															<p>Invalid table data</p>
-														{/if}
-													{:else if chunk.type === 'plot'}
-														{#if isPlotData(chunk.content)}
-															{@const plotData = getPlotData(chunk.content)}
-															{#if plotData}
-																<PlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
-															{:else}
-																<p>Invalid plot data structure</p>
-															{/if}
-														{:else}
-															<p>Invalid plot data</p>
-														{/if}
-													{/if}
-												{/each}
-											</div>
-										{:else}
-											<p class="assistant-message">{msg.text}</p>
-										{/if}
-									{/if}
-								</div>
-							{/each}
-						{/if}
+		<section bind:this={heroWrapper} class="hero-wrapper">
+			<div class="hero-pin">
+				<!-- Hero Section -->
+				<div class="hero-section" class:loaded={isLoaded}>
+					<!-- Hero Header - Always Visible -->
+					<div class="hero-header">
+						<h1 class="hero-title">
+							The <span class="gradient-text">best</span> way to trade.
+						</h1>
+						<p class="hero-subtitle">
+							Peripheral is the terminal to envision and execute your trading ideas.<br />
+						</p>
 					</div>
-				</div>
-				<div class="hero-chart-container hero-widget" bind:this={chartContainerRef}>
-					<!-- Legend overlay -->
-					<div class="hero-chart-legend">
-						<span class="ticker">{currentTicker}</span>
-						<span>O {legendData.open?.toFixed(2)}</span>
-						<span>H {legendData.high?.toFixed(2)}</span>
-						<span>L {legendData.low?.toFixed(2)}</span>
-						<span>C {legendData.close?.toFixed(2)}</span>
-						<span>V {legendData.volume?.toLocaleString()}</span>
+
+					<!-- Animation Input Bar -->
+					{#if !removeAnimationInput}
+					<div class="animation-input-container" class:typing={animationPhase === 'typing'} class:submitted={animationPhase === 'submitted'} class:complete={animationPhase === 'complete'}>
+						<div class="animation-input-wrapper">
+							<textarea
+								class="animation-input"
+								bind:value={animationInput}
+								bind:this={animationInputRef}
+								readonly
+								rows="1"
+								class:typing-cursor={animationPhase === 'typing'}
+							></textarea>
+							<button
+								class="animation-send"
+								class:pulse={animationPhase === 'submitted'}
+							>
+								<svg viewBox="0 0 18 18" class="send-icon">
+									<path
+										d="M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z"
+									/>
+								</svg>
+							</button>
+						</div>
+					</div>
+					{/if}
+
+					<!-- Hero Actions - Revealed after animation -->
+					<div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
+						<div class="hero-chat-container hero-widget" class:has-messages={chatMessages.length > 0}>
+							<div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
+								{#if chatMessages.length !== 0}
+									{#each chatMessages as msg (msg.message_id)}
+										<div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
+											{#if msg.sender === 'user'}
+												<div class="message user">
+													<div class="message-content">
+														<p>{msg.text}</p>
+													</div>
+												</div>
+											{:else}
+												{#if msg.contentChunks && msg.contentChunks.length > 0}
+													<div class="assistant-message">
+														{#each msg.contentChunks as chunk, idx}
+															{#if chunk.type === 'text'}
+																<p>{@html typeof chunk.content === 'string' ? chunk.content : String(chunk.content)}</p>
+															{:else if chunk.type === 'table'}
+																{#if isTableData(chunk.content)}
+																	{@const tableData = chunk.content}
+																	<div class="assistant-table">
+																		<table>
+																			{#if tableData.caption}
+																				<caption>{@html tableData.caption}</caption>
+																			{/if}
+																			<thead>
+																				<tr>
+																					{#each tableData.headers as header}
+																						<th>{@html header}</th>
+																					{/each}
+																				</tr>
+																			</thead>
+																			<tbody>
+																				{#each tableData.rows as row}
+																					<tr>
+																						{#each row as cell}
+																							<td>{@html typeof cell === 'string' ? cell : String(cell)}</td>
+																						{/each}
+																					</tr>
+																				{/each}
+																			</tbody>
+																		</table>
+																	</div>
+																{:else}
+																	<p>Invalid table data</p>
+																{/if}
+															{:else if chunk.type === 'plot'}
+																{#if isPlotData(chunk.content)}
+																	{@const plotData = getPlotData(chunk.content)}
+																	{#if plotData}
+																		<PlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
+																	{:else}
+																		<p>Invalid plot data structure</p>
+																	{/if}
+																{:else}
+																	<p>Invalid plot data</p>
+																{/if}
+															{/if}
+														{/each}
+													</div>
+												{:else}
+													<p class="assistant-message">{msg.text}</p>
+												{/if}
+											{/if}
+										</div>
+									{/each}
+								{/if}
+							</div>
+						</div>
+						<div class="hero-chart-container hero-widget" bind:this={chartContainerRef}>
+							<!-- Legend overlay -->
+							<div class="hero-chart-legend">
+								<span class="ticker">{currentTicker}</span>
+								<span>O {legendData.open?.toFixed(2)}</span>
+								<span>H {legendData.high?.toFixed(2)}</span>
+								<span>L {legendData.low?.toFixed(2)}</span>
+								<span>C {legendData.close?.toFixed(2)}</span>
+								<span>V {legendData.volume?.toLocaleString()}</span>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
 		</section>
-
 		<!-- Subsections -->
 		<section class="subsections-section">
 			<div class="subsections-content">
@@ -1366,6 +1347,15 @@
 		.hero-widget {
 			/* Already uses variable – class mainly for semantics now */
 			height: var(--hero-widget-h);
+		}
+		.hero-wrapper {
+			height: calc(100vh + 1500px);   /* 100 vh +  totalScroll (1500 px) */
+  			position: relative;
+		}
+		.hero-pin{
+			position: sticky;   /*  or ‘fixed: top:0; left:0; width:100%’ */
+			top: 0;
+			height: 100vh;      /*  fills the viewport while pinned  */
 		}
 
 	</style>
