@@ -72,8 +72,8 @@ func newS3Client(cfg s3Config) (*s3.Client, error) {
 		return nil, fmt.Errorf("load aws cfg: %w", err)
 	}
 
-	// Use a custom HTTP client with a shorter timeout.
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	// Use a custom HTTP client with an extended timeout to handle slow S3 responses.
+	httpClient := &http.Client{Timeout: 5 * time.Minute}
 	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.HTTPClient = httpClient
 		o.DisableLogOutputChecksumValidationSkipped = true

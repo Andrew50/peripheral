@@ -145,7 +145,7 @@ def strategy():
     
     try:
         import asyncio
-        from accessor_strategy_engine import AccessorStrategyEngine
+        from strategy_engine import AccessorStrategyEngine
         
         async def run_strategy_test():
             engine = AccessorStrategyEngine()
