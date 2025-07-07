@@ -1,0 +1,26 @@
+:root {
+	/* Splash (landing) page colour palette */
+	--color-dark: #0B2E33;
+	--color-primary: #4F7C82;
+	--color-accent: #93B1B5;
+	--color-light: #B8E3E9;
+
+	/* Layout & sizing tokens used by the landing page */
+	--pill-size: 40px;
+	--header-h: 48px;
+	--header-top: 16px;
+
+	/* Hero widget */
+	--hero-widget-h: clamp(320px, 55vw, 600px);
+	--hero-widget-background-color: #ededf1;
+}
+
+/* Shared gradient page background */
+html, body {
+	margin: 0;
+	font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
+	/* Prevent rubber-band / pull-to-refresh scrolling that lets the page scroll above the top */
+	overscroll-behavior-y: none;
+	overscroll-behavior-x: contain;
+} 

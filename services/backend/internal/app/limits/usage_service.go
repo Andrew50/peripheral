@@ -17,30 +17,31 @@ const (
 	UsageTypeCredits       UsageType = "credits"
 	UsageTypeAlert         UsageType = "alert"
 	UsageTypeStrategyAlert UsageType = "strategy_alert"
+	UsageTypeBacktest      UsageType = "backtest"
 )
 
 // UserUsage represents the current credits and usage for a user
 type UserUsage struct {
-	UserID                      int       `json:"user_id"`
+	UserID                       int       `json:"user_id"`
 	SubscriptionCreditsRemaining int       `json:"subscription_credits_remaining"`
-	PurchasedCreditsRemaining   int       `json:"purchased_credits_remaining"`
-	TotalCreditsRemaining       int       `json:"total_credits_remaining"`
+	PurchasedCreditsRemaining    int       `json:"purchased_credits_remaining"`
+	TotalCreditsRemaining        int       `json:"total_credits_remaining"`
 	SubscriptionCreditsAllocated int       `json:"subscription_credits_allocated"`
-	ActiveAlerts                int       `json:"active_alerts"`
-	AlertsLimit                 int       `json:"alerts_limit"`
-	ActiveStrategyAlerts        int       `json:"active_strategy_alerts"`
-	StrategyAlertsLimit         int       `json:"strategy_alerts_limit"`
-	CurrentPeriodStart          time.Time `json:"current_period_start"`
-	LastLimitReset              time.Time `json:"last_limit_reset"`
-	PlanName                    string    `json:"plan_name"`
-	SubscriptionStatus          string    `json:"subscription_status"`
+	ActiveAlerts                 int       `json:"active_alerts"`
+	AlertsLimit                  int       `json:"alerts_limit"`
+	ActiveStrategyAlerts         int       `json:"active_strategy_alerts"`
+	StrategyAlertsLimit          int       `json:"strategy_alerts_limit"`
+	CurrentPeriodStart           time.Time `json:"current_period_start"`
+	LastLimitReset               time.Time `json:"last_limit_reset"`
+	PlanName                     string    `json:"plan_name"`
+	SubscriptionStatus           string    `json:"subscription_status"`
 }
 
 // CreditConsumptionResult represents the result of consuming credits
 type CreditConsumptionResult struct {
-	Success           bool   `json:"success"`
-	RemainingCredits  int    `json:"remaining_credits"`
-	SourceUsed        string `json:"source_used"`
+	Success          bool   `json:"success"`
+	RemainingCredits int    `json:"remaining_credits"`
+	SourceUsed       string `json:"source_used"`
 }
 
 // CheckUsageAllowed checks if a user can perform a specific action based on their credits
@@ -118,7 +119,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 	case UsageTypeCredits:
 		// For queries, consume credits directly in Go code
 		var currentSubscriptionCredits, currentPurchasedCredits int
-		
+
 		// Get current credit balances
 		err = tx.QueryRow(ctx, `
 			SELECT COALESCE(subscription_credits_remaining, 0), COALESCE(purchased_credits_remaining, 0)
@@ -126,13 +127,13 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		if err != nil {
 			return fmt.Errorf("error getting current credit balances: %v", err)
 		}
-		
+
 		// Check if user has enough total credits
 		totalCredits := currentSubscriptionCredits + currentPurchasedCredits
 		if totalCredits < resourceConsumed {
 			return fmt.Errorf("insufficient credits")
 		}
-		
+
 		// Calculate how many credits to consume from each source
 		var creditsFromSubscription, creditsFromPurchased int
 		if currentSubscriptionCredits >= resourceConsumed {
@@ -142,7 +143,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 			creditsFromSubscription = currentSubscriptionCredits
 			creditsFromPurchased = resourceConsumed - currentSubscriptionCredits
 		}
-		
+
 		// Update user credits
 		_, err = tx.Exec(ctx, `
 			UPDATE users SET 
@@ -153,7 +154,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		if err != nil {
 			return fmt.Errorf("error updating user credits: %v", err)
 		}
-		
+
 		// Determine source used for logging
 		var sourceUsed string
 		if creditsFromPurchased > 0 {
@@ -161,42 +162,50 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		} else {
 			sourceUsed = "subscription"
 		}
-		
+
 		// Log the usage with credit consumption details
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata, credits_consumed, credits_source)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON, resourceConsumed, sourceUsed)
-		
+
 	case UsageTypeAlert:
 		// For alerts, update the counter
 		_, err = tx.Exec(ctx, "UPDATE users SET active_alerts = active_alerts + $2 WHERE userId = $1", userID, resourceConsumed)
 		if err != nil {
 			return fmt.Errorf("error updating active alerts counter: %v", err)
 		}
-		
+
 		// Log the usage
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
-		
+
 	case UsageTypeStrategyAlert:
 		// For strategy alerts, update the counter
 		_, err = tx.Exec(ctx, "UPDATE users SET active_strategy_alerts = active_strategy_alerts + $2 WHERE userId = $1", userID, resourceConsumed)
 		if err != nil {
 			return fmt.Errorf("error updating active strategy alerts counter: %v", err)
 		}
-		
+
 		// Log the usage
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
 			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
-		
+
+	case UsageTypeBacktest:
+		// For backtests, just log usage without consuming credits
+		metadataJSON, _ := json.Marshal(metadata)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+			VALUES ($1, $2, $3, $4, $5)`,
+			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
+
 	default:
 		// For other usage types, just log
 		metadataJSON, _ := json.Marshal(metadata)
@@ -231,7 +240,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) 
 		SELECT credits_per_billing_period 
 		FROM plan_limits 
 		WHERE plan_name = $1`, planName).Scan(&creditsPerPeriod)
-	
+
 	if err != nil {
 		return fmt.Errorf("plan '%s' not found in plan_limits table", planName)
 	}
@@ -257,7 +266,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) 
 		"plan_name":         planName,
 	}
 	metadataJSON, _ := json.Marshal(metadata)
-	
+
 	_, err = conn.DB.Exec(ctx, `
 		INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 		VALUES ($1, 'credits_reset', 0, $2, $3)`,
@@ -271,7 +280,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) 
 	return nil
 }
 
-// GetUserUsageStats returns usage statistics for a user  
+// GetUserUsageStats returns usage statistics for a user
 func GetUserUsageStats(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -364,12 +373,19 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, planName string) erro
 			strategy_alerts_limit = $4
 		WHERE userId = $1`
 
-	_, err = conn.DB.Exec(ctx, updateQuery,
+	res, err := conn.DB.Exec(ctx, updateQuery,
 		userID, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
-
 	if err != nil {
 		return fmt.Errorf("error updating user credits: %v", err)
 	}
+
+	rows := res.RowsAffected()
+	if rows == 0 {
+		// This should never happen – it means we did not update the target row.
+		return fmt.Errorf("no rows updated when allocating credits (userID=%d, plan=%s)", userID, planName)
+	}
+
+	log.Printf("Allocated %d credits for user %d under plan '%s' (alerts:%d, strategyAlerts:%d)", creditsPerPeriod, userID, planName, alertsLimit, strategyAlertsLimit)
 
 	log.Printf("Updated credits for user %d to plan '%s': credits=%d, alerts=%d, strategy_alerts=%d",
 		userID, planName, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
@@ -399,7 +415,7 @@ func AddPurchasedCredits(conn *data.Conn, userID int, creditsToAdd int) error {
 		"purchase_type": "manual_addition",
 	}
 	metadataJSON, _ := json.Marshal(metadata)
-	
+
 	_, err = conn.DB.Exec(ctx, `
 		INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 		VALUES ($1, 'credits_purchase', $2, 'N/A', $3)`,

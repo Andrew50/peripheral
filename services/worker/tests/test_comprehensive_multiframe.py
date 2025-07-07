@@ -354,7 +354,7 @@ def strategy():
 '''
     
     try:
-        from accessor_strategy_engine import AccessorStrategyEngine
+        from strategy_engine import AccessorStrategyEngine
         
         engine = AccessorStrategyEngine()
         

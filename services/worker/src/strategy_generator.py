@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 from openai import OpenAI
 from validator import SecurityValidator, SecurityError, StrategyComplianceError
-from accessor_strategy_engine import AccessorStrategyEngine
+from strategy_engine import AccessorStrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +401,7 @@ COMMON MISTAKES TO AVOID:
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
 - BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
 - NO DATE FILTERING: Using only daily data for precise stop timing
-- Appending instances only after exit is determined – always record the entry as an instance, even when you can’t yet determine an exit.
+- Appending instances only after exit is determined – always record the entry as an instance, even when you can't yet determine an exit.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows

@@ -1,0 +1,678 @@
+package marketdata
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"bytes"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/klauspost/compress/gzip"
+)
+
+// -----------------------------------------------------------------------------
+// Performance-optimised connection pool for bulk COPY
+// -----------------------------------------------------------------------------
+
+type bulkLoadPool struct {
+	pool *pgxpool.Pool
+}
+
+func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, error) {
+	cfg := db.Config()
+	cfg.MinConns = int32(copyWorkerCount)
+	cfg.MaxConns = int32(copyWorkerCount)
+
+	// Apply tuning parameters to every connection via AfterConnect hook.
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		memMB := 4096 / copyWorkerCount
+		if memMB < 64 {
+			memMB = 64
+		}
+		settings := []string{
+			"SET synchronous_commit = off",
+			fmt.Sprintf("SET maintenance_work_mem = '%dMB'", memMB),
+			"SET work_mem = '256MB'",
+			"SET temp_buffers = '256MB'",
+		}
+		for _, s := range settings {
+			if _, err := conn.Exec(ctx, s); err != nil {
+				return fmt.Errorf("set %s: %w", s, err)
+			}
+		}
+		return nil
+	}
+
+	pool, err := pgxpool.ConnectConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create bulk load pool: %w", err)
+	}
+
+	return &bulkLoadPool{pool: pool}, nil
+}
+
+func (blp *bulkLoadPool) Close() { blp.pool.Close() }
+
+func (blp *bulkLoadPool) AcquireFunc(ctx context.Context, fn func(*pgxpool.Conn) error) error {
+	return blp.pool.AcquireFunc(ctx, fn)
+}
+
+// -----------------------------------------------------------------------------
+// Streaming CSV reader that concatenates multiple gzip files
+// -----------------------------------------------------------------------------
+
+type batchedCSVReader struct {
+	ctx    context.Context
+	files  []string
+	s3c    *s3.Client
+	bucket string
+
+	current io.Reader
+	fileIdx int
+	header  []byte
+	hasRead bool
+
+	gz   *gzip.Reader
+	body io.ReadCloser
+
+	// Accumulated time spent fetching objects from S3. This allows callers to
+	// break down wall-clock time between network I/O (download) and database
+	// insertion work.
+	fetchDur time.Duration
+}
+
+func newBatchedCSVReader(ctx context.Context, s3c *s3.Client, bucket string, files []string) *batchedCSVReader {
+	return &batchedCSVReader{ctx: ctx, files: files, s3c: s3c, bucket: bucket}
+}
+
+func (b *batchedCSVReader) Read(p []byte) (int, error) {
+	for {
+		// If we have an active reader, consume from it first.
+		if b.current != nil {
+			n, err := b.current.Read(p)
+			if err == nil || err != io.EOF {
+				// Successful read or real error (not EOF).
+				return n, err
+			}
+
+			// Clean up after hitting EOF on current file.
+			if b.gz != nil {
+				_ = b.gz.Close()
+				b.gz = nil
+			}
+			if b.body != nil {
+				_ = b.body.Close()
+				b.body = nil
+			}
+			b.current = nil
+			// Loop to open next file.
+		}
+
+		// No more files left.
+		if b.fileIdx >= len(b.files) {
+			return 0, io.EOF
+		}
+
+		file := b.files[b.fileIdx]
+		b.fileIdx++
+
+		// Measure the time spent establishing the object stream from S3.
+		fetchStart := time.Now()
+		ctxObj, cancel := context.WithTimeout(b.ctx, 15*time.Minute)
+		resp, err := b.s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(b.bucket), Key: aws.String(file)})
+		cancel()
+		b.fetchDur += time.Since(fetchStart)
+		if err != nil {
+			return 0, fmt.Errorf("get object %s: %w", file, err)
+		}
+
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return 0, fmt.Errorf("gzip reader %s: %w", file, err)
+		}
+
+		b.gz = gz
+		b.body = resp.Body
+		reader := bufio.NewReader(gz)
+
+		if !b.hasRead {
+			headerLine, err := reader.ReadString('\n')
+			if err != nil {
+				gz.Close()
+				resp.Body.Close()
+				return 0, fmt.Errorf("read header: %w", err)
+			}
+			mapped := headerLine
+			if strings.Contains(headerLine, "window_start") {
+				mapped = strings.Replace(headerLine, "window_start", "timestamp", 1)
+			}
+			b.header = []byte(mapped)
+			b.hasRead = true
+			b.current = io.MultiReader(bytes.NewReader(b.header), reader)
+		} else {
+			if _, err = reader.ReadString('\n'); err != nil {
+				gz.Close()
+				resp.Body.Close()
+				return 0, fmt.Errorf("skip header: %w", err)
+			}
+			b.current = reader
+		}
+		// Loop will now read from the new current reader.
+	}
+}
+
+// FetchDuration returns the total time spent fetching objects from S3 so far.
+func (b *batchedCSVReader) FetchDuration() time.Duration {
+	return b.fetchDur
+}
+
+// -----------------------------------------------------------------------------
+// Pipeline worker & dispatcher
+// -----------------------------------------------------------------------------
+
+// Result status used by workers to report back to the aggregator.
+type resultStatus int
+
+const (
+	resultLoaded resultStatus = iota
+	resultFailed
+)
+
+type workerResult struct {
+	day    time.Time
+	status resultStatus
+	reason string
+}
+
+type pipelineWorker struct {
+	s3c       *s3.Client
+	bucket    string
+	table     string
+	timeframe string
+	pool      *bulkLoadPool
+	collector *failedCollector
+	resultCh  chan<- workerResult // channel to report per-file outcomes
+	skipped   *int64
+}
+
+func newPipelineWorker(s3c *s3.Client, bucket, table, timeframe string, pool *bulkLoadPool, fc *failedCollector, resCh chan<- workerResult, skipped *int64) *pipelineWorker {
+	return &pipelineWorker{s3c: s3c, bucket: bucket, table: table, timeframe: timeframe, pool: pool, collector: fc, resultCh: resCh, skipped: skipped}
+}
+
+func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+
+	reader := newBatchedCSVReader(ctx, pw.s3c, pw.bucket, files)
+
+	batchErr := pw.pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
+		pgc := c.Conn().PgConn()
+
+		// -----------------------------------------------------------------
+		// Per-connection staging table setup
+		// -----------------------------------------------------------------
+		stageTable := fmt.Sprintf("%s_stage_%d", pw.table, pgc.PID())
+
+		// Staging table needs a bigint timestamp column because Polygon CSV files
+		// contain Unix *nanosecond* epoch values. The main hypertables now store
+		// a proper timestamptz, so we cannot use LIKE <main> anymore – instead
+		// define the minimal schema explicitly with a bigint timestamp column
+		// and no constraints.
+		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
+			ticker        text      NOT NULL,
+			volume        numeric,
+			open          numeric,
+			close         numeric,
+			high          numeric,
+			low           numeric,
+			"timestamp"  bigint     NOT NULL,
+			transactions  integer
+		)`, stageTable)
+		if _, err := c.Exec(ctx, createStageSQL); err != nil {
+			return fmt.Errorf("create staging table: %w", err)
+		}
+
+		// Step 1: COPY into staging table.
+		copySQL := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", stageTable)
+		if _, err := pgc.CopyFrom(ctx, reader, copySQL); err != nil {
+			return err
+		}
+
+		// Step 2: Upsert into main table.
+		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
+SELECT ticker, volume, open, close, high, low,
+       to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
+       transactions FROM %s
+ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+    volume        = EXCLUDED.volume,
+    open          = EXCLUDED.open,
+    close         = EXCLUDED.close,
+    high          = EXCLUDED.high,
+    low           = EXCLUDED.low,
+    transactions  = EXCLUDED.transactions`, pw.table, stageTable)
+
+		if _, err := c.Exec(ctx, upsertSQL); err != nil {
+			return fmt.Errorf("upsert into %s: %w", pw.table, err)
+		}
+
+		// Step 3: Clear staging table for next batch.
+		if _, err := c.Exec(ctx, fmt.Sprintf("TRUNCATE %s", stageTable)); err != nil {
+			return fmt.Errorf("truncate stage: %w", err)
+		}
+
+		return nil
+	})
+
+	if batchErr == nil {
+		for _, f := range files {
+			if day, err := parseDayFromKey(f); err == nil {
+				pw.resultCh <- workerResult{day: day, status: resultLoaded}
+			}
+		}
+		return nil
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(batchErr, &pgErr) && pgErr.Code == "23505" {
+		for _, f := range files {
+			if day, err := parseDayFromKey(f); err == nil {
+				pw.resultCh <- workerResult{day: day, status: resultLoaded}
+			}
+		}
+		return nil
+	}
+
+	var finalErr error
+	for _, file := range files {
+		if err := copyObject(ctx, pw.pool.pool, pw.s3c, pw.bucket, file, pw.table); err != nil {
+			var fe *pgconn.PgError
+			if errors.As(err, &fe) {
+				code := fe.Code
+				if code == "22P04" || code == "57014" {
+					atomic.AddInt64(pw.skipped, 1)
+					if pw.collector != nil {
+						if day, errDay := parseDayFromKey(file); errDay == nil {
+							pw.collector.Add(failedFile{Day: day, Timeframe: pw.timeframe, Reason: fe.Message})
+							pw.resultCh <- workerResult{day: day, status: resultFailed, reason: fe.Message}
+						}
+					}
+					continue
+				}
+			}
+			// Gracefully handle truncated or corrupted gzip files (unexpected EOF).
+			if errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "unexpected EOF") {
+				log.Printf("warning: skipping %s due to gzip error: %v", file, err)
+				atomic.AddInt64(pw.skipped, 1)
+				if pw.collector != nil {
+					if day, errDay := parseDayFromKey(file); errDay == nil {
+						pw.collector.Add(failedFile{Day: day, Timeframe: pw.timeframe, Reason: err.Error()})
+						pw.resultCh <- workerResult{day: day, status: resultFailed, reason: err.Error()}
+					}
+				}
+				continue
+			}
+			finalErr = err
+			if pw.collector != nil {
+				if day, errDay := parseDayFromKey(file); errDay == nil {
+					pw.collector.Add(failedFile{Day: day, Timeframe: pw.timeframe, Reason: err.Error()})
+					pw.resultCh <- workerResult{day: day, status: resultFailed, reason: err.Error()}
+				}
+			}
+		} else {
+			if day, err := parseDayFromKey(file); err == nil {
+				pw.resultCh <- workerResult{day: day, status: resultLoaded}
+			}
+		}
+	}
+	return finalErr
+}
+
+// processFilesWithPipeline is the public dispatcher that fans out work to COPY workers.
+func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string, keys []string, table string, timeframe string, pool *bulkLoadPool, fc *failedCollector, processed *int64, skipped *int64, total int64, progressInterval int64, db *pgxpool.Pool, initialCutoff time.Time) (time.Time, error) {
+	if len(keys) == 0 {
+		return time.Time{}, nil
+	}
+
+	startTime := time.Now()
+
+	// Build list of unique days for the tracker.
+	uniq := make(map[time.Time]struct{})
+	for _, k := range keys {
+		if d, err := parseDayFromKey(k); err == nil {
+			uniq[d] = struct{}{}
+		}
+	}
+	var days []time.Time
+	for d := range uniq {
+		days = append(days, d)
+	}
+
+	tracker := newDayStatusTracker(days, initialCutoff)
+
+	// Channel for per-file results.
+	resultCh := make(chan workerResult, 100)
+
+	// Error channel to receive first fatal error.
+	errCh := make(chan error, 1)
+
+	// Context to allow cancellation on first error.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Aggregator goroutine – persists progress and failed files periodically.
+	aggDone := make(chan struct{})
+	var finalCutoff time.Time
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		persisted := initialCutoff
+
+		flush := func() {
+			cut := tracker.CurrentCutoff()
+			// Persist failed files collected so far.
+			if failed := fc.PopAll(); len(failed) > 0 {
+				if err := storeFailedFiles(ctx, db, failed); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					cancel()
+					return
+				}
+			}
+
+			// Persist last_loaded_at if we can move the cut-off.
+			if cut.After(persisted) {
+				if err := setLastLoadedAt(ctx, db, timeframe, cut); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					cancel()
+					return
+				}
+				persisted = cut
+			}
+		}
+
+		for {
+			select {
+			case r, ok := <-resultCh:
+				if !ok {
+					flush()
+					finalCutoff = persisted
+					close(aggDone)
+					return
+				}
+				before := tracker.CurrentCutoff()
+				if r.status == resultLoaded {
+					tracker.MarkLoaded(r.day)
+				} else {
+					tracker.MarkFailed(r.day)
+				}
+				// If the guaranteed cutoff advanced, flush immediately.
+				if tracker.CurrentCutoff().After(before) {
+					flush()
+				}
+			case <-ticker.C:
+				flush()
+			case <-ctx.Done():
+				flush()
+				finalCutoff = persisted
+				close(aggDone)
+				return
+			}
+		}
+	}()
+
+	// Prepare batches of keys.
+	batches := make([][]string, 0, (len(keys)+copyBatchSize-1)/copyBatchSize)
+	for i := 0; i < len(keys); i += copyBatchSize {
+		end := i + copyBatchSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+		batches = append(batches, keys[i:end])
+	}
+
+	batchCh := make(chan []string)
+	var wg sync.WaitGroup
+
+	// Worker goroutines.
+	for i := 0; i < copyWorkerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			worker := newPipelineWorker(s3c, bucket, table, timeframe, pool, fc, resultCh, skipped)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case batch, ok := <-batchCh:
+					if !ok {
+						return
+					}
+					if err := worker.processFiles(ctx, batch); err != nil {
+						select {
+						case errCh <- err:
+						default:
+						}
+						cancel()
+						return
+					}
+					n := atomic.AddInt64(processed, int64(len(batch)))
+					if n%progressInterval == 0 || n == total {
+						elapsed := time.Since(startTime)
+						remainingFiles := total - n
+						var estRemaining time.Duration
+						if n > 0 {
+							estRemaining = time.Duration(float64(elapsed) * float64(remainingFiles) / float64(n))
+						}
+						log.Printf("%s progress: %d/%d processed | elapsed %v | est remaining %v", table, n, total, elapsed.Truncate(time.Second), estRemaining.Truncate(time.Second))
+					}
+				}
+			}
+		}()
+	}
+
+	// Producer goroutine to feed batches.
+	go func() {
+		for _, b := range batches {
+			select {
+			case <-ctx.Done():
+				return
+			case batchCh <- b:
+			}
+		}
+		close(batchCh)
+	}()
+
+	// Wait for workers then close result channel.
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return time.Time{}, err
+	case <-aggDone:
+		return finalCutoff, nil
+	}
+}
+
+// -----------------------------------------------------------------------------
+// COPY helpers & failed-file tracking structs
+// -----------------------------------------------------------------------------
+
+func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, key, table string) error {
+	// Download object with generous timeout – single-file fallback path.
+	ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+
+	resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return fmt.Errorf("gzip: %w", err)
+	}
+	defer gz.Close()
+
+	// Two-step load: COPY into per-connection staging (bigint ts) then upsert converting to timestamptz.
+	return db.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
+		pgc := c.Conn().PgConn()
+
+		stageTable := fmt.Sprintf("%s_stage_%d", table, pgc.PID())
+
+		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
+			ticker        text      NOT NULL,
+			volume        numeric,
+			open          numeric,
+			close         numeric,
+			high          numeric,
+			low           numeric,
+			"timestamp"  bigint     NOT NULL,
+			transactions  integer
+		)`, stageTable)
+		if _, err := c.Exec(ctx, createStageSQL); err != nil {
+			return fmt.Errorf("create staging table: %w", err)
+		}
+
+		copySQL := fmt.Sprintf(`COPY %s(ticker, volume, open, close, high, low, "timestamp", transactions)
+ FROM STDIN WITH (FORMAT csv, HEADER true)`, stageTable)
+		if _, err := pgc.CopyFrom(ctx, gz, copySQL); err != nil {
+			// UNIQUE violations are handled by the upsert step, so COPY should not hit them.
+			return err
+		}
+
+		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
+SELECT ticker, volume, open, close, high, low,
+       to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
+       transactions FROM %s
+ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+    volume        = EXCLUDED.volume,
+    open          = EXCLUDED.open,
+    close         = EXCLUDED.close,
+    high          = EXCLUDED.high,
+    low           = EXCLUDED.low,
+    transactions  = EXCLUDED.transactions`, table, stageTable)
+
+		if _, err := c.Exec(ctx, upsertSQL); err != nil {
+			return err
+		}
+
+		if _, err := c.Exec(ctx, fmt.Sprintf("TRUNCATE %s", stageTable)); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+// copyCSV is no longer used but kept for reference; mark deprecated.
+// Deprecated: use the two-step staging load path instead.
+func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
+	pgErr := pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
+		pgc := c.Conn().PgConn()
+		sql := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", table)
+		_, err := pgc.CopyFrom(ctx, r, sql)
+		return err
+	})
+	return pgErr
+}
+
+// Failure bookkeeping --------------------------------------------------------
+
+type failedFile struct {
+	Day       time.Time
+	Timeframe string
+	Reason    string
+}
+
+type failedCollector struct {
+	mu   sync.Mutex
+	list []failedFile
+}
+
+func (fc *failedCollector) Add(f failedFile) {
+	fc.mu.Lock()
+	fc.list = append(fc.list, f)
+	fc.mu.Unlock()
+}
+
+func (fc *failedCollector) List() []failedFile {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	out := make([]failedFile, len(fc.list))
+	copy(out, fc.list)
+	return out
+}
+
+func (fc *failedCollector) PopAll() []failedFile {
+	fc.mu.Lock()
+	out := fc.list
+	fc.list = nil
+	fc.mu.Unlock()
+	return out
+}
+
+// Processed-date tracking -----------------------------------------------------
+
+type processedDateTracker struct {
+	mu             sync.Mutex
+	processedDates map[time.Time]bool
+}
+
+func newProcessedDateTracker() *processedDateTracker {
+	return &processedDateTracker{processedDates: make(map[time.Time]bool)}
+}
+
+func (p *processedDateTracker) AddProcessedDate(d time.Time) {
+	p.mu.Lock()
+	p.processedDates[d] = true
+	p.mu.Unlock()
+}
+
+func (p *processedDateTracker) GetConservativeUpdateDate() time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.processedDates) == 0 {
+		return time.Time{}
+	}
+	var earliest time.Time
+	for d := range p.processedDates {
+		if earliest.IsZero() || d.Before(earliest) {
+			earliest = d
+		}
+	}
+	return earliest.AddDate(0, 0, -1)
+}
+
+// parseDayFromKey extracts YYYY-MM-DD from an S3 key that ends with .csv.gz.
+func parseDayFromKey(key string) (time.Time, error) {
+	parts := strings.Split(key, "/")
+	if len(parts) == 0 {
+		return time.Time{}, fmt.Errorf("invalid key")
+	}
+	fname := strings.TrimSuffix(parts[len(parts)-1], ".csv.gz")
+	return time.Parse("2006-01-02", fname)
+}

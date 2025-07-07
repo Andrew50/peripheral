@@ -21,6 +21,7 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
+	"backend/internal/app/limits"
 	"backend/internal/app/screensaver"
 	"backend/internal/app/settings"
 	"backend/internal/app/strategy"
@@ -28,7 +29,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"backend/internal/app/limits"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -131,7 +131,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		// TODO: replace with real auth logic
 		return nil, nil
 	},
-	
+
 	// --- pricing / billing ----------------------------------------------------
 	"getUserConversation":        agent.GetUserConversation,
 	"getSuggestedQueries":        agent.GetSuggestedQueries,
@@ -149,12 +149,13 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"setConversationVisibility": agent.SetConversationVisibility,
 
 	// --- billing / stripe -----------------------------------------------------
-	"createCheckoutSession":       CreateCheckoutSession,
-	"createCreditCheckoutSession": CreateCreditCheckoutSession,
-	"createCustomerPortal":        CreateCustomerPortal,
-	"getSubscriptionStatus":       GetSubscriptionStatus,
+	"createCheckoutSession":           CreateCheckoutSession,
+	"createCreditCheckoutSession":     CreateCreditCheckoutSession,
+	"createCustomerPortal":            CreateCustomerPortal,
+	"getSubscriptionStatus":           GetSubscriptionStatus,
 	"getCombinedSubscriptionAndUsage": GetCombinedSubscriptionAndUsage,
-	"verifyCheckoutSession":       VerifyCheckoutSession,
+	"verifyCheckoutSession":           VerifyCheckoutSession,
+	"cancelSubscription":              CancelSubscription,
 
 	// --- usage credits and tracking -------------------------------------------
 	"getUserUsageStats": func(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {

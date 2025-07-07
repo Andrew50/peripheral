@@ -101,7 +101,9 @@ spec:
                 - name: DB_HOST
                   value: "db"
                 - name: ENVIRONMENT
-                  value: "${ENVIRONMENT:-Development}"
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
                 - name: TELEGRAM_BOT_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -114,6 +116,10 @@ spec:
                       name: telegram-secret
                       key: chat-id
                       optional: true
+                - name: K8S_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
               volumeMounts:
                 - name: backups-volume
                   mountPath: /backups
@@ -172,8 +178,14 @@ spec:
               value: "60"
             - name: MAX_FAILURE_COUNT
               value: "3"
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: ENVIRONMENT
-              value: "${ENVIRONMENT:-Development}"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -16,7 +16,7 @@ from typing import Any, Dict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # DataProvider import removed - using MockDataProvider for testing
-from accessor_strategy_engine import AccessorStrategyEngine
+from strategy_engine import AccessorStrategyEngine
 from validator import SecurityError
 
 

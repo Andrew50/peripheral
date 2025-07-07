@@ -2,15 +2,14 @@
 	import { settings } from '$lib/utils/stores/stores';
 	import { get } from 'svelte/store';
 	import type { Settings } from '$lib/utils/types/types';
-	import { privateRequest } from '$lib/utils/helpers/backend';
 	import '$lib/styles/global.css';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
 	import { logout } from '$lib/auth';
-	import { redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
 	import { subscriptionStatus, fetchCombinedSubscriptionAndUsage } from '$lib/utils/stores/stores';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
@@ -26,20 +25,8 @@
 	let deletingAccount = false;
 
 	// Handle manage subscription
-	async function handleManageSubscription() {
-		subscriptionStatus.update((s) => ({ ...s, loading: true, error: '' }));
-
-		try {
-			const response = await privateRequest<{ url: string }>('createCustomerPortal', {});
-			redirectToCustomerPortal(response.url);
-		} catch (error) {
-			console.error('Error opening customer portal:', error);
-			subscriptionStatus.update((s) => ({
-				...s,
-				loading: false,
-				error: 'Failed to open subscription management. Please try again.'
-			}));
-		}
+	function handleManageSubscription() {
+		goto('/pricing');
 	}
 
 	// Initialize component
@@ -233,16 +220,33 @@
 						<p class="error-text">{$subscriptionStatus.error}</p>
 					{:else if $subscriptionStatus.isActive}
 						<div class="subscription-info">
-							<p class="subscription-status">Status: <span class="active">Active</span></p>
-							{#if $subscriptionStatus.currentPlan}
-								<p>Plan: {$subscriptionStatus.currentPlan}</p>
-							{/if}
-							{#if $subscriptionStatus.currentPeriodEnd}
-								<p>
-									Next billing: {new Date(
-										$subscriptionStatus.currentPeriodEnd * 1000
-									).toLocaleDateString()}
+							{#if $subscriptionStatus.isCanceling}
+								<p class="subscription-status">Status: <span class="canceling">Canceling</span></p>
+								{#if $subscriptionStatus.currentPlan}
+									<p>Plan: {$subscriptionStatus.currentPlan}</p>
+								{/if}
+								{#if $subscriptionStatus.currentPeriodEnd}
+									<p>
+										Access until: {new Date(
+											$subscriptionStatus.currentPeriodEnd * 1000
+										).toLocaleDateString()}
+									</p>
+								{/if}
+								<p class="canceling-note">
+									Your subscription will remain active until the end of your current billing period.
 								</p>
+							{:else}
+								<p class="subscription-status">Status: <span class="active">Active</span></p>
+								{#if $subscriptionStatus.currentPlan}
+									<p>Plan: {$subscriptionStatus.currentPlan}</p>
+								{/if}
+								{#if $subscriptionStatus.currentPeriodEnd}
+									<p>
+										Next billing: {new Date(
+											$subscriptionStatus.currentPeriodEnd * 1000
+										).toLocaleDateString()}
+									</p>
+								{/if}
 							{/if}
 							<button class="manage-subscription-button" on:click={handleManageSubscription}>
 								Manage Subscription
@@ -593,6 +597,17 @@
 
 	.subscription-status .inactive {
 		color: var(--warning-color, #f59e0b);
+	}
+
+	.subscription-status .canceling {
+		color: var(--warning-color, #f59e0b);
+	}
+
+	.canceling-note {
+		color: var(--warning-color, #f59e0b);
+		font-size: 0.875rem;
+		font-style: italic;
+		margin-top: 0.5rem;
 	}
 
 	.manage-subscription-button,

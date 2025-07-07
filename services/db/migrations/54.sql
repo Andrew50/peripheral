@@ -1,0 +1,1 @@
+TRUNCATE TABLE ohlcv_update_state;

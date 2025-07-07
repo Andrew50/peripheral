@@ -19,14 +19,17 @@
 		type DatabasePlan,
 		type DatabaseCreditProduct
 	} from '$lib/config/pricing';
-	import '$lib/styles/global.css';
-	import '$lib/styles/landing.css';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import '$lib/styles/splash.css';
 
 	// Individual loading states for better UX
 	let loadingStates: Record<string, boolean> = {
 		plus: false,
 		pro: false,
 		manage: false,
+		cancel: false,
+		reactivate: false,
 		credits100: false,
 		credits250: false,
 		credits1000: false
@@ -45,6 +48,14 @@
 	let pricingLoading = true;
 	let pricingError = '';
 
+	// Selected billing period state – allows users to toggle between monthly and yearly pricing
+	let billingPeriod: 'month' | 'year' = 'month';
+
+	// Include Free plan regardless of selected billing period so it always shows
+	$: filteredPlans = plans.filter(
+		(plan) => plan.plan_name.toLowerCase() === 'free' || plan.billing_period === billingPeriod
+	);
+
 	// Function to determine if the current user is authenticated
 	const isAuthenticated = (): boolean => {
 		if (!browser) return false;
@@ -59,6 +70,17 @@
 		return (
 			isAuthenticated() &&
 			$subscriptionStatus.currentPlan === planDisplayName &&
+			!$subscriptionStatus.loading &&
+			!$subscriptionStatus.error
+		);
+	};
+
+	// Helper function to check if the current plan is being canceled
+	const isCurrentPlanCanceling = (planDisplayName: string): boolean => {
+		return (
+			isAuthenticated() &&
+			$subscriptionStatus.currentPlan === planDisplayName &&
+			$subscriptionStatus.isCanceling &&
 			!$subscriptionStatus.loading &&
 			!$subscriptionStatus.error
 		);
@@ -111,6 +133,15 @@
 				.filter((plan) => plan.is_active)
 				.sort((a, b) => a.sort_order - b.sort_order);
 			console.log(config.creditProducts);
+
+			// Initialize dynamic loading states for any new plans (e.g., yearly tiers)
+			plans.forEach((plan) => {
+				const key = plan.plan_name.toLowerCase();
+				if (!(key in loadingStates)) {
+					loadingStates[key] = false;
+				}
+			});
+
 			creditProducts = config.creditProducts
 				.filter((product) => product.is_active)
 				.sort((a, b) => a.sort_order - b.sort_order);
@@ -144,8 +175,8 @@
 		}
 	}
 
-	// Enhanced upgrade handler with individual loading states
-	async function handleUpgrade(planKey: 'plus' | 'pro') {
+	// Enhanced upgrade handler with individual loading states (supports dynamic plan keys)
+	async function handleUpgrade(planKey: string) {
 		// Check if user is authenticated before allowing upgrade
 		const isValidAuth = await validateAuthentication();
 
@@ -159,7 +190,7 @@
 	}
 
 	// Enhanced credit purchase handler
-	async function handleCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+	async function handleCreditPurchase(creditKey: string) {
 		// Check if user is authenticated before allowing purchase
 		const isValidAuth = await validateAuthentication();
 
@@ -178,8 +209,8 @@
 		await processCreditPurchase(creditKey);
 	}
 
-	// Process the actual upgrade
-	async function processUpgrade(planKey: 'plus' | 'pro') {
+	// Process the actual upgrade (supports dynamic plan keys)
+	async function processUpgrade(planKey: string) {
 		// Double-check authentication before processing payment
 		const isValidAuth = await validateAuthentication();
 
@@ -189,6 +220,11 @@
 			);
 			goto(`/signup?plan=${planKey}&redirect=checkout`);
 			return;
+		}
+
+		// Ensure we have a loading state entry for this plan
+		if (!(planKey in loadingStates)) {
+			loadingStates[planKey] = false;
 		}
 
 		loadingStates[planKey] = true;
@@ -207,7 +243,15 @@
 			);
 
 			// Redirect immediately to checkout
-			await redirectToCheckout(response.sessionId);
+			try {
+				await redirectToCheckout(response.sessionId);
+			} catch (redirectError) {
+				console.warn(
+					'Stripe.js redirect failed, falling back to direct URL redirect',
+					redirectError
+				);
+				window.location.href = response.url;
+			}
 		} catch (error) {
 			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
@@ -217,7 +261,7 @@
 	}
 
 	// Process credit purchase
-	async function processCreditPurchase(creditKey: 'credits100' | 'credits250' | 'credits1000') {
+	async function processCreditPurchase(creditKey: string) {
 		loadingStates[creditKey] = true;
 		feedbackMessage = '';
 		feedbackType = '';
@@ -242,7 +286,15 @@
 			);
 
 			// Redirect immediately to checkout
-			await redirectToCheckout(response.sessionId);
+			try {
+				await redirectToCheckout(response.sessionId);
+			} catch (redirectError) {
+				console.warn(
+					'Stripe.js redirect failed, falling back to direct URL redirect',
+					redirectError
+				);
+				window.location.href = response.url;
+			}
 		} catch (error) {
 			console.error('❌ [processCreditPurchase] Error creating credit checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
@@ -277,6 +329,55 @@
 		}
 	}
 
+	// Handle cancel subscription
+	async function handleCancelSubscription() {
+		if (
+			!confirm(
+				'Are you sure you want to cancel your subscription? You will retain access until the end of the current billing period.'
+			)
+		) {
+			return;
+		}
+
+		loadingStates.cancel = true;
+		feedbackMessage = '';
+		feedbackType = '';
+
+		try {
+			await privateRequest('cancelSubscription', {});
+			await fetchSubscriptionStatus();
+			feedbackMessage =
+				'Your subscription will remain active until the end of your current billing period.';
+			feedbackType = 'success';
+		} catch (error) {
+			console.error('Error cancelling subscription:', error);
+			feedbackMessage = 'Failed to cancel subscription. Please try again.';
+			feedbackType = 'error';
+		} finally {
+			loadingStates.cancel = false;
+		}
+	}
+
+	// Handle reactivate subscription
+	async function handleReactivateSubscription() {
+		loadingStates.reactivate = true;
+		feedbackMessage = '';
+		feedbackType = '';
+
+		try {
+			await privateRequest('reactivateSubscription', {});
+			await fetchSubscriptionStatus();
+			feedbackMessage = 'Your subscription has been reactivated successfully.';
+			feedbackType = 'success';
+		} catch (error) {
+			console.error('Error reactivating subscription:', error);
+			feedbackMessage = 'Failed to reactivate subscription. Please try again.';
+			feedbackType = 'error';
+		} finally {
+			loadingStates.reactivate = false;
+		}
+	}
+
 	// Clear feedback message after timeout
 	function clearFeedback() {
 		setTimeout(() => {
@@ -292,9 +393,12 @@
 		clearFeedback();
 	}
 
-	function navigateToHome() {
-		goto('/');
-	}
+	// Helper to get display name without "(Yearly)" suffix for yearly billing plans
+	const getPlanDisplayName = (plan: DatabasePlan): string => {
+		return plan.billing_period === 'year'
+			? plan.display_name.replace(/\s*\(Yearly\)\s*$/i, '').trim()
+			: plan.display_name;
+	};
 
 	// Run initialization on mount
 	onMount(async () => {
@@ -438,48 +542,27 @@
 			await fetchSubscriptionStatus();
 		}
 	}
+
+
 </script>
 
 <svelte:head>
-	<title>Pricing & Plans - Peripheral</title>
+	<title>Pricing | Peripheral</title>
 </svelte:head>
-
+<SiteHeader />
 <!-- Use landing page design system -->
+ <!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="landing-background landing-reset">
-	<!-- Background Effects -->
-	<div class="landing-background-animation">
-		<div class="landing-gradient-orb landing-orb-1"></div>
-		<div class="landing-gradient-orb landing-orb-2"></div>
-		<div class="landing-gradient-orb landing-orb-3"></div>
-		<div class="landing-static-gradient"></div>
-	</div>
-
-	<!-- Header -->
-	<header class="landing-header">
-		<div class="landing-header-content">
-			<div class="logo-section">
-				<button
-					on:click={navigateToHome}
-					on:keydown={(e) => e.key === 'Enter' && navigateToHome()}
-					class="logo-button"
-					aria-label="Navigate to home"
-				>
-					<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="landing-logo" />
-				</button>
-			</div>
-			<nav class="landing-nav">
-				<button class="landing-button secondary" on:click={navigateToHome}>← Back to Home</button>
-			</nav>
-		</div>
-	</header>
 
 	<!-- Main Pricing Content -->
 	<div class="landing-container" style="padding-top: 120px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
-				<h1 class="landing-title">Pricing & Plans</h1>
-				<p class="landing-subtitle">Choose the perfect plan for your trading needs</p>
+				<h1 class="landing-title">Frictionless Trading</h1>
+				<p class="landing-subtitle">Leverage Peripheral to envision, enhance, and execute your trading ideas.</p>
 			</div>
 
 			<!-- Feedback Messages -->
@@ -504,25 +587,46 @@
 			{:else if $subscriptionStatus.error && isAuthenticated()}
 				<div class="error-message">{$subscriptionStatus.error}</div>
 			{:else}
+				<!-- Billing Period Slider Toggle -->
+				<div class="billing-slider" class:yearly={billingPeriod === 'year'}>
+					<div class="slider-background"></div>
+					<button 
+						class="slider-option {billingPeriod === 'month' ? 'active' : ''}" 
+						on:click={() => (billingPeriod = 'month')}
+					>
+						Billed Monthly
+					</button>
+					<button 
+						class="slider-option {billingPeriod === 'year' ? 'active' : ''}" 
+						on:click={() => (billingPeriod = 'year')}
+					>
+						Billed Yearly
+					</button>
+				</div>
+
 				<!-- Available Plans -->
 				<div class="plans-section">
 					<div class="plans-grid">
-						{#each plans as plan}
+						{#each filteredPlans as plan}
 							<div
-								class="plan-card landing-glass-card {isCurrentPlan(plan.display_name)
+								class="plan-card {isCurrentPlan(plan.display_name)
 									? 'current-plan'
+									: ''} {isCurrentPlanCanceling(plan.display_name)
+									? 'canceling-plan'
 									: ''} {plan.is_popular ? 'featured' : ''}"
 							>
 								<div class="plan-header">
-									{#if isCurrentPlan(plan.display_name)}
+									{#if isCurrentPlanCanceling(plan.display_name)}
+										<div class="canceling-badge">Canceling</div>
+									{:else if isCurrentPlan(plan.display_name)}
 										<div class="current-badge">Current Plan</div>
 									{:else if plan.is_popular}
 										<div class="popular-badge">Most Popular</div>
 									{/if}
-									<h3>{plan.display_name}</h3>
+									<h3>{getPlanDisplayName(plan)}</h3>
 									<div class="plan-price">
-										<span class="price">{formatPrice(plan.price_cents)}</span>
-										<span class="period">/{plan.billing_period}</span>
+										<span class="price">{formatPrice(plan.price_cents, plan.billing_period)}</span>
+										<span class="period">/month</span>
 									</div>
 								</div>
 								<ul class="plan-features">
@@ -530,16 +634,36 @@
 										<li>{feature}</li>
 									{/each}
 								</ul>
-								{#if isCurrentPlan(plan.display_name)}
+								{#if isCurrentPlanCanceling(plan.display_name)}
 									<button
-										class="landing-button secondary full-width"
-										on:click={handleManageSubscription}
-										disabled={loadingStates.manage}
+										class="landing-button primary full-width"
+										on:click={handleReactivateSubscription}
+										disabled={loadingStates.reactivate}
 									>
-										{#if loadingStates.manage}
+										{#if loadingStates.reactivate}
 											<div class="landing-loader"></div>
 										{:else}
-											Manage Subscription
+											Reactivate Subscription
+										{/if}
+									</button>
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p class="canceling-note">
+											Your subscription will remain active until {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
+								{:else if isCurrentPlan(plan.display_name)}
+									<button
+										class="landing-button secondary full-width"
+										on:click={handleCancelSubscription}
+										disabled={loadingStates.cancel}
+										style="background-color: #dc2626; color: white;"
+									>
+										{#if loadingStates.cancel}
+											<div class="landing-loader"></div>
+										{:else}
+											Cancel Subscription
 										{/if}
 									</button>
 								{:else if plan.plan_name.toLowerCase() === 'free'}
@@ -565,7 +689,7 @@
 										{#if loadingStates[plan.plan_name.toLowerCase()]}
 											<div class="landing-loader"></div>
 										{:else}
-											Choose {plan.display_name}
+											Choose {getPlanDisplayName(plan)}
 										{/if}
 									</button>
 								{/if}
@@ -585,7 +709,7 @@
 					<div class="credits-grid">
 						{#each creditProducts as product}
 							<div
-								class="credit-card landing-glass-card {!$subscriptionStatus.isActive
+								class="credit-card {!$subscriptionStatus.isActive
 									? 'disabled'
 									: ''} {product.is_popular ? 'featured' : ''}"
 								title={!$subscriptionStatus.isActive
@@ -598,7 +722,7 @@
 									{/if}
 									<h3>{product.display_name}</h3>
 									<div class="credit-price">
-										<span class="price">{formatPrice(product.price_cents)}</span>
+										<span class="price">{formatPrice(product.price_cents, 'month')}</span>
 									</div>
 									<p class="credit-description">{product.description || ''}</p>
 								</div>
@@ -623,6 +747,8 @@
 		</div>
 	</div>
 </div>
+
+<SiteFooter />
 
 <style>
 	/* Pricing-specific styles that build on landing system */
@@ -719,10 +845,6 @@
 		flex-direction: column;
 	}
 
-	.plan-card:hover {
-		transform: translateY(-5px);
-		border-color: var(--landing-border-focus);
-	}
 
 	.plan-card.featured {
 		border-color: var(--landing-accent-blue);
@@ -743,6 +865,24 @@
 		right: 0;
 		height: 3px;
 		background: var(--landing-success);
+		border-radius: 8px 8px 0 0;
+	}
+
+	/* Canceling plan styling */
+	.plan-card.canceling-plan {
+		border-color: var(--landing-warning, #f59e0b);
+		background: rgba(245, 158, 11, 0.02);
+		position: relative;
+	}
+
+	.plan-card.canceling-plan::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--landing-warning, #f59e0b);
 		border-radius: 8px 8px 0 0;
 	}
 
@@ -772,6 +912,29 @@
 		padding: 0.1875rem 0.625rem;
 		border-radius: 10px;
 		opacity: 0.9;
+	}
+
+	/* Canceling badge */
+	.canceling-badge {
+		position: absolute;
+		top: -8px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--landing-warning, #f59e0b);
+		color: white;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		padding: 0.1875rem 0.625rem;
+		border-radius: 10px;
+		opacity: 0.9;
+	}
+
+	.canceling-note {
+		font-size: 0.8125rem;
+		color: var(--landing-warning, #f59e0b);
+		text-align: center;
+		margin-top: 0.75rem;
+		font-style: italic;
 	}
 
 	.plan-header {
@@ -968,5 +1131,67 @@
 		outline: 2px solid var(--landing-accent-blue);
 		outline-offset: 2px;
 		border-radius: 4px;
+	}
+
+	/* Billing Slider Styles */
+	.billing-slider {
+		position: relative;
+		display: flex;
+		background: var(--color-dark);
+		border-radius: 25px;
+		padding: 4px;
+		margin: 0 auto 2rem;
+		width: fit-content;
+		overflow: hidden;
+	}
+
+	.slider-background {
+		position: absolute;
+		top: 4px;
+		left: 4px;
+		width: calc(50% - 4px);
+		height: calc(100% - 8px);
+		background: #f5f9ff;
+		border-radius: 21px;
+		transition: transform 0.2s ease;
+		z-index: 1;
+		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+	}
+
+	.billing-slider.yearly .slider-background {
+		transform: translateX(100%);
+	}
+
+	.slider-option {
+		position: relative;
+		z-index: 2;
+		background: none;
+		border: none;
+		padding: 0.875rem 2rem;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		border-radius: 16px;
+		min-width: 120px;
+		font-family: 'Inter', sans-serif;
+		color: #f5f9ff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		white-space: nowrap;
+	}
+	.slider-option.active {
+		color: #000000;
+	}
+
+
+	@media (max-width: 640px) {
+		.slider-option {
+			padding: 0.625rem 1rem;
+			font-size: 0.8125rem;
+			min-width: 90px;
+		}
 	}
 </style>

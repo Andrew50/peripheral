@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -112,6 +113,115 @@ func (d *DateRangeField) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("date_range must be either string or []string")
 }
 
+// checkForActiveBacktests performs a comprehensive check for active backtests for a specific user
+func checkForActiveBacktests(ctx context.Context, conn *data.Conn, userID int) (bool, error) {
+	// Check both queues for waiting backtest tasks
+	queues := []string{"strategy_queue", "strategy_queue_priority"}
+
+	for _, queueName := range queues {
+		queueLen, err := conn.Cache.LLen(ctx, queueName).Result()
+		if err != nil {
+			return false, fmt.Errorf("error checking queue %s: %v", queueName, err)
+		}
+
+		if queueLen > 0 {
+			// Read all items in the queue
+			queueItems, err := conn.Cache.LRange(ctx, queueName, 0, queueLen-1).Result()
+			if err != nil {
+				return false, fmt.Errorf("error reading queue %s: %v", queueName, err)
+			}
+
+			// Check for backtest tasks for this user
+			for _, item := range queueItems {
+				var queuedTask map[string]interface{}
+				if err := json.Unmarshal([]byte(item), &queuedTask); err != nil {
+					continue // skip malformed
+				}
+
+				if queuedTask["task_type"] == "backtest" {
+					if args, ok := queuedTask["args"].(map[string]interface{}); ok {
+						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
+							// Check if this backtest belongs to the current user
+							queuedUserID, err := strconv.Atoi(userIDStr)
+							if err != nil {
+								continue
+							}
+
+							if queuedUserID == userID {
+								return true, nil // Found active backtest for this user
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check task assignments for currently running backtest tasks
+	assignmentKeys, err := conn.Cache.Keys(ctx, "task_assignment:*").Result()
+	if err != nil {
+		return false, fmt.Errorf("error getting task assignment keys: %v", err)
+	}
+
+	for _, assignmentKey := range assignmentKeys {
+		assignmentJSON, err := conn.Cache.Get(ctx, assignmentKey).Result()
+		if err != nil {
+			continue // skip if assignment was deleted
+		}
+
+		var assignment map[string]interface{}
+		if err := json.Unmarshal([]byte(assignmentJSON), &assignment); err != nil {
+			continue // skip malformed
+		}
+
+		// Get the task result to check if it's a backtest for this user
+		taskID, ok := assignment["task_id"].(string)
+		if !ok {
+			continue
+		}
+
+		resultKey := fmt.Sprintf("task_result:%s", taskID)
+		resultJSON, err := conn.Cache.Get(ctx, resultKey).Result()
+		if err != nil {
+			continue // skip if result doesn't exist
+		}
+
+		var taskResult map[string]interface{}
+		if err := json.Unmarshal([]byte(resultJSON), &taskResult); err != nil {
+			continue // skip malformed
+		}
+
+		// Check if this is a backtest task
+		data, ok := taskResult["data"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check original task data
+		if originalTask, exists := data["original_task"]; exists {
+			if taskMap, ok := originalTask.(map[string]interface{}); ok {
+				if taskType, ok := taskMap["task_type"].(string); ok && taskType == "backtest" {
+					// Check if this backtest belongs to the current user
+					if args, ok := taskMap["args"].(map[string]interface{}); ok {
+						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
+							assignedUserID, err := strconv.Atoi(userIDStr)
+							if err != nil {
+								continue
+							}
+
+							if assignedUserID == userID {
+								return true, nil // Found running backtest for this user
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false, nil
+}
+
 // RunBacktest executes a complete strategy backtest using the new worker architecture
 func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
 	return RunBacktestWithProgress(ctx, conn, userID, rawArgs, nil)
@@ -126,20 +236,9 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 
 	log.Printf("Starting complete backtest for strategy %d using new worker architecture", args.StrategyID)
 
-	// Check if user has sufficient credits for backtest
-	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
-	// For now, backtests cost 1 credit regardless of size
-	allowed, remainingCredits, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeCredits, 1)
-	if err != nil {
-		return nil, fmt.Errorf("error checking credit usage limits: %v", err)
-	}
-	if !allowed {
-		return nil, fmt.Errorf("insufficient credits to run backtest. You have %d credits remaining. Please add more credits to your account", remainingCredits)
-	}
-
 	// Verify strategy exists and user has permission
 	var strategyExists bool
-	err = conn.DB.QueryRow(context.Background(), `
+	err := conn.DB.QueryRow(context.Background(), `
 		SELECT EXISTS(SELECT 1 FROM strategies WHERE strategyid = $1 AND userid = $2)`,
 		args.StrategyID, userID).Scan(&strategyExists)
 	if err != nil {
@@ -150,7 +249,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	}
 
 	// Call the worker's run_backtest function
-	result, err := callWorkerBacktestWithProgress(ctx, conn, args.StrategyID, progressCallback)
+	result, err := callWorkerBacktestWithProgress(ctx, conn, userID, args.StrategyID, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker backtest: %v", err)
 	}
@@ -189,20 +288,20 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		// Don't return error, just log warning
 	}
 
-	// Record credit usage for successful backtest
-	// TODO: This will need to be based on bars processed later (100k bars = 1 credit)
-	// For now, backtests cost 1 credit regardless of size
+	// Log backtest usage for analytics (no credit consumption)
 	metadata := map[string]interface{}{
 		"strategy_id":       args.StrategyID,
 		"instances_found":   len(result.Instances),
 		"symbols_processed": responseWithInstances.Summary.SymbolsProcessed,
 		"operation_type":    "backtest",
+		"credits_consumed":  0, // Explicitly show no credits consumed
 	}
-	if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
-		log.Printf("Warning: Failed to record credit usage for backtest: %v", err)
+	if err := limits.RecordUsage(conn, userID, limits.UsageTypeBacktest, 0, metadata); err != nil {
+		log.Printf("Warning: Failed to log backtest usage: %v", err)
 		// Don't fail the request since backtest was successful
 	}
-	// Remove plot data from response but keep it in cached version
+
+	// Remove data from plots to save memory
 	for i := range responseWithInstances.StrategyPlots {
 		responseWithInstances.StrategyPlots[i].Data = []map[string]any{}
 	}
@@ -215,7 +314,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 }
 
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
-func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
+func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Generate unique task ID
 	taskID := fmt.Sprintf("backtest_%d_%d", strategyID, time.Now().UnixNano())
 
@@ -225,8 +324,18 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, strate
 		"task_type": "backtest",
 		"args": map[string]interface{}{
 			"strategy_id": fmt.Sprintf("%d", strategyID),
+			"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Check for active backtests using comprehensive check
+	hasActiveBacktest, err := checkForActiveBacktests(ctx, conn, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error checking for active backtests: %v", err)
+	}
+	if hasActiveBacktest {
+		return nil, fmt.Errorf("another backtest is already queued or running for your account. Please wait for it to complete before starting a new one")
 	}
 
 	// Submit task to Redis queue

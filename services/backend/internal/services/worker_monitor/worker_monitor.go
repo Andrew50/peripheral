@@ -1,4 +1,4 @@
-package services
+package worker_monitor
 
 import (
 	"backend/internal/data"
@@ -80,10 +80,6 @@ func (wm *WorkerMonitor) Start() {
 	}
 	wm.isRunning = true
 	wm.mu.Unlock()
-
-	log.Println("🔍 Starting ultra-fast worker monitor service...")
-	log.Printf("⚡ Configuration: 5s check interval, 10s timeout, 5m task limit")
-	log.Printf("🎯 Target: Sub-15-second failure detection and recovery")
 
 	// Start monitoring goroutine
 	go wm.monitorLoop()
