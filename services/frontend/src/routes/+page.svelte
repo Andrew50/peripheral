@@ -9,6 +9,9 @@
 		import { createTimelineEvents, sampleQuery, totalScroll } from '$lib/landing/timeline';
 		import PlotChunk from '$lib/features/chat/components/PlotChunk.svelte';
 		import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
+		import ChipSection from '$lib/landing/ChipSection.svelte';
+		import SiteHeader from '$lib/components/SiteHeader.svelte';
+		import '$lib/styles/splash.css';
 
 		if (browser) {
 			document.title = 'Peripheral';
@@ -101,21 +104,11 @@
 				
 		}
 
-		// Added chart highlight stubs
-		function updateChartHighlight() {
-			// integrate chart highlight logic here
-		}
-
-		function resetChartHighlight() {
-			// reset chart highlight logic here
-		}
 
 		const timelineEvents: TimelineEvent[] = createTimelineEvents({
 			addUserMessage: addMessage,
 			addAssistantMessage,
 			removeLastMessage,
-			updateChartHighlight,
-			resetChartHighlight,
 		});
 
 		function evaluateTimeline() {
@@ -205,8 +198,8 @@
 
 		// ------- Hero chart legend state ---------
 		const currentTicker = 'SPY';
-		interface LegendData { open: number; high: number; low: number; close: number; }
-		let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0 };
+		interface LegendData { open: number; high: number; low: number; close: number; volume: number; }
+		let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0, volume: 0 };
 
 		onMount(() => {
 			if (browser) {
@@ -237,7 +230,18 @@
 						width: chartContainerRef.clientWidth,
 						height: chartContainerRef.clientHeight,
 						layout: { background: { color: 'transparent' }, textColor: '#0B2E33', attributionLogo: false },
-						grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+						grid: {
+							vertLines: {
+								visible: true,
+								color: 'rgba(11, 46, 51, 0.15)',
+								style: 1 
+							},
+							horzLines: {
+								visible: true,
+								color: 'rgba(11, 46, 51, 0.15)', 
+								style: 1 
+							}
+						},
 						timeScale: { visible: true },
 						handleScroll: {
 							mouseWheel: false,
@@ -248,9 +252,10 @@
 						handleScale: {
 							mouseWheel: false,
 							pinch: true,
-						},
+						}
 					});
 
+					// Candles (price)
 					const candleSeries = chart.addCandlestickSeries({
 						upColor: '#26a69a',
 						downColor: '#ef5350',
@@ -259,6 +264,16 @@
 						wickDownColor: '#ef5350',
 					});
 
+					// Volume histogram (shares traded) – mimic chart.svelte settings
+					const volumeSeries = chart.addHistogramSeries({
+						lastValueVisible: false,
+						priceLineVisible: false,
+						priceFormat: { type: 'volume' },
+						priceScaleId: ''
+					});
+					// Place volume at bottom 10 % and hide its own scale
+					volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.90, bottom: 0 }, visible: false });
+
 					const now = Math.floor(Date.now() / 1000);
 					const candleData = Array.from({ length: 200 }, (_, i) => {
 						const base = 100 + Math.sin(i / 4) * 3;
@@ -266,6 +281,7 @@
 						const close = open + (Math.random() - 0.5) * 4;
 						const high = Math.max(open, close) + Math.random() * 2;
 						const low = Math.min(open, close) - Math.random() * 2;
+						const volume = Math.floor(1000 + Math.random() * 9000);
 
 						return {
 							time: (now - (200 - i) * 60) as any,
@@ -273,9 +289,18 @@
 							high,
 							low,
 							close,
+							volume,
 						};
 					});
 					candleSeries.setData(candleData);
+					// Random volume data mapped from candleData
+					volumeSeries.setData(
+						candleData.map((bar: any) => ({
+							time: bar.time,
+							value: bar.volume,
+							color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+						}))
+					);
 
 					// Inject real SPY data from server, if available
 					if (data?.defaultChartData?.chartData?.bars?.length) {
@@ -284,23 +309,32 @@
 							open: bar.open,
 							high: bar.high,
 							low: bar.low,
-							close: bar.close
+							close: bar.close,
+							volume: bar.volume ?? bar.v ?? bar.vol ?? 0
 						}));
 						candleSeries.setData(serverBars);
-					}
-
-					// Initialise legend with latest bar
-					if (candleData.length) {
-						const lastBar = candleData[candleData.length - 1];
-						legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close };
+						volumeSeries.setData(
+							serverBars.map((bar: any) => ({
+								time: bar.time,
+								value: bar.volume,
+								color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
+							}))
+						);
+						// Ensure legend volume updated with latest server bar
+						if (serverBars.length) {
+							const lastBar = serverBars[serverBars.length - 1];
+							legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close, volume: lastBar.volume } as any;
+						}
 					}
 
 					// Subscribe to crosshair to update legend reactively
 					chart.subscribeCrosshairMove(param => {
 						if (!param || !param.seriesData) return;
 						const bar = param.seriesData.get(candleSeries);
+						const volBar = param.seriesData.get(volumeSeries);
 						if (bar && typeof bar === 'object' && 'open' in bar) {
-							legendData = { open: bar.open, high: bar.high, low: bar.low, close: bar.close } as any;
+							const volumeVal = volBar && typeof volBar === 'object' && 'value' in volBar ? volBar.value : legendData.volume;
+							legendData = { open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: volumeVal } as any;
 						}
 					});
 
@@ -353,20 +387,7 @@
 	<!-- Window scroll listener -->
 	<svelte:window on:scroll={handleScroll} />
 
-	<!-- Morphing pill header -->
-	<header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
-		<nav class="header-content">
-			<div class="logo-section">
-				<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
-				<p class="logo-text">Peripheral</p>
-			</div>
-			<div class="navigation">
-				<button class="nav-button secondary" on:click={navigateToPricing}>Pricing</button>
-				<button class="nav-button secondary" on:click={navigateToLogin}>Login</button>
-				<button class="nav-button primary" on:click={navigateToSignup}>Sign up</button>
-			</div>
-		</nav>
-	</header>
+	<SiteHeader />
 
 	<main class="landing-container">
 		<!-- Hero Section -->
@@ -409,13 +430,9 @@
 
 			<!-- Hero Actions - Revealed after animation -->
 			<div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
-				<div class="hero-chat-container">
+				<div class="hero-chat-container hero-widget" class:has-messages={chatMessages.length > 0}>
 					<div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
-						{#if chatMessages.length === 0}
-							<div class="hero-chat-placeholder">
-								<p>Ask me anything about trading, market analysis, or investment strategies...</p>
-							</div>
-						{:else}
+						{#if chatMessages.length !== 0}
 							{#each chatMessages as msg (msg.message_id)}
 								<div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
 									{#if msg.sender === 'user'}
@@ -482,7 +499,7 @@
 						{/if}
 					</div>
 				</div>
-				<div class="hero-chart-container" bind:this={chartContainerRef}>
+				<div class="hero-chart-container hero-widget" bind:this={chartContainerRef}>
 					<!-- Legend overlay -->
 					<div class="hero-chart-legend">
 						<span class="ticker">{currentTicker}</span>
@@ -490,6 +507,7 @@
 						<span>H {legendData.high?.toFixed(2)}</span>
 						<span>L {legendData.low?.toFixed(2)}</span>
 						<span>C {legendData.close?.toFixed(2)}</span>
+						<span>V {legendData.volume?.toLocaleString()}</span>
 					</div>
 				</div>
 			</div>
@@ -522,7 +540,8 @@
 				{/each}
 			</div>
 		</section>
-
+		<!-- Ideas Chips Section -->
+		<ChipSection />
 		<!-- Big Centered Tagline Section -->
 		<section class="tagline-section">
 			<div class="tagline-inner">
@@ -598,15 +617,6 @@
 			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		}
 
-		:root {
-			--color-dark: #0B2E33;
-			--color-primary: #4F7C82;
-			--color-accent: #93B1B5;
-			--color-light: #B8E3E9;
-			--pill-size: 40px;
-			--header-h: 48px;
-			--header-top: 16px;
-		}
 
 		.landing-container {
 			position: relative;
@@ -644,18 +654,6 @@
 				}
 		}
 
-		/* Navigation Header */
-
-		.header-content {
-			padding: 0 1rem;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			width: 100%;
-			height: 100%;
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			position: relative;
-		}
 
 		.logo-section {
 			display: flex;
@@ -677,61 +675,6 @@
 			margin: 0;
 			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 			letter-spacing: -0.02em;
-		}
-
-		.navigation {
-			display: flex;
-			gap: 0.75rem;
-			align-items: center;
-		}
-
-		.nav-button {
-			padding: 0.35rem 0.9rem;
-			border: none;
-			border-radius: 20px;
-			font-size: 0.8rem;
-			font-weight: 600;
-			cursor: pointer;
-			text-decoration: none;
-			background: transparent;
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			white-space: nowrap;
-		}
-
-		.nav-button.secondary {
-			background: transparent;
-			color: #000000;
-			border: 1px solid var(--color-primary);
-		}
-
-		.nav-button.primary {
-			background: rgb(0, 0, 0);
-			color: #f5f9ff;
-		}
-
-		.nav-button.primary:hover,
-		.nav-button.secondary:hover {
-			transform: translateY(-1px);
-			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-		}
-
-		#site-header {
-			position: fixed;
-			top: var(--header-top);
-			left: 50%;
-			transform: translateX(-50%);
-			width: 75vw;
-			max-width: 1400px;
-			height: var(--header-h);
-			background: #f5f9ff;
-			backdrop-filter: blur(16px);
-			border: 1px solid rgba(255,255,255,0.25);
-			border-radius: 999px;
-			transition: all .4s cubic-bezier(.4,0,.2,1);
-			z-index: 1050;
-			box-shadow: 0 4px 20px rgba(0,0,0,.1);
-			font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-			cursor: pointer;
 		}
 
 
@@ -989,18 +932,8 @@
 
 		/* Responsive Design */
 		@media (max-width: 768px) {
-			.header-content {
-				padding: 0 1rem;
-			}
 
-			.navigation {
-				gap: 0.5rem;
-			}
 
-			.nav-button {
-				padding: 0.4rem 1rem;
-				font-size: 0.8rem;
-			}
 
 			.logo-image {
 				height: 28px;
@@ -1077,6 +1010,17 @@
 				flex-direction: column;
 				align-items: stretch;
 			}
+
+			:root { --hero-widget-h: 220px; }
+			.hero-chat-container {
+				max-width: 100%;
+				min-height: 220px;
+				max-height: 260px;
+			}
+			.hero-chart-container {
+				max-width: 100%;
+				height: var(--hero-widget-h);
+			}
 		}
 
 		@media (max-width: 480px) {
@@ -1098,6 +1042,16 @@
 			.footer-content {
 				flex-direction: column;
 			}
+
+			:root { --hero-widget-h: 220px; }
+			.hero-chat-container {
+				min-height: 160px;
+				max-height: 220px;
+			}
+			.hero-chart-container {
+				height: var(--hero-widget-h);
+				max-height: 220px;
+			}
 		}
 
 		/* Global styles for proper layout */
@@ -1105,19 +1059,6 @@
 			box-sizing: border-box;
 		}
 
-		#site-header.transparent {
-			background: none;
-			backdrop-filter: none;
-			box-shadow: none;
-			border: none;
-		}
-
-		#site-header.hidden-up {
-			transform: translateX(-50%) translateY(-120%);
-			opacity: 0;
-			pointer-events: none;
-			transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s cubic-bezier(.4,0,.2,1);
-		}
 
 		.footer-brand {
 			width: 100vw;
@@ -1428,8 +1369,8 @@
 			max-width: 800px;
 			margin-top: 0;
 			/* Allow hero-actions to fill remaining vertical space */
-			flex: 1 1 auto;
-			height: 100%;
+			flex: 0 1 auto;
+			height: auto;
 		}
 
 		.hero-actions.show {
@@ -1448,14 +1389,14 @@
 			gap: 0; /* Remove gap since there's only the messages pane */
 			margin: 0;
 			/* Fill available vertical space */
-			min-height: 350px;
-			height: 100%;
+			min-height: 280px;
+			height: var(--hero-widget-h);
 			max-height: none;
 		}
 
 		.hero-chat-messages {
-			background: rgba(255, 255, 255, 0.1);
-			border: 1px solid rgba(255, 255, 255, 0.2);
+			background: var(--hero-widget-background-color);
+			border: 1px solid rgba(255, 255, 255, 1);
 			border-radius: 16px;
 			padding: 1.5rem;
 			overflow-y: auto;
@@ -1483,11 +1424,11 @@
 			flex: 1;
 			width: 100%;
 			max-width: 400px;
-			height: 100%;
+			height: var(--hero-widget-h);
 			max-height: none;
 			border-radius: 16px;
-			background: rgba(255, 255, 255, 0.1);
-			border: 1px solid rgba(255, 255, 255, 0.2);
+			background: var(--hero-widget-background-color);
+			border: 1px solid var(--hero-widget-background-color);
 			position: relative;
 		}
 
@@ -1495,8 +1436,8 @@
 		@media (max-width: 768px) {
 			.hero-chat-container {
 				max-width: 100%;
-				min-height: 250px;
-				max-height: 300px;
+				min-height: 220px;
+				max-height: 260px;
 			}
 
 			.hero-chat-messages {
@@ -1505,15 +1446,15 @@
 
 			.hero-chart-container {
 				max-width: 100%;
-				height: 260px;
-				max-height: 300px;
+				height: var(--hero-widget-h);
+				max-height: 260px;
 			}
 		}
 
 		@media (max-width: 480px) {
 			.hero-chat-container {
-				min-height: 200px;
-				max-height: 250px;
+				min-height: 160px;
+				max-height: 220px;
 			}
 
 			.hero-chat-messages {
@@ -1523,8 +1464,8 @@
 
 
 			.hero-chart-container {
-				height: 200px;
-				max-height: 250px;
+				height: var(--hero-widget-h);
+				max-height: 220px;
 			}
 		}
 
@@ -1538,22 +1479,22 @@
 				grid-template-columns: 40% 60%;
 				gap: 2rem;
 				justify-content: center;
-				height: 100%;
 			}
 
 			.hero-chat-container {
 				width: 100%; /* full width of its grid cell */
 				max-width: none;
-				height: 100%;
 				max-height: none;
+				min-height: 280px;
+				height: var(--hero-widget-h);
 			}
 
 			.hero-chart-container {
 				width: 100%;
 				max-width: none;
-				height: 100%;
 				max-height: none;
-				min-height: 350px;
+				min-height: 280px;
+				height: var(--hero-widget-h);
 			}
 		}
 
@@ -1616,6 +1557,12 @@
 		}
 		.hero-chart-legend .ticker {
 			font-weight: 700;
+		}
+
+		/* Shared widget class */
+		.hero-widget {
+			/* Already uses variable – class mainly for semantics now */
+			height: var(--hero-widget-h);
 		}
 
 	</style>
