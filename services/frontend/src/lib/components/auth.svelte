@@ -431,23 +431,4 @@
 		}
 	}
 
-	.logo-button {
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		transition: opacity 0.2s ease;
-	}
-
-	.logo-button:hover {
-		opacity: 0.8;
-	}
-
-	.logo-button:focus {
-		outline: 2px solid var(--landing-accent-blue);
-		outline-offset: 2px;
-		border-radius: 4px;
-	}
 </style>
