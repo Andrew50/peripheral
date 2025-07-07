@@ -610,7 +610,7 @@
 					<div class="plans-grid">
 						{#each filteredPlans as plan}
 							<div
-								class="plan-card landing-glass-card {isCurrentPlan(plan.display_name)
+								class="plan-card {isCurrentPlan(plan.display_name)
 									? 'current-plan'
 									: ''} {isCurrentPlanCanceling(plan.display_name)
 									? 'canceling-plan'
@@ -710,7 +710,7 @@
 					<div class="credits-grid">
 						{#each creditProducts as product}
 							<div
-								class="credit-card landing-glass-card {!$subscriptionStatus.isActive
+								class="credit-card {!$subscriptionStatus.isActive
 									? 'disabled'
 									: ''} {product.is_popular ? 'featured' : ''}"
 								title={!$subscriptionStatus.isActive
