@@ -175,6 +175,29 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 		log.Printf("warning: drop staging table %s: %v", stageTbl, err)
 	}
 
+	// -------------------------------------------------------------------
+	// Cleanup any per-connection staging tables left behind by workers.
+	// These tables follow the naming pattern <tbl>_stage_<pid> and are
+	// created in ohlcv_pipeline.go for each database connection. They are
+	// truncated after use but not dropped, which leads to clutter over
+	// repeated runs. Remove them now to keep the schema tidy.
+	// -------------------------------------------------------------------
+
+	dropWorkerStagesSQL := fmt.Sprintf(`DO $$
+DECLARE r record;
+BEGIN
+    FOR r IN
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND tablename LIKE '%s_stage_%%'
+    LOOP
+        EXECUTE format('DROP TABLE IF EXISTS %%I', r.tablename);
+    END LOOP;
+END$$;`, tbl)
+
+	if _, err := db.Exec(ctx, dropWorkerStagesSQL); err != nil {
+		log.Printf("warning: drop worker stage tables for %s: %v", tbl, err)
+	}
+
 	return nil
 }
 

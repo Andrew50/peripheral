@@ -1,6 +1,15 @@
 FROM timescale/timescaledb-ha:pg17
 USER root
 RUN apt-get update && apt-get install -y cron
+
+# -------------------------------------------------------------------
+# Install kubectl for local/dev containers (matches cluster v1.30.*)
+ARG KUBECTL_VERSION=v1.30.0
+RUN curl -L -o /usr/local/bin/kubectl \
+    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
+    chmod +x /usr/local/bin/kubectl
+# -------------------------------------------------------------------
+
 ENV PGDATA /var/lib/postgresql/data
 EXPOSE 5432
 
