@@ -20,6 +20,7 @@
 		type DatabaseCreditProduct
 	} from '$lib/config/pricing';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 
 	// Individual loading states for better UX
 	let loadingStates: Record<string, boolean> = {
@@ -442,16 +443,9 @@
 <svelte:head>
 	<title>Pricing | Peripheral</title>
 </svelte:head>
-
+<SiteHeader />
 <!-- Use landing page design system -->
 <div class="landing-background landing-reset">
-	<!-- Background Effects -->
-	<div class="landing-background-animation">
-		<div class="landing-gradient-orb landing-orb-1"></div>
-		<div class="landing-gradient-orb landing-orb-2"></div>
-		<div class="landing-gradient-orb landing-orb-3"></div>
-		<div class="landing-static-gradient"></div>
-	</div>
 
 	<!-- Main Pricing Content -->
 	<div class="landing-container" style="padding-top: 120px;">
@@ -604,7 +598,7 @@
 	</div>
 </div>
 
-<SiteHeader />
+<SiteFooter />
 
 <style>
 	/* Pricing-specific styles that build on landing system */
