@@ -27,6 +27,8 @@
 		plus: false,
 		pro: false,
 		manage: false,
+		cancel: false,
+		reactivate: false,
 		credits100: false,
 		credits250: false,
 		credits1000: false
@@ -59,6 +61,17 @@
 		return (
 			isAuthenticated() &&
 			$subscriptionStatus.currentPlan === planDisplayName &&
+			!$subscriptionStatus.loading &&
+			!$subscriptionStatus.error
+		);
+	};
+
+	// Helper function to check if the current plan is being canceled
+	const isCurrentPlanCanceling = (planDisplayName: string): boolean => {
+		return (
+			isAuthenticated() &&
+			$subscriptionStatus.currentPlan === planDisplayName &&
+			$subscriptionStatus.isCanceling &&
 			!$subscriptionStatus.loading &&
 			!$subscriptionStatus.error
 		);
@@ -111,6 +124,15 @@
 				.filter((plan) => plan.is_active)
 				.sort((a, b) => a.sort_order - b.sort_order);
 			console.log(config.creditProducts);
+
+			// Initialize dynamic loading states for any new plans (e.g., yearly tiers)
+			plans.forEach((plan) => {
+				const key = plan.plan_name.toLowerCase();
+				if (!(key in loadingStates)) {
+					loadingStates[key] = false;
+				}
+			});
+
 			creditProducts = config.creditProducts
 				.filter((product) => product.is_active)
 				.sort((a, b) => a.sort_order - b.sort_order);
@@ -144,8 +166,8 @@
 		}
 	}
 
-	// Enhanced upgrade handler with individual loading states
-	async function handleUpgrade(planKey: 'plus' | 'pro') {
+	// Enhanced upgrade handler with individual loading states (supports dynamic plan keys)
+	async function handleUpgrade(planKey: string) {
 		// Check if user is authenticated before allowing upgrade
 		const isValidAuth = await validateAuthentication();
 
@@ -178,8 +200,8 @@
 		await processCreditPurchase(creditKey);
 	}
 
-	// Process the actual upgrade
-	async function processUpgrade(planKey: 'plus' | 'pro') {
+	// Process the actual upgrade (supports dynamic plan keys)
+	async function processUpgrade(planKey: string) {
 		// Double-check authentication before processing payment
 		const isValidAuth = await validateAuthentication();
 
@@ -189,6 +211,11 @@
 			);
 			goto(`/signup?plan=${planKey}&redirect=checkout`);
 			return;
+		}
+
+		// Ensure we have a loading state entry for this plan
+		if (!(planKey in loadingStates)) {
+			loadingStates[planKey] = false;
 		}
 
 		loadingStates[planKey] = true;
@@ -207,7 +234,15 @@
 			);
 
 			// Redirect immediately to checkout
-			await redirectToCheckout(response.sessionId);
+			try {
+				await redirectToCheckout(response.sessionId);
+			} catch (redirectError) {
+				console.warn(
+					'Stripe.js redirect failed, falling back to direct URL redirect',
+					redirectError
+				);
+				window.location.href = response.url;
+			}
 		} catch (error) {
 			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
@@ -242,7 +277,15 @@
 			);
 
 			// Redirect immediately to checkout
-			await redirectToCheckout(response.sessionId);
+			try {
+				await redirectToCheckout(response.sessionId);
+			} catch (redirectError) {
+				console.warn(
+					'Stripe.js redirect failed, falling back to direct URL redirect',
+					redirectError
+				);
+				window.location.href = response.url;
+			}
 		} catch (error) {
 			console.error('❌ [processCreditPurchase] Error creating credit checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
@@ -274,6 +317,55 @@
 			feedbackMessage = 'Failed to open customer portal. Please try again.';
 			feedbackType = 'error';
 			loadingStates.manage = false;
+		}
+	}
+
+	// Handle cancel subscription
+	async function handleCancelSubscription() {
+		if (
+			!confirm(
+				'Are you sure you want to cancel your subscription? You will retain access until the end of the current billing period.'
+			)
+		) {
+			return;
+		}
+
+		loadingStates.cancel = true;
+		feedbackMessage = '';
+		feedbackType = '';
+
+		try {
+			await privateRequest('cancelSubscription', {});
+			await fetchSubscriptionStatus();
+			feedbackMessage =
+				'Your subscription will remain active until the end of your current billing period.';
+			feedbackType = 'success';
+		} catch (error) {
+			console.error('Error cancelling subscription:', error);
+			feedbackMessage = 'Failed to cancel subscription. Please try again.';
+			feedbackType = 'error';
+		} finally {
+			loadingStates.cancel = false;
+		}
+	}
+
+	// Handle reactivate subscription
+	async function handleReactivateSubscription() {
+		loadingStates.reactivate = true;
+		feedbackMessage = '';
+		feedbackType = '';
+
+		try {
+			await privateRequest('reactivateSubscription', {});
+			await fetchSubscriptionStatus();
+			feedbackMessage = 'Your subscription has been reactivated successfully.';
+			feedbackType = 'success';
+		} catch (error) {
+			console.error('Error reactivating subscription:', error);
+			feedbackMessage = 'Failed to reactivate subscription. Please try again.';
+			feedbackType = 'error';
+		} finally {
+			loadingStates.reactivate = false;
 		}
 	}
 
@@ -485,10 +577,14 @@
 							<div
 								class="plan-card landing-glass-card {isCurrentPlan(plan.display_name)
 									? 'current-plan'
+									: ''} {isCurrentPlanCanceling(plan.display_name)
+									? 'canceling-plan'
 									: ''} {plan.is_popular ? 'featured' : ''}"
 							>
 								<div class="plan-header">
-									{#if isCurrentPlan(plan.display_name)}
+									{#if isCurrentPlanCanceling(plan.display_name)}
+										<div class="canceling-badge">Canceling</div>
+									{:else if isCurrentPlan(plan.display_name)}
 										<div class="current-badge">Current Plan</div>
 									{:else if plan.is_popular}
 										<div class="popular-badge">Most Popular</div>
@@ -504,16 +600,36 @@
 										<li>{feature}</li>
 									{/each}
 								</ul>
-								{#if isCurrentPlan(plan.display_name)}
+								{#if isCurrentPlanCanceling(plan.display_name)}
 									<button
-										class="landing-button secondary full-width"
-										on:click={handleManageSubscription}
-										disabled={loadingStates.manage}
+										class="landing-button primary full-width"
+										on:click={handleReactivateSubscription}
+										disabled={loadingStates.reactivate}
 									>
-										{#if loadingStates.manage}
+										{#if loadingStates.reactivate}
 											<div class="landing-loader"></div>
 										{:else}
-											Manage Subscription
+											Reactivate Subscription
+										{/if}
+									</button>
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p class="canceling-note">
+											Your subscription will remain active until {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
+								{:else if isCurrentPlan(plan.display_name)}
+									<button
+										class="landing-button secondary full-width"
+										on:click={handleCancelSubscription}
+										disabled={loadingStates.cancel}
+										style="background-color: #dc2626; color: white;"
+									>
+										{#if loadingStates.cancel}
+											<div class="landing-loader"></div>
+										{:else}
+											Cancel Subscription
 										{/if}
 									</button>
 								{:else if plan.plan_name.toLowerCase() === 'free'}
@@ -722,6 +838,24 @@
 		border-radius: 8px 8px 0 0;
 	}
 
+	/* Canceling plan styling */
+	.plan-card.canceling-plan {
+		border-color: var(--landing-warning, #f59e0b);
+		background: rgba(245, 158, 11, 0.02);
+		position: relative;
+	}
+
+	.plan-card.canceling-plan::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--landing-warning, #f59e0b);
+		border-radius: 8px 8px 0 0;
+	}
+
 	.popular-badge {
 		position: absolute;
 		top: -8px;
@@ -748,6 +882,29 @@
 		padding: 0.1875rem 0.625rem;
 		border-radius: 10px;
 		opacity: 0.9;
+	}
+
+	/* Canceling badge */
+	.canceling-badge {
+		position: absolute;
+		top: -8px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--landing-warning, #f59e0b);
+		color: white;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		padding: 0.1875rem 0.625rem;
+		border-radius: 10px;
+		opacity: 0.9;
+	}
+
+	.canceling-note {
+		font-size: 0.8125rem;
+		color: var(--landing-warning, #f59e0b);
+		text-align: center;
+		margin-top: 0.75rem;
+		font-style: italic;
 	}
 
 	.plan-header {

@@ -53,6 +53,7 @@ export const userLastTickers = writable<any[]>([]);
 export interface SubscriptionStatus {
 	status: string;
 	isActive: boolean;
+	isCanceling: boolean;
 	currentPlan: string;
 	hasCustomer: boolean;
 	hasSubscription: boolean;
@@ -74,6 +75,7 @@ export interface SubscriptionStatus {
 export const subscriptionStatus = writable<SubscriptionStatus>({
 	status: 'inactive',
 	isActive: false,
+	isCanceling: false,
 	currentPlan: '',
 	hasCustomer: false,
 	hasSubscription: false,
