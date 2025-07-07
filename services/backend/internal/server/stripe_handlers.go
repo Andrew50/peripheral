@@ -34,7 +34,7 @@ func CreateCheckoutSession(conn *data.Conn, userID int, rawArgs json.RawMessage)
 	}
 
 	// Get user email from database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	var email string
@@ -79,7 +79,7 @@ func CreateCreditCheckoutSession(conn *data.Conn, userID int, rawArgs json.RawMe
 	}
 
 	// Check if user has an active subscription (required for credit purchases)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	var email, subscriptionStatus string
@@ -112,7 +112,7 @@ func CreateCreditCheckoutSession(conn *data.Conn, userID int, rawArgs json.RawMe
 // CreateCustomerPortal creates a new Stripe customer portal session
 func CreateCustomerPortal(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	// Get user's Stripe customer ID from database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	var stripeCustomerID string
@@ -155,7 +155,7 @@ func stripeWebhookHandler(conn *data.Conn) http.HandlerFunc {
 func GetSubscriptionStatus(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("GetSubscriptionStatus called for userID: %d", userID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	var stripeCustomerID, stripeSubscriptionID, subscriptionStatus, subscriptionPlan string
@@ -282,7 +282,7 @@ func VerifyCheckoutSession(conn *data.Conn, userID int, rawArgs json.RawMessage)
 func GetUserUsage(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("GetUserUsage called for userID: %d", userID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	var activeAlerts, alertsLimit, activeStrategyAlerts, strategyAlertsLimit int
@@ -381,7 +381,7 @@ func GetCombinedSubscriptionAndUsage(conn *data.Conn, userID int, rawArgs json.R
 
 // CancelSubscription cancels the user's subscription at the end of the current billing period
 func CancelSubscription(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Start a database transaction
@@ -436,7 +436,7 @@ func CancelSubscription(conn *data.Conn, userID int, rawArgs json.RawMessage) (i
 
 // ReactivateSubscription reactivates a subscription that was set to cancel at period end
 func ReactivateSubscription(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Retrieve the user's Stripe subscription ID
