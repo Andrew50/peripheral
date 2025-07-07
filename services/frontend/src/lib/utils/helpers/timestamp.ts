@@ -79,9 +79,9 @@ export function UTCTimestampToESTString(utcTimestamp: number, dateOnly = false):
 	const utcDatetime = DateTime.fromMillis(utcTimestamp, { zone: 'utc' });
 	const easternTime = utcDatetime.setZone('America/New_York');
 	if (dateOnly) {
-		return easternTime.toFormat('yyyy-MM-dd'); // Date only
+		return easternTime.toFormat('MM-dd-yyyy'); // Date only
 	}
-	return easternTime.toFormat('yyyy-MM-dd HH:mm:ss');
+	return easternTime.toFormat('MM-dd-yyyy HH:mm:ss');
 }
 export function ESTTimestampToESTString(utcTimestamp: number, dateOnly = false): string {
 	if (utcTimestamp === 0 || utcTimestamp === undefined) {
