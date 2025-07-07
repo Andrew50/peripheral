@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
+	import { timelineProgress } from '$lib/landing/timeline';
 	// Visibility & transparency state
 	let isHeaderVisible = true;
 	let isHeaderTransparent = true;
@@ -10,14 +11,15 @@
 
 	function handleScroll() {
 		const currentY = window.scrollY;
+		const isOnSplashPage = window.location.pathname === '/';
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
 			isHeaderVisible = true;
-		} else {
+		} else if (isOnSplashPage && $timelineProgress === 1) {
 			isHeaderVisible = false;
 		}
 		// Make header transparent near the top of the page
-		isHeaderTransparent = currentY < 30;
+		isHeaderTransparent = currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
 		prevScrollY = currentY;
 	}
 
@@ -33,6 +35,8 @@
 		return () => window.removeEventListener('scroll', handleScroll);
 	});
 </script>
+<!-- Window scroll listener -->
+<svelte:window on:scroll={handleScroll} />
 
 <!-- Pill-style global site header reused across all pages -->
 <header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>

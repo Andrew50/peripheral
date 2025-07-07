@@ -19,6 +19,14 @@
 </script>
 
 <!-- Footer -->
+<!-- Big Centered Tagline Section -->
+	<section class="tagline-section">
+	<div class="tagline-inner">
+		<p class="tagline-pretext">JUMP INTO</p>
+		<h2 class="tagline-text">The Final Trading Terminal.</h2>
+		<button class="tagline" on:click={() => goto('/signup')}>Get Started</button>
+	</div>
+</section>
 <footer class="landing-footer">
 	<div class="footer-content">
 		<div class="footer-section footer-left"> 
@@ -61,6 +69,59 @@
 </footer>
 
 <style>
+	.tagline-section {
+		width: 100vw;
+		padding: 4rem 0 8rem 0;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		background: none;
+	}
+	.tagline-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	.tagline-text {
+		font-size: clamp(2.5rem, 7vw, 5rem);
+		font-weight: 900;
+		color: var(--color-dark);
+		text-align: center;
+		margin: 0;
+		letter-spacing: -0.04em;
+		line-height: 1.1;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	}
+	.tagline {
+		margin-top: 3rem;
+		font-size: 1.2rem;
+		padding: 1.1rem 2.5rem;
+		background: rgb(0, 0, 0);
+		color: #f5f9ff;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.1s ease;
+		box-shadow: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.tagline:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	}
+
+	.tagline-pretext {
+		font-size: 1.2rem;
+		font-weight: 500;
+		color: var(--color-primary);
+		margin: 0 0 0.5rem 0;
+		text-align: center;
+	}
 	.landing-footer {
 		position: relative;
 		z-index: 10;
