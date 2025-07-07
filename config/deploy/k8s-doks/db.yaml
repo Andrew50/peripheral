@@ -40,6 +40,17 @@ spec:
             preStop:
               exec:
                 command: ["/app/graceful-shutdown.sh"]
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
           resources:
             requests:
               cpu: 100m
@@ -54,7 +65,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodSeconds: 150
+      terminationGracePeriodSeconds: 300
 
 ---
 apiVersion: v1

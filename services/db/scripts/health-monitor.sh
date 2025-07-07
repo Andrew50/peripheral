@@ -549,13 +549,24 @@ $recent_logs
 \`\`\`"
     fi
 
-    telegram_message="$telegram_message
+    # Attempt to fetch recent Kubernetes pod logs if kubectl is available
+    if command -v kubectl >/dev/null 2>&1; then
+        local pod_logs="$(kubectl logs deployment/db-health-monitor --tail=20 2>/dev/null || true)"
 
-*Quick Actions:*
-\`kubectl logs deployment/db-health-monitor --tail=20\`
-\`kubectl get pods -l app=db\`
-\`kubectl describe pod -l app=db\`
-\`kubectl logs -l app=db --tail=50\`"
+        # Fallback to database pods if health-monitor deployment logs are unavailable
+        if [ -z "$pod_logs" ]; then
+            pod_logs="$(kubectl logs -l app=db --tail=20 2>/dev/null || true)"
+        fi
+
+        if [ -n "$pod_logs" ]; then
+            telegram_message="$telegram_message
+
+*Pod Logs (last 20 lines):*
+\`\`\`
+$pod_logs
+\`\`\`"
+        fi
+    fi
 
     # Send to Telegram
     local response
