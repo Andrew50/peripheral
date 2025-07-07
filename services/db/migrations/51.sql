@@ -1,3 +1,4 @@
+
 -- Migration: 051_change_securities_name_to_text
 -- Description: Change securities.name column to TEXT to store unlimited length company names
 
@@ -11,5 +12,3 @@ VALUES (
     51,
     'Change securities.name column to TEXT to store unlimited length company names'
 ) ON CONFLICT (version) DO NOTHING;
-
-COMMIT; 

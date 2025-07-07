@@ -47,6 +47,14 @@
 	let pricingLoading = true;
 	let pricingError = '';
 
+	// Selected billing period state – allows users to toggle between monthly and yearly pricing
+	let billingPeriod: 'month' | 'year' = 'month';
+
+	// Include Free plan regardless of selected billing period so it always shows
+	$: filteredPlans = plans.filter(
+		(plan) => plan.plan_name.toLowerCase() === 'free' || plan.billing_period === billingPeriod
+	);
+
 	// Function to determine if the current user is authenticated
 	const isAuthenticated = (): boolean => {
 		if (!browser) return false;
@@ -384,9 +392,12 @@
 		clearFeedback();
 	}
 
-	function navigateToHome() {
-		goto('/');
-	}
+	// Helper to get display name without "(Yearly)" suffix for yearly billing plans
+	const getPlanDisplayName = (plan: DatabasePlan): string => {
+		return plan.billing_period === 'year'
+			? plan.display_name.replace(/\s*\(Yearly\)\s*$/i, '').trim()
+			: plan.display_name;
+	};
 
 	// Run initialization on mount
 	onMount(async () => {
@@ -530,6 +541,12 @@
 			await fetchSubscriptionStatus();
 		}
 	}
+
+	// Helper function to update billing period when the toggle is changed
+	function toggleBillingPeriod(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		billingPeriod = input.checked ? 'year' : 'month';
+	}
 </script>
 
 <svelte:head>
@@ -544,7 +561,7 @@
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
-				<h1 class="landing-title">Stay</h1>
+				<h1 class="landing-title">Frictionless Trading</h1>
 				<p class="landing-subtitle">Leverage Peripheral's environment to envision, enhance, and execute your trading ideas.</p>
 			</div>
 
@@ -570,10 +587,28 @@
 			{:else if $subscriptionStatus.error && isAuthenticated()}
 				<div class="error-message">{$subscriptionStatus.error}</div>
 			{:else}
+				<!-- Billing Period Slider Toggle -->
+				<div class="billing-toggle">
+					<span class="toggle-label" on:click={() => (billingPeriod = 'month')}>
+						Billed Monthly
+					</span>
+					<label class="switch">
+						<input
+							type="checkbox"
+							checked={billingPeriod === 'year'}
+							on:change={toggleBillingPeriod}
+						/>
+						<span class="slider-switch"></span>
+					</label>
+					<span class="toggle-label" on:click={() => (billingPeriod = 'year')}>
+						Billed Yearly
+					</span>
+				</div>
+
 				<!-- Available Plans -->
 				<div class="plans-section">
 					<div class="plans-grid">
-						{#each plans as plan}
+						{#each filteredPlans as plan}
 							<div
 								class="plan-card landing-glass-card {isCurrentPlan(plan.display_name)
 									? 'current-plan'
@@ -589,10 +624,10 @@
 									{:else if plan.is_popular}
 										<div class="popular-badge">Most Popular</div>
 									{/if}
-									<h3>{plan.display_name}</h3>
+									<h3>{getPlanDisplayName(plan)}</h3>
 									<div class="plan-price">
-										<span class="price">{formatPrice(plan.price_cents)}</span>
-										<span class="period">/{plan.billing_period}</span>
+										<span class="price">{formatPrice(plan.price_cents, plan.billing_period)}</span>
+										<span class="period">/month</span>
 									</div>
 								</div>
 								<ul class="plan-features">
@@ -655,7 +690,7 @@
 										{#if loadingStates[plan.plan_name.toLowerCase()]}
 											<div class="landing-loader"></div>
 										{:else}
-											Choose {plan.display_name}
+											Choose {getPlanDisplayName(plan)}
 										{/if}
 									</button>
 								{/if}
@@ -688,7 +723,7 @@
 									{/if}
 									<h3>{product.display_name}</h3>
 									<div class="credit-price">
-										<span class="price">{formatPrice(product.price_cents)}</span>
+										<span class="price">{formatPrice(product.price_cents, 'month')}</span>
 									</div>
 									<p class="credit-description">{product.description || ''}</p>
 								</div>
@@ -811,10 +846,6 @@
 		flex-direction: column;
 	}
 
-	.plan-card:hover {
-		transform: translateY(-5px);
-		border-color: var(--landing-border-focus);
-	}
 
 	.plan-card.featured {
 		border-color: var(--landing-accent-blue);
@@ -1101,5 +1132,64 @@
 		outline: 2px solid var(--landing-accent-blue);
 		outline-offset: 2px;
 		border-radius: 4px;
+	}
+
+	/* Billing Toggle Styles */
+	.billing-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.billing-toggle .toggle-label {
+		font-weight: 500;
+		color: var(--landing-text-primary);
+		cursor: pointer;
+		user-select: none;
+		font-size: 0.9375rem;
+	}
+
+	/* Switch slider */
+	.switch {
+		position: relative;
+		display: inline-block;
+		width: 52px;
+		height: 28px;
+	}
+
+	.switch input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+
+	.slider-switch {
+		position: absolute;
+		cursor: pointer;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: var(--landing-border, rgba(255, 255, 255, 0.3));
+		transition: 0.2s;
+		border-radius: 9999px;
+	}
+
+	.slider-switch::before {
+		position: absolute;
+		content: '';
+		height: 22px;
+		width: 22px;
+		left: 3px;
+		top: 3px;
+		background: var(--landing-accent-blue);
+		transition: 0.2s;
+		border-radius: 50%;
+	}
+
+	.switch input:checked + .slider-switch::before {
+		transform: translateX(24px);
 	}
 </style>

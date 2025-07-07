@@ -301,10 +301,16 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		// Don't fail the request since backtest was successful
 	}
 
-	// No need to convert the cleaned plots for the API response here since
-	// responseWithInstances already contains the lightweight plots created earlier.
-	// result.StrategyPlots is only mutated to free memory before function return.
-	return responseWithInstances, nil
+	// Remove data from plots to save memory
+	for i := range responseWithInstances.StrategyPlots {
+		responseWithInstances.StrategyPlots[i].Data = []map[string]any{}
+	}
+	response := BacktestResponse{
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
+		StrategyPlots:  responseWithInstances.StrategyPlots,
+	}
+	return response, nil
 }
 
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks

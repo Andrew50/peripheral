@@ -220,8 +220,11 @@ export async function getStripePriceForCreditProduct(productKey: string): Promis
 }
 
 // Format price from cents to display format
-export function formatPrice(cents: number): string {
-	if (cents === 0) return 'Free';
+export function formatPrice(cents: number, billingPeriod: string): string {
+	if (cents === 0) return '$0';
+	if (billingPeriod === 'year') {
+		return `$${(cents / 100 / 12).toFixed(2).replace(/\.00$/, '')}`;
+	}
 	return `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
