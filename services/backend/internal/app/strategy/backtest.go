@@ -292,8 +292,6 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	metadata := map[string]interface{}{
 		"strategy_id":       args.StrategyID,
 		"instances_found":   len(result.Instances),
-		"strategy_id":       args.StrategyID,
-		"instances_found":   len(result.Instances),
 		"symbols_processed": responseWithInstances.Summary.SymbolsProcessed,
 		"operation_type":    "backtest",
 		"credits_consumed":  0, // Explicitly show no credits consumed
@@ -304,13 +302,15 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	}
 
 	// Remove data from plots to save memory
-	for i := range result.StrategyPlots {
-		result.StrategyPlots[i].Data = nil
+	for i := range responseWithInstances.StrategyPlots {
+		responseWithInstances.StrategyPlots[i].Data = []map[string]any{}
 	}
-
-	// Update the response with cleaned plots
-	responseWithInstances.StrategyPlots = result.StrategyPlots
-	return responseWithInstances, nil
+	response := BacktestResponse{
+		Summary:        summary,
+		StrategyPrints: result.StrategyPrints,
+		StrategyPlots:  responseWithInstances.StrategyPlots,
+	}
+	return response, nil
 }
 
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
