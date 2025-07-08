@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, preloadCode } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
@@ -25,11 +25,20 @@
 
 	// Navigation helpers
 	function navigateTo(path: string) {
-		goto(path);
+		if (!browser) return;
+		if (window.location.pathname === path) {
+			// Already on the desired route – just scroll to top for a snappy UX
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		} else {
+			goto(path);
+		}
 	}
 
 	onMount(() => {
 		if (!browser) return;
+		// Preload code for commonly visited routes to make subsequent navigations instantaneous
+		['/', '/pricing', '/login', '/signup'].forEach((p) => preloadCode(p));
+
 		handleScroll();
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
