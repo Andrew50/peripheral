@@ -322,12 +322,39 @@ function initStoresWithAuth() {
 									const newList = currentList || [];
 									return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
 								});
+
+								// Initialize visible watchlists and default selection after flag creation
+								import('$lib/features/watchlist/watchlistUtils').then(
+									({ initializeVisibleWatchlists, selectWatchlist }) => {
+										const updatedList = [{ watchlistId: newId, watchlistName: 'flag' }, ...(list || [])];
+										if (updatedList.length) {
+											selectWatchlist(String(updatedList[0].watchlistId));
+											initializeVisibleWatchlists(updatedList, updatedList[0].watchlistId);
+										}
+									}
+								).catch(() => {
+									// Fail silently to avoid breaking the app
+								});
 							})
 							.catch((err) => {
 								console.error('Error creating flag watchlist:', err);
 							});
 					} else {
 						flagWatchlistId = flagWatch.watchlistId;
+
+						// Initialize visible watchlists and default selection when watchlists are loaded
+						import('$lib/features/watchlist/watchlistUtils').then(
+							({ initializeVisibleWatchlists, selectWatchlist }) => {
+								if (Array.isArray(list) && list.length) {
+									// Select flag watchlist if it exists, otherwise first watchlist
+									const defaultWatchlist = flagWatch || list[0];
+									selectWatchlist(String(defaultWatchlist.watchlistId));
+									initializeVisibleWatchlists(list, defaultWatchlist.watchlistId);
+								}
+							}
+						).catch(() => {
+							// Fail silently to avoid breaking the app
+						});
 					}
 				})
 				.catch((err) => {

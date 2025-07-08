@@ -9,6 +9,7 @@
 	import ExtendedHoursToggle from '$lib/components/extendedHoursToggle/extendedHoursToggle.svelte';
 
 	import Watchlist from '$lib/features/watchlist/watchlist.svelte';
+	import WatchlistTabs from '$lib/features/watchlist/watchlistTabs.svelte';
 	import Quote from '$lib/features/quotes/quote.svelte';
 	import { activeMenu, changeMenu } from '$lib/utils/stores/stores';
 	// Define PageData interface locally since auto-generated types aren't available yet
@@ -86,6 +87,10 @@
 	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
+	// ─── Alert tabs ────────────────────────────────────────────────────────────
+	const alertTabs = ['active', 'inactive', 'history'] as const;
+	type AlertView = (typeof alertTabs)[number];
+	let alertView: AlertView = 'active';
 	// Initialize chartWidth with a default value
 	let chartWidth = 0;
 
@@ -1152,220 +1157,238 @@
 				</div>
 			{/if}
 
-			<!-- Main content and sidebar wrapper -->
-			<div class="main-and-sidebar-wrapper">
-				<!-- Top bar -->
-				<div class="top-bar">
-					<!-- Left side content -->
-					<div class="top-bar-left">
-						<button
-							class="symbol metadata-button"
-							on:click={handleTickerClick}
-							on:keydown={handleTickerKeydown}
-							aria-label="Change ticker"
-						>
-							<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
-								<path
-									d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							{$activeChartInstance?.ticker || 'NaN'}
-						</button>
-
-						<!-- Divider -->
-						<div class="divider"></div>
-
-						<!-- Add common timeframe buttons -->
-						{#each commonTimeframes as tf}
+			<!-- Main horizontal container -->
+			<div class="main-horizontal-container">
+				<!-- Center section (chart + top bar) -->
+				<div class="center-section">
+					<!-- Top bar -->
+					<div class="top-bar">
+						<!-- Left side content -->
+						<div class="top-bar-left">
 							<button
-								class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
-								tf
-									? 'active'
-									: ''}"
-								on:click={() => selectTimeframe(tf)}
-								aria-label="Set timeframe to {tf}"
-								aria-pressed={$activeChartInstance?.timeframe === tf}
+								class="symbol metadata-button"
+								on:click={handleTickerClick}
+								on:keydown={handleTickerKeydown}
+								aria-label="Change ticker"
 							>
-								{tf}
+								<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+									<path
+										d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								{$activeChartInstance?.ticker || 'NaN'}
 							</button>
-						{/each}
-						<!-- Button to open custom timeframe input -->
-						<button
-							class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
-							on:click={handleCustomTimeframeClick}
-							aria-label="Select custom timeframe"
-							aria-pressed={isCustomTimeframe ? 'true' : 'false'}
-						>
-							{#if isCustomTimeframe}
-								{$activeChartInstance?.timeframe}
-							{:else}
-								...
-							{/if}
-						</button>
 
-						<!-- Divider -->
-						<div class="divider"></div>
+							<!-- Divider -->
+							<div class="divider"></div>
 
-						<button
-							class="session-type metadata-button"
-							on:click={handleSessionClick}
-							aria-label="Toggle session type"
-						>
-							{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
-						</button>
-
-						<!-- Divider -->
-						<div class="divider"></div>
-
-						<!-- Calendar button for timestamp selection -->
-						<button
-							class="calendar-button metadata-button"
-							on:click={handleCalendar}
-							title="Go to Date"
-							aria-label="Go to Date"
-						>
-							<svg
-								viewBox="0 0 24 24"
-								width="16"
-								height="16"
-								fill="none"
-								xmlns="http://www.w3.org/2000/svg"
-							>
-								<path
-									d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-									stroke="currentColor"
-									stroke-width="1.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-						</button>
-
-						<!-- Divider -->
-						<div class="divider"></div>
-
-						<!-- Countdown -->
-						<div class="countdown-container">
-							<span class="countdown-label">Next Bar Close:</span>
-							<span class="countdown-value">{$countdown}</span>
-						</div>
-					</div>
-
-					<!-- Right side - Sidebar Controls -->
-					{#if $menuWidth > 0}
-						<div class="top-bar-right">
-							{#if $activeMenu === 'alerts'}
-								<!-- Alert Controls -->
-								<div class="sidebar-controls">
-									<div class="alert-controls-right">
-										<button
-											class="create-alert-btn metadata-button"
-											on:click={createPriceAlert}
-											title="Create New Price Alert"
-										>
-											Create Alert
-										</button>
-									</div>
-								</div>
-							{/if}
-						</div>
-					{/if}
-				</div>
-
-				<!-- Content below top bar -->
-				<div class="content-below-topbar">
-					<!-- Main content area -->
-					<div class="main-content">
-						<!-- Chart area -->
-						<div class="chart-wrapper">
-							<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
-						</div>
-
-						<!-- Bottom windows container -->
-						<div class="bottom-windows-container" style="--bottom-height: {bottomWindowsHeight}px">
-							{#each bottomWindows as w}
-								<div class="bottom-window">
-									<div class="window-content">
-										{#if w.type === 'screener'}
-											{#await import('$lib/features/screener/screener.svelte') then module}
-												<svelte:component this={module.default} />
-											{/await}
-										{:else if w.type === 'strategies'}
-											{#await import('$lib/features/strategies/strategies.svelte') then module}
-												<svelte:component this={module.default} />
-											{/await}
-										{:else if w.type === 'settings'}
-											{#await import('$lib/features/settings/settings.svelte') then module}
-												<svelte:component this={module.default} />
-											{/await}
-										{/if}
-									</div>
-								</div>
+							<!-- Add common timeframe buttons -->
+							{#each commonTimeframes as tf}
+								<button
+									class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
+									tf
+										? 'active'
+										: ''}"
+									on:click={() => selectTimeframe(tf)}
+									aria-label="Set timeframe to {tf}"
+									aria-pressed={$activeChartInstance?.timeframe === tf}
+								>
+									{tf}
+								</button>
 							{/each}
-							{#if bottomWindows.length > 0}
-								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-								<div
-									class="bottom-resize-handle"
-									role="separator"
-									aria-orientation="horizontal"
-									aria-label="Resize bottom panel"
-									on:mousedown={startBottomResize}
-									on:keydown={handleKeyboardBottomResize}
-									tabindex="0"
-								></div>
-							{/if}
-						</div>
-					</div>
+							<!-- Button to open custom timeframe input -->
+							<button
+								class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+								on:click={handleCustomTimeframeClick}
+								aria-label="Select custom timeframe"
+								aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+							>
+								{#if isCustomTimeframe}
+									{$activeChartInstance?.timeframe}
+								{:else}
+									...
+								{/if}
+							</button>
 
-					<!-- Sidebar -->
-					{#if $menuWidth > 0}
-						<div class="sidebar" style="width: {$menuWidth}px;">
-							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-							<div
-								class="resize-handle"
-								role="separator"
-								aria-orientation="vertical"
-								aria-label="Resize sidebar"
-								on:mousedown={startResize}
-								on:touchstart={startResize}
-								on:keydown={handleKeyboardResize}
-								tabindex="0"
-							/>
-							<div class="sidebar-content">
-								<div class="main-sidebar-content">
-									{#if $activeMenu === 'watchlist'}
-										<Watchlist />
-									{:else if $activeMenu === 'alerts'}
-										<Alerts />
-										<!--{:else if $activeMenu === 'news'}
-										<News />-->
-									{/if}
-								</div>
+							<!-- Divider -->
+							<div class="divider"></div>
 
-								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-								<div
-									class="sidebar-resize-handle"
-									role="separator"
-									aria-orientation="horizontal"
-									aria-label="Resize quote panel"
-									on:mousedown={startSidebarResize}
-									on:touchstart|preventDefault={startSidebarResize}
-									on:keydown={handleKeyboardSidebarResize}
-									tabindex="0"
-								></div>
+							<button
+								class="session-type metadata-button"
+								on:click={handleSessionClick}
+								aria-label="Toggle session type"
+							>
+								{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
+							</button>
 
-								<!-- Quote section now on bottom -->
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
-									<Quote />
-								</div>
+							<!-- Divider -->
+							<div class="divider"></div>
+
+							<!-- Calendar button for timestamp selection -->
+							<button
+								class="calendar-button metadata-button"
+								on:click={handleCalendar}
+								title="Go to Date"
+								aria-label="Go to Date"
+							>
+								<svg
+									viewBox="0 0 24 24"
+									width="16"
+									height="16"
+									fill="none"
+									xmlns="http://www.w3.org/2000/svg"
+								>
+									<path
+										d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+										stroke="currentColor"
+										stroke-width="1.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</button>
+
+							<!-- Divider -->
+							<div class="divider"></div>
+
+							<!-- Countdown -->
+							<div class="countdown-container">
+								<span class="countdown-label">Next Bar Close:</span>
+								<span class="countdown-value">{$countdown}</span>
 							</div>
 						</div>
-					{/if}
+					</div>
+
+					<!-- Content below top bar -->
+					<div class="content-below-topbar">
+						<!-- Main content area -->
+						<div class="main-content">
+							<!-- Chart area -->
+							<div class="chart-wrapper">
+								<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
+							</div>
+
+							<!-- Bottom windows container -->
+							<div
+								class="bottom-windows-container"
+								style="--bottom-height: {bottomWindowsHeight}px"
+							>
+								{#each bottomWindows as w}
+									<div class="bottom-window">
+										<div class="window-content">
+											{#if w.type === 'screener'}
+												{#await import('$lib/features/screener/screener.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{:else if w.type === 'strategies'}
+												{#await import('$lib/features/strategies/strategies.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{:else if w.type === 'settings'}
+												{#await import('$lib/features/settings/settings.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{/if}
+										</div>
+									</div>
+								{/each}
+								{#if bottomWindows.length > 0}
+									<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+									<div
+										class="bottom-resize-handle"
+										role="separator"
+										aria-orientation="horizontal"
+										aria-label="Resize bottom panel"
+										on:mousedown={startBottomResize}
+										on:keydown={handleKeyboardBottomResize}
+										tabindex="0"
+									></div>
+								{/if}
+							</div>
+						</div>
+					</div>
 				</div>
+
+				<!-- Sidebar -->
+				{#if $menuWidth > 0}
+					<div class="sidebar" style="width: {$menuWidth}px;">
+						<!-- Sidebar header -->
+						<div class="sidebar-header">
+							{#if $activeMenu === 'alerts'}
+								<!-- Alert Controls -->
+								<div class="alert-tab-container">
+									{#each alertTabs as tab}
+										<button
+											class="watchlist-tab {alertView === tab ? 'active' : ''}"
+											on:click={() => (alertView = tab)}
+											title={tab === 'history'
+												? 'Alert History'
+												: tab.charAt(0).toUpperCase() + tab.slice(1) + ' Alerts'}
+										>
+											{tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'History'}
+										</button>
+									{/each}
+
+									<button
+										class="watchlist-tab plus-button"
+										on:click={createPriceAlert}
+										title="Create New Price Alert"
+										style="margin-left: auto;"
+									>
+										+
+									</button>
+								</div>
+							{/if}
+							{#if $activeMenu === 'watchlist'}
+								<WatchlistTabs />
+							{/if}
+						</div>
+
+						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+						<div
+							class="resize-handle"
+							role="separator"
+							aria-orientation="vertical"
+							aria-label="Resize sidebar"
+							on:mousedown={startResize}
+							on:touchstart={startResize}
+							on:keydown={handleKeyboardResize}
+							tabindex="0"
+						/>
+						<div class="sidebar-content">
+							<div class="main-sidebar-content">
+								{#if $activeMenu === 'watchlist'}
+									<Watchlist showTabs={false} />
+								{:else if $activeMenu === 'alerts'}
+									<Alerts view={alertView} />
+									<!--{:else if $activeMenu === 'news'}
+									<News />-->
+								{/if}
+							</div>
+
+							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+							<div
+								class="sidebar-resize-handle"
+								role="separator"
+								aria-orientation="horizontal"
+								aria-label="Resize quote panel"
+								on:mousedown={startSidebarResize}
+								on:touchstart|preventDefault={startSidebarResize}
+								on:keydown={handleKeyboardSidebarResize}
+								tabindex="0"
+							></div>
+
+							<!-- Quote section now on bottom -->
+							<div class="ticker-info-container" style="height: {tickerHeight}px">
+								<Quote />
+							</div>
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -1859,5 +1882,95 @@
 	.bottom-logo-link {
 		display: inline-flex;
 		align-items: center;
+	}
+
+	/* New layout structure styles */
+	.main-horizontal-container {
+		display: flex;
+		flex: 1;
+		height: 100%;
+	}
+
+	.center-section {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0; /* Allows flex child to shrink below content size */
+	}
+
+	.sidebar {
+		display: flex !important;
+		flex-direction: column;
+		height: 100%;
+		border-left: 4px solid var(--c1);
+	}
+
+	.sidebar-header {
+		height: 40px;
+		min-height: 40px;
+		background-color: #0f0f0f;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 4px solid var(--c1);
+	}
+
+	.sidebar-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	/* ───── Alert tab styles ─────────────────────────────────────────────────── */
+	.alert-tab-container {
+		display: flex;
+		align-items: center;
+		flex-grow: 1;
+		min-width: 0;
+		gap: 0;
+	}
+
+	.sidebar-header .watchlist-tab {
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 12px;
+		background: transparent;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.sidebar-header .watchlist-tab:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.sidebar-header .watchlist-tab:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+	}
+
+	.sidebar-header .watchlist-tab.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 </style>
