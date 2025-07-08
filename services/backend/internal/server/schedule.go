@@ -329,24 +329,36 @@ func (s *JobScheduler) Start() chan struct{} {
 	// Reload job last run times from Redis
 	s.loadJobLastRunTimes()
 
-	// Run jobs marked for initialization
-	s.runInitJobs()
+	// Add 10-minute delay before starting scheduler operations
+	log.Printf("⏰ Scheduler initialized - waiting 10 minutes before starting job execution...")
 
-	// Start the Edgar Filings Service
-	marketdata.StartEdgarFilingsService(s.Conn)
 	go func() {
-		for filing := range marketdata.NewFilingsChannel {
-			socket.BroadcastGlobalSECFiling(filing)
+		// Wait 10 minutes before starting scheduler operations
+		select {
+		case <-time.After(10 * time.Minute):
+			log.Printf("🚀 Starting scheduler operations after 10-minute delay")
+		case <-s.StopChan:
+			log.Printf("⏹️ Scheduler stopped during startup delay")
+			return
 		}
-	}()
 
-	// Start the ticker for regular job execution
-	ticker := time.NewTicker(1 * time.Minute)
+		// Run jobs marked for initialization
+		s.runInitJobs()
 
-	// Create a separate ticker for queue status updates (every 5 minutes)
-	queueStatusTicker := time.NewTicker(5 * time.Minute)
+		// Start the Edgar Filings Service
+		marketdata.StartEdgarFilingsService(s.Conn)
+		go func() {
+			for filing := range marketdata.NewFilingsChannel {
+				socket.BroadcastGlobalSECFiling(filing)
+			}
+		}()
 
-	go func() {
+		// Start the ticker for regular job execution
+		ticker := time.NewTicker(1 * time.Minute)
+
+		// Create a separate ticker for queue status updates (every 5 minutes)
+		queueStatusTicker := time.NewTicker(5 * time.Minute)
+
 		for {
 			select {
 			case <-ticker.C:
