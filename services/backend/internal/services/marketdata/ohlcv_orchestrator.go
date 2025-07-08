@@ -129,33 +129,15 @@ END$$;`, tbl)
 	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
 
 	// -----------------------------------------------------------------
-	// Staging table housekeeping
-	// -----------------------------------------------------------------
-	// Historically we maintained a single shared staging table named
-	// <tbl>_stage. Under certain failure modes (e.g. a crash between
-	// CREATE TABLE and the subsequent DROP in PostLoadCleanup) the table
-	// may be removed while its composite type remains. On the next run
-	// `CREATE TABLE IF NOT EXISTS` fails with the error:
-	//     ERROR: type "<tbl>_stage" already exists (SQLSTATE 42710)
-	// To make the pre-load step resilient we proactively remove both the
-	// table *and* any lingering composite type before recreating it.
-
-	stageTbl := tbl + "_stage"
-	// Best-effort cleanup – ignore errors and recreate a fresh table.
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
-		return fmt.Errorf("cleanup stale staging table: %w", err)
-	}
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TYPE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
-		return fmt.Errorf("cleanup stale staging type: %w", err)
-	}
-
-	createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE %s (LIKE %s INCLUDING ALL)`, stageTbl, tbl)
-	if _, err := data.ExecWithRetry(ctx, db, createStageSQL); err != nil {
-		return fmt.Errorf("create staging table: %w", err)
-	}
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`TRUNCATE %s`, stageTbl)); err != nil {
-		return fmt.Errorf("truncate staging table: %w", err)
-	}
+	// NOTE: Previously we created a shared staging table `<tbl>_stage` here.
+	// That approach was prone to race conditions between concurrent sessions
+	// that still held cached references to the table's composite *row type*.
+	// Dropping the type in one session could invalidate another session's
+	// cache and trigger «cache lookup failed for relation …» (SQLSTATE XX000).
+	//
+	// The load pipeline has since moved to per-connection staging tables
+	// (`<tbl>_stage_<pid>`), so the shared table is no longer required.
+	// We therefore skip this step entirely to avoid the invalidation hazard.
 
 	return nil
 }
