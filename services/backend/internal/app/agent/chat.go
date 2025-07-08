@@ -94,7 +94,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return QueryResponse{
 			ContentChunks: []ContentChunk{{
 				Type:    "text",
-				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+				Content: "You have reached your query limit. Please add more credits to your account to continue.",
 			}},
 			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
 			ConversationID: query.ConversationID,
