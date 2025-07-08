@@ -219,8 +219,15 @@ func addCORSHeaders(w http.ResponseWriter) {
 
 func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
-		_ = alertsvc.LogCriticalAlert(err)
 		logMessage := fmt.Sprintf("%s: %v", context, err)
+
+		// Only log a critical alert for non-auth related errors. Authentication
+		// failures (e.g. invalid or expired JWTs) are expected client errors and
+		// should not trigger pager duty alerts.
+		if context != "auth" {
+			_ = alertsvc.LogCriticalAlert(err)
+		}
+
 		if context == "auth" {
 			http.Error(w, logMessage, http.StatusUnauthorized)
 		} else {

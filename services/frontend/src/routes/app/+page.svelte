@@ -47,7 +47,6 @@
 	// Import Instance from types
 	import type { Instance } from '$lib/utils/types/types';
 
-
 	// Add new import for Query component
 	import Query from '$lib/features/chat/chat.svelte';
 
@@ -313,7 +312,6 @@
 	};
 
 	onMount(() => {
-
 		if (!browser) return;
 		initStores();
 		// Async initialization function
@@ -1515,17 +1513,10 @@
 					Loading Time...
 				{/if}
 			</span>
-			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
-				<!-- Add key to force re-render when the profile changes -->
-				{#key profileIconKey}
-					<img
-						src={getProfileDisplay()}
-						alt="Profile"
-						class="pfp"
-						on:error={handleProfilePicError}
-					/>
-				{/key}
-			</button>
+			<!-- Site logo (clickable) -->
+			<a href="/" class="bottom-logo-link">
+				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+			</a>
 		</div>
 	</div>
 
@@ -1556,6 +1547,15 @@
 			</div>
 		</div>
 	{/if}
+
+	<!-- Profile bar (top-right) -->
+	<div class="profile-bar">
+		<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
+			{#key profileIconKey}
+				<img src={getProfileDisplay()} alt="Profile" class="pfp" on:error={handleProfilePicError} />
+			{/key}
+		</button>
+	</div>
 </div>
 
 <style>
@@ -1806,5 +1806,50 @@
 		width: 16px;
 		height: 16px;
 		stroke-width: 2.5;
+	}
+
+	/* Profile bar container */
+	.profile-bar {
+		position: fixed;
+		top: 0;
+		right: 0;
+		width: 45px; /* same width as sidebar-buttons */
+		height: 40px; /* same height as top bar */
+		background-color: #0f0f0f;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-left: 4px solid var(--c1);
+		border-bottom: 4px solid var(--c1);
+		z-index: 11; /* above top bar */
+	}
+
+	/* Profile picture inside profile bar */
+	.profile-bar .pfp {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		cursor: pointer;
+		background-color: var(--c3);
+		border: 1px solid var(--c4);
+		overflow: hidden;
+		display: block;
+	}
+
+	/* Hide original bottom bar profile button */
+	.bottom-bar .profile-button {
+		display: none;
+	}
+
+	/* Bottom bar logo */
+	.bottom-bar .bottom-logo {
+		height: 28px;
+		width: auto;
+		display: block;
+	}
+
+	.bottom-logo-link {
+		display: inline-flex;
+		align-items: center;
 	}
 </style>

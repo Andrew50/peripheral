@@ -28,6 +28,8 @@ CORRUPTION_INDICATORS=(
     "recovery failed"
     "backup block is corrupted"
 )
+STARTUP_GRACE_PERIOD=${STARTUP_GRACE_PERIOD:-300}  # seconds
+START_TIME=$(date +%s)
 
 # Database credentials
 DB_USER=${POSTGRES_USER:-postgres}
@@ -62,17 +64,39 @@ error_log() {
 
 # Check if database is accepting connections
 check_connection() {
-    if PGPASSWORD=$POSTGRES_PASSWORD pg_isready -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" >/dev/null 2>&1; then
+    local output
+    output=$(PGPASSWORD=$POSTGRES_PASSWORD pg_isready -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" 2>&1 || true)
+
+    # Accepting connections normally
+    if echo "$output" | grep -q "accepting connections"; then
         return 0
-    else
-        LAST_FAILURE_REASON="Database connection failed"
-        FAILURE_DETAILS="pg_isready check failed for $DB_USER@$DB_HOST:$DB_NAME"
+    fi
+
+    # Database is still starting up (57P03)
+    if echo "$output" | grep -q "starting up"; then
+        local elapsed=$(( $(date +%s) - START_TIME ))
+        if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+            log "Database is still starting up (${elapsed}/${STARTUP_GRACE_PERIOD}s)"
+            return 0
+        fi
+        LAST_FAILURE_REASON="Database still starting after grace period"
+        FAILURE_DETAILS="$output"
         return 1
     fi
+
+    LAST_FAILURE_REASON="Database connection failed"
+    FAILURE_DETAILS="$output"
+    return 1
 }
 
 # Check for corruption indicators in logs
 check_for_corruption() {
+    # Skip corruption checks during initial startup grace period
+    local elapsed=$(( $(date +%s) - START_TIME ))
+    if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+        return 0
+    fi
+    
     # Skip local process check if monitoring a remote Postgres instance
     if [[ "$DB_HOST" != "localhost" && "$DB_HOST" != "127.0.0.1" && "$DB_HOST" != "0.0.0.0" ]]; then
         # Only analyze logs; assume process is remote
@@ -120,6 +144,12 @@ check_for_corruption() {
 
 # Test basic database functionality
 test_database_functionality() {
+    # Skip detailed tests during startup grace period
+    local elapsed=$(( $(date +%s) - START_TIME ))
+    if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+        return 0
+    fi
+    
     # Test simple query
     if ! PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "SELECT 1;" >/dev/null 2>&1; then
         error_log "Basic database query failed"
