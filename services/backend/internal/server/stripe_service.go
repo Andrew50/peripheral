@@ -29,6 +29,14 @@ func init() {
 	if stripe.Key == "" {
 		log.Println("Warning: STRIPE_SECRET_KEY not set")
 	}
+
+	// Fail fast if the webhook signing secret is missing. Without it we would silently
+	// accept every webhook request and leave subscriptions inactive, which is a
+	// critical mis-configuration. Crash the process so the deployment is marked
+	// unhealthy and operators notice immediately.
+	if os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
+		log.Fatal("STRIPE_WEBHOOK_SECRET not set – aborting startup")
+	}
 }
 
 // StripeCreateCheckoutSession creates a new Stripe Checkout session for subscription
