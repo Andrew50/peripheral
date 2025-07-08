@@ -14,7 +14,7 @@
 	import { parseMarkdown, handleTickerButtonClick } from '$lib/features/chat/utils';
 	// Import table-related types and functionality from chat interface
 	import type { SortState } from '$lib/features/chat/interface';
-
+    import type { ISeriesApi, Time, CandlestickData, CandlestickSeriesOptions, CandlestickStyleOptions, SeriesOptionsCommon, WhitespaceData, DeepPartial, HistogramData, HistogramSeriesOptions, HistogramStyleOptions, LineData, LineSeriesOptions, LineStyleOptions } from 'lightweight-charts';
     // ---------------------------------------------
 	// Chat message structures (mirrors main chat)
 	// ---------------------------------------------
@@ -46,7 +46,81 @@
 	let tableSortStates: { [key: string]: SortState } = {};
 	let tablePaginationStates: { [key: string]: { currentPage: number; rowsPerPage: number } } = {};
 	// Server-injected data (bars for SPY) forwarded from route
-	export let defaultChartData: any = undefined;
+    export let defaultKey: string;
+    export let chartsByKey: Record<string, {chartData: {bars: any[]}; timeframe: string, ticker: string}>;
+    export let defaultChartData: any;
+
+    const chartPool = chartsByKey;
+    let activeKey = defaultKey;
+
+    function setChart(keys: string[], chartType: 'candle' | 'line') {
+        // Clear all series first
+        chartCandleSeries?.setData([]);
+        chartVolumeSeries?.setData([]);
+        chartLineSeries1?.setData([]);
+        chartLineSeries2?.setData([]);
+        chartLineSeries3?.setData([]);
+
+        if (chartType === 'line') {
+            // For line charts, use the first 3 keys for the 3 line series
+            const lineSeries = [chartLineSeries1, chartLineSeries2, chartLineSeries3];
+            
+            keys.slice(0, 3).forEach((key, index) => {
+                const slice = chartPool[key];
+                if (!slice) {
+                    console.warn('Chart slice not found for key', key);
+                    return;
+                }
+                const bars = slice.chartData.bars.map((bar: any) => ({
+                    time: bar.time as any,
+                    value: bar.close
+                }));
+                lineSeries[index]?.setData(bars);
+            });
+        }
+        
+        if (chartType === 'candle') {
+            const slice = chartPool[keys[0]];
+            if (!slice) {
+                console.warn('Chart slice not found for key', keys[0]);
+                return;
+            }
+
+            activeKey = keys[0];
+
+            // Map backend bars into lightweight-charts format
+            const bars = slice.chartData.bars.map((bar: any) => ({
+                time: bar.time as any,
+                open: bar.open,
+                high: bar.high,
+                low: bar.low,
+                close: bar.close,
+                volume: bar.volume ?? bar.v ?? bar.vol ?? 0
+            }));
+            chartCandleSeries?.setData(bars);
+            console.log('bars', bars);
+            chartVolumeSeries?.setData(
+                bars.map((b: any) => ({
+                    time: b.time,
+                    value: b.volume,
+                    color: b.close >= b.open ? '#26a69a' : '#ef5350'
+                }))
+            );
+
+            if (bars.length) {
+                const last = bars[bars.length - 1];
+                legendData = {
+                    open: last.open,
+                    high: last.high,
+                    low: last.low,
+                    close: last.close,
+                    volume: last.volume
+                } as any;
+            }
+        }
+    }
+
+
 
 	// ----- Local state -----
 	let isLoaded = false;
@@ -60,8 +134,45 @@
 	let typewriterInterval: NodeJS.Timeout;
 	// Control removal of the animation input bar after transition
 	let removeAnimationInput = false;
+    let chartContainerRef: HTMLDivElement;
 
-	let chartContainerRef: HTMLDivElement;
+	let chartCandleSeries: ISeriesApi<
+		'Candlestick',
+		Time,
+		WhitespaceData<Time> | CandlestickData<Time>,
+		CandlestickSeriesOptions,
+		DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>
+	>;
+    let chartVolumeSeries: ISeriesApi<
+		'Histogram',
+		Time,
+		WhitespaceData<Time> | HistogramData<Time>,
+		HistogramSeriesOptions,
+		DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>
+	>;
+
+	// Add 3 line series
+	let chartLineSeries1: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
+	let chartLineSeries2: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
+	let chartLineSeries3: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
 
 	let chatMessages: ChatMessage[] = [];
 
@@ -101,7 +212,8 @@
 		addUserMessage: addMessage,
 		addAssistantMessage,
 		removeLastMessage,
-		highlightEventForward
+		highlightEventForward,
+		setChart
 	});
 
 
@@ -236,16 +348,18 @@
 		updateChatScroll();
 	}
 
+	// Control chat auto-sync (progress → scroll) – disabled once we start manual scrolling
+	let chatAutoSync = true;
+
 	// Programmatically scroll the chat messages pane based on global timeline progress
 	function updateChatScroll() {
+		if (!chatAutoSync) return;
 		if (!heroChatMessagesRef) return;
-		// Use rAF to ensure DOM has updated (new messages affect scrollHeight)
 		requestAnimationFrame(() => {
 			if (!heroChatMessagesRef) return;
 			const maxScroll = heroChatMessagesRef.scrollHeight - heroChatMessagesRef.clientHeight;
-			if (maxScroll <= 0) return; // nothing to scroll
-			const progress = get(timelineProgress);
-			heroChatMessagesRef.scrollTop = maxScroll * progress;
+			if (maxScroll <= 0) return;
+			heroChatMessagesRef.scrollTop = maxScroll * get(timelineProgress);
 		});
 	}
 
@@ -288,20 +402,8 @@
 		}, 800);
 
 	}
-    function setData(data: any) {
-        if (data.chartData?.bars?.length) {
-            const serverBars = data.chartData.bars.map((bar: any) => ({
-                time: bar.time as any,
-                open: bar.open,
-                high: bar.high,
-                low: bar.low,
-                close: bar.close,
-                volume: bar.volume ?? bar.v ?? bar.vol ?? 0
-            }));
-        }
-    }
 	// ------- Hero chart legend state ---------
-	const currentTicker = 'SPY';
+	const currentTicker = 'QQQ';
 	interface LegendData {
 		open: number;
 		high: number;
@@ -315,14 +417,34 @@
 	let selectedRowKey: string | null = null;
 	// References to chart & series for later updates (used for legend updates etc.)
 	let chartInstance: any;
-	let candleSeriesRef: any;
-	let volumeSeriesRef: any;
 
 	function highlightTableRow(tableKey: string, rowIndex: number) {
+		// Retrieve table context (first table only for hero demo)
+		const tableMsg = chatMessages.find((m) => m.contentChunks?.some((c) => c.type === 'table'));
+		if (!tableMsg) return;
+		const tableIdx = tableMsg.contentChunks.findIndex((c) => c.type === 'table');
+		const tableData: any = tableMsg.contentChunks[tableIdx].content;
+		const totalRows: number = tableData?.rows?.length ?? 0;
+		if (totalRows === 0) return;
+		const clampedRowIdx = Math.min(Math.max(rowIndex, 0), totalRows - 1);
+
+		// Ensure correct pagination page so the row is rendered
+		const pagState = tablePaginationStates[tableKey] || { currentPage: 1, rowsPerPage: 5 };
+		const { rowsPerPage } = pagState;
+		const totalPages = Math.ceil(totalRows / rowsPerPage);
+		const requiredPage = Math.floor(clampedRowIdx / rowsPerPage) + 1;
+		if (requiredPage > totalPages) return; // invalid
+
+		if (pagState.currentPage !== requiredPage) {
+			tablePaginationStates[tableKey] = { ...pagState, currentPage: requiredPage } as any;
+			tablePaginationStates = { ...tablePaginationStates }; // trigger reactivity
+		}
+		rowIndex = clampedRowIdx;
+
 		selectedRowKey = `${tableKey}-${rowIndex}`;
 
-		// After DOM updates, adjust scroll only if row is outside the current viewport of chat container
-		requestAnimationFrame(() => {
+		// Wait for DOM to update, then scroll
+		setTimeout(() => {
 			const rowEl = document.querySelector(`tr[data-row-key="${selectedRowKey}"]`);
 			if (!rowEl || !heroChatMessagesRef) return;
 
@@ -336,19 +458,19 @@
 			if (isAbove || isBelow) {
 				scrollElementIntoChat(rowEl as HTMLElement);
 			}
-		});
+		}, 50);
+
+		// Stop automatic scroll syncing after first explicit highlight
+		chatAutoSync = false;
 	}
 
-	// Helper: smoothly scroll chat container so a given element is visible near the top
+	// Smoothly scroll chat container so `el` is near the top
 	function scrollElementIntoChat(el: HTMLElement) {
 		if (!heroChatMessagesRef) return;
 		const container = heroChatMessagesRef;
-		const containerRect = container.getBoundingClientRect();
-		const elRect = el.getBoundingClientRect();
-
-		// Compute element position relative to container scrollTop
-		const offset = elRect.top - containerRect.top + container.scrollTop;
+		const offset = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
 		container.scrollTo({ top: Math.max(offset - 8, 0), behavior: 'smooth' });
+		chatAutoSync = false; // stop auto sync after manual scroll
 	}
 
 	// Ensure the table as a whole is visible in the chat pane
@@ -361,20 +483,26 @@
 	}
 
 	// New: extracted highlighter so it’s in scope before reactive block
-	export function highlightEventForward(rowIndex: number = -1) {
-		// Bring entire table into view first
+	export function highlightEventForward(rowIndex: number = -1, attempts = 6) {
+		// Ensure table container is visible
 		scrollTableIntoView();
 
-		if (rowIndex < 0) return; // sentinel: no row highlight requested
+		if (rowIndex < 0) return; // just scroll table, auto-sync already disabled
 
-		// Delay row highlight slightly to let scroll settle
-		setTimeout(() => {
+		// Locate table row; if not yet in DOM (async rendering), retry a few times
+		const tryHighlight = () => {
 			const tableMsg = chatMessages.find((m) => m.contentChunks?.some((c) => c.type === 'table'));
-			if (!tableMsg) return;
+			if (!tableMsg) {
+				if (attempts > 0) setTimeout(() => highlightEventForward(rowIndex, attempts - 1), 50);
+				return;
+			}
 			const tableIdx = tableMsg.contentChunks.findIndex((c) => c.type === 'table');
 			const tableKey = `${tableMsg.message_id}-${tableIdx}`;
 			highlightTableRow(tableKey, rowIndex);
-		}, 100);
+		};
+
+		// Initial slight delay to allow DOM update, then attempt highlight
+		setTimeout(tryHighlight, 60);
 	}
 
 
@@ -436,50 +564,22 @@
 		});
 		volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.9, bottom: 0 }, visible: false });
 
-		/* ----- Generate placeholder sine-wave data ----- */
-		const now = Math.floor(Date.now() / 1000);
-		const candleData = Array.from({ length: 200 }, (_, i) => {
-			const base = 100 + Math.sin(i / 4) * 3;
-			const open = base + (Math.random() - 0.5) * 2;
-			const close = open + (Math.random() - 0.5) * 4;
-			const high = Math.max(open, close) + Math.random() * 2;
-			const low = Math.min(open, close) - Math.random() * 2;
-			const volume = Math.floor(1000 + Math.random() * 9000);
-
-			return { time: (now - (200 - i) * 60) as any, open, high, low, close, volume };
+		// Add 3 line series with different colors
+		const lineSeries1 = chart.addLineSeries({
+			color: '#2196F3',
+			lineWidth: 2,
+			title: 'Line 1'
 		});
-		candleSeries.setData(candleData);
-		volumeSeries.setData(
-			candleData.map((bar: any) => ({
-				time: bar.time,
-				value: bar.volume,
-				color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
-			}))
-		);
-
-		// Inject real SPY data if provided by server
-		if (defaultChartData?.chartData?.bars?.length) {
-			const serverBars = defaultChartData.chartData.bars.map((bar: any) => ({
-				time: bar.time as any,
-				open: bar.open,
-				high: bar.high,
-				low: bar.low,
-				close: bar.close,
-				volume: bar.volume ?? bar.v ?? bar.vol ?? 0
-			}));
-			candleSeries.setData(serverBars);
-			volumeSeries.setData(
-				serverBars.map((bar: any) => ({
-					time: bar.time,
-					value: bar.volume,
-					color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
-				}))
-			);
-			if (serverBars.length) {
-				const lastBar = serverBars[serverBars.length - 1];
-				legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close, volume: lastBar.volume } as any;
-			}
-		}
+		const lineSeries2 = chart.addLineSeries({
+			color: '#FF9800',
+			lineWidth: 2,
+			title: 'Line 2'
+		});
+		const lineSeries3 = chart.addLineSeries({
+			color: '#4CAF50',
+			lineWidth: 2,
+			title: 'Line 3'
+		});
 
 		// Subscribe to crosshair for reactive legend updates
 		chart.subscribeCrosshairMove((param) => {
@@ -494,15 +594,23 @@
 
 		// In onMount chart init, assign refs
 		chartInstance = chart;
-		candleSeriesRef = candleSeries;
-		volumeSeriesRef = volumeSeries;
+		chartCandleSeries = candleSeries;
+		chartVolumeSeries = volumeSeries;
+		chartLineSeries1 = lineSeries1;
+		chartLineSeries2 = lineSeries2;
+		chartLineSeries3 = lineSeries3;
 
-		new ResizeObserver(() => {
+        new ResizeObserver(() => {
 			chart.applyOptions({
 				width: chartContainerRef!.clientWidth,
 				height: chartContainerRef!.clientHeight
 			});
 		}).observe(chartContainerRef);
+
+		// Inject server-preloaded data for the default key (first slice)
+        console.log('activeKey', activeKey);
+		setChart([activeKey], 'candle');
+
 	});
 
 	onDestroy(() => {

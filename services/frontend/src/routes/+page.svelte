@@ -42,13 +42,22 @@
 				content: ''
 			}
 		];
+
+		// Data returned from the server-side `load` function
+		export let data: {
+			defaultKey: string;
+			chartsByKey: Record<string, any>;
+			defaultChartData: any;
+		};
+
+		const { defaultKey, chartsByKey, defaultChartData } = data;
 	</script>
 
 
 	<SiteHeader/>
 
 	<main class="landing-container">
-		<HeroAnimation />
+		<HeroAnimation {defaultKey} {chartsByKey} {defaultChartData}/>
 		<!-- Subsections -->
 		<section class="subsections-section">
 			<div class="subsections-content">

@@ -15,18 +15,23 @@ export interface TimelineActions {
   addAssistantMessage: (contentChunks: ContentChunk[]) => void;
   removeLastMessage: () => void;
   highlightEventForward: (rowIndex: number) => void;
+  setChart: (keys: string[], chartType: 'candle' | 'line') => void;
 }
 export const sampleQuery = "Analyze the impact of tariffs on tech and retail stocks between 2018 and 2025.";
 export const totalScroll = 10000; // px of wheel delta required for full timeline
 
 // Global store containing the hero animation progress (0 → 1)
 export const timelineProgress = writable(0);
-
+// Helper to build a unique key for each chart slice (ticker + timestamp + timeframe)
+function ChartKey(ticker: string, timestampMs: number, timeframe: string): string {
+	return `${ticker}_${timestampMs}_${timeframe}`;
+}
 export function createTimelineEvents({
   addUserMessage,
   addAssistantMessage,
   removeLastMessage,
-  highlightEventForward
+  highlightEventForward,
+  setChart
 }: TimelineActions): TimelineEvent[] {
   return [      
     {
@@ -82,15 +87,17 @@ export function createTimelineEvents({
     // Immediately after the table is injected, scroll it into view & focus first row
     {
       trigger: 0.205,
-      forward: () => highlightEventForward(-1)   // scroll table only
+      forward: () => highlightEventForward(-1),   // scroll table only
+      backward: () => setChart([ChartKey("QQQ", 0, "1d")], "candle")
     },
     {
-      trigger: 0.25,
-      forward: () => highlightEventForward(2)   // now highlight third row
+      trigger: 0.30,
+      forward: () => {highlightEventForward(2), setChart([ChartKey("QQQ", Date.UTC(2019, 8, 1), "1d"), ChartKey("WMT", Date.UTC(2019, 8, 1), "1d"), ChartKey("COST", Date.UTC(2019, 8, 1), "1d")], "line")}    // now highlight third row
     },
     {
-      trigger: 0.3,
-      forward: () => highlightEventForward(5)
+      trigger: 0.40,
+      forward: () => highlightEventForward(5),
+      backward: () => highlightEventForward(2)
     },
     {
       trigger: 0.75,
@@ -103,8 +110,7 @@ export function createTimelineEvents({
       backward: () => removeLastMessage()
     }
   ];
-} 
-[
+} [
 
   {
     "type": "backtest_table",
