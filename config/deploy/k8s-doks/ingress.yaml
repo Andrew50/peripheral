@@ -60,6 +60,13 @@ spec:
                 name: backend
                 port:
                   number: 5058
+          - path: /billing/webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
           - path: /
             pathType: Prefix
             backend:
@@ -92,6 +99,13 @@ spec:
                 port:
                   number: 5058
           - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /billing/webhook
             pathType: Prefix
             backend:
               service:

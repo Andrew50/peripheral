@@ -166,6 +166,8 @@ TICKER USAGE:
 - For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
 - For universe-wide strategies, use filters={{}} or filters with sector/industry constraints
 - Return results with 'ticker' field (string), not 'securityid'
+- For Bitcoin exposure, use "IBIT" (iShares Bitcoin Trust ETF)
+- For Ethereum exposure, use "ETHE" (Grayscale Ethereum Trust)
 
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 - DO NOT use .tail(1) or .head(1) to limit results per ticker
