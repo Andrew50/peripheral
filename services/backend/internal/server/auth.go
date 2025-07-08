@@ -76,7 +76,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var a SignupArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		return nil, fmt.Errorf("Signup invalid args: %v", err)
+		return nil, fmt.Errorf("%w: invalid signup args: %v", ErrInvalidInput, err)
 	}
 	username := strings.ToLower(a.Email)
 
@@ -109,7 +109,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 
 	if count > 0 {
-		return nil, fmt.Errorf("email already registered")
+		return nil, fmt.Errorf("%w: email already registered", ErrEmailExists)
 	}
 
 	// Check if username already exists
@@ -119,7 +119,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("error checking username: %v", err)
 	}
 	if count > 0 {
-		return nil, fmt.Errorf("username already taken")
+		return nil, fmt.Errorf("%w: username already taken", ErrUsernameExists)
 	}
 
 	// Insert new user with auth_type='password'
@@ -173,7 +173,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var a LoginArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		return nil, fmt.Errorf("login invalid args: %v", err)
+		return nil, fmt.Errorf("%w: login invalid args: %v", ErrInvalidInput, err)
 	}
 
 	log.Printf("Login attempt for email: %s", a.Email)
@@ -197,7 +197,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	switch {
 	case err == pgx.ErrNoRows:
 		log.Printf("Login failed: No user found for email: %s", a.Email)
-		return nil, fmt.Errorf("incorrect email") // <-- NEW specific error
+		return nil, fmt.Errorf("%w", ErrIncorrectEmail)
 	case err != nil:
 		log.Printf("ERROR: Database query failed during login check: %v", err)
 		return nil, fmt.Errorf("database error: %v", err)
@@ -206,15 +206,14 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// 2) Is this a Google-only account?
 	if authType == "google" {
 		log.Printf("Login failed: Google-only user attempting password login for email: %s", a.Email)
-		errorMessage := "This account uses Google Sign-In. Please login with Google."
-		return nil, fmt.Errorf("%s", errorMessage)
+		return nil, fmt.Errorf("%w", ErrGoogleAuthRequired)
 	}
 
 	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
 	if authType == "password" || authType == "both" {
 		if storedPw != a.Password {
 			log.Printf("Login failed: Password mismatch for email: %s", a.Email)
-			return nil, fmt.Errorf("incorrect password") // <-- NEW specific error
+			return nil, fmt.Errorf("%w", ErrIncorrectPassword)
 		}
 	} else {
 		// This case should ideally not be reached if authType logic is correct,
@@ -292,7 +291,7 @@ func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		RedirectOrigin string `json:"redirectOrigin"`
 	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
 	}
 
 	// Validate that we have the required OAuth configuration
@@ -320,7 +319,7 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		State string `json:"state"`
 	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
 	}
 
 	log.Printf("Google callback processing with code")
@@ -423,12 +422,12 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	}
 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		return nil, fmt.Errorf("invalid args: %v", err)
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
 	}
 
 	// Check confirmation string for regular delete account
 	if args.Confirmation != "DELETE" {
-		return nil, fmt.Errorf("confirmation must be 'DELETE' to delete account")
+		return nil, fmt.Errorf("%w: confirmation must be 'DELETE'", ErrInvalidInput)
 	}
 
 	var userID int
@@ -441,7 +440,7 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 
 		// Extra verification that only authenticated users can delete accounts
 		if userID <= 0 {
-			return nil, fmt.Errorf("invalid user ID")
+			return nil, fmt.Errorf("%w: invalid user ID", ErrInvalidInput)
 		}
 	}
 

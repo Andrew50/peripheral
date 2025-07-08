@@ -21,6 +21,15 @@ func LogCriticalAlert(err error) error {
 		return nil // nothing to report
 	}
 
+	// Detect development environment and skip sending critical alerts. This avoids
+	// requiring Telegram credentials during local development.
+	envValue := strings.ToLower(os.Getenv("ENVIRONMENT"))
+	if envValue == "" || envValue == "dev" || envValue == "development" {
+		// Still write the error to the local log for visibility.
+		log.Printf("[DEV] Critical error: %v", err)
+		return nil
+	}
+
 	// Ensure the bot is initialised. We defer to the existing helper in
 	// dispatch.go so that we reuse the same global bot/chatID variables.
 	if bot == nil {
