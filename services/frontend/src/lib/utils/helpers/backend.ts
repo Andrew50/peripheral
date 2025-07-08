@@ -3,11 +3,19 @@ import { goto } from '$app/navigation';
 export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
 
-// Default value for server-side rendering - use environment variable if available
-base_url =
-	typeof process !== 'undefined' && process.env?.BACKEND_URL
-		? process.env.BACKEND_URL
-		: 'http://localhost:5058';
+// Determine base URL for server-side (Node) context first
+if (typeof process !== 'undefined') {
+    // 1. Explicit override always wins
+    if (process.env?.BACKEND_URL) {
+        base_url = process.env.BACKEND_URL;
+    }
+    // 2. If running inside a Kubernetes pod (KUBERNETES_SERVICE_HOST is automatically
+    //    injected by Kubernetes) fall back to the ClusterIP service name.
+    else if (process.env?.KUBERNETES_SERVICE_HOST) {
+        // "backend" is the Service name defined in k8s manifests.
+        base_url = 'http://backend:5058';
+    }
+}
 
 if (typeof window !== 'undefined') {
 	// For client-side code

@@ -4,7 +4,6 @@ import (
 	"backend/internal/data"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -12,39 +11,40 @@ import (
 )
 
 // SubscriptionPlan represents a subscription plan configuration
+// Note: Features are now managed in frontend configuration, not database
 type SubscriptionPlan struct {
-	ID                      int      `json:"id"`
-	PlanName                string   `json:"plan_name"`
-	StripePriceIDTest       *string  `json:"stripe_price_id_test"`
-	StripePriceIDLive       *string  `json:"stripe_price_id_live"`
-	DisplayName             string   `json:"display_name"`
-	Description             *string  `json:"description"`
-	PriceCents              int      `json:"price_cents"`
-	BillingPeriod           string   `json:"billing_period"`
-	CreditsPerBillingPeriod int      `json:"credits_per_billing_period"`
-	AlertsLimit             int      `json:"alerts_limit"`
-	StrategyAlertsLimit     int      `json:"strategy_alerts_limit"`
-	Features                []string `json:"features"`
-	IsActive                bool     `json:"is_active"`
-	IsPopular               bool     `json:"is_popular"`
-	SortOrder               int      `json:"sort_order"`
-	CreatedAt               time.Time `json:"created_at"`
-	UpdatedAt               time.Time `json:"updated_at"`
+	ID                      int     `json:"id"`
+	PlanName                string  `json:"plan_name"`
+	StripePriceIDTest       *string `json:"stripe_price_id_test"`
+	StripePriceIDLive       *string `json:"stripe_price_id_live"`
+	DisplayName             string  `json:"display_name"`
+	Description             *string `json:"description"`
+	PriceCents              int     `json:"price_cents"`
+	BillingPeriod           string  `json:"billing_period"`
+	CreditsPerBillingPeriod int     `json:"credits_per_billing_period"`
+	AlertsLimit             int     `json:"alerts_limit"`
+	StrategyAlertsLimit     int     `json:"strategy_alerts_limit"`
+
+	IsActive  bool      `json:"is_active"`
+	IsPopular bool      `json:"is_popular"`
+	SortOrder int       `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // CreditProduct represents a credit product configuration
 type CreditProduct struct {
-	ID                int      `json:"id"`
-	ProductKey        string   `json:"product_key"`
-	StripePriceIDTest *string  `json:"stripe_price_id_test"`
-	StripePriceIDLive *string  `json:"stripe_price_id_live"`
-	DisplayName       string   `json:"display_name"`
-	Description       *string  `json:"description"`
-	CreditAmount      int      `json:"credit_amount"`
-	PriceCents        int      `json:"price_cents"`
-	IsActive          bool     `json:"is_active"`
-	IsPopular         bool     `json:"is_popular"`
-	SortOrder         int      `json:"sort_order"`
+	ID                int       `json:"id"`
+	ProductKey        string    `json:"product_key"`
+	StripePriceIDTest *string   `json:"stripe_price_id_test"`
+	StripePriceIDLive *string   `json:"stripe_price_id_live"`
+	DisplayName       string    `json:"display_name"`
+	Description       *string   `json:"description"`
+	CreditAmount      int       `json:"credit_amount"`
+	PriceCents        int       `json:"price_cents"`
+	IsActive          bool      `json:"is_active"`
+	IsPopular         bool      `json:"is_popular"`
+	SortOrder         int       `json:"sort_order"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -59,7 +59,7 @@ func GetSubscriptionPlans(conn *data.Conn) ([]SubscriptionPlan, error) {
 			id, plan_name, stripe_price_id_test, stripe_price_id_live, 
 			display_name, description, price_cents, billing_period, 
 			credits_per_billing_period, alerts_limit, strategy_alerts_limit, 
-			features, is_active, is_popular, sort_order, created_at, updated_at
+			is_active, is_popular, sort_order, created_at, updated_at
 		FROM subscription_plans 
 		WHERE is_active = TRUE 
 		ORDER BY sort_order ASC`
@@ -73,7 +73,6 @@ func GetSubscriptionPlans(conn *data.Conn) ([]SubscriptionPlan, error) {
 	var plans []SubscriptionPlan
 	for rows.Next() {
 		var plan SubscriptionPlan
-		var featuresJSON sql.NullString
 		var description sql.NullString
 		var stripePriceIDTest, stripePriceIDLive sql.NullString
 
@@ -81,7 +80,7 @@ func GetSubscriptionPlans(conn *data.Conn) ([]SubscriptionPlan, error) {
 			&plan.ID, &plan.PlanName, &stripePriceIDTest, &stripePriceIDLive,
 			&plan.DisplayName, &description, &plan.PriceCents, &plan.BillingPeriod,
 			&plan.CreditsPerBillingPeriod, &plan.AlertsLimit, &plan.StrategyAlertsLimit,
-			&featuresJSON, &plan.IsActive, &plan.IsPopular, &plan.SortOrder,
+			&plan.IsActive, &plan.IsPopular, &plan.SortOrder,
 			&plan.CreatedAt, &plan.UpdatedAt,
 		)
 		if err != nil {
@@ -97,19 +96,6 @@ func GetSubscriptionPlans(conn *data.Conn) ([]SubscriptionPlan, error) {
 		}
 		if stripePriceIDLive.Valid {
 			plan.StripePriceIDLive = &stripePriceIDLive.String
-		}
-
-		// Parse features JSON
-		if featuresJSON.Valid {
-			var features []string
-			if err := json.Unmarshal([]byte(featuresJSON.String), &features); err != nil {
-				log.Printf("Warning: Failed to parse features JSON for plan %s: %v", plan.PlanName, err)
-				plan.Features = []string{} // Default to empty array on error
-			} else {
-				plan.Features = features
-			}
-		} else {
-			plan.Features = []string{} // Default to empty array
 		}
 
 		plans = append(plans, plan)
@@ -236,14 +222,14 @@ func GetStripeEnvironment() string {
 		log.Println("Warning: STRIPE_SECRET_KEY not set, defaulting to test mode")
 		return "test"
 	}
-	
+
 	// Stripe test keys start with "sk_test_", live keys start with "sk_live_"
 	if len(stripeKey) >= 8 && stripeKey[:8] == "sk_test_" {
 		return "test"
 	} else if len(stripeKey) >= 8 && stripeKey[:8] == "sk_live_" {
 		return "live"
 	}
-	
+
 	// Default to test mode if we can't determine
 	log.Println("Warning: Could not determine Stripe environment, defaulting to test mode")
 	return "test"
@@ -255,10 +241,10 @@ func GetStripePriceIDForPlan(conn *data.Conn, planName string) (string, error) {
 	defer cancel()
 
 	environment := GetStripeEnvironment()
-	
+
 	var priceID sql.NullString
 	var query string
-	
+
 	if environment == "test" {
 		query = `SELECT stripe_price_id_test FROM subscription_plans WHERE plan_name = $1`
 	} else {
@@ -283,10 +269,10 @@ func GetStripePriceIDForCreditProduct(conn *data.Conn, productKey string) (strin
 	defer cancel()
 
 	environment := GetStripeEnvironment()
-	
+
 	var priceID sql.NullString
 	var query string
-	
+
 	if environment == "test" {
 		query = `SELECT stripe_price_id_test FROM credit_products WHERE product_key = $1`
 	} else {
@@ -303,4 +289,4 @@ func GetStripePriceIDForCreditProduct(conn *data.Conn, productKey string) (strin
 	}
 
 	return priceID.String, nil
-} 
+}
