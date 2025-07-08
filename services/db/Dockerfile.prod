@@ -2,6 +2,16 @@ FROM timescale/timescaledb-ha:pg17
 USER root
 # Password will be provided via environment variables
 RUN apt-get update && apt-get install -y cron
+
+# -------------------------------------------------------------------
+# Install kubectl so health-monitor script can fetch pod logs
+# Keep version aligned with cluster minor version (1.30.*)
+ARG KUBECTL_VERSION=v1.30.0
+RUN curl -L -o /usr/local/bin/kubectl \
+    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
+    chmod +x /usr/local/bin/kubectl
+# -------------------------------------------------------------------
+
 EXPOSE 5432
 
 # Copy initialization scripts

@@ -53,8 +53,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 10s
-      retries: 20
-      start_period: 15s
+      retries: 120 # Allow up to 10 minutes (120×5 s) of failed checks
+      start_period: 300s # Give Postgres up to 5 minutes before health checks affect status
     shm_size: 2g
     deploy:
       resources:

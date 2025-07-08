@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -203,7 +204,7 @@ func UpdateSecurityCik(conn *data.Conn) error {
 
 	// Process each ticker and update the database
 	for _, company := range secData {
-		_, err := conn.DB.Exec(context.Background(),
+		_, err := data.ExecWithRetry(context.Background(), conn.DB,
 			`UPDATE securities 
 			 SET cik = $1 
 			 WHERE ticker = $2 
@@ -212,7 +213,9 @@ func UpdateSecurityCik(conn *data.Conn) error {
 			company.CikStr, company.Ticker,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to update CIK for ticker %s: %w", company.Ticker, err)
+			// Log the failure and continue with other tickers instead of aborting the whole job
+			log.Printf("failed to update CIK for ticker %s after retries: %v", company.Ticker, err)
+			continue
 		}
 	}
 

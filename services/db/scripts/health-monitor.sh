@@ -73,21 +73,27 @@ check_connection() {
 
 # Check for corruption indicators in logs
 check_for_corruption() {
-    # Check if PostgreSQL process is running
-    local pg_pid
-    pg_pid=$(pgrep postgres | head -1 2>/dev/null)
-    if [ -n "$pg_pid" ]; then
-        if ! kill -0 "$pg_pid" 2>/dev/null; then
-            error_log "PostgreSQL process $pg_pid is not running"
-            LAST_FAILURE_REASON="PostgreSQL process not running"
-            FAILURE_DETAILS="Process $pg_pid not found"
+    # Skip local process check if monitoring a remote Postgres instance
+    if [[ "$DB_HOST" != "localhost" && "$DB_HOST" != "127.0.0.1" && "$DB_HOST" != "0.0.0.0" ]]; then
+        # Only analyze logs; assume process is remote
+        : # no-op; continue to log inspection below
+    else
+        # Check if PostgreSQL process is running locally
+        local pg_pid
+        pg_pid=$(pgrep postgres | head -1 2>/dev/null)
+        if [ -n "$pg_pid" ]; then
+            if ! kill -0 "$pg_pid" 2>/dev/null; then
+                error_log "PostgreSQL process $pg_pid is not running"
+                LAST_FAILURE_REASON="PostgreSQL process not running"
+                FAILURE_DETAILS="Process $pg_pid not found"
+                return 1
+            fi
+        else
+            error_log "No PostgreSQL process found"
+            LAST_FAILURE_REASON="No PostgreSQL process found"
+            FAILURE_DETAILS="pgrep postgres returned no results"
             return 1
         fi
-    else
-        error_log "No PostgreSQL process found"
-        LAST_FAILURE_REASON="No PostgreSQL process found"
-        FAILURE_DETAILS="pgrep postgres returned no results"
-        return 1
     fi
     
     # Check our captured PostgreSQL logs for corruption indicators
@@ -388,8 +394,8 @@ get_k8s_info() {
         fi
         
         # Get node name if available
-        if [ -n "$NODE_NAME" ]; then
-            k8s_info="$k8s_info\n• Node: $NODE_NAME"
+        if [ -n "${NODE_NAME:-}" ]; then
+            k8s_info="$k8s_info\n• Node: ${NODE_NAME:-Unknown}"
         fi
     fi
     
