@@ -28,6 +28,8 @@ CORRUPTION_INDICATORS=(
     "recovery failed"
     "backup block is corrupted"
 )
+STARTUP_GRACE_PERIOD=${STARTUP_GRACE_PERIOD:-300}  # seconds
+START_TIME=$(date +%s)
 
 # Database credentials
 DB_USER=${POSTGRES_USER:-postgres}
@@ -62,32 +64,60 @@ error_log() {
 
 # Check if database is accepting connections
 check_connection() {
-    if PGPASSWORD=$POSTGRES_PASSWORD pg_isready -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" >/dev/null 2>&1; then
+    local output
+    output=$(PGPASSWORD=$POSTGRES_PASSWORD pg_isready -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" 2>&1 || true)
+
+    # Accepting connections normally
+    if echo "$output" | grep -q "accepting connections"; then
         return 0
-    else
-        LAST_FAILURE_REASON="Database connection failed"
-        FAILURE_DETAILS="pg_isready check failed for $DB_USER@$DB_HOST:$DB_NAME"
+    fi
+
+    # Database is still starting up (57P03)
+    if echo "$output" | grep -q "starting up"; then
+        local elapsed=$(( $(date +%s) - START_TIME ))
+        if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+            log "Database is still starting up (${elapsed}/${STARTUP_GRACE_PERIOD}s)"
+            return 0
+        fi
+        LAST_FAILURE_REASON="Database still starting after grace period"
+        FAILURE_DETAILS="$output"
         return 1
     fi
+
+    LAST_FAILURE_REASON="Database connection failed"
+    FAILURE_DETAILS="$output"
+    return 1
 }
 
 # Check for corruption indicators in logs
 check_for_corruption() {
-    # Check if PostgreSQL process is running
-    local pg_pid
-    pg_pid=$(pgrep postgres | head -1 2>/dev/null)
-    if [ -n "$pg_pid" ]; then
-        if ! kill -0 "$pg_pid" 2>/dev/null; then
-            error_log "PostgreSQL process $pg_pid is not running"
-            LAST_FAILURE_REASON="PostgreSQL process not running"
-            FAILURE_DETAILS="Process $pg_pid not found"
+    # Skip corruption checks during initial startup grace period
+    local elapsed=$(( $(date +%s) - START_TIME ))
+    if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+        return 0
+    fi
+    
+    # Skip local process check if monitoring a remote Postgres instance
+    if [[ "$DB_HOST" != "localhost" && "$DB_HOST" != "127.0.0.1" && "$DB_HOST" != "0.0.0.0" ]]; then
+        # Only analyze logs; assume process is remote
+        : # no-op; continue to log inspection below
+    else
+        # Check if PostgreSQL process is running locally
+        local pg_pid
+        pg_pid=$(pgrep postgres | head -1 2>/dev/null)
+        if [ -n "$pg_pid" ]; then
+            if ! kill -0 "$pg_pid" 2>/dev/null; then
+                error_log "PostgreSQL process $pg_pid is not running"
+                LAST_FAILURE_REASON="PostgreSQL process not running"
+                FAILURE_DETAILS="Process $pg_pid not found"
+                return 1
+            fi
+        else
+            error_log "No PostgreSQL process found"
+            LAST_FAILURE_REASON="No PostgreSQL process found"
+            FAILURE_DETAILS="pgrep postgres returned no results"
             return 1
         fi
-    else
-        error_log "No PostgreSQL process found"
-        LAST_FAILURE_REASON="No PostgreSQL process found"
-        FAILURE_DETAILS="pgrep postgres returned no results"
-        return 1
     fi
     
     # Check our captured PostgreSQL logs for corruption indicators
@@ -114,6 +144,12 @@ check_for_corruption() {
 
 # Test basic database functionality
 test_database_functionality() {
+    # Skip detailed tests during startup grace period
+    local elapsed=$(( $(date +%s) - START_TIME ))
+    if [ "$elapsed" -lt "$STARTUP_GRACE_PERIOD" ]; then
+        return 0
+    fi
+    
     # Test simple query
     if ! PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "SELECT 1;" >/dev/null 2>&1; then
         error_log "Basic database query failed"
@@ -388,8 +424,8 @@ get_k8s_info() {
         fi
         
         # Get node name if available
-        if [ -n "$NODE_NAME" ]; then
-            k8s_info="$k8s_info\n• Node: $NODE_NAME"
+        if [ -n "${NODE_NAME:-}" ]; then
+            k8s_info="$k8s_info\n• Node: ${NODE_NAME:-Unknown}"
         fi
     fi
     

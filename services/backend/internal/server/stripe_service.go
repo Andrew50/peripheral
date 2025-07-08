@@ -22,10 +22,20 @@ import (
 	"github.com/stripe/stripe-go/v78/webhook"
 )
 
+const DBContextTimeout = 1 * time.Minute
+
 func init() {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 	if stripe.Key == "" {
 		log.Println("Warning: STRIPE_SECRET_KEY not set")
+	}
+
+	// Fail fast if the webhook signing secret is missing. Without it we would silently
+	// accept every webhook request and leave subscriptions inactive, which is a
+	// critical mis-configuration. Crash the process so the deployment is marked
+	// unhealthy and operators notice immediately.
+	if os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
+		log.Fatal("STRIPE_WEBHOOK_SECRET not set – aborting startup")
 	}
 }
 
@@ -294,7 +304,7 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 		planName = "Unknown" // Fallback so we can still mark the subscription active
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Safely grab customer and subscription IDs (objects may be nil)
@@ -322,6 +332,7 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 		planName,
 		userID)
 	if err != nil {
+		log.Printf("Critical: failed to update user subscription for user %d: %v", userID, err)
 		return fmt.Errorf("error updating user subscription: %v", err)
 	}
 
@@ -343,7 +354,7 @@ func handleStripeSubscriptionDeleted(conn *data.Conn, event stripe.Event) error 
 		return fmt.Errorf("error parsing subscription: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Get user ID first
@@ -387,7 +398,7 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		return fmt.Errorf("error parsing subscription: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Determine the correct status based on Stripe subscription state
@@ -492,7 +503,7 @@ func handleStripePaymentFailed(conn *data.Conn, event stripe.Event) error {
 		return nil // Not a subscription invoice
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Update subscription status to past_due
@@ -521,7 +532,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		return nil // Not a subscription invoice
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
 	defer cancel()
 
 	// Fetch the current subscription from Stripe to get up-to-date plan information

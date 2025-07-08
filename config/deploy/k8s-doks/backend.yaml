@@ -156,6 +156,8 @@ spec:
                 secretKeyRef:
                   name: stripe-secret
                   key: STRIPE_PUBLISHABLE_KEY
+            - name: ENVIRONMENT
+              value: ${ENVIRONMENT}
           resources:
             requests:
               cpu: "300m"

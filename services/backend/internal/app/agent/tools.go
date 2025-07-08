@@ -45,7 +45,7 @@ var (
 		"getSecurityID": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getSecurityID",
-				Description: "Get the security ID from a security ticker symbol.",
+				Description: "Get the security ID for a given ticker. This is not necessary unless other tools require securityID as an argument.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{

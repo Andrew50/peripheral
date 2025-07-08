@@ -735,7 +735,7 @@
 
 				const errorMessage: Message = {
 					message_id: errorMessageId,
-					content: `Error: ${error.message || 'Failed to get response'}`,
+					content: 'Error: ' + getFriendlyErrorMessage(error),
 					sender: 'assistant',
 					timestamp: new Date(),
 					status: 'error'
@@ -787,7 +787,7 @@
 			if (loadingMessage) {
 				const errorMessage: Message = {
 					message_id: errorMessageId,
-					content: `Error: ${error.message || 'An unexpected error occurred'}`,
+					content: 'Error: ' + getFriendlyErrorMessage(error),
 					sender: 'assistant',
 					timestamp: new Date(),
 					status: 'error'
@@ -895,8 +895,6 @@
 		return null;
 	}
 
-
-
 	// Function to navigate to a specific page
 	function goToPage(tableKey: string, pageNumber: number, totalPages: number) {
 		if (pageNumber >= 1 && pageNumber <= totalPages) {
@@ -948,7 +946,7 @@
 			if (valB == null) return -1;
 
 			let comparison = 0;
-			
+
 			// Check if both values are already numbers
 			if (typeof valA === 'number' && typeof valB === 'number') {
 				comparison = valA - valB;
@@ -956,11 +954,11 @@
 				// Convert to strings for comparison
 				const strA = String(valA).trim();
 				const strB = String(valB).trim();
-				
+
 				// Check if both strings represent numbers (more strict check)
 				const numA = parseFloat(strA);
 				const numB = parseFloat(strB);
-				
+
 				// Only treat as numbers if the entire string is a valid number
 				if (!isNaN(numA) && !isNaN(numB) && strA === numA.toString() && strB === numB.toString()) {
 					comparison = numA - numB;
@@ -1371,6 +1369,21 @@
 			];
 		}
 	}
+
+	// Helper to translate technical error messages into user-friendly text
+	function getFriendlyErrorMessage(error: any): string {
+		if (!error || !error.message) {
+			return 'An unexpected error occurred';
+		}
+		const msg: string = String(error.message);
+		if (msg.includes('WebSocket connection closed')) {
+			return 'Lost connection to the server. Please try again.';
+		}
+		if (msg.toLowerCase().includes('timeout')) {
+			return 'The request timed out. Please try again.';
+		}
+		return msg;
+	}
 </script>
 
 <div class="chat-container">
@@ -1430,8 +1443,8 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-								<MessageTimeline 
-									timeline={processingTimeline} 
+								<MessageTimeline
+									timeline={processingTimeline}
 									currentStatus={$functionStatusStore?.userMessage || 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
@@ -1514,7 +1527,12 @@
 													}}
 
 													{#if tableData}
-														{@const paginationState = tablePaginationStates[tableKey] || (tablePaginationStates[tableKey] = { currentPage: 1, rowsPerPage: 5 })}
+														{@const paginationState =
+															tablePaginationStates[tableKey] ||
+															(tablePaginationStates[tableKey] = {
+																currentPage: 1,
+																rowsPerPage: 5
+															})}
 														{@const currentPage = paginationState.currentPage}
 														{@const rowsPerPage = paginationState.rowsPerPage}
 														{@const totalRows = tableData.rows.length}
@@ -1583,47 +1601,80 @@
 																	</tbody>
 																</table>
 															</div>
-															
+
 															{#if totalPages > 1}
 																<div class="table-pagination">
 																	<div class="pagination-controls">
-																		
 																		<button
-																			class="pagination-btn glass glass--small {1 === currentPage ? 'active' : ''}"
+																			class="pagination-btn glass glass--small {1 === currentPage
+																				? 'active'
+																				: ''}"
 																			on:click={() => goToPage(tableKey, 1, totalPages)}
 																			title="First page"
 																		>
-																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-																				<path d="M18.41,16.59L13.82,12L18.41,7.41L17,6L11,12L17,18L18.41,16.59M6,6H8V18H6V6Z"/>
+																			<svg
+																				viewBox="0 0 24 24"
+																				width="14"
+																				height="14"
+																				fill="currentColor"
+																			>
+																				<path
+																					d="M18.41,16.59L13.82,12L18.41,7.41L17,6L11,12L17,18L18.41,16.59M6,6H8V18H6V6Z"
+																				/>
 																			</svg>
 																		</button>
 																		<button
 																			class="pagination-btn glass glass--small"
-																			on:click={() => previousPage(tableKey, currentPage, totalPages)}
+																			on:click={() =>
+																				previousPage(tableKey, currentPage, totalPages)}
 																			disabled={currentPage === 1}
 																			title="Previous page"
 																		>
-																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-																				<path d="M15.41,16.59L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.59Z"/>
+																			<svg
+																				viewBox="0 0 24 24"
+																				width="14"
+																				height="14"
+																				fill="currentColor"
+																			>
+																				<path
+																					d="M15.41,16.59L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.59Z"
+																				/>
 																			</svg>
 																		</button>
 																		<button
-																		class="pagination-btn glass glass--small"
-																		on:click={() => nextPage(tableKey, currentPage, totalPages)}
-																		disabled={currentPage === totalPages}
-																		title="Next page"
+																			class="pagination-btn glass glass--small"
+																			on:click={() => nextPage(tableKey, currentPage, totalPages)}
+																			disabled={currentPage === totalPages}
+																			title="Next page"
 																		>
-																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-																				<path d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z"/>
+																			<svg
+																				viewBox="0 0 24 24"
+																				width="14"
+																				height="14"
+																				fill="currentColor"
+																			>
+																				<path
+																					d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z"
+																				/>
 																			</svg>
 																		</button>
 																		<button
-																			class="pagination-btn glass glass--small {totalPages === currentPage ? 'active' : ''}"
+																			class="pagination-btn glass glass--small {totalPages ===
+																			currentPage
+																				? 'active'
+																				: ''}"
 																			on:click={() => goToPage(tableKey, totalPages, totalPages)}
 																			title="Last page"
 																		>
-																			<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-																				<path d="M5.59,7.41L10.18,12L5.59,16.59L7,18L13,12L7,6L5.59,7.41M16,6H18V18H16V6Z"/>
+																			<svg
+																				viewBox="0 0 24 24"
+																				width="14"
+																				height="14"
+																				fill="currentColor"
+																			>
+																				<path
+																					d="M5.59,7.41L10.18,12L5.59,16.59L7,18L13,12L7,6L5.59,7.41M16,6H18V18H16V6Z"
+																				/>
 																			</svg>
 																		</button>
 																	</div>

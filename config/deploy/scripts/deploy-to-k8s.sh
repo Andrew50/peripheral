@@ -88,36 +88,20 @@ for dep in "${SERVICES_ARRAY[@]}"; do
   fi
   
   # Set maximum attempts and timeout per attempt
-  MAX_ATTEMPTS=5  # Total of 12 attempts
-  TIMEOUT_PER_ATTEMPT="1m"  # 1 minute per attempt (total 12 minutes max)
+  MAX_ATTEMPTS=20  # 20 attempts
+  TIMEOUT_PER_ATTEMPT="30s"  # 30 seconds per attempt (total 10 minutes max)
   
   # Try rollout status with multiple short attempts
   success=false
   for attempt in $(seq 1 $MAX_ATTEMPTS); do
-    echo "Attempt $attempt/$MAX_ATTEMPTS for deployment: $dep"
-    
+    echo "Waiting for ${dep} rollout (attempt ${attempt}/${MAX_ATTEMPTS})..."
     if kubectl rollout status "deployment/${dep}" --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" --timeout="${TIMEOUT_PER_ATTEMPT}"; then
-      echo "Deployment ${dep} successfully rolled out on attempt $attempt."
+      echo "Deployment ${dep} successfully rolled out on attempt ${attempt}."
       success=true
       break
-    else
-      echo "Rollout not complete after attempt $attempt. Checking deployment status..."
-      
-      # Show deployment status after each attempt
-      echo "Current deployment status for ${dep}:"
-      kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" -o wide
-      
-      # Show pod status
-      echo "Current pod status for ${dep}:"
-      POD_SELECTOR=$(kubectl get deployment "${dep}" --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" -o jsonpath='{.spec.selector.matchLabels.app}')
-      kubectl get pods --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" -l "app=${POD_SELECTOR}" -o wide
-      
-      # If this is the last attempt, we'll do more detailed diagnostics
-      if [[ $attempt -eq $MAX_ATTEMPTS ]]; then
-        break
-      fi
-      
-      echo "Waiting before next attempt..."
+    fi
+    # Only sleep between attempts if not the last one
+    if [[ ${attempt} -lt ${MAX_ATTEMPTS} ]]; then
       sleep 10
     fi
   done
@@ -161,6 +145,14 @@ for dep in "${SERVICES_ARRAY[@]}"; do
     echo "Recent pod events:"
     kubectl get events --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" --field-selector="involvedObject.kind=Pod" | grep -i "${dep}" | tail -20
     
+    # Collect logs from all pods in the namespace for deeper diagnostics
+    echo "=== Logs for ALL pods in namespace ${K8S_NAMESPACE} ==="
+    ALL_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" -o jsonpath='{.items[*].metadata.name}')
+    for pod in $ALL_PODS; do
+      echo "---- Last 200 lines for pod $pod ----"
+      kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" --tail=200 || true
+    done
+    
     # Fail the deployment process for all services consistently
     echo "ERROR: Deployment ${dep} failed to roll out after $MAX_ATTEMPTS attempts."
     echo "You can check its status later with: kubectl rollout status deployment/${dep} -n ${K8S_NAMESPACE}"
@@ -203,5 +195,13 @@ else
 fi
 
 # The temporary directory cleanup is handled by a subsequent script.
+
+# 9. Print logs from all pods regardless of rollout result
+echo "=== Final logs for ALL pods in namespace ${K8S_NAMESPACE} ==="
+ALL_PODS=$(kubectl get pods --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" -o jsonpath='{.items[*].metadata.name}')
+for pod in $ALL_PODS; do
+  echo "---- Last 200 lines for pod $pod ----"
+  kubectl logs "$pod" --namespace="${K8S_NAMESPACE}" --context="${MINIKUBE_PROFILE}" --tail=200 || true
+done
 
 echo "Deploy-to-K8s script complete. All deployments successful in namespace ${K8S_NAMESPACE}."

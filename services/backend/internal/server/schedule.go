@@ -490,6 +490,21 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	jobName := job.Name
 	startTime := time.Now()
 
+	// Recover from panics to avoid scheduler crash
+	defer func() {
+		if rec := recover(); rec != nil {
+			var err error
+			switch x := rec.(type) {
+			case error:
+				err = fmt.Errorf("panic: %w", x)
+			default:
+				err = fmt.Errorf("panic: %v", x)
+			}
+			_ = alerts.LogCriticalAlert(err)
+			log.Printf("❌ Job %s panicked: %v", jobName, err)
+		}
+	}()
+
 	// Log job start
 	log.Printf("🚀 Starting job: %s at %s", jobName, startTime.Format("2006-01-02 15:04:05"))
 
@@ -511,6 +526,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Handle completion logging based on execution result
 	if err != nil {
 		log.Printf("❌ Job %s FAILED after %v: %v", jobName, duration, err)
+		_ = alerts.LogCriticalAlert(err)
 		return
 	}
 

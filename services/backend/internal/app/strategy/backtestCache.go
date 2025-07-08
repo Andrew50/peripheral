@@ -33,7 +33,16 @@ func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, stra
 			if err != nil {
 				return nil, fmt.Errorf("error running backtest: %v", err)
 			}
-			return backtestResponse.(*BacktestResponse), nil
+
+			// Handle both pointer and value types conservatively.
+			switch v := backtestResponse.(type) {
+			case *BacktestResponse:
+				return v, nil
+			case BacktestResponse:
+				return &v, nil
+			default:
+				return nil, fmt.Errorf("unexpected type %T returned from RunBacktest", backtestResponse)
+			}
 		}
 		return nil, fmt.Errorf("error getting backtest cache: %v", err)
 	}
@@ -48,6 +57,7 @@ func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, stra
 
 	return &response, nil
 }
+
 func InvalidateBacktestInstancesCache(ctx context.Context, conn *data.Conn, userID int, strategyID int) error {
 	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
 

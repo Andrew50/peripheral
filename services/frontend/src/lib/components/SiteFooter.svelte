@@ -51,7 +51,7 @@
 					<a href="https://twitter.com/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="X (Twitter)">
 						<img src="/x-logo-white.png" alt="X (Twitter)" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 					</a>
-					<a href="https://discord.gg/peripheral" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="Discord">
+					<a href="https://discord.gg/HpQ8ZbvDkV" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="Discord">
 						<img src="/Discord-Symbol-White.png" alt="Discord" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 					</a>
 					<a href="https://www.linkedin.com/company/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="LinkedIn">

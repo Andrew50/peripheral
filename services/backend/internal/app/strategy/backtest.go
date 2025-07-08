@@ -305,7 +305,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	for i := range responseWithInstances.StrategyPlots {
 		responseWithInstances.StrategyPlots[i].Data = []map[string]any{}
 	}
-	response := BacktestResponse{
+	response := &BacktestResponse{
 		Summary:        summary,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  responseWithInstances.StrategyPlots,

@@ -130,9 +130,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		// Measure the time spent establishing the object stream from S3.
 		fetchStart := time.Now()
-		ctxObj, cancel := context.WithTimeout(b.ctx, 15*time.Minute)
-		resp, err := b.s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(b.bucket), Key: aws.String(file)})
-		cancel()
+		resp, err := getS3ObjectWithRetry(b.ctx, b.s3c, b.bucket, file, 3)
 		b.fetchDur += time.Since(fetchStart)
 		if err != nil {
 			return 0, fmt.Errorf("get object %s: %w", file, err)
@@ -517,15 +515,59 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 }
 
 // -----------------------------------------------------------------------------
+// S3 retry helpers
+// -----------------------------------------------------------------------------
+
+// getS3ObjectWithRetry downloads an S3 object with exponential backoff retry on rate limits
+func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key string, maxRetries int) (*s3.GetObjectOutput, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2^attempt seconds, capped at 30 seconds
+			backoffDuration := time.Duration(1<<attempt) * time.Second
+			if backoffDuration > 30*time.Second {
+				backoffDuration = 30 * time.Second
+			}
+
+			log.Printf("S3 GetObject rate limited for %s (attempt %d/%d), backing off for %v...", key, attempt, maxRetries, backoffDuration)
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoffDuration):
+			}
+		}
+
+		ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
+		resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+		cancel()
+
+		if err != nil {
+			lastErr = err
+
+			// Check if this is a rate limit error
+			if isS3RateLimitError(err) {
+				continue // Retry on rate limit
+			}
+
+			// For non-rate-limit errors, fail immediately
+			return nil, err
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("S3 GetObject failed after %d retries for %s, last error: %w", maxRetries, key, lastErr)
+}
+
+// -----------------------------------------------------------------------------
 // COPY helpers & failed-file tracking structs
 // -----------------------------------------------------------------------------
 
 func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, key, table string) error {
-	// Download object with generous timeout – single-file fallback path.
-	ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
-
-	resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	// Download object with retry logic for rate limiting
+	resp, err := getS3ObjectWithRetry(ctx, s3c, bucket, key, 3)
 	if err != nil {
 		return err
 	}

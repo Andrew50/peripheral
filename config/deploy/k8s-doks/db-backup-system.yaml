@@ -101,9 +101,7 @@ spec:
                 - name: DB_HOST
                   value: "db"
                 - name: ENVIRONMENT
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.namespace
+                  value: ${ENVIRONMENT}
                 - name: TELEGRAM_BOT_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -178,14 +176,14 @@ spec:
               value: "60"
             - name: MAX_FAILURE_COUNT
               value: "3"
+            - name: STARTUP_GRACE_PERIOD
+              value: "300"
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: ENVIRONMENT
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ${ENVIRONMENT}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:

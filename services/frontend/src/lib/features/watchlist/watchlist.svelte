@@ -42,11 +42,6 @@
 		);
 	}
 
-	// Helper function to get first letter of watchlist name
-	function getWatchlistInitial(name: string): string {
-		return name.charAt(0).toUpperCase();
-	}
-
 	// Watchlist tab functionality
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
@@ -178,7 +173,11 @@
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
 
 	// Automatically select the first watchlist if none is selected
-	$: if ($watchlists && $watchlists.length > 0 && (!currentWatchlistId || isNaN(currentWatchlistId))) {
+	$: if (
+		$watchlists &&
+		$watchlists.length > 0 &&
+		(!currentWatchlistId || isNaN(currentWatchlistId))
+	) {
 		selectWatchlist(String($watchlists[0].watchlistId));
 	}
 
@@ -231,42 +230,6 @@
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
-	<!-- Shortcut buttons -->
-	<div class="watchlist-shortcuts-container">
-		<div class="watchlist-shortcuts">
-			{#if Array.isArray($watchlists)}
-				{#each $watchlists as watchlist}
-					<button
-						class="shortcut-button {$globalCurrentWatchlistId === watchlist.watchlistId
-							? 'active'
-							: ''}"
-						title={watchlist.watchlistName}
-						on:click={() => switchToWatchlist(watchlist.watchlistId)}
-					>
-						{#if watchlist.watchlistName.toLowerCase() === 'flag'}
-							<span class="flag-shortcut-icon">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M5 5v14"></path>
-									<path d="M19 5l-6 4 6 4-6 4"></path>
-								</svg>
-							</span>
-						{:else}
-							{getWatchlistInitial(watchlist.watchlistName)}
-						{/if}
-					</button>
-				{/each}
-			{/if}
-		</div>
-	</div>
-
 	<!-- Watchlist Tabs -->
 	<div class="watchlist-tabs-container">
 		{#if !showWatchlistInput}
@@ -367,20 +330,6 @@
 </div>
 
 <style>
-	.watchlist-shortcuts-container {
-		display: flex;
-		justify-content: flex-start;
-		align-items: center;
-		padding: 12px;
-		width: 100%;
-	}
-
-	.watchlist-shortcuts {
-		display: flex;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-
 	.watchlist-tabs-container {
 		display: flex;
 		align-items: center;
@@ -553,37 +502,6 @@
 		color: #ffffff;
 	}
 
-	.shortcut-button {
-		padding: 0;
-		color: #ffffff;
-		font-size: 0.65rem;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-		width: 24px;
-		height: 24px;
-		min-width: 24px;
-		min-height: 24px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 50%;
-	}
-
-	.shortcut-button:hover {
-		background: rgba(255, 255, 255, 0.9);
-		border-color: rgba(255, 255, 255, 0.4);
-		color: #000;
-	}
-
-	.shortcut-button.active {
-		background: rgba(255, 255, 255, 0.2);
-		color: #ffffff;
-		border-color: rgba(255, 255, 255, 0.6);
-	}
-
 	.feature-container {
 		display: flex;
 		flex-direction: column;
@@ -639,18 +557,5 @@
 		border-radius: 0;
 		display: flex;
 		flex-direction: column;
-	}
-
-	/* Shortcut flag icon styling */
-	.flag-shortcut-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.flag-shortcut-icon svg {
-		width: 10px;
-		height: 10px;
-		color: #4a80f0;
-		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 	}
 </style>
