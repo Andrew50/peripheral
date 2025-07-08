@@ -32,4 +32,4 @@ export const chipIdeas: ChipIdea[] = [
     { icon: "📈", text: "Analyze buying leaps on QQQ after a 10% market correction."},
     { icon: "💰", text: "Examine the performance of crypto stocks after the GENIUS act was passed."},
     { icon: "🗓️", text: "Compare the performance of stocks after the 2016 and 2024 elections."},
-]; 
+];
