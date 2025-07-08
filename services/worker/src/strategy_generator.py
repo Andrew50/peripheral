@@ -682,7 +682,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             # Use only o3 model as requested
             models_to_try = [
-                ("o4-mini", None),                # o3 model only
+                ("o3", None),                # o3 model only
             ]
             
             last_error = None
@@ -694,6 +694,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                     
                     response = self.openai_client.responses.create(
                         model=model_name,
+                        reasoning={"effort": "low"},
                         input=f"{user_prompt}",
                         instructions=f"{system_instruction}",
                         user=f"user:{userID}",
