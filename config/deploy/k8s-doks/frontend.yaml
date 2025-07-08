@@ -26,6 +26,8 @@ spec:
               cpu: 500m
               memory: 512Mi
           env:
+            - name: BACKEND_URL
+              value: "http://backend:5058"
             - name: PUBLIC_STRIPE_KEY
               valueFrom:
                 secretKeyRef:
