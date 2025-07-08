@@ -47,7 +47,7 @@ export function logout(redirectPath: string = '/login') {
 	sessionStorage.removeItem('profilePic');
 
 	// Redirect to specified path
-	goto(redirectPath);
+	window.location.href = "/";
 }
 
 /**

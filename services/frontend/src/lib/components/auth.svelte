@@ -1,14 +1,13 @@
 <!-- auth.svelte -->
 <script lang="ts">
 	import { publicRequest } from '$lib/utils/helpers/backend';
-	import '$lib/styles/splash.css';
 	import { browser } from '$app/environment';
 	import type { LoginResponse } from '$lib/auth';
 	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
 	import { createEventDispatcher, onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import '$lib/styles/splash.css';
 
 	const dispatch = createEventDispatcher();
 
@@ -291,12 +290,16 @@
 </div>
 
 <style>
+	/* Global styles */
+	:global(*) {
+			box-sizing: border-box;
+	}
 	/* Use splash.css color system for consistency */
 	.auth-page {
 		width: 100%;
 		min-height: 70vh;
-		background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
-		color: var(--color-dark);
+		background: linear-gradient(135deg, var(--color-light, #B8E3E9) 0%, var(--color-accent, #93B1B5) 100%);
+		color: var(--color-dark, #0B2E33);
 		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		display: flex;
 		flex-direction: column;
@@ -327,7 +330,7 @@
 		font-size: 2rem;
 		font-weight: 700;
 		margin: 0 0 0.5rem 0;
-		color: var(--color-dark);
+		color: var(--color-dark, #0B2E33);
 		line-height: 1.2;
 	}
 
@@ -346,7 +349,7 @@
 		background: rgba(255, 255, 255, 1);
 		border: 1.5px solid #000000;
 		border-radius: 12px;
-		color: var(--color-dark);
+		color: var(--color-dark, #0B2E33);
 		font-family: 'Inter', sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
@@ -395,20 +398,20 @@
 		border: 1.5px solid #000000;
 		border-radius: 12px;
 		background: rgba(255, 255, 255, 1);
-		color: var(--color-dark);
+		color: #0B2E33;
 		font-size: 0.95rem;
 		font-family: 'Inter', sans-serif;
 		transition: all 0.3s ease;
 	}
 
 	.auth-input::placeholder {
-		color: var(--color-primary);
+		color: #4F7C82;
 		opacity: 0.6;
 	}
 
 	.auth-input:focus {
 		outline: none;
-		border-color: var(--color-primary);
+		border-color: var(--color-primary, #4F7C82);
 		background: rgba(255, 255, 255, 0.9);
 		box-shadow: 0 0 0 3px rgba(79, 124, 130, 0.1);
 	}
@@ -422,7 +425,7 @@
 	.submit-button {
 		width: 100%;
 		height: 52px;
-		background: var(--color-dark);
+		background: var(--color-dark, #0B2E33);
 		color: white;
 		border: none;
 		border-radius: 12px;

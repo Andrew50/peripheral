@@ -8,7 +8,7 @@
 	let isHeaderVisible = true;
 	let isHeaderTransparent = true;
 	let prevScrollY = 0;
-
+	import '$lib/styles/splash.css';
 	function handleScroll() {
 		const currentY = window.scrollY;
 		const isOnSplashPage = window.location.pathname === '/';
@@ -19,7 +19,7 @@
 			isHeaderVisible = false;
 		}
 		// Make header transparent near the top of the page
-		isHeaderTransparent = currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
+		isHeaderTransparent =  currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
 		prevScrollY = currentY;
 	}
 
@@ -165,7 +165,9 @@
 		pointer-events: none;
 		transition: transform 0.4s cubic-bezier(.4, 0, .2, 1), opacity 0.4s cubic-bezier(.4, 0, .2, 1);
 	}
-
+	:global(*) {
+			box-sizing: border-box;
+	}
 	/* Responsive tweaks */
 	@media (max-width: 768px) {
 		.header-content {

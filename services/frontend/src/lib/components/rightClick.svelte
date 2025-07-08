@@ -194,10 +194,9 @@
 		style="top: {$rightClickQuery.y}px; left: {$rightClickQuery.x}px;"
 	>
 		<div class="header content-padding">
-			<div class="ticker">{$rightClickQuery.instance.ticker || ''}</div>
-			<div class="timestamp fluid-text">
-				{$rightClickQuery.instance.timestamp
-					? UTCTimestampToESTString($rightClickQuery.instance.timestamp)
+			<div class="header-text">
+				<b>{$rightClickQuery.instance.ticker || ''}</b> {$rightClickQuery.instance.timestamp
+					? UTCTimestampToESTString($rightClickQuery.instance.timestamp, $rightClickQuery.instance.timeframe?.includes('d') || $rightClickQuery.instance.timeframe?.includes('w') || $rightClickQuery.instance.timeframe?.includes('m'))
 					: ''}
 			</div>
 		</div>
