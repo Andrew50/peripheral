@@ -674,11 +674,11 @@
 									</button>
 								{:else if plan.plan_name.toLowerCase() === 'free'}
 									{#if !$subscriptionStatus.isActive && isAuthenticated()}
-										<button class="landing-button primary full-width current" disabled>
+										<button class="subscribe-button current" disabled>
 											Current Plan
 										</button>
 									{:else if $subscriptionStatus.isActive}
-										<button class="landing-button secondary full-width" disabled>
+										<button class="subscribe-button" disabled>
 											Downgrade not available
 										</button>
 									{:else}
@@ -1257,6 +1257,13 @@
 
 	.subscribe-button.pro:active:not(:disabled) {
 		background: #e0e0e0;
+	}
+
+	/* Greyed-out styling for disabled/current subscribe buttons (Free plan, downgrade) */
+	.subscribe-button.current {
+		background: rgba(255, 255, 255, 0.08);
+		color: rgba(255, 255, 255, 0.8);
+		cursor: not-allowed;
 	}
 
 
