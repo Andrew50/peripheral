@@ -48,7 +48,6 @@
 	// Server-injected data (bars for SPY) forwarded from route
     export let defaultKey: string;
     export let chartsByKey: Record<string, {chartData: {bars: any[]}; timeframe: string, ticker: string}>;
-    export let defaultChartData: any;
 
     const chartPool = chartsByKey;
     let activeKey = defaultKey;
