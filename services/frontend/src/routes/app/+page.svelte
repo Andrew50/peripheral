@@ -1085,6 +1085,14 @@
 			await fetchSubscriptionStatus();
 		}
 	}
+
+	// Update the site title to reflect the active chart's ticker (or fallback when none)
+	$: if (browser) {
+		const siteTitle = $activeChartInstance?.ticker || 'Peripheral';
+		if (document.title !== siteTitle) {
+			document.title = siteTitle;
+		}
+	}
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
