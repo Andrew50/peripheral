@@ -74,7 +74,7 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 	}
 
 	fc := &failedCollector{}
-	bulkConnPool, err := newBulkLoadPool(ctx, db)
+	bulkConnPool, err := newBulkLoadPoolWithRetry(ctx, db)
 	if err != nil {
 		return fmt.Errorf("create bulk load pool: %w", err)
 	}

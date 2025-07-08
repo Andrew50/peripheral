@@ -170,7 +170,7 @@ func fetch(ctx context.Context, url string) ([]byte, error) {
 // ------------------------------------------------------------------- //
 
 func applyUpdate(ctx context.Context, db *pgxpool.Pool, ticker string, m meta) error {
-	_, err := db.Exec(ctx,
+	_, err := data.ExecWithRetry(ctx, db, // switched to robust retry helper
 		`UPDATE securities
 		    SET sector = $1,
 		        industry = $2

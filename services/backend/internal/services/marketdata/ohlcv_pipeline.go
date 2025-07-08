@@ -24,6 +24,12 @@ import (
 
 // -----------------------------------------------------------------------------
 // Performance-optimised connection pool for bulk COPY
+//
+// Note: Connection pool creation includes retry logic to handle transient
+// database connectivity issues (e.g., during database restarts, maintenance
+// windows, or Kubernetes pod rescheduling). The retry wrapper will attempt
+// up to 5 times with exponential backoff for connection timeouts and dial
+// errors before failing the job.
 // -----------------------------------------------------------------------------
 
 type bulkLoadPool struct {
@@ -61,6 +67,68 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 	}
 
 	return &bulkLoadPool{pool: pool}, nil
+}
+
+// newBulkLoadPoolWithRetry wraps newBulkLoadPool with retry logic for transient connection failures.
+// This handles cases where the database is temporarily unavailable (restarts, maintenance, etc.).
+func newBulkLoadPoolWithRetry(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, error) {
+	const maxAttempts = 5
+	const baseDelay = 2 * time.Second
+	const maxDelay = 30 * time.Second
+
+	var lastErr error
+	delay := baseDelay
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Check if context was cancelled before attempting
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		blp, err := newBulkLoadPool(ctx, db)
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("✅ Bulk load pool created successfully on attempt %d/%d", attempt, maxAttempts)
+			}
+			return blp, nil
+		}
+
+		lastErr = err
+
+		// Check if this looks like a transient connection error
+		isTransientError := strings.Contains(err.Error(), "dial error") ||
+			strings.Contains(err.Error(), "i/o timeout") ||
+			strings.Contains(err.Error(), "connection refused") ||
+			strings.Contains(err.Error(), "timeout")
+
+		// If it's not a transient error, fail immediately
+		if !isTransientError {
+			return nil, fmt.Errorf("create bulk load pool: %w", err)
+		}
+
+		// Don't retry on the last attempt
+		if attempt == maxAttempts {
+			break
+		}
+
+		log.Printf("⚠️ Bulk load pool creation failed (attempt %d/%d): %v - retrying in %v",
+			attempt, maxAttempts, err, delay)
+
+		// Sleep with context cancellation check
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+
+		// Exponential backoff with cap
+		delay *= 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+
+	return nil, fmt.Errorf("create bulk load pool failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (blp *bulkLoadPool) Close() { blp.pool.Close() }
@@ -657,7 +725,7 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 
 // copyCSV is no longer used but kept for reference; mark deprecated.
 // Deprecated: use the two-step staging load path instead.
-func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
+/*func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
 	pgErr := pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
 		pgc := c.Conn().PgConn()
 		sql := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", table)
@@ -665,7 +733,7 @@ func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader)
 		return err
 	})
 	return pgErr
-}
+}*/
 
 // Failure bookkeeping --------------------------------------------------------
 
@@ -704,6 +772,7 @@ func (fc *failedCollector) PopAll() []failedFile {
 
 // Processed-date tracking -----------------------------------------------------
 
+/*
 type processedDateTracker struct {
 	mu             sync.Mutex
 	processedDates map[time.Time]bool
@@ -733,6 +802,7 @@ func (p *processedDateTracker) GetConservativeUpdateDate() time.Time {
 	}
 	return earliest.AddDate(0, 0, -1)
 }
+*/
 
 // parseDayFromKey extracts YYYY-MM-DD from an S3 key that ends with .csv.gz.
 func parseDayFromKey(key string) (time.Time, error) {
