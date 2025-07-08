@@ -576,14 +576,14 @@
 			{#if pricingLoading}
 				<div class="loading-message">
 					<div class="landing-loader"></div>
-					<span>Loading pricing information...</span>
+					<span></span>
 				</div>
 			{:else if pricingError}
 				<div class="error-message">{pricingError}</div>
 			{:else if $subscriptionStatus.loading}
 				<div class="loading-message">
 					<div class="landing-loader"></div>
-					<span>Loading subscription information...</span>
+					<span></span>
 				</div>
 			{:else if $subscriptionStatus.error && isAuthenticated()}
 				<div class="error-message">{$subscriptionStatus.error}</div>
@@ -677,20 +677,20 @@
 											Downgrade not available
 										</button>
 									{:else}
-										<button class="landing-button secondary full-width" disabled>
-											Free Plan
+										<button class="subscribe-button" disabled>
+											Get Started Free
 										</button>
 									{/if}
 								{:else}
 									<button
-										class="landing-button primary full-width"
+										class="subscribe-button {plan.plan_name.toLowerCase() === 'pro' ? 'pro' : ''}"
 										on:click={() => handleUpgrade(plan.plan_name.toLowerCase())}
 										disabled={loadingStates[plan.plan_name.toLowerCase()]}
 									>
 										{#if loadingStates[plan.plan_name.toLowerCase()]}
 											<div class="landing-loader"></div>
 										{:else}
-											Choose {getPlanDisplayName(plan)}
+											Subscribe
 										{/if}
 									</button>
 								{/if}
@@ -1185,6 +1185,47 @@
 	}
 	.slider-option.active {
 		color: #000000;
+	}
+
+	/* Subscribe Button Styles – visually consistent with slider options */
+	.subscribe-button {
+		position: relative;
+		z-index: 1;
+		background: none;
+		border: 2px solid #f5f9ff;
+		padding: 0.875rem 2rem;
+		font-size: 1rem;
+		font-weight: 600;
+		cursor: pointer;
+		border-radius: 24px;
+		min-width: 120px;
+		font-family: 'Geist', 'Inter', sans-serif;
+		color: #f5f9ff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		white-space: nowrap;
+	}
+
+	.subscribe-button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	/* Pro plan subscribe button overrides */
+	.subscribe-button.pro {
+		background: #f5f9ff;
+		color: #000000;
+		border: 2px solid transparent;
+	}
+
+	.subscribe-button.pro:hover:not(:disabled) {
+		background: #e0e0e0;
+	}
+
+	.subscribe-button.pro:active:not(:disabled) {
+		background: #e0e0e0;
 	}
 
 
