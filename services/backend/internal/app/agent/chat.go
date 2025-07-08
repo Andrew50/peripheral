@@ -117,7 +117,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
-	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 15*time.Minute).Result()
+	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 1*time.Minute).Result() // 1 min for testing lol
 	if lockErr != nil {
 		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
 	}

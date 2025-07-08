@@ -10,7 +10,11 @@
 	import { get } from 'svelte/store';
 	import PlotChunk from '$lib/features/chat/components/PlotChunk.svelte';
 	import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
-
+	// Import chat utils for markdown parsing and ticker button functionality
+	import { parseMarkdown, handleTickerButtonClick } from '$lib/features/chat/utils';
+	// Import table-related types and functionality from chat interface
+	import type { SortState } from '$lib/features/chat/interface';
+    import type { ISeriesApi, Time, CandlestickData, CandlestickSeriesOptions, CandlestickStyleOptions, SeriesOptionsCommon, WhitespaceData, DeepPartial, HistogramData, HistogramSeriesOptions, HistogramStyleOptions, LineData, LineSeriesOptions, LineStyleOptions } from 'lightweight-charts';
     // ---------------------------------------------
 	// Chat message structures (mirrors main chat)
 	// ---------------------------------------------
@@ -37,8 +41,86 @@
 			Array.isArray(content.rows)
 		);
 	}
+
+	// Table state management (mirrors chat.svelte)
+	let tableSortStates: { [key: string]: SortState } = {};
+	let tablePaginationStates: { [key: string]: { currentPage: number; rowsPerPage: number } } = {};
 	// Server-injected data (bars for SPY) forwarded from route
-	export let defaultChartData: any = undefined;
+    export let defaultKey: string;
+    export let chartsByKey: Record<string, {chartData: {bars: any[]}; timeframe: string, ticker: string}>;
+    export let defaultChartData: any;
+
+    const chartPool = chartsByKey;
+    let activeKey = defaultKey;
+
+    function setChart(keys: string[], chartType: 'candle' | 'line') {
+        // Clear all series first
+        chartCandleSeries?.setData([]);
+        chartVolumeSeries?.setData([]);
+        chartLineSeries1?.setData([]);
+        chartLineSeries2?.setData([]);
+        chartLineSeries3?.setData([]);
+
+        if (chartType === 'line') {
+            // For line charts, use the first 3 keys for the 3 line series
+            const lineSeries = [chartLineSeries1, chartLineSeries2, chartLineSeries3];
+            
+            keys.slice(0, 3).forEach((key, index) => {
+                const slice = chartPool[key];
+                if (!slice) {
+                    console.warn('Chart slice not found for key', key);
+                    return;
+                }
+                const bars = slice.chartData.bars.map((bar: any) => ({
+                    time: bar.time as any,
+                    value: bar.close
+                }));
+                lineSeries[index]?.setData(bars);
+            });
+        }
+        
+        if (chartType === 'candle') {
+            const slice = chartPool[keys[0]];
+            if (!slice) {
+                console.warn('Chart slice not found for key', keys[0]);
+                return;
+            }
+
+            activeKey = keys[0];
+
+            // Map backend bars into lightweight-charts format
+            const bars = slice.chartData.bars.map((bar: any) => ({
+                time: bar.time as any,
+                open: bar.open,
+                high: bar.high,
+                low: bar.low,
+                close: bar.close,
+                volume: bar.volume ?? bar.v ?? bar.vol ?? 0
+            }));
+            chartCandleSeries?.setData(bars);
+            console.log('bars', bars);
+            chartVolumeSeries?.setData(
+                bars.map((b: any) => ({
+                    time: b.time,
+                    value: b.volume,
+                    color: b.close >= b.open ? '#26a69a' : '#ef5350'
+                }))
+            );
+
+            if (bars.length) {
+                const last = bars[bars.length - 1];
+                legendData = {
+                    open: last.open,
+                    high: last.high,
+                    low: last.low,
+                    close: last.close,
+                    volume: last.volume
+                } as any;
+            }
+        }
+    }
+
+
 
 	// ----- Local state -----
 	let isLoaded = false;
@@ -52,10 +134,53 @@
 	let typewriterInterval: NodeJS.Timeout;
 	// Control removal of the animation input bar after transition
 	let removeAnimationInput = false;
+    let chartContainerRef: HTMLDivElement;
 
-	let chartContainerRef: HTMLDivElement;
+	let chartCandleSeries: ISeriesApi<
+		'Candlestick',
+		Time,
+		WhitespaceData<Time> | CandlestickData<Time>,
+		CandlestickSeriesOptions,
+		DeepPartial<CandlestickStyleOptions & SeriesOptionsCommon>
+	>;
+    let chartVolumeSeries: ISeriesApi<
+		'Histogram',
+		Time,
+		WhitespaceData<Time> | HistogramData<Time>,
+		HistogramSeriesOptions,
+		DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>
+	>;
+
+	// Add 3 line series
+	let chartLineSeries1: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
+	let chartLineSeries2: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
+	let chartLineSeries3: ISeriesApi<
+		'Line',
+		Time,
+		WhitespaceData<Time> | LineData<Time>,
+		LineSeriesOptions,
+		DeepPartial<LineStyleOptions & SeriesOptionsCommon>
+	>;
 
 	let chatMessages: ChatMessage[] = [];
+
+	// After the declaration of chatMessages, add a reference for the chat messages element
+	let heroChatMessagesRef: HTMLDivElement;
+
+	// Create a wrapper function for the event listener to fix type mismatch
+	let tickerButtonHandler: ((event: Event) => void) | null = null;
 
 	/* ------------------------------------------------
 	   Timeline & typewriter helpers
@@ -70,12 +195,11 @@
 		chatMessages = [...chatMessages, msg];
 	}
 
-	function addAssistantMessage(text: string) {
+	function addAssistantMessage(contentChunks: ContentChunk[]) {
 		const msg: ChatMessage = {
 			message_id: 'hero_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
 			sender: 'assistant',
-			text,
-			contentChunks: [{ type: 'text', content: text }]
+			contentChunks
 		};
 		chatMessages = [...chatMessages, msg];
 	}
@@ -87,11 +211,131 @@
 	const timelineEvents: TimelineEvent[] = createTimelineEvents({
 		addUserMessage: addMessage,
 		addAssistantMessage,
-		removeLastMessage
+		removeLastMessage,
+		highlightEventForward,
+		setChart
 	});
 
 
 	let heroWrapper: HTMLElement;
+
+	// Function to safely access table data properties (mirrors chat.svelte)
+	function getTableData(content: any): TableData | null {
+		if (isTableData(content)) {
+			return content;
+		}
+		return null;
+	}
+
+	// Function to navigate to a specific page
+	function goToPage(tableKey: string, pageNumber: number, totalPages: number) {
+		if (pageNumber >= 1 && pageNumber <= totalPages) {
+			tablePaginationStates[tableKey].currentPage = pageNumber;
+			tablePaginationStates = { ...tablePaginationStates }; // Trigger reactivity
+		}
+	}
+
+	// Function to go to next page
+	function nextPage(tableKey: string, currentPage: number, totalPages: number) {
+		if (currentPage < totalPages) {
+			goToPage(tableKey, currentPage + 1, totalPages);
+		}
+	}
+
+	// Function to go to previous page
+	function previousPage(tableKey: string, currentPage: number, totalPages: number) {
+		if (currentPage > 1) {
+			goToPage(tableKey, currentPage - 1, totalPages);
+		}
+	}
+
+	// Function to sort table data
+	function sortTable(tableKey: string, columnIndex: number, tableData: TableData) {
+		const currentSortState = tableSortStates[tableKey] || { columnIndex: null, direction: null };
+		let newDirection: 'asc' | 'desc' | null = 'asc';
+
+		if (currentSortState.columnIndex === columnIndex) {
+			// Toggle direction if clicking the same column
+			newDirection = currentSortState.direction === 'asc' ? 'desc' : 'asc';
+		}
+
+		// Update sort state for this table
+		tableSortStates[tableKey] = { columnIndex, direction: newDirection };
+		tableSortStates = { ...tableSortStates }; // Trigger reactivity
+
+		// Sort the rows
+		tableData.rows.sort((a, b) => {
+			// Skip sorting if rows are not arrays
+			if (!Array.isArray(a) || !Array.isArray(b)) {
+				return 0;
+			}
+			const valA = a[columnIndex];
+			const valB = b[columnIndex];
+
+			// Handle null/undefined values
+			if (valA == null && valB == null) return 0;
+			if (valA == null) return 1;
+			if (valB == null) return -1;
+
+			let comparison = 0;
+
+			// Check if both values are already numbers
+			if (typeof valA === 'number' && typeof valB === 'number') {
+				comparison = valA - valB;
+			} else {
+				// Convert to strings for comparison
+				const strA = String(valA).trim();
+				const strB = String(valB).trim();
+
+				// Check if both strings represent numbers (more strict check)
+				const numA = parseFloat(strA);
+				const numB = parseFloat(strB);
+
+				// Only treat as numbers if the entire string is a valid number
+				if (!isNaN(numA) && !isNaN(numB) && strA === numA.toString() && strB === numB.toString()) {
+					comparison = numA - numB;
+				} else {
+					// String comparison (case-insensitive)
+					const lowerA = strA.toLowerCase();
+					const lowerB = strB.toLowerCase();
+					comparison = lowerA.localeCompare(lowerB);
+				}
+			}
+
+			return newDirection === 'asc' ? comparison : comparison * -1;
+		});
+
+		// Reset to page 1 when sorting to avoid confusion
+		if (tablePaginationStates[tableKey]) {
+			tablePaginationStates[tableKey].currentPage = 1;
+		}
+
+		// Find the message containing this table and update its content_chunks
+		// This is necessary because tableData is a copy within the #each loop
+		chatMessages = chatMessages.map((msg) => {
+			if (msg.contentChunks) {
+				msg.contentChunks = msg.contentChunks.map((chunk, idx) => {
+					const currentTableKey = msg.message_id + '-' + idx;
+					if (
+						currentTableKey === tableKey &&
+						chunk.type === 'table' &&
+						isTableData(chunk.content)
+					) {
+						// Return a new chunk object with the sorted rows
+						return {
+							...chunk,
+							content: {
+								...chunk.content,
+								rows: [...tableData.rows] // Ensure a new array reference
+							}
+						};
+					}
+					return chunk;
+				});
+			}
+			return msg;
+		});
+	}
 
 	function updateHeroProgress() {
 		if (!heroWrapper) return;
@@ -99,6 +343,24 @@
 		const travelled = Math.min(Math.max(-rect.top, 0), totalScroll);
 		timelineProgress.set(travelled / totalScroll);
 		evaluateTimeline();
+
+		// Synchronize the chat scroll position with overall hero progress
+		updateChatScroll();
+	}
+
+	// Control chat auto-sync (progress → scroll) – disabled once we start manual scrolling
+	let chatAutoSync = true;
+
+	// Programmatically scroll the chat messages pane based on global timeline progress
+	function updateChatScroll() {
+		if (!chatAutoSync) return;
+		if (!heroChatMessagesRef) return;
+		requestAnimationFrame(() => {
+			if (!heroChatMessagesRef) return;
+			const maxScroll = heroChatMessagesRef.scrollHeight - heroChatMessagesRef.clientHeight;
+			if (maxScroll <= 0) return;
+			heroChatMessagesRef.scrollTop = maxScroll * get(timelineProgress);
+		});
 	}
 
 	function evaluateTimeline() {
@@ -140,20 +402,8 @@
 		}, 800);
 
 	}
-    function setData(data: any) {
-        if (data.chartData?.bars?.length) {
-            const serverBars = data.chartData.bars.map((bar: any) => ({
-                time: bar.time as any,
-                open: bar.open,
-                high: bar.high,
-                low: bar.low,
-                close: bar.close,
-                volume: bar.volume ?? bar.v ?? bar.vol ?? 0
-            }));
-        }
-    }
 	// ------- Hero chart legend state ---------
-	const currentTicker = 'SPY';
+	const currentTicker = 'QQQ';
 	interface LegendData {
 		open: number;
 		high: number;
@@ -162,6 +412,99 @@
 		volume: number;
 	}
 	let legendData: LegendData = { open: 0, high: 0, low: 0, close: 0, volume: 0 };
+
+	// Immediately after hero chat state variables
+	let selectedRowKey: string | null = null;
+	// References to chart & series for later updates (used for legend updates etc.)
+	let chartInstance: any;
+
+	function highlightTableRow(tableKey: string, rowIndex: number) {
+		// Retrieve table context (first table only for hero demo)
+		const tableMsg = chatMessages.find((m) => m.contentChunks?.some((c) => c.type === 'table'));
+		if (!tableMsg) return;
+		const tableIdx = tableMsg.contentChunks.findIndex((c) => c.type === 'table');
+		const tableData: any = tableMsg.contentChunks[tableIdx].content;
+		const totalRows: number = tableData?.rows?.length ?? 0;
+		if (totalRows === 0) return;
+		const clampedRowIdx = Math.min(Math.max(rowIndex, 0), totalRows - 1);
+
+		// Ensure correct pagination page so the row is rendered
+		const pagState = tablePaginationStates[tableKey] || { currentPage: 1, rowsPerPage: 5 };
+		const { rowsPerPage } = pagState;
+		const totalPages = Math.ceil(totalRows / rowsPerPage);
+		const requiredPage = Math.floor(clampedRowIdx / rowsPerPage) + 1;
+		if (requiredPage > totalPages) return; // invalid
+
+		if (pagState.currentPage !== requiredPage) {
+			tablePaginationStates[tableKey] = { ...pagState, currentPage: requiredPage } as any;
+			tablePaginationStates = { ...tablePaginationStates }; // trigger reactivity
+		}
+		rowIndex = clampedRowIdx;
+
+		selectedRowKey = `${tableKey}-${rowIndex}`;
+
+		// Wait for DOM to update, then scroll
+		setTimeout(() => {
+			const rowEl = document.querySelector(`tr[data-row-key="${selectedRowKey}"]`);
+			if (!rowEl || !heroChatMessagesRef) return;
+
+			const container = heroChatMessagesRef;
+			const containerRect = container.getBoundingClientRect();
+			const rowRect = (rowEl as HTMLElement).getBoundingClientRect();
+
+			const isAbove = rowRect.top < containerRect.top;
+			const isBelow = rowRect.bottom > containerRect.bottom;
+
+			if (isAbove || isBelow) {
+				scrollElementIntoChat(rowEl as HTMLElement);
+			}
+		}, 50);
+
+		// Stop automatic scroll syncing after first explicit highlight
+		chatAutoSync = false;
+	}
+
+	// Smoothly scroll chat container so `el` is near the top
+	function scrollElementIntoChat(el: HTMLElement) {
+		if (!heroChatMessagesRef) return;
+		const container = heroChatMessagesRef;
+		const offset = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+		container.scrollTo({ top: Math.max(offset - 8, 0), behavior: 'smooth' });
+		chatAutoSync = false; // stop auto sync after manual scroll
+	}
+
+	// Ensure the table as a whole is visible in the chat pane
+	function scrollTableIntoView() {
+		if (!heroChatMessagesRef) return;
+		const tableContainer = heroChatMessagesRef.querySelector('.chunk-table-container');
+		if (tableContainer) {
+			scrollElementIntoChat(tableContainer as HTMLElement);
+		}
+	}
+
+	// New: extracted highlighter so it’s in scope before reactive block
+	export function highlightEventForward(rowIndex: number = -1, attempts = 6) {
+		// Ensure table container is visible
+		scrollTableIntoView();
+
+		if (rowIndex < 0) return; // just scroll table, auto-sync already disabled
+
+		// Locate table row; if not yet in DOM (async rendering), retry a few times
+		const tryHighlight = () => {
+			const tableMsg = chatMessages.find((m) => m.contentChunks?.some((c) => c.type === 'table'));
+			if (!tableMsg) {
+				if (attempts > 0) setTimeout(() => highlightEventForward(rowIndex, attempts - 1), 50);
+				return;
+			}
+			const tableIdx = tableMsg.contentChunks.findIndex((c) => c.type === 'table');
+			const tableKey = `${tableMsg.message_id}-${tableIdx}`;
+			highlightTableRow(tableKey, rowIndex);
+		};
+
+		// Initial slight delay to allow DOM update, then attempt highlight
+		setTimeout(tryHighlight, 60);
+	}
+
 
 	// Chart & scroll setup
 	onMount(() => {
@@ -175,6 +518,15 @@
 		isLoaded = true;
 		setTimeout(() => startTypewriterEffect(), 0);
 		evaluateTimeline();
+
+		// Add delegated event listener for ticker buttons in hero chat
+		let heroChatContainer: HTMLDivElement;
+		const heroChatEl = document.querySelector('.hero-chat-container');
+		if (heroChatEl) {
+			heroChatContainer = heroChatEl as HTMLDivElement;
+			tickerButtonHandler = (event: Event) => handleTickerButtonClick(event as MouseEvent);
+			heroChatContainer.addEventListener('click', tickerButtonHandler);
+		}
 
 		if (!chartContainerRef) return;
 
@@ -212,50 +564,22 @@
 		});
 		volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.9, bottom: 0 }, visible: false });
 
-		/* ----- Generate placeholder sine-wave data ----- */
-		const now = Math.floor(Date.now() / 1000);
-		const candleData = Array.from({ length: 200 }, (_, i) => {
-			const base = 100 + Math.sin(i / 4) * 3;
-			const open = base + (Math.random() - 0.5) * 2;
-			const close = open + (Math.random() - 0.5) * 4;
-			const high = Math.max(open, close) + Math.random() * 2;
-			const low = Math.min(open, close) - Math.random() * 2;
-			const volume = Math.floor(1000 + Math.random() * 9000);
-
-			return { time: (now - (200 - i) * 60) as any, open, high, low, close, volume };
+		// Add 3 line series with different colors
+		const lineSeries1 = chart.addLineSeries({
+			color: '#2196F3',
+			lineWidth: 2,
+			title: 'Line 1'
 		});
-		candleSeries.setData(candleData);
-		volumeSeries.setData(
-			candleData.map((bar: any) => ({
-				time: bar.time,
-				value: bar.volume,
-				color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
-			}))
-		);
-
-		// Inject real SPY data if provided by server
-		if (defaultChartData?.chartData?.bars?.length) {
-			const serverBars = defaultChartData.chartData.bars.map((bar: any) => ({
-				time: bar.time as any,
-				open: bar.open,
-				high: bar.high,
-				low: bar.low,
-				close: bar.close,
-				volume: bar.volume ?? bar.v ?? bar.vol ?? 0
-			}));
-			candleSeries.setData(serverBars);
-			volumeSeries.setData(
-				serverBars.map((bar: any) => ({
-					time: bar.time,
-					value: bar.volume,
-					color: bar.close >= bar.open ? '#26a69a' : '#ef5350'
-				}))
-			);
-			if (serverBars.length) {
-				const lastBar = serverBars[serverBars.length - 1];
-				legendData = { open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close, volume: lastBar.volume } as any;
-			}
-		}
+		const lineSeries2 = chart.addLineSeries({
+			color: '#FF9800',
+			lineWidth: 2,
+			title: 'Line 2'
+		});
+		const lineSeries3 = chart.addLineSeries({
+			color: '#4CAF50',
+			lineWidth: 2,
+			title: 'Line 3'
+		});
 
 		// Subscribe to crosshair for reactive legend updates
 		chart.subscribeCrosshairMove((param) => {
@@ -268,17 +592,38 @@
 			}
 		});
 
-		new ResizeObserver(() => {
+		// In onMount chart init, assign refs
+		chartInstance = chart;
+		chartCandleSeries = candleSeries;
+		chartVolumeSeries = volumeSeries;
+		chartLineSeries1 = lineSeries1;
+		chartLineSeries2 = lineSeries2;
+		chartLineSeries3 = lineSeries3;
+
+        new ResizeObserver(() => {
 			chart.applyOptions({
 				width: chartContainerRef!.clientWidth,
 				height: chartContainerRef!.clientHeight
 			});
 		}).observe(chartContainerRef);
+
+		// Inject server-preloaded data for the default key (first slice)
+        console.log('activeKey', activeKey);
+		setChart([activeKey], 'candle');
+
 	});
 
 	onDestroy(() => {
 		if (!browser) return;
 		window.removeEventListener('scroll', updateHeroProgress);
+		
+		// Clean up ticker button event listener
+		const heroChatEl = document.querySelector('.hero-chat-container');
+		if (heroChatEl) {
+			if (tickerButtonHandler) {
+				heroChatEl.removeEventListener('click', tickerButtonHandler);
+			}
+		}
 	});
 </script>
 
@@ -325,50 +670,200 @@
             <!-- Hero Actions - Revealed after animation -->
             <div class="hero-actions" class:show={showHeroContent} style="margin-top: 0;">
                 <div class="hero-chat-container hero-widget" class:has-messages={chatMessages.length > 0}>
-                    <div class="hero-chat-messages" class:has-messages={chatMessages.length > 0}>
+                    <div class="hero-chat-messages" class:has-messages={chatMessages.length > 0} bind:this={heroChatMessagesRef}>
                         {#if chatMessages.length !== 0}
                             {#each chatMessages as msg (msg.message_id)}
                                 <div in:fade={{ duration: 200 }} out:fade={{ duration: 200 }} class="message-wrapper {msg.sender}">
                                     {#if msg.sender === 'user'}
                                         <div class="message user">
                                             <div class="message-content">
-                                                <p>{msg.text}</p>
+                                                <div class="chunk-text">
+                                                    {@html parseMarkdown(msg.text || '')}
+                                                </div>
                                             </div>
                                         </div>
                                     {:else}
                                         {#if msg.contentChunks && msg.contentChunks.length > 0}
                                             <div class="assistant-message">
                                                 {#each msg.contentChunks as chunk, idx}
-                                                    {#if chunk.type === 'text'}
-                                                        <p>{@html typeof chunk.content === 'string' ? chunk.content : String(chunk.content)}</p>
+                                                                                        {#if chunk.type === 'text'}
+                                        <div class="chunk-text">
+                                            {@html parseMarkdown(
+                                                typeof chunk.content === 'string' ? chunk.content : String(chunk.content)
+                                            )}
+                                        </div>
                                                     {:else if chunk.type === 'table'}
                                                         {#if isTableData(chunk.content)}
-                                                            {@const tableData = chunk.content}
-                                                            <div class="assistant-table">
-                                                                <table>
+                                                            {@const tableData = getTableData(chunk.content)}
+                                                            {@const tableKey = msg.message_id + '-' + idx}
+                                                            {@const currentSort = tableSortStates[tableKey] || {
+                                                                columnIndex: null,
+                                                                direction: null
+                                                            }}
+
+                                                            {#if tableData}
+                                                                {@const paginationState =
+                                                                    tablePaginationStates[tableKey] ||
+                                                                    (tablePaginationStates[tableKey] = {
+                                                                        currentPage: 1,
+                                                                        rowsPerPage: 5
+                                                                    })}
+                                                                {@const currentPage = paginationState.currentPage}
+                                                                {@const rowsPerPage = paginationState.rowsPerPage}
+                                                                {@const totalRows = tableData.rows.length}
+                                                                {@const totalPages = Math.ceil(totalRows / rowsPerPage)}
+                                                                {@const startIndex = (currentPage - 1) * rowsPerPage}
+                                                                {@const endIndex = Math.min(startIndex + rowsPerPage, totalRows)}
+                                                                {@const displayedRows = tableData.rows.slice(startIndex, endIndex)}
+
+                                                                <div class="chunk-table-container">
                                                                     {#if tableData.caption}
-                                                                        <caption>{@html tableData.caption}</caption>
+                                                                        <div class="table-caption">
+                                                                            {@html parseMarkdown(tableData.caption)}
+                                                                        </div>
                                                                     {/if}
-                                                                    <thead>
-                                                                        <tr>
-                                                                            {#each tableData.headers as header}
-                                                                                <th>{@html header}</th>
-                                                                            {/each}
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {#each tableData.rows as row}
-                                                                            <tr>
-                                                                                {#each row as cell}
-                                                                                    <td>{@html typeof cell === 'string' ? cell : String(cell)}</td>
+                                                                    <div class="chunk-table">
+                                                                        <table>
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    {#each tableData.headers as header, colIndex}
+                                                                                        <th
+                                                                                            on:click={() =>
+                                                                                                sortTable(
+                                                                                                    tableKey,
+                                                                                                    colIndex,
+                                                                                                    JSON.parse(JSON.stringify(tableData))
+                                                                                                )}
+                                                                                            class:sortable={true}
+                                                                                            class:sorted={currentSort.columnIndex === colIndex}
+                                                                                            class:asc={currentSort.columnIndex === colIndex &&
+                                                                                                currentSort.direction === 'asc'}
+                                                                                            class:desc={currentSort.columnIndex === colIndex &&
+                                                                                                currentSort.direction === 'desc'}
+                                                                                        >
+                                                                                            {@html parseMarkdown(
+                                                                                                typeof header === 'string' ? header : String(header)
+                                                                                            )}
+                                                                                            {#if currentSort.columnIndex === colIndex}
+                                                                                                <span class="sort-indicator">
+                                                                                                    {currentSort.direction === 'asc' ? '▲' : '▼'}
+                                                                                                </span>
+                                                                                            {/if}
+                                                                                        </th>
+                                                                                    {/each}
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {#each displayedRows as row, rowIndex}
+                                                                                    <tr data-row-key={`${tableKey}-${startIndex + rowIndex}`} class:selected-row={selectedRowKey === `${tableKey}-${startIndex + rowIndex}`}>
+                                                                                        {#if Array.isArray(row)}
+                                                                                            {#each row as cell}
+                                                                                                <td
+                                                                                                    >{@html parseMarkdown(
+                                                                                                        typeof cell === 'string' ? cell : String(cell)
+                                                                                                    )}</td
+                                                                                                >
+                                                                                            {/each}
+                                                                                        {:else}
+                                                                                            <td colspan={tableData.headers.length}
+                                                                                                >Invalid row data: {typeof row === 'string'
+                                                                                                    ? row
+                                                                                                    : String(row)}</td
+                                                                                            >
+                                                                                        {/if}
+                                                                                    </tr>
                                                                                 {/each}
-                                                                            </tr>
-                                                                        {/each}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+
+                                                                    {#if totalPages > 1}
+                                                                        <div class="table-pagination">
+                                                                            <div class="pagination-controls">
+                                                                                <button
+                                                                                    class="pagination-btn glass glass--small {1 === currentPage
+                                                                                        ? 'active'
+                                                                                        : ''}"
+                                                                                    on:click={() => goToPage(tableKey, 1, totalPages)}
+                                                                                    title="First page"
+                                                                                >
+                                                                                    <svg
+                                                                                        viewBox="0 0 24 24"
+                                                                                        width="14"
+                                                                                        height="14"
+                                                                                        fill="currentColor"
+                                                                                    >
+                                                                                        <path
+                                                                                            d="M18.41,16.59L13.82,12L18.41,7.41L17,6L11,12L17,18L18.41,16.59M6,6H8V18H6V6Z"
+                                                                                        />
+                                                                                    </svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    class="pagination-btn glass glass--small"
+                                                                                    on:click={() =>
+                                                                                        previousPage(tableKey, currentPage, totalPages)}
+                                                                                    disabled={currentPage === 1}
+                                                                                    title="Previous page"
+                                                                                >
+                                                                                    <svg
+                                                                                        viewBox="0 0 24 24"
+                                                                                        width="14"
+                                                                                        height="14"
+                                                                                        fill="currentColor"
+                                                                                    >
+                                                                                        <path
+                                                                                            d="M15.41,16.59L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.59Z"
+                                                                                        />
+                                                                                    </svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    class="pagination-btn glass glass--small"
+                                                                                    on:click={() => nextPage(tableKey, currentPage, totalPages)}
+                                                                                    disabled={currentPage === totalPages}
+                                                                                    title="Next page"
+                                                                                >
+                                                                                    <svg
+                                                                                        viewBox="0 0 24 24"
+                                                                                        width="14"
+                                                                                        height="14"
+                                                                                        fill="currentColor"
+                                                                                    >
+                                                                                        <path
+                                                                                            d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z"
+                                                                                        />
+                                                                                    </svg>
+                                                                                </button>
+                                                                                <button
+                                                                                    class="pagination-btn glass glass--small {totalPages ===
+                                                                                    currentPage
+                                                                                        ? 'active'
+                                                                                        : ''}"
+                                                                                    on:click={() => goToPage(tableKey, totalPages, totalPages)}
+                                                                                    title="Last page"
+                                                                                >
+                                                                                    <svg
+                                                                                        viewBox="0 0 24 24"
+                                                                                        width="14"
+                                                                                        height="14"
+                                                                                        fill="currentColor"
+                                                                                    >
+                                                                                        <path
+                                                                                            d="M5.59,7.41L10.18,12L5.59,16.59L7,18L13,12L7,6L5.59,7.41M16,6H18V18H16V6Z"
+                                                                                        />
+                                                                                    </svg>
+                                                                                </button>
+                                                                            </div>
+                                                                            <div class="pagination-info">
+                                                                                Page {currentPage} of {totalPages}
+                                                                            </div>
+                                                                        </div>
+                                                                    {/if}
+                                                                </div>
+                                                            {:else}
+                                                                <div class="chunk-error">Invalid table data structure</div>
+                                                            {/if}
                                                         {:else}
-                                                            <p>Invalid table data</p>
+                                                            <div class="chunk-error">Invalid table data format</div>
                                                         {/if}
                                                     {:else if chunk.type === 'plot'}
                                                         {#if isPlotData(chunk.content)}
@@ -385,7 +880,9 @@
                                                 {/each}
                                             </div>
                                         {:else}
-                                            <p class="assistant-message">{msg.text}</p>
+                                            <div class="assistant-message">
+                                                {@html parseMarkdown(msg.text || '')}
+                                            </div>
                                         {/if}
                                     {/if}
                                 </div>
@@ -724,7 +1221,7 @@
         border: 1px solid rgba(255, 255, 255, 1);
         border-radius: 16px;
         padding: 1.5rem;
-        overflow-y: auto;
+        overflow-y: hidden; /* Disable manual scrolling, controlled programmatically */
         display: flex;
         flex-direction: column;
         gap: 1rem;
@@ -858,13 +1355,236 @@
         margin: 0;
         font-size: 0.9rem;
         color: var(--color-dark);
-        max-width: 80%;
+        width: 100%;
+        max-width: 100%;
         text-align: left;
     }
 
     /* Force Inter font inside chat */
     .hero-chat-container, .hero-chat-container * {
         font-family: 'Geist';
+    }
+
+    /* Ticker button styles */
+    .hero-chat-container :global(.ticker-button) {
+        background: rgba(79, 124, 130, 0.1);
+        color: #4f7c82;
+        border: 1px solid rgba(79, 124, 130, 0.3);
+        border-radius: 0.25rem;
+        padding: 0.125rem 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-block;
+        margin: 0 0.125rem;
+        font-family: 'Geist', monospace;
+    }
+
+    .hero-chat-container :global(.ticker-button:hover) {
+        background: rgba(79, 124, 130, 0.2);
+        border-color: #4f7c82;
+        transform: translateY(-1px);
+    }
+
+    .hero-chat-container :global(.ticker-button:active) {
+        transform: translateY(0);
+    }
+
+    .hero-chat-container :global(.ticker-button:disabled) {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* Content chunk styling */
+    .hero-chat-container :global(.chunk-text) {
+        margin: 0;
+    }
+
+    .hero-chat-container :global(.chunk-text h1),
+    .hero-chat-container :global(.chunk-text h2),
+    .hero-chat-container :global(.chunk-text h3),
+    .hero-chat-container :global(.chunk-text h4),
+    .hero-chat-container :global(.chunk-text h5),
+    .hero-chat-container :global(.chunk-text h6) {
+        margin: 0.5rem 0;
+        font-weight: 600;
+    }
+
+    .hero-chat-container :global(.chunk-text p) {
+        margin: 0.5rem 0;
+        line-height: 1.5;
+    }
+
+    .hero-chat-container :global(.chunk-text ul),
+    .hero-chat-container :global(.chunk-text ol) {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+    }
+
+    /* Table formatting - compact version for hero */
+    .hero-chat-container :global(.chunk-table-container) {
+        margin: 0.5rem 0;
+        border-radius: 0.375rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        font-size: 0.75rem;
+    }
+
+    .hero-chat-container :global(.table-caption) {
+        padding: 0.5rem;
+        text-align: left;
+        font-weight: 600;
+        color: var(--color-dark);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.1);
+        font-size: 0.85rem;
+    }
+
+    .hero-chat-container :global(.chunk-table) {
+        overflow-x: auto;
+        max-width: 100%;
+    }
+
+    .hero-chat-container :global(.chunk-table table) {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        line-height: 1.2rem;
+    }
+
+    .hero-chat-container :global(.chunk-table th) {
+        padding: 0.375rem 0.5rem;
+        text-align: left;
+        font-weight: 600;
+        color: var(--color-dark);
+        background: rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        font-size: 0.75rem;
+        vertical-align: middle;
+    }
+
+    .hero-chat-container :global(.chunk-table th.sortable:hover) {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    .hero-chat-container :global(.chunk-table th .sort-indicator) {
+        margin-left: 0.15rem;
+        font-size: 0.7rem;
+        color: var(--color-primary);
+    }
+
+    .hero-chat-container :global(.chunk-table td) {
+        padding: 0.375rem 0.5rem;
+        color: var(--color-dark);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        white-space: nowrap;
+        font-size: 0.75rem;
+        vertical-align: middle;
+    }
+
+    .hero-chat-container :global(.chunk-table tbody tr:last-child td) {
+        border-bottom: none;
+    }
+
+    .hero-chat-container :global(.chunk-table tbody tr:hover) {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Table pagination - compact version */
+    .hero-chat-container :global(.table-pagination) {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .hero-chat-container :global(.pagination-controls) {
+        display: flex;
+        gap: 0.15rem;
+    }
+
+    .hero-chat-container :global(.pagination-btn) {
+        padding: 0.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--color-dark);
+        border-radius: 0.2rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        width: 28px;
+        height: 28px;
+    }
+
+    .hero-chat-container :global(.pagination-btn:hover:not(:disabled)) {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .hero-chat-container :global(.pagination-btn:disabled) {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .hero-chat-container :global(.pagination-btn.active) {
+        background: var(--color-primary);
+        border-color: var(--color-primary);
+        color: white;
+    }
+
+    .hero-chat-container :global(.pagination-info) {
+        font-size: 0.8rem;
+        color: var(--color-dark);
+        opacity: 0.8;
+    }
+
+    /* Error state styling */
+    .hero-chat-container :global(.chunk-error) {
+        padding: 1rem;
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    /* Responsive table design - compact but readable for hero */
+    @media (max-width: 768px) {
+        .hero-chat-container :global(.chunk-table table) {
+            font-size: 0.7rem;
+        }
+        
+        .hero-chat-container :global(.chunk-table th),
+        .hero-chat-container :global(.chunk-table td) {
+            padding: 0.25rem 0.375rem;
+            font-size: 0.65rem;
+        }
+        
+        .hero-chat-container :global(.table-pagination) {
+            flex-direction: column;
+            gap: 0.375rem;
+            padding: 0.375rem;
+        }
+
+        .hero-chat-container :global(.pagination-btn) {
+            width: 24px;
+            height: 24px;
+        }
+
+        .hero-chat-container :global(.pagination-info) {
+            font-size: 0.7rem;
+        }
     }
 
     .hero-chart-legend {
@@ -898,5 +1618,9 @@
         position: sticky;   /*  or 'fixed: top:0; left:0; width:100%' */
         top: 0;
         height: 100vh;      /*  fills the viewport while pinned  */
+    }
+
+    .hero-chat-container :global(tr.selected-row) {
+        background: rgba(79, 124, 130, 0.2) !important;
     }
 </style>
