@@ -57,7 +57,7 @@
 	<SiteHeader/>
 
 	<main class="landing-container">
-		<HeroAnimation {defaultKey} {chartsByKey} {defaultChartData}/>
+		<HeroAnimation {defaultKey} {chartsByKey}/>
 		<!-- Subsections -->
 		<section class="subsections-section">
 			<div class="subsections-content">

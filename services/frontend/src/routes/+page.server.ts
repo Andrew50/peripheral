@@ -44,10 +44,9 @@ async function getChartDataForSplashScreen(
 	/** Direction of the chart */ direction: 'backward' | 'forward',
 	/** Number of bars to request */ bars: number = DEFAULT_SPLASH_BARS
 ) {
-
 	const { securityId = 0 } = await publicRequest<SecurityIdResponse>(
 		'getSecurityIDFromTickerTimestamp',
-		{ ticker, timestampMs }
+		{ ticker, timestamp: timestampMs }
 	);
 
 	if (!securityId) {
