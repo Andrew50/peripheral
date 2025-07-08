@@ -148,8 +148,21 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 		return fmt.Errorf("re-enable autovacuum for %s: %w", tbl, err)
 	}
 
-	// Re-add compression policy
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`SELECT add_compression_policy('%s', 302400000000000)`, tbl)); err != nil {
+	// Re-add compression policy only if it does not already exist to avoid
+	// duplicate-object errors (SQLSTATE 42710). The TimescaleDB catalog view
+	// `timescaledb_information.jobs` lists compression policies, so we query
+	// it first inside a PL/pgSQL block.
+	policySQL := fmt.Sprintf(`DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM timescaledb_information.jobs
+        WHERE proc_name = 'policy_compression'
+          AND relname = '%s') THEN
+        PERFORM add_compression_policy('%s', 302400000000000);
+    END IF;
+END$$;`, tbl, tbl)
+
+	if _, err := data.ExecWithRetry(ctx, db, policySQL); err != nil {
 		return fmt.Errorf("re-add compression policy for %s: %w", tbl, err)
 	}
 
