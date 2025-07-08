@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -41,9 +43,27 @@ func LogCriticalAlert(err error) error {
 		env = "unknown"
 	}
 
+	// Resolve the caller function name to give more context where the error originated.
+	callerFn := func() string {
+		// Skip two frames to get out of runtime.Callers and this anonymous func itself.
+		pcs := make([]uintptr, 10)
+		n := runtime.Callers(3, pcs) // 0:getCaller,1:LogCriticalAlert,2:caller
+		frames := runtime.CallersFrames(pcs[:n])
+		for {
+			frame, more := frames.Next()
+			if !strings.Contains(frame.Function, "alerts.") { // skip any function within alerts package
+				return frame.Function
+			}
+			if !more {
+				break
+			}
+		}
+		return "unknown"
+	}()
+
 	// Prepare the message.
 	timestamp := time.Now().UTC().Format(time.RFC3339)
-	msg := fmt.Sprintf("\u26A0\uFE0F *Critical Alert*\nEnvironment: %s\nTime: %s UTC\nError: %v", env, timestamp, err)
+	msg := fmt.Sprintf("\u26A0\uFE0F *Critical Alert*\nEnvironment: %s\nTime: %s UTC\nFunction: %s\nError: %v", env, timestamp, callerFn, err)
 
 	// Send the message.
 	if sendErr := SendTelegramMessage(msg, chatID); sendErr != nil {
