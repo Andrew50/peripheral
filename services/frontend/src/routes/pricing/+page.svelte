@@ -50,7 +50,7 @@
 	let pricingError = '';
 
 	// Selected billing period state – allows users to toggle between monthly and yearly pricing
-	let billingPeriod: 'month' | 'year' = 'month';
+	let billingPeriod: 'month' | 'year' = 'year';
 
 	// Include Free plan regardless of selected billing period so it always shows
 	$: filteredPlans = plans.filter(
@@ -558,7 +558,7 @@
 <div class="landing-background landing-reset">
 
 	<!-- Main Pricing Content -->
-	<div class="landing-container" style="padding-top: 120px;">
+	<div class="landing-container" style="padding-top: 200px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
@@ -603,6 +603,11 @@
 					>
 						Billed Yearly
 					</button>
+				</div>
+				<div class="billing-subtitle">
+					<p>
+						Save up to 20% by paying yearly - 2 months free
+					</p>
 				</div>
 
 				<!-- Available Plans -->
@@ -683,7 +688,7 @@
 									{/if}
 								{:else}
 									<button
-										class="subscribe-button {plan.plan_name.toLowerCase() === 'pro' ? 'pro' : ''}"
+										class="subscribe-button {plan.plan_name.toLowerCase().includes('pro') ? 'pro' : ''}"
 										on:click={() => handleUpgrade(plan.plan_name.toLowerCase())}
 										disabled={loadingStates[plan.plan_name.toLowerCase()]}
 									>
@@ -841,9 +846,10 @@
 	.plan-card {
 		padding: 2rem;
 		position: relative;
-		transition: all 0.3s ease;
 		display: flex;
 		flex-direction: column;
+        border: 2px solid rgba(0, 0, 0, 0.5);
+        border-radius: 24px;
 	}
 
 
@@ -886,18 +892,18 @@
 		background: var(--landing-warning, #f59e0b);
 		border-radius: 8px 8px 0 0;
 	}
-
 	.popular-badge {
 		position: absolute;
-		top: -8px;
+		top: -14px;
 		left: 50%;
 		transform: translateX(-50%);
-		background: var(--landing-accent-blue);
-		color: white;
-		font-size: 0.75rem;
+		background: #f5f9ff;
+		color: #000000;
+		font-family: 'Geist', 'Inter', sans-serif;
+		font-size: 0.875rem;
 		font-weight: 600;
-		padding: 0.25rem 0.75rem;
-		border-radius: 12px;
+		padding: 0.3rem 0.875rem;
+		border-radius: 14px;
 	}
 
 	/* Subtle current plan badge - smaller and less prominent than popular badge */
@@ -1139,11 +1145,36 @@
 		position: relative;
 		display: flex;
 		background: var(--color-dark);
-		border-radius: 25px;
+		border-radius: 28px;
 		padding: 4px;
-		margin: 0 auto 2rem;
+		/* Increased bottom margin for extra space before plan cards */
+		margin: 0 auto 0.5rem; /* keep slight separation; subtitle will add its own spacing */
 		width: fit-content;
 		overflow: hidden;
+		/* Shrink slider by 10% */
+		transform: scale(0.9);
+		transform-origin: center;
+	}
+
+	/* Billing subtitle directly under the slider */
+	.billing-subtitle {
+		text-align: center;
+		margin: 1rem auto 3rem;
+		max-width: 600px;
+	}
+
+	.billing-subtitle p {
+		font-size: 0.9375rem;
+		font-weight: 500;
+		color: var(--landing-text-secondary);
+		font-family: 'Geist', 'Inter', sans-serif;
+		line-height: 1.5;
+	}
+
+	/* Enlarge the hero title specifically for the pricing page */
+	.pricing-hero .landing-title {
+		font-size: clamp(3rem, 7vw, 4.5rem);
+		font-family: 'Inter', sans-serif;
 	}
 
 	.slider-background {
@@ -1153,7 +1184,7 @@
 		width: calc(50% - 4px);
 		height: calc(100% - 8px);
 		background: #f5f9ff;
-		border-radius: 21px;
+		border-radius: 28px;
 		transition: transform 0.2s ease;
 		z-index: 1;
 		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
@@ -1192,7 +1223,7 @@
 		position: relative;
 		z-index: 1;
 		background: none;
-		border: 2px solid #f5f9ff;
+		border: 2px solid rgba(0, 0, 0, 0.5);
 		padding: 0.875rem 2rem;
 		font-size: 1rem;
 		font-weight: 600;
