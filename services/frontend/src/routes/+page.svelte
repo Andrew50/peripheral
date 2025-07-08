@@ -24,18 +24,22 @@
 		const subsections = [
 			{
 				title: 'Transform ideas into edge in minutes',
-				description: 'From concept to execution, our platform turns your trading insights into profitable strategies faster than ever before.',
-				content: 'Whether you have a hunch about market patterns or a complex algorithmic strategy, Peripheral provides the tools to test, refine, and deploy your ideas with unprecedented speed and precision.'
+				description: 'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
 			},
 			{
 				title: 'Never miss a trade.',
-				description: 'Stay ahead of the market with instant access to live data, news, and analytics across all major exchanges.',
-				content: 'Our advanced data infrastructure delivers sub-minute precision for all US stocks and ETFs, combined with intelligent filtering and alerting systems that keep you informed of what matters most.'
+				description: 'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
+				content: ''
 			},
 			{
-				title: 'Built for serious traders',
-				description: 'Professional-grade tools designed for both individual traders and institutional-level strategies.',
-				content: 'From backtesting with historical data since 2008 to real-time screening and portfolio management, every feature is crafted to meet the demanding needs of serious market participants.'
+				title: 'Analysis at the speed of now',
+				description: 'In dynamic, fast-moving markets, every second counts. Peripheral provides quality analysis of news, fundamentals, and data XX% faster than ChatGPT, Perplexity, and comparable services with accurate data.',
+				content: ''
+			}, 
+			{
+				title: 'Frictionless trading.',
+				description: 'All the insights you need, before you ask. Our context aware terminal automatically surfaces the most relevant news, data, and insights about symbols you care about. Stay in the flow.',
+				content: ''
 			}
 		];
 	</script>
@@ -102,7 +106,6 @@
 					sans-serif;
 			display: flex;
 			flex-direction: column;
-			padding-top: var(--header-h);
 		}
 
 		/* Subsections Section */
