@@ -136,18 +136,79 @@ func monthlyPrefixes(base string, from, to time.Time) []string {
 
 // listCSVObjects lists all *.csv.gz objects under prefix and returns their keys.
 func listCSVObjects(ctx context.Context, s3c *s3.Client, bucket, prefix string) ([]string, error) {
+	return listCSVObjectsWithRetry(ctx, s3c, bucket, prefix, 3)
+}
+
+// listCSVObjectsWithRetry lists all *.csv.gz objects under prefix with exponential backoff retry.
+func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix string, maxRetries int) ([]string, error) {
 	var out []string
-	pag := s3.NewListObjectsV2Paginator(s3c, &s3.ListObjectsV2Input{Bucket: aws.String(bucket), Prefix: aws.String(prefix)})
-	for pag.HasMorePages() {
-		page, err := pag.NextPage(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, obj := range page.Contents {
-			if obj.Key != nil && strings.HasSuffix(*obj.Key, ".csv.gz") {
-				out = append(out, *obj.Key)
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2^attempt seconds, with jitter
+			backoffDuration := time.Duration(1<<attempt) * time.Second
+			if backoffDuration > 30*time.Second {
+				backoffDuration = 30 * time.Second // Cap at 30 seconds
+			}
+
+			log.Printf("S3 rate limited (attempt %d/%d), backing off for %v...", attempt, maxRetries, backoffDuration)
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoffDuration):
 			}
 		}
+
+		out = nil // Reset output slice for retry
+		success := true
+
+		pag := s3.NewListObjectsV2Paginator(s3c, &s3.ListObjectsV2Input{Bucket: aws.String(bucket), Prefix: aws.String(prefix)})
+		for pag.HasMorePages() {
+			page, err := pag.NextPage(ctx)
+			if err != nil {
+				lastErr = err
+				success = false
+
+				// Check if this is a rate limit error (429)
+				if isS3RateLimitError(err) {
+					log.Printf("S3 rate limit hit during pagination for prefix %s: %v", prefix, err)
+					break // Break from pagination, will retry entire operation
+				}
+
+				// For non-rate-limit errors, fail immediately
+				return nil, err
+			}
+
+			for _, obj := range page.Contents {
+				if obj.Key != nil && strings.HasSuffix(*obj.Key, ".csv.gz") {
+					out = append(out, *obj.Key)
+				}
+			}
+		}
+
+		if success {
+			return out, nil
+		}
+
+		// If we hit a rate limit error but haven't exhausted retries, continue to next attempt
+		if !isS3RateLimitError(lastErr) {
+			return nil, lastErr
+		}
 	}
-	return out, nil
+
+	return nil, fmt.Errorf("S3 listing failed after %d retries, last error: %w", maxRetries, lastErr)
+}
+
+// isS3RateLimitError checks if the error is an S3 rate limiting error (429 Too Many Requests)
+func isS3RateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "TooManyRequests") ||
+		strings.Contains(errStr, "429") ||
+		strings.Contains(errStr, "Too Many Requests")
 }
