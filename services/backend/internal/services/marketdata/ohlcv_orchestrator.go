@@ -157,7 +157,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM timescaledb_information.jobs
         WHERE proc_name = 'policy_compression'
-          AND relname = '%s') THEN
+          AND hypertable_name = '%s') THEN
         PERFORM add_compression_policy('%s', 302400000000000);
     END IF;
 END$$;`, tbl, tbl)

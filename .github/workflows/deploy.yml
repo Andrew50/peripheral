@@ -205,3 +205,27 @@ jobs:
       - name: Cleanup
         if: always()
         run: config/deploy/scripts/cleanup.sh
+
+      - name: Send Telegram alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN_B64: ${{ env.TELEGRAM_BOT_TOKEN_B64 }}
+          TELEGRAM_CHAT_ID_B64: ${{ env.TELEGRAM_CHAT_ID_B64 }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN_B64" ] || [ -z "$TELEGRAM_CHAT_ID_B64" ]; then
+            echo "Telegram credentials missing; skipping alert."
+            exit 0
+          fi
+          BOT_TOKEN=$(echo "$TELEGRAM_BOT_TOKEN_B64" | base64 -d | tr -d '\n')
+          CHAT_ID=$(echo "$TELEGRAM_CHAT_ID_B64" | base64 -d | tr -d '\n')
+          MESSAGE="🚨 Deployment to *$ENVIRONMENT* failed on branch *$TARGET_BRANCH* in workflow *$WORKFLOW*.\nSee run: https://github.com/$REPO/actions/runs/$RUN_ID"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode=Markdown \
+            -d disable_web_page_preview=true
