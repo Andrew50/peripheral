@@ -319,7 +319,7 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 	}
 
 	// Update user with Stripe IDs and plan info. Use COALESCE-like updates where IDs may be blank.
-	_, err = conn.DB.Exec(ctx, `
+	_, err = data.ExecWithRetry(ctx, conn.DB, `
 		UPDATE users 
 		SET stripe_customer_id = COALESCE(NULLIF($1, ''), stripe_customer_id),
 		    stripe_subscription_id = COALESCE(NULLIF($2, ''), stripe_subscription_id),
