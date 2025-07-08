@@ -101,7 +101,7 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	log.Printf("🔧 Pre-load setup for %s", tbl)
 
-	if _, err := db.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s SET (autovacuum_enabled = FALSE)`, tbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s SET (autovacuum_enabled = FALSE)`, tbl)); err != nil {
 		return fmt.Errorf("disable autovacuum: %w", err)
 	}
 
@@ -122,7 +122,7 @@ BEGIN
     EXECUTE format('DROP INDEX IF EXISTS %%I', idx.indexname);
   END LOOP;
 END$$;`, tbl)
-	if _, err := db.Exec(ctx, dropSQL); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, dropSQL); err != nil {
 		return fmt.Errorf("drop indexes: %w", err)
 	}
 
@@ -131,10 +131,10 @@ END$$;`, tbl)
 	// Create or clean staging table for two-step COPY.
 	stageTbl := tbl + "_stage"
 	createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL)`, stageTbl, tbl)
-	if _, err := db.Exec(ctx, createStageSQL); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, createStageSQL); err != nil {
 		return fmt.Errorf("create staging table: %w", err)
 	}
-	if _, err := db.Exec(ctx, fmt.Sprintf(`TRUNCATE %s`, stageTbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`TRUNCATE %s`, stageTbl)); err != nil {
 		return fmt.Errorf("truncate staging table: %w", err)
 	}
 	return nil
@@ -144,12 +144,12 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	log.Printf("🔧 Post-load cleanup for %s", tbl)
 
 	// Re-enable autovacuum
-	if _, err := db.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s RESET (autovacuum_enabled)`, tbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s RESET (autovacuum_enabled)`, tbl)); err != nil {
 		return fmt.Errorf("re-enable autovacuum for %s: %w", tbl, err)
 	}
 
 	// Re-add compression policy
-	if _, err := db.Exec(ctx, fmt.Sprintf(`SELECT add_compression_policy('%s', 302400000000000)`, tbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`SELECT add_compression_policy('%s', 302400000000000)`, tbl)); err != nil {
 		return fmt.Errorf("re-add compression policy for %s: %w", tbl, err)
 	}
 
@@ -161,17 +161,17 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 		indexSQLs = []string{`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_idx ON ohlcv_1d (ticker, "timestamp" DESC)`}
 	}
 	for _, q := range indexSQLs {
-		if _, err := db.Exec(ctx, q); err != nil {
+		if _, err := data.ExecWithRetry(ctx, db, q); err != nil {
 			return fmt.Errorf("recreate index %s: %w", q, err)
 		}
 	}
-	if _, err := db.Exec(ctx, fmt.Sprintf(`ANALYZE %s`, tbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ANALYZE %s`, tbl)); err != nil {
 		log.Printf("analyze warning for %s: %v", tbl, err)
 	}
 
 	// Drop staging table created for this timeframe.
 	stageTbl := tbl + "_stage"
-	if _, err := db.Exec(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, stageTbl)); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, stageTbl)); err != nil {
 		log.Printf("warning: drop staging table %s: %v", stageTbl, err)
 	}
 
@@ -194,7 +194,7 @@ BEGIN
     END LOOP;
 END$$;`, tbl)
 
-	if _, err := db.Exec(ctx, dropWorkerStagesSQL); err != nil {
+	if _, err := data.ExecWithRetry(ctx, db, dropWorkerStagesSQL); err != nil {
 		log.Printf("warning: drop worker stage tables for %s: %v", tbl, err)
 	}
 
