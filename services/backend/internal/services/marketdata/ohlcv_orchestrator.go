@@ -240,8 +240,12 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 }
 
 func setLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string, t time.Time) error {
-	_, err := db.Exec(ctx, `INSERT INTO ohlcv_update_state(timeframe, last_loaded_at) VALUES($1, $2)
-                             ON CONFLICT (timeframe) DO UPDATE SET last_loaded_at = EXCLUDED.last_loaded_at`, timeframe, t)
+	// Use the robust retry helper so a brief database restart does not abort the
+	// entire ingestion run.
+	_, err := data.ExecWithRetry(ctx, db, `INSERT INTO ohlcv_update_state(timeframe, last_loaded_at)
+                                         VALUES($1, $2)
+                                         ON CONFLICT (timeframe) DO UPDATE
+                                         SET last_loaded_at = EXCLUDED.last_loaded_at`, timeframe, t)
 	return err
 }
 
@@ -250,7 +254,9 @@ func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile)
 		return nil
 	}
 	for _, f := range files {
-		if _, err := db.Exec(ctx, `INSERT INTO ohlcv_failed_files(day, timeframe, reason) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, f.Day, f.Timeframe, f.Reason); err != nil {
+		if _, err := data.ExecWithRetry(ctx, db, `INSERT INTO ohlcv_failed_files(day, timeframe, reason)
+                                                VALUES($1,$2,$3)
+                                                ON CONFLICT DO NOTHING`, f.Day, f.Timeframe, f.Reason); err != nil {
 			return err
 		}
 	}
