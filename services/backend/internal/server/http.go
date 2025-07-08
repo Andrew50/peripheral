@@ -221,6 +221,7 @@ func addCORSHeaders(w http.ResponseWriter) {
 func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
 		logMessage := fmt.Sprintf("%s: %v", context, err)
+		log.Println(logMessage)
 
 		// Only log a critical alert for non-auth related errors. Authentication
 		// failures (e.g. invalid or expired JWTs) are expected client errors and
@@ -229,11 +230,13 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 			_ = alertsvc.LogCriticalAlert(err)
 		}
 
+		// Decide public-facing message
+		status, msg := resolveAppError(err)
 		if context == "auth" {
-			http.Error(w, logMessage, http.StatusUnauthorized)
-		} else {
-			http.Error(w, logMessage, http.StatusBadRequest)
+			status = http.StatusUnauthorized
 		}
+
+		http.Error(w, msg, status)
 		return true
 	}
 	return false
@@ -285,9 +288,9 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		if err != nil {
 			// Log the detailed error on the server
 			log.Printf("Public handler error [%s]: %v", req.Function, err)
-			// Send the specific error message back to the client
-			// Use StatusBadRequest for general input/logic errors from Login/Signup
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			// Map to safe client message
+			status, msg := resolveAppError(err)
+			http.Error(w, msg, status)
 			return
 		}
 
