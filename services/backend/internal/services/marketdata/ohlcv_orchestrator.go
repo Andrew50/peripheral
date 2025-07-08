@@ -128,15 +128,35 @@ END$$;`, tbl)
 
 	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
 
-	// Create or clean staging table for two-step COPY.
+	// -----------------------------------------------------------------
+	// Staging table housekeeping
+	// -----------------------------------------------------------------
+	// Historically we maintained a single shared staging table named
+	// <tbl>_stage. Under certain failure modes (e.g. a crash between
+	// CREATE TABLE and the subsequent DROP in PostLoadCleanup) the table
+	// may be removed while its composite type remains. On the next run
+	// `CREATE TABLE IF NOT EXISTS` fails with the error:
+	//     ERROR: type "<tbl>_stage" already exists (SQLSTATE 42710)
+	// To make the pre-load step resilient we proactively remove both the
+	// table *and* any lingering composite type before recreating it.
+
 	stageTbl := tbl + "_stage"
-	createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL)`, stageTbl, tbl)
+	// Best-effort cleanup – ignore errors and recreate a fresh table.
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
+		return fmt.Errorf("cleanup stale staging table: %w", err)
+	}
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TYPE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
+		return fmt.Errorf("cleanup stale staging type: %w", err)
+	}
+
+	createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE %s (LIKE %s INCLUDING ALL)`, stageTbl, tbl)
 	if _, err := data.ExecWithRetry(ctx, db, createStageSQL); err != nil {
 		return fmt.Errorf("create staging table: %w", err)
 	}
 	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`TRUNCATE %s`, stageTbl)); err != nil {
 		return fmt.Errorf("truncate staging table: %w", err)
 	}
+
 	return nil
 }
 
@@ -182,10 +202,15 @@ END$$;`, tbl, tbl)
 		log.Printf("analyze warning for %s: %v", tbl, err)
 	}
 
-	// Drop staging table created for this timeframe.
 	stageTbl := tbl + "_stage"
 	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, stageTbl)); err != nil {
 		log.Printf("warning: drop staging table %s: %v", stageTbl, err)
+	}
+	// Also remove the composite type in case the table was dropped elsewhere
+	// and only the type remains (prevents "type ... already exists" on the
+	// next run).
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TYPE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
+		log.Printf("warning: drop staging type %s: %v", stageTbl, err)
 	}
 
 	// -------------------------------------------------------------------

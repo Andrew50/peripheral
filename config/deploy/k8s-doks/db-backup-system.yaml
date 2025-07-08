@@ -176,6 +176,8 @@ spec:
               value: "60"
             - name: MAX_FAILURE_COUNT
               value: "3"
+            - name: STARTUP_GRACE_PERIOD
+              value: "300"
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:
