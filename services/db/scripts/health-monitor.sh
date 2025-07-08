@@ -370,7 +370,7 @@ get_system_info() {
     # Get CPU usage
     local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null || echo "N/A")
     if [ "$cpu_usage" != "N/A" ]; then
-        system_info="$system_info\n• CPU Usage: ${cpu_usage}%"
+        system_info="$system_info\n• CPU: ${cpu_usage}%"
     fi
     
     # Get memory usage
@@ -379,21 +379,19 @@ get_system_info() {
         local mem_total=$(echo "$mem_info" | awk '{print $2}')
         local mem_used=$(echo "$mem_info" | awk '{print $3}')
         local mem_percent=$((mem_used * 100 / mem_total))
-        system_info="$system_info\n• Memory Usage: ${mem_percent}% (${mem_used}MB/${mem_total}MB)"
+        system_info="$system_info\n• Memory: ${mem_percent}% (${mem_used}MB/${mem_total}MB)"
     fi
     
-    # Get disk usage for backup directory
-    if [ -d "/backups" ]; then
-        local disk_usage=$(df -h /backups 2>/dev/null | tail -1 | awk '{print $5}' | cut -d'%' -f1)
-        if [ -n "$disk_usage" ] && [ "$disk_usage" != "Use%" ]; then
-            system_info="$system_info\n• Backup Disk Usage: ${disk_usage}%"
-        fi
+    # Get root disk usage (closest proxy to DB volume)
+    local disk_usage=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | cut -d'%' -f1)
+    if [ -n "$disk_usage" ] && [ "$disk_usage" != "Use%" ]; then
+        system_info="$system_info\n• Disk: ${disk_usage}% (/)"
     fi
     
     # Get uptime
-    local uptime_info=$(uptime 2>/dev/null | awk -F'up ' '{print $2}' | awk -F',' '{print $1}')
+    local uptime_info=$(uptime -p 2>/dev/null | sed 's/^up //')
     if [ -n "$uptime_info" ]; then
-        system_info="$system_info\n• System Uptime: $uptime_info"
+        system_info="$system_info\n• Uptime: $uptime_info"
     fi
     
     echo -e "$system_info"
@@ -519,19 +517,11 @@ send_alert() {
         return 0
     fi
     
-    # Get recent database logs and status
+    # Get recent database logs and minimal system info
     local recent_logs
     recent_logs=$(get_recent_db_logs)
-    local db_status
-    db_status=$(get_db_status_info)
     local system_info
     system_info=$(get_system_info)
-    local k8s_info
-    k8s_info=$(get_k8s_info)
-    local health_status
-    health_status=$(get_health_status)
-    local backup_status
-    backup_status=$(get_backup_status)
     
     # Determine emoji based on alert type
     local emoji="⚠️"
@@ -543,65 +533,14 @@ send_alert() {
         "SUCCESS") emoji="✅" ;;
     esac
     
-    # Get environment info
     local env_info="${ENVIRONMENT:-Development}"
-    local host_info=$(hostname 2>/dev/null || echo "Unknown")
-    local db_info="$DB_USER@$DB_HOST:$DB_NAME"
     
-    # Format message for Telegram
-    local telegram_message="$emoji *Database Alert - $alert_type*
+    # Compact Telegram message
+    local telegram_message="$emoji *$alert_type* \- *$env_info*\n\n$alert_message\n\n*System Resources:*$system_info"
 
-*System:* PostgreSQL Health Monitor
-*Environment:* $env_info
-*Host:* $host_info
-*Database:* $db_info
-*Time:* $timestamp
-
-*Alert Message:*
-$alert_message
-
-*Failure Details:*
-• Reason: ${LAST_FAILURE_REASON:-Unknown}
-• Details: ${FAILURE_DETAILS:-No specific details}
-• Failure Count: $FAILURE_COUNT/$MAX_FAILURE_COUNT
-• Last Recovery: $(date -d @$LAST_RECOVERY_TIME '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "Never")
-
-*Health Status:*$health_status
-• Connection String: $DB_USER@$DB_HOST:$DB_NAME$db_status
-
-*System Resources:*$system_info
-
-*Kubernetes Info:*$k8s_info
-
-*Backup Status:*$backup_status"
-
-    # Add recent logs if available
     if [ -n "$recent_logs" ]; then
-        telegram_message="$telegram_message
-
-*Recent Database Logs:*
-\`\`\`
-$recent_logs
-\`\`\`"
-    fi
-
-    # Attempt to fetch recent Kubernetes pod logs if kubectl is available
-    if command -v kubectl >/dev/null 2>&1; then
-        local pod_logs="$(kubectl logs deployment/db-health-monitor --tail=20 2>/dev/null || true)"
-
-        # Fallback to database pods if health-monitor deployment logs are unavailable
-        if [ -z "$pod_logs" ]; then
-            pod_logs="$(kubectl logs -l app=db --tail=20 2>/dev/null || true)"
-        fi
-
-        if [ -n "$pod_logs" ]; then
-            telegram_message="$telegram_message
-
-*Pod Logs (last 20 lines):*
-\`\`\`
-$pod_logs
-\`\`\`"
-        fi
+        telegram_message="$telegram_message\n\n*Recent Logs:*\n\
+\`\`\`\n$recent_logs\n\`\`\`"
     fi
 
     # Send to Telegram
@@ -661,11 +600,18 @@ main() {
             # Reset failure count on success
             if [ $FAILURE_COUNT -gt 0 ]; then
                 log "Health restored after $FAILURE_COUNT failures"
+                send_alert "Database health restored after $FAILURE_COUNT consecutive failures." "SUCCESS"
                 FAILURE_COUNT=0
             fi
         else
             FAILURE_COUNT=$((FAILURE_COUNT + 1))
             error_log "Health check failed (failure count: $FAILURE_COUNT/$MAX_FAILURE_COUNT)"
+            
+            # Send an alert only on the FIRST consecutive failure (state change: OK -> FAIL)
+            if [ $FAILURE_COUNT -eq 1 ]; then
+                local initial_alert="Database health check failed. Reason: ${LAST_FAILURE_REASON:-Unknown} - ${FAILURE_DETAILS:-No details}"
+                send_alert "$initial_alert" "ERROR"
+            fi
             
             if [ $FAILURE_COUNT -ge $MAX_FAILURE_COUNT ]; then
                 error_log "Maximum failure count reached, triggering recovery"

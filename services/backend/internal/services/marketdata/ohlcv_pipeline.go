@@ -87,6 +87,8 @@ type batchedCSVReader struct {
 	gz   *gzip.Reader
 	body io.ReadCloser
 
+	cancel context.CancelFunc // cancels the request context once the body is closed
+
 	// Accumulated time spent fetching objects from S3. This allows callers to
 	// break down wall-clock time between network I/O (download) and database
 	// insertion work.
@@ -116,6 +118,10 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 				_ = b.body.Close()
 				b.body = nil
 			}
+			if b.cancel != nil {
+				b.cancel()
+				b.cancel = nil
+			}
 			b.current = nil
 			// Loop to open next file.
 		}
@@ -130,7 +136,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		// Measure the time spent establishing the object stream from S3.
 		fetchStart := time.Now()
-		resp, err := getS3ObjectWithRetry(b.ctx, b.s3c, b.bucket, file, 3)
+		resp, cancelFunc, err := getS3ObjectWithRetry(b.ctx, b.s3c, b.bucket, file, 3)
 		b.fetchDur += time.Since(fetchStart)
 		if err != nil {
 			return 0, fmt.Errorf("get object %s: %w", file, err)
@@ -144,6 +150,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		b.gz = gz
 		b.body = resp.Body
+		b.cancel = cancelFunc
 		reader := bufio.NewReader(gz)
 
 		if !b.hasRead {
@@ -518,8 +525,12 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 // S3 retry helpers
 // -----------------------------------------------------------------------------
 
-// getS3ObjectWithRetry downloads an S3 object with exponential backoff retry on rate limits
-func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key string, maxRetries int) (*s3.GetObjectOutput, error) {
+// getS3ObjectWithRetry downloads an S3 object with exponential backoff retry on rate limits.
+// It returns both the object output and the CancelFunc belonging to the per-request timeout
+// context. Callers **must** invoke the returned cancel function after they are done reading
+// resp.Body (ideally in the same defer that closes the body) to release resources associated
+// with the timer.
+func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key string, maxRetries int) (*s3.GetObjectOutput, context.CancelFunc, error) {
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -534,16 +545,18 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			case <-time.After(backoffDuration):
 			}
 		}
 
 		ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
 		resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
-		cancel()
 
 		if err != nil {
+			// If the request failed, release resources tied to the timeout context
+			cancel() // cancel context for the failed attempt
+
 			lastErr = err
 
 			// Check if this is a rate limit error
@@ -552,13 +565,20 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 			}
 
 			// For non-rate-limit errors, fail immediately
-			return nil, err
+			return nil, nil, err
 		}
 
-		return resp, nil
+		// On success, *do not* call cancel() – keeping the context alive ensures
+		// the underlying HTTP stream remains readable for the lifetime of
+		// resp.Body. The 15-minute timeout will still automatically cancel if
+		// the download stalls for too long.
+
+		// Success – return both the response and the cancel so the caller can
+		// defer their cleanup.
+		return resp, cancel, nil
 	}
 
-	return nil, fmt.Errorf("S3 GetObject failed after %d retries for %s, last error: %w", maxRetries, key, lastErr)
+	return nil, nil, fmt.Errorf("S3 GetObject failed after %d retries for %s, last error: %w", maxRetries, key, lastErr)
 }
 
 // -----------------------------------------------------------------------------
@@ -567,11 +587,16 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 
 func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, key, table string) error {
 	// Download object with retry logic for rate limiting
-	resp, err := getS3ObjectWithRetry(ctx, s3c, bucket, key, 3)
+	resp, cancel, err := getS3ObjectWithRetry(ctx, s3c, bucket, key, 3)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		resp.Body.Close()
+		if cancel != nil {
+			cancel()
+		}
+	}()
 
 	gz, err := gzip.NewReader(resp.Body)
 	if err != nil {
