@@ -127,7 +127,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
         VALUES ($1, $2, $3)
     `
 
-	_, err = conn.DB.Exec(context.Background(),
+	_, err = data.ExecWithRetry(context.Background(), conn.DB,
 		query,
 		alert.AlertID,
 		timestamp,
@@ -144,7 +144,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
         SET active = false
         WHERE alertId = $1
     `
-	_, err = conn.DB.Exec(context.Background(), updateQuery, alert.AlertID)
+	_, err = data.ExecWithRetry(context.Background(), conn.DB, updateQuery, alert.AlertID)
 	if err != nil {
 		//log.Printf("Failed to disable alert with ID %d: %v", alert.AlertID, err)
 		return fmt.Errorf("failed to disable alert: %v", err)

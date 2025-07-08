@@ -195,9 +195,9 @@ func getCreditAmountFromPriceID(conn *data.Conn, priceID string) (int, error) {
 }
 
 // Helper function to check if price ID is for credits using database
-func isCreditPriceID(conn *data.Conn, priceID string) (bool, error) {
-	return pricing.IsCreditPriceID(conn, priceID)
-}
+//func isCreditPriceID(conn *data.Conn, priceID string) (bool, error) {
+//return pricing.IsCreditPriceID(conn, priceID)
+//}
 
 func handleStripeCheckoutSessionCompleted(conn *data.Conn, event stripe.Event) error {
 	var session stripe.CheckoutSession
@@ -319,7 +319,7 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 	}
 
 	// Update user with Stripe IDs and plan info. Use COALESCE-like updates where IDs may be blank.
-	_, err = conn.DB.Exec(ctx, `
+	_, err = data.ExecWithRetry(ctx, conn.DB, `
 		UPDATE users 
 		SET stripe_customer_id = COALESCE(NULLIF($1, ''), stripe_customer_id),
 		    stripe_subscription_id = COALESCE(NULLIF($2, ''), stripe_subscription_id),

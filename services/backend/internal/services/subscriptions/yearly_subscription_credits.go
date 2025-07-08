@@ -61,7 +61,7 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 		// Compute if at least one full month has elapsed since last reset.
 		if now.After(lastReset.AddDate(0, 1, 0)) {
 			// Perform credit reset without touching current_period_start
-			_, err := conn.DB.Exec(ctx, `
+			_, err := data.ExecWithRetry(ctx, conn.DB, `
 				UPDATE users SET
 					subscription_credits_remaining = $2,
 					subscription_credits_allocated = $2,
@@ -80,7 +80,7 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 				"plan_name":         planName,
 			}
 			if metaJSON, err := json.Marshal(metadata); err == nil {
-				_, _ = conn.DB.Exec(ctx, `
+				_, _ = data.ExecWithRetry(ctx, conn.DB, `
 					INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 					VALUES ($1, 'credits_reset', 0, $2, $3)`,
 					userID, planName, metaJSON)

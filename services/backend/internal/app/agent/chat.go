@@ -94,7 +94,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return QueryResponse{
 			ContentChunks: []ContentChunk{{
 				Type:    "text",
-				Content: fmt.Sprintf("You have reached your query limit. Please add more credits to your account to continue."),
+				Content: "You have reached your query limit. Please add more credits to your account to continue.",
 			}},
 			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
 			ConversationID: query.ConversationID,
@@ -477,13 +477,26 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == backtestPlotChunkContent.PlotID {
+					// Extract axis titles safely with nil checks
+					var xAxisTitle, yAxisTitle string
+					if xaxis, ok := plot.Layout["xaxis"].(map[string]any); ok && xaxis != nil {
+						if title, titleOk := xaxis["title"].(string); titleOk {
+							xAxisTitle = title
+						}
+					}
+					if yaxis, ok := plot.Layout["yaxis"].(map[string]any); ok && yaxis != nil {
+						if title, titleOk := yaxis["title"].(string); titleOk {
+							yAxisTitle = title
+						}
+					}
+
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
 						Length:     plot.Length,
-						XAxisTitle: plot.Layout["xaxis"].(map[string]any)["title"].(string),
-						YAxisTitle: plot.Layout["yaxis"].(map[string]any)["title"].(string),
+						XAxisTitle: xAxisTitle,
+						YAxisTitle: yAxisTitle,
 					}
 					processedChunks = append(processedChunks, chunk)
 					break
