@@ -16,6 +16,7 @@
 		getStripePriceForPlan,
 		getStripePriceForCreditProduct,
 		formatPrice,
+		getPlanFeaturesForPlan,
 		type DatabasePlan,
 		type DatabaseCreditProduct
 	} from '$lib/config/pricing';
@@ -630,7 +631,7 @@
 									</div>
 								</div>
 								<ul class="plan-features">
-									{#each plan.features as feature}
+									{#each getPlanFeaturesForPlan(plan) as feature}
 										<li>{feature}</li>
 									{/each}
 								</ul>

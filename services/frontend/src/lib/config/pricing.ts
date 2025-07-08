@@ -1,6 +1,7 @@
 // Database-driven pricing configuration
 import { browser } from '$app/environment';
 import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+import { getPlanFeatures } from './plan-features';
 
 // Database-driven pricing configuration
 export interface DatabasePlan {
@@ -15,7 +16,6 @@ export interface DatabasePlan {
 	credits_per_billing_period: number;
 	alerts_limit: number;
 	strategy_alerts_limit: number;
-	features: string[];
 	is_active: boolean;
 	is_popular: boolean;
 	sort_order: number;
@@ -228,4 +228,7 @@ export function formatPrice(cents: number, billingPeriod: string): string {
 	return `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
+export function getPlanFeaturesForPlan(plan: DatabasePlan): string[] {
+	return getPlanFeatures(plan.plan_name);
+}
 
