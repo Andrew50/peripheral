@@ -50,6 +50,8 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
+	// userID associated with this client connection
+	userID               int
 }
 
 /*
@@ -397,14 +399,9 @@ func (c *Client) close() {
 		c.removeSubscribedChannel(channelName)
 	}
 
-	// Remove the client from the UserToClient map
+	// Remove the client from the UserToClient map using the stored userID
 	UserToClientMutex.Lock()
-	for userID, client := range UserToClient {
-		if client == c {
-			delete(UserToClient, userID)
-			break
-		}
-	}
+	delete(UserToClient, c.userID)
 	UserToClientMutex.Unlock()
 
 }
@@ -425,6 +422,8 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 		buffer:              10000,
 		loopRunning:         false,
 		subscribedChannels:  make(map[string]struct{}),
+		lastTickTime:          time.Time{},
+		userID:               userID,
 	}
 
 	// Store the client in the userToClient map

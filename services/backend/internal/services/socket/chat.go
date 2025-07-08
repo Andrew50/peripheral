@@ -19,20 +19,12 @@ func SetChatHandler(handler ChatHandler) {
 
 // HandleChatQuery handles chat queries received via WebSocket
 func (c *Client) HandleChatQuery(requestID, query string, contextItems []map[string]interface{}, activeChartContext map[string]interface{}, conversationID string) {
-	// Find the userID for this client
-	var userID int
-	UserToClientMutex.RLock()
-	for uid, client := range UserToClient {
-		if client == c {
-			userID = uid
-			break
-		}
-	}
-	UserToClientMutex.RUnlock()
+	// Retrieve the userID directly from the client instance
+	userID := c.userID
 
 	if userID == 0 {
-		// Send error response
-		c.SendChatResponse(requestID, false, nil, "User not found")
+		// No user associated with this connection (unexpected). Ask the client to reconnect.
+		c.SendChatResponse(requestID, false, nil, "Session expired, please reconnect")
 		return
 	}
 
