@@ -29,6 +29,39 @@ spec:
                 values:
                 - db
             topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: wait-for-db
+          image: postgres:15-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for database to be ready..."
+              until pg_isready -h db -p 5432 -U postgres; do
+                echo "Database is not ready yet. Waiting 5 seconds..."
+                sleep 5
+              done
+              echo "Database is ready!"
+              
+              # Additional check: try to connect and run a simple query
+              echo "Testing database connection..."
+              until PGPASSWORD="$POSTGRES_PASSWORD" psql -h db -p 5432 -U postgres -d postgres -c "SELECT 1;" > /dev/null 2>&1; do
+                echo "Database connection test failed. Waiting 5 seconds..."
+                sleep 5
+              done
+              echo "Database connection test successful!"
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
       containers:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
