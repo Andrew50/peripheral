@@ -87,7 +87,4 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "CHECKPOINT;" 
 
 # Step 5: Wait additional time for any remaining cleanup
 log "Waiting for cleanup processes..."
-sleep 45
-
-log "Graceful shutdown preparation completed. Ready for SIGTERM."
-SEND_TELEGRAM "✅ Graceful shutdown preparation completed for $DB_NAME" || true 
+sleep 45 
