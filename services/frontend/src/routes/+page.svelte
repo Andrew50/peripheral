@@ -68,19 +68,7 @@
 							<p class="subsection-description">{subsection.description}</p>
 							<p class="subsection-content">{subsection.content}</p>
 						</div>
-						<div class="subsection-visual">
-							<div class="visual-placeholder">
-								<div class="visual-icon">
-									{#if index === 0}
-										⚡
-									{:else if index === 1}
-										📊
-									{:else}
-										🎯
-									{/if}
-								</div>
-							</div>
-						</div>
+
 					</div>
 				{/each}
 			</div>
