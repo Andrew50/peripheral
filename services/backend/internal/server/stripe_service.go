@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stripe/stripe-go/v78"
-	billingportalsession "github.com/stripe/stripe-go/v78/billingportal/session"
-	checkoutsession "github.com/stripe/stripe-go/v78/checkout/session"
-	"github.com/stripe/stripe-go/v78/customer"
-	"github.com/stripe/stripe-go/v78/subscription"
-	"github.com/stripe/stripe-go/v78/webhook"
+	stripe "github.com/stripe/stripe-go/v82"
+	billingportalsession "github.com/stripe/stripe-go/v82/billingportal/session"
+	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
+	"github.com/stripe/stripe-go/v82/customer"
+	"github.com/stripe/stripe-go/v82/subscription"
+	"github.com/stripe/stripe-go/v82/webhook"
 )
 
 const DBContextTimeout = 1 * time.Minute
@@ -134,22 +134,9 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Enhanced logging for debugging
-	log.Printf("🔍 STRIPE WEBHOOK DEBUG: Received webhook request")
-	log.Printf("🔍 Request Method: %s", r.Method)
-	log.Printf("🔍 Request URL: %s", r.URL.String())
-	log.Printf("🔍 Request Headers:")
-	for name, values := range r.Header {
-		for _, value := range values {
-			// Log all headers but redact sensitive ones partially
-			if name == "Stripe-Signature" && len(value) > 10 {
-				log.Printf("🔍   %s: %s...%s (length: %d)", name, value[:10], value[len(value)-10:], len(value))
-			} else {
-				log.Printf("🔍   %s: %s", name, value)
-			}
-		}
-	}
-	log.Printf("🔍 Payload length: %d bytes", len(payload))
+	// Basic logging for debugging
+	log.Printf("Stripe webhook request received: method=%s url=%s payload_bytes=%d", r.Method, r.URL.String(), len(payload))
+	// (detailed request headers and payload size logging removed)
 
 	// Check if Stripe-Signature header exists
 	stripeSignature := r.Header.Get("Stripe-Signature")
@@ -171,10 +158,6 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("✅ STRIPE WEBHOOK: Headers and environment OK, verifying signature...")
-	log.Printf("🔍 Webhook secret length: %d characters", len(webhookSecret))
-	log.Printf("🔍 Signature header length: %d characters", len(stripeSignature))
 
 	// Verify webhook signature - try multiple possible secrets
 	var event stripe.Event
@@ -204,12 +187,12 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 			IgnoreAPIVersionMismatch: true,
 		})
 		if err == nil {
-			log.Printf("✅ STRIPE WEBHOOK: Signature verified with relaxed API version checking")
+			// signature verified successfully – no additional logging needed
 		} else {
 			log.Printf("❌ STRIPE WEBHOOK ERROR: Relaxed verification also failed: %v", err)
 		}
 	} else {
-		log.Printf("✅ STRIPE WEBHOOK: Signature verified successfully")
+		// signature verified successfully – no additional logging needed
 	}
 
 	if err != nil {
@@ -224,9 +207,6 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	}
 
 	// Handle the event
-	log.Printf("🎉 STRIPE WEBHOOK SUCCESS: Processing event type: %s", event.Type)
-	log.Printf("🔍 Event ID: %s", event.ID)
-	log.Printf("🔍 Event created: %s", time.Unix(event.Created, 0).Format(time.RFC3339))
 
 	switch event.Type {
 	case "checkout.session.completed":
@@ -240,7 +220,7 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	case "invoice.payment_succeeded":
 		err = handleStripePaymentSucceeded(conn, event)
 	default:
-		log.Printf("⚠️ STRIPE WEBHOOK: Unhandled event type: %s", event.Type)
+		// No specific handler for this event type – ignoring
 	}
 
 	if err != nil {
@@ -249,7 +229,6 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	log.Printf("✅ STRIPE WEBHOOK COMPLETE: Successfully processed event %s (ID: %s)", event.Type, event.ID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -478,7 +457,10 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		log.Printf("Subscription %s has CancelAtPeriodEnd=true, overriding status from '%s' to 'canceling'", subscription.ID, status)
 		status = "canceling"
 	}
-	periodEnd := time.Unix(subscription.CurrentPeriodEnd, 0)
+	var periodEnd time.Time
+	if len(subscription.Items.Data) > 0 {
+		periodEnd = time.Unix(subscription.Items.Data[0].CurrentPeriodEnd, 0)
+	}
 
 	// Get the price ID from the subscription to determine plan
 	var priceID string
@@ -568,8 +550,11 @@ func handleStripePaymentFailed(conn *data.Conn, event stripe.Event) error {
 		return fmt.Errorf("error parsing invoice: %v", err)
 	}
 
-	if invoice.Subscription == nil {
-		return nil // Not a subscription invoice
+	var subID string
+	if invoice.Parent != nil && invoice.Parent.SubscriptionDetails != nil && invoice.Parent.SubscriptionDetails.Subscription != nil {
+		subID = invoice.Parent.SubscriptionDetails.Subscription.ID
+	} else {
+		return nil // Not a subscription invoice or missing subscription info
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
@@ -581,13 +566,13 @@ func handleStripePaymentFailed(conn *data.Conn, event stripe.Event) error {
 		SET subscription_status = 'past_due',
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID)
+		subID)
 
 	if err != nil {
 		return fmt.Errorf("error updating subscription status to past_due: %v", err)
 	}
 
-	log.Printf("Updated subscription %s to past_due due to payment failure", invoice.Subscription.ID)
+	log.Printf("Updated subscription %s to past_due due to payment failure", subID)
 	return nil
 }
 
@@ -597,7 +582,10 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		return fmt.Errorf("error parsing invoice: %v", err)
 	}
 
-	if invoice.Subscription == nil {
+	var subID string
+	if invoice.Parent != nil && invoice.Parent.SubscriptionDetails != nil && invoice.Parent.SubscriptionDetails.Subscription != nil {
+		subID = invoice.Parent.SubscriptionDetails.Subscription.ID
+	} else {
 		return nil // Not a subscription invoice
 	}
 
@@ -605,7 +593,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	defer cancel()
 
 	// Fetch the current subscription from Stripe to get up-to-date plan information
-	stripeSubscription, err := subscription.Get(invoice.Subscription.ID, nil)
+	stripeSubscription, err := subscription.Get(subID, nil)
 	if err != nil {
 		return fmt.Errorf("error fetching subscription from Stripe: %v", err)
 	}
@@ -632,7 +620,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	err = conn.DB.QueryRow(ctx, `
 		SELECT userId FROM users 
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID).Scan(&userID)
+		subID).Scan(&userID)
 
 	if err != nil {
 		return fmt.Errorf("error finding user for subscription: %v", err)
@@ -647,7 +635,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		    subscription_plan = $3,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID, periodEnd, planName)
+		subID, periodEnd, planName)
 
 	if err != nil {
 		return fmt.Errorf("error updating subscription with plan info: %v", err)
@@ -659,7 +647,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		// Don't fail the webhook since the subscription was successfully renewed
 	}
 
-	log.Printf("Updated subscription %s to active with plan %s, period end %s and reset credits for user %d", invoice.Subscription.ID, planName, periodEnd, userID)
+	log.Printf("Updated subscription %s to active with plan %s, period end %s and reset credits for user %d", subID, planName, periodEnd, userID)
 
 	return nil
 }

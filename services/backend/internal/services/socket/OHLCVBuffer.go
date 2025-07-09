@@ -2,12 +2,14 @@ package socket
 
 import (
 	"backend/internal/data"
+	"backend/internal/data/utils"
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/polygon-io/client-go/websocket/models"
 )
 
@@ -114,44 +116,89 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 }
 
 func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
-	batch := &pgx.Batch{}
+	if len(records) == 0 {
+		return
+	}
 
-	for _, record := range records {
-		minuteTimestamp := time.Unix(record.Timestamp/1000, 0).Truncate(time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-		batch.Queue(`
-            INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp", transactions)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (ticker, "timestamp") DO UPDATE SET
-                high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
-                low = LEAST(ohlcv_1m.low, EXCLUDED.low),
-                close = EXCLUDED.close,
-                volume = ohlcv_1m.volume + EXCLUDED.volume`,
-			record.Ticker,
-			record.Volume,
-			record.Open,
-			record.Close,
-			record.High,
-			record.Low,
-			minuteTimestamp,
-			nil, // transactions - not available from real-time data
+	// ------------------------------------------------------------------
+	// 1-Minute bars – build one multi-row INSERT … ON CONFLICT statement
+	// ------------------------------------------------------------------
+	var (
+		args1m         []interface{}
+		placeholders1m []string
+	)
+	for i, r := range records {
+		ts := time.Unix(r.Timestamp/1000, 0).Truncate(time.Minute)
+		// 8 columns per row, so shift is i*8
+		base := i * 8
+		placeholders1m = append(placeholders1m, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8))
+		args1m = append(args1m,
+			r.Ticker,
+			r.Volume,
+			r.Open,
+			r.Close,
+			r.High,
+			r.Low,
+			ts,
+			nil, // transactions not available in real-time
 		)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	query1m := fmt.Sprintf(`INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp", transactions)
+		VALUES %s
+		ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+			high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
+			low  = LEAST(ohlcv_1m.low,  EXCLUDED.low),
+			close = EXCLUDED.close,
+			volume = ohlcv_1m.volume + EXCLUDED.volume`, strings.Join(placeholders1m, ","))
 
-	br := b.dbConn.DB.SendBatch(ctx, batch)
-	defer br.Close()
-
-	// Execute all statements
-	for i := 0; i < len(records); i++ {
-		_, err := br.Exec()
-		if err != nil {
-			log.Printf("Batch exec error on record %d: %v", i, err)
-		}
+	if _, err := b.dbConn.DB.Exec(ctx, query1m, args1m...); err != nil {
+		log.Printf("batchInsert 1m exec error: %v", err)
 	}
 
+	// --------------------------------------------------------------
+	// 1-Day bars – only during regular hours, aggregated on the fly
+	// --------------------------------------------------------------
+	var (
+		args1d         []interface{}
+		placeholders1d []string
+	)
+	for _, r := range records {
+		minuteTS := time.Unix(r.Timestamp/1000, 0).Truncate(time.Minute)
+		if !utils.IsTimestampRegularHours(minuteTS) {
+			continue
+		}
+		dayTS := minuteTS.Truncate(24 * time.Hour)
+		idxStart := len(args1d) + 1 // first placeholder for this row
+		placeholders1d = append(placeholders1d, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", idxStart, idxStart+1, idxStart+2, idxStart+3, idxStart+4, idxStart+5, idxStart+6, idxStart+7))
+		args1d = append(args1d,
+			r.Ticker,
+			r.Volume,
+			r.Open,
+			r.Close,
+			r.High,
+			r.Low,
+			dayTS,
+			nil,
+		)
+	}
+
+	if len(args1d) > 0 {
+		query1d := fmt.Sprintf(`INSERT INTO ohlcv_1d (ticker, volume, open, close, high, low, "timestamp", transactions)
+			VALUES %s
+			ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+				high = GREATEST(ohlcv_1d.high, EXCLUDED.high),
+				low  = LEAST(ohlcv_1d.low,  EXCLUDED.low),
+				close = EXCLUDED.close,
+				volume = ohlcv_1d.volume + EXCLUDED.volume,
+				open = COALESCE(ohlcv_1d.open, EXCLUDED.open)`, strings.Join(placeholders1d, ","))
+		if _, err := b.dbConn.DB.Exec(ctx, query1d, args1d...); err != nil {
+			log.Printf("batchInsert 1d exec error: %v", err)
+		}
+	}
 }
 
 func (b *OHLCVBuffer) FlushRemaining() {
