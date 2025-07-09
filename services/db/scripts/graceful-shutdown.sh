@@ -39,8 +39,13 @@ DB_USER=${POSTGRES_USER:-postgres}
 DB_NAME=${POSTGRES_DB:-postgres}
 
 # Step 1: Prevent new non-superuser connections
-log "Disabling new connections (ALTER DATABASE … CONNECTION LIMIT 0)…"
-PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "ALTER DATABASE \"$DB_NAME\" CONNECTION LIMIT 0;" 2>/dev/null || { log "Could not disable new connections"; SEND_TELEGRAM "⚠️ Failed to disable new DB connections during graceful shutdown"; }
+log "Disabling new connections..."
+if ! DISABLE_OUTPUT=$( PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
+    ALTER SYSTEM SET max_connections = 0;
+    SELECT pg_reload_conf();
+" 2>&1 ); then
+    error_log "Could not disable new connections: $DISABLE_OUTPUT"
+fi
 
 # Step 2: Wait for current transactions to complete (up to 90 seconds)
 log "Waiting for active transactions to complete..."
