@@ -31,6 +31,10 @@ send_alert() {
 # Send alert on any unhandled error
 trap 'send_alert "🚨 DB start-up script failed on line $LINENO"' ERR
 
+# Ensure WAL archive directory exists inside PGDATA (matches archive_command path)
+mkdir -p /home/postgres/pgdata/wal_archive
+chown postgres:postgres /home/postgres/pgdata/wal_archive
+
 # Determine the location of migrate.sh dynamically
 MIGRATE_SCRIPT=""
 if [ -f "/app/migrate.sh" ]; then
