@@ -181,7 +181,7 @@ jobs:
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
           
-          SERVICES="backend frontend db cache worker"
+          SERVICES="db cache backend worker frontend"
           echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
           echo "Using services: ${SERVICES}"
           
