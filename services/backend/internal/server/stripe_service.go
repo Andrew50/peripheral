@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stripe/stripe-go/v78"
@@ -128,38 +129,105 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading Stripe webhook body: %v", err)
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Failed to read request body: %v", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
+
+	// Enhanced logging for debugging
+	log.Printf("🔍 STRIPE WEBHOOK DEBUG: Received webhook request")
+	log.Printf("🔍 Request Method: %s", r.Method)
+	log.Printf("🔍 Request URL: %s", r.URL.String())
+	log.Printf("🔍 Request Headers:")
+	for name, values := range r.Header {
+		for _, value := range values {
+			// Log all headers but redact sensitive ones partially
+			if name == "Stripe-Signature" && len(value) > 10 {
+				log.Printf("🔍   %s: %s...%s (length: %d)", name, value[:10], value[len(value)-10:], len(value))
+			} else {
+				log.Printf("🔍   %s: %s", name, value)
+			}
+		}
+	}
+	log.Printf("🔍 Payload length: %d bytes", len(payload))
+
+	// Check if Stripe-Signature header exists
+	stripeSignature := r.Header.Get("Stripe-Signature")
+	if stripeSignature == "" {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Missing Stripe-Signature header")
+		log.Printf("🔍 This indicates either:")
+		log.Printf("🔍   1. Request is not from Stripe (manual curl/test)")
+		log.Printf("🔍   2. Ingress/proxy is stripping headers")
+		log.Printf("🔍   3. Webhook endpoint URL in Stripe dashboard is wrong")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Check if webhook secret is configured
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if webhookSecret == "" {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: STRIPE_WEBHOOK_SECRET environment variable not set")
+		log.Printf("🔍 This is a server configuration issue")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("✅ STRIPE WEBHOOK: Headers and environment OK, verifying signature...")
+	log.Printf("🔍 Webhook secret length: %d characters", len(webhookSecret))
+	log.Printf("🔍 Signature header length: %d characters", len(stripeSignature))
 
 	// Verify webhook signature - try multiple possible secrets
 	var event stripe.Event
 
 	// Try primary webhook secret
-	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-	if webhookSecret != "" {
-		event, err = webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), webhookSecret)
-		if err != nil {
-			log.Printf("Failed to verify with primary webhook secret: %v", err)
-			// Retry verification but ignore API version mismatch to accommodate newer Stripe API versions
-			event, err = webhook.ConstructEventWithOptions(payload, r.Header.Get("Stripe-Signature"), webhookSecret, webhook.ConstructEventOptions{
-				IgnoreAPIVersionMismatch: true,
-			})
-			if err == nil {
-				log.Printf("Successfully verified webhook signature by ignoring API version mismatch")
-			}
+	event, err = webhook.ConstructEvent(payload, stripeSignature, webhookSecret)
+	if err != nil {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Primary signature verification failed: %v", err)
+		log.Printf("🔍 Error type analysis:")
+
+		// Provide specific error guidance
+		errStr := err.Error()
+		if strings.Contains(errStr, "timestamp") {
+			log.Printf("🔍   -> Timestamp issue: Webhook may be too old or clock skew")
+		} else if strings.Contains(errStr, "signature") {
+			log.Printf("🔍   -> Signature mismatch: Likely wrong webhook secret")
+			log.Printf("🔍   -> Check that STRIPE_STAGE_WEBHOOK_SECRET matches Stripe dashboard")
+		} else if strings.Contains(errStr, "header") {
+			log.Printf("🔍   -> Header issue: Signature header format problem")
+		} else {
+			log.Printf("🔍   -> Unknown verification error")
 		}
+
+		// Retry verification but ignore API version mismatch to accommodate newer Stripe API versions
+		log.Printf("🔄 STRIPE WEBHOOK: Retrying with relaxed API version checking...")
+		event, err = webhook.ConstructEventWithOptions(payload, stripeSignature, webhookSecret, webhook.ConstructEventOptions{
+			IgnoreAPIVersionMismatch: true,
+		})
+		if err == nil {
+			log.Printf("✅ STRIPE WEBHOOK: Signature verified with relaxed API version checking")
+		} else {
+			log.Printf("❌ STRIPE WEBHOOK ERROR: Relaxed verification also failed: %v", err)
+		}
+	} else {
+		log.Printf("✅ STRIPE WEBHOOK: Signature verified successfully")
 	}
 
 	if err != nil {
-		log.Printf("Error verifying Stripe webhook signature: %v", err)
+		log.Printf("❌ STRIPE WEBHOOK FINAL ERROR: All signature verification attempts failed")
+		log.Printf("🔧 TROUBLESHOOTING STEPS:")
+		log.Printf("🔧   1. Verify webhook endpoint URL in Stripe dashboard: https://stage.peripheral.io/billing/webhook")
+		log.Printf("🔧   2. Check STRIPE_STAGE_WEBHOOK_SECRET in GitHub secrets matches Stripe dashboard")
+		log.Printf("🔧   3. Ensure webhook signing secret is copied correctly (no extra spaces)")
+		log.Printf("🔧   4. Test with Stripe CLI: stripe listen --forward-to https://stage.peripheral.io/billing/webhook")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Handle the event
-	log.Printf("Processing Stripe webhook event: %s", event.Type)
+	log.Printf("🎉 STRIPE WEBHOOK SUCCESS: Processing event type: %s", event.Type)
+	log.Printf("🔍 Event ID: %s", event.ID)
+	log.Printf("🔍 Event created: %s", time.Unix(event.Created, 0).Format(time.RFC3339))
+
 	switch event.Type {
 	case "checkout.session.completed":
 		err = handleStripeCheckoutSessionCompleted(conn, event)
@@ -172,15 +240,16 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	case "invoice.payment_succeeded":
 		err = handleStripePaymentSucceeded(conn, event)
 	default:
-		log.Printf("Unhandled Stripe event type: %s", event.Type)
+		log.Printf("⚠️ STRIPE WEBHOOK: Unhandled event type: %s", event.Type)
 	}
 
 	if err != nil {
-		log.Printf("Error handling Stripe webhook event %s: %v", event.Type, err)
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Failed to handle event %s (ID: %s): %v", event.Type, event.ID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("✅ STRIPE WEBHOOK COMPLETE: Successfully processed event %s (ID: %s)", event.Type, event.ID)
 	w.WriteHeader(http.StatusOK)
 }
 
