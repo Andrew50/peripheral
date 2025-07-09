@@ -651,7 +651,7 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search.",
+				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
