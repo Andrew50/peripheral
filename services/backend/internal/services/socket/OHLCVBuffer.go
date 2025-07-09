@@ -113,18 +113,21 @@ func (b *OHLCVBuffer) addBar(timestamp int64, securityID int, bar models.EquityA
 	}
 }
 
-// Batch insert multiple records for the same timestamp
 func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
 	batch := &pgx.Batch{}
 
 	for _, record := range records {
+		minuteTimestamp := time.Unix(record.Timestamp/1000, 0).Truncate(time.Minute)
+
 		batch.Queue(`
-            INSERT INTO ohlcv_1s (timestamp, securityid, open, high, low, close, volume) 
+            INSERT INTO ohlcv_1m (timestamp, securityid, open, high, low, close, volume)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (securityid, timestamp) DO UPDATE SET
-                open = EXCLUDED.open, high = EXCLUDED.high, 
-                low = EXCLUDED.low, close = EXCLUDED.close, volume = EXCLUDED.volume`,
-			time.Unix(record.Timestamp/1000, 0),
+                high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
+                low = LEAST(ohlcv_1m.low, EXCLUDED.low),
+                close = EXCLUDED.close,
+                volume = ohlcv_1m.volume + EXCLUDED.volume`,
+			minuteTimestamp,
 			record.SecurityID,
 			record.Open, record.High, record.Low, record.Close, record.Volume,
 		)
@@ -143,6 +146,7 @@ func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
 			log.Printf("Batch exec error on record %d: %v", i, err)
 		}
 	}
+
 }
 
 func (b *OHLCVBuffer) FlushRemaining() {
