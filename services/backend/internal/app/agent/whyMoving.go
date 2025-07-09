@@ -165,7 +165,6 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 		prompt += "\n"
 	}
 	prompt += fmt.Sprintf("\nCurrent date/time is %s", time.Now().In(nyLoc).Format("2006-01-02 15:04:05"))
-	fmt.Println("prompt: ", prompt)
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return nil, fmt.Errorf("error getting gemini key: %w", err)
@@ -212,7 +211,6 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 			}
 		}
 	}
-	fmt.Println("resultText: ", resultText)
 	var llmResults []LLMWhyMovingResult
 	err = json.Unmarshal([]byte(resultText), &llmResults)
 	if err != nil {
