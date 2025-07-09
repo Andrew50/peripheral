@@ -17,16 +17,6 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-buffers-number: "16"  # Increased from 8 to 16
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "2m" # Increased from 512k to 2MB
 
-    # Header preservation for webhooks (especially Stripe-Signature)
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Forwarded-Proto: https";
-      proxy_set_header Stripe-Signature $http_stripe_signature;
-      proxy_pass_header Stripe-Signature;
-    
-    # Preserve all headers and ensure webhook compatibility
-    nginx.ingress.kubernetes.io/proxy-pass-headers: "Stripe-Signature,X-Stripe-*"
-    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
-
     # SSL redirect off (since Cloudflare is terminating SSL)
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 
