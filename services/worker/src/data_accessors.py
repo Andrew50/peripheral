@@ -166,7 +166,10 @@ class DataAccessorProvider:
         
         # Always batch when tickers=None (all securities)
         if tickers is None:
-            logger.info("🔄 Batching enabled: fetching all securities")
+            logger.info("🔄 Batching enabled: fetching all securities") 
+            return True
+        elif not tickers:  # Empty list case
+            logger.info("🔄 Batching enabled: empty tickers list")
             return True
         
         # Batch when ticker list is large
@@ -462,7 +465,7 @@ class DataAccessorProvider:
                 table_name = timeframe_config
             
             # Default columns if not specified - include ticker by default
-            if columns is None:
+            if not columns:
                 columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume"]
             
             # Validate columns against allowed set (removed adj_close)

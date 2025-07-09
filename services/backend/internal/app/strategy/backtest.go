@@ -68,16 +68,14 @@ type StrategyPlotData struct {
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
 type WorkerBacktestResult struct {
-	Success            bool                   `json:"success"`
-	StrategyID         int                    `json:"strategy_id"`
-	ExecutionMode      string                 `json:"execution_mode"`
-	Instances          []map[string]any       `json:"instances"`
-	Summary            WorkerSummary          `json:"summary"`
-	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
-	ExecutionTimeMs    int                    `json:"execution_time_ms"`
-	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
-	StrategyPlots      []StrategyPlotData     `json:"strategy_plots,omitempty"`
-	ErrorMessage       string                 `json:"error_message,omitempty"`
+	Success        bool               `json:"success"`
+	StrategyID     int                `json:"strategy_id"`
+	ExecutionMode  string             `json:"execution_mode,omitempty"`
+	Instances      []map[string]any   `json:"instances"`
+	Summary        WorkerSummary      `json:"summary"`
+	StrategyPrints string             `json:"strategy_prints,omitempty"`
+	StrategyPlots  []StrategyPlotData `json:"strategy_plots,omitempty"`
+	ErrorMessage   string             `json:"error_message,omitempty"`
 }
 
 // WorkerSummary represents worker summary statistics
