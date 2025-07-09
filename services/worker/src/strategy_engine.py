@@ -165,18 +165,16 @@ class AccessorStrategyEngine:
             
             result = {
                 'success': True,
-                'execution_mode': 'backtest',
+                #'execution_mode': 'backtest',
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
                 'strategy_plots': strategy_plots,
                 'instance_limit_reached': TrackedList.is_limit_reached(),
-                'max_instances_configured': max_instances,
                 'summary': {
                     'total_instances': len(instances),
                     'symbols_processed': len(symbols),
                     'date_range': date_range,
-                    'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
                 },
             }
             
