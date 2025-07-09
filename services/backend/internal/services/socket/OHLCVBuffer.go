@@ -66,7 +66,7 @@ func (b *OHLCVBuffer) flushIfStale() {
 		batchToFlush := make([]OHLCVRecord, len(b.buffer))
 		copy(batchToFlush, b.buffer)
 		b.buffer = b.buffer[:0]
-		go b.batchInsertToSeconds(batchToFlush)
+		go b.batchInsert(batchToFlush)
 		b.lastFlush = time.Now()
 	}
 }
@@ -113,13 +113,8 @@ func (b *OHLCVBuffer) addBar(timestamp int64, securityID int, bar models.EquityA
 	}
 }
 
-func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
-	b.batchInsertToSeconds(records)
-	b.batchInsertToMinutes(records)
-}
-
 // Batch insert multiple records for the same timestamp
-func (b *OHLCVBuffer) batchInsertToSeconds(records []OHLCVRecord) {
+func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
 	batch := &pgx.Batch{}
 
 	for _, record := range records {
@@ -148,42 +143,6 @@ func (b *OHLCVBuffer) batchInsertToSeconds(records []OHLCVRecord) {
 			log.Printf("Batch exec error on record %d: %v", i, err)
 		}
 	}
-}
-
-func (b *OHLCVBuffer) batchInsertToMinutes(records []OHLCVRecord) {
-	batch := &pgx.Batch{}
-
-	for _, record := range records {
-		minuteTimestamp := time.Unix(record.Timestamp/1000, 0).Truncate(time.Minute)
-
-		batch.Queue(`
-            INSERT INTO ohlcv_1m (timestamp, securityid, open, high, low, close, volume)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (securityid, timestamp) DO UPDATE SET
-                high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
-                low = LEAST(ohlcv_1m.low, EXCLUDED.low),
-                close = EXCLUDED.close,
-                volume = ohlcv_1m.volume + EXCLUDED.volume`,
-			minuteTimestamp,
-			record.SecurityID,
-			record.Open, record.High, record.Low, record.Close, record.Volume,
-		)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	br := b.dbConn.DB.SendBatch(ctx, batch)
-	defer br.Close()
-
-	// Execute all statements
-	for i := 0; i < len(records); i++ {
-		_, err := br.Exec()
-		if err != nil {
-			log.Printf("Batch exec error on record %d: %v", i, err)
-		}
-	}
-
 }
 
 func (b *OHLCVBuffer) FlushRemaining() {
