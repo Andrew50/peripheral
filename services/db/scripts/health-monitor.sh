@@ -365,36 +365,39 @@ get_db_status_info() {
 
 # Get system resource information
 get_system_info() {
-    local system_info=""
-    
-    # Get CPU usage
-    local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null || echo "N/A")
-    if [ "$cpu_usage" != "N/A" ]; then
-        system_info="$system_info\n• CPU: ${cpu_usage}%"
+    # Build a compact, single-line summary of resource usage (CPU, RAM in GB, Disk, Uptime)
+    local cpu_usage mem_info mem_total_mb mem_used_mb mem_total_gb mem_used_gb mem_percent
+    local disk_usage uptime_info summary
+
+    # CPU usage (fallback to mpstat if top format differs)
+    cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null)
+    if [ -z "$cpu_usage" ]; then
+        cpu_usage=$(mpstat 1 1 2>/dev/null | awk '/Average:/ {printf "%.1f", 100-$NF}')
     fi
-    
-    # Get memory usage
-    local mem_info=$(free -m 2>/dev/null | grep Mem)
+    cpu_usage=${cpu_usage:-N/A}
+
+    # Memory usage (convert MB → GB with 1 decimal)
+    mem_info=$(free -m 2>/dev/null | grep Mem || true)
     if [ -n "$mem_info" ]; then
-        local mem_total=$(echo "$mem_info" | awk '{print $2}')
-        local mem_used=$(echo "$mem_info" | awk '{print $3}')
-        local mem_percent=$((mem_used * 100 / mem_total))
-        system_info="$system_info\n• Memory: ${mem_percent}% (${mem_used}MB/${mem_total}MB)"
+        mem_total_mb=$(echo "$mem_info" | awk '{print $2}')
+        mem_used_mb=$(echo "$mem_info" | awk '{print $3}')
+        mem_percent=$((mem_used_mb * 100 / mem_total_mb))
+        mem_total_gb=$(awk "BEGIN {printf \"%.1f\", $mem_total_mb / 1024}")
+        mem_used_gb=$(awk "BEGIN {printf \"%.1f\", $mem_used_mb / 1024}")
     fi
-    
-    # Get root disk usage (closest proxy to DB volume)
-    local disk_usage=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | cut -d'%' -f1)
-    if [ -n "$disk_usage" ] && [ "$disk_usage" != "Use%" ]; then
-        system_info="$system_info\n• Disk: ${disk_usage}% (/)"
-    fi
-    
-    # Get uptime
-    local uptime_info=$(uptime -p 2>/dev/null | sed 's/^up //')
-    if [ -n "$uptime_info" ]; then
-        system_info="$system_info\n• Uptime: $uptime_info"
-    fi
-    
-    echo -e "$system_info"
+
+    # Root disk usage (numeric percentage without % sign)
+    disk_usage=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
+    disk_usage=${disk_usage:-N/A}
+
+    # Uptime (strip leading 'up ' and commas to save space)
+    uptime_info=$(uptime -p 2>/dev/null | sed 's/^up //;s/,//g')
+
+    # Construct single-line output
+    summary="• CPU: ${cpu_usage}% | RAM: ${mem_used_gb:-?}/${mem_total_gb:-?}GB (${mem_percent:-?}%) | Disk: ${disk_usage}% | Uptime: ${uptime_info}"
+
+    # Prepend newline so downstream formatting remains unchanged
+    echo -e "\n${summary}"
 }
 
 # Get Kubernetes pod information
