@@ -12,13 +12,13 @@ import (
 )
 
 type OHLCVRecord struct {
-	Timestamp  int64
-	SecurityID int
-	Open       float64
-	High       float64
-	Low        float64
-	Close      float64
-	Volume     int64
+	Timestamp int64
+	Ticker    string
+	Open      float64
+	High      float64
+	Low       float64
+	Close     float64
+	Volume    int64
 }
 
 type OHLCVBuffer struct {
@@ -72,28 +72,28 @@ func (b *OHLCVBuffer) flushIfStale() {
 }
 
 // Add a new OHLCV bar to the buffer
-func (b *OHLCVBuffer) addBar(timestamp int64, securityID int, bar models.EquityAgg) {
+func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAgg) {
 	record := OHLCVRecord{
-		Timestamp:  timestamp,
-		SecurityID: securityID,
-		Open:       bar.Open,
-		High:       bar.High,
-		Low:        bar.Low,
-		Close:      bar.Close,
-		Volume:     int64(bar.Volume),
+		Timestamp: timestamp,
+		Ticker:    ticker,
+		Open:      bar.Open,
+		High:      bar.High,
+		Low:       bar.Low,
+		Close:     bar.Close,
+		Volume:    int64(bar.Volume),
 	}
 
 	b.mu.Lock()
 
 	var batchToFlush []OHLCVRecord
-	var oldTimestamp int64
+	//var oldTimestamp int64
 	var shouldFlush bool
 
 	if timestamp > b.currentTimestamp {
 		if len(b.buffer) > 0 {
 			batchToFlush = make([]OHLCVRecord, len(b.buffer))
 			copy(batchToFlush, b.buffer)
-			oldTimestamp = b.currentTimestamp
+			//oldTimestamp = b.currentTimestamp
 			shouldFlush = true
 			b.lastFlush = time.Now()
 		}
@@ -108,8 +108,8 @@ func (b *OHLCVBuffer) addBar(timestamp int64, securityID int, bar models.EquityA
 
 	if shouldFlush {
 		go b.batchInsert(batchToFlush)
-		log.Printf("Flushing batch: %d records for timestamp %d",
-			len(batchToFlush), oldTimestamp)
+		//log.Printf("Flushing batch: %d records for timestamp %d",
+		//len(batchToFlush), oldTimestamp)
 	}
 }
 
@@ -120,16 +120,21 @@ func (b *OHLCVBuffer) batchInsert(records []OHLCVRecord) {
 		minuteTimestamp := time.Unix(record.Timestamp/1000, 0).Truncate(time.Minute)
 
 		batch.Queue(`
-            INSERT INTO ohlcv_1m (timestamp, securityid, open, high, low, close, volume)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (securityid, timestamp) DO UPDATE SET
+            INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp", transactions)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (ticker, "timestamp") DO UPDATE SET
                 high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
                 low = LEAST(ohlcv_1m.low, EXCLUDED.low),
                 close = EXCLUDED.close,
                 volume = ohlcv_1m.volume + EXCLUDED.volume`,
+			record.Ticker,
+			record.Volume,
+			record.Open,
+			record.Close,
+			record.High,
+			record.Low,
 			minuteTimestamp,
-			record.SecurityID,
-			record.Open, record.High, record.Low, record.Close, record.Volume,
+			nil, // transactions - not available from real-time data
 		)
 	}
 
