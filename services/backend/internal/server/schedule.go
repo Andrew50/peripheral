@@ -330,7 +330,7 @@ func (s *JobScheduler) Start() chan struct{} {
 	s.loadJobLastRunTimes()
 
 	// Add 10-minute delay before starting scheduler operations
-	log.Printf("⏰ Scheduler initialized - waiting 10 minutes before starting job execution...")
+	log.Printf("⏰ Scheduler initialized - 30 seconds before starting job execution...")
 
 	go func() {
 		// Wait 30 seconds before starting scheduler operations
