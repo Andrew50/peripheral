@@ -1,14 +1,23 @@
 package main
 
 import (
-    "backend/internal/server"
-    "backend/internal/data"
+	"backend/internal/data"
+	"backend/internal/server"
+	"time"
 )
 
 func main() {
 	conn, cleanup := data.InitConn(true)
 	defer cleanup()
-	stopScheduler := server.StartScheduler(conn)
-	defer close(stopScheduler)
+
+	// Start the scheduler after a 30-second delay to allow the server to finish
+	// initializing. Previously this delay was 10 minutes; it is now reduced
+	// to improve startup time.
+	go func() {
+		time.Sleep(30 * time.Second)
+		server.StartScheduler(conn)
+	}()
+
+	// Start the HTTP server (blocks)
 	server.StartServer(conn)
 }

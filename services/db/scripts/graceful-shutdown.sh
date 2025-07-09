@@ -22,10 +22,12 @@ DB_NAME=${POSTGRES_DB:-postgres}
 
 # Step 1: Stop accepting new connections
 log "Disabling new connections..."
-PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
+if ! DISABLE_OUTPUT=$( PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
     ALTER SYSTEM SET max_connections = 0;
     SELECT pg_reload_conf();
-" 2>/dev/null || log "Could not disable new connections"
+" 2>&1 ); then
+    error_log "Could not disable new connections: $DISABLE_OUTPUT"
+fi
 
 # Step 2: Wait for current transactions to complete (up to 90 seconds)
 log "Waiting for active transactions to complete..."
