@@ -157,7 +157,6 @@ class AccessorStrategyEngine:
             if error: 
                 raise error
             # Calculate performance metrics
-            performance = self._calculate_performance_metrics(instances)
             
             execution_time = (time.time() - start_time) * 1000
             
@@ -179,7 +178,6 @@ class AccessorStrategyEngine:
                     'date_range': date_range,
                     'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
                 },
-                'performance': performance
             }
             
             logger.info(f"Backtest completed: {len(instances)} instances, {execution_time:.1f}ms")
@@ -252,18 +250,12 @@ class AccessorStrategyEngine:
             logger.debug(f"🔍 Global accessor context: {global_accessor.execution_context}")
             logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
             
-            logger.debug("🔧 Validation optimizations enabled:")
-            logger.debug("   ✓ Minimal dataset: 1 symbol")
-            logger.debug("   ✓ Exact min_bars from strategy code (no arbitrary caps)")
-            logger.debug("   ✓ Fast execution path (validation mode)")
-            logger.debug("   ✓ Skip result ranking and processing")
-            logger.debug("   ✓ Context set on both engine and global data accessors")
             
             # Execute strategy with validation context (don't care about results)
             instances, _, _, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation',
-                max_instances=1000  # Lower limit for validation
+                max_instances=100 # Lower limit for validation
             )
             if error: 
                 raise error
@@ -1106,53 +1098,3 @@ class AccessorStrategyEngine:
             ranked_results.append(ranked_result)
         
         return ranked_results
-
-    def _calculate_performance_metrics(self, instances: List[Dict]) -> Dict[str, Any]:
-        """Calculate performance metrics from instances"""
-        
-        if not instances:
-            return {
-                'total_instances': 0,
-                'signal_rate': 0.0,
-                'unique_tickers': 0,
-                'avg_score': 0.0
-            }
-        
-        # Basic statistics
-        total_instances = len(instances)
-        # Since all returned instances are positive signals (they met criteria), count all
-        positive_instances = total_instances  # All instances are positive instances
-        unique_tickers = len(set(i['ticker'] for i in instances))
-        
-        # Calculate signal rate (always 1.0 since all returned instances are signals)
-        signal_rate = 1.0
-        
-        # Calculate average score if available
-        scores = [i.get('score', 0) for i in instances if 'score' in i and isinstance(i['score'], (int, float))]
-        avg_score = sum(scores) / len(scores) if scores else 0.0
-        
-        metrics = {
-            'total_instances': total_instances,
-            'positive_instances': positive_instances,
-            'signal_rate': round(signal_rate, 4),
-            'unique_tickers': unique_tickers,
-            'avg_score': round(avg_score, 4)
-        }
-        
-        # Add custom metrics if present in instances
-        numeric_fields = []
-        for instance in instances:
-            for key, value in instance.items():
-                if key not in ['ticker', 'timestamp'] and isinstance(value, (int, float)):
-                    if key not in numeric_fields:
-                        numeric_fields.append(key)
-        
-        for field in numeric_fields:
-            values = [i.get(field) for i in instances if field in i and isinstance(i[field], (int, float))]
-            if values:
-                metrics[f'{field}_mean'] = round(np.mean(values), 4)
-                metrics[f'{field}_std'] = round(np.std(values), 4)
-                metrics[f'{field}_min'] = round(min(values), 4)
-                metrics[f'{field}_max'] = round(max(values), 4)
-        
-        return metrics 

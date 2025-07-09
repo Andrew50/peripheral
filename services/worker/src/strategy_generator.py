@@ -647,10 +647,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
     def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
-        
-        IMPORTANT: The system instruction emphasizes returning ALL matching instances,
-        not just the latest per ticker. This prevents the .tail(1) bug that was
-        limiting backtest results to only one instance per symbol.
         """
         try:
             system_instruction = self._get_system_instruction()
