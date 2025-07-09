@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"backend/internal/services/alerts"
+
 	stripe "github.com/stripe/stripe-go/v82"
 	billingportalsession "github.com/stripe/stripe-go/v82/billingportal/session"
 	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
@@ -225,6 +227,8 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 
 	if err != nil {
 		log.Printf("❌ STRIPE WEBHOOK ERROR: Failed to handle event %s (ID: %s): %v", event.Type, event.ID, err)
+		// Send a critical alert so ops are notified immediately
+		alerts.LogCriticalAlert(fmt.Errorf("stripe webhook handler error: %w", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -388,7 +392,9 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 	if planName != "Unknown" {
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, planName); err != nil {
 			log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, planName, err)
-			// Don't fail the webhook since the subscription was successfully created
+			// Escalate: the user paid but we could not allocate their credits – ops must investigate
+			alerts.LogCriticalAlert(fmt.Errorf("failed to allocate credits (plan=%s, user=%d): %w", planName, userID, err))
+			// Don't fail the webhook so subscription remains active, but alert has been sent
 		}
 	}
 
@@ -434,6 +440,7 @@ func handleStripeSubscriptionDeleted(conn *data.Conn, event stripe.Event) error 
 	// Reset user to Free plan credits when subscription is canceled
 	if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 		log.Printf("Warning: Failed to reset user credits for user %d to Free plan: %v", userID, err)
+		alerts.LogCriticalAlert(fmt.Errorf("failed to reset credits to Free after cancellation (user=%d): %w", userID, err))
 	}
 
 	log.Printf("Successfully canceled subscription %s for user %d", subscription.ID, userID)
@@ -514,6 +521,7 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, targetPlan); err != nil {
 			log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, targetPlan, err)
+			alerts.LogCriticalAlert(fmt.Errorf("failed to update credits during subscription update (plan=%s, user=%d): %w", targetPlan, userID, err))
 		}
 
 		log.Printf("Successfully updated subscription %s to status %s with plan %s for user %d", subscription.ID, status, planName, userID)
@@ -535,6 +543,7 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		if status != "active" && status != "canceling" {
 			if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 				log.Printf("Warning: Failed to reset user credits for user %d to Free plan: %v", userID, err)
+				alerts.LogCriticalAlert(fmt.Errorf("failed to reset credits to Free (user=%d): %w", userID, err))
 			}
 		}
 
@@ -644,6 +653,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	// Reset subscription credits for the user's billing cycle with current plan
 	if err := limits.ResetUserSubscriptionCredits(conn, userID, planName); err != nil {
 		log.Printf("Warning: Failed to reset subscription credits for user %d: %v", userID, err)
+		alerts.LogCriticalAlert(fmt.Errorf("failed to reset subscription credits (plan=%s, user=%d): %w", planName, userID, err))
 		// Don't fail the webhook since the subscription was successfully renewed
 	}
 
