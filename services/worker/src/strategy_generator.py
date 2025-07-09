@@ -65,7 +65,7 @@ class StrategyGenerator:
         self.openai_client = OpenAI(api_key=api_key)
         logger.info("OpenAI client initialized successfully")
     
-    def _get_current_filter_values(self) -> Dict[str, List[str]]:
+    def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
         try:
             # Apply rate limiting to prevent connection storms
@@ -91,7 +91,7 @@ class StrategyGenerator:
         """Get system instruction for OpenAI code generation with current database filter values"""
         
         # Get current filter values from database
-        filter_values = self._get_current_filter_values()
+        filter_values = self._get_current_filter_values_from_db()
         
         # Format filter values for the prompt
         sectors_str = '", "'.join(filter_values['sectors'])
