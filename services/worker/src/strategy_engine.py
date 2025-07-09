@@ -161,6 +161,9 @@ class AccessorStrategyEngine:
             
             execution_time = (time.time() - start_time) * 1000
             
+            # Create date range array for summary compatibility
+            date_range = [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
+            
             result = {
                 'success': True,
                 'execution_mode': 'backtest',
@@ -172,8 +175,8 @@ class AccessorStrategyEngine:
                 'max_instances_configured': max_instances,
                 'summary': {
                     'total_instances': len(instances),
-                    'symbols_analyzed': len(symbols),
-                    'date_range': f"{start_date.date()} to {end_date.date()}",
+                    'symbols_processed': len(symbols),
+                    'date_range': date_range,
                     'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
                 },
                 'performance': performance

@@ -715,8 +715,6 @@ class StrategyWorker:
         strategy_code = self._fetch_strategy_code(strategy_id)
         logger.debug(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
-        
-        
         # Handle symbols and securities filtering
         symbols_input = symbols or []
         securities_filter = securities or []
@@ -741,28 +739,53 @@ class StrategyWorker:
         if task_id:
             self._publish_progress(task_id, "preparation", "Preparing date ranges and execution parameters...")
         
-        # Parse dates
+        # Parse and validate dates
+        parsed_start_date = None
+        parsed_end_date = None
+        
         if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-        else:
-            start_date = datetime.now() - timedelta(days=365)  # Default 1 year
-            
+            try:
+                # Parse as YYYY-MM-DD format only
+                parsed_start_date = datetime.strptime(start_date, '%Y-%m-%d')
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid start_date format '{start_date}': {e}. Expected YYYY-MM-DD format. Using default.")
+                parsed_start_date = None
+        
         if end_date:
-            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-        else:
-            end_date = datetime.now()
+            try:
+                # Parse as YYYY-MM-DD format only
+                parsed_end_date = datetime.strptime(end_date, '%Y-%m-%d')
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid end_date format '{end_date}': {e}. Expected YYYY-MM-DD format. Using default.")
+                parsed_end_date = None
+        
+        # Set defaults if parsing failed or dates not provided
+        if not parsed_start_date:
+            parsed_start_date = datetime.now() - timedelta(days=365)  # Default 1 year
+            logger.info(f"Using default start_date: {parsed_start_date.date()}")
+        
+        if not parsed_end_date:
+            parsed_end_date = datetime.now()
+            logger.info(f"Using default end_date: {parsed_end_date.date()}")
+        
+        # Validate date range
+        if parsed_start_date >= parsed_end_date:
+            raise ValueError(f"start_date ({parsed_start_date.date()}) must be before end_date ({parsed_end_date.date()})")
+        
+        # Log the final date range
+        logger.info(f"Backtest date range: {parsed_start_date.date()} to {parsed_end_date.date()}")
         
         if task_id:
-            self._publish_progress(task_id, "execution", f"Executing backtest: {start_date.date()} to {end_date.date()}", 
-                                 {"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), 
+            self._publish_progress(task_id, "execution", f"Executing backtest: {parsed_start_date.date()} to {parsed_end_date.date()}", 
+                                 {"start_date": parsed_start_date.isoformat(), "end_date": parsed_end_date.isoformat(), 
                                   "symbol_count": len(target_symbols)})
         
         # Execute using accessor strategy engine
         result = await self.strategy_engine.execute_backtest(
             strategy_code=strategy_code,
             symbols=target_symbols,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=parsed_start_date,
+            end_date=parsed_end_date,
             **kwargs
         )
         

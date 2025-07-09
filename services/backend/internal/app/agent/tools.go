@@ -414,8 +414,16 @@ var (
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
+						"startDate": {
+							Type:        genai.TypeString,
+							Description: "The start date of the backtest in YYYY-MM-DD format.",
+						},
+						"endDate": {
+							Type:        genai.TypeString,
+							Description: "The end date of the backtest in YYYY-MM-DD format.",
+						},
 					},
-					Required: []string{"strategyId"},
+					Required: []string{"strategyId", "startDate", "endDate"},
 				},
 			},
 			Function:      strategy.RunBacktest,
