@@ -7,7 +7,7 @@
 
 	/* Layout & sizing tokens used by the landing page */
 	--pill-size: 40px;
-	--header-h: 48px;
+	--header-h: 0px;
 	--header-top: 16px;
 
 	/* Hero widget */

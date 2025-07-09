@@ -174,7 +174,7 @@ jobs:
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          SERVICES="backend frontend db cache worker"
+          SERVICES="db cache backend worker frontend"
           echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
           echo "Using services: ${SERVICES}"
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"

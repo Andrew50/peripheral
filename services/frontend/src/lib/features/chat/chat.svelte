@@ -1990,8 +1990,8 @@
 		<div class="public-viewing-notice">
 			<p>
 				You are viewing a shared conversation. <button
-					class="auth-link"
-					on:click={() => showAuthModal('conversations', 'login')}>Sign in</button
+					class="auth-link" 
+					on:click={() => window.location.href = '/login'}>Sign in</button
 				> to start your own chat.
 			</p>
 		</div>

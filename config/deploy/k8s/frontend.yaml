@@ -21,6 +21,8 @@ spec:
           env:
             - name: ORIGIN
               value: "https://${INGRESS_HOST}"
+            - name: BACKEND_URL
+              value: "http://backend:5058"
             - name: PUBLIC_STRIPE_KEY
               valueFrom:
                 secretKeyRef:

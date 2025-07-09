@@ -117,7 +117,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
-	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 15*time.Minute).Result()
+	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 1*time.Minute).Result() // 1 min for testing lol
 	if lockErr != nil {
 		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
 	}
@@ -477,13 +477,26 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == backtestPlotChunkContent.PlotID {
+					// Extract axis titles safely with nil checks
+					var xAxisTitle, yAxisTitle string
+					if xaxis, ok := plot.Layout["xaxis"].(map[string]any); ok && xaxis != nil {
+						if title, titleOk := xaxis["title"].(string); titleOk {
+							xAxisTitle = title
+						}
+					}
+					if yaxis, ok := plot.Layout["yaxis"].(map[string]any); ok && yaxis != nil {
+						if title, titleOk := yaxis["title"].(string); titleOk {
+							yAxisTitle = title
+						}
+					}
+
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
 						Length:     plot.Length,
-						XAxisTitle: plot.Layout["xaxis"].(map[string]any)["title"].(string),
-						YAxisTitle: plot.Layout["yaxis"].(map[string]any)["title"].(string),
+						XAxisTitle: xAxisTitle,
+						YAxisTitle: yAxisTitle,
 					}
 					processedChunks = append(processedChunks, chunk)
 					break

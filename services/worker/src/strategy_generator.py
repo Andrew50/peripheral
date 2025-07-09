@@ -166,6 +166,8 @@ TICKER USAGE:
 - For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
 - For universe-wide strategies, use filters={{}} or filters with sector/industry constraints
 - Return results with 'ticker' field (string), not 'securityid'
+- For Bitcoin exposure, use "IBIT" (iShares Bitcoin Trust ETF)
+- For Ethereum exposure, use "ETHE" (Grayscale Ethereum Trust)
 
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 - DO NOT use .tail(1) or .head(1) to limit results per ticker
@@ -479,7 +481,7 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - Almost always include plots in the strategy to help the user understand the data
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
 - Do not worry about the styling of the plot, just ensure the data is correct and serialisable.
-- You should plot equity curves of the strategy over time.
+- Plot equity curves of the P/L performance of strategies overtime.
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (required) (e.g., "MRNA", "AAPL")
@@ -680,7 +682,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             
             # Use only o3 model as requested
             models_to_try = [
-                ("o4-mini", None),                # o3 model only
+                ("o3", None),                # o3 model only
             ]
             
             last_error = None
@@ -692,6 +694,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                     
                     response = self.openai_client.responses.create(
                         model=model_name,
+                        reasoning={"effort": "low"},
                         input=f"{user_prompt}",
                         instructions=f"{system_instruction}",
                         user=f"user:{userID}",
