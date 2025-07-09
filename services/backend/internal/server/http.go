@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"backend/internal/app/account"
 	"backend/internal/app/agent"
@@ -828,6 +829,8 @@ func StartServer(conn *data.Conn) {
 	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
 	http.Handle("/healthz", withPanicRecovery(HealthCheck()))
 	http.Handle("/billing/webhook", withPanicRecovery(stripeWebhookHandler(conn)))
+
+	http.Handle("/metrics", promhttp.Handler())
 
 	server := &http.Server{
 		Addr:         ":5058",
