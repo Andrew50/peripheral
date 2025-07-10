@@ -237,7 +237,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, productKey string
 	// Get the credits for this product
 	var creditsPerMonth int
 	err := conn.DB.QueryRow(ctx, `
-		SELECT credits_per_month 
+		SELECT queries_limit 
 		FROM subscription_products 
 		WHERE product_key = $1`, productKey).Scan(&creditsPerMonth)
 
@@ -345,7 +345,7 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, productKey string) er
 	var creditsPerMonth, alertsLimit, strategyAlertsLimit int
 
 	query := `
-		SELECT credits_per_month, alerts_limit, strategy_alerts_limit
+		SELECT queries_limit, alerts_limit, strategy_alerts_limit
 		FROM subscription_products 
 		WHERE product_key = $1`
 

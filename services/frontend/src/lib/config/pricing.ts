@@ -1,7 +1,6 @@
 // Database-driven pricing configuration
 import { browser } from '$app/environment';
 import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
-import { getPlanFeatures } from './plan-features';
 
 // Backend structure for subscription products (matches backend SubscriptionProduct)
 export interface BackendSubscriptionProduct {
@@ -15,7 +14,6 @@ export interface BackendSubscriptionProduct {
 	multi_chart: boolean;
 	multi_strategy_screening: boolean;
 	watchlist_alerts: boolean;
-	credits_per_month: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -44,7 +42,6 @@ export interface BackendSubscriptionPlanWithPricing {
 	multi_chart: boolean;
 	multi_strategy_screening: boolean;
 	watchlist_alerts: boolean;
-	credits_per_month: number;
 	created_at: string;
 	updated_at: string;
 	prices: BackendPrice[];
@@ -57,7 +54,7 @@ export interface BackendCreditProduct {
 	stripe_price_id_test?: string;
 	stripe_price_id_live?: string;
 	credit_amount: number;
-	is_active: boolean;
+	price_cents: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -72,7 +69,7 @@ export interface DatabasePlan {
 	description?: string;
 	price_cents: number;
 	billing_period: string;
-	credits_per_billing_period: number;
+	queries_per_billing_period: number;
 	alerts_limit: number;
 	strategy_alerts_limit: number;
 	is_active: boolean;
@@ -241,7 +238,7 @@ function transformBackendDataToFrontend(
 		description: 'Perfect for getting started',
 		price_cents: 0,
 		billing_period: 'month',
-		credits_per_billing_period: 5,
+		queries_per_billing_period: 5,
 		alerts_limit: 0,
 		strategy_alerts_limit: 0,
 		is_active: true,
@@ -285,7 +282,7 @@ function transformBackendDataToFrontend(
 				description: displayInfo.description,
 				price_cents: price.price_cents,
 				billing_period: price.billing_period,
-				credits_per_billing_period: backendPlan.credits_per_month,
+				queries_per_billing_period: backendPlan.queries_limit,
 				alerts_limit: backendPlan.alerts_limit,
 				strategy_alerts_limit: backendPlan.strategy_alerts_limit,
 				is_active: true, // Only active plans are returned from backend
@@ -302,8 +299,7 @@ function transformBackendDataToFrontend(
 	const validCreditProducts = backendCreditProducts.filter(product =>
 		product.product_key &&
 		product.credit_amount &&
-		product.credit_amount > 0 &&
-		product.is_active
+		product.credit_amount > 0
 	);
 
 	// Transform credit products
@@ -323,8 +319,8 @@ function transformBackendDataToFrontend(
 			display_name: displayInfo.display_name,
 			description: displayInfo.description,
 			credit_amount: backendProduct.credit_amount,
-			price_cents: 0, // Credit products don't need price_cents in the frontend interface
-			is_active: backendProduct.is_active,
+			price_cents: backendProduct.price_cents,
+			is_active: true, // All credit products returned from backend are active
 			is_popular: displayInfo.is_popular,
 			sort_order: displayInfo.sort_order,
 			created_at: backendProduct.created_at,
@@ -481,7 +477,5 @@ export function formatPrice(cents: number, billingPeriod: string): string {
 	return `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
-export function getPlanFeaturesForPlan(plan: DatabasePlan): string[] {
-	return getPlanFeatures(plan.plan_name);
-}
+
 

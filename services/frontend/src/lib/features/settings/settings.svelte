@@ -24,6 +24,11 @@
 	let deleteConfirmationText = '';
 	let deletingAccount = false;
 
+	// Cancel subscription variables
+	let cancelingSubscription = false;
+	let showCancelConfirmation = false;
+	let cancelConfirmationText = '';
+
 	// Handle manage subscription
 	function handleManageSubscription() {
 		goto('/pricing');
@@ -65,6 +70,32 @@
 	function generateInitialAvatar(username: string) {
 		const initial = username.charAt(0).toUpperCase();
 		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
+	}
+
+	// Function to handle subscription cancellation
+	async function handleCancelSubscription() {
+		if (cancelConfirmationText !== 'CANCEL') {
+			return;
+		}
+
+		cancelingSubscription = true;
+		errorMessage = '';
+
+		try {
+			await privateRequest('cancelSubscription', {});
+
+			// Refresh subscription status to reflect the cancellation
+			await fetchCombinedSubscriptionAndUsage();
+
+			// Reset confirmation state
+			showCancelConfirmation = false;
+			cancelConfirmationText = '';
+		} catch (error) {
+			console.error('Error canceling subscription:', error);
+			errorMessage = 'Failed to cancel subscription. Please try again.';
+		} finally {
+			cancelingSubscription = false;
+		}
 	}
 
 	// Function to handle account deletion
@@ -248,9 +279,53 @@
 									</p>
 								{/if}
 							{/if}
-							<button class="manage-subscription-button" on:click={handleManageSubscription}>
-								Manage Subscription
-							</button>
+							<div class="subscription-buttons">
+								<button class="manage-subscription-button" on:click={handleManageSubscription}>
+									Manage Subscription
+								</button>
+								{#if !$subscriptionStatus.isCanceling}
+									{#if !showCancelConfirmation}
+										<button
+											class="cancel-subscription-button"
+											on:click={() => (showCancelConfirmation = true)}
+										>
+											Cancel Subscription
+										</button>
+									{:else}
+										<div class="cancel-confirmation">
+											<p class="warning-text">
+												⚠️ This will cancel your subscription at the end of your current billing
+												period.
+											</p>
+											<p>Type <strong>CANCEL</strong> to confirm:</p>
+											<input
+												type="text"
+												bind:value={cancelConfirmationText}
+												placeholder="Type CANCEL here"
+												class="cancel-input"
+											/>
+											<div class="cancel-buttons">
+												<button
+													class="cancel-button"
+													on:click={() => {
+														showCancelConfirmation = false;
+														cancelConfirmationText = '';
+													}}
+												>
+													Keep Subscription
+												</button>
+												<button
+													class="confirm-cancel-button"
+													disabled={cancelConfirmationText !== 'CANCEL' || cancelingSubscription}
+													on:click={handleCancelSubscription}
+												>
+													{cancelingSubscription ? 'Canceling...' : 'Cancel Subscription'}
+												</button>
+											</div>
+										</div>
+									{/if}
+								{/if}
+							</div>
 						</div>
 					{:else}
 						<div class="subscription-info">
@@ -270,21 +345,21 @@
 						<p class="error-text">{$subscriptionStatus.error}</p>
 					{:else}
 						<div class="usage-info">
-							<!-- Credits Section -->
+							<!-- Queries Section -->
 							<div class="usage-section">
-								<h5>Credits</h5>
+								<h5>Queries</h5>
 								<div class="usage-item">
-									<span class="usage-label">Total Credits:</span>
+									<span class="usage-label">Total Queries:</span>
 									<span class="usage-value">{$subscriptionStatus.totalCreditsRemaining || 0}</span>
 								</div>
 								<div class="usage-item">
-									<span class="usage-label">Subscription Credits:</span>
+									<span class="usage-label">Subscription Queries:</span>
 									<span class="usage-value"
 										>{$subscriptionStatus.subscriptionCreditsRemaining || 0}</span
 									>
 								</div>
 								<div class="usage-item">
-									<span class="usage-label">Purchased Credits:</span>
+									<span class="usage-label">Purchased Queries:</span>
 									<span class="usage-value"
 										>{$subscriptionStatus.purchasedCreditsRemaining || 0}</span
 									>
@@ -322,17 +397,17 @@
 								</div>
 							</div>
 
-							<!-- Purchase Credits Button -->
+							<!-- Purchase Queries Button -->
 							{#if $subscriptionStatus.isActive}
 								<button
 									class="upgrade-button"
 									on:click={() => goto('/pricing')}
 									style="margin-top: 1rem;"
 								>
-									Purchase More Credits
+									Purchase More Queries
 								</button>
 							{:else}
-								<p class="upgrade-note">Upgrade to a paid plan to purchase additional credits</p>
+								<p class="upgrade-note">Upgrade to a paid plan to purchase additional queries</p>
 							{/if}
 						</div>
 					{/if}
@@ -610,6 +685,13 @@
 		margin-top: 0.5rem;
 	}
 
+	.subscription-buttons {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		align-items: flex-start;
+	}
+
 	.manage-subscription-button,
 	.upgrade-button {
 		padding: 0.75rem 1.5rem;
@@ -621,13 +703,85 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		align-self: flex-start;
 		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 	}
 
 	.manage-subscription-button:hover,
 	.upgrade-button:hover {
 		background-color: var(--c3-hover);
+	}
+
+	.cancel-subscription-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+	}
+
+	.cancel-subscription-button:hover:not(:disabled) {
+		background-color: #b91c1c;
+	}
+
+	.cancel-subscription-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.cancel-confirmation {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		width: 100%;
+		max-width: 400px;
+		padding: 1rem;
+		background-color: rgba(239, 68, 68, 0.05);
+		border-radius: 6px;
+		border: 1px solid rgba(239, 68, 68, 0.1);
+	}
+
+	.cancel-input {
+		padding: 0.75rem;
+		background-color: var(--c2);
+		border: 1px solid #dc2626;
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		width: 100%;
+		text-align: center;
+	}
+
+	.cancel-buttons {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+	}
+
+	.confirm-cancel-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.confirm-cancel-button:hover:not(:disabled) {
+		background-color: #b91c1c;
+	}
+
+	.confirm-cancel-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.account-actions {

@@ -21,6 +21,7 @@ import (
 	billingportalsession "github.com/stripe/stripe-go/v82/billingportal/session"
 	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
 	"github.com/stripe/stripe-go/v82/customer"
+	"github.com/stripe/stripe-go/v82/price"
 	"github.com/stripe/stripe-go/v82/subscription"
 	"github.com/stripe/stripe-go/v82/webhook"
 )
@@ -249,9 +250,10 @@ func getCreditAmountFromPriceID(conn *data.Conn, priceID string) (int, error) {
 }
 
 // Helper function to check if price ID is for credits using database
-//func isCreditPriceID(conn *data.Conn, priceID string) (bool, error) {
-//return pricing.IsCreditPriceID(conn, priceID)
-//}
+// COMMENTED OUT: This function was never used and IsCreditPriceID is now also commented out
+// func isCreditPriceID(conn *data.Conn, priceID string) (bool, error) {
+// 	return pricing.IsCreditPriceID(conn, priceID)
+// }
 
 func handleStripeCheckoutSessionCompleted(conn *data.Conn, event stripe.Event) error {
 	var session stripe.CheckoutSession
@@ -707,6 +709,79 @@ func handleStripePriceUpdated(conn *data.Conn, event stripe.Event) error {
 	}
 
 	log.Printf("Successfully updated price %s to %d cents in %s mode", price.ID, price.UnitAmount, map[bool]string{true: "live", false: "test"}[isLiveMode])
+	return nil
+}
+
+// SyncPricingFromStripe fetches all prices from Stripe and updates the database
+func SyncPricingFromStripe(conn *data.Conn) error {
+	log.Printf("🔄 Starting pricing sync from Stripe...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// List all prices from Stripe
+	params := &stripe.PriceListParams{}
+	params.Filters.AddFilter("limit", "", "100")   // Get up to 100 prices per request
+	params.Filters.AddFilter("active", "", "true") // Only active prices
+
+	iter := price.List(params)
+	var updatedCount, skippedCount int
+
+	for iter.Next() {
+		stripePrice := iter.Price()
+
+		// Skip if price doesn't have unit_amount (e.g., usage-based pricing)
+		if stripePrice.UnitAmount == 0 {
+			log.Printf("⚠️ Skipping price %s - no unit amount", stripePrice.ID)
+			skippedCount++
+			continue
+		}
+
+		// Determine which column to update based on live mode
+		var updateQuery string
+		var args []interface{}
+
+		if stripePrice.Livemode {
+			updateQuery = `
+				UPDATE prices 
+				SET price_cents = $1,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE stripe_price_id_live = $2`
+			args = []interface{}{stripePrice.UnitAmount, stripePrice.ID}
+		} else {
+			updateQuery = `
+				UPDATE prices 
+				SET price_cents = $1,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE stripe_price_id_test = $2`
+			args = []interface{}{stripePrice.UnitAmount, stripePrice.ID}
+		}
+
+		// Execute the update
+		result, err := data.ExecWithRetry(ctx, conn.DB, updateQuery, args...)
+		if err != nil {
+			log.Printf("❌ Error updating price %s: %v", stripePrice.ID, err)
+			continue
+		}
+
+		rowsAffected := result.RowsAffected()
+		if rowsAffected > 0 {
+			updatedCount++
+			log.Printf("✅ Updated price %s: %d cents (%s mode)",
+				stripePrice.ID,
+				stripePrice.UnitAmount,
+				map[bool]string{true: "live", false: "test"}[stripePrice.Livemode])
+		} else {
+			log.Printf("⚠️ Price %s not found in database (may be untracked)", stripePrice.ID)
+			skippedCount++
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("error iterating Stripe prices: %v", err)
+	}
+
+	log.Printf("✅ Pricing sync completed: %d updated, %d skipped", updatedCount, skippedCount)
 	return nil
 }
 

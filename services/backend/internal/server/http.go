@@ -156,6 +156,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getCombinedSubscriptionAndUsage": GetCombinedSubscriptionAndUsage,
 	"verifyCheckoutSession":           VerifyCheckoutSession,
 	"cancelSubscription":              CancelSubscription,
+	"reactivateSubscription":          ReactivateSubscription,
 
 	// --- usage credits and tracking -------------------------------------------
 	"getUserUsageStats": func(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {

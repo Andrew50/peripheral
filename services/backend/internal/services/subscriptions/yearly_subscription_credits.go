@@ -35,10 +35,10 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 		SELECT u.userId,
 		       u.subscription_plan,
 		       COALESCE(u.last_limit_reset, u.current_period_start) AS last_reset,
-		       sp.credits_per_month
+		       sp.queries_limit
 		FROM users u
 		JOIN subscription_products sp ON sp.product_key = u.subscription_plan
-		JOIN prices p ON sp.id = p.product_id
+		JOIN prices p ON sp.product_key = p.product_key
 		WHERE u.subscription_status = 'active'
 		  AND p.billing_period = 'yearly'`)
 	if err != nil {

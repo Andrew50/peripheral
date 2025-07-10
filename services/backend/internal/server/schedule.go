@@ -156,9 +156,21 @@ func updateYearlySubscriptionCreditsJob(conn *data.Conn) error {
 	return subscriptions.UpdateYearlySubscriptionCredits(conn)
 }
 
+// Wrapper for Stripe pricing sync
+func syncPricingFromStripeJob(conn *data.Conn) error {
+	return SyncPricingFromStripe(conn)
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
+		{
+			Name:           "SyncPricingFromStripe",
+			Function:       syncPricingFromStripeJob,
+			Schedule:       []TimeOfDay{{Hour: 4, Minute: 0}}, // Run at 4:00 AM daily
+			RunOnInit:      true,
+			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
+		},
 		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
