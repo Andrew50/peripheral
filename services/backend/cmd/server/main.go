@@ -1,8 +1,8 @@
 package main
 
 import (
-	"backend/internal/data"
-	"backend/internal/server"
+    "backend/internal/server"
+    "backend/internal/data"
 )
 
 func main() {
