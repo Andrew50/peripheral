@@ -30,10 +30,36 @@
 	let showTimeAndSales = false;
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
+	let whyMovingContent: string | null = null;
+	let lastFetchedWhyMovingTicker: string | null = null;
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
 		if (chartInstance?.ticker) {
 			instance.set(chartInstance);
+
+			// Fetch "Why It's Moving" once per new ticker (private endpoint, skip for public viewing)
+			if (
+				!get(isPublicViewing) &&
+				chartInstance.ticker !== lastFetchedWhyMovingTicker &&
+				chartInstance.ticker
+			) {
+				lastFetchedWhyMovingTicker = chartInstance.ticker;
+				privateRequest<any[]>('getWhyMoving', { tickers: [chartInstance.ticker] })
+					.then((res) => {
+						if (Array.isArray(res) && res.length > 0 && res[0]?.content) {
+							const item = res[0];
+							const timestamp = new Date(item.created_at).getTime();
+							const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
+							whyMovingContent = Date.now() - timestamp <= maxAgeMs ? item.content : null;
+						} else {
+							whyMovingContent = null;
+						}
+					})
+					.catch((e) => {
+						console.error('Quote component: Error fetching why moving:', e);
+						whyMovingContent = null;
+					});
+			}
 
 			// Handle details fetching in the main subscription
 			if (chartInstance.securityId && lastFetchedSecurityId !== chartInstance.securityId) {
@@ -251,6 +277,13 @@
 				<TimeAndSales {instance} />
 			{/if} -->
 		</div>
+
+		{#if whyMovingContent}
+			<div class="why-moving">
+				<span class="label">Why it's moving:</span>
+				<p class="value why-moving-text">{whyMovingContent}</p>
+			</div>
+		{/if}
 
 		<!-- Details Section -->
 		<div class="quote-details">
@@ -634,6 +667,34 @@
 		font-size: 0.8em;
 		line-height: 1.4;
 		color: var(--text-secondary);
+	}
+
+	/* Why Moving */
+	.why-moving {
+		margin-top: clamp(4px, 1vw, 8px);
+		padding: clamp(8px, 1.2vw, 12px);
+		background: rgba(255, 255, 255, 0.05);
+		backdrop-filter: blur(6px);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 8px;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+		text-align: left;
+	}
+
+	.why-moving .label {
+		display: block;
+		color: var(--text-primary);
+		font-size: 0.8em;
+		margin-bottom: 6px;
+		font-weight: 600;
+		text-transform: uppercase;
+	}
+
+	.why-moving-text {
+		font-size: 0.8em;
+		line-height: 1.4;
+		color: var(--text-secondary);
+		white-space: pre-wrap;
 	}
 
 	/* Responsive adjustments */

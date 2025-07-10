@@ -1,25 +1,28 @@
 <script lang="ts">
-	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
-	import { redirectToCheckout, redirectToCustomerPortal } from '$lib/utils/helpers/stripe';
+	// Import the new helper functions
+	import {
+		redirectToCheckout,
+		redirectToCustomerPortal,
+		formatPrice,
+		getPlanFeatures,
+		getPlanPrice,
+		getPriceId,
+		getCreditPriceId,
+		getPlanDisplayName,
+		getCreditProductDisplayName,
+		type DatabasePlan,
+		type DatabaseCreditProduct,
+		type PublicPricingConfiguration
+	} from '$lib/utils/helpers/stripe';
 	import {
 		subscriptionStatus,
 		fetchSubscriptionStatus,
 		fetchUserUsage
 	} from '$lib/utils/stores/stores';
-	import {
-		fetchPricingConfiguration,
-		getPlan,
-		getCreditProduct,
-		getStripePriceForPlan,
-		getStripePriceForCreditProduct,
-		formatPrice,
-		getPlanFeaturesForPlan,
-		type DatabasePlan,
-		type DatabaseCreditProduct
-	} from '$lib/config/pricing';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
@@ -47,6 +50,7 @@
 	// Pricing data state
 	let plans: DatabasePlan[] = [];
 	let creditProducts: DatabaseCreditProduct[] = [];
+	let environment: string = 'test';
 	let pricingLoading = true;
 	let pricingError = '';
 
@@ -55,7 +59,7 @@
 
 	// Include Free plan regardless of selected billing period so it always shows
 	$: filteredPlans = plans.filter(
-		(plan) => plan.plan_name.toLowerCase() === 'free' || plan.billing_period === billingPeriod
+		(plan) => plan.product_key?.toLowerCase() === 'free' || plan.billing_period === billingPeriod
 	);
 
 	// Auth state - check immediately to prevent flash
@@ -69,7 +73,8 @@
 	// Helper function to safely check if a plan is the current plan (only when authenticated)
 	// This implements a conservative approach: only highlight current plan when user is logged in
 	// and subscription data is fully loaded without errors
-	const isCurrentPlan = (planDisplayName: string): boolean => {
+	const isCurrentPlan = (plan: DatabasePlan): boolean => {
+		const planDisplayName = getPlanDisplayName(plan);
 		return (
 			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan?.split(' ')[0] === planDisplayName?.split(' ')[0] &&
@@ -79,7 +84,8 @@
 	};
 
 	// Helper function to check if the current plan is being canceled
-	const isCurrentPlanCanceling = (planDisplayName: string): boolean => {
+	const isCurrentPlanCanceling = (plan: DatabasePlan): boolean => {
+		const planDisplayName = getPlanDisplayName(plan);
 		return (
 			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan === planDisplayName &&
@@ -94,7 +100,7 @@
 		return (
 			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan?.toLowerCase().includes('plus') &&
-			plan.plan_name.toLowerCase().includes('pro')
+			plan.product_key.toLowerCase().includes('pro')
 		);
 	};
 
@@ -140,27 +146,29 @@
 			pricingLoading = true;
 			pricingError = '';
 
-			const config = await fetchPricingConfiguration();
-			plans = config.plans
-				.filter((plan) => plan.is_active)
-				.sort((a, b) => a.sort_order - b.sort_order);
-			console.log(config.creditProducts);
+			// Fetch pricing configuration using the new format
+			const config = await publicRequest<PublicPricingConfiguration>(
+				'getPublicPricingConfiguration',
+				{}
+			);
 
-			// Initialize dynamic loading states for any new plans (e.g., yearly tiers)
+			// Use the data as-is since the API returns the correct format
+			plans = config.plans;
+			creditProducts = config.creditProducts;
+			environment = config.environment;
+
+			// Initialize dynamic loading states for any new plans
 			plans.forEach((plan) => {
-				const key = plan.plan_name.toLowerCase();
+				const key = plan.product_key?.toLowerCase() || 'unknown';
 				if (!(key in loadingStates)) {
 					loadingStates[key] = false;
 				}
 			});
 
-			creditProducts = config.creditProducts
-				.filter((product) => product.is_active)
-				.sort((a, b) => a.sort_order - b.sort_order);
-
 			console.log('✅ [loadPricingConfiguration] Pricing configuration loaded:', {
 				plans,
-				creditProducts
+				creditProducts,
+				environment
 			});
 		} catch (error) {
 			console.error('❌ [loadPricingConfiguration] Failed to load pricing configuration:', error);
@@ -170,6 +178,22 @@
 		}
 	}
 
+	// Helper function to check if a plan is popular (hardcoded)
+	const isPlanPopular = (productKey: string): boolean => {
+		if (!productKey) return false;
+		const popularPlans = ['plus'];
+		return popularPlans.includes(productKey.toLowerCase());
+	};
+
+	// Helper function to check if a credit product is popular (hardcoded)
+	const isCreditProductPopular = (productKey: string): boolean => {
+		if (!productKey) return false;
+		const popularProducts = ['credits250'];
+		return popularProducts.includes(productKey.toLowerCase());
+	};
+
+	// Note: getPlanDisplayName and getPlanPrice are imported from stripe.ts
+
 	// Initialize component
 	async function initializeComponent() {
 		const isAuth = isAuthenticatedFn();
@@ -177,14 +201,9 @@
 		// Load pricing configuration first
 		await loadPricingConfiguration();
 
-		if (isAuth) {
-			await fetchSubscriptionStatus();
-			console.log('📊 [initializeComponent] Subscription status fetch completed');
-		} else {
-			console.log(
-				'ℹ️ [initializeComponent] User not authenticated, skipping subscription status fetch'
-			);
-		}
+		// Always fetch subscription status regardless of authentication
+		await fetchSubscriptionStatus();
+		console.log('📊 [initializeComponent] Subscription status fetch completed');
 	}
 
 	// Enhanced upgrade handler with individual loading states (supports dynamic plan keys)
@@ -213,7 +232,7 @@
 
 		// Check if user has active subscription
 		if (!$subscriptionStatus.isActive) {
-			feedbackMessage = 'Active subscription required to purchase credits';
+			feedbackMessage = 'Active subscription required to purchase queries';
 			feedbackType = 'error';
 			return;
 		}
@@ -244,7 +263,13 @@
 		feedbackType = '';
 
 		try {
-			const priceId = await getStripePriceForPlan(planKey);
+			// Find the plan by key
+			const plan = plans.find((p) => p.product_key?.toLowerCase() === planKey.toLowerCase());
+			if (!plan) {
+				throw new Error(`Plan not found: ${planKey}`);
+			}
+
+			const priceId = getPriceId(plan, environment, billingPeriod);
 			if (!priceId) {
 				throw new Error(`No Stripe price ID found for plan: ${planKey}`);
 			}
@@ -279,12 +304,12 @@
 		feedbackType = '';
 
 		try {
-			const creditProduct = await getCreditProduct(creditKey);
+			const creditProduct = creditProducts.find((p) => p.product_key === creditKey);
 			if (!creditProduct) {
 				throw new Error(`Credit product not found: ${creditKey}`);
 			}
 
-			const priceId = await getStripePriceForCreditProduct(creditKey);
+			const priceId = getCreditPriceId(creditProduct, environment);
 			if (!priceId) {
 				throw new Error(`No Stripe price ID found for credit product: ${creditKey}`);
 			}
@@ -405,12 +430,7 @@
 		clearFeedback();
 	}
 
-	// Helper to get display name without "(Yearly)" suffix for yearly billing plans
-	const getPlanDisplayName = (plan: DatabasePlan): string => {
-		return plan.billing_period === 'year'
-			? plan.display_name.replace(/\s*\(Yearly\)\s*$/i, '').trim()
-			: plan.display_name;
-	};
+	// Note: getPlanDisplayName is imported from stripe.ts
 
 	// Run initialization on mount
 	onMount(async () => {
@@ -461,7 +481,7 @@
 
 					// Refresh user usage and show success message
 					await fetchUserUsage();
-					feedbackMessage = 'Credits purchased successfully!';
+					feedbackMessage = 'Queries purchased successfully!';
 					feedbackType = 'success';
 					return;
 				}
@@ -554,8 +574,6 @@
 			await fetchSubscriptionStatus();
 		}
 	}
-
-
 </script>
 
 <svelte:head>
@@ -563,18 +581,19 @@
 </svelte:head>
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
- <!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="landing-background landing-reset">
-
 	<!-- Main Pricing Content -->
 	<div class="landing-container" style="padding-top: 200px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
 				<h1 class="landing-title">Frictionless Trading</h1>
-				<p class="landing-subtitle">Leverage Peripheral to envision, enhance, and execute your trading ideas.</p>
+				<p class="landing-subtitle">
+					Leverage Peripheral to envision, enhance, and execute your trading ideas.
+				</p>
 			</div>
 
 			<!-- Feedback Messages -->
@@ -602,23 +621,21 @@
 				<!-- Billing Period Slider Toggle -->
 				<div class="billing-slider" class:yearly={billingPeriod === 'year'}>
 					<div class="slider-background"></div>
-					<button 
-						class="slider-option {billingPeriod === 'month' ? 'active' : ''}" 
+					<button
+						class="slider-option {billingPeriod === 'month' ? 'active' : ''}"
 						on:click={() => (billingPeriod = 'month')}
 					>
 						Billed Monthly
 					</button>
-					<button 
-						class="slider-option {billingPeriod === 'year' ? 'active' : ''}" 
+					<button
+						class="slider-option {billingPeriod === 'year' ? 'active' : ''}"
 						on:click={() => (billingPeriod = 'year')}
 					>
 						Billed Yearly
 					</button>
 				</div>
 				<div class="billing-subtitle">
-					<p>
-						Save up to 20% by paying yearly - 2 months free
-					</p>
+					<p>Save up to 20% by paying yearly - 2 months free</p>
 				</div>
 
 				<!-- Available Plans -->
@@ -626,30 +643,34 @@
 					<div class="plans-grid">
 						{#each filteredPlans as plan}
 							<div
-								class="plan-card {isCurrentPlan(plan.display_name)
+								class="plan-card {isCurrentPlan(plan)
 									? 'current-plan'
-									: ''} {isCurrentPlanCanceling(plan.display_name)
-									? 'canceling-plan'
-									: ''} {plan.is_popular ? 'featured' : ''}"
+									: ''} {isCurrentPlanCanceling(plan) ? 'canceling-plan' : ''} {isPlanPopular(
+									plan.product_key || ''
+								)
+									? 'featured'
+									: ''}"
 							>
 								<div class="plan-header">
-									{#if isCurrentPlanCanceling(plan.display_name)}
+									{#if isCurrentPlanCanceling(plan)}
 										<div class="canceling-badge">Canceling</div>
-									{:else if plan.is_popular}
+									{:else if isPlanPopular(plan.product_key || '')}
 										<div class="popular-badge">Most Popular</div>
 									{/if}
 									<h3>{getPlanDisplayName(plan)}</h3>
 									<div class="plan-price">
-										<span class="price">{formatPrice(plan.price_cents, plan.billing_period)}</span>
+										<span class="price"
+											>{formatPrice(getPlanPrice(plan, billingPeriod), billingPeriod)}</span
+										>
 										<span class="period">/month</span>
 									</div>
 								</div>
 								<ul class="plan-features">
-									{#each getPlanFeaturesForPlan(plan) as feature}
+									{#each getPlanFeatures(plan) as feature}
 										<li>{feature}</li>
 									{/each}
 								</ul>
-								{#if isCurrentPlanCanceling(plan.display_name)}
+								{#if isCurrentPlanCanceling(plan)}
 									<button
 										class="landing-button primary full-width"
 										on:click={handleReactivateSubscription}
@@ -668,46 +689,36 @@
 											).toLocaleDateString()}
 										</p>
 									{/if}
-								{:else if isCurrentPlan(plan.display_name)}
-									<button
-										class="subscribe-button"
-										on:click={handleCancelSubscription}
-										disabled
-									>
+								{:else if isCurrentPlan(plan)}
+									<button class="subscribe-button" on:click={handleCancelSubscription} disabled>
 										{#if loadingStates.cancel}
 											<div class="landing-loader"></div>
 										{:else}
 											Active Subscription
 										{/if}
 									</button>
-								{:else if plan.plan_name.toLowerCase() === 'free'}
+								{:else if plan.product_key?.toLowerCase() === 'free'}
 									{#if !$subscriptionStatus.isActive && isAuthenticatedFn()}
-										<button class="subscribe-button current" disabled>
-											Current Plan
-										</button>
+										<button class="subscribe-button current" disabled> Current Plan </button>
 									{:else if $subscriptionStatus.isActive}
-										<button class="subscribe-button" disabled>
-											Downgrade not available
-										</button>
+										<button class="subscribe-button" disabled> Downgrade not available </button>
 									{:else}
-										<button class="subscribe-button" disabled>
-											Get Started Free
-										</button>
+										<button class="subscribe-button" disabled> Get Started Free </button>
 									{/if}
 								{:else}
 									<button
-										class="subscribe-button {plan.plan_name.toLowerCase().includes('pro') ? 'pro' : ''}"
-										on:click={() => handleUpgrade(plan.plan_name.toLowerCase())}
-										disabled={loadingStates[plan.plan_name.toLowerCase()]}
+										class="subscribe-button {plan.product_key?.toLowerCase().includes('pro')
+											? 'pro'
+											: ''}"
+										on:click={() => handleUpgrade(plan.product_key?.toLowerCase() || '')}
+										disabled={loadingStates[plan.product_key?.toLowerCase() || '']}
 									>
-										{#if loadingStates[plan.plan_name.toLowerCase()]}
+										{#if loadingStates[plan.product_key?.toLowerCase() || '']}
 											<div class="landing-loader"></div>
+										{:else if isUpgradeEligible(plan)}
+											Upgrade
 										{:else}
-											{#if isUpgradeEligible(plan)}
-												Upgrade
-											{:else}
-												Subscribe
-											{/if}
+											Subscribe
 										{/if}
 									</button>
 								{/if}
@@ -716,12 +727,12 @@
 					</div>
 				</div>
 
-				<!-- Credit Products Section -->
+				<!-- Query Products Section -->
 				<div class="credits-section">
 					<div class="credits-header">
-						<h2 class="landing-subtitle">Add More Credits</h2>
+						<h2 class="landing-subtitle">Add More Queries</h2>
 						<p class="credits-description">
-							Purchase additional credits to extend your usage beyond your monthly allocation.
+							Purchase additional queries to extend your usage beyond your monthly allocation.
 						</p>
 					</div>
 					<div class="credits-grid">
@@ -729,20 +740,21 @@
 							<div
 								class="credit-card {!$subscriptionStatus.isActive
 									? 'disabled'
-									: ''} {product.is_popular ? 'featured' : ''}"
+									: ''} {isCreditProductPopular(product.product_key) ? 'featured' : ''}"
 								title={!$subscriptionStatus.isActive
-									? 'Active subscription required to purchase credits'
+									? 'Active subscription required to purchase queries'
 									: ''}
 							>
 								<div class="credit-header">
-									{#if product.is_popular}
+									{#if isCreditProductPopular(product.product_key)}
 										<div class="popular-badge">Best Value</div>
 									{/if}
-									<h3>{product.display_name}</h3>
-									<div class="credit-price">
-										<span class="price">{formatPrice(product.price_cents, 'month')}</span>
+									<h3>{getCreditProductDisplayName(product)}</h3>
+									<div class="credit-amount">
+										<span class="amount">{product.credit_amount}</span>
+										<span class="label">Queries</span>
 									</div>
-									<p class="credit-description">{product.description || ''}</p>
+									<p class="credit-description">Additional queries for your account</p>
 								</div>
 								<button
 									class="landing-button primary full-width"
@@ -754,7 +766,7 @@
 									{:else if !$subscriptionStatus.isActive}
 										Subscription Required
 									{:else}
-										Purchase {product.credit_amount} Credits
+										Purchase {product.credit_amount} Queries
 									{/if}
 								</button>
 							</div>
@@ -860,10 +872,9 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-        border: 2px solid rgba(0, 0, 0, 0.5);
-        border-radius: 24px;
+		border: 2px solid rgba(0, 0, 0, 0.5);
+		border-radius: 24px;
 	}
-
 
 	.plan-card.featured {
 		border-color: var(--landing-accent-blue);
@@ -1025,7 +1036,7 @@
 		}
 	}
 
-	/* Credit Products Styles */
+	/* Query Products Styles */
 	.credits-section {
 		margin-bottom: 3rem;
 	}
@@ -1089,7 +1100,8 @@
 	}
 
 	.credit-card.disabled h3,
-	.credit-card.disabled .price,
+	.credit-card.disabled .amount,
+	.credit-card.disabled .label,
 	.credit-card.disabled .credit-description {
 		color: var(--landing-text-secondary);
 		opacity: 0.7;
@@ -1112,7 +1124,7 @@
 		margin-bottom: 1rem;
 	}
 
-	.credit-price {
+	.credit-amount {
 		display: flex;
 		align-items: baseline;
 		justify-content: center;
@@ -1120,10 +1132,15 @@
 		margin-bottom: 1rem;
 	}
 
-	.credit-price .price {
+	.credit-amount .amount {
 		font-size: 2.5rem;
 		font-weight: 700;
 		color: var(--landing-text-primary);
+	}
+
+	.credit-amount .label {
+		font-size: 1rem;
+		color: var(--landing-text-secondary);
 	}
 
 	.credit-description {
@@ -1277,7 +1294,6 @@
 		color: rgba(255, 255, 255, 0.8);
 		cursor: not-allowed;
 	}
-
 
 	@media (max-width: 640px) {
 		.slider-option {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/telebot.v3"
@@ -16,10 +17,22 @@ import (
 var (
 	bot    *telebot.Bot
 	chatID int64
+	// devEnv indicates whether the application is running in a local development
+	// environment. When true, Telegram integration is skipped entirely so that
+	// developers are not required to provide bot credentials.
+	devEnv bool
 )
 
 // InitTelegramBot performs operations related to InitTelegramBot functionality.
 func InitTelegramBot() error {
+	// Detect a development environment early and skip Telegram setup entirely.
+	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
+	if env == "" || env == "dev" || env == "development" {
+		devEnv = true
+		log.Println("InitTelegramBot: development environment detected, skipping Telegram bot initialisation")
+		return nil
+	}
+
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if botToken == "" {
 		log.Fatal("Error: TELEGRAM_BOT_TOKEN environment variable is required.")
@@ -50,6 +63,10 @@ func InitTelegramBot() error {
 
 // SendTelegramMessage performs operations related to SendTelegramMessage functionality.
 func SendTelegramMessage(msg string, chatID int64) error {
+	// No-op in development or if the bot has not been initialised.
+	if devEnv || bot == nil {
+		return nil
+	}
 	recipient := telebot.ChatID(chatID)
 	_, err := bot.Send(recipient, msg)
 	return err
@@ -110,7 +127,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
         VALUES ($1, $2, $3)
     `
 
-	_, err = conn.DB.Exec(context.Background(),
+	_, err = data.ExecWithRetry(context.Background(), conn.DB,
 		query,
 		alert.AlertID,
 		timestamp,
@@ -127,7 +144,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
         SET active = false
         WHERE alertId = $1
     `
-	_, err = conn.DB.Exec(context.Background(), updateQuery, alert.AlertID)
+	_, err = data.ExecWithRetry(context.Background(), conn.DB, updateQuery, alert.AlertID)
 	if err != nil {
 		//log.Printf("Failed to disable alert with ID %d: %v", alert.AlertID, err)
 		return fmt.Errorf("failed to disable alert: %v", err)

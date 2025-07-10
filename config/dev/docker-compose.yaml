@@ -42,7 +42,7 @@ services:
     networks:
       - compose_network
     volumes:
-      - db:/var/lib/postgresql/data
+      - db:/home/postgres/pgdata
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres

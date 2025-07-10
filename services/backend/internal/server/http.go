@@ -25,6 +25,7 @@ import (
 	"backend/internal/app/settings"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
+	alertsvc "backend/internal/services/alerts"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -155,6 +156,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getCombinedSubscriptionAndUsage": GetCombinedSubscriptionAndUsage,
 	"verifyCheckoutSession":           VerifyCheckoutSession,
 	"cancelSubscription":              CancelSubscription,
+	"reactivateSubscription":          ReactivateSubscription,
 
 	// --- usage credits and tracking -------------------------------------------
 	"getUserUsageStats": func(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -188,6 +190,28 @@ type StreamingResponse struct {
 	Timestamp time.Time   `json:"timestamp"`
 }
 
+// withPanicRecovery wraps an http.HandlerFunc, recovers from panics,
+// sends a critical alert, and returns HTTP 500.
+func withPanicRecovery(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				var err error
+				switch x := rec.(type) {
+				case error:
+					err = fmt.Errorf("panic: %w", x)
+				default:
+					err = fmt.Errorf("panic: %v", x)
+				}
+
+				_ = alertsvc.LogCriticalAlert(err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+		}()
+		h(w, r)
+	}
+}
+
 func addCORSHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -197,11 +221,22 @@ func addCORSHeaders(w http.ResponseWriter) {
 func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
 		logMessage := fmt.Sprintf("%s: %v", context, err)
-		if context == "auth" {
-			http.Error(w, logMessage, http.StatusUnauthorized)
-		} else {
-			http.Error(w, logMessage, http.StatusBadRequest)
+		log.Println(logMessage)
+
+		// Only log a critical alert for non-auth related errors. Authentication
+		// failures (e.g. invalid or expired JWTs) are expected client errors and
+		// should not trigger pager duty alerts.
+		if context != "auth" {
+			_ = alertsvc.LogCriticalAlert(err)
 		}
+
+		// Decide public-facing message
+		status, msg := resolveAppError(err)
+		if context == "auth" {
+			status = http.StatusUnauthorized
+		}
+
+		http.Error(w, msg, status)
 		return true
 	}
 	return false
@@ -253,9 +288,9 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		if err != nil {
 			// Log the detailed error on the server
 			log.Printf("Public handler error [%s]: %v", req.Function, err)
-			// Send the specific error message back to the client
-			// Use StatusBadRequest for general input/logic errors from Login/Signup
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			// Map to safe client message
+			status, msg := resolveAppError(err)
+			http.Error(w, msg, status)
 			return
 		}
 
@@ -786,18 +821,18 @@ func StartServer(conn *data.Conn) {
 	// Initialize chat handler for WebSocket
 	socket.SetChatHandler(agent.GetChatRequest)
 
-	http.HandleFunc("/public", publicHandler(conn))
-	http.HandleFunc("/private", privateHandler(conn))
-	http.HandleFunc("/streaming-chat", streamingChatHandler(conn))
-	http.HandleFunc("/ws", WSHandler(conn))
-	http.HandleFunc("/upload", privateUploadHandler(conn))
-	http.HandleFunc("/healthz", HealthCheck())
-	http.HandleFunc("/billing/webhook", stripeWebhookHandler(conn))
+	// Replace direct registrations with panic-recovered handlers
+	http.Handle("/public", withPanicRecovery(publicHandler(conn)))
+	http.Handle("/private", withPanicRecovery(privateHandler(conn)))
+	http.Handle("/streaming-chat", withPanicRecovery(streamingChatHandler(conn)))
+	http.Handle("/ws", withPanicRecovery(WSHandler(conn)))
+	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
+	http.Handle("/healthz", withPanicRecovery(HealthCheck()))
+	http.Handle("/billing/webhook", withPanicRecovery(stripeWebhookHandler(conn)))
 
 	server := &http.Server{
-		Addr:    ":5058",
-		Handler: http.DefaultServeMux,
-		// Good practice to set timeouts to prevent resource exhaustion.
+		Addr:         ":5058",
+		Handler:      http.DefaultServeMux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 10 * time.Minute, // Increased for streaming
 		IdleTimeout:  240 * time.Second,
@@ -805,6 +840,7 @@ func StartServer(conn *data.Conn) {
 
 	log.Println("debug: Server running on port 5058")
 	if err := server.ListenAndServe(); err != nil {
+		_ = alertsvc.LogCriticalAlert(err)
 		log.Fatal(err)
 	}
 }

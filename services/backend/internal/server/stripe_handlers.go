@@ -11,10 +11,10 @@ import (
 
 	"backend/internal/app/pricing"
 
-	stripe "github.com/stripe/stripe-go/v78"
-	subscription "github.com/stripe/stripe-go/v78/subscription"
+	stripe "github.com/stripe/stripe-go/v82"
+	subscription "github.com/stripe/stripe-go/v82/subscription"
 
-	checkoutsession "github.com/stripe/stripe-go/v78/checkout/session"
+	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
 )
 
 // CreateCheckoutSessionArgs represents arguments for creating a checkout session
@@ -218,10 +218,20 @@ func GetSubscriptionStatus(conn *data.Conn, userID int, rawArgs json.RawMessage)
 			return nil, fmt.Errorf("subscription found but plan information is missing")
 		}
 		currentPlan = subscriptionPlan
-	default:
+	case "inactive":
+		// For inactive users, they are on the Free plan
 		isActive = false
 		isCanceling = false
-		currentPlan = ""
+		// Use stored plan if available, otherwise default to Free
+		if subscriptionPlan != "" {
+			currentPlan = subscriptionPlan
+		} else {
+			currentPlan = "Free"
+		}
+	default:
+		// Unexpected subscription status
+		log.Printf("Error: Unexpected subscription status '%s' for user %d", subscriptionStatus, userID)
+		return nil, fmt.Errorf("unexpected subscription status: %s", subscriptionStatus)
 	}
 
 	response := map[string]interface{}{
@@ -320,11 +330,11 @@ func GetUserUsage(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 func GetPublicPricingConfiguration(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("GetPublicPricingConfiguration called")
 
-	// Get subscription plans
-	plans, err := pricing.GetSubscriptionPlans(conn)
+	// Get subscription products with pricing
+	plans, err := pricing.GetSubscriptionProductsWithPricing(conn)
 	if err != nil {
-		log.Printf("Error getting subscription plans: %v", err)
-		return nil, fmt.Errorf("error retrieving subscription plans")
+		log.Printf("Error getting subscription products: %v", err)
+		return nil, fmt.Errorf("error retrieving subscription products")
 	}
 
 	// Get credit products

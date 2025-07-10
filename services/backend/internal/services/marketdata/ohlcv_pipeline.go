@@ -24,6 +24,12 @@ import (
 
 // -----------------------------------------------------------------------------
 // Performance-optimised connection pool for bulk COPY
+//
+// Note: Connection pool creation includes retry logic to handle transient
+// database connectivity issues (e.g., during database restarts, maintenance
+// windows, or Kubernetes pod rescheduling). The retry wrapper will attempt
+// up to 5 times with exponential backoff for connection timeouts and dial
+// errors before failing the job.
 // -----------------------------------------------------------------------------
 
 type bulkLoadPool struct {
@@ -52,6 +58,20 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 				return fmt.Errorf("set %s: %w", s, err)
 			}
 		}
+
+		// Disable or raise the tuple-decompression guardrail for this session so large UPSERTs
+		// that touch compressed chunks do not error with:
+		//   ERROR: tuple decompression limit exceeded by operation (SQLSTATE 53400)
+		// If the running TimescaleDB version does not expose the GUC the command will error
+		// with "unrecognized configuration parameter". In that case we log the event and
+		// continue; for any other error we still abort pool creation.
+		if _, err := conn.Exec(ctx, "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"); err != nil {
+			if strings.Contains(err.Error(), "unrecognized configuration parameter") {
+				log.Printf("ℹ️  Parameter timescaledb.max_tuples_decompressed_per_dml_transaction not available: %v", err)
+			} else {
+				return fmt.Errorf("set timescaledb.max_tuples_decompressed_per_dml_transaction: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -61,6 +81,68 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 	}
 
 	return &bulkLoadPool{pool: pool}, nil
+}
+
+// newBulkLoadPoolWithRetry wraps newBulkLoadPool with retry logic for transient connection failures.
+// This handles cases where the database is temporarily unavailable (restarts, maintenance, etc.).
+func newBulkLoadPoolWithRetry(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, error) {
+	const maxAttempts = 5
+	const baseDelay = 2 * time.Second
+	const maxDelay = 30 * time.Second
+
+	var lastErr error
+	delay := baseDelay
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Check if context was cancelled before attempting
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		blp, err := newBulkLoadPool(ctx, db)
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("✅ Bulk load pool created successfully on attempt %d/%d", attempt, maxAttempts)
+			}
+			return blp, nil
+		}
+
+		lastErr = err
+
+		// Check if this looks like a transient connection error
+		isTransientError := strings.Contains(err.Error(), "dial error") ||
+			strings.Contains(err.Error(), "i/o timeout") ||
+			strings.Contains(err.Error(), "connection refused") ||
+			strings.Contains(err.Error(), "timeout")
+
+		// If it's not a transient error, fail immediately
+		if !isTransientError {
+			return nil, fmt.Errorf("create bulk load pool: %w", err)
+		}
+
+		// Don't retry on the last attempt
+		if attempt == maxAttempts {
+			break
+		}
+
+		log.Printf("⚠️ Bulk load pool creation failed (attempt %d/%d): %v - retrying in %v",
+			attempt, maxAttempts, err, delay)
+
+		// Sleep with context cancellation check
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+
+		// Exponential backoff with cap
+		delay *= 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+
+	return nil, fmt.Errorf("create bulk load pool failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (blp *bulkLoadPool) Close() { blp.pool.Close() }
@@ -86,6 +168,8 @@ type batchedCSVReader struct {
 
 	gz   *gzip.Reader
 	body io.ReadCloser
+
+	cancel context.CancelFunc // cancels the request context once the body is closed
 
 	// Accumulated time spent fetching objects from S3. This allows callers to
 	// break down wall-clock time between network I/O (download) and database
@@ -116,6 +200,10 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 				_ = b.body.Close()
 				b.body = nil
 			}
+			if b.cancel != nil {
+				b.cancel()
+				b.cancel = nil
+			}
 			b.current = nil
 			// Loop to open next file.
 		}
@@ -130,9 +218,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		// Measure the time spent establishing the object stream from S3.
 		fetchStart := time.Now()
-		ctxObj, cancel := context.WithTimeout(b.ctx, 15*time.Minute)
-		resp, err := b.s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(b.bucket), Key: aws.String(file)})
-		cancel()
+		resp, cancelFunc, err := getS3ObjectWithRetry(b.ctx, b.s3c, b.bucket, file, 3)
 		b.fetchDur += time.Since(fetchStart)
 		if err != nil {
 			return 0, fmt.Errorf("get object %s: %w", file, err)
@@ -146,6 +232,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		b.gz = gz
 		b.body = resp.Body
+		b.cancel = cancelFunc
 		reader := bufio.NewReader(gz)
 
 		if !b.hasRead {
@@ -226,6 +313,15 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		// Per-connection staging table setup
 		// -----------------------------------------------------------------
 		stageTable := fmt.Sprintf("%s_stage_%d", pw.table, pgc.PID())
+
+		// Ensure the temporary staging table is removed once this connection finishes.
+		// We drop it *before* the function returns so it is cleaned up even if the
+		// job crashes between batches.
+		defer func() {
+			if _, err := c.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stageTable)); err != nil {
+				log.Printf("warning: drop staging table %s: %v", stageTable, err)
+			}
+		}()
 
 		// Staging table needs a bigint timestamp column because Polygon CSV files
 		// contain Unix *nanosecond* epoch values. The main hypertables now store
@@ -517,19 +613,81 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 }
 
 // -----------------------------------------------------------------------------
+// S3 retry helpers
+// -----------------------------------------------------------------------------
+
+// getS3ObjectWithRetry downloads an S3 object with exponential backoff retry on rate limits.
+// It returns both the object output and the CancelFunc belonging to the per-request timeout
+// context. Callers **must** invoke the returned cancel function after they are done reading
+// resp.Body (ideally in the same defer that closes the body) to release resources associated
+// with the timer.
+func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key string, maxRetries int) (*s3.GetObjectOutput, context.CancelFunc, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2^attempt seconds, capped at 30 seconds
+			backoffDuration := time.Duration(1<<attempt) * time.Second
+			if backoffDuration > 30*time.Second {
+				backoffDuration = 30 * time.Second
+			}
+
+			log.Printf("S3 GetObject rate limited for %s (attempt %d/%d), backing off for %v...", key, attempt, maxRetries, backoffDuration)
+
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-time.After(backoffDuration):
+			}
+		}
+
+		ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
+		resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+
+		if err != nil {
+			// If the request failed, release resources tied to the timeout context
+			cancel() // cancel context for the failed attempt
+
+			lastErr = err
+
+			// Check if this is a rate limit error
+			if isS3RateLimitError(err) {
+				continue // Retry on rate limit
+			}
+
+			// For non-rate-limit errors, fail immediately
+			return nil, nil, err
+		}
+
+		// On success, *do not* call cancel() – keeping the context alive ensures
+		// the underlying HTTP stream remains readable for the lifetime of
+		// resp.Body. The 15-minute timeout will still automatically cancel if
+		// the download stalls for too long.
+
+		// Success – return both the response and the cancel so the caller can
+		// defer their cleanup.
+		return resp, cancel, nil
+	}
+
+	return nil, nil, fmt.Errorf("S3 GetObject failed after %d retries for %s, last error: %w", maxRetries, key, lastErr)
+}
+
+// -----------------------------------------------------------------------------
 // COPY helpers & failed-file tracking structs
 // -----------------------------------------------------------------------------
 
 func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, key, table string) error {
-	// Download object with generous timeout – single-file fallback path.
-	ctxObj, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
-
-	resp, err := s3c.GetObject(ctxObj, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	// Download object with retry logic for rate limiting
+	resp, cancel, err := getS3ObjectWithRetry(ctx, s3c, bucket, key, 3)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		resp.Body.Close()
+		if cancel != nil {
+			cancel()
+		}
+	}()
 
 	gz, err := gzip.NewReader(resp.Body)
 	if err != nil {
@@ -590,7 +748,7 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 
 // copyCSV is no longer used but kept for reference; mark deprecated.
 // Deprecated: use the two-step staging load path instead.
-func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
+/*func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader) error {
 	pgErr := pool.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
 		pgc := c.Conn().PgConn()
 		sql := fmt.Sprintf("COPY %s(ticker, volume, open, close, high, low, \"timestamp\", transactions) FROM STDIN WITH (FORMAT csv, HEADER true)", table)
@@ -598,7 +756,7 @@ func copyCSV(ctx context.Context, pool *pgxpool.Pool, table string, r io.Reader)
 		return err
 	})
 	return pgErr
-}
+}*/
 
 // Failure bookkeeping --------------------------------------------------------
 
@@ -637,6 +795,7 @@ func (fc *failedCollector) PopAll() []failedFile {
 
 // Processed-date tracking -----------------------------------------------------
 
+/*
 type processedDateTracker struct {
 	mu             sync.Mutex
 	processedDates map[time.Time]bool
@@ -666,6 +825,7 @@ func (p *processedDateTracker) GetConservativeUpdateDate() time.Time {
 	}
 	return earliest.AddDate(0, 0, -1)
 }
+*/
 
 // parseDayFromKey extracts YYYY-MM-DD from an S3 key that ends with .csv.gz.
 func parseDayFromKey(key string) (time.Time, error) {

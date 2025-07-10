@@ -95,7 +95,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 		}
 
 		// 2) Mark as DELISTED any ticker NOT in this date's list
-		if _, err := conn.DB.Exec(ctx, `
+		if _, err := data.ExecWithRetry(ctx, conn.DB, `
 			UPDATE securities
 			   SET maxDate = $1
 			 WHERE maxDate IS NULL
@@ -110,7 +110,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 		}
 
 		// 3) REACTIVATE any ticker IN this date's list
-		if _, err := conn.DB.Exec(ctx, `
+		if _, err := data.ExecWithRetry(ctx, conn.DB, `
 			UPDATE securities
 			   SET maxDate = NULL
 			 WHERE maxDate IS NOT NULL
@@ -124,7 +124,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 		} else {
 			// 4) INSERT new IPO tickers with mindate = current date
 			for _, ipo := range ipos.Tickers {
-				if _, err := conn.DB.Exec(ctx, `
+				if _, err := data.ExecWithRetry(ctx, conn.DB, `
 					INSERT INTO securities (ticker, mindate, figi) 
 					VALUES ($1, $2, $3)
 					ON CONFLICT (ticker, mindate) DO NOTHING
@@ -284,7 +284,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 		}
 
 		// Insert new IPO security with listing date as minDate and NULL maxDate
-		_, err = conn.DB.Exec(context.Background(), `
+		_, err = data.ExecWithRetry(ctx, conn.DB, `
 			INSERT INTO securities (ticker, minDate, maxDate, active, figi) 
 			VALUES ($1, $2, NULL, true, $3)
 			ON CONFLICT (ticker, minDate) DO NOTHING`,

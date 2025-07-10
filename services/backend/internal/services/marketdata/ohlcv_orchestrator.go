@@ -74,7 +74,7 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 	}
 
 	fc := &failedCollector{}
-	bulkConnPool, err := newBulkLoadPool(ctx, db)
+	bulkConnPool, err := newBulkLoadPoolWithRetry(ctx, db)
 	if err != nil {
 		return fmt.Errorf("create bulk load pool: %w", err)
 	}
@@ -128,15 +128,17 @@ END$$;`, tbl)
 
 	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
 
-	// Create or clean staging table for two-step COPY.
-	stageTbl := tbl + "_stage"
-	createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (LIKE %s INCLUDING ALL)`, stageTbl, tbl)
-	if _, err := data.ExecWithRetry(ctx, db, createStageSQL); err != nil {
-		return fmt.Errorf("create staging table: %w", err)
-	}
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`TRUNCATE %s`, stageTbl)); err != nil {
-		return fmt.Errorf("truncate staging table: %w", err)
-	}
+	// -----------------------------------------------------------------
+	// NOTE: Previously we created a shared staging table `<tbl>_stage` here.
+	// That approach was prone to race conditions between concurrent sessions
+	// that still held cached references to the table's composite *row type*.
+	// Dropping the type in one session could invalidate another session's
+	// cache and trigger «cache lookup failed for relation …» (SQLSTATE XX000).
+	//
+	// The load pipeline has since moved to per-connection staging tables
+	// (`<tbl>_stage_<pid>`), so the shared table is no longer required.
+	// We therefore skip this step entirely to avoid the invalidation hazard.
+
 	return nil
 }
 
@@ -157,7 +159,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM timescaledb_information.jobs
         WHERE proc_name = 'policy_compression'
-          AND relname = '%s') THEN
+          AND hypertable_name = '%s') THEN
         PERFORM add_compression_policy('%s', 302400000000000);
     END IF;
 END$$;`, tbl, tbl)
@@ -182,10 +184,15 @@ END$$;`, tbl, tbl)
 		log.Printf("analyze warning for %s: %v", tbl, err)
 	}
 
-	// Drop staging table created for this timeframe.
 	stageTbl := tbl + "_stage"
 	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, stageTbl)); err != nil {
 		log.Printf("warning: drop staging table %s: %v", stageTbl, err)
+	}
+	// Also remove the composite type in case the table was dropped elsewhere
+	// and only the type remains (prevents "type ... already exists" on the
+	// next run).
+	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`DROP TYPE IF EXISTS %s CASCADE`, stageTbl)); err != nil {
+		log.Printf("warning: drop staging type %s: %v", stageTbl, err)
 	}
 
 	// -------------------------------------------------------------------
@@ -233,8 +240,12 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 }
 
 func setLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string, t time.Time) error {
-	_, err := db.Exec(ctx, `INSERT INTO ohlcv_update_state(timeframe, last_loaded_at) VALUES($1, $2)
-                             ON CONFLICT (timeframe) DO UPDATE SET last_loaded_at = EXCLUDED.last_loaded_at`, timeframe, t)
+	// Use the robust retry helper so a brief database restart does not abort the
+	// entire ingestion run.
+	_, err := data.ExecWithRetry(ctx, db, `INSERT INTO ohlcv_update_state(timeframe, last_loaded_at)
+                                         VALUES($1, $2)
+                                         ON CONFLICT (timeframe) DO UPDATE
+                                         SET last_loaded_at = EXCLUDED.last_loaded_at`, timeframe, t)
 	return err
 }
 
@@ -243,7 +254,9 @@ func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile)
 		return nil
 	}
 	for _, f := range files {
-		if _, err := db.Exec(ctx, `INSERT INTO ohlcv_failed_files(day, timeframe, reason) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, f.Day, f.Timeframe, f.Reason); err != nil {
+		if _, err := data.ExecWithRetry(ctx, db, `INSERT INTO ohlcv_failed_files(day, timeframe, reason)
+                                                VALUES($1,$2,$3)
+                                                ON CONFLICT DO NOTHING`, f.Day, f.Timeframe, f.Reason); err != nil {
 			return err
 		}
 	}

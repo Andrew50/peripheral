@@ -156,9 +156,21 @@ func updateYearlySubscriptionCreditsJob(conn *data.Conn) error {
 	return subscriptions.UpdateYearlySubscriptionCredits(conn)
 }
 
+// Wrapper for Stripe pricing sync
+func syncPricingFromStripeJob(conn *data.Conn) error {
+	return SyncPricingFromStripe(conn)
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
+		{
+			Name:           "SyncPricingFromStripe",
+			Function:       syncPricingFromStripeJob,
+			Schedule:       []TimeOfDay{{Hour: 4, Minute: 0}}, // Run at 4:00 AM daily
+			RunOnInit:      true,
+			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
+		},
 		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
@@ -330,12 +342,12 @@ func (s *JobScheduler) Start() chan struct{} {
 	s.loadJobLastRunTimes()
 
 	// Add 10-minute delay before starting scheduler operations
-	log.Printf("⏰ Scheduler initialized - waiting 10 minutes before starting job execution...")
+	log.Printf("⏰ Scheduler initialized - 30 seconds before starting job execution...")
 
 	go func() {
-		// Wait 10 minutes before starting scheduler operations
+		// Wait 30 seconds before starting scheduler operations
 		select {
-		case <-time.After(10 * time.Minute):
+		case <-time.After(30 * time.Second):
 			log.Printf("🚀 Starting scheduler operations after 10-minute delay")
 		case <-s.StopChan:
 			log.Printf("⏹️ Scheduler stopped during startup delay")
@@ -509,6 +521,21 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	jobName := job.Name
 	startTime := time.Now()
 
+	// Recover from panics to avoid scheduler crash
+	defer func() {
+		if rec := recover(); rec != nil {
+			var err error
+			switch x := rec.(type) {
+			case error:
+				err = fmt.Errorf("panic: %w", x)
+			default:
+				err = fmt.Errorf("panic: %v", x)
+			}
+			_ = alerts.LogCriticalAlert(err)
+			log.Printf("❌ Job %s panicked: %v", jobName, err)
+		}
+	}()
+
 	// Log job start
 	log.Printf("🚀 Starting job: %s at %s", jobName, startTime.Format("2006-01-02 15:04:05"))
 
@@ -530,6 +557,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Handle completion logging based on execution result
 	if err != nil {
 		log.Printf("❌ Job %s FAILED after %v: %v", jobName, duration, err)
+		_ = alerts.LogCriticalAlert(err)
 		return
 	}
 

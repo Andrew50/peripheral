@@ -3,7 +3,7 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
-	import WhyMoving from '$lib/components/whyMoving.svelte';
+	// import WhyMoving from '$lib/components/whyMoving.svelte';
 
 	import { chartRequest, privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
@@ -2256,7 +2256,7 @@
 </div>
 
 <!-- Why Moving Popup -->
-<WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} />
+<!-- <WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} /> -->
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
