@@ -12,6 +12,28 @@ set -Eeuo pipefail
 # Convert the space-separated string of services into a bash array
 read -r -a SERVICES_ARRAY <<< "$SERVICES"
 
+# Function to set or clear deployment flag in the db-health-monitor pod
+set_deployment_flag() {
+  local ACTION="$1"   # set|clear
+  local FILE="/backups/deploying.flag"
+  local POD
+  POD=$(kubectl get pods --namespace="${K8S_NAMESPACE}" -l app=db-health-monitor -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [[ -z "$POD" ]]; then
+    echo "db-health-monitor pod not found; skipping deployment flag ${ACTION}."
+    return
+  fi
+  if [[ "$ACTION" == "set" ]]; then
+    kubectl exec "$POD" --namespace="${K8S_NAMESPACE}" -- /bin/sh -c "touch $FILE" || true
+  else
+    kubectl exec "$POD" --namespace="${K8S_NAMESPACE}" -- /bin/sh -c "rm -f $FILE" || true
+  fi
+}
+
+# Ensure the flag is cleared when the script exits (success or failure)
+trap 'set_deployment_flag clear; exit' EXIT SIGINT SIGTERM
+
+# Mark the beginning of a planned deployment to suppress alerts
+set_deployment_flag set
 
 echo "Deploying to Kubernetes with tag: $DOCKER_TAG, namespace: $K8S_NAMESPACE"
 echo "Temporary directory: $TMP_DIR"

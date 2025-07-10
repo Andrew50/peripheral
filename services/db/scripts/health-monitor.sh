@@ -31,6 +31,9 @@ CORRUPTION_INDICATORS=(
 STARTUP_GRACE_PERIOD=${STARTUP_GRACE_PERIOD:-300}  # seconds
 START_TIME=$(date +%s)
 
+# Deployment suppression flag – if this file exists we treat all health checks as skipped
+DEPLOYMENT_SUPPRESSION_FILE=${DEPLOYMENT_SUPPRESSION_FILE:-/backups/deploying.flag}
+
 # Database credentials
 DB_USER=${POSTGRES_USER:-postgres}
 DB_NAME=${POSTGRES_DB:-postgres}
@@ -599,6 +602,33 @@ main() {
     log "=== Database Health Monitor Started ==="
     
     while true; do
+            # Suppress alerts when a deployment is in progress
+    if [ -f "$DEPLOYMENT_SUPPRESSION_FILE" ]; then
+        # Check if flag is stale (older than 30 minutes)
+        local flag_age=$(( $(date +%s) - $(stat -c %Y "$DEPLOYMENT_SUPPRESSION_FILE" 2>/dev/null || echo 0) ))
+        if [ $flag_age -gt 1800 ]; then
+            log "Deployment flag is stale (${flag_age}s old); removing it and resuming monitoring."
+            local stale_alert="⚠️ Stale deployment flag detected and removed!
+
+A deployment suppression flag was found that is ${flag_age} seconds old (over 30 minutes). This suggests a deployment script may have crashed or been interrupted without properly cleaning up.
+
+• Flag file: $DEPLOYMENT_SUPPRESSION_FILE
+• Flag age: ${flag_age}s (threshold: 1800s)
+• Action: Flag removed automatically
+• Status: Health monitoring resumed
+
+This is a self-healing action - no manual intervention required, but you may want to check recent deployment logs."
+            
+            rm -f "$DEPLOYMENT_SUPPRESSION_FILE"
+            send_alert "$stale_alert" "WARNING"
+        else
+            log "Deployment flag detected ($DEPLOYMENT_SUPPRESSION_FILE); skipping health checks."
+            FAILURE_COUNT=0
+            sleep $HEALTH_CHECK_INTERVAL
+            continue
+        fi
+    fi
+        
         if perform_health_check; then
             # Reset failure count on success
             if [ $FAILURE_COUNT -gt 0 ]; then
