@@ -61,6 +61,19 @@
 	import { authModalStore, hideAuthModal } from '$lib/stores/authModal';
 	import { subscriptionStatus, fetchSubscriptionStatus } from '$lib/utils/stores/stores';
 
+	// Import mobile device detection
+	import { isMobileDevice } from '$lib/utils/stores/device';
+
+	// Debug logging for interface selection
+	$: if (browser && $isMobileDevice !== undefined) {
+		console.log('📱 [interface] Device detection result:', {
+			isMobileDevice: $isMobileDevice,
+			userAgent: navigator.userAgent,
+			screenWidth: window.innerWidth,
+			interface: $isMobileDevice ? 'mobile-chat-only' : 'desktop-full'
+		});
+	}
+
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
 
@@ -142,7 +155,7 @@
 	const MAX_TICKER_HEIGHT = 600;
 
 	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 0; // Start closed instead of hard-coded 600px
+	let leftMenuWidth = 600; // <-- Set initial width to 300
 	let leftResizing = false;
 
 	// Calendar state
@@ -186,60 +199,28 @@
 	function updateChartWidth() {
 		if (browser) {
 			const rightSidebarWidth = $menuWidth;
-			const rightConstraints = getRightSidebarConstraints();
-			const leftConstraints = getLeftSidebarConstraints();
-
-			// LOGGING: Track all width calculations and guard conditions
-			console.log('📐 [updateChartWidth] Width calculations:', {
-				windowInnerWidth: window.innerWidth,
-				rightSidebarWidth,
-				leftMenuWidth,
-				rightConstraints,
-				leftConstraints,
-				rightWithinBounds: rightSidebarWidth <= rightConstraints.max,
-				leftWithinBounds: leftMenuWidth <= leftConstraints.max,
-				currentChartWidth: chartWidth,
-				proposedChartWidth: window.innerWidth - rightSidebarWidth - leftMenuWidth - 45
-			});
-
-			// Check if sidebars are within bounds, if not fix them
-			if (rightSidebarWidth > rightConstraints.max || leftMenuWidth > leftConstraints.max) {
-				console.warn('🚫 [updateChartWidth] Sidebar limits exceeded - enforcing limits:', {
-					rightSidebarExceeds: rightSidebarWidth > rightConstraints.max,
-					leftSidebarExceeds: leftMenuWidth > leftConstraints.max,
-					rightSidebarOverage: rightSidebarWidth - rightConstraints.max,
-					leftSidebarOverage: leftMenuWidth - leftConstraints.max
-				});
-
-				// Enforce limits and then recalculate
-				const { leftClamped, rightClamped } = enforceSidebarLimits();
-
-				// If we clamped anything, the reactive statement will call this function again
-				// so we can return early here
-				if (leftClamped || rightClamped) {
-					console.log(
-						'🔄 [updateChartWidth] Sidebars clamped, will recalculate on next reactive update'
-					);
-					return;
-				}
+			// Responsive max sidebar widths
+			let maxRightSidebarWidth = 600;
+			if (window.innerWidth <= 800) {
+				maxRightSidebarWidth = Math.min(250, window.innerWidth * 0.4);
+			} else if (window.innerWidth <= 1000) {
+				maxRightSidebarWidth = Math.min(300, window.innerWidth * 0.35);
+			} else if (window.innerWidth <= 1200) {
+				maxRightSidebarWidth = Math.min(350, window.innerWidth * 0.3);
+			} else if (window.innerWidth <= 1400) {
+				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
 			}
+			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
 
-			// Calculate new chart width with current (now valid) sidebar widths
-			const newChartWidth = window.innerWidth - $menuWidth - leftMenuWidth - 45;
-			console.log('✅ [updateChartWidth] Updating chart width:', {
-				from: chartWidth,
-				to: newChartWidth,
-				difference: newChartWidth - chartWidth
-			});
-			chartWidth = newChartWidth;
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
+
+			// Only reduce chart width if sidebar widths are within bounds
+			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
+			}
 		}
 	}
 	$: if ($menuWidth !== undefined) {
-		console.log('🔄 [reactive] menuWidth changed, triggering updateChartWidth:', {
-			newMenuWidth: $menuWidth,
-			leftMenuWidth,
-			currentChartWidth: chartWidth
-		});
 		updateChartWidth();
 	}
 
@@ -387,13 +368,13 @@
 		// Start async initialization
 		init();
 
-		// LOGGING: Track initial layout setup
-		console.log('🚀 [onMount] Initial layout setup:', {
-			windowInnerWidth: window.innerWidth,
-			windowInnerHeight: window.innerHeight,
-			initialMenuWidth: $menuWidth,
-			initialLeftMenuWidth: leftMenuWidth,
-			initialChartWidth: chartWidth
+		// Expose mobile device override for debugging
+		import('$lib/utils/stores/device').then(({ setMobileDeviceOverride }) => {
+			(window as any).setMobileMode = setMobileDeviceOverride;
+			console.log(
+				'🛠️ [debug] Mobile device override available via window.setMobileMode(true/false/null)'
+			);
+			console.log('🛠️ [debug] URL override: add ?mobile=1 or ?mobile=0 to the URL');
 		});
 
 		updateChartWidth();
@@ -402,36 +383,8 @@
 		// Set up countdown timer
 		const countdownInterval = setInterval(calculateCountdown, 1000);
 
-		// Set up window resize handler to enforce sidebar limits
-		const handleWindowResize = () => {
-			console.log('📏 [handleWindowResize] Window resized, enforcing sidebar limits:', {
-				windowInnerWidth: window.innerWidth,
-				windowInnerHeight: window.innerHeight,
-				currentMenuWidth: $menuWidth,
-				currentLeftMenuWidth: leftMenuWidth,
-				currentChartWidth: chartWidth
-			});
-
-			// Enforce limits when window size changes (e.g., zoom, orientation change)
-			const { leftClamped, rightClamped } = enforceSidebarLimits();
-
-			// Update chart width (will be called again reactively if sidebars were clamped)
-			if (!leftClamped && !rightClamped) {
-				updateChartWidth();
-			}
-		};
-
-		window.addEventListener('resize', handleWindowResize);
-
 		// Set up chart width recalculation
 		const resizeObserver = new ResizeObserver(() => {
-			console.log('👁️ [ResizeObserver] Container size change detected, updating chart width:', {
-				windowInnerWidth: window.innerWidth,
-				windowInnerHeight: window.innerHeight,
-				currentMenuWidth: $menuWidth,
-				currentLeftMenuWidth: leftMenuWidth,
-				currentChartWidth: chartWidth
-			});
 			updateChartWidth();
 		});
 
@@ -443,7 +396,6 @@
 		// Cleanup function
 		return () => {
 			clearInterval(countdownInterval);
-			window.removeEventListener('resize', handleWindowResize);
 			resizeObserver.disconnect();
 		};
 	});
@@ -502,49 +454,29 @@
 	});
 
 	function toggleMenu(menuName: Menu) {
-		console.log('🔄 [toggleMenu] Menu toggle operation:', {
-			menuName,
-			currentActiveMenu: $activeMenu,
-			currentMenuWidth: $menuWidth,
-			currentChartWidth: chartWidth,
-			windowInnerWidth: window.innerWidth,
-			visualViewportScale: window.visualViewport?.scale || 'unknown'
-		});
-
 		if (menuName === $activeMenu) {
 			// If clicking the same menu, close it
-			console.log('🔒 [toggleMenu] Closing current menu');
 			lastSidebarMenu = null;
 			menuWidth.set(0);
 			changeMenu('none');
 		} else {
-			// Open new menu - let changeMenu handle the width calculation
-			console.log('🔓 [toggleMenu] Opening new menu:', {
-				newMenu: menuName,
-				willCalculateWidth: 'based on screen size'
-			});
+			// Open new menu
 			lastSidebarMenu = null;
+			// Only set width if sidebar is currently closed, otherwise preserve current width
+			if ($menuWidth === 0) {
+				menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
+			}
 			changeMenu(menuName);
 		}
 	}
 
 	// Sidebar resizing
 	let resizing = false;
+	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 
 	function startResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		resizing = true;
-
-		// LOGGING: Track resize session start
-		console.log('🎯 [startResize] Starting right sidebar resize session:', {
-			currentMenuWidth: $menuWidth,
-			currentChartWidth: chartWidth,
-			windowInnerWidth: window.innerWidth,
-			leftMenuWidth,
-			eventType: event instanceof MouseEvent ? 'mouse' : 'touch',
-			initialClientX: event instanceof MouseEvent ? event.clientX : event.touches[0].clientX
-		});
-
 		document.addEventListener('mousemove', resize);
 		document.addEventListener('mouseup', stopResize);
 		document.addEventListener('touchmove', resize);
@@ -562,84 +494,35 @@
 			clientX = event.touches[0].clientX;
 		}
 
-		// LOGGING: Track coordinate and width calculations
-		const dragBarPosition = clientX; // Where the drag bar actually is
-		const sidebarLeftEdge = window.innerWidth - $menuWidth - 45; // Where sidebar visually starts
-		const dragBarOffset = dragBarPosition - sidebarLeftEdge; // How far drag bar is from sidebar edge
-
 		// Calculate width from right edge of window, excluding the sidebar buttons width
 		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
-		const rightConstraints = getRightSidebarConstraints();
-		const maxSidebarWidth = rightConstraints.max;
-
-		console.log('🖱️ [resize] Coordinate and width calculations:', {
-			eventType: event instanceof MouseEvent ? 'mouse' : 'touch',
-			clientX,
-			windowInnerWidth: window.innerWidth,
-			currentMenuWidth: $menuWidth,
-			dragBarPosition,
-			sidebarLeftEdge,
-			dragBarOffset, // Should be ~-4px due to CSS left: -4px
-			newWidth,
-			maxSidebarWidth,
-			newWidthVsMax: newWidth - maxSidebarWidth,
-			willBeClampedToMax: newWidth > maxSidebarWidth
-		});
+		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
 
 		// Store state before closing
-		if (newWidth < rightConstraints.min && lastSidebarMenu !== null) {
-			console.log('🔒 [resize] Closing sidebar - width below minimum:', {
-				newWidth,
-				minWidth: rightConstraints.min,
-				lastSidebarMenu
-			});
+		if (newWidth < minWidth && lastSidebarMenu !== null) {
 			lastSidebarMenu = null;
 			menuWidth.set(0);
 		}
 		// Restore state if dragging back
-		else if (newWidth >= rightConstraints.min && lastSidebarMenu) {
-			const clampedWidth = clampWithTolerance(newWidth, rightConstraints.min, rightConstraints.max);
-			console.log('🔓 [resize] Restoring sidebar:', {
-				newWidth,
-				clampedWidth,
-				constraints: rightConstraints,
-				wasClamped: Math.abs(clampedWidth - newWidth) > 0.1
-			});
+		else if (newWidth >= minWidth && lastSidebarMenu) {
 			lastSidebarMenu = lastSidebarMenu;
-			menuWidth.set(clampedWidth);
+			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
 			lastSidebarMenu = null;
 		}
 		// Normal resize
-		else if (newWidth >= rightConstraints.min) {
-			const clampedWidth = clampWithTolerance(newWidth, rightConstraints.min, rightConstraints.max);
-			console.log('📏 [resize] Normal resize operation:', {
-				newWidth,
-				clampedWidth,
-				constraints: rightConstraints,
-				wasClamped: Math.abs(clampedWidth - newWidth) > 0.1,
-				currentMenuWidth: $menuWidth,
-				widthChange: clampedWidth - $menuWidth
-			});
-			menuWidth.set(clampedWidth);
+		else if (newWidth >= minWidth) {
+			// Only update if we're within the maximum width
+			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
 		}
 
-		// Always update chart width since we now clamp values
-		console.log('📊 [resize] Triggering chart width update');
-		updateChartWidth();
+		// Only update chart width if we're within bounds
+		if (newWidth <= maxSidebarWidth) {
+			updateChartWidth();
+		}
 	}
 
 	function stopResize() {
 		resizing = false;
-
-		// LOGGING: Track resize session end and final state
-		console.log('🏁 [stopResize] Ending right sidebar resize session:', {
-			finalMenuWidth: $menuWidth,
-			finalChartWidth: chartWidth,
-			windowInnerWidth: window.innerWidth,
-			leftMenuWidth,
-			totalWidthUsed: $menuWidth + leftMenuWidth + chartWidth + 45
-		});
-
 		document.removeEventListener('mousemove', resize);
 		document.removeEventListener('mouseup', stopResize);
 		document.removeEventListener('touchmove', resize);
@@ -971,17 +854,6 @@
 	function startLeftResize(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		leftResizing = true;
-
-		// LOGGING: Track left resize session start
-		console.log('🎯 [startLeftResize] Starting left sidebar resize session:', {
-			currentLeftMenuWidth: leftMenuWidth,
-			currentChartWidth: chartWidth,
-			currentRightMenuWidth: $menuWidth,
-			windowInnerWidth: window.innerWidth,
-			eventType: event instanceof MouseEvent ? 'mouse' : 'touch',
-			initialClientX: event instanceof MouseEvent ? event.clientX : event.touches[0].clientX
-		});
-
 		document.addEventListener('mousemove', resizeLeft);
 		document.addEventListener('mouseup', stopLeftResize);
 		document.addEventListener('touchmove', resizeLeft);
@@ -999,63 +871,20 @@
 			clientX = event.touches[0].clientX;
 		}
 
-		// LOGGING: Track left sidebar coordinate and width calculations
-		const dragBarPosition = clientX; // Where the left drag bar actually is
-		const sidebarRightEdge = leftMenuWidth; // Where left sidebar visually ends
-		const dragBarOffset = dragBarPosition - sidebarRightEdge; // How far drag bar is from sidebar edge
-
 		// Calculate width from left edge of window
 		let newWidth = clientX;
-		// Use consolidated constraints
-		const leftConstraints = getLeftSidebarConstraints();
+		// Limit chat to minimum 15% and maximum 40% of screen width
+		const minLeftSidebarWidth = window.innerWidth * 0.15;
+		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - 45);
 
-		console.log('🖱️ [resizeLeft] Left sidebar coordinate and width calculations:', {
-			eventType: event instanceof MouseEvent ? 'mouse' : 'touch',
-			clientX,
-			windowInnerWidth: window.innerWidth,
-			currentLeftMenuWidth: leftMenuWidth,
-			dragBarPosition,
-			sidebarRightEdge,
-			dragBarOffset, // Should be ~+4px due to CSS right: -4px
-			newWidth,
-			leftConstraints,
-			newWidthVsMin: newWidth - leftConstraints.min,
-			newWidthVsMax: newWidth - leftConstraints.max,
-			willBeClampedToMin: newWidth < leftConstraints.min,
-			willBeClampedToMax: newWidth > leftConstraints.max
-		});
+		// Enforce minimum and maximum width without auto-closing
+		leftMenuWidth = Math.max(minLeftSidebarWidth, Math.min(newWidth, maxLeftSidebarWidth));
 
-		// Enforce minimum and maximum width using consolidated clamping
-		const clampedWidth = clampWithTolerance(newWidth, leftConstraints.min, leftConstraints.max);
-
-		console.log('📏 [resizeLeft] Left sidebar width adjustment:', {
-			rawNewWidth: newWidth,
-			clampedWidth,
-			leftConstraints,
-			wasClampedToMin: clampedWidth === leftConstraints.min && newWidth < leftConstraints.min,
-			wasClampedToMax: clampedWidth === leftConstraints.max && newWidth > leftConstraints.max,
-			currentLeftMenuWidth: leftMenuWidth,
-			widthChange: clampedWidth - leftMenuWidth
-		});
-
-		leftMenuWidth = clampedWidth;
-
-		console.log('📊 [resizeLeft] Triggering chart width update after left sidebar resize');
 		updateChartWidth();
 	}
 
 	function stopLeftResize() {
 		leftResizing = false;
-
-		// LOGGING: Track left resize session end and final state
-		console.log('🏁 [stopLeftResize] Ending left sidebar resize session:', {
-			finalLeftMenuWidth: leftMenuWidth,
-			finalChartWidth: chartWidth,
-			finalRightMenuWidth: $menuWidth,
-			windowInnerWidth: window.innerWidth,
-			totalWidthUsed: leftMenuWidth + chartWidth + $menuWidth + 45
-		});
-
 		document.removeEventListener('mousemove', resizeLeft);
 		document.removeEventListener('mouseup', stopLeftResize);
 		document.removeEventListener('touchmove', resizeLeft);
@@ -1065,33 +894,11 @@
 
 	// Toggle left pane for Query
 	function toggleLeftPane() {
-		console.log('🔄 [toggleLeftPane] Left pane toggle operation:', {
-			currentLeftMenuWidth: leftMenuWidth,
-			currentChartWidth: chartWidth,
-			currentRightMenuWidth: $menuWidth,
-			windowInnerWidth: window.innerWidth,
-			willOpen: leftMenuWidth === 0,
-			willClose: leftMenuWidth > 0
-		});
-
 		if (leftMenuWidth > 0) {
-			console.log('🔒 [toggleLeftPane] Closing left pane');
 			leftMenuWidth = 0;
 		} else {
-			// Use consolidated constraints for consistent sizing
-			const leftConstraints = getLeftSidebarConstraints();
-			// Start with 30% of screen width, clamped to constraints
-			const preferredWidth = window.innerWidth * 0.3;
-			const newWidth = clampWithTolerance(preferredWidth, leftConstraints.min, leftConstraints.max);
-
-			console.log('🔓 [toggleLeftPane] Opening left pane:', {
-				preferredWidth,
-				newWidth,
-				leftConstraints,
-				screenWidth: window.innerWidth,
-				percentageUsed: Math.round((newWidth / window.innerWidth) * 100) + '%'
-			});
-			leftMenuWidth = newWidth;
+			// Set to 15% of screen width when opening
+			leftMenuWidth = window.innerWidth * 0.3;
 		}
 		updateChartWidth();
 	}
@@ -1313,183 +1120,6 @@
 			document.title = siteTitle;
 		}
 	}
-
-	// Debug function to dump current layout state (accessible from browser console)
-	function debugLayoutState() {
-		const leftConstraints = getLeftSidebarConstraints();
-		const state = {
-			windowDimensions: {
-				innerWidth: window.innerWidth,
-				innerHeight: window.innerHeight,
-				visualViewportScale: window.visualViewport?.scale || 'unknown',
-				devicePixelRatio: window.devicePixelRatio
-			},
-			sidebarWidths: {
-				leftMenuWidth,
-				rightMenuWidth: $menuWidth,
-				chartWidth,
-				sidebarButtonsWidth: 45
-			},
-			calculations: {
-				totalUsedWidth: leftMenuWidth + $menuWidth + chartWidth + 45,
-				remainingWidth: window.innerWidth - (leftMenuWidth + $menuWidth + chartWidth + 45),
-				rightConstraints: getRightSidebarConstraints(),
-				leftConstraints: getLeftSidebarConstraints()
-			},
-			percentages: {
-				leftSidebarPercent: Math.round((leftMenuWidth / window.innerWidth) * 100),
-				rightSidebarPercent: Math.round(($menuWidth / window.innerWidth) * 100),
-				chartPercent: Math.round((chartWidth / window.innerWidth) * 100)
-			},
-			resizeState: {
-				resizing,
-				leftResizing,
-				sidebarResizing,
-				bottomResizing
-			},
-			stores: {
-				activeMenu: $activeMenu,
-				menuWidth: $menuWidth
-			}
-		};
-
-		console.log('🐛 [DEBUG] Current layout state:', state);
-		return state;
-	}
-
-	// Expose debug function globally for console access
-	if (browser) {
-		(window as any).debugLayoutState = debugLayoutState;
-	}
-
-	// Consolidated sidebar width constraint functions
-	function getRightSidebarConstraints() {
-		const screenWidth = window.innerWidth;
-
-		// Continuous function for max width based on screen size
-		// Smoothly transitions from 40% at 800px to 25% at 2000px+
-		const minScreenWidth = 800;
-		const maxScreenWidth = 2000;
-		const minPercentage = 0.25; // 25% at large screens
-		const maxPercentage = 0.4; // 40% at small screens
-
-		// Calculate percentage using linear interpolation, clamped to range
-		const clampedWidth = Math.max(minScreenWidth, Math.min(screenWidth, maxScreenWidth));
-		const t = (clampedWidth - minScreenWidth) / (maxScreenWidth - minScreenWidth);
-		const percentage = maxPercentage - t * (maxPercentage - minPercentage);
-
-		// Calculate max width with continuous function
-		const calculatedMaxWidth = screenWidth * percentage;
-
-		// Apply absolute limits with smooth transitions
-		const absoluteMin = 200;
-		const absoluteMax = 600;
-		const maxWidth = Math.max(absoluteMin, Math.min(calculatedMaxWidth, absoluteMax));
-
-		// Always subtract button width and ensure minimum space for chart
-		const maxAllowed = Math.min(maxWidth, screenWidth - 45 - 200); // Reserve 200px minimum for chart
-
-		return {
-			min: 120,
-			max: Math.max(120, maxAllowed) // Ensure max is never less than min
-		};
-	}
-
-	function getLeftSidebarConstraints() {
-		const screenWidth = window.innerWidth;
-
-		// Continuous functions for both min and max widths
-		const minScreenWidth = 800;
-		const maxScreenWidth = 2000;
-
-		// Min width: smoothly transitions from 20% at 800px to 10% at 2000px+
-		const minPercentageRange = { small: 0.2, large: 0.1 };
-		const minAbsoluteRange = { small: 150, large: 300 };
-
-		// Max width: smoothly transitions from 50% at 800px to 30% at 2000px+
-		const maxPercentageRange = { small: 0.5, large: 0.3 };
-		const maxAbsoluteRange = { small: 300, large: 600 };
-
-		// Calculate interpolation factor (0 = small screen, 1 = large screen)
-		const clampedWidth = Math.max(minScreenWidth, Math.min(screenWidth, maxScreenWidth));
-		const t = (clampedWidth - minScreenWidth) / (maxScreenWidth - minScreenWidth);
-
-		// Calculate min width using continuous interpolation
-		const minPercentage =
-			minPercentageRange.small + t * (minPercentageRange.large - minPercentageRange.small);
-		const minAbsolute =
-			minAbsoluteRange.small + t * (minAbsoluteRange.large - minAbsoluteRange.small);
-		const calculatedMin = screenWidth * minPercentage;
-		const minWidth = Math.max(minAbsolute, calculatedMin);
-
-		// Calculate max width using continuous interpolation
-		const maxPercentage =
-			maxPercentageRange.small + t * (maxPercentageRange.large - maxPercentageRange.small);
-		const maxAbsolute =
-			maxAbsoluteRange.small + t * (maxAbsoluteRange.large - maxAbsoluteRange.small);
-		const calculatedMax = screenWidth * maxPercentage;
-		const maxWidth = Math.min(maxAbsolute, calculatedMax);
-
-		return {
-			min: Math.round(minWidth),
-			max: Math.round(Math.max(minWidth + 50, maxWidth)) // Ensure max is at least 50px larger than min
-		};
-	}
-
-	// Utility function to clamp a value with floating point tolerance
-	function clampWithTolerance(
-		value: number,
-		min: number,
-		max: number,
-		tolerance: number = 0.1
-	): number {
-		if (value < min - tolerance) return min;
-		if (value > max + tolerance) return max;
-		return value;
-	}
-
-	// Consolidated function to enforce all sidebar limits and fix violations
-	function enforceSidebarLimits(): { leftClamped: boolean; rightClamped: boolean } {
-		const rightConstraints = getRightSidebarConstraints();
-		const leftConstraints = getLeftSidebarConstraints();
-
-		let leftClamped = false;
-		let rightClamped = false;
-
-		// Clamp right sidebar
-		const newRightWidth = clampWithTolerance(
-			$menuWidth,
-			rightConstraints.min,
-			rightConstraints.max
-		);
-		if (Math.abs(newRightWidth - $menuWidth) > 0.1) {
-			console.log('🔧 [enforceSidebarLimits] Clamping right sidebar:', {
-				from: $menuWidth,
-				to: newRightWidth,
-				constraints: rightConstraints
-			});
-			menuWidth.set(newRightWidth);
-			rightClamped = true;
-		}
-
-		// Clamp left sidebar
-		const newLeftWidth = clampWithTolerance(
-			leftMenuWidth,
-			leftConstraints.min,
-			leftConstraints.max
-		);
-		if (Math.abs(newLeftWidth - leftMenuWidth) > 0.1) {
-			console.log('🔧 [enforceSidebarLimits] Clamping left sidebar:', {
-				from: leftMenuWidth,
-				to: newLeftWidth,
-				constraints: leftConstraints
-			});
-			leftMenuWidth = newLeftWidth;
-			leftClamped = true;
-		}
-
-		return { leftClamped, rightClamped };
-	}
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
@@ -1503,12 +1133,7 @@
 		}
 	}}
 >
-	<!-- Mobile-only full-screen chat -->
-	<div class="mobile-chat-wrapper">
-		<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
-	</div>
-
-	<!-- Global Popups -->
+	<!-- Global Popups (always available) -->
 	<Input />
 	<RightClick />
 	<StrategiesPopup />
@@ -1529,341 +1154,351 @@
 		on:close={hideAuthModal}
 	/>
 
-	<!-- Main area wrapper -->
-	<div class="app-container">
-		<div class="content-wrapper">
-			<!-- Left sidebar for Query -->
-			{#if leftMenuWidth > 0}
-				<div class="left-sidebar" style="width: {leftMenuWidth}px;">
-					<div class="sidebar-content">
-						<div class="main-sidebar-content">
-							<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
-						</div>
-					</div>
-					<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-					<div
-						class="resize-handle right"
-						role="separator"
-						aria-orientation="vertical"
-						aria-label="Resize left panel"
-						on:mousedown={startLeftResize}
-						on:touchstart={startLeftResize}
-						on:keydown={handleKeyboardLeftResize}
-						tabindex="0"
-					/>
-				</div>
-			{/if}
+	{#if $isMobileDevice}
+		<!-- Mobile-only full-screen chat interface -->
+		<div class="mobile-chat-container">
+			<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
+		</div>
+	{:else}
+		<!-- Desktop interface -->
 
-			<!-- Main horizontal container -->
-			<div class="main-horizontal-container">
-				<!-- Center section (chart + top bar) -->
-				<div class="center-section">
-					<!-- Top bar -->
-					<div class="top-bar">
-						<!-- Left side content -->
-						<div class="top-bar-left">
-							<button
-								class="symbol metadata-button"
-								on:click={handleTickerClick}
-								on:keydown={handleTickerKeydown}
-								aria-label="Change ticker"
-							>
-								<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
-									<path
-										d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-								{$activeChartInstance?.ticker || 'NaN'}
-							</button>
-
-							<!-- Divider -->
-							<div class="divider"></div>
-
-							<!-- Add common timeframe buttons -->
-							{#each commonTimeframes as tf}
-								<button
-									class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
-									tf
-										? 'active'
-										: ''}"
-									on:click={() => selectTimeframe(tf)}
-									aria-label="Set timeframe to {tf}"
-									aria-pressed={$activeChartInstance?.timeframe === tf}
-								>
-									{tf}
-								</button>
-							{/each}
-							<!-- Button to open custom timeframe input -->
-							<button
-								class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
-								on:click={handleCustomTimeframeClick}
-								aria-label="Select custom timeframe"
-								aria-pressed={isCustomTimeframe ? 'true' : 'false'}
-							>
-								{#if isCustomTimeframe}
-									{$activeChartInstance?.timeframe}
-								{:else}
-									...
-								{/if}
-							</button>
-
-							<!-- Divider -->
-							<div class="divider"></div>
-
-							<button
-								class="session-type metadata-button"
-								on:click={handleSessionClick}
-								aria-label="Toggle session type"
-							>
-								{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
-							</button>
-
-							<!-- Divider -->
-							<div class="divider"></div>
-
-							<!-- Calendar button for timestamp selection -->
-							<button
-								class="calendar-button metadata-button"
-								on:click={handleCalendar}
-								title="Go to Date"
-								aria-label="Go to Date"
-							>
-								<svg
-									viewBox="0 0 24 24"
-									width="16"
-									height="16"
-									fill="none"
-									xmlns="http://www.w3.org/2000/svg"
-								>
-									<path
-										d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-							</button>
-
-							<!-- Divider -->
-							<div class="divider"></div>
-
-							<!-- Countdown -->
-							<div class="countdown-container">
-								<span class="countdown-label">Next Bar Close:</span>
-								<span class="countdown-value">{$countdown}</span>
-							</div>
-						</div>
-					</div>
-
-					<!-- Content below top bar -->
-					<div class="content-below-topbar">
-						<!-- Main content area -->
-						<div class="main-content">
-							<!-- Chart area -->
-							<div class="chart-wrapper">
-								<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
-							</div>
-
-							<!-- Bottom windows container -->
-							<div
-								class="bottom-windows-container"
-								style="--bottom-height: {bottomWindowsHeight}px"
-							>
-								{#each bottomWindows as w}
-									<div class="bottom-window">
-										<div class="window-content">
-											{#if w.type === 'screener'}
-												{#await import('$lib/features/screener/screener.svelte') then module}
-													<svelte:component this={module.default} />
-												{/await}
-											{:else if w.type === 'strategies'}
-												{#await import('$lib/features/strategies/strategies.svelte') then module}
-													<svelte:component this={module.default} />
-												{/await}
-											{:else if w.type === 'settings'}
-												{#await import('$lib/features/settings/settings.svelte') then module}
-													<svelte:component this={module.default} />
-												{/await}
-											{/if}
-										</div>
-									</div>
-								{/each}
-								{#if bottomWindows.length > 0}
-									<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-									<div
-										class="bottom-resize-handle"
-										role="separator"
-										aria-orientation="horizontal"
-										aria-label="Resize bottom panel"
-										on:mousedown={startBottomResize}
-										on:keydown={handleKeyboardBottomResize}
-										tabindex="0"
-									></div>
-								{/if}
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Sidebar -->
-				{#if $menuWidth > 0}
-					<div class="sidebar" style="width: {$menuWidth}px;">
-						<!-- Sidebar header -->
-						<div class="sidebar-header">
-							{#if $activeMenu === 'alerts'}
-								<!-- Alert Controls -->
-								<div class="alert-tab-container">
-									{#each alertTabs as tab}
-										<button
-											class="watchlist-tab {alertView === tab ? 'active' : ''}"
-											on:click={() => (alertView = tab)}
-											title={tab === 'history'
-												? 'Alert History'
-												: tab.charAt(0).toUpperCase() + tab.slice(1) + ' Alerts'}
-										>
-											{tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'History'}
-										</button>
-									{/each}
-
-									<button
-										class="watchlist-tab plus-button"
-										on:click={createPriceAlert}
-										title="Create New Price Alert"
-										style="margin-left: auto;"
-									>
-										+
-									</button>
-								</div>
-							{/if}
-							{#if $activeMenu === 'watchlist'}
-								<WatchlistTabs />
-							{/if}
-						</div>
-
-						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-						<div
-							class="resize-handle"
-							role="separator"
-							aria-orientation="vertical"
-							aria-label="Resize sidebar"
-							on:mousedown={startResize}
-							on:touchstart={startResize}
-							on:keydown={handleKeyboardResize}
-							tabindex="0"
-						/>
+		<!-- Main area wrapper -->
+		<div class="app-container">
+			<div class="content-wrapper">
+				<!-- Left sidebar for Query -->
+				{#if leftMenuWidth > 0}
+					<div class="left-sidebar" style="width: {leftMenuWidth}px;">
 						<div class="sidebar-content">
 							<div class="main-sidebar-content">
+								<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
+							</div>
+						</div>
+						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+						<div
+							class="resize-handle right"
+							role="separator"
+							aria-orientation="vertical"
+							aria-label="Resize left panel"
+							on:mousedown={startLeftResize}
+							on:touchstart={startLeftResize}
+							on:keydown={handleKeyboardLeftResize}
+							tabindex="0"
+						/>
+					</div>
+				{/if}
+
+				<!-- Main horizontal container -->
+				<div class="main-horizontal-container">
+					<!-- Center section (chart + top bar) -->
+					<div class="center-section">
+						<!-- Top bar -->
+						<div class="top-bar">
+							<!-- Left side content -->
+							<div class="top-bar-left">
+								<button
+									class="symbol metadata-button"
+									on:click={handleTickerClick}
+									on:keydown={handleTickerKeydown}
+									aria-label="Change ticker"
+								>
+									<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+										<path
+											d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+									{$activeChartInstance?.ticker || 'NaN'}
+								</button>
+
+								<!-- Divider -->
+								<div class="divider"></div>
+
+								<!-- Add common timeframe buttons -->
+								{#each commonTimeframes as tf}
+									<button
+										class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
+										tf
+											? 'active'
+											: ''}"
+										on:click={() => selectTimeframe(tf)}
+										aria-label="Set timeframe to {tf}"
+										aria-pressed={$activeChartInstance?.timeframe === tf}
+									>
+										{tf}
+									</button>
+								{/each}
+								<!-- Button to open custom timeframe input -->
+								<button
+									class="timeframe-custom-button metadata-button {isCustomTimeframe
+										? 'active'
+										: ''}"
+									on:click={handleCustomTimeframeClick}
+									aria-label="Select custom timeframe"
+									aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+								>
+									{#if isCustomTimeframe}
+										{$activeChartInstance?.timeframe}
+									{:else}
+										...
+									{/if}
+								</button>
+
+								<!-- Divider -->
+								<div class="divider"></div>
+
+								<button
+									class="session-type metadata-button"
+									on:click={handleSessionClick}
+									aria-label="Toggle session type"
+								>
+									{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
+								</button>
+
+								<!-- Divider -->
+								<div class="divider"></div>
+
+								<!-- Calendar button for timestamp selection -->
+								<button
+									class="calendar-button metadata-button"
+									on:click={handleCalendar}
+									title="Go to Date"
+									aria-label="Go to Date"
+								>
+									<svg
+										viewBox="0 0 24 24"
+										width="16"
+										height="16"
+										fill="none"
+										xmlns="http://www.w3.org/2000/svg"
+									>
+										<path
+											d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+
+								<!-- Divider -->
+								<div class="divider"></div>
+
+								<!-- Countdown -->
+								<div class="countdown-container">
+									<span class="countdown-label">Next Bar Close:</span>
+									<span class="countdown-value">{$countdown}</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Content below top bar -->
+						<div class="content-below-topbar">
+							<!-- Main content area -->
+							<div class="main-content">
+								<!-- Chart area -->
+								<div class="chart-wrapper">
+									<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
+								</div>
+
+								<!-- Bottom windows container -->
+								<div
+									class="bottom-windows-container"
+									style="--bottom-height: {bottomWindowsHeight}px"
+								>
+									{#each bottomWindows as w}
+										<div class="bottom-window">
+											<div class="window-content">
+												{#if w.type === 'screener'}
+													{#await import('$lib/features/screener/screener.svelte') then module}
+														<svelte:component this={module.default} />
+													{/await}
+												{:else if w.type === 'strategies'}
+													{#await import('$lib/features/strategies/strategies.svelte') then module}
+														<svelte:component this={module.default} />
+													{/await}
+												{:else if w.type === 'settings'}
+													{#await import('$lib/features/settings/settings.svelte') then module}
+														<svelte:component this={module.default} />
+													{/await}
+												{/if}
+											</div>
+										</div>
+									{/each}
+									{#if bottomWindows.length > 0}
+										<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+										<div
+											class="bottom-resize-handle"
+											role="separator"
+											aria-orientation="horizontal"
+											aria-label="Resize bottom panel"
+											on:mousedown={startBottomResize}
+											on:keydown={handleKeyboardBottomResize}
+											tabindex="0"
+										></div>
+									{/if}
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Sidebar -->
+					{#if $menuWidth > 0}
+						<div class="sidebar" style="width: {$menuWidth}px;">
+							<!-- Sidebar header -->
+							<div class="sidebar-header">
+								{#if $activeMenu === 'alerts'}
+									<!-- Alert Controls -->
+									<div class="alert-tab-container">
+										{#each alertTabs as tab}
+											<button
+												class="watchlist-tab {alertView === tab ? 'active' : ''}"
+												on:click={() => (alertView = tab)}
+												title={tab === 'history'
+													? 'Alert History'
+													: tab.charAt(0).toUpperCase() + tab.slice(1) + ' Alerts'}
+											>
+												{tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'History'}
+											</button>
+										{/each}
+
+										<button
+											class="watchlist-tab plus-button"
+											on:click={createPriceAlert}
+											title="Create New Price Alert"
+											style="margin-left: auto;"
+										>
+											+
+										</button>
+									</div>
+								{/if}
 								{#if $activeMenu === 'watchlist'}
-									<Watchlist showTabs={false} />
-								{:else if $activeMenu === 'alerts'}
-									<Alerts view={alertView} />
-									<!--{:else if $activeMenu === 'news'}
-									<News />-->
+									<WatchlistTabs />
 								{/if}
 							</div>
 
 							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 							<div
-								class="sidebar-resize-handle"
+								class="resize-handle"
 								role="separator"
-								aria-orientation="horizontal"
-								aria-label="Resize quote panel"
-								on:mousedown={startSidebarResize}
-								on:touchstart|preventDefault={startSidebarResize}
-								on:keydown={handleKeyboardSidebarResize}
+								aria-orientation="vertical"
+								aria-label="Resize sidebar"
+								on:mousedown={startResize}
+								on:touchstart={startResize}
+								on:keydown={handleKeyboardResize}
 								tabindex="0"
-							></div>
+							/>
+							<div class="sidebar-content">
+								<div class="main-sidebar-content">
+									{#if $activeMenu === 'watchlist'}
+										<Watchlist showTabs={false} />
+									{:else if $activeMenu === 'alerts'}
+										<Alerts view={alertView} />
+										<!--{:else if $activeMenu === 'news'}
+									<News />-->
+									{/if}
+								</div>
 
-							<!-- Quote section now on bottom -->
-							<div class="ticker-info-container" style="height: {tickerHeight}px">
-								<Quote />
+								<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+								<div
+									class="sidebar-resize-handle"
+									role="separator"
+									aria-orientation="horizontal"
+									aria-label="Resize quote panel"
+									on:mousedown={startSidebarResize}
+									on:touchstart|preventDefault={startSidebarResize}
+									on:keydown={handleKeyboardSidebarResize}
+									tabindex="0"
+								></div>
+
+								<!-- Quote section now on bottom -->
+								<div class="ticker-info-container" style="height: {tickerHeight}px">
+									<Quote />
+								</div>
 							</div>
 						</div>
-					</div>
-				{/if}
+					{/if}
+				</div>
+			</div>
+
+			<!-- Sidebar toggle buttons -->
+			<div class="sidebar-buttons">
+				{#each sidebarMenus as menu}
+					<button
+						class="toggle-button side-btn {$activeMenu === menu ? 'active' : ''}"
+						on:click={() => toggleMenu(menu)}
+						title={menu.charAt(0).toUpperCase() + menu.slice(1)}
+					>
+						<img src="{menu}.png" alt={menu} class="menu-icon" />
+					</button>
+				{/each}
 			</div>
 		</div>
 
-		<!-- Sidebar toggle buttons -->
-		<div class="sidebar-buttons">
-			{#each sidebarMenus as menu}
+		<!-- Bottom bar -->
+		<div class="bottom-bar">
+			<div class="bottom-bar-left">
 				<button
-					class="toggle-button side-btn {$activeMenu === menu ? 'active' : ''}"
-					on:click={() => toggleMenu(menu)}
-					title={menu.charAt(0).toUpperCase() + menu.slice(1)}
+					class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
+					on:click={toggleLeftPane}
+					title="Query"
 				>
-					<img src="{menu}.png" alt={menu} class="menu-icon" />
-				</button>
-			{/each}
-		</div>
-	</div>
-
-	<!-- Bottom bar -->
-	<div class="bottom-bar">
-		<div class="bottom-bar-left">
-			<button
-				class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
-				on:click={toggleLeftPane}
-				title="Query"
-			>
-				<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path
-						d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-			</button>
-
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
-				on:click={() => openBottomWindow('strategies')}
-			>
-				Strategies
-			</button>
-			<button
-				class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
-				on:click={() => openBottomWindow('screener')}
-			>
-				Screener
-			</button>
-		</div>
-
-		<div class="bottom-bar-right">
-			<!-- Upgrade button - only show if user is authenticated but not subscribed -->
-			{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
-				<button
-					class="toggle-button upgrade-button"
-					on:click={openPricingSettings}
-					title="Upgrade to Pro"
-				>
-					<svg
-						class="upgrade-icon"
-						viewBox="0 0 24 24"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-					>
+					<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<path
-							d="M12 2L3.09 8.26L12 14L20.91 8.26L12 2ZM12 22L3.09 15.74L12 10L20.91 15.74L12 22Z"
+							d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z"
 							stroke="currentColor"
 							stroke-width="2"
 							stroke-linecap="round"
 							stroke-linejoin="round"
 						/>
 					</svg>
-					Upgrade
 				</button>
-			{/if}
 
-			<!-- Replay buttons commented out -->
-			<!-- 
+				<button
+					class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
+					on:click={() => openBottomWindow('strategies')}
+				>
+					Strategies
+				</button>
+				<button
+					class="toggle-button {bottomWindows.some((w) => w.type === 'screener') ? 'active' : ''}"
+					on:click={() => openBottomWindow('screener')}
+				>
+					Screener
+				</button>
+			</div>
+
+			<div class="bottom-bar-right">
+				<!-- Upgrade button - only show if user is authenticated but not subscribed -->
+				{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+					<button
+						class="toggle-button upgrade-button"
+						on:click={openPricingSettings}
+						title="Upgrade to Pro"
+					>
+						<svg
+							class="upgrade-icon"
+							viewBox="0 0 24 24"
+							fill="none"
+							xmlns="http://www.w3.org/2000/svg"
+						>
+							<path
+								d="M12 2L3.09 8.26L12 14L20.91 8.26L12 2ZM12 22L3.09 15.74L12 10L20.91 15.74L12 22Z"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						Upgrade
+					</button>
+				{/if}
+
+				<!-- Replay buttons commented out -->
+				<!-- 
 			<button
 				class="toggle-button replay-button {!$streamInfo.replayActive || $streamInfo.replayPaused
 					? 'play'
@@ -1915,7 +1550,6 @@
 				>
 					<svg viewBox="0 0 24 24"
 						><path
-							d="M14,19.14V4.86L11,7.86L9.59,6.45L15.14,0.89L20.7,6.45L19.29,7.86L16,4.86V19.14H14M5,19.14V4.86H3V19.14H5Z"
 						/></svg
 					>
 				</button>
@@ -1934,56 +1568,63 @@
 			{/if}
 			-->
 
-			<span class="value">
-				{#if $streamInfo.timestamp !== undefined}
-					{formatTimestamp($streamInfo.timestamp)}
-				{:else}
-					Loading Time...
-				{/if}
-			</span>
-			<!-- Site logo (clickable) -->
-			<a href="/" class="bottom-logo-link">
-				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-			</a>
-		</div>
-	</div>
-
-	{#if showSettingsPopup}
-		<div
-			class="settings-overlay"
-			role="dialog"
-			aria-label="Settings"
-			on:click|self={toggleSettings}
-			on:keydown={(e) => {
-				if (e.key === 'Escape') {
-					toggleSettings();
-				}
-			}}
-		>
-			<div class="settings-modal">
-				<div class="settings-header">
-					<h2>Settings</h2>
-					<button class="close-btn" on:click={toggleSettings}>×</button>
-				</div>
-				<div class="settings-content">
-					{#if showSettingsPopup}
-						{#await import('$lib/features/settings/settings.svelte') then module}
-							<svelte:component this={module.default} initialTab={activeTab} />
-						{/await}
+				<span class="value">
+					{#if $streamInfo.timestamp !== undefined}
+						{formatTimestamp($streamInfo.timestamp)}
+					{:else}
+						Loading Time...
 					{/if}
-				</div>
+				</span>
+				<!-- Site logo (clickable) -->
+				<a href="/" class="bottom-logo-link">
+					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+				</a>
 			</div>
 		</div>
-	{/if}
 
-	<!-- Profile bar (top-right) -->
-	<div class="profile-bar">
-		<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
-			{#key profileIconKey}
-				<img src={getProfileDisplay()} alt="Profile" class="pfp" on:error={handleProfilePicError} />
-			{/key}
-		</button>
-	</div>
+		{#if showSettingsPopup}
+			<div
+				class="settings-overlay"
+				role="dialog"
+				aria-label="Settings"
+				on:click|self={toggleSettings}
+				on:keydown={(e) => {
+					if (e.key === 'Escape') {
+						toggleSettings();
+					}
+				}}
+			>
+				<div class="settings-modal">
+					<div class="settings-header">
+						<h2>Settings</h2>
+						<button class="close-btn" on:click={toggleSettings}>×</button>
+					</div>
+					<div class="settings-content">
+						{#if showSettingsPopup}
+							{#await import('$lib/features/settings/settings.svelte') then module}
+								<svelte:component this={module.default} initialTab={activeTab} />
+							{/await}
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Profile bar (top-right) -->
+		<div class="profile-bar">
+			<button class="profile-button" on:click={toggleSettings} aria-label="Toggle Settings">
+				{#key profileIconKey}
+					<img
+						src={getProfileDisplay()}
+						alt="Profile"
+						class="pfp"
+						on:error={handleProfilePicError}
+					/>
+				{/key}
+			</button>
+		</div>
+	{/if}
+	<!-- End desktop interface -->
 </div>
 
 <style>
@@ -2371,20 +2012,20 @@
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 
-	/* Scale icons in sidebar */
-	.sidebar img,
-	.sidebar svg {
-		width: clamp(1rem, 1.5vw, 1.5rem);
-		height: clamp(1rem, 1.5vw, 1.5rem);
+	/* Mobile full-screen chat container */
+	.mobile-chat-container {
+		position: fixed;
+		inset: 0; /* top:0; right:0; bottom:0; left:0; */
+		z-index: 9999; /* above everything */
+		background: #0f0f0f; /* match site background so it feels native */
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
 	}
 
-	/* —— Mobile full-screen chat quick-fix —— */
-	.mobile-chat-wrapper {
-		display: none; /* hidden on desktop */
-	}
-
-	@media (max-width: 768px) {
-		/* hide the normal interface on phones */
+	/* Fallback CSS for width-based detection (if JS device detection fails) */
+	@media (max-width: 480px) {
+		/* Very small screens get mobile interface as fallback */
 		.app-container,
 		.bottom-bar,
 		.sidebar-buttons,
@@ -2392,14 +2033,9 @@
 			display: none !important;
 		}
 
-		/* show chat & make it fill the viewport */
-		.mobile-chat-wrapper {
-			display: block;
-			position: fixed;
-			inset: 0; /* top:0; right:0; bottom:0; left:0; */
-			z-index: 9999; /* above everything */
-			background: #0f0f0f; /* match site background so it feels native */
-			overflow: hidden;
+		/* Ensure mobile chat is visible on very small screens */
+		.mobile-chat-container {
+			display: flex !important;
 		}
 	}
 </style>
