@@ -47,6 +47,7 @@ type BacktestResponse struct {
 	Instances      []BacktestInstanceRow `json:"instances,omitempty"`
 	Summary        BacktestSummary       `json:"summary"`
 	StrategyPrints string                `json:"strategyPrints,omitempty"`
+	ResponseImages []ResponseImage       `json:"responseImages,omitempty"`
 	StrategyPlots  []StrategyPlot        `json:"strategyPlots,omitempty"`
 }
 
@@ -65,6 +66,10 @@ type StrategyPlotData struct {
 	PlotID int            `json:"plotID"`
 	Data   map[string]any `json:"data"` // Full plotly figure object
 }
+type ResponseImage struct {
+	Data   string `json:"data"`
+	Format string `json:"format"`
+}
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
 type WorkerBacktestResult struct {
@@ -75,6 +80,7 @@ type WorkerBacktestResult struct {
 	Summary        WorkerSummary      `json:"summary"`
 	StrategyPrints string             `json:"strategy_prints,omitempty"`
 	StrategyPlots  []StrategyPlotData `json:"strategy_plots,omitempty"`
+	ResponseImages []string           `json:"response_images,omitempty"`
 	ErrorMessage   string             `json:"error_message,omitempty"`
 }
 
@@ -274,11 +280,18 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		// Extract metadata from the full plot data
 		extractPlotAttributes(&lightweightPlots[i], plot.Data)
 	}
-
+	responseImages := make([]ResponseImage, len(result.ResponseImages))
+	for i, img := range result.ResponseImages {
+		responseImages[i] = ResponseImage{
+			Data:   img,
+			Format: "png",
+		}
+	}
 	responseWithInstances := BacktestResponse{
 		Summary:        summary,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  lightweightPlots,
+		ResponseImages: responseImages,
 		Instances:      convertWorkerInstancesToBacktestResults(result.Instances),
 	}
 	// Cache the results
@@ -308,6 +321,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 		Summary:        summary,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  responseWithInstances.StrategyPlots,
+		ResponseImages: responseImages,
 	}
 	return response, nil
 }

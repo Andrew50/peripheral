@@ -651,12 +651,11 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
             # Create concise user prompt based on context
             if existing_strategy:
                 # For editing - keep it minimal
-                user_prompt = f"""EDIT REQUEST: {prompt}
-
-                CURRENT STRATEGY: {existing_strategy.get('name', 'Strategy')}
-                {self._get_code_summary(existing_strategy.get('pythonCode', ''))}
-
-            Generate the updated strategy function."""
+                user_prompt = f"""
+                CURRENT STRATEGY: {existing_strategy.get('name', 'Strategy')} \n
+                CURRENT STRATEGY CODE: {existing_strategy.get('pythonCode', '')} \n
+                EDIT REQUEST: {prompt} \n
+                Generate the updated strategy function."""
             else:
 
                 user_prompt = f"""CREATE STRATEGY: {prompt}"""
@@ -712,24 +711,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
         except Exception as e:
             logger.error(f"OpenAI code generation failed: {e}")
             return ""
-    
-    def _get_code_summary(self, code: str) -> str:
-        """Get a brief summary of existing code to reduce token usage"""
-        if not code:
-            return "No existing code"
-        
-        # Extract just the function signature and first few lines
-        lines = code.split('\n')
-        summary_lines = []
-        
-        for line in lines[:15]:  # First 15 lines max
-            if line.strip():
-                summary_lines.append(line)
-        
-        if len(lines) > 15:
-            summary_lines.append("... (code continues)")
-        
-        return '\n'.join(summary_lines)
+
     
     def _extract_python_code(self, response: str) -> str:
         """Extract Python code from response, removing markdown formatting"""
