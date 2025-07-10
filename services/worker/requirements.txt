@@ -20,7 +20,6 @@ scipy>=1.7.0
 
 # Visualization and plotting
 plotly>=5.17.0
-kaleido>=0.2.1
 matplotlib>=3.7.0
 
 # Utilities
