@@ -405,17 +405,6 @@ class SecurityValidator:
         
         return True
 
-    def _is_pandas_import(self, node: Union[ast.Import, ast.ImportFrom]) -> bool:
-        """Check if this is a pandas import"""
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == "pandas":
-                    return True
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith("pandas"):
-                return True
-        return False
-
     def _find_strategy_functions(self, tree: ast.AST) -> List[ast.FunctionDef]:
         """Find valid strategy functions in the code"""
         functions = []
@@ -437,36 +426,6 @@ class SecurityValidator:
             )
         
         return True
-
-    def _get_annotation_text(self, annotation: ast.AST) -> str:
-        """Extract annotation text safely"""
-        try:
-            if hasattr(ast, 'unparse'):
-                return ast.unparse(annotation)
-            else:
-                # Fallback for older Python versions
-                if isinstance(annotation, ast.Attribute):
-                    if isinstance(annotation.value, ast.Name):
-                        return f"{annotation.value.id}.{annotation.attr}"
-                elif isinstance(annotation, ast.Name):
-                    return annotation.id
-                return str(annotation)
-        except:
-            return ""
-
-    def _is_dataframe_annotation(self, annotation_text: str) -> bool:
-        """Check if annotation represents a pandas DataFrame"""
-        valid_annotations = [
-            "pandas.DataFrame", "pd.DataFrame", "DataFrame"
-        ]
-        return any(valid in annotation_text for valid in valid_annotations)
-    
-    def _is_ndarray_annotation(self, annotation_text: str) -> bool:
-        """Check if annotation represents a numpy ndarray"""
-        valid_annotations = [
-            "numpy.ndarray", "np.ndarray", "ndarray"
-        ]
-        return any(valid in annotation_text for valid in valid_annotations)
 
     def _validate_function_body(self, func_node: ast.FunctionDef) -> bool:
         """Validate function body follows strategy requirements"""
@@ -660,78 +619,6 @@ class SecurityValidator:
     def _check_nonlocal_statement(self, node: ast.Nonlocal) -> bool:
         """Check nonlocal statements (forbidden)"""
         raise SecurityError("Nonlocal statements are not allowed in strategies")
-
-    def validate_instance_fields(self, instances: List[Dict[str, Any]]) -> bool:
-        """
-        Validate that all instances have required fields.
-        
-        Required fields:
-        - ticker (str): Stock ticker symbol
-        - timestamp (str): Date/time identifier
-        
-        The engine guarantees that the input DataFrame will contain raw market data
-        with columns like ticker, date, open, high, low, close, volume, and fund_* columns.
-        """
-        if not instances:
-            return True
-            
-        if not isinstance(instances, list):
-            raise StrategyComplianceError("Strategy must return a list of dictionaries")
-            
-        for i, instance in enumerate(instances):
-            if not isinstance(instance, dict):
-                raise StrategyComplianceError(f"Instance {i} must be a dictionary, got {type(instance)}")
-            
-            # Check required fields
-            missing_fields = self.required_instance_fields - set(instance.keys())
-            if missing_fields:
-                raise StrategyComplianceError(
-                    f"Instance {i} missing required fields: {missing_fields}. "
-                    f"Required fields are: {self.required_instance_fields}"
-                )
-            
-            # Validate field types
-            if 'ticker' in instance:
-                if not isinstance(instance['ticker'], str):
-                    raise StrategyComplianceError(
-                        f"Instance {i} 'ticker' field must be a string, got {type(instance['ticker'])}"
-                    )
-                if not instance['ticker'].strip():
-                    raise StrategyComplianceError(f"Instance {i} 'ticker' field cannot be empty")
-                    
-            if 'timestamp' in instance:
-                if not isinstance(instance['timestamp'], (str, int, float)):
-                    raise StrategyComplianceError(
-                        f"Instance {i} 'timestamp' field must be a string or number, got {type(instance['timestamp'])}"
-                    )
-        
-        return True
-
-    def get_data_field_documentation(self) -> str:
-        """Return documentation about available DataFrame fields"""
-        return f"""
-        Available DataFrame columns (raw market data):
-        {', '.join(sorted(self.available_data_fields))}
-        
-        Required instance fields:
-        {', '.join(sorted(self.required_instance_fields))}
-        
-        The df parameter is a pandas DataFrame with raw market data columns:
-        - ticker (string): Stock symbol
-        - date (datetime): Trading date  
-        - open (float): Opening price
-        - high (float): High price
-        - low (float): Low price
-        - close (float): Closing price
-        - volume (int): Trading volume
-        - fund_* (various): Fundamental data when available
-        
-        IMPORTANT: No technical indicators are pre-calculated.
-        Calculate your own technical indicators (SMA, RSI, MACD, etc.) within your strategy 
-        function using raw price data and pandas operations.
-        
-        Access data using pandas operations: df['column_name'], df.loc[], df.iloc[], etc.
-        """
 
 
 class SecurityError(Exception):

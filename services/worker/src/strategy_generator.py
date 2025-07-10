@@ -65,7 +65,7 @@ class StrategyGenerator:
         self.openai_client = OpenAI(api_key=api_key)
         logger.info("OpenAI client initialized successfully")
     
-    def _get_current_filter_values(self) -> Dict[str, List[str]]:
+    def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
         try:
             # Apply rate limiting to prevent connection storms
@@ -91,7 +91,7 @@ class StrategyGenerator:
         """Get system instruction for OpenAI code generation with current database filter values"""
         
         # Get current filter values from database
-        filter_values = self._get_current_filter_values()
+        filter_values = self._get_current_filter_values_from_db()
         
         # Format filter values for the prompt
         sectors_str = '", "'.join(filter_values['sectors'])
@@ -159,7 +159,7 @@ FILTER EXAMPLES:
 - Small cap stocks: filters={{"market_cap_max": 2000000000}}
 - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 
-EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - you don't need to worry about this.
+EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - don't worry about this.
 
 TICKER USAGE:
 - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
@@ -172,7 +172,6 @@ TICKER USAGE:
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 - DO NOT use .tail(1) or .head(1) to limit results per ticker
 - Return every occurrence that meets your criteria across the entire dataset
-- The execution engine will handle filtering for different modes (backtest, screening, alerts)
 - Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
 
 CRITICAL: INSTANCE STRUCTURE
@@ -190,12 +189,11 @@ CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
 - DO NOT include static thresholds or constants (e.g., 'rsi_threshold': 30)
 - This data is ESSENTIAL for backtesting, analysis, and understanding why signals triggered
 
-CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM - NO BUFFERS
+CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM + 1 BAR BUFFER (NO ADDITIONAL BUFFER)
 - min_bars = EXACT number of bars required for calculation, NOT a suggestion
-- Examples: RSI needs 14 bars → min_bars=14, MACD needs 26 bars → min_bars=26
-- NEVER add buffer periods like "need 20 + 5 buffer = 25"
+- Examples: RSI needs 14 bars → min_bars=15, MACD needs 26 bars → min_bars=27
 - If you need multiple indicators, use the MAXIMUM of their individual minimums
-- Example: RSI(14) + SMA(50) strategy → min_bars=50 (not 64, not 55)
+- Example: RSI(14) + SMA(50) strategy → min_bars=51 (not 64, not 55)
 
 DATA VALIDATION:
 - Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
@@ -231,7 +229,6 @@ X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
 ERROR HANDLING NOTE:
 - The strategy executor automatically wraps your strategy function in try-except blocks
 - You do NOT need to include try-except in your strategy code
-- Focus on the strategy logic - error handling is managed by the system
 - If data is invalid, simply return an empty list: return []
 
 EXAMPLE PATTERNS:
@@ -284,7 +281,7 @@ def strategy():
     bar_data_1d = get_bar_data(
         timeframe="1d",
         columns=["ticker", "timestamp", "close"],
-        min_bars=20,  # Need 20 bars for RSI calculation (14 + buffer)
+        min_bars=21,  # Need 20 bars for RSI calculation (14 + buffer)
         filters={{"sector": "Technology"}}  # Filter to technology sector
     )
     
@@ -438,6 +435,10 @@ SECURITY RULES:
 - No exec, eval, or dynamic code execution
 - Use only standard mathematical and data manipulation operations
 
+CODE OPTIMIZATIONS: 
+- Drop intermediate columns once they are no longer needed that are not output in the final instance list
+- Minimize the number of shift() and index manipulation operations
+
 DATA VALIDATION:
 - Always validate DataFrame columns exist before using them
 - Check for None/empty data at every step
@@ -447,8 +448,6 @@ DATA VALIDATION:
 **CRITICAL STOP LOSS IMPLEMENTATION**: 
 BE EXTREMELY CAREFUL WITH stop loss prices. Markets can gap through stops, resulting in much worse exits than expected.
 
-REQUIRED STOP LOSS PATTERN:
-```python
 # Step 1: Check for overnight gaps FIRST
 if day_open <= stop_loss_price:
     exit_price = day_open  # ✅ Use actual gap-down price, NOT stop price
@@ -457,7 +456,6 @@ if day_open <= stop_loss_price:
 elif day_low <= stop_loss_price:
     exit_price = stop_loss_price  # ✅ Safe - no gap occurred
     exit_reason = 'intraday_stop_hit'
-```
 
 ENHANCED PRECISION WITH DATE FILTERING:
 For exact stop timing, use multi-timeframe analysis:
@@ -468,11 +466,10 @@ For exact stop timing, use multi-timeframe analysis:
 
 Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
 
-
 PRINTING DATA (REQUIRED): 
 - Use print() to print useful data for the user
 - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
-- This should SUPER comprehensive. The user will not have access to the data other than what is printed. 
+- This should SUPER comprehensive. The user will not have access to the data and information other than what is printed and the instance list.
 
 PLOTLY PLOT GENERATION (REQUIRED):
 - Use plotly to generate plots of useful visualizations of the data
@@ -647,10 +644,6 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
     def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
-        
-        IMPORTANT: The system instruction emphasizes returning ALL matching instances,
-        not just the latest per ticker. This prevents the .tail(1) bug that was
-        limiting backtest results to only one instance per symbol.
         """
         try:
             system_instruction = self._get_system_instruction()

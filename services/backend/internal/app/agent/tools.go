@@ -663,7 +663,7 @@ var (
 			Function:      wrapWithContext(RunWebSearch),
 			StatusMessage: "Searching the web...",
 		},
-		"runTwitterSearch": {
+		/*"runTwitterSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runTwitterSearch",
 				Description: "Run a search on X using Grok.",
@@ -680,7 +680,7 @@ var (
 			},
 			Function:      wrapWithContext(RunTwitterSearch),
 			StatusMessage: "Searching Twitter...",
-		},
+		},*/ //COMMENTED out for now since we ran out of credits
 		"getLatestTweets": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLatestTweets",
