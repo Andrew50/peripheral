@@ -4,6 +4,9 @@
 	import { browser } from '$app/environment';
 
 	import { timelineProgress } from '$lib/landing/timeline';
+	
+	// Auth state prop
+	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
 	let isHeaderVisible = true;
 	let isHeaderTransparent = true;
@@ -37,12 +40,14 @@
 	onMount(() => {
 		if (!browser) return;
 		// Preload code for commonly visited routes to make subsequent navigations instantaneous
-		['/', '/pricing', '/login', '/signup'].forEach((p) => preloadCode(p));
+		const routes = ['/', '/pricing', '/login', '/signup'];
+		routes.forEach((p) => preloadCode(p));
 
 		handleScroll();
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
 	});
+	
 </script>
 <!-- Window scroll listener -->
 <svelte:window on:scroll={handleScroll} />
@@ -56,8 +61,12 @@
 		</div>
 		<div class="navigation">
 			<button class="nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
-			<button class="nav-button secondary" on:click={() => navigateTo('/login')}>Login</button>
-			<button class="nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
+			{#if isAuthenticated}
+				<button class="nav-button primary" on:click={() => navigateTo('/app')}>Go to Terminal</button>
+			{:else}
+				<button class="nav-button secondary" on:click={() => navigateTo('/login')}>Login</button>
+				<button class="nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
+			{/if}
 		</div>
 	</nav>
 </header>

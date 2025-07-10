@@ -6,25 +6,31 @@
 		import ChipSection from '$lib/landing/ChipSection.svelte';
 		import SiteHeader from '$lib/components/SiteHeader.svelte';
 		import SiteFooter from '$lib/components/SiteFooter.svelte';
-		import HeroAnimation from '$lib/landing/HeroAnimation.svelte';
-		import '$lib/styles/splash.css';
+			import HeroAnimation from '$lib/landing/HeroAnimation.svelte';
+	import '$lib/styles/splash.css';
+	import { getAuthState, getCookie } from '$lib/auth';
 
 		if (browser) {
 			document.title = 'Peripheral';
 		}
 
-		onMount(() => {
+			// Auth state - check immediately to prevent flash
+	let isAuthenticated = getAuthState();
 
-			if (browser) {
-				// Start preloading pricing configuration early
-				startPricingPreload();
-			}
-		});
+	onMount(() => {
+		if (browser) {
+			// Start preloading pricing configuration early
+			startPricingPreload();
+		}
+	});
+
+
 		// Subsections data
 		const subsections = [
 			{
 				title: 'Transform ideas into edge in minutes',
 				description: 'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
+				content: ''
 			},
 			{
 				title: 'Never miss a trade.',
@@ -54,7 +60,7 @@
 	</script>
 
 
-	<SiteHeader/>
+	<SiteHeader {isAuthenticated}/>
 
 	<main class="landing-container">
 		<HeroAnimation {defaultKey} {chartsByKey}/>
