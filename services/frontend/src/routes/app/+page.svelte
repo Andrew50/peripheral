@@ -30,7 +30,6 @@
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get, writable } from 'svelte/store';
 	import {
@@ -1040,7 +1039,7 @@
 	}
 
 	function openPricingSettings() {
-		goto('/pricing');
+		window.location.href = "/pricing";
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1522,7 +1521,7 @@
 				{/if}
 			</span>
 			<!-- Site logo (clickable) -->
-			<a href="/" class="bottom-logo-link">
+			<a  class="bottom-logo-link" on:click={() => window.location.href = "/"}>
 				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
 			</a>
 		</div>
@@ -1844,11 +1843,6 @@
 		display: block;
 	}
 
-	/* Hide original bottom bar profile button */
-	.bottom-bar .profile-button {
-		display: none;
-	}
-
 	/* Bottom bar logo */
 	.bottom-bar .bottom-logo {
 		height: 28px;
@@ -1859,5 +1853,6 @@
 	.bottom-logo-link {
 		display: inline-flex;
 		align-items: center;
+		cursor: pointer;
 	}
 </style>
