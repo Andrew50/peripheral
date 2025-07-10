@@ -73,3 +73,31 @@ export function setAuthSessionStorage(token: string, profilePic: string, usernam
 	sessionStorage.setItem('profilePic', profilePic || '');
 	sessionStorage.setItem('username', username || '');
 }
+
+/**
+ * Get a specific cookie value
+ */
+export function getCookie(name: string): string | null {
+	if (!browser) return null;
+	
+	const value = `; ${document.cookie}`;
+	const parts = value.split(`; ${name}=`);
+	if (parts.length === 2) {
+		const cookieValue = parts.pop()?.split(';').shift();
+		return cookieValue ? decodeURIComponent(cookieValue) : null;
+	}
+	return null;
+}
+
+/**
+ * Check if user is authenticated by checking both sessionStorage and cookies
+ * Uses sessionStorage first (faster), falls back to cookies (for initial loads)
+ */
+export function getAuthState(): boolean {
+	if (!browser) return false;
+	
+	const sessionToken = sessionStorage.getItem('authToken');
+	const cookieToken = getCookie('authToken');
+	
+	return !!(sessionToken || cookieToken);
+}

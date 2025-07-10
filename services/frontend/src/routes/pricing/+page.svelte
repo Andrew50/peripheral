@@ -26,6 +26,7 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
+	import { getAuthState } from '$lib/auth';
 
 	// Individual loading states for better UX
 	let loadingStates: Record<string, boolean> = {
@@ -56,27 +57,17 @@
 	// Selected billing period state – allows users to toggle between monthly and yearly pricing
 	let billingPeriod: 'month' | 'year' = 'year';
 
-	// Filter plans based on selected billing period
-	$: filteredPlans = plans.filter((plan) => {
-		// Always show Free plan
-		if (plan.product_key?.toLowerCase() === 'free') {
-			return true;
-		}
+	// Include Free plan regardless of selected billing period so it always shows
+	$: filteredPlans = plans.filter(
+		(plan) => plan.product_key?.toLowerCase() === 'free' || plan.billing_period === billingPeriod
+	);
 
-		// For paid plans, check if they have pricing for the selected billing period
-		if (!plan.prices || plan.prices.length === 0) {
-			return false;
-		}
-
-		const apiPeriod = billingPeriod === 'month' ? 'monthly' : 'yearly';
-		return plan.prices.some((price) => price.billing_period === apiPeriod);
-	});
-
-	// Function to determine if the current user is authenticated
-	const isAuthenticated = (): boolean => {
-		if (!browser) return false;
-		const authToken = sessionStorage.getItem('authToken');
-		return !!authToken;
+	// Auth state - check immediately to prevent flash
+	let isAuthenticated = getAuthState();
+	
+	// Function to determine if the current user is authenticated (for backward compatibility)
+	const isAuthenticatedFn = (): boolean => {
+		return isAuthenticated;
 	};
 
 	// Helper function to safely check if a plan is the current plan (only when authenticated)
@@ -85,7 +76,7 @@
 	const isCurrentPlan = (plan: DatabasePlan): boolean => {
 		const planDisplayName = getPlanDisplayName(plan);
 		return (
-			isAuthenticated() &&
+			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan?.split(' ')[0] === planDisplayName?.split(' ')[0] &&
 			!$subscriptionStatus.loading &&
 			!$subscriptionStatus.error
@@ -96,7 +87,7 @@
 	const isCurrentPlanCanceling = (plan: DatabasePlan): boolean => {
 		const planDisplayName = getPlanDisplayName(plan);
 		return (
-			isAuthenticated() &&
+			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan === planDisplayName &&
 			$subscriptionStatus.isCanceling &&
 			!$subscriptionStatus.loading &&
@@ -107,7 +98,7 @@
 	// Helper to check if a Pro plan should show "Upgrade" instead of "Subscribe" when the user is on Plus
 	const isUpgradeEligible = (plan: DatabasePlan): boolean => {
 		return (
-			isAuthenticated() &&
+			isAuthenticatedFn() &&
 			$subscriptionStatus.currentPlan?.toLowerCase().includes('plus') &&
 			plan.product_key.toLowerCase().includes('pro')
 		);
@@ -205,6 +196,8 @@
 
 	// Initialize component
 	async function initializeComponent() {
+		const isAuth = isAuthenticatedFn();
+
 		// Load pricing configuration first
 		await loadPricingConfiguration();
 
@@ -586,7 +579,7 @@
 <svelte:head>
 	<title>Pricing | Peripheral</title>
 </svelte:head>
-<SiteHeader />
+<SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -622,7 +615,7 @@
 					<div class="landing-loader"></div>
 					<span></span>
 				</div>
-			{:else if $subscriptionStatus.error && isAuthenticated()}
+			{:else if $subscriptionStatus.error && isAuthenticatedFn()}
 				<div class="error-message">{$subscriptionStatus.error}</div>
 			{:else}
 				<!-- Billing Period Slider Toggle -->
@@ -705,7 +698,7 @@
 										{/if}
 									</button>
 								{:else if plan.product_key?.toLowerCase() === 'free'}
-									{#if !$subscriptionStatus.isActive && isAuthenticated()}
+									{#if !$subscriptionStatus.isActive && isAuthenticatedFn()}
 										<button class="subscribe-button current" disabled> Current Plan </button>
 									{:else if $subscriptionStatus.isActive}
 										<button class="subscribe-button" disabled> Downgrade not available </button>
