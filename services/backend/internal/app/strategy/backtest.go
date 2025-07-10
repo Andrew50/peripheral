@@ -15,10 +15,11 @@ const BacktestCacheKey = "backtest:userID:%d:strategyID:%d"
 
 // RunBacktestArgs represents arguments for backtesting (API compatibility)
 type RunBacktestArgs struct {
-	StrategyID  int   `json:"strategyId"`
-	Securities  []int `json:"securities"`
-	Start       int64 `json:"start"`
-	FullResults bool  `json:"fullResults"`
+	StrategyID  int    `json:"strategyId"`
+	Securities  []int  `json:"securities"`
+	StartDate   string `json:"startDate"`
+	EndDate     string `json:"endDate"`
+	FullResults bool   `json:"fullResults"`
 }
 
 // BacktestInstanceRow represents a single backtest instance (API compatibility)
@@ -67,16 +68,14 @@ type StrategyPlotData struct {
 
 // WorkerBacktestResult represents the result from the worker's run_backtest function
 type WorkerBacktestResult struct {
-	Success            bool                   `json:"success"`
-	StrategyID         int                    `json:"strategy_id"`
-	ExecutionMode      string                 `json:"execution_mode"`
-	Instances          []map[string]any       `json:"instances"`
-	Summary            WorkerSummary          `json:"summary"`
-	PerformanceMetrics map[string]interface{} `json:"performance_metrics"`
-	ExecutionTimeMs    int                    `json:"execution_time_ms"`
-	StrategyPrints     string                 `json:"strategy_prints,omitempty"`
-	StrategyPlots      []StrategyPlotData     `json:"strategy_plots,omitempty"`
-	ErrorMessage       string                 `json:"error_message,omitempty"`
+	Success        bool               `json:"success"`
+	StrategyID     int                `json:"strategy_id"`
+	ExecutionMode  string             `json:"execution_mode,omitempty"`
+	Instances      []map[string]any   `json:"instances"`
+	Summary        WorkerSummary      `json:"summary"`
+	StrategyPrints string             `json:"strategy_prints,omitempty"`
+	StrategyPlots  []StrategyPlotData `json:"strategy_plots,omitempty"`
+	ErrorMessage   string             `json:"error_message,omitempty"`
 }
 
 // WorkerSummary represents worker summary statistics
@@ -249,7 +248,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	}
 
 	// Call the worker's run_backtest function
-	result, err := callWorkerBacktestWithProgress(ctx, conn, userID, args.StrategyID, progressCallback)
+	result, err := callWorkerBacktestWithProgress(ctx, conn, userID, args, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker backtest: %v", err)
 	}
@@ -314,17 +313,19 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 }
 
 // callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
-func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID, strategyID int, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
+func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunBacktestArgs, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Generate unique task ID
-	taskID := fmt.Sprintf("backtest_%d_%d", strategyID, time.Now().UnixNano())
+	taskID := fmt.Sprintf("backtest_%d_%d", args.StrategyID, time.Now().UnixNano())
 
 	// Prepare backtest task payload
 	task := map[string]interface{}{
 		"task_id":   taskID,
 		"task_type": "backtest",
 		"args": map[string]interface{}{
-			"strategy_id": fmt.Sprintf("%d", strategyID),
+			"strategy_id": fmt.Sprintf("%d", args.StrategyID),
 			"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
+			"start_date":  args.StartDate,
+			"end_date":    args.EndDate,
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
 	}

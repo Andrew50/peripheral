@@ -12,14 +12,17 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/stripe/stripe-go/v78"
-	billingportalsession "github.com/stripe/stripe-go/v78/billingportal/session"
-	checkoutsession "github.com/stripe/stripe-go/v78/checkout/session"
-	"github.com/stripe/stripe-go/v78/customer"
-	"github.com/stripe/stripe-go/v78/subscription"
-	"github.com/stripe/stripe-go/v78/webhook"
+	"backend/internal/services/alerts"
+
+	stripe "github.com/stripe/stripe-go/v82"
+	billingportalsession "github.com/stripe/stripe-go/v82/billingportal/session"
+	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
+	"github.com/stripe/stripe-go/v82/customer"
+	"github.com/stripe/stripe-go/v82/subscription"
+	"github.com/stripe/stripe-go/v82/webhook"
 )
 
 const DBContextTimeout = 1 * time.Minute
@@ -128,8 +131,33 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading Stripe webhook body: %v", err)
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Failed to read request body: %v", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	// Basic logging for debugging
+	log.Printf("Stripe webhook request received: method=%s url=%s payload_bytes=%d", r.Method, r.URL.String(), len(payload))
+	// (detailed request headers and payload size logging removed)
+
+	// Check if Stripe-Signature header exists
+	stripeSignature := r.Header.Get("Stripe-Signature")
+	if stripeSignature == "" {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Missing Stripe-Signature header")
+		log.Printf("🔍 This indicates either:")
+		log.Printf("🔍   1. Request is not from Stripe (manual curl/test)")
+		log.Printf("🔍   2. Ingress/proxy is stripping headers")
+		log.Printf("🔍   3. Webhook endpoint URL in Stripe dashboard is wrong")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Check if webhook secret is configured
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if webhookSecret == "" {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: STRIPE_WEBHOOK_SECRET environment variable not set")
+		log.Printf("🔍 This is a server configuration issue")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -137,29 +165,51 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	var event stripe.Event
 
 	// Try primary webhook secret
-	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-	if webhookSecret != "" {
-		event, err = webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), webhookSecret)
-		if err != nil {
-			log.Printf("Failed to verify with primary webhook secret: %v", err)
-			// Retry verification but ignore API version mismatch to accommodate newer Stripe API versions
-			event, err = webhook.ConstructEventWithOptions(payload, r.Header.Get("Stripe-Signature"), webhookSecret, webhook.ConstructEventOptions{
-				IgnoreAPIVersionMismatch: true,
-			})
-			if err == nil {
-				log.Printf("Successfully verified webhook signature by ignoring API version mismatch")
-			}
+	event, err = webhook.ConstructEvent(payload, stripeSignature, webhookSecret)
+	if err != nil {
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Primary signature verification failed: %v", err)
+		log.Printf("🔍 Error type analysis:")
+
+		// Provide specific error guidance
+		errStr := err.Error()
+		if strings.Contains(errStr, "timestamp") {
+			log.Printf("🔍   -> Timestamp issue: Webhook may be too old or clock skew")
+		} else if strings.Contains(errStr, "signature") {
+			log.Printf("🔍   -> Signature mismatch: Likely wrong webhook secret")
+			log.Printf("🔍   -> Check that STRIPE_STAGE_WEBHOOK_SECRET matches Stripe dashboard")
+		} else if strings.Contains(errStr, "header") {
+			log.Printf("🔍   -> Header issue: Signature header format problem")
+		} else {
+			log.Printf("🔍   -> Unknown verification error")
 		}
+
+		// Retry verification but ignore API version mismatch to accommodate newer Stripe API versions
+		log.Printf("🔄 STRIPE WEBHOOK: Retrying with relaxed API version checking...")
+		event, err = webhook.ConstructEventWithOptions(payload, stripeSignature, webhookSecret, webhook.ConstructEventOptions{
+			IgnoreAPIVersionMismatch: true,
+		})
+		if err == nil {
+			// signature verified successfully – no additional logging needed
+		} else {
+			log.Printf("❌ STRIPE WEBHOOK ERROR: Relaxed verification also failed: %v", err)
+		}
+	} else {
+		// signature verified successfully – no additional logging needed
 	}
 
 	if err != nil {
-		log.Printf("Error verifying Stripe webhook signature: %v", err)
+		log.Printf("❌ STRIPE WEBHOOK FINAL ERROR: All signature verification attempts failed")
+		log.Printf("🔧 TROUBLESHOOTING STEPS:")
+		log.Printf("🔧   1. Verify webhook endpoint URL in Stripe dashboard: https://stage.peripheral.io/billing/webhook")
+		log.Printf("🔧   2. Check STRIPE_STAGE_WEBHOOK_SECRET in GitHub secrets matches Stripe dashboard")
+		log.Printf("🔧   3. Ensure webhook signing secret is copied correctly (no extra spaces)")
+		log.Printf("🔧   4. Test with Stripe CLI: stripe listen --forward-to https://stage.peripheral.io/billing/webhook")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Handle the event
-	log.Printf("Processing Stripe webhook event: %s", event.Type)
+
 	switch event.Type {
 	case "checkout.session.completed":
 		err = handleStripeCheckoutSessionCompleted(conn, event)
@@ -172,11 +222,13 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	case "invoice.payment_succeeded":
 		err = handleStripePaymentSucceeded(conn, event)
 	default:
-		log.Printf("Unhandled Stripe event type: %s", event.Type)
+		// No specific handler for this event type – ignoring
 	}
 
 	if err != nil {
-		log.Printf("Error handling Stripe webhook event %s: %v", event.Type, err)
+		log.Printf("❌ STRIPE WEBHOOK ERROR: Failed to handle event %s (ID: %s): %v", event.Type, event.ID, err)
+		// Send a critical alert so ops are notified immediately
+		alerts.LogCriticalAlert(fmt.Errorf("stripe webhook handler error: %w", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -340,7 +392,9 @@ func handleSubscriptionPurchase(conn *data.Conn, session stripe.CheckoutSession,
 	if planName != "Unknown" {
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, planName); err != nil {
 			log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, planName, err)
-			// Don't fail the webhook since the subscription was successfully created
+			// Escalate: the user paid but we could not allocate their credits – ops must investigate
+			alerts.LogCriticalAlert(fmt.Errorf("failed to allocate credits (plan=%s, user=%d): %w", planName, userID, err))
+			// Don't fail the webhook so subscription remains active, but alert has been sent
 		}
 	}
 
@@ -386,6 +440,7 @@ func handleStripeSubscriptionDeleted(conn *data.Conn, event stripe.Event) error 
 	// Reset user to Free plan credits when subscription is canceled
 	if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 		log.Printf("Warning: Failed to reset user credits for user %d to Free plan: %v", userID, err)
+		alerts.LogCriticalAlert(fmt.Errorf("failed to reset credits to Free after cancellation (user=%d): %w", userID, err))
 	}
 
 	log.Printf("Successfully canceled subscription %s for user %d", subscription.ID, userID)
@@ -409,7 +464,10 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		log.Printf("Subscription %s has CancelAtPeriodEnd=true, overriding status from '%s' to 'canceling'", subscription.ID, status)
 		status = "canceling"
 	}
-	periodEnd := time.Unix(subscription.CurrentPeriodEnd, 0)
+	var periodEnd time.Time
+	if len(subscription.Items.Data) > 0 {
+		periodEnd = time.Unix(subscription.Items.Data[0].CurrentPeriodEnd, 0)
+	}
 
 	// Get the price ID from the subscription to determine plan
 	var priceID string
@@ -463,6 +521,7 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, targetPlan); err != nil {
 			log.Printf("Warning: Failed to update user credits for user %d to plan %s: %v", userID, targetPlan, err)
+			alerts.LogCriticalAlert(fmt.Errorf("failed to update credits during subscription update (plan=%s, user=%d): %w", targetPlan, userID, err))
 		}
 
 		log.Printf("Successfully updated subscription %s to status %s with plan %s for user %d", subscription.ID, status, planName, userID)
@@ -484,6 +543,7 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		if status != "active" && status != "canceling" {
 			if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 				log.Printf("Warning: Failed to reset user credits for user %d to Free plan: %v", userID, err)
+				alerts.LogCriticalAlert(fmt.Errorf("failed to reset credits to Free (user=%d): %w", userID, err))
 			}
 		}
 
@@ -499,8 +559,11 @@ func handleStripePaymentFailed(conn *data.Conn, event stripe.Event) error {
 		return fmt.Errorf("error parsing invoice: %v", err)
 	}
 
-	if invoice.Subscription == nil {
-		return nil // Not a subscription invoice
+	var subID string
+	if invoice.Parent != nil && invoice.Parent.SubscriptionDetails != nil && invoice.Parent.SubscriptionDetails.Subscription != nil {
+		subID = invoice.Parent.SubscriptionDetails.Subscription.ID
+	} else {
+		return nil // Not a subscription invoice or missing subscription info
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
@@ -512,13 +575,13 @@ func handleStripePaymentFailed(conn *data.Conn, event stripe.Event) error {
 		SET subscription_status = 'past_due',
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID)
+		subID)
 
 	if err != nil {
 		return fmt.Errorf("error updating subscription status to past_due: %v", err)
 	}
 
-	log.Printf("Updated subscription %s to past_due due to payment failure", invoice.Subscription.ID)
+	log.Printf("Updated subscription %s to past_due due to payment failure", subID)
 	return nil
 }
 
@@ -528,7 +591,10 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		return fmt.Errorf("error parsing invoice: %v", err)
 	}
 
-	if invoice.Subscription == nil {
+	var subID string
+	if invoice.Parent != nil && invoice.Parent.SubscriptionDetails != nil && invoice.Parent.SubscriptionDetails.Subscription != nil {
+		subID = invoice.Parent.SubscriptionDetails.Subscription.ID
+	} else {
 		return nil // Not a subscription invoice
 	}
 
@@ -536,7 +602,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	defer cancel()
 
 	// Fetch the current subscription from Stripe to get up-to-date plan information
-	stripeSubscription, err := subscription.Get(invoice.Subscription.ID, nil)
+	stripeSubscription, err := subscription.Get(subID, nil)
 	if err != nil {
 		return fmt.Errorf("error fetching subscription from Stripe: %v", err)
 	}
@@ -563,7 +629,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	err = conn.DB.QueryRow(ctx, `
 		SELECT userId FROM users 
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID).Scan(&userID)
+		subID).Scan(&userID)
 
 	if err != nil {
 		return fmt.Errorf("error finding user for subscription: %v", err)
@@ -578,7 +644,7 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 		    subscription_plan = $3,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE stripe_subscription_id = $1`,
-		invoice.Subscription.ID, periodEnd, planName)
+		subID, periodEnd, planName)
 
 	if err != nil {
 		return fmt.Errorf("error updating subscription with plan info: %v", err)
@@ -587,10 +653,11 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 	// Reset subscription credits for the user's billing cycle with current plan
 	if err := limits.ResetUserSubscriptionCredits(conn, userID, planName); err != nil {
 		log.Printf("Warning: Failed to reset subscription credits for user %d: %v", userID, err)
+		alerts.LogCriticalAlert(fmt.Errorf("failed to reset subscription credits (plan=%s, user=%d): %w", planName, userID, err))
 		// Don't fail the webhook since the subscription was successfully renewed
 	}
 
-	log.Printf("Updated subscription %s to active with plan %s, period end %s and reset credits for user %d", invoice.Subscription.ID, planName, periodEnd, userID)
+	log.Printf("Updated subscription %s to active with plan %s, period end %s and reset credits for user %d", subID, planName, periodEnd, userID)
 
 	return nil
 }

@@ -141,23 +141,7 @@ class DataAccessorProvider:
                     else:
                         tickers = None
             
-            # Validation mode: only override tickers=None if NO filters are specified
-            # If filters are specified, the user wants to test with filtered data, so respect that
-            if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation':
-                if tickers is None and not filters:
-                    # Only override when no filters are specified - user wants to test with minimal data
-                    tickers = self.execution_context.get('symbols', ['AAPL'])[:1]  # Only use first ticker for validation
-                    logger.info(f"🧪 Validation mode: overriding tickers=None (no filters) to use minimal dataset: {tickers}")
-                    # Add tickers to filters for consistency
-                    if not filters:
-                        filters = {}
-                    filters['tickers'] = tickers
-                elif tickers is not None and len(tickers) > 1 and not (filters and any(k != 'tickers' for k in filters.keys())):
-                    # Only limit ticker list when no other filters are specified
-                    tickers = tickers[:1]  # Limit to first ticker only for validation
-                    logger.info(f"🧪 Validation mode: limiting tickers to first symbol only (no other filters): {tickers}")
-                    filters['tickers'] = tickers
-                # If other filters are specified, don't override - let the user test their filtered strategy
+
                
             # Check if we need to use batching (now with potentially corrected tickers)
             should_batch = self._should_use_batching(tickers, aggregate_mode)
@@ -182,7 +166,10 @@ class DataAccessorProvider:
         
         # Always batch when tickers=None (all securities)
         if tickers is None:
-            logger.info("🔄 Batching enabled: fetching all securities")
+            logger.info("🔄 Batching enabled: fetching all securities") 
+            return True
+        elif not tickers:  # Empty list case
+            logger.info("🔄 Batching enabled: empty tickers list")
             return True
         
         # Batch when ticker list is large
@@ -478,7 +465,7 @@ class DataAccessorProvider:
                 table_name = timeframe_config
             
             # Default columns if not specified - include ticker by default
-            if columns is None:
+            if not columns:
                 columns = ["ticker", "timestamp", "open", "high", "low", "close", "volume"]
             
             # Validate columns against allowed set (removed adj_close)
@@ -1053,12 +1040,6 @@ class DataAccessorProvider:
             
             # Handle ticker-specific filtering
             if tickers is not None and len(tickers) > 0:
-                # Validation mode: only limit to single ticker when no other filters are specified
-                other_filters_exist = filters and any(k != 'tickers' for k in filters.keys())
-                if hasattr(self, 'execution_context') and self.execution_context.get('mode') == 'validation' and not other_filters_exist:
-                    tickers = tickers[:1]  # Only use first ticker for validation when no other filters
-                    logger.info(f"🧪 Validation mode: limiting tickers to first symbol only (no other filters): {tickers}")
-                
                 # Convert ticker symbols to security IDs and add to filter
                 logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
                 security_ids = self._get_security_ids_from_tickers(tickers, filters)

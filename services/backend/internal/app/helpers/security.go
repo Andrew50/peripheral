@@ -4,7 +4,6 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/data/postgres"
-	"backend/internal/metrics"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -304,13 +303,8 @@ type GetSecurityFromTickerResults struct {
 
 // GetSecuritiesFromTicker runs fuzzy finding to a user's input and returns similar tickers
 func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
-	start := time.Now()
-	functionName := "GetSecuritiesFromTicker"
-
 	var args GetSecurityFromTickerArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		metrics.RecordFunctionCall(functionName, "error", time.Since(start).Seconds())
-
 		return nil, fmt.Errorf("getAnnotations invalid args: %v", err)
 	}
 
@@ -344,14 +338,8 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 				)                                             DESC
 		LIMIT 10`
 
-	queryStart := time.Now()
 	rows, err := conn.DB.Query(context.Background(), sqlQuery, tickerQuery)
-	queryDuration := time.Since(queryStart).Seconds()
-
-	metrics.RecordDatabaseQuery(functionName, queryDuration)
-
 	if err != nil {
-		metrics.RecordFunctionCall(functionName, "error", time.Since(start).Seconds())
 		return nil, err
 	}
 	defer rows.Close()
@@ -362,7 +350,6 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 		var timestamp sql.NullTime
 		var name, icon sql.NullString
 		if err := rows.Scan(&security.SecurityID, &security.Ticker, &name, &icon, &timestamp); err != nil {
-			metrics.RecordFunctionCall(functionName, "error", time.Since(start).Seconds())
 			return nil, err
 		}
 		if timestamp.Valid {
@@ -375,11 +362,6 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 		security.Icon = icon.String
 		securities = append(securities, security)
 	}
-
-	duration := time.Since(start).Seconds()
-	metrics.RecordFunctionCall(functionName, "success", duration)
-	metrics.RecordResults(functionName, len(securities))
-
 	return securities, nil
 }
 func GetAgentTickerMenuDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {

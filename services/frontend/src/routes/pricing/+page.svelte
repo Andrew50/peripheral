@@ -70,7 +70,7 @@
 	const isCurrentPlan = (planDisplayName: string): boolean => {
 		return (
 			isAuthenticated() &&
-			$subscriptionStatus.currentPlan === planDisplayName &&
+			$subscriptionStatus.currentPlan?.split(' ')[0] === planDisplayName?.split(' ')[0] &&
 			!$subscriptionStatus.loading &&
 			!$subscriptionStatus.error
 		);
@@ -84,6 +84,15 @@
 			$subscriptionStatus.isCanceling &&
 			!$subscriptionStatus.loading &&
 			!$subscriptionStatus.error
+		);
+	};
+
+	// Helper to check if a Pro plan should show "Upgrade" instead of "Subscribe" when the user is on Plus
+	const isUpgradeEligible = (plan: DatabasePlan): boolean => {
+		return (
+			isAuthenticated() &&
+			$subscriptionStatus.currentPlan?.toLowerCase().includes('plus') &&
+			plan.plan_name.toLowerCase().includes('pro')
 		);
 	};
 
@@ -624,8 +633,6 @@
 								<div class="plan-header">
 									{#if isCurrentPlanCanceling(plan.display_name)}
 										<div class="canceling-badge">Canceling</div>
-									{:else if isCurrentPlan(plan.display_name)}
-										<div class="current-badge">Current Plan</div>
 									{:else if plan.is_popular}
 										<div class="popular-badge">Most Popular</div>
 									{/if}
@@ -661,15 +668,14 @@
 									{/if}
 								{:else if isCurrentPlan(plan.display_name)}
 									<button
-										class="landing-button secondary full-width"
+										class="subscribe-button"
 										on:click={handleCancelSubscription}
-										disabled={loadingStates.cancel}
-										style="background-color: #dc2626; color: white;"
+										disabled
 									>
 										{#if loadingStates.cancel}
 											<div class="landing-loader"></div>
 										{:else}
-											Cancel Subscription
+											Active Subscription
 										{/if}
 									</button>
 								{:else if plan.plan_name.toLowerCase() === 'free'}
@@ -695,7 +701,11 @@
 										{#if loadingStates[plan.plan_name.toLowerCase()]}
 											<div class="landing-loader"></div>
 										{:else}
-											Subscribe
+											{#if isUpgradeEligible(plan)}
+												Upgrade
+											{:else}
+												Subscribe
+											{/if}
 										{/if}
 									</button>
 								{/if}

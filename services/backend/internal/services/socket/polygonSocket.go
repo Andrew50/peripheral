@@ -135,7 +135,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			switch msg := out.(type) {
 			case models.EquityAgg:
 				if msg.EndTimestamp-msg.StartTimestamp == 1000 {
-					ohlcvBuffer.addBar(msg.EndTimestamp, securityID, msg)
+					ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
 				}
 
 				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/

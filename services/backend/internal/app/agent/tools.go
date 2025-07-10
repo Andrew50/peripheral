@@ -414,8 +414,16 @@ var (
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
+						"startDate": {
+							Type:        genai.TypeString,
+							Description: "The start date of the backtest in YYYY-MM-DD format.",
+						},
+						"endDate": {
+							Type:        genai.TypeString,
+							Description: "The end date of the backtest in YYYY-MM-DD format.",
+						},
 					},
-					Required: []string{"strategyId"},
+					Required: []string{"strategyId", "startDate", "endDate"},
 				},
 			},
 			Function:      strategy.RunBacktest,
@@ -643,7 +651,7 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search.",
+				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -655,7 +663,7 @@ var (
 			Function:      wrapWithContext(RunWebSearch),
 			StatusMessage: "Searching the web...",
 		},
-		"runTwitterSearch": {
+		/*"runTwitterSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runTwitterSearch",
 				Description: "Run a search on X using Grok.",
@@ -672,7 +680,7 @@ var (
 			},
 			Function:      wrapWithContext(RunTwitterSearch),
 			StatusMessage: "Searching Twitter...",
-		},
+		},*/ //COMMENTED out for now since we ran out of credits
 		"getLatestTweets": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLatestTweets",

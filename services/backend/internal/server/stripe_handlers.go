@@ -11,10 +11,10 @@ import (
 
 	"backend/internal/app/pricing"
 
-	stripe "github.com/stripe/stripe-go/v78"
-	subscription "github.com/stripe/stripe-go/v78/subscription"
+	stripe "github.com/stripe/stripe-go/v82"
+	subscription "github.com/stripe/stripe-go/v82/subscription"
 
-	checkoutsession "github.com/stripe/stripe-go/v78/checkout/session"
+	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
 )
 
 // CreateCheckoutSessionArgs represents arguments for creating a checkout session

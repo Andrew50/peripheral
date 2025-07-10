@@ -38,7 +38,7 @@ log "Starting graceful shutdown process..."
 DB_USER=${POSTGRES_USER:-postgres}
 DB_NAME=${POSTGRES_DB:-postgres}
 
-# Step 1: Stop accepting new connections
+# Step 1: Prevent new non-superuser connections
 log "Disabling new connections..."
 if ! DISABLE_OUTPUT=$( PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
     ALTER SYSTEM SET max_connections = 0;
@@ -87,7 +87,4 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "CHECKPOINT;" 
 
 # Step 5: Wait additional time for any remaining cleanup
 log "Waiting for cleanup processes..."
-sleep 45
-
-log "Graceful shutdown preparation completed. Ready for SIGTERM."
-SEND_TELEGRAM "✅ Graceful shutdown preparation completed for $DB_NAME" || true 
+sleep 45 

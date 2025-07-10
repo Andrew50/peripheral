@@ -31,6 +31,10 @@ send_alert() {
 # Send alert on any unhandled error
 trap 'send_alert "🚨 DB start-up script failed on line $LINENO"' ERR
 
+# Ensure WAL archive directory exists inside PGDATA (matches archive_command path)
+mkdir -p /home/postgres/pgdata/wal_archive
+chown postgres:postgres /home/postgres/pgdata/wal_archive
+
 # Determine the location of migrate.sh dynamically
 MIGRATE_SCRIPT=""
 if [ -f "/app/migrate.sh" ]; then
@@ -114,8 +118,8 @@ log "Starting final PostgreSQL instance with exec (making it PID 1)..."
 # The official entrypoint script will itself use 'exec postgres ...' at its end.
 # This ensures signals sent to the container (like SIGTERM from 'docker stop')
 # go directly to the postgres process run by the entrypoint.
-# We wrap the postgres command with our log capture script to ensure logs are available for health monitoring
-exec /app/capture-logs.sh docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
+# NOTE: Removed log capture wrapper to fix signal handling - logs will go to stdout/stderr
+exec docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
 
 # Note: Anything after 'exec' will not run unless 'exec' fails.
 error_log "Exec failed! Could not start final PostgreSQL instance."

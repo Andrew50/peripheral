@@ -330,12 +330,12 @@ func (s *JobScheduler) Start() chan struct{} {
 	s.loadJobLastRunTimes()
 
 	// Add 10-minute delay before starting scheduler operations
-	log.Printf("⏰ Scheduler initialized - waiting 10 minutes before starting job execution...")
+	log.Printf("⏰ Scheduler initialized - 30 seconds before starting job execution...")
 
 	go func() {
-		// Wait 10 minutes before starting scheduler operations
+		// Wait 30 seconds before starting scheduler operations
 		select {
-		case <-time.After(10 * time.Minute):
+		case <-time.After(30 * time.Second):
 			log.Printf("🚀 Starting scheduler operations after 10-minute delay")
 		case <-s.StopChan:
 			log.Printf("⏹️ Scheduler stopped during startup delay")
