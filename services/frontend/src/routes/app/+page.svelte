@@ -1503,6 +1503,11 @@
 		}
 	}}
 >
+	<!-- Mobile-only full-screen chat -->
+	<div class="mobile-chat-wrapper">
+		<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
+	</div>
+
 	<!-- Global Popups -->
 	<Input />
 	<RightClick />
@@ -2364,5 +2369,37 @@
 		color: #ffffff;
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
+
+	/* Scale icons in sidebar */
+	.sidebar img,
+	.sidebar svg {
+		width: clamp(1rem, 1.5vw, 1.5rem);
+		height: clamp(1rem, 1.5vw, 1.5rem);
+	}
+
+	/* —— Mobile full-screen chat quick-fix —— */
+	.mobile-chat-wrapper {
+		display: none; /* hidden on desktop */
+	}
+
+	@media (max-width: 768px) {
+		/* hide the normal interface on phones */
+		.app-container,
+		.bottom-bar,
+		.sidebar-buttons,
+		.profile-bar {
+			display: none !important;
+		}
+
+		/* show chat & make it fill the viewport */
+		.mobile-chat-wrapper {
+			display: block;
+			position: fixed;
+			inset: 0; /* top:0; right:0; bottom:0; left:0; */
+			z-index: 9999; /* above everything */
+			background: #0f0f0f; /* match site background so it feels native */
+			overflow: hidden;
+		}
 	}
 </style>
