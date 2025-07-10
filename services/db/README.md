@@ -45,11 +45,11 @@ This script is the container's entrypoint. It performs the following steps:
 4.  If migrations succeed, it cleanly shuts down the temporary instance.
 5.  Uses `exec` to replace itself with the final `docker-entrypoint.sh postgres` command, making the main PostgreSQL server PID 1 within the container. This ensures proper signal handling.
 
-## Backup (`scripts/backup.sh`)
+## Backup (`scripts/backup-improved.sh`)
 
--   This script performs a `pg_dump` of the database.
+-   This script performs a comprehensive `pg_dump` of the database with verification and error handling.
 -   It's intended to be run periodically (e.g., via `cron` within the container or an external scheduler).
--   Backups are timestamped, stored in the `/backups` volume, compressed, and older backups are pruned.
+-   Backups are timestamped, stored in the `/backups` volume, compressed, verified for integrity, and older backups are pruned automatically.
 
 ## Dockerfiles
 

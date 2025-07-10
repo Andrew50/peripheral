@@ -201,11 +201,11 @@ spec:
               mountPath: /backups
           resources:
             requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
               cpu: 200m
               memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
           livenessProbe:
             exec:
               command:
