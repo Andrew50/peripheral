@@ -58,6 +58,20 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 				return fmt.Errorf("set %s: %w", s, err)
 			}
 		}
+
+		// Disable or raise the tuple-decompression guardrail for this session so large UPSERTs
+		// that touch compressed chunks do not error with:
+		//   ERROR: tuple decompression limit exceeded by operation (SQLSTATE 53400)
+		// If the running TimescaleDB version does not expose the GUC the command will error
+		// with "unrecognized configuration parameter". In that case we log the event and
+		// continue; for any other error we still abort pool creation.
+		if _, err := conn.Exec(ctx, "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"); err != nil {
+			if strings.Contains(err.Error(), "unrecognized configuration parameter") {
+				log.Printf("ℹ️  Parameter timescaledb.max_tuples_decompressed_per_dml_transaction not available: %v", err)
+			} else {
+				return fmt.Errorf("set timescaledb.max_tuples_decompressed_per_dml_transaction: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -299,6 +313,15 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		// Per-connection staging table setup
 		// -----------------------------------------------------------------
 		stageTable := fmt.Sprintf("%s_stage_%d", pw.table, pgc.PID())
+
+		// Ensure the temporary staging table is removed once this connection finishes.
+		// We drop it *before* the function returns so it is cleaned up even if the
+		// job crashes between batches.
+		defer func() {
+			if _, err := c.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stageTable)); err != nil {
+				log.Printf("warning: drop staging table %s: %v", stageTable, err)
+			}
+		}()
 
 		// Staging table needs a bigint timestamp column because Polygon CSV files
 		// contain Unix *nanosecond* epoch values. The main hypertables now store

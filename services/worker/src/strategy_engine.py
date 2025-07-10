@@ -19,8 +19,8 @@ import plotly
 import traceback
 import linecache
 import sys 
+import math
 
-from data_accessors import DataAccessorProvider, get_bar_data, get_general_data
 from validator import SecurityValidator, SecurityError
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,9 @@ class AccessorStrategyEngine:
     """
     
     def __init__(self):
-        self.data_accessor = DataAccessorProvider()
+        # Use the global singleton instead of creating a new instance
+        from data_accessors import get_data_accessor
+        self.data_accessor = get_data_accessor()
         self.validator = SecurityValidator()
         
     async def execute_backtest(
@@ -138,16 +140,6 @@ class AccessorStrategyEngine:
                 end_date=end_date
             )
             
-            # CRITICAL: Also set context on global accessor in case strategy uses global functions
-            from data_accessors import get_data_accessor
-            global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
-                mode='backtest',
-                symbols=symbols,
-                start_date=start_date,
-                end_date=end_date
-            )
-            
             # Execute strategy with accessor context
             instances, strategy_prints, strategy_plots, error = await self._execute_strategy(
                 strategy_code, 
@@ -157,26 +149,25 @@ class AccessorStrategyEngine:
             if error: 
                 raise error
             # Calculate performance metrics
-            performance = self._calculate_performance_metrics(instances)
             
             execution_time = (time.time() - start_time) * 1000
             
+            # Create date range array for summary compatibility
+            date_range = [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
+            
             result = {
                 'success': True,
-                'execution_mode': 'backtest',
+                #'execution_mode': 'backtest',
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
                 'strategy_plots': strategy_plots,
                 'instance_limit_reached': TrackedList.is_limit_reached(),
-                'max_instances_configured': max_instances,
                 'summary': {
                     'total_instances': len(instances),
-                    'symbols_analyzed': len(symbols),
-                    'date_range': f"{start_date.date()} to {end_date.date()}",
-                    'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
+                    'symbols_processed': len(symbols),
+                    'date_range': date_range,
                 },
-                'performance': performance
             }
             
             logger.info(f"Backtest completed: {len(instances)} instances, {execution_time:.1f}ms")
@@ -217,50 +208,52 @@ class AccessorStrategyEngine:
         start_time = time.time()
         
         try:
-            # Extract min_bars requirements from strategy code
-            min_bars_requirements = self.validator.extract_min_bars_requirements(strategy_code)
+            getBarDataFunctionCalls = self.extract_get_bar_data_calls(strategy_code)
+            logger.info(f"📋 Extracted {len(getBarDataFunctionCalls)} get_bar_data calls: {getBarDataFunctionCalls}")
+            tickersInStrategyCode = self.get_all_tickers_from_calls(getBarDataFunctionCalls)
+            logger.info(f"📋 Extracted {len(tickersInStrategyCode)} tickers from get_bar_data calls: {tickersInStrategyCode}")
+
+            symbolsForValidation = tickersInStrategyCode if len(tickersInStrategyCode) <= 10 else tickersInStrategyCode[:10]
+            symbolsForValidation = symbolsForValidation if symbolsForValidation else ['AAPL']  # Default if empty
             
+            max_timeframe, max_timeframe_min_bars = self.getMaxTimeframeAndMinBars(getBarDataFunctionCalls)
             # Log the exact requirements that will be used
-            if min_bars_requirements:
-                logger.info("📊 Extracted min_bars requirements from strategy:")
-                for req in min_bars_requirements:
-                    logger.info(f"   Line {req['line_number']}: get_bar_data(timeframe='{req['timeframe']}', min_bars={req['min_bars']})")
-                max_bars = max(req['min_bars'] for req in min_bars_requirements)
-                logger.info(f"🎯 Validation will use exact min_bars requirements (max: {max_bars} bars)")
+            logger.info(f"🎯 Validation will use exact min_bars requirements (timeframe: {max_timeframe}, min_bars: {max_timeframe_min_bars})")
+            
+            # Calculate start date based on timeframe and min_bars (convert to days and round up)
+            end_date = dt.now()
+            if max_timeframe and max_timeframe_min_bars > 0:
+                # Parse timeframe and convert to days
+                if max_timeframe.endswith('d'):
+                    days_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
+                elif max_timeframe.endswith('h'):
+                    hours_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
+                    days_back = math.ceil(hours_back / 24)  # Round up to nearest day
+                elif max_timeframe.endswith('m'):
+                    minutes_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
+                    days_back = math.ceil(minutes_back / (24 * 60))  # Round up to nearest day
+                else:
+                    days_back = 30  # Default fallback
+                start_date = end_date - timedelta(days=days_back)
             else:
-                logger.info("📊 No get_bar_data calls found - using minimal data for validation")
+                start_date = end_date - timedelta(days=30)  # Default fallback
             
             # Set execution context for validation with exact requirements
             context_data = {
                 'mode': 'validation',  # Special validation mode
-                'symbols': ['AAPL'],   # Just one symbol for validation
-                'min_bars_requirements': min_bars_requirements  # Pass exact requirements
+                'symbols': symbolsForValidation,   # Use extracted tickers for more realistic validation
+                'start_date': start_date,
+                'end_date': end_date
             }
             
             self.data_accessor.set_execution_context(**context_data)
             
-            # CRITICAL: Also set context on global accessor in case strategy uses global functions
-            from data_accessors import get_data_accessor
-            global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(**context_data)
-            
-            # Debug: Verify both instances have validation context
-            logger.debug(f"🔍 Engine accessor context: {self.data_accessor.execution_context}")
-            logger.debug(f"🔍 Global accessor context: {global_accessor.execution_context}")
-            logger.debug(f"🔍 Same instance check: {self.data_accessor is global_accessor}")
-            
-            logger.debug("🔧 Validation optimizations enabled:")
-            logger.debug("   ✓ Minimal dataset: 1 symbol")
-            logger.debug("   ✓ Exact min_bars from strategy code (no arbitrary caps)")
-            logger.debug("   ✓ Fast execution path (validation mode)")
-            logger.debug("   ✓ Skip result ranking and processing")
-            logger.debug("   ✓ Context set on both engine and global data accessors")
-            
+            validationMaxInstances = 100
             # Execute strategy with validation context (don't care about results)
             instances, _, _, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation',
-                max_instances=1000  # Lower limit for validation
+                max_instances=validationMaxInstances # Lower limit for validation
             )
             if error: 
                 raise error
@@ -271,7 +264,7 @@ class AccessorStrategyEngine:
                 'execution_mode': 'validation',
                 'instances_generated': len(instances),
                 'instance_limit_reached': TrackedList.is_limit_reached(),
-                'max_instances_configured': 1000,  # Validation uses lower limit
+                'max_instances_configured': validationMaxInstances,  # Validation uses lower limit
                 'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
@@ -327,14 +320,6 @@ class AccessorStrategyEngine:
             
             # Set execution context for data accessors with screening optimizations
             self.data_accessor.set_execution_context(
-                mode='screening',
-                symbols=universe
-            )
-            
-            # CRITICAL: Also set context on global accessor in case strategy uses global functions
-            from data_accessors import get_data_accessor
-            global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
                 mode='screening',
                 symbols=universe
             )
@@ -417,14 +402,6 @@ class AccessorStrategyEngine:
             
             # Set execution context for data accessors
             self.data_accessor.set_execution_context(
-                mode='alert',
-                symbols=symbols
-            )
-            
-            # CRITICAL: Also set context on global accessor in case strategy uses global functions
-            from data_accessors import get_data_accessor
-            global_accessor = get_data_accessor()
-            global_accessor.set_execution_context(
                 mode='alert',
                 symbols=symbols
             )
@@ -1103,53 +1080,54 @@ class AccessorStrategyEngine:
             ranked_results.append(ranked_result)
         
         return ranked_results
-
-    def _calculate_performance_metrics(self, instances: List[Dict]) -> Dict[str, Any]:
-        """Calculate performance metrics from instances"""
+    
+    def get_all_tickers_from_calls(self, getBarDataFunctionCalls: List[Dict[str, Any]]) -> List[str]:
+        """
+        Extract all unique tickers from all get_bar_data calls
         
-        if not instances:
-            return {
-                'total_instances': 0,
-                'signal_rate': 0.0,
-                'unique_tickers': 0,
-                'avg_score': 0.0
-            }
+        Returns:
+            List of unique ticker symbols found in filters
+        """
+        all_tickers = set()
         
-        # Basic statistics
-        total_instances = len(instances)
-        # Since all returned instances are positive signals (they met criteria), count all
-        positive_instances = total_instances  # All instances are positive instances
-        unique_tickers = len(set(i['ticker'] for i in instances))
+        for call in getBarDataFunctionCalls:
+            analysis = call.get("filter_analysis", {})
+            if analysis.get("has_tickers"):
+                specific_tickers = analysis.get("specific_tickers", [])
+                all_tickers.update(specific_tickers)
         
-        # Calculate signal rate (always 1.0 since all returned instances are signals)
-        signal_rate = 1.0
+        return sorted(list(all_tickers))
+    
+    def getMaxTimeframeAndMinBars(self, getBarDataFunctionCalls: List[Dict[str, Any]]) -> Tuple[Optional[str], int]:
+        """
+        Get the max timeframe and its associated min_bars from get_bar_data calls
         
-        # Calculate average score if available
-        scores = [i.get('score', 0) for i in instances if 'score' in i and isinstance(i['score'], (int, float))]
-        avg_score = sum(scores) / len(scores) if scores else 0.0
+        Returns:
+            Tuple of (max_timeframe, max_timeframe_min_bars)
+        """
+        import re
         
-        metrics = {
-            'total_instances': total_instances,
-            'positive_instances': positive_instances,
-            'signal_rate': round(signal_rate, 4),
-            'unique_tickers': unique_tickers,
-            'avg_score': round(avg_score, 4)
-        }
+        max_tf_priority = (0, 0)  # (category, multiplier)
+        max_tf_str = None
+        max_tf_min_bars = 0
         
-        # Add custom metrics if present in instances
-        numeric_fields = []
-        for instance in instances:
-            for key, value in instance.items():
-                if key not in ['ticker', 'timestamp'] and isinstance(value, (int, float)):
-                    if key not in numeric_fields:
-                        numeric_fields.append(key)
+        # Timeframe priority: week/month > day > hour > minute
+        tf_categories = {'m': 0, 'h': 1, 'd': 2, 'w': 3, 'M': 4}
         
-        for field in numeric_fields:
-            values = [i.get(field) for i in instances if field in i and isinstance(i[field], (int, float))]
-            if values:
-                metrics[f'{field}_mean'] = round(np.mean(values), 4)
-                metrics[f'{field}_std'] = round(np.std(values), 4)
-                metrics[f'{field}_min'] = round(min(values), 4)
-                metrics[f'{field}_max'] = round(max(values), 4)
+        for call in getBarDataFunctionCalls:
+            timeframe = call.get("timeframe")
+            if isinstance(timeframe, str):
+                # Parse timeframe (e.g., "13m" -> category=0, multiplier=13)
+                match = re.match(r'(\d+)([mhdwM])', timeframe)
+                if match:
+                    multiplier = int(match.group(1))
+                    category = tf_categories.get(match.group(2), 0)
+                    tf_priority = (category, multiplier)
+                    
+                    # Update max timeframe if this one has higher priority
+                    if tf_priority > max_tf_priority:
+                        max_tf_priority = tf_priority
+                        max_tf_str = timeframe
+                        max_tf_min_bars = call.get("min_bars", 0)
         
-        return metrics 
+        return max_tf_str, max_tf_min_bars

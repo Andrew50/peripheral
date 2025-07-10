@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -113,11 +112,14 @@ var copyBatchSize = func() int {
 
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
-	cpus := runtime.NumCPU()
-	if cpus > 8 {
-		return 8
-	}
-	return cpus
+	return 1 // TODO: remove this if we can get db stable
+	/*
+		cpus := runtime.NumCPU()
+		if cpus > 8 {
+			return 8
+		}
+		return cpus
+	*/
 }()
 
 // -----------------------------------------------------------------------------

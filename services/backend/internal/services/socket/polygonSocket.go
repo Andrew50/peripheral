@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	//"log"
@@ -82,6 +83,13 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
+	err = polygonWS.Subscribe(polygonws.StocksSecAggs)
+	if err != nil {
+		log.Println("Error subscribing to Polygon WebSocket: ", err)
+		return
+	}
+
+	InitOHLCVBuffer(conn)
 
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
@@ -125,8 +133,12 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				continue
 			}
 			switch msg := out.(type) {
-			/*            case models.EquityAgg:
-			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
+			case models.EquityAgg:
+				if msg.EndTimestamp-msg.StartTimestamp == 1000 {
+					ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
+				}
+
+				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				channelNameType := getChannelNameType(msg.Timestamp)
 				fastChannelName := fmt.Sprintf("%d-fast-%s", securityID, channelNameType)
@@ -249,6 +261,10 @@ func StopPolygonWS() error {
 	if polygonWSConn == nil {
 		fmt.Println("polygon websocket connection is not initialized")
 		return fmt.Errorf("polygon websocket connection is not initialized")
+	}
+
+	if ohlcvBuffer != nil {
+		ohlcvBuffer.Stop()
 	}
 
 	polygonWSConn.Close()

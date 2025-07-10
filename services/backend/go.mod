@@ -21,7 +21,7 @@ require (
 	github.com/openai/openai-go v1.6.0
 	github.com/polygon-io/client-go v1.16.13
 	github.com/shopspring/decimal v1.2.0
-	github.com/stripe/stripe-go/v78 v78.12.0
+	github.com/stripe/stripe-go/v82 v82.3.0
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/trace v1.36.0
 	go.uber.org/zap v1.17.0
@@ -31,14 +31,6 @@ require (
 	golang.org/x/text v0.25.0
 	google.golang.org/genai v1.6.0
 	gopkg.in/telebot.v3 v3.3.8
-)
-
-require (
-	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.62.0 // indirect
-	github.com/prometheus/procfs v0.15.1 // indirect
 )
 
 require (
@@ -86,7 +78,6 @@ require (
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/prometheus/client_golang v1.22.0
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

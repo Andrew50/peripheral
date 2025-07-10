@@ -14,18 +14,38 @@ error_log() {
     echo "$LOG_PREFIX ERROR: $1" >&2
 }
 
+# Telegram alert function (optional)
+SEND_TELEGRAM() {
+    local MSG="$1"
+    if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+        log "Telegram credentials not configured – skipping alert"
+        return 0
+    fi
+    local PREFIX=""
+    if [[ -n "${ENVIRONMENT:-}" ]]; then PREFIX="[$ENVIRONMENT] "; fi
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        -d chat_id="${TELEGRAM_CHAT_ID}" \
+        -d text="${PREFIX}${MSG}" \
+        -d disable_web_page_preview=true >/dev/null 2>&1 || true
+}
+
+# Send alert on any unhandled error
+trap 'SEND_TELEGRAM "🚨 Graceful-shutdown failed in $DB_NAME on line $LINENO"' ERR
+
 log "Starting graceful shutdown process..."
 
 # Database credentials
 DB_USER=${POSTGRES_USER:-postgres}
 DB_NAME=${POSTGRES_DB:-postgres}
 
-# Step 1: Stop accepting new connections
+# Step 1: Prevent new non-superuser connections
 log "Disabling new connections..."
-PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
+if ! DISABLE_OUTPUT=$( PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
     ALTER SYSTEM SET max_connections = 0;
     SELECT pg_reload_conf();
-" 2>/dev/null || log "Could not disable new connections"
+" 2>&1 ); then
+    error_log "Could not disable new connections: $DISABLE_OUTPUT"
+fi
 
 # Step 2: Wait for current transactions to complete (up to 90 seconds)
 log "Waiting for active transactions to complete..."
@@ -46,6 +66,11 @@ for i in {1..90}; do
     sleep 1
 done
 
+# After waiting loop check again
+if [[ "$ACTIVE_CONNECTIONS" -gt 0 ]]; then
+    SEND_TELEGRAM "⚠️ Graceful shutdown timed out – $ACTIVE_CONNECTIONS active connections still running after 90s";
+fi
+
 # Step 3: Terminate remaining idle connections
 log "Terminating idle connections..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
@@ -54,14 +79,12 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "
     WHERE datname = '$DB_NAME' 
     AND pid <> pg_backend_pid()
     AND state IN ('idle', 'idle in transaction', 'idle in transaction (aborted)')
-" 2>/dev/null || log "Could not terminate idle connections"
+" 2>/dev/null || { log "Could not terminate idle connections"; SEND_TELEGRAM "⚠️ Failed to terminate idle connections during graceful shutdown"; }
 
 # Step 4: Force checkpoint to ensure data is written to disk
 log "Forcing checkpoint..."
-PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "CHECKPOINT;" 2>/dev/null || log "Could not force checkpoint"
+PGPASSWORD=$POSTGRES_PASSWORD psql -U "$DB_USER" -d "$DB_NAME" -c "CHECKPOINT;" 2>/dev/null || { log "Could not force checkpoint"; SEND_TELEGRAM "⚠️ Failed to force checkpoint during graceful shutdown"; }
 
 # Step 5: Wait additional time for any remaining cleanup
 log "Waiting for cleanup processes..."
-sleep 45
-
-log "Graceful shutdown preparation completed. Ready for SIGTERM." 
+sleep 45 
