@@ -161,6 +161,27 @@
 	// Calendar state
 	let calendarVisible = false;
 
+	// Mobile banner state
+	let showMobileBanner = false;
+	const MOBILE_BANNER_STORAGE_KEY = 'atlantis-mobile-banner-dismissed';
+
+	// Initialize mobile banner visibility based on device and dismissal state
+	$: if (browser && $isMobileDevice !== undefined) {
+		if ($isMobileDevice) {
+			const dismissed = localStorage.getItem(MOBILE_BANNER_STORAGE_KEY);
+			showMobileBanner = !dismissed;
+		} else {
+			showMobileBanner = false;
+		}
+	}
+
+	function dismissMobileBanner() {
+		showMobileBanner = false;
+		if (browser) {
+			localStorage.setItem(MOBILE_BANNER_STORAGE_KEY, 'true');
+		}
+	}
+
 	// Get shared conversation ID from server-side layout data
 	$: layoutData = $page.data;
 	$: sharedConversationId = layoutData?.sharedConversationId || '';
@@ -1138,7 +1159,6 @@
 	<RightClick />
 	<StrategiesPopup />
 	<Calendar bind:visible={calendarVisible} initialTimestamp={$streamInfo.timestamp} />
-	<MobileBanner />
 	<ExtendedHoursToggle
 		instance={$activeChartInstance || {}}
 		visible={$extendedHoursToggleVisible}
@@ -1157,6 +1177,10 @@
 	{#if $isMobileDevice}
 		<!-- Mobile-only full-screen chat interface -->
 		<div class="mobile-chat-container">
+			<!-- Mobile banner at the top -->
+			{#if showMobileBanner}
+				<MobileBanner on:dismiss={dismissMobileBanner} />
+			{/if}
 			<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
 		</div>
 	{:else}
@@ -2021,21 +2045,5 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-	}
-
-	/* Fallback CSS for width-based detection (if JS device detection fails) */
-	@media (max-width: 480px) {
-		/* Very small screens get mobile interface as fallback */
-		.app-container,
-		.bottom-bar,
-		.sidebar-buttons,
-		.profile-bar {
-			display: none !important;
-		}
-
-		/* Ensure mobile chat is visible on very small screens */
-		.mobile-chat-container {
-			display: flex !important;
-		}
 	}
 </style>
