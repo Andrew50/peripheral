@@ -50,6 +50,10 @@ type FinalResponse struct {
 	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
+type ResponseImage struct {
+	Data   string `json:"data"`
+	Format string `json:"format"`
+}
 
 /*
 	func replySchema() *genai.Schema {
@@ -531,12 +535,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	var model string
-	if len(executionResults) >= 3 {
-		model = "o3"
-	} else {
-		model = "o4-mini"
-	}
+	model := "o3"
 
 	rawSchema := ref.Reflect(AtlantisFinalResponse{})
 	b, _ := json.Marshal(rawSchema)
@@ -711,17 +710,91 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 	}
 	if len(executionResults) > 0 {
 		var allResults []map[string]interface{}
+		var allImages []ResponseImage
 		for _, result := range executionResults {
 			// Skip results that had errors
 			if result.Error != nil && finalRound {
 				continue
 			}
 
+			// Create a cleaned result without responseImages
+			var resultsWithoutResponseImages map[string]interface{}
+
+			// Check if result contains responseImages
+			// First try direct cast to map
+			var resultMap map[string]interface{}
+			var ok bool
+
+			if resultMap, ok = result.Result.(map[string]interface{}); ok {
+			} else {
+				// If direct cast fails, convert any type to map through JSON marshaling
+				// Marshal the result to JSON
+				jsonBytes, err := json.Marshal(result.Result)
+				if err != nil {
+					fmt.Printf("Failed to marshal result to JSON: %v\n", err)
+					// Keep original result if marshaling fails
+					resultData := map[string]interface{}{
+						"fn":   result.FunctionName,
+						"res":  result.Result,
+						"args": result.Args,
+					}
+					allResults = append(allResults, resultData)
+					continue
+				}
+
+				// Unmarshal back to map[string]interface{}
+				if err := json.Unmarshal(jsonBytes, &resultMap); err != nil {
+					fmt.Printf("Failed to unmarshal JSON to map: %v\n", err)
+					// Keep original result if unmarshaling fails
+					resultData := map[string]interface{}{
+						"fn":   result.FunctionName,
+						"res":  result.Result,
+						"args": result.Args,
+					}
+					allResults = append(allResults, resultData)
+					continue
+				}
+			}
+
+			// Now check for responseImages in the converted map
+			if responseImages, hasImages := resultMap["responseImages"]; hasImages {
+				// Try to extract and append images to allImages with multiple type assertions
+				// First try []ResponseImage
+				if imageList, ok := responseImages.([]ResponseImage); ok {
+					for _, img := range imageList {
+						allImages = append(allImages, img)
+					}
+				} else if imageList, ok := responseImages.([]interface{}); ok {
+					// Try []interface{} (common after JSON unmarshaling)
+					for _, img := range imageList {
+						imgBytes, err := json.Marshal(img)
+						if err == nil {
+							var responseImg ResponseImage
+							if err := json.Unmarshal(imgBytes, &responseImg); err == nil {
+								allImages = append(allImages, responseImg)
+							}
+						}
+					}
+				}
+
+				// Always create a copy of the result without responseImages (regardless of processing success)
+				cleanedResultMap := make(map[string]interface{})
+				for k, v := range resultMap {
+					if k != "responseImages" {
+						cleanedResultMap[k] = v
+					}
+				}
+				resultsWithoutResponseImages = cleanedResultMap
+			} else {
+				resultsWithoutResponseImages = resultMap
+			}
+
 			resultData := map[string]interface{}{
 				"fn":   result.FunctionName,
-				"res":  result.Result,
+				"res":  resultsWithoutResponseImages,
 				"args": result.Args,
 			}
+
 			allResults = append(allResults, resultData)
 		}
 
@@ -738,6 +811,28 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 					Role: responses.EasyInputMessageRoleSystem,
 					Content: responses.EasyInputMessageContentUnionParam{
 						OfString: openai.String(string(combinedContent)),
+					},
+				},
+			})
+		}
+		fmt.Println("allImages: ", len(allImages))
+		if len(allImages) > 0 {
+			var imageContent []responses.ResponseInputContentUnionParam
+			for _, img := range allImages {
+				// Format as data URL: data:image/png;base64,{base64_data}
+				dataURL := fmt.Sprintf("data:image/%s;base64,%s", img.Format, img.Data)
+				imageContent = append(imageContent, responses.ResponseInputContentUnionParam{
+					OfInputImage: &responses.ResponseInputImageParam{
+						ImageURL: openai.String(dataURL),
+					},
+				})
+			}
+			// Add images as a system message with mixed content
+			messages = append(messages, responses.ResponseInputItemUnionParam{
+				OfMessage: &responses.EasyInputMessageParam{
+					Role: responses.EasyInputMessageRoleUser,
+					Content: responses.EasyInputMessageContentUnionParam{
+						OfInputItemContentList: imageContent,
 					},
 				},
 			})

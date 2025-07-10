@@ -38,6 +38,9 @@
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
 
+	// Keep local ID in sync with global store
+	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
+
 	// Extended Instance type to include watchlistItemId
 	interface WatchlistItem extends Instance {
 		watchlistItemId?: number;
@@ -582,7 +585,7 @@
 									</optgroup>
 									<optgroup label="Actions">
 										<option value="new">+ Create New Watchlist</option>
-										{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
+										{#if currentWatchlistId !== undefined && currentWatchlistId !== flagWatchlistId}
 											<option value="delete">- Delete Current Watchlist</option>
 										{/if}
 									</optgroup>

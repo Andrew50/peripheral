@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
   import { chipIdeas } from './chipIdeas';
   import type { ChipIdea } from './chipIdeas';
+  
 
   const chipsPerRow = 7;
 
@@ -18,14 +20,18 @@
       <div class="chip-row {index % 2 === 1 ? 'reverse' : ''}">
         <div class="chip-track">
           {#each row as chip}
-            <button class="chip">
+            <button class="chip" on:click={() => {
+              goto('/signup');
+            }}>
               <span class="chip-icon">{chip.icon}</span>
               <span class="chip-text">{chip.text}</span>
             </button>
           {/each}
           <!-- Duplicate the chips for seamless loop -->
           {#each row as chip}
-            <button class="chip">
+            <button class="chip" on:click={() => {
+              goto('/signup');
+            }}>
               <span class="chip-icon">{chip.icon}</span>
               <span class="chip-text">{chip.text}</span>
             </button>

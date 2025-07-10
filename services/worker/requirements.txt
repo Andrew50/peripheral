@@ -20,6 +20,7 @@ scipy>=1.7.0
 
 # Visualization and plotting
 plotly>=5.17.0
+matplotlib>=3.7.0
 
 # Utilities
 python-dateutil>=2.8.0
