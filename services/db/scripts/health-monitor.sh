@@ -145,6 +145,154 @@ check_for_corruption() {
     return 0
 }
 
+# Check disk usage for database and backup pods and alert if over 80%
+check_disk_usage() {
+    local alert_triggered=false
+    local disk_summary=""
+    
+    # Check if we're in Kubernetes and can access kubectl
+    if [ -n "$KUBERNETES_SERVICE_HOST" ] && command -v kubectl >/dev/null 2>&1; then
+        # Check database pod disk usage
+        local db_pod_name
+        db_pod_name=$(kubectl get pods -l app=db --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | head -1)
+        
+        if [ -n "$db_pod_name" ]; then
+            local db_disk_info
+            db_disk_info=$(kubectl exec "$db_pod_name" -- df -BG /home/postgres/pgdata 2>/dev/null | tail -1 || true)
+            
+            if [ -n "$db_disk_info" ]; then
+                local db_total_gb=$(echo "$db_disk_info" | awk '{print $2}' | tr -d 'G')
+                local db_used_gb=$(echo "$db_disk_info" | awk '{print $3}' | tr -d 'G')
+                local db_percent=$(echo "$db_disk_info" | awk '{print $5}' | tr -d '%')
+                
+                disk_summary="$disk_summary\n• DB Storage: ${db_used_gb}/${db_total_gb}GB (${db_percent}%)"
+                
+                if [ -n "$db_percent" ] && [ "$db_percent" != "Use%" ] && [ "$db_percent" -gt 80 ]; then
+                    local db_alert="🚨 Database Pod High Disk Usage Alert!
+
+Database pod disk usage has exceeded the 80% threshold:
+
+• Database Storage: ${db_used_gb}GB / ${db_total_gb}GB (${db_percent}%)
+• Pod: $db_pod_name
+• Mount: /home/postgres/pgdata
+• Threshold: 80%
+• Environment: ${ENVIRONMENT:-Development}
+
+Immediate actions needed:
+1. Check for large PostgreSQL log files
+2. Review WAL file accumulation
+3. Consider increasing database storage capacity
+4. Investigate unexpected database growth
+5. Run VACUUM FULL if appropriate
+
+This is critical - database may stop working if disk fills up!"
+
+                    send_alert "$db_alert" "CRITICAL"
+                    log "High database disk usage detected: ${db_percent}% (${db_used_gb}GB/${db_total_gb}GB)"
+                    alert_triggered=true
+                fi
+            else
+                disk_summary="$disk_summary\n• DB Storage: Unable to check"
+                error_log "Unable to check database pod disk usage"
+            fi
+        else
+            disk_summary="$disk_summary\n• DB Storage: Pod not found"
+            error_log "Database pod not found"
+        fi
+        
+        # Check backup pod/volume disk usage
+        local backup_pod_name
+        backup_pod_name=$(kubectl get pods -l app=db-health-monitor --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | head -1)
+        
+        if [ -n "$backup_pod_name" ]; then
+            local backup_disk_info
+            backup_disk_info=$(kubectl exec "$backup_pod_name" -- df -BG /backups 2>/dev/null | tail -1 || true)
+            
+            if [ -n "$backup_disk_info" ]; then
+                local backup_total_gb=$(echo "$backup_disk_info" | awk '{print $2}' | tr -d 'G')
+                local backup_used_gb=$(echo "$backup_disk_info" | awk '{print $3}' | tr -d 'G')
+                local backup_percent=$(echo "$backup_disk_info" | awk '{print $5}' | tr -d '%')
+                
+                disk_summary="$disk_summary\n• Backup Storage: ${backup_used_gb}/${backup_total_gb}GB (${backup_percent}%)"
+                
+                if [ -n "$backup_percent" ] && [ "$backup_percent" != "Use%" ] && [ "$backup_percent" -gt 80 ]; then
+                    local backup_alert="⚠️ Backup Storage High Disk Usage Alert!
+
+Backup storage has exceeded the 80% threshold:
+
+• Backup Storage: ${backup_used_gb}GB / ${backup_total_gb}GB (${backup_percent}%)
+• Pod: $backup_pod_name  
+• Mount: /backups
+• Threshold: 80%
+• Environment: ${ENVIRONMENT:-Development}
+
+Recommended actions:
+1. Clean up old backup files (older than 30 days)
+2. Compress or archive old backups
+3. Consider increasing backup storage capacity
+4. Review backup retention policy
+5. Check for failed backup cleanup processes
+
+Backup operations may fail if storage fills up completely!"
+
+                    send_alert "$backup_alert" "WARNING"
+                    log "High backup disk usage detected: ${backup_percent}% (${backup_used_gb}GB/${backup_total_gb}GB)"
+                    alert_triggered=true
+                fi
+            else
+                disk_summary="$disk_summary\n• Backup Storage: Unable to check"
+                error_log "Unable to check backup pod disk usage"
+            fi
+        else
+            disk_summary="$disk_summary\n• Backup Storage: Pod not found"
+            error_log "Backup pod not found"
+        fi
+        
+        log "Disk usage summary:$disk_summary"
+    else
+        # Fallback to local disk check if not in Kubernetes
+        local disk_info
+        disk_info=$(df -BG / 2>/dev/null | tail -1 || true)
+        if [ -n "$disk_info" ]; then
+            local disk_total_gb=$(echo "$disk_info" | awk '{print $2}' | tr -d 'G')
+            local disk_used_gb=$(echo "$disk_info" | awk '{print $3}' | tr -d 'G')
+            local disk_percent=$(echo "$disk_info" | awk '{print $5}' | tr -d '%')
+            
+            log "Local disk usage: ${disk_used_gb}/${disk_total_gb}GB (${disk_percent}%)"
+            
+            if [ -n "$disk_percent" ] && [ "$disk_percent" != "Use%" ] && [ "$disk_percent" -gt 80 ]; then
+                local local_alert="⚠️ High Disk Usage Alert!
+
+Local disk usage has exceeded the 80% threshold:
+
+• Current Usage: ${disk_used_gb}GB / ${disk_total_gb}GB (${disk_percent}%)
+• Threshold: 80%
+• Environment: ${ENVIRONMENT:-Development}
+• Mount Point: / (root filesystem)
+
+Please consider:
+1. Cleaning up old backup files
+2. Removing temporary files
+3. Expanding disk storage capacity
+4. Investigating unexpected disk usage growth"
+
+                send_alert "$local_alert" "WARNING"
+                log "High local disk usage detected: ${disk_percent}% (${disk_used_gb}GB/${disk_total_gb}GB)"
+                alert_triggered=true
+            fi
+        else
+            error_log "Unable to check local disk usage"
+            return 1
+        fi
+    fi
+    
+    if [ "$alert_triggered" = true ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # Test basic database functionality
 test_database_functionality() {
     # Skip detailed tests during startup grace period
@@ -366,39 +514,89 @@ get_db_status_info() {
     echo -e "$status_info"
 }
 
-# Get system resource information
+# Get cluster-wide system resource information
 get_system_info() {
-    # Build a compact, single-line summary of resource usage (CPU, RAM in GB, Disk, Uptime)
-    local cpu_usage mem_info mem_total_mb mem_used_mb mem_total_gb mem_used_gb mem_percent
-    local disk_usage uptime_info summary
+    local summary=""
+    
+    # Check if we're in Kubernetes and can access kubectl
+    if [ -n "$KUBERNETES_SERVICE_HOST" ] && command -v kubectl >/dev/null 2>&1; then
+        # Get cluster-wide metrics
+        local cluster_cpu_usage cluster_mem_usage cluster_pods
+        
+        # Get node resource usage
+        local nodes_info
+        nodes_info=$(kubectl top nodes --no-headers 2>/dev/null || true)
+        
+        if [ -n "$nodes_info" ]; then
+            # Calculate total CPU and memory usage across all nodes
+            local total_cpu_cores=0 total_cpu_used=0 total_mem_gb=0 total_mem_used=0
+            
+            while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                    local cpu_used=$(echo "$line" | awk '{print $2}' | tr -d 'm')
+                    local cpu_percent=$(echo "$line" | awk '{print $3}' | tr -d '%')
+                    local mem_used=$(echo "$line" | awk '{print $4}' | tr -d 'Mi')
+                    local mem_percent=$(echo "$line" | awk '{print $5}' | tr -d '%')
+                    
+                    # Convert to standard units
+                    local cpu_cores=$(awk "BEGIN {printf \"%.1f\", $cpu_used / 1000}")
+                    local mem_gb=$(awk "BEGIN {printf \"%.1f\", $mem_used / 1024}")
+                    
+                    total_cpu_used=$(awk "BEGIN {printf \"%.1f\", $total_cpu_used + $cpu_cores}")
+                    total_mem_used=$(awk "BEGIN {printf \"%.1f\", $total_mem_used + $mem_gb}")
+                fi
+            done <<< "$nodes_info"
+            
+            cluster_cpu_usage="${total_cpu_used} cores"
+            cluster_mem_usage="${total_mem_used}GB"
+        else
+            cluster_cpu_usage="N/A"
+            cluster_mem_usage="N/A"
+        fi
+        
+        # Get pod count
+        cluster_pods=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | wc -l || echo "N/A")
+        
+        # Get cluster uptime (oldest node)
+        local cluster_uptime
+        cluster_uptime=$(kubectl get nodes --no-headers -o custom-columns=AGE:.metadata.creationTimestamp 2>/dev/null | head -1 | xargs -I {} date -d {} '+%s' 2>/dev/null || echo "")
+        if [ -n "$cluster_uptime" ]; then
+            local current_time=$(date +%s)
+            local uptime_seconds=$((current_time - cluster_uptime))
+            local uptime_days=$((uptime_seconds / 86400))
+            cluster_uptime="${uptime_days}d"
+        else
+            cluster_uptime="N/A"
+        fi
+        
+        summary="• Cluster CPU: ${cluster_cpu_usage} | Cluster RAM: ${cluster_mem_usage} | Pods: ${cluster_pods} | Cluster Age: ${cluster_uptime}"
+    else
+        # Fallback to local metrics if not in Kubernetes or kubectl unavailable
+        local cpu_usage mem_info mem_total_mb mem_used_mb mem_total_gb mem_used_gb mem_percent uptime_info
+        
+        # CPU usage (fallback to mpstat if top format differs)
+        cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null)
+        if [ -z "$cpu_usage" ]; then
+            cpu_usage=$(mpstat 1 1 2>/dev/null | awk '/Average:/ {printf "%.1f", 100-$NF}')
+        fi
+        cpu_usage=${cpu_usage:-N/A}
 
-    # CPU usage (fallback to mpstat if top format differs)
-    cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null)
-    if [ -z "$cpu_usage" ]; then
-        cpu_usage=$(mpstat 1 1 2>/dev/null | awk '/Average:/ {printf "%.1f", 100-$NF}')
+        # Memory usage (convert MB → GB with 1 decimal)
+        mem_info=$(free -m 2>/dev/null | grep Mem || true)
+        if [ -n "$mem_info" ]; then
+            mem_total_mb=$(echo "$mem_info" | awk '{print $2}')
+            mem_used_mb=$(echo "$mem_info" | awk '{print $3}')
+            mem_percent=$((mem_used_mb * 100 / mem_total_mb))
+            mem_total_gb=$(awk "BEGIN {printf \"%.1f\", $mem_total_mb / 1024}")
+            mem_used_gb=$(awk "BEGIN {printf \"%.1f\", $mem_used_mb / 1024}")
+        fi
+
+        # Uptime (strip leading 'up ' and commas to save space)
+        uptime_info=$(uptime -p 2>/dev/null | sed 's/^up //;s/,//g')
+
+        summary="• CPU: ${cpu_usage}% | RAM: ${mem_used_gb:-?}/${mem_total_gb:-?}GB (${mem_percent:-?}%) | Uptime: ${uptime_info}"
     fi
-    cpu_usage=${cpu_usage:-N/A}
-
-    # Memory usage (convert MB → GB with 1 decimal)
-    mem_info=$(free -m 2>/dev/null | grep Mem || true)
-    if [ -n "$mem_info" ]; then
-        mem_total_mb=$(echo "$mem_info" | awk '{print $2}')
-        mem_used_mb=$(echo "$mem_info" | awk '{print $3}')
-        mem_percent=$((mem_used_mb * 100 / mem_total_mb))
-        mem_total_gb=$(awk "BEGIN {printf \"%.1f\", $mem_total_mb / 1024}")
-        mem_used_gb=$(awk "BEGIN {printf \"%.1f\", $mem_used_mb / 1024}")
-    fi
-
-    # Root disk usage (numeric percentage without % sign)
-    disk_usage=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
-    disk_usage=${disk_usage:-N/A}
-
-    # Uptime (strip leading 'up ' and commas to save space)
-    uptime_info=$(uptime -p 2>/dev/null | sed 's/^up //;s/,//g')
-
-    # Construct single-line output
-    summary="• CPU: ${cpu_usage}% | RAM: ${mem_used_gb:-?}/${mem_total_gb:-?}GB (${mem_percent:-?}%) | Disk: ${disk_usage}% | Uptime: ${uptime_info}"
-
+    
     # Prepend newline so downstream formatting remains unchanged
     echo -e "\n${summary}"
 }
@@ -592,6 +790,9 @@ perform_health_check() {
         error_log "Database functionality test failed: $LAST_FAILURE_REASON - $FAILURE_DETAILS"
         return 1
     fi
+    
+    # Check disk usage (non-critical, continues even if high)
+    check_disk_usage
     
     log "Health check passed"
     return 0

@@ -162,7 +162,7 @@ main() {
     # Create backup with verbose output
     log "Starting pg_dump..."
     
-    # Use comprehensive pg_dump options
+    # Use comprehensive pg_dump options, excluding large OHLCV tables
     if PGPASSWORD=$POSTGRES_PASSWORD pg_dump \
         -U "$DB_USER" \
         -d "$DB_NAME" \
@@ -173,6 +173,8 @@ main() {
         --create \
         --clean \
         --if-exists \
+        --exclude-table=ohlcv_1m \
+        --exclude-table=ohlcv_1d \
         > "$BACKUP_FILE" 2>>"$LOG_FILE"; then
         
         log "pg_dump completed successfully"
