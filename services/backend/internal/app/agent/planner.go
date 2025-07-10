@@ -50,6 +50,13 @@ type FinalResponse struct {
 	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
+type ResponseImage struct {
+	Data        string `json:"data"`
+	Format      string `json:"format"`
+	Description string `json:"description"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+}
 
 /*
 	func replySchema() *genai.Schema {
