@@ -20,6 +20,8 @@ import traceback
 import linecache
 import sys 
 import math
+import ast
+from plotlyToMatlab import plotly_to_matplotlib_png
 
 from validator import SecurityValidator, SecurityError
 
@@ -141,7 +143,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, strategy_prints, strategy_plots, error = await self._execute_strategy(
+            instances, strategy_prints, strategy_plots, response_images, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='backtest',
                 max_instances=max_instances
@@ -162,6 +164,7 @@ class AccessorStrategyEngine:
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
                 'strategy_plots': strategy_plots,
+                'response_images': response_images,
                 'instance_limit_reached': TrackedList.is_limit_reached(),
                 'summary': {
                     'total_instances': len(instances),
@@ -250,7 +253,7 @@ class AccessorStrategyEngine:
             
             validationMaxInstances = 100
             # Execute strategy with validation context (don't care about results)
-            instances, _, _, error = await self._execute_strategy(
+            instances, _, _, _, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='validation',
                 max_instances=validationMaxInstances # Lower limit for validation
@@ -265,7 +268,6 @@ class AccessorStrategyEngine:
                 'instances_generated': len(instances),
                 'instance_limit_reached': TrackedList.is_limit_reached(),
                 'max_instances_configured': validationMaxInstances,  # Validation uses lower limit
-                'min_bars_requirements': min_bars_requirements,
                 'execution_time_ms': int(execution_time),
                 'message': 'Validation passed - strategy can execute without errors'
             }
@@ -333,7 +335,7 @@ class AccessorStrategyEngine:
             logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
-            instances, _, _, error = await self._execute_strategy(
+            instances, _, _, _, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='screening',
                 max_instances=max_instances
@@ -407,7 +409,7 @@ class AccessorStrategyEngine:
             )
             
             # Execute strategy with accessor context
-            instances, _, _, error = await self._execute_strategy(
+            instances, _, _, _, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='alert',
                 max_instances=max_instances
@@ -479,7 +481,7 @@ class AccessorStrategyEngine:
         strategy_code: str, 
         execution_mode: str,
         max_instances: int = 15000
-    ) -> Tuple[List[Dict], str, List[Dict], Exception]:
+    ) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
         
         # Create safe execution environment with data accessor functions
@@ -529,12 +531,12 @@ class AccessorStrategyEngine:
                 logger.error(detailed_error_msg)
                 
                 # Return empty list and any captured output instead of crashing
-                return [], "", [], strategy_error
+                return [], "", [], [], strategy_error
             
             # Validate and clean instances
             if not isinstance(instances, list):
                 logger.error(f"Strategy function must return a list, got {type(instances)}")
-                return [], "", [], "Strategy function must return a list"
+                return [], "", [], [], "Strategy function must return a list"
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -555,7 +557,7 @@ class AccessorStrategyEngine:
             limit_msg = " (limit reached)" if TrackedList.is_limit_reached() else ""
             logger.info(f"Strategy returned {len(valid_instances)} valid instances{limit_msg}")
             logger.info(f"Strategy captured {len(self.plots_collection)} plots")
-            return valid_instances, strategy_prints, self.plots_collection, None
+            return valid_instances, strategy_prints, self.plots_collection, self.response_images, None
             
         except Exception as e:
             # Get detailed error information for compilation/setup errors
@@ -566,15 +568,15 @@ class AccessorStrategyEngine:
             logger.error(detailed_error_msg)
             
             # Return empty list for compilation/setup errors too
-            return [], "", [], e
+            return [], "", [], [], e
     
     async def _create_safe_globals(self, execution_mode: str) -> Dict[str, Any]:
         """Create safe execution environment with data accessor functions"""
         
         # Initialize plots collection for this execution
         self.plots_collection = []
+        self.response_images = []
         self.plot_counter = 0
-        
         # Create bound methods that use this engine's data accessor
         def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None, 
                               aggregate_mode=False, extended_hours=False, start_date=None, end_date=None):
@@ -686,6 +688,21 @@ class AccessorStrategyEngine:
                 # Extract entire plot data (full figure object)
                 figure_data = self._extract_plot_data(fig)
                 
+                # Generate PNG as base64 and add to response_images using matplotlib
+                try:
+
+                    png_base64 = plotly_to_matplotlib_png(fig)
+                    if png_base64:
+                        self.response_images.append(png_base64)
+                        logger.debug(f"Generated PNG using matplotlib for plot {plotID}")
+                    else:
+                        logger.warning(f"Failed to generate PNG for plot {plotID}")
+                        self.response_images.append(None)
+                except Exception as matplotlib_error:
+                    logger.warning(f"Failed to generate PNG for plot {plotID}: {matplotlib_error}")
+                    # Add None to maintain index alignment with plots_collection
+                    self.response_images.append(None)
+                
                 plot_data = {
                     'plotID': plotID,
                     'data': figure_data  # Entire figure object with data, layout, config
@@ -701,6 +718,8 @@ class AccessorStrategyEngine:
                     'data': {}  # Empty object
                 }
                 self.plots_collection.append(fallback_plot)
+                # Add None to response_images for failed plot
+                self.response_images.append(None)
         
         # Create wrapped make_subplots that returns figures with captured show
         def captured_make_subplots(*args, **kwargs):
@@ -1131,3 +1150,150 @@ class AccessorStrategyEngine:
                         max_tf_min_bars = call.get("min_bars", 0)
         
         return max_tf_str, max_tf_min_bars
+
+    def extract_get_bar_data_calls(self, strategy_code: str) -> List[Dict[str, Any]]:
+        """
+        Extract all get_bar_data calls from strategy code using AST parsing.
+        Returns list of dicts with timeframe, min_bars, and filter_analysis.
+        """
+        calls = []
+        
+        try:
+            # Parse the code into an AST
+            tree = ast.parse(strategy_code)
+            
+            # Walk through all nodes in the AST
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    # Check if this is a get_bar_data call
+                    func_name = None
+                    if isinstance(node.func, ast.Name):
+                        func_name = node.func.id
+                    elif isinstance(node.func, ast.Attribute):
+                        func_name = node.func.attr
+                    
+                    if func_name == 'get_bar_data':
+                        # Extract parameters from the call
+                        call_info = self._extract_get_bar_data_params(node)
+                        if call_info:
+                            calls.append(call_info)
+                            
+        except SyntaxError as e:
+            logger.warning(f"Failed to parse strategy code for get_bar_data extraction: {e}")
+        except Exception as e:
+            logger.warning(f"Error extracting get_bar_data calls: {e}")
+            
+        return calls
+    
+    def _extract_get_bar_data_params(self, call_node: ast.Call) -> Optional[Dict[str, Any]]:
+        """
+        Extract parameters from a get_bar_data() call node.
+        Returns dict with timeframe, min_bars, and filter_analysis.
+        """
+        try:
+            call_info = {
+                'timeframe': '1d',  # default
+                'min_bars': 1,      # default
+                'line_number': getattr(call_node, 'lineno', 0)
+            }
+            
+            # Extract positional arguments
+            if len(call_node.args) >= 1:
+                # First arg is timeframe
+                timeframe = self._extract_string_value(call_node.args[0])
+                if timeframe:
+                    call_info['timeframe'] = timeframe
+                    
+            if len(call_node.args) >= 3:
+                # Third arg is min_bars (second is columns)
+                min_bars = self._extract_int_value(call_node.args[2])
+                if min_bars is not None:
+                    call_info['min_bars'] = min_bars
+            
+            # Extract keyword arguments
+            filters_node = None
+            for keyword in call_node.keywords:
+                if keyword.arg == 'timeframe':
+                    timeframe = self._extract_string_value(keyword.value)
+                    if timeframe:
+                        call_info['timeframe'] = timeframe
+                elif keyword.arg == 'min_bars':
+                    min_bars = self._extract_int_value(keyword.value)
+                    if min_bars is not None:
+                        call_info['min_bars'] = min_bars
+                elif keyword.arg == 'filters':
+                    filters_node = keyword.value
+            
+            # Extract and analyze filters for ticker information
+            call_info['filter_analysis'] = self._analyze_filters_ast(filters_node)
+            
+            return call_info
+            
+        except Exception as e:
+            logger.debug(f"Failed to extract parameters from get_bar_data call: {e}")
+            return None
+    
+    def _extract_string_value(self, node: ast.AST) -> Optional[str]:
+        """Extract string value from AST node if possible."""
+        try:
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                return node.value
+            elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+                return node.s
+        except:
+            pass
+        return None
+
+    def _extract_int_value(self, node: ast.AST) -> Optional[int]:
+        """Extract integer value from AST node if possible."""
+        try:
+            if isinstance(node, ast.Constant) and isinstance(node.value, int):
+                return node.value
+            elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+                if isinstance(node.n, int):
+                    return node.n
+        except:
+            pass
+        return None
+    
+    def _analyze_filters_ast(self, filters_node: Optional[ast.AST]) -> Dict[str, Any]:
+        """
+        Analyze filters AST node to extract ticker information.
+        """
+        filter_analysis = {
+            "has_tickers": False,
+            "specific_tickers": []
+        }
+        
+        if filters_node is None:
+            return filter_analysis
+        
+        try:
+            # Handle dict literals like {'tickers': ['AAPL', 'MSFT']}
+            if isinstance(filters_node, ast.Dict):
+                tickers = set()
+                
+                for key, value in zip(filters_node.keys, filters_node.values):
+                    # Look for 'tickers' or 'ticker' keys
+                    key_str = self._extract_string_value(key)
+                    if key_str in ['tickers', 'ticker']:
+                        # Extract ticker values
+                        if isinstance(value, ast.List):
+                            # Handle list of tickers: ['AAPL', 'MSFT']
+                            for elem in value.elts:
+                                ticker = self._extract_string_value(elem)
+                                tickers.add(ticker.upper())
+                        elif isinstance(value, (ast.Constant, ast.Str)):
+                            # Handle single ticker: 'AAPL'
+                            ticker = self._extract_string_value(value)
+                            tickers.add(ticker.upper())
+                
+                if tickers:
+                    filter_analysis["has_tickers"] = True
+                    filter_analysis["specific_tickers"] = sorted(list(tickers))
+                    
+        except Exception as e:
+            logger.debug(f"Error analyzing filters AST: {e}")
+        
+        return filter_analysis
+    

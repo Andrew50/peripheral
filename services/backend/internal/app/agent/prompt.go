@@ -401,7 +401,8 @@ func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int
 	// Add execution results
 	if len(results) > 0 {
 		sb.WriteString("\n<ExecutionResults>\n")
-		resultsJSON, err := json.Marshal(results)
+		cleanedResults := cleanExecuteResultsForPrompt(results)
+		resultsJSON, err := json.Marshal(cleanedResults)
 		if err != nil {
 			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
 		} else {
@@ -413,6 +414,96 @@ func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int
 	}
 
 	return sb.String(), nil
+}
+
+// cleanExecuteResultsForPrompt removes responseImages from ExecuteResults to prevent
+// large base64 image data from bloating planning prompts
+func cleanExecuteResultsForPrompt(results []ExecuteResult) []ExecuteResult {
+	// First pass: check if any results contain responseImages
+	needsCleaning := false
+	for _, result := range results {
+		if result.Result != nil && hasResponseImages(result.Result) {
+			needsCleaning = true
+			break
+		}
+	}
+
+	// Early return if no cleaning needed
+	if !needsCleaning {
+		return results
+	}
+
+	// Only create new slice when cleaning is actually needed
+	cleanedResults := make([]ExecuteResult, len(results))
+
+	for i, result := range results {
+		if result.Result != nil && hasResponseImages(result.Result) {
+			// Only clean results that actually need it
+			cleanedResults[i] = ExecuteResult{
+				FunctionName: result.FunctionName,
+				Args:         result.Args,
+				Error:        result.Error,
+				Result:       cleanResultOfResponseImages(result.Result),
+			}
+		} else {
+			// Preserve original object when no cleaning needed
+			cleanedResults[i] = result
+		}
+	}
+
+	return cleanedResults
+}
+
+// hasResponseImages quickly checks if a result contains responseImages without deep processing
+func hasResponseImages(result interface{}) bool {
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		_, hasImages := resultMap["responseImages"]
+		return hasImages
+	}
+
+	// For non-map types, try JSON conversion (less common case)
+	if jsonBytes, err := json.Marshal(result); err == nil {
+		var tempMap map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &tempMap); err == nil {
+			_, hasImages := tempMap["responseImages"]
+			return hasImages
+		}
+	}
+
+	return false
+}
+
+// cleanResultOfResponseImages removes responseImages from a result object
+func cleanResultOfResponseImages(result interface{}) interface{} {
+	// Try direct cast to map first
+	var resultMap map[string]interface{}
+	var ok bool
+
+	if resultMap, ok = result.(map[string]interface{}); ok {
+		// Direct cast succeeded
+	} else {
+		// If direct cast fails, convert through JSON marshaling
+		jsonBytes, err := json.Marshal(result)
+		if err != nil {
+			// If marshaling fails, return original result
+			return result
+		}
+
+		// Unmarshal back to map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &resultMap); err != nil {
+			// If unmarshaling fails, return original result
+			return result
+		}
+	}
+
+	// Create a new map without responseImages
+	cleanedResultMap := make(map[string]interface{})
+	for k, v := range resultMap {
+		if k != "responseImages" {
+			cleanedResultMap[k] = v
+		}
+	}
+	return cleanedResultMap
 }
 
 // </prompt.go>
