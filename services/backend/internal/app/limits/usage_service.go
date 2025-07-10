@@ -230,19 +230,19 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 
 // ResetUserSubscriptionCredits resets subscription credits for a specific user when their billing period renews
 // This function is designed to be called from Stripe webhooks
-func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) error {
+func ResetUserSubscriptionCredits(conn *data.Conn, userID int, productKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Get the credits for this plan
-	var creditsPerPeriod int
+	// Get the credits for this product
+	var creditsPerMonth int
 	err := conn.DB.QueryRow(ctx, `
-		SELECT credits_per_billing_period 
-		FROM plan_limits 
-		WHERE plan_name = $1`, planName).Scan(&creditsPerPeriod)
+		SELECT queries_limit 
+		FROM subscription_products 
+		WHERE product_key = $1`, productKey).Scan(&creditsPerMonth)
 
 	if err != nil {
-		return fmt.Errorf("plan '%s' not found in plan_limits table", planName)
+		return fmt.Errorf("product '%s' not found in subscription_products table", productKey)
 	}
 
 	// Reset subscription credits but keep purchased credits
@@ -253,7 +253,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) 
 			current_period_start = CURRENT_TIMESTAMP,
 			last_limit_reset = CURRENT_TIMESTAMP
 		WHERE userId = $1`,
-		userID, creditsPerPeriod)
+		userID, creditsPerMonth)
 
 	if err != nil {
 		return fmt.Errorf("error resetting user subscription credits: %v", err)
@@ -262,21 +262,21 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, planName string) 
 	// Log the reset action
 	metadata := map[string]interface{}{
 		"reset_reason":      "billing_cycle_webhook",
-		"credits_allocated": creditsPerPeriod,
-		"plan_name":         planName,
+		"credits_allocated": creditsPerMonth,
+		"product_key":       productKey,
 	}
 	metadataJSON, _ := json.Marshal(metadata)
 
 	_, err = conn.DB.Exec(ctx, `
 		INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 		VALUES ($1, 'credits_reset', 0, $2, $3)`,
-		userID, planName, metadataJSON)
+		userID, productKey, metadataJSON)
 
 	if err != nil {
 		log.Printf("Warning: Failed to log credit reset for user %d: %v", userID, err)
 	}
 
-	log.Printf("Reset subscription credits for user %d (plan: %s, credits: %d)", userID, planName, creditsPerPeriod)
+	log.Printf("Reset subscription credits for user %d (product: %s, credits: %d)", userID, productKey, creditsPerMonth)
 	return nil
 }
 
@@ -337,30 +337,30 @@ func GetUserUsageStats(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 }
 
 // UpdateUserCreditsForPlan updates a user's credit allocation based on their subscription plan
-func UpdateUserCreditsForPlan(conn *data.Conn, userID int, planName string) error {
+func UpdateUserCreditsForPlan(conn *data.Conn, userID int, productKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Get the credits for the specified plan
-	var creditsPerPeriod, alertsLimit, strategyAlertsLimit int
+	// Get the credits for the specified product
+	var creditsPerMonth, alertsLimit, strategyAlertsLimit int
 
 	query := `
-		SELECT credits_per_billing_period, alerts_limit, strategy_alerts_limit
-		FROM plan_limits 
-		WHERE plan_name = $1`
+		SELECT queries_limit, alerts_limit, strategy_alerts_limit
+		FROM subscription_products 
+		WHERE product_key = $1`
 
-	err := conn.DB.QueryRow(ctx, query, planName).Scan(
-		&creditsPerPeriod, &alertsLimit, &strategyAlertsLimit,
+	err := conn.DB.QueryRow(ctx, query, productKey).Scan(
+		&creditsPerMonth, &alertsLimit, &strategyAlertsLimit,
 	)
 
 	if err != nil {
-		// If plan not found, use default Free plan limits
-		if planName == "" || planName == "Free" {
-			creditsPerPeriod = 5
+		// If product not found, use default Free plan limits
+		if productKey == "" || productKey == "Free" {
+			creditsPerMonth = 5
 			alertsLimit = 0
 			strategyAlertsLimit = 0
 		} else {
-			return fmt.Errorf("plan '%s' not found in plan_limits table", planName)
+			return fmt.Errorf("product '%s' not found in subscription_products table", productKey)
 		}
 	}
 
@@ -374,7 +374,7 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, planName string) erro
 		WHERE userId = $1`
 
 	res, err := conn.DB.Exec(ctx, updateQuery,
-		userID, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
+		userID, creditsPerMonth, alertsLimit, strategyAlertsLimit)
 	if err != nil {
 		return fmt.Errorf("error updating user credits: %v", err)
 	}
@@ -382,13 +382,13 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, planName string) erro
 	rows := res.RowsAffected()
 	if rows == 0 {
 		// This should never happen – it means we did not update the target row.
-		return fmt.Errorf("no rows updated when allocating credits (userID=%d, plan=%s)", userID, planName)
+		return fmt.Errorf("no rows updated when allocating credits (userID=%d, product=%s)", userID, productKey)
 	}
 
-	log.Printf("Allocated %d credits for user %d under plan '%s' (alerts:%d, strategyAlerts:%d)", creditsPerPeriod, userID, planName, alertsLimit, strategyAlertsLimit)
+	log.Printf("Allocated %d credits for user %d under product '%s' (alerts:%d, strategyAlerts:%d)", creditsPerMonth, userID, productKey, alertsLimit, strategyAlertsLimit)
 
-	log.Printf("Updated credits for user %d to plan '%s': credits=%d, alerts=%d, strategy_alerts=%d",
-		userID, planName, creditsPerPeriod, alertsLimit, strategyAlertsLimit)
+	log.Printf("Updated credits for user %d to product '%s': credits=%d, alerts=%d, strategy_alerts=%d",
+		userID, productKey, creditsPerMonth, alertsLimit, strategyAlertsLimit)
 
 	return nil
 }
