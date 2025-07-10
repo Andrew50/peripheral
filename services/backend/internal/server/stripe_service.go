@@ -221,6 +221,8 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 		err = handleStripePaymentFailed(conn, event)
 	case "invoice.payment_succeeded":
 		err = handleStripePaymentSucceeded(conn, event)
+	case "price.updated":
+		err = handleStripePriceUpdated(conn, event)
 	default:
 		// No specific handler for this event type – ignoring
 	}
@@ -236,9 +238,9 @@ func HandleStripeWebhook(conn *data.Conn, w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-// Helper function to map Stripe price IDs to plan names using database
+// Helper function to map Stripe price IDs to product keys using database
 func getPlanNameFromPriceID(conn *data.Conn, priceID string) (string, error) {
-	return pricing.GetPlanNameFromPriceID(conn, priceID)
+	return pricing.GetProductKeyFromPriceID(conn, priceID)
 }
 
 // Helper function to get credit amount from price ID using database
@@ -659,6 +661,52 @@ func handleStripePaymentSucceeded(conn *data.Conn, event stripe.Event) error {
 
 	log.Printf("Updated subscription %s to active with plan %s, period end %s and reset credits for user %d", subID, planName, periodEnd, userID)
 
+	return nil
+}
+
+func handleStripePriceUpdated(conn *data.Conn, event stripe.Event) error {
+	var price stripe.Price
+	if err := json.Unmarshal(event.Data.Raw, &price); err != nil {
+		return fmt.Errorf("error parsing price object: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
+	defer cancel()
+
+	// Determine the environment to update the correct Stripe price ID column
+	isLiveMode := price.Livemode
+
+	// Update the price in our database
+	var updateQuery string
+	if isLiveMode {
+		updateQuery = `
+			UPDATE prices 
+			SET price_cents = $1,
+			    stripe_price_id_live = $2,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE stripe_price_id_live = $2`
+	} else {
+		updateQuery = `
+			UPDATE prices 
+			SET price_cents = $1,
+			    stripe_price_id_test = $2,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE stripe_price_id_test = $2`
+	}
+
+	result, err := conn.DB.Exec(ctx, updateQuery, price.UnitAmount, price.ID)
+	if err != nil {
+		return fmt.Errorf("error updating price in database: %v", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+
+	if rowsAffected == 0 {
+		log.Printf("Warning: Price update webhook received for price ID %s, but no matching price found in database", price.ID)
+		return nil // Don't fail the webhook since this might be a price we don't track
+	}
+
+	log.Printf("Successfully updated price %s to %d cents in %s mode", price.ID, price.UnitAmount, map[bool]string{true: "live", false: "test"}[isLiveMode])
 	return nil
 }
 

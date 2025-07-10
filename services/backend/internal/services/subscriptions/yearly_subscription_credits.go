@@ -14,7 +14,7 @@ import (
 //
 // Logic:
 //  1. Identify all users with an *active* Stripe subscription whose plan's
-//     billing period is `year` (looked-up via the subscription_plans table).
+//     billing period is `year` (looked-up via the prices table).
 //  2. For each user, check if at least one calendar month has elapsed since
 //     their last_limit_reset timestamp (or if last_limit_reset is NULL).
 //  3. When the interval has elapsed, call ResetUserSubscriptionCredits which
@@ -30,16 +30,17 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 	defer cancel()
 
 	// Select active users on yearly billing plans along with their last reset.
-	// We rely on subscription_plans.billing_period = 'year' to detect yearly plans.
+	// We rely on prices.billing_period = 'yearly' to detect yearly plans.
 	rows, err := conn.DB.Query(ctx, `
 		SELECT u.userId,
 		       u.subscription_plan,
 		       COALESCE(u.last_limit_reset, u.current_period_start) AS last_reset,
-		       sp.credits_per_billing_period
+		       sp.credits_per_month
 		FROM users u
-		JOIN subscription_plans sp ON sp.plan_name = u.subscription_plan
+		JOIN subscription_products sp ON sp.product_key = u.subscription_plan
+		JOIN prices p ON sp.id = p.product_id
 		WHERE u.subscription_status = 'active'
-		  AND sp.billing_period = 'year'`)
+		  AND p.billing_period = 'yearly'`)
 	if err != nil {
 		return fmt.Errorf("querying yearly subscription users: %w", err)
 	}
@@ -50,10 +51,10 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 
 	for rows.Next() {
 		var userID int
-		var planName string
+		var productKey string
 		var lastReset time.Time
-		var creditsPerPeriod int
-		if err := rows.Scan(&userID, &planName, &lastReset, &creditsPerPeriod); err != nil {
+		var creditsPerMonth int
+		if err := rows.Scan(&userID, &productKey, &lastReset, &creditsPerMonth); err != nil {
 			log.Printf("❌ Error scanning yearly subscription user row: %v", err)
 			continue
 		}
@@ -67,23 +68,23 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 					subscription_credits_allocated = $2,
 					last_limit_reset              = CURRENT_TIMESTAMP
 				WHERE userId = $1`,
-				userID, creditsPerPeriod)
+				userID, creditsPerMonth)
 			if err != nil {
-				log.Printf("❌ Error updating credits for user %d (plan %s): %v", userID, planName, err)
+				log.Printf("❌ Error updating credits for user %d (product %s): %v", userID, productKey, err)
 				continue
 			}
 
 			// Record in usage_logs for audit
 			metadata := map[string]interface{}{
 				"reset_reason":      "yearly_plan_monthly_allocation",
-				"credits_allocated": creditsPerPeriod,
-				"plan_name":         planName,
+				"credits_allocated": creditsPerMonth,
+				"product_key":       productKey,
 			}
 			if metaJSON, err := json.Marshal(metadata); err == nil {
 				_, _ = data.ExecWithRetry(ctx, conn.DB, `
 					INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
 					VALUES ($1, 'credits_reset', 0, $2, $3)`,
-					userID, planName, metaJSON)
+					userID, productKey, metaJSON)
 			}
 
 			processed++

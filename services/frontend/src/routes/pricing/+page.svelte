@@ -552,8 +552,6 @@
 			await fetchSubscriptionStatus();
 		}
 	}
-
-
 </script>
 
 <svelte:head>
@@ -561,18 +559,19 @@
 </svelte:head>
 <SiteHeader />
 <!-- Use landing page design system -->
- <!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="landing-background landing-reset">
-
 	<!-- Main Pricing Content -->
 	<div class="landing-container" style="padding-top: 200px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
 				<h1 class="landing-title">Frictionless Trading</h1>
-				<p class="landing-subtitle">Leverage Peripheral to envision, enhance, and execute your trading ideas.</p>
+				<p class="landing-subtitle">
+					Leverage Peripheral to envision, enhance, and execute your trading ideas.
+				</p>
 			</div>
 
 			<!-- Feedback Messages -->
@@ -600,23 +599,21 @@
 				<!-- Billing Period Slider Toggle -->
 				<div class="billing-slider" class:yearly={billingPeriod === 'year'}>
 					<div class="slider-background"></div>
-					<button 
-						class="slider-option {billingPeriod === 'month' ? 'active' : ''}" 
+					<button
+						class="slider-option {billingPeriod === 'month' ? 'active' : ''}"
 						on:click={() => (billingPeriod = 'month')}
 					>
 						Billed Monthly
 					</button>
-					<button 
-						class="slider-option {billingPeriod === 'year' ? 'active' : ''}" 
+					<button
+						class="slider-option {billingPeriod === 'year' ? 'active' : ''}"
 						on:click={() => (billingPeriod = 'year')}
 					>
 						Billed Yearly
 					</button>
 				</div>
 				<div class="billing-subtitle">
-					<p>
-						Save up to 20% by paying yearly - 2 months free
-					</p>
+					<p>Save up to 20% by paying yearly - 2 months free</p>
 				</div>
 
 				<!-- Available Plans -->
@@ -667,11 +664,7 @@
 										</p>
 									{/if}
 								{:else if isCurrentPlan(plan.display_name)}
-									<button
-										class="subscribe-button"
-										on:click={handleCancelSubscription}
-										disabled
-									>
+									<button class="subscribe-button" on:click={handleCancelSubscription} disabled>
 										{#if loadingStates.cancel}
 											<div class="landing-loader"></div>
 										{:else}
@@ -680,32 +673,26 @@
 									</button>
 								{:else if plan.plan_name.toLowerCase() === 'free'}
 									{#if !$subscriptionStatus.isActive && isAuthenticated()}
-										<button class="subscribe-button current" disabled>
-											Current Plan
-										</button>
+										<button class="subscribe-button current" disabled> Current Plan </button>
 									{:else if $subscriptionStatus.isActive}
-										<button class="subscribe-button" disabled>
-											Downgrade not available
-										</button>
+										<button class="subscribe-button" disabled> Downgrade not available </button>
 									{:else}
-										<button class="subscribe-button" disabled>
-											Get Started Free
-										</button>
+										<button class="subscribe-button" disabled> Get Started Free </button>
 									{/if}
 								{:else}
 									<button
-										class="subscribe-button {plan.plan_name.toLowerCase().includes('pro') ? 'pro' : ''}"
+										class="subscribe-button {plan.plan_name.toLowerCase().includes('pro')
+											? 'pro'
+											: ''}"
 										on:click={() => handleUpgrade(plan.plan_name.toLowerCase())}
 										disabled={loadingStates[plan.plan_name.toLowerCase()]}
 									>
 										{#if loadingStates[plan.plan_name.toLowerCase()]}
 											<div class="landing-loader"></div>
+										{:else if isUpgradeEligible(plan)}
+											Upgrade
 										{:else}
-											{#if isUpgradeEligible(plan)}
-												Upgrade
-											{:else}
-												Subscribe
-											{/if}
+											Subscribe
 										{/if}
 									</button>
 								{/if}
@@ -737,8 +724,9 @@
 										<div class="popular-badge">Best Value</div>
 									{/if}
 									<h3>{product.display_name}</h3>
-									<div class="credit-price">
-										<span class="price">{formatPrice(product.price_cents, 'month')}</span>
+									<div class="credit-amount">
+										<span class="amount">{product.credit_amount}</span>
+										<span class="label">Credits</span>
 									</div>
 									<p class="credit-description">{product.description || ''}</p>
 								</div>
@@ -858,10 +846,9 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-        border: 2px solid rgba(0, 0, 0, 0.5);
-        border-radius: 24px;
+		border: 2px solid rgba(0, 0, 0, 0.5);
+		border-radius: 24px;
 	}
-
 
 	.plan-card.featured {
 		border-color: var(--landing-accent-blue);
@@ -1087,7 +1074,8 @@
 	}
 
 	.credit-card.disabled h3,
-	.credit-card.disabled .price,
+	.credit-card.disabled .amount,
+	.credit-card.disabled .label,
 	.credit-card.disabled .credit-description {
 		color: var(--landing-text-secondary);
 		opacity: 0.7;
@@ -1110,7 +1098,7 @@
 		margin-bottom: 1rem;
 	}
 
-	.credit-price {
+	.credit-amount {
 		display: flex;
 		align-items: baseline;
 		justify-content: center;
@@ -1118,10 +1106,15 @@
 		margin-bottom: 1rem;
 	}
 
-	.credit-price .price {
+	.credit-amount .amount {
 		font-size: 2.5rem;
 		font-weight: 700;
 		color: var(--landing-text-primary);
+	}
+
+	.credit-amount .label {
+		font-size: 1rem;
+		color: var(--landing-text-secondary);
 	}
 
 	.credit-description {
@@ -1275,7 +1268,6 @@
 		color: rgba(255, 255, 255, 0.8);
 		cursor: not-allowed;
 	}
-
 
 	@media (max-width: 640px) {
 		.slider-option {
