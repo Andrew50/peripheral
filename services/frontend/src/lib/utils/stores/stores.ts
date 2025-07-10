@@ -196,7 +196,36 @@ export function updateUserLastTickers(selectedTicker: any) {
 
 // Add constants for menu width
 export const MIN_MENU_WIDTH = 200;
-const DEFAULT_MENU_WIDTH = 450;
+
+// Calculate default menu width based on screen size using continuous function
+function getDefaultMenuWidth(): number {
+	if (typeof window === 'undefined') return 250; // SSR fallback
+
+	const screenWidth = window.innerWidth;
+
+	// Continuous function for default menu width
+	// Smoothly transitions from 25% at 800px to 20% at 2000px+
+	const minScreenWidth = 800;
+	const maxScreenWidth = 2000;
+	const minPercentage = 0.2;  // 20% at large screens
+	const maxPercentage = 0.25; // 25% at small screens
+
+	// Calculate percentage using linear interpolation, clamped to range
+	const clampedWidth = Math.max(minScreenWidth, Math.min(screenWidth, maxScreenWidth));
+	const t = (clampedWidth - minScreenWidth) / (maxScreenWidth - minScreenWidth);
+	const percentage = maxPercentage - (t * (maxPercentage - minPercentage));
+
+	// Calculate width with continuous function
+	const calculatedWidth = screenWidth * percentage;
+
+	// Apply absolute limits with smooth transitions
+	const absoluteMin = 200;
+	const absoluteMax = 400;
+
+	return Math.round(Math.max(absoluteMin, Math.min(calculatedWidth, absoluteMax)));
+}
+
+const DEFAULT_MENU_WIDTH = getDefaultMenuWidth();
 
 export interface StreamInfo {
 	replayActive: boolean;
@@ -402,7 +431,8 @@ export function changeMenu(menuName: Menu) {
 			return 'none';
 		}
 		if (current === 'none') {
-			menuWidth.set(DEFAULT_MENU_WIDTH);
+			// Recalculate default width based on current screen size
+			menuWidth.set(getDefaultMenuWidth());
 		}
 		return menuName;
 	});
