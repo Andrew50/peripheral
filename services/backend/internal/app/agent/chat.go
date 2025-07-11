@@ -5,6 +5,7 @@ import (
 	"backend/internal/app/limits"
 	"backend/internal/app/strategy"
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -114,7 +115,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
-
+	socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
 	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 1*time.Minute).Result() // 1 min for testing lol
