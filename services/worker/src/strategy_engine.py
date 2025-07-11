@@ -109,6 +109,7 @@ class AccessorStrategyEngine:
         
     async def execute_backtest(
         self, 
+        strategy_id: int,
         strategy_code: str, 
         symbols: List[str], 
         start_date: dt, 
@@ -146,7 +147,8 @@ class AccessorStrategyEngine:
             instances, strategy_prints, strategy_plots, response_images, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='backtest',
-                max_instances=max_instances
+                max_instances=max_instances,
+                strategy_id=strategy_id
             )
             if error: 
                 raise error
@@ -477,10 +479,11 @@ class AccessorStrategyEngine:
         return alerts
 
     async def _execute_strategy(
-        self, 
+        self,
         strategy_code: str, 
         execution_mode: str,
-        max_instances: int = 15000
+        max_instances: int = 15000,
+        strategy_id: int = None
     ) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
         
@@ -514,7 +517,7 @@ class AccessorStrategyEngine:
             try:
                 # Capture stdout and plots during strategy execution
                 stdout_buffer = io.StringIO()
-                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
+                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context(strategy_id):
                     instances = strategy_func()
                 strategy_prints = stdout_buffer.getvalue()
                 
@@ -663,7 +666,7 @@ class AccessorStrategyEngine:
         
         return safe_globals
     
-    def _plotly_capture_context(self):
+    def _plotly_capture_context(self, strategy_id=None):
         """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
         
         try:
@@ -691,7 +694,7 @@ class AccessorStrategyEngine:
                 # Generate PNG as base64 and add to response_images using matplotlib
                 try:
 
-                    png_base64 = plotly_to_matplotlib_png(fig)
+                    png_base64 = plotly_to_matplotlib_png(fig, plotID, strategy_id)
                     if png_base64:
                         self.response_images.append(png_base64)
                         logger.debug(f"Generated PNG using matplotlib for plot {plotID}")
