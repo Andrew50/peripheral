@@ -31,7 +31,6 @@
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get, writable } from 'svelte/store';
 	import {
@@ -1088,7 +1087,7 @@
 	}
 
 	function openPricingSettings() {
-		goto('/pricing');
+		window.location.href = "/pricing";
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1592,19 +1591,19 @@
 			{/if}
 			-->
 
-				<span class="value">
-					{#if $streamInfo.timestamp !== undefined}
-						{formatTimestamp($streamInfo.timestamp)}
-					{:else}
-						Loading Time...
-					{/if}
-				</span>
-				<!-- Site logo (clickable) -->
-				<a href="/" class="bottom-logo-link">
-					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-				</a>
-			</div>
+			<span class="value">
+				{#if $streamInfo.timestamp !== undefined}
+					{formatTimestamp($streamInfo.timestamp)}
+				{:else}
+					Loading Time...
+				{/if}
+			</span>
+			<!-- Site logo (clickable) -->
+			<a  class="bottom-logo-link" on:click={() => window.location.href = "/"}>
+				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+			</a>
 		</div>
+	</div>
 
 		{#if showSettingsPopup}
 			<div
@@ -1929,11 +1928,6 @@
 		display: block;
 	}
 
-	/* Hide original bottom bar profile button */
-	.bottom-bar .profile-button {
-		display: none;
-	}
-
 	/* Bottom bar logo */
 	.bottom-bar .bottom-logo {
 		height: 28px;
@@ -1944,6 +1938,109 @@
 	.bottom-logo-link {
 		display: inline-flex;
 		align-items: center;
+		cursor: pointer;
+		
+	}
+
+	/* New layout structure styles */
+	.main-horizontal-container {
+		display: flex;
+		flex: 1;
+		height: 100%;
+	}
+
+	.center-section {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0; /* Allows flex child to shrink below content size */
+	}
+
+	.sidebar {
+		display: flex !important;
+		flex-direction: column;
+		height: 100%;
+		border-left: 4px solid var(--c1);
+	}
+
+	.sidebar-header {
+		height: 40px;
+		min-height: 40px;
+		background-color: #0f0f0f;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 4px solid var(--c1);
+	}
+
+	.sidebar-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	/* ───── Alert tab styles ─────────────────────────────────────────────────── */
+	.alert-tab-container {
+		display: flex;
+		align-items: center;
+		flex-grow: 1;
+		min-width: 0;
+		gap: 0;
+	}
+
+	.sidebar-header .watchlist-tab {
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 12px;
+		background: transparent;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.sidebar-header .watchlist-tab:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.sidebar-header .watchlist-tab:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+	}
+
+	.sidebar-header .watchlist-tab.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
+
+	/* Mobile full-screen chat container */
+	.mobile-chat-container {
+		position: fixed;
+		inset: 0; /* top:0; right:0; bottom:0; left:0; */
+		z-index: 9999; /* above everything */
+		background: #0f0f0f; /* match site background so it feels native */
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* New layout structure styles */

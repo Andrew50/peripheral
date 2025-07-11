@@ -90,7 +90,7 @@ export async function uploadRequest<T>(
 	});
 
 	if (response.status === 401) {
-		goto('/login');
+		window.location.href = '/login';
 		throw new Error('Authentication failed');
 	}
 	if (!response.ok) {
@@ -177,7 +177,7 @@ export async function privateRequest<T>(
 	if (response.status === 401) {
 		// Redirect to login page for authentication errors
 		console.warn('Authentication required for:', func);
-		goto('/login');
+		window.location.href = '/login';
 		throw new Error('Authentication required');
 	} else if (response.ok) {
 		const result = (await response.json()) as T;
@@ -227,7 +227,7 @@ export async function queueRequest<T>(
 			throw new Error('No auth token found');
 		}
 	} catch (error) {
-		goto('/login');
+		window.location.href = '/login';
 		throw new Error(
 			'Authentication failed: ' + (error instanceof Error ? error.message : 'Unknown error')
 		);
@@ -248,7 +248,7 @@ export async function queueRequest<T>(
 	}).catch();
 
 	if (response.status === 401) {
-		goto('/login');
+		window.location.href = '/login';
 	} else if (!response.ok) {
 		const errorMessage = await response.text();
 		console.error('Error queuing task:', errorMessage);
@@ -326,7 +326,7 @@ export async function streamingChatRequest<T>(
 	});
 
 	if (response.status === 401) {
-		goto('/login');
+		window.location.href = '/login';
 		throw new Error('Authentication required');
 	} else if (!response.ok) {
 		const errorMessage = await response.text();

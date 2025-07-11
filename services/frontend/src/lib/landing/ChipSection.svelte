@@ -77,13 +77,13 @@
   .chip-track {
     display: flex;
     gap: 0.75rem;
-    animation: scrollLeft 60s linear infinite;
+    animation: scrollLeft 90s linear infinite;
     width: fit-content;
   }
 
   /* Reverse rows scroll in opposite direction */
   .chip-row.reverse .chip-track {
-    animation: scrollRight 60s linear infinite;
+    animation: scrollRight 90s linear infinite;
   }
 
   /* Pause animation on hover */
@@ -146,16 +146,16 @@
     }
 
     .chip-track {
-      animation-duration: 80s;
+      animation-duration: 120s;
     }
 
     .chip {
-      padding: 0.5rem 0.8rem;
-      font-size: 0.85rem;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.75rem;
     }
 
     .chip-icon {
-      font-size: 1rem;
+      font-size: 0.9rem;
     }
   }
 </style> 

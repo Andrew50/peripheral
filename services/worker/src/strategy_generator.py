@@ -689,7 +689,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                         reasoning={"effort": "low"},
                         input=f"{user_prompt}",
                         instructions=f"{system_instruction}",
-                        user=f"user:{userID}",
+                        user=f"user:0",
                         timeout=120.0  # 2 minute timeout for other models
                     )
                     

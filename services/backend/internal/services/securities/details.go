@@ -45,7 +45,7 @@ func UpdateSecurityDetails(conn *data.Conn, test bool) error {
 	rows, err := conn.DB.Query(context.Background(),
 		`SELECT securityid, ticker 
 		 FROM securities 
-		 WHERE maxDate IS NULL AND (logo IS NULL OR icon IS NULL)`)
+		 WHERE maxDate IS NULL`)
 	if err != nil {
 		return fmt.Errorf("failed to query active securities: %v", err)
 	}
