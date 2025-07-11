@@ -111,7 +111,6 @@ class DataAccessorProvider:
                     - sector: str (e.g., 'Technology', 'Healthcare')
                     - industry: str (e.g., 'Software', 'Pharmaceuticals')
                     - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
-                    - locale: str (e.g., 'us', 'ca')
                     - market_cap_min: float (minimum market cap)
                     - market_cap_max: float (maximum market cap)
                     - active: bool (default True if not specified)
@@ -281,9 +280,6 @@ class DataAccessorProvider:
                     filter_parts.append("primary_exchange = %s")
                     params.append(filters['primary_exchange'])
                 
-                if 'locale' in filters:
-                    filter_parts.append("locale = %s")
-                    params.append(filters['locale'])
                 
                 if 'market_cap_min' in filters:
                     filter_parts.append("market_cap >= %s")
@@ -292,10 +288,7 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
-                
-                if 'sic_code' in filters:
-                    filter_parts.append("sic_code = %s")
-                    params.append(filters['sic_code'])
+            
                 
                 if 'total_employees_min' in filters:
                     filter_parts.append("total_employees >= %s")
@@ -364,15 +357,6 @@ class DataAccessorProvider:
                 """)
                 filter_values['primary_exchanges'] = [row[0] for row in cursor.fetchall()]
                 
-                # Get distinct locales
-                cursor.execute("""
-                    SELECT DISTINCT locale 
-                    FROM securities 
-                    WHERE maxdate IS NULL AND active = true AND locale IS NOT NULL 
-                    ORDER BY locale
-                """)
-                filter_values['locales'] = [row[0] for row in cursor.fetchall()]
-                
                 cursor.close()
                 
                 return filter_values
@@ -383,7 +367,6 @@ class DataAccessorProvider:
                 'sectors': [],
                 'industries': [],
                 'primary_exchanges': [],
-                'locales': []
             }
     
     def _get_bar_data_single(self, timeframe: str = "1d", columns: List[str] = None, 
@@ -401,7 +384,6 @@ class DataAccessorProvider:
                     - sector: str (e.g., 'Technology', 'Healthcare')
                     - industry: str (e.g., 'Software', 'Pharmaceuticals')
                     - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
-                    - locale: str (e.g., 'us', 'ca')
                     - market_cap_min: float (minimum market cap)
                     - market_cap_max: float (maximum market cap)
                     - active: bool (default True if not specified)
@@ -481,7 +463,10 @@ class DataAccessorProvider:
             # Priority 1: Direct date parameters from function call
             if start_date and end_date:
                 # Use direct datetime comparison with timezone-aware timestamps
-                date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
+                if start_date == end_date:
+                    date_filter = "o.timestamp = %s"
+                else: 
+                    date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [self._normalize_est(start_date), self._normalize_est(end_date)]
                 logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
             elif start_date:
@@ -555,17 +540,9 @@ class DataAccessorProvider:
                     security_filter_parts.append("s.industry = %s")
                     security_params.append(filters['industry'])
                 
-                #if 'market' in filters:
-                #    security_filter_parts.append("s.market = %s")
-                #    security_params.append(filters['market'])
-                
                 if 'primary_exchange' in filters:
                     security_filter_parts.append("s.primary_exchange = %s")
                     security_params.append(filters['primary_exchange'])
-                
-                if 'locale' in filters:
-                    security_filter_parts.append("s.locale = %s")
-                    security_params.append(filters['locale'])
                 
                 if 'market_cap_min' in filters:
                     security_filter_parts.append("s.market_cap >= %s")
@@ -574,11 +551,6 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     security_filter_parts.append("s.market_cap <= %s")
                     security_params.append(filters['market_cap_max'])
-                
-                if 'sic_code' in filters:
-                    security_filter_parts.append("s.sic_code = %s")
-                    security_params.append(filters['sic_code'])
-                
                 if 'total_employees_min' in filters:
                     security_filter_parts.append("s.total_employees >= %s")
                     security_params.append(filters['total_employees_min'])
@@ -863,10 +835,7 @@ class DataAccessorProvider:
                 if 'primary_exchange' in filters:
                     filter_parts.append("primary_exchange = %s")
                     params.append(filters['primary_exchange'])
-                
-                if 'locale' in filters:
-                    filter_parts.append("locale = %s")
-                    params.append(filters['locale'])
+            
                 
                 if 'market_cap_min' in filters:
                     filter_parts.append("market_cap >= %s")
@@ -876,9 +845,6 @@ class DataAccessorProvider:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
                 
-                if 'sic_code' in filters:
-                    filter_parts.append("sic_code = %s")
-                    params.append(filters['sic_code'])
                 
                 if 'total_employees_min' in filters:
                     filter_parts.append("total_employees >= %s")
@@ -934,14 +900,13 @@ class DataAccessorProvider:
                     - sector: str (e.g., 'Technology', 'Healthcare')
                     - industry: str (e.g., 'Software', 'Pharmaceuticals')
                     - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
-                    - locale: str (e.g., 'us', 'ca')
                     - market_cap_min: float (minimum market cap)
                     - market_cap_max: float (maximum market cap)
                     - active: bool (default True if not specified)
             
         Returns:
             pandas.DataFrame with columns: ticker, name, sector, industry, primary_exchange, 
-                                         locale, active, description, cik, market_cap, etc.
+                                        active, description, cik, market_cap, etc.
         """
         try:
             # Extract tickers from filters if provided
@@ -956,15 +921,15 @@ class DataAccessorProvider:
             
             # Default columns if not specified - include ticker by default
             if columns is None:
-                columns = ["ticker", "name", "sector", "industry", "market", "primary_exchange", 
-                          "locale", "active", "description", "cik"]
+                columns = ["ticker", "name", "sector", "industry", "primary_exchange", 
+                          "active", "description", "cik"]
             
             # Validate columns against allowed set
             allowed_columns = {
                 "securityid", "ticker", "name", "sector", "industry", "market", 
-                "primary_exchange", "locale", "active", "description", "cik",
+                "primary_exchange", "active", "description", "cik",
                 "market_cap", "share_class_shares_outstanding", "share_class_figi",
-                "sic_code", "sic_description", "total_employees", "weighted_shares_outstanding"
+                "total_employees", "weighted_shares_outstanding"
             }
             safe_columns = [col for col in columns if col in allowed_columns]
             
@@ -996,10 +961,6 @@ class DataAccessorProvider:
                     filter_parts.append("primary_exchange = %s")
                     params.append(filters['primary_exchange'])
                 
-                if 'locale' in filters:
-                    filter_parts.append("locale = %s")
-                    params.append(filters['locale'])
-                
                 if 'market_cap_min' in filters:
                     filter_parts.append("market_cap >= %s")
                     params.append(filters['market_cap_min'])
@@ -1007,10 +968,6 @@ class DataAccessorProvider:
                 if 'market_cap_max' in filters:
                     filter_parts.append("market_cap <= %s")
                     params.append(filters['market_cap_max'])
-                
-                if 'sic_code' in filters:
-                    filter_parts.append("sic_code = %s")
-                    params.append(filters['sic_code'])
                 
                 if 'total_employees_min' in filters:
                     filter_parts.append("total_employees >= %s")
@@ -1327,7 +1284,6 @@ def get_bar_data(timeframe: str = "1d", columns: List[str] = None, min_bars: int
                 - sector: str (e.g., 'Technology', 'Healthcare')
                 - industry: str (e.g., 'Software', 'Pharmaceuticals')
                 - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
-                - locale: str (e.g., 'us', 'ca')
                 - market_cap_min: float (minimum market cap)
                 - market_cap_max: float (maximum market cap)
                 - active: bool (default True if not specified)
@@ -1356,7 +1312,6 @@ def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) 
                 - sector: str (e.g., 'Technology', 'Healthcare')
                 - industry: str (e.g., 'Software', 'Pharmaceuticals')
                 - primary_exchange: str (e.g., 'NASDAQ', 'NYSE')
-                - locale: str (e.g., 'us', 'ca')
                 - market_cap_min: float (minimum market cap)
                 - market_cap_max: float (maximum market cap)
                 - active: bool (default True if not specified)

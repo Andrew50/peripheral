@@ -508,8 +508,7 @@ class StrategyWorker:
             parsed_end_date = datetime.now()
             logger.info(f"Using default end_date: {parsed_end_date.date()}")
         
-        # Validate date range
-        if parsed_start_date >= parsed_end_date:
+        if parsed_start_date > parsed_end_date:
             raise ValueError(f"start_date ({parsed_start_date.date()}) must be before end_date ({parsed_end_date.date()})")
         
         # Log the final date range
@@ -522,6 +521,7 @@ class StrategyWorker:
         
         # Execute using accessor strategy engine
         result = await self.strategy_engine.execute_backtest(
+            strategy_id=strategy_id,
             strategy_code=strategy_code,
             symbols=target_symbols,
             start_date=parsed_start_date,
