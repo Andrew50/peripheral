@@ -8,7 +8,7 @@
 	import { createTimelineEvents, sampleQuery, totalScroll } from '$lib/landing/timeline';
 	import { timelineProgress } from '$lib/landing/timeline';
 	import { get } from 'svelte/store';
-	import PlotChunk from '$lib/features/chat/components/PlotChunk.svelte';
+	import HeroPlotChunk from '$lib/landing/HeroPlotChunk.svelte';
 	import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
 	// Import chat utils for markdown parsing and ticker button functionality
 	import { parseMarkdown, handleTickerButtonClick } from '$lib/features/chat/utils';
@@ -134,6 +134,8 @@
 	// Control removal of the animation input bar after transition
 	let removeAnimationInput = false;
     let chartContainerRef: HTMLDivElement;
+	
+
 
 	let chartCandleSeries: ISeriesApi<
 		'Candlestick',
@@ -340,7 +342,10 @@
 		if (!heroWrapper) return;
 		const rect = heroWrapper.getBoundingClientRect();
 		const travelled = Math.min(Math.max(-rect.top, 0), totalScroll);
-		timelineProgress.set(travelled / totalScroll);
+		const newProgress = travelled / totalScroll;
+		
+		// Timeline progress for events
+		timelineProgress.set(newProgress);
 		evaluateTimeline();
 
 		// Synchronize the chat scroll position with overall hero progress
@@ -481,8 +486,26 @@
 		}
 	}
 
+	// Ensure the plot as a whole is visible in the chat pane  
+	function scrollPlotIntoView() {
+		if (!heroChatMessagesRef) return;
+		const plotContainer = heroChatMessagesRef.querySelector('.hero-plot-container');
+		if (plotContainer) {
+			scrollElementIntoChat(plotContainer as HTMLElement);
+		}
+	}
+
 	// New: extracted highlighter so it’s in scope before reactive block
 	export function highlightEventForward(rowIndex: number = -1, attempts = 6) {
+		if (rowIndex === -2) {
+			// Special case: scroll plot into view
+			setTimeout(() => {
+				scrollPlotIntoView();
+				chatAutoSync = false; // disable auto sync after manual scroll
+			}, 100);
+			return;
+		}
+
 		// Ensure table container is visible
 		scrollTableIntoView();
 
@@ -685,12 +708,12 @@
                                         {#if msg.contentChunks && msg.contentChunks.length > 0}
                                             <div class="assistant-message">
                                                 {#each msg.contentChunks as chunk, idx}
-                                                                                        {#if chunk.type === 'text'}
-                                        <div class="chunk-text">
-                                            {@html parseMarkdown(
-                                                typeof chunk.content === 'string' ? chunk.content : String(chunk.content)
-                                            )}
-                                        </div>
+                                                    {#if chunk.type === 'text'}
+                                                        <div class="chunk-text">
+                                                            {@html parseMarkdown(
+                                                                typeof chunk.content === 'string' ? chunk.content : String(chunk.content)
+                                                            )}
+                                                        </div>
                                                     {:else if chunk.type === 'table'}
                                                         {#if isTableData(chunk.content)}
                                                             {@const tableData = getTableData(chunk.content)}
@@ -868,7 +891,7 @@
                                                         {#if isPlotData(chunk.content)}
                                                             {@const plotData = getPlotData(chunk.content)}
                                                             {#if plotData}
-                                                                <PlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
+                                                                <HeroPlotChunk {plotData} plotKey={generatePlotKey(msg.message_id, idx)} />
                                                             {:else}
                                                                 <p>Invalid plot data structure</p>
                                                             {/if}
@@ -1228,6 +1251,7 @@
         flex: 1;
         justify-content: center;
         align-items: center;
+        position: relative;
     }
 
     .hero-chat-placeholder {
@@ -1622,4 +1646,5 @@
     .hero-chat-container :global(tr.selected-row) {
         background: rgba(79, 124, 130, 0.2) !important;
     }
+
 </style>
