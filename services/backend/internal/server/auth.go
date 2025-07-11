@@ -18,6 +18,7 @@ import (
 	"backend/internal/app/limits"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -61,7 +62,6 @@ type LoginResponse struct {
 	Settings   string          `json:"settings"`
 	Setups     [][]interface{} `json:"setups"`
 	ProfilePic string          `json:"profilePic"`
-	Username   string          `json:"username"`
 }
 
 // SignupArgs represents a structure for handling SignupArgs data.
@@ -78,7 +78,6 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
 		return nil, fmt.Errorf("%w: invalid signup args: %v", ErrInvalidInput, err)
 	}
-	username := strings.ToLower(a.Email)
 
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -112,21 +111,11 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("%w: email already registered", ErrEmailExists)
 	}
 
-	// Check if username already exists
-	err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE username=$1", username).Scan(&count)
-	if err != nil {
-		log.Printf("ERROR: Database query failed while checking username: %v", err)
-		return nil, fmt.Errorf("error checking username: %v", err)
-	}
-	if count > 0 {
-		return nil, fmt.Errorf("%w: username already taken", ErrUsernameExists)
-	}
-
 	// Insert new user with auth_type='password'
 	var userID int
 	err = tx.QueryRow(ctx,
-		"INSERT INTO users (username, email, password, auth_type) VALUES ($1, $2, $3, $4) RETURNING userId",
-		username, a.Email, a.Password, "password").Scan(&userID)
+		"INSERT INTO users (email, password, auth_type) VALUES ($1, $2, $3) RETURNING userId",
+		a.Email, a.Password, "password").Scan(&userID)
 	if err != nil {
 		log.Printf("ERROR: Failed to create user: %v", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
@@ -190,9 +179,9 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	// 1) Does the email exist? Get user details.
 	err := conn.DB.QueryRow(ctx,
-		`SELECT userId, username, password, profile_picture, auth_type
+		`SELECT userId, password, profile_picture, auth_type
 		 FROM users WHERE email=$1`,
-		a.Email).Scan(&userID, &resp.Username, &storedPw, &profilePicture, &authType)
+		a.Email).Scan(&userID, &storedPw, &profilePicture, &authType)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -282,7 +271,6 @@ type GoogleUser struct {
 type GoogleLoginResponse struct {
 	Token      string `json:"token"`
 	ProfilePic string `json:"profilePic"`
-	Username   string `json:"username"`
 }
 
 // GoogleLogin performs operations related to GoogleLogin functionality.
@@ -346,21 +334,31 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 
 	// Check if user exists, if not create new user
 	var userID int
-	var username string
 	var authType string
 
 	err = conn.DB.QueryRow(context.Background(),
-		"SELECT userId, username, auth_type FROM users WHERE email = $1",
-		googleUser.Email).Scan(&userID, &username, &authType)
+		"SELECT userId, auth_type FROM users WHERE email = $1",
+		googleUser.Email).Scan(&userID, &authType)
 
 	if err != nil {
 		// User doesn't exist, create new user with auth_type='google'
-		username = googleUser.Name
 		err = conn.DB.QueryRow(context.Background(),
-			"INSERT INTO users (username, password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING userId",
-			googleUser.Name, "", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userID)
+			"INSERT INTO users (password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5) RETURNING userId",
+			"", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userID)
 		if err != nil {
 			log.Printf("ERROR: Failed to create Google user: %v", err)
+
+			// Check if this is a constraint violation error
+			if pgErr, ok := err.(*pgconn.PgError); ok {
+				// Check for unique constraint violations
+				if pgErr.Code == "23505" { // unique_violation
+					if strings.Contains(pgErr.ConstraintName, "users_email_key") {
+						log.Printf("Email already exists for Google user: %s", googleUser.Email)
+						return nil, fmt.Errorf("%w", ErrEmailExists)
+					}
+				}
+			}
+
 			return nil, fmt.Errorf("failed to create user: %v", err)
 		}
 
@@ -379,6 +377,17 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 			googleUser.ID, googleUser.Picture, "both", userID)
 		if err != nil {
 			log.Printf("ERROR: Failed to update user for Google linking: %v", err)
+
+			// Check if this is a constraint violation error
+			if pgErr, ok := err.(*pgconn.PgError); ok {
+				if pgErr.Code == "23505" { // unique_violation
+					if strings.Contains(pgErr.ConstraintName, "users_google_id") {
+						log.Printf("Google ID already linked to another account: %s", googleUser.ID)
+						return nil, fmt.Errorf("this Google account is already linked to another user")
+					}
+				}
+			}
+
 			return nil, fmt.Errorf("failed to update user: %v", err)
 		}
 		log.Printf("Linked Google account to existing user ID: %d", userID)
@@ -395,7 +404,6 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 	return GoogleLoginResponse{
 		Token:      jwtToken,
 		ProfilePic: googleUser.Picture,
-		Username:   username,
 	}, nil
 }
 

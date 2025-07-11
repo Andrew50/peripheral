@@ -17,7 +17,6 @@
 
 	// Add profile picture state
 	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
-	let username = browser ? sessionStorage.getItem('username') || '' : '';
 
 	// Delete account variables
 	let showDeleteConfirmation = false;
@@ -66,10 +65,9 @@
 		}
 	}
 
-	// Generate initial avatar SVG from username
-	function generateInitialAvatar(username: string) {
-		const initial = username.charAt(0).toUpperCase();
-		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
+	// Generate simple default avatar
+	function generateDefaultAvatar() {
+		return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#2a2e36"/><text x="50" y="60" font-family="Arial" font-size="36" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 	}
 
 	// Function to handle subscription cancellation
@@ -232,12 +230,14 @@
 				<h3>Account Settings</h3>
 
 				<div class="profile-section">
-					<div class="profile-picture-container">
-						<div class="profile-picture">
-							<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
-						</div>
-						<div class="username-display">
-							{username}
+					<h2>Profile</h2>
+					<div class="profile-content">
+						<div class="profile-picture-container">
+							{#if profilePic}
+								<img src={profilePic} alt="Profile" class="profile-image" />
+							{:else}
+								<img src={generateDefaultAvatar()} alt="Profile" class="profile-image" />
+							{/if}
 						</div>
 					</div>
 				</div>

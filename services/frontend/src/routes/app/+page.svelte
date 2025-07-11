@@ -144,7 +144,7 @@
 
 	// Initialize with default question mark avatar
 	let profilePic = '';
-	let username = '';
+	// Username removed - using email for avatar generation when needed
 	let profilePicError = false;
 	let profileIconKey = 0;
 	let currentProfileDisplay = ''; // Add this to hold the current display value
@@ -377,8 +377,7 @@
 
 			// Initialize subscription status if user is authenticated
 			const authToken = sessionStorage.getItem('authToken');
-			const username = sessionStorage.getItem('username');
-			if (authToken && username) {
+			if (authToken) {
 				// Only fetch if we haven't already triggered it above
 				if (!sessionId) {
 					fetchSubscriptionStatus();
@@ -732,7 +731,7 @@
 	// Add reactive statement for profile display
 	$: {
 		// Recalculate the profile display whenever these values change
-		if (profilePic || username || profilePicError) {
+		if (profilePic || profilePicError) {
 			currentProfileDisplay = calculateProfileDisplay();
 		}
 	}
@@ -743,9 +742,9 @@
 			return profilePic;
 		}
 
-		// If username is available, generate avatar with initial
-		if (username) {
-			const initial = username.charAt(0).toUpperCase();
+		// Generate default avatar with '?' initial since we no longer have username
+		{
+			const initial = '?';
 			// Use a simpler SVG format to ensure browser compatibility
 			const avatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
 
@@ -777,10 +776,11 @@
 		profilePicError = true;
 
 		// Generate a fallback immediately
-		if (username) {
-			const initial = username.charAt(0).toUpperCase();
+		// Generate default avatar with '?' initial since we no longer have username
+		{
+			const initial = '?';
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
-		} else {
+		}
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 		}
 
@@ -838,7 +838,7 @@
 	}
 
 	// Add reactive statements to update the profile icon when data changes
-	$: if (profilePic || username) {
+	$: if (profilePic) {
 		// Increment key to force re-render when profile data changes
 		profileIconKey++;
 	}
@@ -1140,6 +1140,62 @@
 		if (document.title !== siteTitle) {
 			document.title = siteTitle;
 		}
+	}
+
+	// Default profile picture generation
+	let profilePic = '';
+	let profilePicError = false;
+	let userEmail = '';
+
+	onMount(async () => {
+		// ... existing code ...
+
+		const authToken = sessionStorage.getItem('authToken');
+		if (authToken) {
+			// ... existing logic for other API calls ...
+		}
+
+		// ... existing code ...
+	});
+
+	// ... existing code ...
+
+	// Generate initial avatar SVG from email address
+	function generateInitialAvatar(email: string) {
+		const initial = email ? email.charAt(0).toUpperCase() : 'U';
+		const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+		const colorIndex = initial.charCodeAt(0) % colors.length;
+		const bgColor = colors[colorIndex];
+
+		return `data:image/svg+xml,${encodeURIComponent(`
+			<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+				<rect width="32" height="32" rx="16" fill="${bgColor}"/>
+				<text x="16" y="20" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">${initial}</text>
+			</svg>
+		`)}`;
+	}
+
+	// ... existing code ...
+
+	// Update avatar generation logic
+	$: if (profilePic || userEmail) {
+		// Use profilePic if available, otherwise generate from email
+		profilePicSrc = profilePic || generateInitialAvatar(userEmail);
+	} else {
+		// Default placeholder
+		profilePicSrc = generateInitialAvatar('');
+	}
+
+	// ... existing code ...
+
+	// Update subscription check condition
+	$: if (
+		browser &&
+		sessionStorage.getItem('authToken') &&
+		!$subscriptionStatus.isActive &&
+		!$subscriptionStatus.loading
+	) {
+		// ... existing subscription logic ...
 	}
 </script>
 
@@ -1497,7 +1553,7 @@
 
 			<div class="bottom-bar-right">
 				<!-- Upgrade button - only show if user is authenticated but not subscribed -->
-				{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+				{#if browser && sessionStorage.getItem('authToken') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
 					<button
 						class="toggle-button upgrade-button"
 						on:click={openPricingSettings}

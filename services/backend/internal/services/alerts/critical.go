@@ -9,6 +9,32 @@ import (
 	"time"
 )
 
+// getCallerName returns the function name to use in logs.
+// If a custom name is provided, it uses that; otherwise it detects the caller
+// function name, skipping any functions within the alerts package itself.
+func getCallerName(customName ...string) string {
+	// If custom name provided, use it
+	if len(customName) > 0 && customName[0] != "" {
+		return customName[0]
+	}
+
+	// Otherwise use runtime detection
+	// Skip frames: 0:getCallerName, 1:LogCriticalAlert, 2:actual caller
+	pcs := make([]uintptr, 10)
+	n := runtime.Callers(3, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		frame, more := frames.Next()
+		if !strings.Contains(frame.Function, "alerts.") { // skip any function within alerts package
+			return frame.Function
+		}
+		if !more {
+			break
+		}
+	}
+	return "unknown"
+}
+
 // LogCriticalAlert sends a critical error message to Telegram.
 //
 // The function lazily initialises the Telegram bot (using InitTelegramBot) if it
@@ -16,7 +42,9 @@ import (
 // information such as the runtime environment (e.g. stage, demo, prod) and a
 // UTC timestamp. Any failure to initialise the bot or send the alert is logged
 // and returned to the caller.
-func LogCriticalAlert(err error) error {
+//
+// An optional functionName can be provided to override automatic function name detection.
+func LogCriticalAlert(err error, functionName ...string) error {
 	if err == nil {
 		return nil // nothing to report
 	}
@@ -25,8 +53,21 @@ func LogCriticalAlert(err error) error {
 	// requiring Telegram credentials during local development.
 	envValue := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if envValue == "" || envValue == "dev" || envValue == "development" {
-		// Still write the error to the local log for visibility.
-		log.Printf("[DEV] Critical error: %v", err)
+		// Still write the error to the local log for visibility with clear delimiters.
+		timestamp := time.Now().UTC().Format(time.RFC3339)
+
+		// Resolve the caller function name for better context in dev logs.
+		callerFn := getCallerName(functionName...)
+
+		log.Printf("\n"+
+			"=========================================\n"+
+			"🚨 CRITICAL ERROR (DEV ENVIRONMENT) 🚨\n"+
+			"=========================================\n"+
+			"Time: %s UTC\n"+
+			"Function: %s\n"+
+			"Error: %v\n"+
+			"=========================================\n",
+			timestamp, callerFn, err)
 		return nil
 	}
 
@@ -53,22 +94,7 @@ func LogCriticalAlert(err error) error {
 	}
 
 	// Resolve the caller function name to give more context where the error originated.
-	callerFn := func() string {
-		// Skip two frames to get out of runtime.Callers and this anonymous func itself.
-		pcs := make([]uintptr, 10)
-		n := runtime.Callers(3, pcs) // 0:getCaller,1:LogCriticalAlert,2:caller
-		frames := runtime.CallersFrames(pcs[:n])
-		for {
-			frame, more := frames.Next()
-			if !strings.Contains(frame.Function, "alerts.") { // skip any function within alerts package
-				return frame.Function
-			}
-			if !more {
-				break
-			}
-		}
-		return "unknown"
-	}()
+	callerFn := getCallerName(functionName...)
 
 	// Prepare the message.
 	timestamp := time.Now().UTC().Format(time.RFC3339)

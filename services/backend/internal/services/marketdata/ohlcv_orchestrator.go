@@ -262,3 +262,36 @@ func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile)
 	}
 	return nil
 }
+
+// CheckOHLCVDataFreshness verifies that both 1-minute and 1-day OHLCV data
+// have been updated within the last 7 days. Returns true if data is fresh,
+// false if either timeframe is stale or missing.
+func CheckOHLCVDataFreshness(conn *data.Conn) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cutoffTime := time.Now().UTC().AddDate(0, 0, -7) // 7 days ago
+
+	// Check both 1-minute and 1-day timeframes
+	timeframes := []string{"1-minute", "1-day"}
+
+	for _, tf := range timeframes {
+		var lastLoaded time.Time
+		err := conn.DB.QueryRow(ctx, `SELECT last_loaded_at FROM ohlcv_update_state WHERE timeframe = $1 LIMIT 1`, tf).Scan(&lastLoaded)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				log.Printf("⚠️  No update state found for timeframe %s", tf)
+				return false, fmt.Errorf("no update state found for timeframe %s", tf)
+			}
+			return false, fmt.Errorf("failed to check update state for %s: %w", tf, err)
+		}
+
+		if lastLoaded.Before(cutoffTime) {
+			log.Printf("⚠️  OHLCV data for %s is stale (last updated: %v, cutoff: %v)", tf, lastLoaded, cutoffTime)
+			return false, nil
+		}
+	}
+
+	log.Printf("✅ OHLCV data is fresh for both 1-minute and 1-day timeframes")
+	return true, nil
+}
