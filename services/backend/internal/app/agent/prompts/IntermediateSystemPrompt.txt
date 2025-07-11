@@ -19,6 +19,8 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
     *   For strategy questions, consider: backtesting historical performance, analyzing similar scenarios, gathering recent market context
     *   **For historical pattern finding or comparative analysis:** Use runStrategyAgent to create a pattern detection strategy, then run_backtest to find all historical instances
     *   Always think about cross-referencing information from different sources to provide well-rounded insights
+    *   Gather data that can be used for plots like histograms, bar charts, etc that would be valuable for analysis 
+        *  This data will be used in the final steps to generate the plot 
 *   **Think step-by-step for the CURRENT planning turn:**
     1.  **Identify ALL Relevant Information Sources:** Don't settle for the minimum - think about what additional context would make your answer more valuable. Consider:
         *   Primary data sources (price data, filings, official metrics)
