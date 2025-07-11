@@ -26,6 +26,8 @@
 		watchlistItemId?: number;
 	}
 
+	export let showTabs: boolean = true;
+
 	let container: HTMLDivElement;
 
 	function deleteItem(item: WatchlistItem) {
@@ -165,14 +167,19 @@
 		switchToWatchlist(parseInt(value, 10));
 		showDropdown = false;
 
-		// Reset select value to placeholder
-		target.value = '';
+		// No manual reset; keeping the value ensures the dropdown remains synced.
 	}
 
 	// Keep currentWatchlistId in sync with the global store
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
 
+	// Full name of the currently selected watchlist for display in header row
+	$: currentWatchlistName = Array.isArray($watchlists)
+		? ($watchlists.find((w) => w.watchlistId === currentWatchlistId)?.watchlistName ?? '')
+		: '';
+
 	// Automatically select the first watchlist if none is selected
+	// This serves as a fallback in case the store initialization didn't run
 	$: if (
 		$watchlists &&
 		$watchlists.length > 0 &&
@@ -182,6 +189,7 @@
 	}
 
 	// Initialize visible watchlists when watchlists and currentWatchlistId are available
+	// This serves as a fallback in case the store initialization didn't run
 	$: if (
 		$watchlists &&
 		$watchlists.length > 0 &&
@@ -231,96 +239,115 @@
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
 	<!-- Watchlist Tabs -->
-	<div class="watchlist-tabs-container">
-		{#if !showWatchlistInput}
-			<div class="watchlist-tabs">
-				<!-- All Visible Watchlist Tabs in Fixed Positions -->
-				{#each visibleWatchlists as watchlist}
-					<button
-						class="watchlist-tab {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
-						title={watchlist.watchlistName}
-						on:click={() => switchToWatchlist(watchlist.watchlistId)}
-					>
-						{watchlist.watchlistName}
-					</button>
-				{/each}
+	{#if showTabs}
+		<div class="watchlist-tabs-container">
+			{#if !showWatchlistInput}
+				<div class="watchlist-tabs">
+					<!-- All Visible Watchlist Tabs in Fixed Positions -->
+					{#each visibleWatchlists as watchlist}
+						<button
+							class="watchlist-tab {currentWatchlistId === watchlist.watchlistId ? 'active' : ''}"
+							title={watchlist.watchlistName}
+							on:click={() => switchToWatchlist(watchlist.watchlistId)}
+						>
+							{watchlist.watchlistName?.[0]?.toUpperCase()}
+						</button>
+					{/each}
 
-				<!-- More button for dropdown -->
-				<div class="dropdown-wrapper">
-					<button
-						class="more-button"
-						title="More Watchlists"
-						on:click={() => (showDropdown = !showDropdown)}
-					>
-						⋯
-					</button>
+					<!-- More button for dropdown -->
+					<div class="dropdown-wrapper">
+						<button
+							class="more-button"
+							title="More Watchlists"
+							on:click={() => (showDropdown = !showDropdown)}
+						>
+							⋯
+						</button>
 
-					{#if showDropdown}
-						<div class="watchlist-dropdown">
-							<select
-								class="dropdown-select default-select"
-								value=""
-								on:change={handleWatchlistChange}
-								on:blur={() => (showDropdown = false)}
-							>
-								<option value="" disabled>Select Watchlist</option>
-								{#if Array.isArray($watchlists)}
-									<optgroup label="My Watchlists">
-										{#each $watchlists as watchlist}
-											<option value={watchlist.watchlistId.toString()}>
-												{watchlist.watchlistName === 'flag'
-													? 'Flag (Protected)'
-													: watchlist.watchlistName}
-											</option>
-										{/each}
-									</optgroup>
-									<optgroup label="Actions">
-										<option value="new">+ Create New Watchlist</option>
-										{#if currentWatchlistId && currentWatchlistId !== flagWatchlistId}
-											<option value="delete">- Delete Current Watchlist</option>
-										{/if}
-									</optgroup>
-								{/if}
-							</select>
-						</div>
-					{/if}
+						{#if showDropdown}
+							<div class="watchlist-dropdown">
+								<select
+									class="dropdown-select default-select"
+									value={currentWatchlistId?.toString()}
+									on:change={handleWatchlistChange}
+									on:blur={() => (showDropdown = false)}
+								>
+									<option value="" disabled>Select Watchlist</option>
+									{#if Array.isArray($watchlists)}
+										<optgroup label="My Watchlists">
+											{#each $watchlists as watchlist}
+												<option value={watchlist.watchlistId.toString()}>
+													{watchlist.watchlistName === 'flag'
+														? 'Flag (Protected)'
+														: watchlist.watchlistName}
+												</option>
+											{/each}
+										</optgroup>
+										<optgroup label="Actions">
+											<option value="new">+ Create New Watchlist</option>
+											{#if currentWatchlistId !== undefined && currentWatchlistId !== flagWatchlistId}
+												<option value="delete">- Delete Current Watchlist</option>
+											{/if}
+										</optgroup>
+									{/if}
+								</select>
+							</div>
+						{/if}
+					</div>
 				</div>
-			</div>
-		{:else}
-			<div class="new-watchlist-section">
-				<input
-					class="new-watchlist-input default-select"
-					id="new-watchlist-input"
-					bind:this={newNameInput}
-					on:keydown={(event) => {
-						if (event.key === 'Enter') {
-							newWatchlist();
-						} else if (event.key === 'Escape') {
-							closeNewWatchlistWindow();
-						}
-					}}
-					bind:value={newWatchlistName}
-					placeholder="New Watchlist Name"
-				/>
-				<div class="new-watchlist-buttons">
-					<button class="utility-button" on:click={newWatchlist}>✓</button>
-					<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
+			{:else}
+				<div class="new-watchlist-section">
+					<input
+						class="new-watchlist-input default-select"
+						id="new-watchlist-input"
+						bind:this={newNameInput}
+						on:keydown={(event) => {
+							if (event.key === 'Enter') {
+								newWatchlist();
+							} else if (event.key === 'Escape') {
+								closeNewWatchlistWindow();
+							}
+						}}
+						bind:value={newWatchlistName}
+						placeholder="New Watchlist Name"
+					/>
+					<div class="new-watchlist-buttons">
+						<button class="utility-button" on:click={newWatchlist}>✓</button>
+						<button class="utility-button" on:click={closeNewWatchlistWindow}>✕</button>
+					</div>
 				</div>
-			</div>
-		{/if}
-
-		<!-- Add Symbol button -->
-		<button
-			class="add-symbol-button"
-			title="Add Symbol"
-			on:click={() => addToWatchlist($globalCurrentWatchlistId)}
-		>
-			+
-		</button>
-	</div>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Wrap List component for scrolling -->
 	<div class="list-scroll-container">
+		<!-- Top row containing the Add Symbol button -->
+		<div class="add-symbol-row">
+			<!-- Full watchlist name, left-aligned -->
+			<div class="watchlist-name">{currentWatchlistName}</div>
+
+			<!-- Alert settings button -->
+			<button
+				class="alert-settings-button"
+				title="Watchlist Alerts Settings"
+				on:click={() => {
+					/* TODO: implement alert settings */
+				}}
+			>
+				<img src="/alerts.png" alt="Alerts" class="icon" />
+			</button>
+
+			<!-- Add Symbol button -->
+			<button
+				class="add-symbol-button"
+				title="Add Symbol"
+				on:click={() => addToWatchlist($globalCurrentWatchlistId)}
+			>
+				+
+			</button>
+		</div>
+
 		<WatchlistList
 			parentDelete={deleteItem}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
@@ -491,15 +518,14 @@
 		justify-content: center;
 		background: transparent;
 		border: none;
-		border-radius: 4px;
+		border-radius: 8px;
 		cursor: pointer;
-		transition: none;
+		transition: background 0.2s ease;
 		flex-shrink: 0;
 	}
 
 	.add-symbol-button:hover {
 		background: rgba(255, 255, 255, 0.1);
-		color: #ffffff;
 	}
 
 	.feature-container {
@@ -551,11 +577,92 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow: visible; /* Remove scrolling from this container */
 		min-height: 0; /* Necessary for flex-grow in some cases */
-		padding: 0;
+		/* Match padding pattern used in alerts container */
+		padding: 0 clamp(0.5rem, 1vw, 1rem) clamp(0.5rem, 1vw, 1rem);
 		background: transparent;
 		border: none;
 		border-radius: 0;
 		display: flex;
 		flex-direction: column;
+	}
+
+	/* Row that houses the + button */
+	.add-symbol-row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		/* Provide a bit of breathing room above header */
+		padding: 0;
+		margin: 16px 0 10px 0;
+	}
+
+	.watchlist-name {
+		color: #ffffff;
+		font-size: 1rem; /* Align with alerts title size */
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		margin: 0 0 0 8px; /* left margin for spacing */
+		margin-right: auto; /* push buttons to the right */
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Adjust left padding of first data column (Ticker) to match Alerts list */
+	:global(.header-table th:nth-child(2)) {
+		padding-left: clamp(4px, 0.5vw, 8px) !important;
+	}
+
+	:global(.body-table td:nth-child(2)) {
+		padding-left: clamp(4px, 0.5vw, 8px) !important;
+	}
+
+	/* Alert Settings button - shares base style with add-symbol-button */
+	.alert-settings-button {
+		padding: 6px 8px;
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 600;
+		background: transparent;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background 0.2s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 32px;
+		height: 32px;
+		flex-shrink: 0;
+	}
+
+	.alert-settings-button:hover {
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	.alert-settings-button .icon {
+		width: 20px;
+		height: 20px;
+		/* Make sure the PNG appears white regardless of original color */
+		filter: brightness(0) invert(1);
+	}
+
+	.add-symbol-button {
+		padding: 6px 8px;
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 600;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		min-width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background 0.2s ease;
+		flex-shrink: 0;
 	}
 </style>
