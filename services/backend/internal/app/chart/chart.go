@@ -501,7 +501,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	// Log chart query in goroutine (even for failed requests)
 	go logChartQuery(conn, userID, args)
 
-	return nil, fmt.Errorf("no data found")
+	return nil, fmt.Errorf("no data found for %d, %s", args.SecurityID, tickerForIncompleteAggregate)
 }
 
 func reverse(data []GetChartDataResults) {

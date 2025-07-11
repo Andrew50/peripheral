@@ -62,11 +62,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     elif 'y' in plottable_data:
         y_data = plottable_data['y']
         x_data = list(range(len(y_data)))
-        
-        if len(y_data) < 50:
-            ax.plot(x_data, y_data, 'o-', label=trace_name, alpha=0.8)
-        else:
-            ax.plot(x_data, y_data, '-', label=trace_name, alpha=0.8)
+        ax.plot(x_data, y_data, 'o', label=trace_name, alpha=0.8)
         plotted = True
     
     # Strategy 3: X data only (histogram-like - show distribution)
