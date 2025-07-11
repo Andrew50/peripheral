@@ -84,8 +84,8 @@
 			const r = await publicRequest<LoginResponse>('login', { email: email, password: password });
 			if (browser) {
 				// Set auth data using centralized utilities
-				setAuthCookies(r.token, r.profilePic, r.username);
-				setAuthSessionStorage(r.token, r.profilePic, r.username);
+				setAuthCookies(r.token, r.profilePic);
+				setAuthSessionStorage(r.token, r.profilePic);
 			}
 
 			handleAuthSuccess(r);
@@ -258,11 +258,7 @@
 
 			<!-- Submit Button -->
 			<div class="form-group">
-				<button
-					type="submit"
-					class="submit-button"
-					disabled={loading}
-				>
+				<button type="submit" class="submit-button" disabled={loading}>
 					{#if loading}
 						<div class="loader"></div>
 					{:else}
@@ -292,15 +288,26 @@
 <style>
 	/* Global styles */
 	:global(*) {
-			box-sizing: border-box;
+		box-sizing: border-box;
 	}
 	/* Use splash.css color system for consistency */
 	.auth-page {
 		width: 100%;
 		min-height: 70vh;
-		background: linear-gradient(135deg, var(--color-light, #B8E3E9) 0%, var(--color-accent, #93B1B5) 100%);
-		color: var(--color-dark, #0B2E33);
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		background: linear-gradient(
+			135deg,
+			var(--color-light, #b8e3e9) 0%,
+			var(--color-accent, #93b1b5) 100%
+		);
+		color: var(--color-dark, #0b2e33);
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		display: flex;
 		flex-direction: column;
 		position: relative;
@@ -330,7 +337,7 @@
 		font-size: 2rem;
 		font-weight: 700;
 		margin: 0 0 0.5rem 0;
-		color: var(--color-dark, #0B2E33);
+		color: var(--color-dark, #0b2e33);
 		line-height: 1.2;
 	}
 
@@ -349,7 +356,7 @@
 		background: rgba(255, 255, 255, 1);
 		border: 1.5px solid #000000;
 		border-radius: 12px;
-		color: var(--color-dark, #0B2E33);
+		color: var(--color-dark, #0b2e33);
 		font-family: 'Inter', sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
@@ -385,7 +392,6 @@
 		margin: 1.5rem 0;
 	}
 
-
 	.form-group {
 		width: 100%;
 	}
@@ -398,20 +404,20 @@
 		border: 1.5px solid #000000;
 		border-radius: 12px;
 		background: rgba(255, 255, 255, 1);
-		color: #0B2E33;
+		color: #0b2e33;
 		font-size: 0.95rem;
 		font-family: 'Inter', sans-serif;
 		transition: all 0.3s ease;
 	}
 
 	.auth-input::placeholder {
-		color: #4F7C82;
+		color: #4f7c82;
 		opacity: 0.6;
 	}
 
 	.auth-input:focus {
 		outline: none;
-		border-color: var(--color-primary, #4F7C82);
+		border-color: var(--color-primary, #4f7c82);
 		background: rgba(255, 255, 255, 0.9);
 		box-shadow: 0 0 0 3px rgba(79, 124, 130, 0.1);
 	}
@@ -425,7 +431,7 @@
 	.submit-button {
 		width: 100%;
 		height: 52px;
-		background: var(--color-dark, #0B2E33);
+		background: var(--color-dark, #0b2e33);
 		color: white;
 		border: none;
 		border-radius: 12px;
@@ -496,8 +502,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* Responsive Design */
