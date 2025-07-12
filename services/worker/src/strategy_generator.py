@@ -490,6 +490,7 @@ RETURN FORMAT:
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
+- ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
 - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
