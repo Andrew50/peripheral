@@ -11,8 +11,9 @@
 
 	const dispatch = createEventDispatcher();
 
-	export let loginMenu: boolean = false;
+	export let mode: 'login' | 'signup' = 'login';
 	export let modalMode: boolean = false;
+	export let inviteCode: string = '';
 	let email = '';
 	let password = '';
 	let errorMessage = writable('');
@@ -30,13 +31,13 @@
 	});
 
 	// Clear error message and reset form when switching between login/signup
-	$: if (loginMenu !== undefined) {
+	$: if (mode) {
 		errorMessage.set('');
 	}
 
 	onMount(() => {
 		if (browser) {
-			document.title = loginMenu ? 'Login | Peripheral' : 'Sign Up |	 Peripheral';
+			document.title = mode === 'login' ? 'Login | Peripheral' : 'Sign Up | Peripheral';
 			isLoaded = true;
 
 			// Check for redirect parameters
@@ -48,7 +49,7 @@
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			if (loginMenu) {
+			if (mode === 'login') {
 				signIn(email, password);
 			} else {
 				signUp(email, password);
@@ -66,7 +67,7 @@
 	// Handle successful authentication with deep linking
 	function handleAuthSuccess(user: LoginResponse) {
 		// Dispatch success event for modal usage
-		dispatch('authSuccess', { type: loginMenu ? 'login' : 'signup', user });
+		dispatch('authSuccess', { type: mode, user });
 
 		// Handle deep linking
 		if (redirectType === 'checkout' && redirectPlan) {
@@ -109,7 +110,14 @@
 	async function signUp(email: string, password: string) {
 		loading = true;
 		try {
-			await publicRequest('signup', { email: email, password: password });
+			const signupData: any = { email: email, password: password };
+
+			// Include invite code if provided
+			if (inviteCode && inviteCode.trim() !== '') {
+				signupData.inviteCode = inviteCode.trim();
+			}
+
+			await publicRequest('signup', signupData);
 			await signIn(email, password);
 		} catch (error) {
 			console.log(error);
@@ -155,6 +163,11 @@
 			errorMessage.set('Failed to initialize Google login');
 		}
 	}
+
+	// Exported method to set invite code from parent component
+	export function setInviteCode(code: string) {
+		inviteCode = code;
+	}
 </script>
 
 <!-- Use consistent light theme design -->
@@ -164,14 +177,14 @@
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
-				{loginMenu ? 'Sign into Peripheral' : 'Execute with Peripheral'}
+				{mode === 'login' ? 'Sign into Peripheral' : 'Execute with Peripheral'}
 			</h1>
 		</div>
 
 		<!-- Auth Form -->
 		<form
 			on:submit|preventDefault={() => {
-				if (loginMenu) {
+				if (mode === 'login') {
 					signIn(email, password);
 				} else {
 					signUp(email, password);
@@ -262,7 +275,7 @@
 					{#if loading}
 						<div class="loader"></div>
 					{:else}
-						{loginMenu ? 'Sign In' : 'Create Account'}
+						{mode === 'login' ? 'Sign In' : 'Create Account'}
 					{/if}
 				</button>
 			</div>
@@ -270,7 +283,7 @@
 
 		<!-- Toggle Auth Mode -->
 		<div class="auth-toggle">
-			{#if loginMenu}
+			{#if mode === 'login'}
 				<p>
 					Don't have an account?
 					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>

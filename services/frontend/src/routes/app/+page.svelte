@@ -143,9 +143,9 @@
 	let lastBottomWindow: BottomWindow | null = null;
 
 	// Initialize with default question mark avatar
-	let profilePic = '';
+	//let profilePic = '';
 	// Username removed - using email for avatar generation when needed
-	let profilePicError = false;
+	//let profilePicError = false;
 	let profileIconKey = 0;
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
@@ -781,8 +781,6 @@
 			const initial = '?';
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
 		}
-			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
-		}
 
 		// Update the stored value with our fallback
 		if (browser) {
@@ -1180,10 +1178,10 @@
 	// Update avatar generation logic
 	$: if (profilePic || userEmail) {
 		// Use profilePic if available, otherwise generate from email
-		profilePicSrc = profilePic || generateInitialAvatar(userEmail);
+		profilePic = profilePic || generateInitialAvatar(userEmail);
 	} else {
 		// Default placeholder
-		profilePicSrc = generateInitialAvatar('');
+		profilePic = generateInitialAvatar('');
 	}
 
 	// ... existing code ...

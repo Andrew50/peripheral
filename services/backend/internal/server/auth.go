@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"backend/internal/app/limits"
+	"backend/internal/app/pricing"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgconn"
@@ -66,8 +67,9 @@ type LoginResponse struct {
 
 // SignupArgs represents a structure for handling SignupArgs data.
 type SignupArgs struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	InviteCode string `json:"inviteCode,omitempty"` // Optional invite code for trial subscriptions
 }
 
 // Signup performs operations related to Signup functionality.
@@ -111,11 +113,37 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("%w: email already registered", ErrEmailExists)
 	}
 
-	// Insert new user with auth_type='password'
+	// Handle invite code if provided
+	var invite *data.Invite
+	if a.InviteCode != "" {
+		log.Printf("Processing signup with invite code: %s", a.InviteCode)
+
+		// Verify the invite code is valid and unused
+		invite, err = data.GetInviteByCode(conn, a.InviteCode)
+		if err != nil {
+			log.Printf("ERROR: Invalid invite code %s: %v", a.InviteCode, err)
+			return nil, fmt.Errorf("invalid invite code")
+		}
+
+		if invite.Used {
+			log.Printf("ERROR: Invite code %s already used", a.InviteCode)
+			return nil, fmt.Errorf("invite code already used")
+		}
+	}
+
+	// Insert new user with auth_type='password' and record invite code if present
 	var userID int
+	var inviteCodeVal string
+	if invite != nil {
+		inviteCodeVal = invite.Code
+	} else {
+		inviteCodeVal = ""
+	}
+
+	// Note: invite_code_used column will accept NULL/empty string when no invite was used
 	err = tx.QueryRow(ctx,
-		"INSERT INTO users (email, password, auth_type) VALUES ($1, $2, $3) RETURNING userId",
-		a.Email, a.Password, "password").Scan(&userID)
+		"INSERT INTO users (email, password, auth_type, invite_code_used) VALUES ($1, $2, $3, NULLIF($4, '')) RETURNING userId",
+		a.Email, a.Password, "password", inviteCodeVal).Scan(&userID)
 	if err != nil {
 		log.Printf("ERROR: Failed to create user: %v", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
@@ -128,10 +156,70 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 	txClosed = true
 
-	// Allocate free plan credits for the new user (idempotent if called again)
-	if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
-		// Propagate the error so signup fails clearly if free credits cannot be allocated
-		return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+	// Handle invite-based trial subscription or regular free plan
+	if invite != nil {
+		log.Printf("Creating trial subscription for user %d with invite %s for plan %s", userID, invite.Code, invite.PlanName)
+
+		// Get the Stripe price ID for the plan (defaulting to monthly billing for trials)
+		priceID, err := pricing.GetStripePriceIDForProduct(conn, invite.PlanName, "monthly")
+		if err != nil {
+			log.Printf("ERROR: Failed to get price ID for plan %s: %v", invite.PlanName, err)
+			return nil, fmt.Errorf("invalid plan in invite: %v", err)
+		}
+
+		// Create trial subscription via Stripe
+		customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, a.Email, invite.TrialDays)
+		if err != nil {
+			log.Printf("ERROR: Failed to create trial subscription for user %d: %v", userID, err)
+			// Note: User is already created, so we continue but log the error
+			// In production, you might want to handle this differently
+		} else {
+			log.Printf("Created trial subscription %s for user %d", subscription.ID, userID)
+
+			// Persist Stripe identifiers and initial trial status in our database so that
+			// later webhook events (e.g. invoice.payment_succeeded) can correctly map
+			// back to this user.
+			ctxStripe, cancelStripe := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancelStripe()
+
+			_, dbErr := conn.DB.Exec(ctxStripe, `
+				UPDATE users
+				SET stripe_customer_id     = $1,
+				    stripe_subscription_id = $2,
+				    subscription_status    = 'trialing',
+				    subscription_plan      = $3,
+				    invite_code_used       = $4,
+				    updated_at             = CURRENT_TIMESTAMP
+				WHERE userId = $5`,
+				customer.ID,
+				subscription.ID,
+				invite.PlanName,
+				invite.Code,
+				userID,
+			)
+			if dbErr != nil {
+				log.Printf("ERROR: Failed to persist Stripe IDs for trial user %d: %v", userID, dbErr)
+			}
+		}
+
+		// Mark invite as used
+		if err := data.MarkInviteUsed(conn, invite.Code); err != nil {
+			log.Printf("ERROR: Failed to mark invite %s as used: %v", invite.Code, err)
+			// Continue even if this fails, as it's not critical for user signup
+		}
+
+		// For trial users, we might want to allocate different credits or skip the free plan
+		// For now, we'll still allocate free plan credits as a baseline
+		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+			log.Printf("ERROR: Failed to allocate free credits for trial user %d: %v", userID, err)
+			// Continue, as trial subscription is the main benefit
+		}
+	} else {
+		// Allocate free plan credits for the new user (idempotent if called again)
+		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+			// Propagate the error so signup fails clearly if free credits cannot be allocated
+			return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+		}
 	}
 
 	// Create modified login args with the email
@@ -513,4 +601,90 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 
 	log.Printf("Successfully deleted account with ID: %d", userID)
 	return map[string]string{"status": "success"}, nil
+}
+
+// CreateInviteArgs represents arguments for creating an invite
+type CreateInviteArgs struct {
+	PlanName  string `json:"planName"`
+	TrialDays int    `json:"trialDays"`
+}
+
+// CreateInviteResponse represents the response for creating an invite
+type CreateInviteResponse struct {
+	Code       string `json:"code"`
+	PlanName   string `json:"planName"`
+	TrialDays  int    `json:"trialDays"`
+	InviteLink string `json:"inviteLink"`
+}
+
+// CreateInvite creates a new invite code (admin only function)
+func CreateInvite(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	log.Printf("CreateInvite called by user %d", userID)
+
+	var args CreateInviteArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
+	}
+
+	// Validate required fields
+	if args.PlanName == "" {
+		return nil, fmt.Errorf("%w: planName is required", ErrInvalidInput)
+	}
+
+	// Set default trial days if not provided
+	if args.TrialDays <= 0 {
+		args.TrialDays = 30
+	}
+
+	// Create the invite using the data layer
+	invite, err := data.CreateInvite(conn, args.PlanName, args.TrialDays)
+	if err != nil {
+		log.Printf("Error creating invite: %v", err)
+		return nil, fmt.Errorf("failed to create invite: %v", err)
+	}
+
+	// Construct invite link (frontend URL can be made configurable via env var)
+	frontendURL := getEnvOrDefault("FRONTEND_URL", "https://peripheral.io")
+	inviteLink := fmt.Sprintf("%s/invite/%s", frontendURL, invite.Code)
+
+	response := CreateInviteResponse{
+		Code:       invite.Code,
+		PlanName:   args.PlanName,
+		TrialDays:  invite.TrialDays,
+		InviteLink: inviteLink,
+	}
+
+	log.Printf("Successfully created invite %s for plan %s (%d trial days)", invite.Code, args.PlanName, invite.TrialDays)
+	return response, nil
+}
+
+// ValidateInvite validates an invite code and returns its details so the frontend can confirm
+// the code before showing the signup modal. It is exposed via the /public endpoint.
+func ValidateInvite(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var args struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
+	}
+
+	if args.Code == "" {
+		return nil, fmt.Errorf("%w: code is required", ErrInvalidInput)
+	}
+
+	invite, err := data.GetInviteByCode(conn, args.Code)
+	if err != nil {
+		return nil, fmt.Errorf("invalid invite code")
+	}
+
+	if invite.Used {
+		return nil, fmt.Errorf("invite code already used")
+	}
+
+	// Return minimal details the UI may show.
+	return map[string]interface{}{
+		"code":      invite.Code,
+		"planName":  invite.PlanName,
+		"trialDays": invite.TrialDays,
+	}, nil
 }
