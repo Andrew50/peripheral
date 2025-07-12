@@ -51,14 +51,14 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     if 'x' in plottable_data and 'y' in plottable_data:
         x_data = plottable_data['x']
         y_data = plottable_data['y']
-        ax.plot(x_data, y_data, 'o', label=trace_name, alpha=1)
+        ax.plot(x_data, y_data, 'o', linestyle='', label=trace_name, alpha=1)
         plotted = True
     
     # Strategy 2: Y data only (create index for x)
     elif 'y' in plottable_data:
         y_data = plottable_data['y']
         x_data = list(range(len(y_data)))
-        ax.plot(x_data, y_data, 'o', label=trace_name, alpha=0.8)
+        ax.plot(x_data, y_data, 'o', linestyle='', label=trace_name, alpha=0.8)
         plotted = True
     
     # Strategy 3: X data only (histogram-like - show distribution)
