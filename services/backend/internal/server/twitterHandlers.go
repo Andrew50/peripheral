@@ -16,7 +16,8 @@ import (
 
 // TwitterWebhookPayload represents only the fields we need from Twitter webhook
 type TwitterWebhookPayload struct {
-	Tweets []Tweet `json:"tweets"`
+	Tweets    []Tweet `json:"tweets,omitempty"`
+	EventType string  `json:"event_type,omitempty"`
 }
 
 // Tweet represents only the fields we need from each tweet
@@ -62,6 +63,18 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			log.Printf("Error parsing Twitter webhook JSON: %v", err)
 			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		// Handle test webhook
+		if payload.EventType == "test_webhook_url" {
+			log.Printf("Received test webhook event")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "success",
+				"message": "Test webhook received",
+			})
 			return
 		}
 
