@@ -93,15 +93,6 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Extracted Tweet Data: URL=%s, Text=%s, CreatedAt=%s, Username=%s",
 				extracted.URL, extracted.Text, extracted.CreatedAt, extracted.Username)
 		}
-
-		// Queue the extracted data for background processing
-		err = processTwitterWebhookEvent(extractedTweets)
-		if err != nil {
-			log.Printf("Error queueing Twitter webhook event: %v", err)
-			http.Error(w, "Error processing webhook", http.StatusInternalServerError)
-			return
-		}
-
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -109,6 +100,13 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			"status":  "success",
 			"message": fmt.Sprintf("Processed %d tweets", len(extractedTweets)),
 		})
+		// Queue the extracted data for background processing
+		err = processTwitterWebhookEvent(extractedTweets)
+		if err != nil {
+			log.Printf("Error queueing Twitter webhook event: %v", err)
+			http.Error(w, "Error processing webhook", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
