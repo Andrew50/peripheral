@@ -5,6 +5,7 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,12 +78,12 @@ func getChannelNameType(timestamp int64) string {
 
 // AlertMessage represents a structure for handling AlertMessage data.
 type AlertMessage struct {
-	AlertID    int    `json:"alertId"`
-	Timestamp  int64  `json:"timestamp"`
-	SecurityID int    `json:"securityId"`
-	Message    string `json:"message"`
-	Channel    string `json:"channel"`
-	Ticker     string `json:"ticker"`
+	AlertID    int      `json:"alertId"`
+	Timestamp  int64    `json:"timestamp"`
+	SecurityID int      `json:"securityId"`
+	Message    string   `json:"message"`
+	Channel    string   `json:"channel"`
+	Tickers    []string `json:"tickers"`
 }
 
 // SendAlertToUser performs operations related to SendAlertToUser functionality.
@@ -97,6 +98,7 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 			return
 		}
 		client.send <- jsonData
+		fmt.Println("Sent alert to user", alert.Message, userID)
 	}
 }
 
