@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v4"
+
 	"backend/internal/services/alerts"
 
 	stripe "github.com/stripe/stripe-go/v82"
@@ -124,6 +126,42 @@ func StripeCreateCustomer(email, name string, userID int) (*stripe.Customer, err
 	}
 
 	return customer.New(params)
+}
+
+// StripeCreateTrialSubscription creates a trial subscription without requiring a payment method
+func StripeCreateTrialSubscription(userID int, priceID, email string, trialDays int) (*stripe.Customer, *stripe.Subscription, error) {
+	// First, create a customer
+	customer, err := StripeCreateCustomer(email, "", userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create customer: %v", err)
+	}
+
+	// Create subscription with trial period and no payment method required
+	params := &stripe.SubscriptionParams{
+		Customer: stripe.String(customer.ID),
+		Items: []*stripe.SubscriptionItemsParams{
+			{
+				Price: stripe.String(priceID),
+			},
+		},
+		TrialPeriodDays: stripe.Int64(int64(trialDays)),
+		TrialSettings: &stripe.SubscriptionTrialSettingsParams{
+			EndBehavior: &stripe.SubscriptionTrialSettingsEndBehaviorParams{
+				MissingPaymentMethod: stripe.String("cancel"),
+			},
+		},
+		Metadata: map[string]string{
+			"user_id":    fmt.Sprintf("%d", userID),
+			"trial_type": "invite_trial",
+		},
+	}
+
+	subscription, err := subscription.New(params)
+	if err != nil {
+		return customer, nil, fmt.Errorf("failed to create trial subscription: %v", err)
+	}
+
+	return customer, subscription, nil
 }
 
 // HandleStripeWebhook processes Stripe webhook events
@@ -421,9 +459,24 @@ func handleStripeSubscriptionDeleted(conn *data.Conn, event stripe.Event) error 
 		SELECT userId FROM users 
 		WHERE stripe_subscription_id = $1`,
 		subscription.ID).Scan(&userID)
-
 	if err != nil {
-		return fmt.Errorf("error finding user for canceled subscription: %v", err)
+		if err == pgx.ErrNoRows {
+			// Fallback: try metadata in subscription
+			if subscription.Metadata != nil {
+				if userIDStr, exists := subscription.Metadata["user_id"]; exists {
+					userID, err = strconv.Atoi(userIDStr)
+					if err != nil {
+						return fmt.Errorf("error parsing user_id from subscription metadata: %v", err)
+					}
+				} else {
+					return fmt.Errorf("user not found for canceled subscription and no metadata user_id present")
+				}
+			} else {
+				return fmt.Errorf("user not found for canceled subscription and no metadata present")
+			}
+		} else {
+			return fmt.Errorf("DB error finding user for canceled subscription: %w", err)
+		}
 	}
 
 	// Update to canceled status and clear subscription details
@@ -494,7 +547,32 @@ func handleStripeSubscriptionUpdated(conn *data.Conn, event stripe.Event) error 
 		subscription.ID).Scan(&userID)
 
 	if err != nil {
-		return fmt.Errorf("error finding user for subscription update: %v", err)
+		// Try to find user by metadata in subscription
+		if subscription.Metadata != nil {
+			if userIDStr, exists := subscription.Metadata["user_id"]; exists {
+				userID, err = strconv.Atoi(userIDStr)
+				if err != nil {
+					return fmt.Errorf("error parsing user_id from subscription metadata: %v", err)
+				}
+
+				// Update the user record with the subscription ID
+				_, err = conn.DB.Exec(ctx, `
+					UPDATE users 
+					SET stripe_subscription_id = $1,
+					    updated_at = CURRENT_TIMESTAMP
+					WHERE userId = $2`,
+					subscription.ID, userID)
+				if err != nil {
+					log.Printf("Warning: Could not update user %d with subscription ID %s: %v", userID, subscription.ID, err)
+				} else {
+					log.Printf("Updated user %d with subscription ID %s", userID, subscription.ID)
+				}
+			} else {
+				return fmt.Errorf("error finding user for subscription update: %v", err)
+			}
+		} else {
+			return fmt.Errorf("error finding user for subscription update: %v", err)
+		}
 	}
 
 	// Update with plan name if we have it

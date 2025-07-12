@@ -320,10 +320,8 @@ func GetStripePriceIDForProduct(conn *data.Conn, productKey string, billingPerio
 }
 */
 
-// GetStripePriceIDForCreditProduct gets the appropriate Stripe price ID for a credit product based on environment
-// COMMENTED OUT: This function is not used anywhere in the codebase
-/*
-func GetStripePriceIDForCreditProduct(conn *data.Conn, productKey string) (string, error) {
+// GetStripePriceIDForProduct gets the appropriate Stripe price ID for a subscription product based on environment
+func GetStripePriceIDForProduct(conn *data.Conn, productKey string, billingPeriod string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -336,23 +334,22 @@ func GetStripePriceIDForCreditProduct(conn *data.Conn, productKey string) (strin
 		query = `
 			SELECT stripe_price_id_test
 			FROM prices
-			WHERE product_key = $1 AND billing_period = 'single'`
+			WHERE lower(product_key) = lower($1) AND billing_period = $2`
 	} else {
 		query = `
 			SELECT stripe_price_id_live
 			FROM prices
-			WHERE product_key = $1 AND billing_period = 'single'`
+			WHERE lower(product_key) = lower($1) AND billing_period = $2`
 	}
 
-	err := conn.DB.QueryRow(ctx, query, productKey).Scan(&priceID)
+	err := conn.DB.QueryRow(ctx, query, productKey, billingPeriod).Scan(&priceID)
 	if err != nil {
-		return "", fmt.Errorf("credit product not found: %s", productKey)
+		return "", fmt.Errorf("product not found: %s with billing period: %s", productKey, billingPeriod)
 	}
 
 	if !priceID.Valid {
-		return "", fmt.Errorf("no %s price ID configured for credit product: %s", environment, productKey)
+		return "", fmt.Errorf("no %s price ID configured for product: %s with billing period: %s", environment, productKey, billingPeriod)
 	}
 
 	return priceID.String, nil
 }
-*/

@@ -89,8 +89,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 		return
 	}
 
-	InitOHLCVBuffer(conn)
-
 	// Add timestamp ticker
 	timestampTicker := time.NewTicker(TimestampUpdateInterval)
 	defer timestampTicker.Stop()
@@ -232,11 +230,14 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 */
 
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
-func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
+func StartPolygonWS(conn *data.Conn, _useAlerts bool, enableRealtime bool) error {
 	useAlerts = _useAlerts
 	if err := initTickerToSecurityIDMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
+
+	// Initialize OHLCV buffer with realtime flag
+	InitOHLCVBuffer(conn, enableRealtime)
 
 	var err error
 	polygonWSConn, err = polygonws.New(polygonws.Config{

@@ -69,8 +69,8 @@
 			});
 
 			// Set auth data using centralized utilities
-			setAuthCookies(response.token, response.profilePic, response.username);
-			setAuthSessionStorage(response.token, response.profilePic, response.username);
+			setAuthCookies(response.token, response.profilePic);
+			setAuthSessionStorage(response.token, response.profilePic);
 
 			// Clean up stored state
 			sessionStorage.removeItem('googleAuthState');
@@ -91,7 +91,20 @@
 			}
 		} catch (error) {
 			console.error('Google authentication failed:', error);
-			errorMessage = 'Authentication failed. Please try again.';
+
+			// Extract specific error message from backend response
+			let displayError = 'Authentication failed. Please try again.';
+			if (typeof error === 'string') {
+				// Extract the core message sent from the backend
+				// It usually comes prefixed like "Server error: 400 - actual message"
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
+			}
+
+			errorMessage = displayError;
 			setTimeout(() => goto('/login'), 3000);
 		}
 	});

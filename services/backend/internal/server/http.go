@@ -45,6 +45,7 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
+	"validateInvite":                   ValidateInvite,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
