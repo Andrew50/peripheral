@@ -139,7 +139,7 @@
 	}
 
 	.auth-modal-content {
-		background: #0f0f0f;
+		background: #121212;
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 16px;
 		position: relative;

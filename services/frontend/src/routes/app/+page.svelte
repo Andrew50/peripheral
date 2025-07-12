@@ -1655,7 +1655,7 @@
 	.top-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
@@ -1872,7 +1872,7 @@
 		right: 0;
 		width: 45px; /* same width as sidebar-buttons */
 		height: 40px; /* same height as top bar */
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1931,7 +1931,7 @@
 	.sidebar-header {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
@@ -2002,7 +2002,7 @@
 		position: fixed;
 		inset: 0; /* top:0; right:0; bottom:0; left:0; */
 		z-index: 9999; /* above everything */
-		background: #0f0f0f; /* match site background so it feels native */
+		background: #121212; /* match site background so it feels native */
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
@@ -2032,7 +2032,7 @@
 	.sidebar-header {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
@@ -2103,7 +2103,7 @@
 		position: fixed;
 		inset: 0; /* top:0; right:0; bottom:0; left:0; */
 		z-index: 9999; /* above everything */
-		background: #0f0f0f; /* match site background so it feels native */
+		background: #121212; /* match site background so it feels native */
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
