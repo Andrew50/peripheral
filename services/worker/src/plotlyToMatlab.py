@@ -51,11 +51,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     if 'x' in plottable_data and 'y' in plottable_data:
         x_data = plottable_data['x']
         y_data = plottable_data['y']
-        
-        if len(y_data) < 50:
-            ax.plot(x_data, y_data, 'o-', label=trace_name, alpha=0.8)
-        else:
-            ax.plot(x_data, y_data, '-', label=trace_name, alpha=0.8)
+        ax.plot(x_data, y_data, 'o', label=trace_name, alpha=1)
         plotted = True
     
     # Strategy 2: Y data only (create index for x)
