@@ -120,7 +120,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 		SecurityID: *alert.SecurityID,
 		Message:    alertMessage,
 		Channel:    "alert",
-		Ticker:     *alert.Ticker,
+		Tickers:    []string{*alert.Ticker},
 	})
 	query := `
         INSERT INTO alertLogs (alertId, timestamp, securityId)
