@@ -624,6 +624,7 @@ class AccessorStrategyEngine:
                 'reversed': reversed,
                 'any': any,
                 'all': all,
+                'zip': zip,
             },
             
             # Standard imports
