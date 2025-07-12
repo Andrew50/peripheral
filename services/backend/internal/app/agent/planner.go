@@ -815,7 +815,6 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 				},
 			})
 		}
-		fmt.Println("allImages: ", len(allImages))
 		if len(allImages) > 0 {
 			var imageContent []responses.ResponseInputContentUnionParam
 			for _, img := range allImages {
