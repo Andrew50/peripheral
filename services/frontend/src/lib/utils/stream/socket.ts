@@ -10,7 +10,7 @@ import { enqueueTick } from './streamHub';
 
 // Define the type for function status updates from backend (simplified)
 export type FunctionStatusUpdate = {
-	type: 'function_status';
+	type: 'FunctionStatus';
 	userMessage: string;
 };
 
@@ -36,6 +36,13 @@ export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
 
+// Callback for handling message ID updates (set by chat component)
+let messageIdUpdateCallback: ((messageId: string, conversationId: string) => void) | null = null;
+
+export function setMessageIdUpdateCallback(callback: ((messageId: string, conversationId: string) => void) | null) {
+	messageIdUpdateCallback = callback;
+}
+
 // Store to manage pending chat requests
 const pendingChatRequests = new Map<
 	string,
@@ -54,7 +61,7 @@ let pendingChatRequest: {
 	context: any[];
 	activeChartContext: any;
 	conversationId: string;
-	timeoutId: number;
+	timeoutId: any;
 } | null = null;
 
 // Chat request timeout duration (30 seconds)
@@ -164,7 +171,7 @@ export function connect() {
 		}
 
 		// Check message type first
-		if (data && data.type === 'function_status') {
+		if (data && data.type === 'FunctionStatus') {
 			const statusUpdate = data as FunctionStatusUpdate;
 			functionStatusStore.set(statusUpdate);
 			return; // Handled function status update
@@ -175,6 +182,14 @@ export function connect() {
 			const titleUpdate = data as TitleUpdate;
 			titleUpdateStore.set(titleUpdate);
 			return; // Handled title update
+		}
+
+		// Handle chat initialization updates
+		if (data && data.type === 'ChatInitializationUpdate') {
+			if (messageIdUpdateCallback && data.message_id && data.conversation_id) {
+				messageIdUpdateCallback(data.message_id, data.conversation_id);
+			}
+			return; // Handled chat initialization update
 		}
 
 		// Handle chat responses
@@ -428,7 +443,7 @@ function sendChatQueryNow(
 	} catch (error) {
 		// Clean up on send failure
 		pendingChatRequests.delete(requestId);
-		reject(error);
+		reject(error instanceof Error ? error : new Error(String(error)));
 	}
 }
 

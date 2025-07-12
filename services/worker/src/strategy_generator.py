@@ -76,7 +76,7 @@ class StrategyGenerator:
             db_values = accessor.get_available_filter_values()
             
             # Validate that we got actual data
-            required_keys = ['sectors', 'industries', 'primary_exchanges', 'locales']
+            required_keys = ['sectors', 'industries', 'primary_exchanges']
             for key in required_keys:
                 if key not in db_values or not db_values[key]:
                     raise ValueError(f"Database returned empty {key} list")
@@ -97,7 +97,6 @@ class StrategyGenerator:
         sectors_str = '", "'.join(filter_values['sectors'])
         industries_str = '", "'.join(filter_values['industries'])
         exchanges_str = '", "'.join(filter_values['primary_exchanges'])
-        locales_str = '", "'.join(filter_values['locales'])
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
@@ -143,7 +142,7 @@ CRITICAL REQUIREMENTS:
   * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
      Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
   * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
-     Columns: ticker, name, sector, industry, market_cap, market, locale, primary_exchange, active, description, cik, total_shares
+     Columns: ticker, name, sector, industry, market_cap,  primary_exchange, active, description, total_shares
 
 AVAILABLE FILTERS (use in filters parameter):
 - sector: "{sectors_str}"
@@ -491,6 +490,7 @@ RETURN FORMAT:
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
 - DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
+- ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
 - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
 Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""

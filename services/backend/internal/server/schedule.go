@@ -172,15 +172,15 @@ var (
 			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
 		},
 		{
-			Name:           "UpdateAllOHLCV",
-			Function:       marketdata.UpdateAllOHLCV,
+			Name:           "UpdateSecurityTables",
+			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "UpdateSecurityTables",
-			Function:       simpleSecuritiesUpdateJob,
+			Name:           "UpdateAllOHLCV",
+			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,

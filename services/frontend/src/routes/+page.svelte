@@ -37,7 +37,7 @@
 				title: 'Never miss a trade.',
 				description: 'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
 				content: '',
-				image: '/watchlist.png'
+				image: '/splash-deploy.png'
 			},
 			{
 				title: 'Analysis at the speed of now',
@@ -103,7 +103,12 @@
 		.landing-container {
 			position: relative;
 			width: 100%;
-			background: linear-gradient(135deg, var(--color-light) 0%, var(--color-accent) 100%);
+			background: linear-gradient(
+				90deg,
+				#010022 0%,
+				rgba(3, 1, 85, 0.75) 99%,
+				rgba(5, 1, 136, 0) 100%
+			);
 			color: var(--color-dark);
 			font-family:
 					'Geist',
@@ -240,24 +245,7 @@
 
 
 
-		/* Corner glow blooms */
-		:global(body)::before {
-			content: "";
-			position: fixed;
-			inset: 0;
-			pointer-events: none;
-			z-index: -1;
-			background:
-				radial-gradient(80rem 80rem at 0% 0%,
-					rgba(var(--color-accent-rgb,147,177,181),0.55) 0%,
-					rgba(var(--color-accent-rgb,147,177,181),0.35) 35%,
-					rgba(var(--color-accent-rgb,147,177,181),0.0) 70%),
-				radial-gradient(80rem 80rem at 100% 100%,
-					rgba(var(--color-dark-rgb,11,46,51),0.55) 0%,
-					rgba(var(--color-dark-rgb,11,46,51),0.35) 35%,
-					rgba(var(--color-dark-rgb,11,46,51),0.0) 70%);
-			filter: blur(120px);
-		}
+		/* Background applied directly to landing container above */
 
 
 	</style>
