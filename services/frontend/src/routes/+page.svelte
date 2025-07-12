@@ -1,7 +1,6 @@
 	<script lang="ts">
 		import { browser } from '$app/environment';
 		import { onMount } from 'svelte';
-		import { goto } from '$app/navigation';
 		import { startPricingPreload } from '$lib/utils/pricing-loader';
 		import ChipSection from '$lib/landing/ChipSection.svelte';
 		import SiteHeader from '$lib/components/SiteHeader.svelte';
@@ -104,10 +103,10 @@
 			position: relative;
 			width: 100%;
 			background: linear-gradient(
-				90deg,
-				#010022 0%,
-				rgba(3, 1, 85, 0.75) 99%,
-				rgba(5, 1, 136, 0) 100%
+				180deg,
+				rgba(5, 1, 136, 0) 0%,
+				rgba(3, 1, 85, 0.75) 50%,
+				#010022 100%
 			);
 			color: var(--color-dark);
 			font-family:
@@ -164,7 +163,7 @@
 			font-size: clamp(2rem, 5vw, 2.5rem);
 			font-weight: 700;
 			margin: 0 0 1.5rem 0;
-			color: var(--color-dark);
+			color: #f5f9ff;
 			line-height: 1.2;
 		}
 
@@ -178,7 +177,7 @@
 
 		.subsection-content {
 			font-size: 1rem;
-			color: var(--color-dark);
+			color: #f5f9ff;
 			line-height: 1.7;
 			opacity: 0.8;
 		}

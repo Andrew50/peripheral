@@ -7,6 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"backend/internal/services/socket"
 )
 
 // TwitterWebhookPayload represents only the fields we need from Twitter webhook
@@ -77,7 +82,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Queue the extracted data for background processing
-		err = queueTwitterWebhookEvent(conn, extractedTweets)
+		err = processTwitterWebhookEvent(extractedTweets)
 		if err != nil {
 			log.Printf("Error queueing Twitter webhook event: %v", err)
 			http.Error(w, "Error processing webhook", http.StatusInternalServerError)
@@ -94,10 +99,41 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 	}
 }
 
-// queueTwitterWebhookEvent queues the extracted tweet data for background processing
-func queueTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) error {
+// processTwitterWebhookEvent processes the extracted tweet data
+func processTwitterWebhookEvent(tweets []ExtractedTweetData) error {
 	fmt.Println("queueTwitterWebhookEvent extractedTweets", tweets)
+	for _, tweet := range tweets {
+		// Extract ticker symbols from the tweet text
+		tickers := extractTickersFromTweet(tweet.Text)
+
+		socket.SendAlertToUser(1, socket.AlertMessage{
+			AlertID:    1,
+			Timestamp:  time.Now().Unix() * 1000,
+			SecurityID: 1,
+			Message:    fmt.Sprintf("@%s: %s", tweet.Username, tweet.Text),
+			Channel:    "alert",
+			Tickers:    tickers,
+		})
+	}
 	return nil
+}
+func extractTickersFromTweet(tweet string) []string {
+	// Regex pattern to match $ followed by 1-6 alphanumeric characters, stopping at space or end
+	pattern := `\$([A-Za-z0-9]{1,6})(?:\s|$)`
+	re := regexp.MustCompile(pattern)
+
+	matches := re.FindAllStringSubmatch(tweet, -1)
+	var tickers []string
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			// Convert to uppercase as ticker symbols are typically uppercase
+			ticker := strings.ToUpper(match[1])
+			tickers = append(tickers, ticker)
+		}
+	}
+
+	return tickers
 }
 
 // twitterWebhookHandler is the HTTP handler wrapper
