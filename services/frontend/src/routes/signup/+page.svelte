@@ -11,9 +11,8 @@
 
 <SiteHeader {isAuthenticated} />
 
-<Auth loginMenu={false} />
+<Auth mode="signup" />
 
 <ChipSection />
-
 
 <SiteFooter />

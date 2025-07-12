@@ -48,7 +48,6 @@ export const load = async ({ cookies, url }: RequestEvent) => {
 
 		// Token is valid, get user info from cookies for client
 		const profilePic = cookies.get('profilePic') || '';
-		const username = cookies.get('username') || '';
 
 		return {
 			isAuthenticated: true,
@@ -56,7 +55,6 @@ export const load = async ({ cookies, url }: RequestEvent) => {
 			sharedConversationId: null,
 			user: {
 				profilePic,
-				username,
 				authToken // Pass to client for API calls
 			}
 		};

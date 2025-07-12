@@ -610,6 +610,7 @@ class AccessorStrategyEngine:
                 'float': float,
                 'int': int,
                 'str': str,
+                'bool': bool,
                 'abs': abs,
                 'max': max,
                 'min': min,

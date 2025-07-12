@@ -280,16 +280,6 @@
 		margin-bottom: clamp(2px, 0.5vw, 4px);
 	}
 
-	.ticker {
-		font-size: clamp(14px, 1.5vw, 16px);
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.timestamp {
-		color: var(--text-secondary);
-		margin-top: clamp(1px, 0.3vw, 2px);
-	}
 
 	.section {
 		padding: clamp(2px, 0.5vw, 4px) 0;

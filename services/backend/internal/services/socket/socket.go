@@ -51,7 +51,7 @@ type Client struct {
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
 	// userID associated with this client connection
-	userID               int
+	userID int
 }
 
 /*
@@ -100,11 +100,43 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 	}
 }
 
+type ChatInitializationUpdate struct {
+	Type           string `json:"type"`
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+}
+
+func SendChatInitializationUpdate(userID int, messageID string, conversationID string) {
+	chatInitializationUpdate := ChatInitializationUpdate{
+		Type:           "ChatInitializationUpdate",
+		MessageID:      messageID,
+		ConversationID: conversationID,
+	}
+	jsonData, err := json.Marshal(chatInitializationUpdate)
+	if err != nil {
+		////fmt.Printf("Error marshaling chat initialization update: %v\n", err)
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		////fmt.Printf("SendChatInitializationUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+	select {
+	case client.send <- jsonData:
+		////fmt.Printf("Sent chat initialization update to user %d: '%s'\n", userID, messageID)
+	default:
+		////fmt.Printf("SendChatInitializationUpdate: send channel blocked or closed for userID: %d. Dropping chat initialization update.\n", userID)
+	}
+}
+
 // FunctionStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
 // It contains a user-friendly message describing the current step.
 type FunctionStatusUpdate struct {
-	Type        string `json:"type"` // Will be "function_status"
+	Type        string `json:"type"` // Will be "FunctionStatus"
 	UserMessage string `json:"userMessage"`
 }
 
@@ -118,7 +150,7 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 	}
 
 	statusUpdate := FunctionStatusUpdate{
-		Type:        "function_status",
+		Type:        "FunctionStatus",
 		UserMessage: messageToSend,
 	}
 
@@ -422,8 +454,8 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 		buffer:              10000,
 		loopRunning:         false,
 		subscribedChannels:  make(map[string]struct{}),
-		lastTickTime:          time.Time{},
-		userID:               userID,
+		lastTickTime:        time.Time{},
+		userID:              userID,
 	}
 
 	// Store the client in the userToClient map

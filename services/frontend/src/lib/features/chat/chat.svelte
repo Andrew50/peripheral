@@ -37,8 +37,7 @@
 	import {
 		functionStatusStore,
 		titleUpdateStore,
-		type FunctionStatusUpdate,
-		type TitleUpdate,
+		setMessageIdUpdateCallback,
 		sendChatQuery
 	} from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
@@ -480,12 +479,17 @@
 			messagesContainer.addEventListener('click', handleTickerButtonClick);
 		}
 
+		// Setup message ID update callback
+		setMessageIdUpdateCallback(handleMessageIdUpdate);
+
 		// Cleanup listener on component destroy
 		return () => {
 			document.removeEventListener('click', handleClickOutside); // Clean up click outside listener
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
 			}
+			// Clean up callback
+			setMessageIdUpdateCallback(null);
 		};
 	});
 
@@ -578,7 +582,7 @@
 
 			// <-- Set initial status immediately -->
 			functionStatusStore.set({
-				type: 'function_status',
+				type: 'FunctionStatus',
 				userMessage: 'Thinking...'
 			});
 
@@ -642,17 +646,6 @@
 					}
 				}
 
-				// Update the temporary user message with the real backend message ID
-				if (typedResponse.message_id) {
-					messagesStore.update((current) =>
-						current.map((msg) =>
-							msg.message_id === userMessage.message_id
-								? { ...msg, message_id: typedResponse.message_id! }
-								: msg
-						)
-					);
-				}
-
 				// Use timestamps from backend response if available, otherwise use current time
 				const messageTimestamp = typedResponse.timestamp
 					? new Date(typedResponse.timestamp)
@@ -701,37 +694,22 @@
 
 				// Check if the error contains backend response data with messageID and conversationID
 				let errorMessageId = 'temp_error_' + Date.now();
-				let shouldUpdateUserMessage = false;
-				let shouldReloadConversations = false;
 
 				// Try to extract backend response data from error
 				if (error.response && typeof error.response === 'object') {
 					if (error.response.message_id) {
-						shouldUpdateUserMessage = true;
 						errorMessageId = error.response.message_id + '_response';
 					}
 					if (error.response.conversation_id && !currentConversationId) {
 						currentConversationId = error.response.conversation_id;
 						backendConversationId = error.response.conversation_id;
-						shouldReloadConversations = true;
 					}
 				}
 
-				// Update the temporary user message with real backend message ID if available
-				if (shouldUpdateUserMessage && error.response?.message_id) {
-					messagesStore.update((current) =>
-						current.map((msg) =>
-							msg.message_id === userMessage.message_id
-								? { ...msg, message_id: error.response.message_id, status: 'error' }
-								: msg
-						)
-					);
-				}
+				// Note: User message ID updates are now handled via ChatInitializationUpdate websocket message
 
-				// Try to clean up pending message on backend for network errors (only if we don't have a real message ID)
-				if (!shouldUpdateUserMessage) {
-					await cleanupPendingMessage(currentProcessingQuery);
-				}
+				// Try to clean up pending message on backend for network errors
+				await cleanupPendingMessage(currentProcessingQuery);
 
 				const errorMessage: Message = {
 					message_id: errorMessageId,
@@ -751,37 +729,22 @@
 
 			// Check if the error contains backend response data with messageID and conversationID
 			let errorMessageId = 'temp_error_' + Date.now();
-			let shouldUpdateUserMessage = false;
-			let shouldReloadConversations = false;
 
 			// Try to extract backend response data from error
 			if (error.response && typeof error.response === 'object') {
 				if (error.response.message_id) {
-					shouldUpdateUserMessage = true;
 					errorMessageId = error.response.message_id + '_response';
 				}
 				if (error.response.conversation_id && !currentConversationId) {
 					currentConversationId = error.response.conversation_id;
 					backendConversationId = error.response.conversation_id;
-					shouldReloadConversations = true;
 				}
 			}
 
-			// Update the temporary user message with real backend message ID if available
-			if (shouldUpdateUserMessage && error.response?.message_id) {
-				messagesStore.update((current) =>
-					current.map((msg) =>
-						msg.message_id === userMessage.message_id
-							? { ...msg, message_id: error.response.message_id, status: 'error' }
-							: msg
-					)
-				);
-			}
+			// Note: User message ID updates are now handled via ChatInitializationUpdate websocket message
 
-			// Try to clean up pending message on backend (only if we don't have a real message ID)
-			if (!shouldUpdateUserMessage) {
-				await cleanupPendingMessage(currentProcessingQuery);
-			}
+			// Try to clean up pending message on backend
+			await cleanupPendingMessage(currentProcessingQuery);
 
 			// Add error message if we have a loading message
 			if (loadingMessage) {
@@ -1318,6 +1281,29 @@
 				typingTitleText = '';
 			}
 		}, typingSpeed);
+	}
+
+	// Setup callback for handling message ID updates
+	function handleMessageIdUpdate(messageId: string, conversationId: string) {
+		// Update the temporary user message with the real backend message ID
+		messagesStore.update((current) =>
+			current.map((msg) => {
+				// Find the most recent temporary user message and update it
+				if (msg.sender === 'user' && msg.message_id.startsWith('temp_') && msg.status === 'pending') {
+					return {
+						...msg,
+						message_id: messageId,
+						status: 'pending' // Keep as pending until response is received
+					};
+				}
+				return msg;
+			})
+		);
+
+		// Update conversation ID if this is a new conversation
+		if (!currentConversationId && conversationId) {
+			currentConversationId = conversationId;
+		}
 	}
 
 	// Reactive block to handle title updates from websocket
