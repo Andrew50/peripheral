@@ -493,6 +493,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
+						PlotID:     backtestPlotChunkContent.PlotID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
 						Length:     plot.Length,
