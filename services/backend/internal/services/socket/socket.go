@@ -102,6 +102,31 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 	}
 }
 
+// SendAlertToAllUsers sends an alert to all connected users
+func SendAlertToAllUsers(alert AlertMessage) {
+	jsonData, err := json.Marshal(alert)
+	if err != nil {
+		fmt.Println("Error marshaling global alert:", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	defer UserToClientMutex.RUnlock()
+
+	userCount := 0
+	for _, client := range UserToClient {
+		if client != nil {
+			select {
+			case client.send <- jsonData:
+				userCount++
+			default:
+			}
+		}
+	}
+
+	fmt.Printf("Sent global alert to %d users: %s\n", userCount, alert.Message)
+}
+
 type ChatInitializationUpdate struct {
 	Type           string `json:"type"`
 	MessageID      string `json:"message_id"`
