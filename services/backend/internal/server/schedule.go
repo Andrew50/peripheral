@@ -4,6 +4,7 @@ import (
 	"backend/internal/data"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
+	"backend/internal/services/screener"
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
@@ -185,10 +186,20 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
+		// COMMENTED OUT: Aggregates initialization disabled
+		/*
+			{
+				Name:           "InitAggregates",
+				Function:       initAggregates,
+				Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
+				RunOnInit:      true,
+				SkipOnWeekends: true,
+			},
+		*/
 		{
-			Name:           "InitAggregates",
-			Function:       initAggregates,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
+			Name:           "StartScreenerUpdater",
+			Function:       screener.StartScreenerUpdater,
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
@@ -342,13 +353,13 @@ func (s *JobScheduler) Start() chan struct{} {
 	s.loadJobLastRunTimes()
 
 	// Add 10-minute delay before starting scheduler operations
-	log.Printf("⏰ Scheduler initialized - 30 seconds before starting job execution...")
+	log.Printf("⏰ Scheduler initialized - 5 seconds before starting job execution...")
 
 	go func() {
-		// Wait 30 seconds before starting scheduler operations
+		// Wait 5 seconds before starting scheduler operations
 		select {
-		case <-time.After(30 * time.Second):
-			log.Printf("🚀 Starting scheduler operations after 10-minute delay")
+		case <-time.After(5 * time.Second):
+			log.Printf("🚀 Starting scheduler operations after 5-second delay")
 		case <-s.StopChan:
 			log.Printf("⏹️ Scheduler stopped during startup delay")
 			return
@@ -393,7 +404,7 @@ func (s *JobScheduler) Start() chan struct{} {
 	return s.StopChan
 }
 
-// runInitJobs runs all jobs that are marked to run on initialization
+// runInitJobs runs all jobs that are marked to run on initialization, doesnt respect SkipOnWeekends
 func (s *JobScheduler) runInitJobs() {
 	for _, job := range s.Jobs {
 		if job.RunOnInit {
@@ -576,6 +587,8 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	}
 }
 
+// COMMENTED OUT: initAggregates function disabled
+/*
 // initAggregates initializes the aggregates
 func initAggregates(conn *data.Conn) error {
 	if useBS {
@@ -584,6 +597,7 @@ func initAggregates(conn *data.Conn) error {
 	}
 	return nil
 }
+*/
 
 // startAlertLoop starts the alert loop if not already running
 // TODO: Currently commented out - see JobList for related commented job

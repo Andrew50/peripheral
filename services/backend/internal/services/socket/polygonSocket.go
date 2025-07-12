@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 
 	//"log"
 	"sync"
@@ -38,6 +37,27 @@ var (
 	lastTimestampUpdate time.Time
 	timestampMutex      sync.RWMutex
 )
+
+// Latest price cache for alerts
+var (
+	latestPrices      = make(map[int]float64) // securityID -> latest price
+	latestPricesMutex sync.RWMutex
+)
+
+// GetLatestPrice returns the latest price for a given security ID
+func GetLatestPrice(securityID int) (float64, bool) {
+	latestPricesMutex.RLock()
+	defer latestPricesMutex.RUnlock()
+	price, exists := latestPrices[securityID]
+	return price, exists
+}
+
+// updateLatestPrice updates the latest price for a security ID
+func updateLatestPrice(securityID int, price float64) {
+	latestPricesMutex.Lock()
+	defer latestPricesMutex.Unlock()
+	latestPrices[securityID] = price
+}
 
 func broadcastTimestamp() {
 	timestampMutex.Lock()
@@ -152,15 +172,27 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					ExchangeID: int(msg.Exchange),
 					Channel:    fastChannelName,
 				}
-				//if alerts.IsAggsInitialized() {
-				if useAlerts {
-					if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
-						// Only log non-initialization errors to reduce noise
-						if !strings.Contains(err.Error(), "aggregates not yet initialized") {
-							fmt.Printf("Error appending tick: %v\n", err)
+
+				// Update latest price cache with trade price
+				updateLatestPrice(securityID, msg.Price)
+
+				// COMMENTED OUT: appendTick call disabled - alerts will be processed directly from ticks
+				/*
+					//if alerts.IsAggsInitialized() {
+					if useAlerts {
+						if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
+							// Only log non-initialization errors to reduce noise
+							if !strings.Contains(err.Error(), "aggregates not yet initialized") {
+								fmt.Printf("Error appending tick: %v\n", err)
+							}
 						}
 					}
-				}
+				*/
+				// Process alerts directly from tick data
+				/*if useAlerts {
+					// Update tick prices and process alerts
+					alerts.ProcessTickUpdate(conn, securityID, data.Price)
+				}*/
 				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
 					break
 				}

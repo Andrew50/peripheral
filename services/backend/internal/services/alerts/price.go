@@ -7,17 +7,14 @@ import (
 )
 
 func processPriceAlert(conn *data.Conn, alert Alert) error {
-	socket.AggDataMutex.RLock()         // Acquire read lock
-	defer socket.AggDataMutex.RUnlock() // Release read lock
-	ds := socket.AggData[*alert.SecurityID]
-	if ds == nil {
-		return fmt.Errorf("market data not found for security ID %d", *alert.SecurityID)
-	}
-	ds.SecondDataExtended.Mutex.RLock()
-	defer ds.SecondDataExtended.Mutex.RUnlock()
 	directionPtr := alert.Direction
 	if directionPtr != nil {
-		price := ds.SecondDataExtended.Aggs[socket.AggsLength-1][1]
+		// Get the latest price from the websocket price cache
+		price, exists := socket.GetLatestPrice(*alert.SecurityID)
+		if !exists {
+			return fmt.Errorf("no price data available for security ID %d", *alert.SecurityID)
+		}
+
 		if *directionPtr {
 			if price >= *alert.Price {
 				if err := dispatchAlert(conn, alert); err != nil {

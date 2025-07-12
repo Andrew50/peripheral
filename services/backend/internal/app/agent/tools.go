@@ -4,6 +4,7 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
+	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -697,6 +698,63 @@ var (
 			StatusMessage: "Searching Twitter...",
 		},
 		// [END SEARCH TOOLS]
+		// [SCREENER TOOLS]
+		"runScreener": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runScreener",
+				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"returnColumns": {
+							Type:        genai.TypeArray,
+							Description: "Array of column names to return in results. Available columns: security_id, open, high, low, close, wk52_low, wk52_high, pre_market_open, pre_market_high, pre_market_low, pre_market_close, market_cap, sector, industry, pre_market_change, pre_market_change_pct, extended_hours_change, extended_hours_change_pct, change_1_pct, change_15_pct, change_1h_pct, change_4h_pct, change_1d_pct, change_1w_pct, change_1m_pct, change_3m_pct, change_6m_pct, change_ytd_1y_pct, change_5y_pct, change_10y_pct, change_all_time_pct, change_from_open, change_from_open_pct, price_over_52wk_high, price_over_52wk_low, rsi, dma_200, dma_50, price_over_50dma, price_over_200dma, beta_1y_vs_spy, beta_1m_vs_spy, volume, avg_volume_1m, dollar_volume, avg_dollar_volume_1m, pre_market_volume, pre_market_dollar_volume, relative_volume_14, pre_market_vol_over_14d_vol, range_1m_pct, range_15m_pct, range_1h_pct, day_range_pct, volatility_1w, volatility_1m, pre_market_range_pct. At least one column is required.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+						"orderBy": {
+							Type:        genai.TypeString,
+							Description: "Optional. Column name to order results by. Must be one of the available columns.",
+						},
+						"sortDirection": {
+							Type:        genai.TypeString,
+							Description: "Optional. Sort direction for ordering results. Must be 'ASC' or 'DESC' (case insensitive). Defaults to 'ASC' if not specified.",
+						},
+						"limit": {
+							Type:        genai.TypeInteger,
+							Description: "Maximum number of results to return. Must be between 1 and 10,000. Defaults to 100 if not specified.",
+						},
+						"filters": {
+							Type:        genai.TypeArray,
+							Description: "Array of filter objects to apply to the screener query. Each filter specifies a column, operator, and value.",
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"column": {
+										Type:        genai.TypeString,
+										Description: "Column name to filter on. Must be one of the available screener columns.",
+									},
+									"operator": {
+										Type:        genai.TypeString,
+										Description: "Comparison operator. Options: '=', '!=', '>', '<', '>=', '<=', 'LIKE' (for strings), 'IN' (for arrays), 'topn', 'bottomn', 'topn_pct', 'bottomn_pct' (for ranking).",
+									},
+									"value": {
+										Type:        genai.TypeUnspecified,
+										Description: "Value to compare against. Type must match column type. For IN operator, use array. For ranking operators (topn/bottomn), use positive integer.",
+									},
+								},
+								Required: []string{"column", "operator", "value"},
+							},
+						},
+					},
+					Required: []string{"returnColumns", "limit"},
+				},
+			},
+			Function:      wrapWithContext(screener.GetScreenerData),
+			StatusMessage: "Screening stocks...",
+		},
+		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
