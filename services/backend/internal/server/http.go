@@ -829,6 +829,7 @@ func StartServer(conn *data.Conn) {
 	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
 	http.Handle("/healthz", withPanicRecovery(HealthCheck()))
 	http.Handle("/billing/webhook", withPanicRecovery(stripeWebhookHandler(conn)))
+	http.Handle("/webhook/twitterapi/v1", withPanicRecovery(twitterWebhookHandler(conn)))
 
 	server := &http.Server{
 		Addr:         ":5058",
