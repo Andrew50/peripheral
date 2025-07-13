@@ -18,6 +18,8 @@ import threading
 from contextlib import contextmanager
 
 from openai import OpenAI
+from google import genai 
+from google.genai import types
 from validator import SecurityValidator, SecurityError, StrategyComplianceError
 from strategy_engine import AccessorStrategyEngine
 
@@ -55,6 +57,7 @@ class StrategyGenerator:
         self.validator = SecurityValidator()
         self.openai_client = None
         self._init_openai_client()
+        self._init_gemini_client()
         
     def _init_openai_client(self):
         """Initialize OpenAI client"""
@@ -64,6 +67,15 @@ class StrategyGenerator:
         
         self.openai_client = OpenAI(api_key=api_key)
         logger.info("OpenAI client initialized successfully")
+    
+    def _init_gemini_client(self):
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+        
+        self.gemini_client = genai.Client(api_key=api_key)
+        logger.info("Gemini client initialized successfully")
+
     
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
@@ -87,16 +99,72 @@ class StrategyGenerator:
             logger.error(f"❌ CRITICAL: Could not fetch current filter values from database: {e}")
             raise RuntimeError(f"Strategy generation requires database connection to get current filter values: {e}") from e
     
-    def _get_system_instruction(self) -> str:
+    def _parse_filter_needs_response(self, response) -> Dict[str, bool]:
+        """Parse the Gemini API response to determine which filters are needed"""
+        try:
+            response_text = response.text.strip()
+            # Try to extract JSON if it's wrapped in code blocks
+            if '```json' in response_text:
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                if json_match:
+                    response_text = json_match.group(1)
+            elif '```' in response_text:
+                json_match = re.search(r'```\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                if json_match:
+                    response_text = json_match.group(1)
+            
+            filter_needs = json.loads(response_text)
+            logger.info(f"Filter needs determined: {filter_needs}")
+            return filter_needs
+        except (json.JSONDecodeError, AttributeError) as e:
+            logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
+            # Default to needing all filters if parsing fails
+            return {"sectors": True, "industries": True, "primary_exchanges": True}
+    
+    def _get_system_instruction(self, prompt: str) -> str:
         """Get system instruction for OpenAI code generation with current database filter values"""
+        contents = [
+            types.Content(role="user", parts=[
+                types.Part.from_text(text=prompt),
+            ])
+        ]
+        generateContentConfig = types.GenerateContentConfig(
+            thinking_config = types.ThinkingConfig(
+                thinking_budget=0
+            ),
+            system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then 
+                you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. 
+                - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
+                - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
+                - primary_exchanges: NYSE, NASDAQ, ARCA
+                ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
+        )
+        response = self.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=contents,
+            config=generateContentConfig,
+        )
+    
+        # Parse the JSON response to determine which filters are needed
+        filter_needs = self._parse_filter_needs_response(response)
         
-        # Get current filter values from database
-        filter_values = self._get_current_filter_values_from_db()
+        # Only get filter values from database if they're needed
+        filter_values = {}
+        if any(filter_needs.values()):
+            db_filter_values = self._get_current_filter_values_from_db()
+            
+            # Only include the filter values that are marked as needed
+            if filter_needs.get("sectors", False):
+                filter_values['sectors'] = db_filter_values['sectors']
+            if filter_needs.get("industries", False):
+                filter_values['industries'] = db_filter_values['industries']
+            if filter_needs.get("primary_exchanges", False):
+                filter_values['primary_exchanges'] = db_filter_values['primary_exchanges']
         
-        # Format filter values for the prompt
-        sectors_str = '", "'.join(filter_values['sectors'])
-        industries_str = '", "'.join(filter_values['industries'])
-        exchanges_str = '", "'.join(filter_values['primary_exchanges'])
+        # Format filter values for the prompt (only include if they exist)
+        sectors_str = '", "'.join(filter_values.get('sectors', [])) if filter_values.get('sectors') else ""
+        industries_str = '", "'.join(filter_values.get('industries', [])) if filter_values.get('industries') else ""
+        exchanges_str = '", "'.join(filter_values.get('primary_exchanges', [])) if filter_values.get('primary_exchanges') else ""
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
@@ -104,13 +172,9 @@ Allowed imports:
 - pandas, numpy, datetime, math, plotly. 
 - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
-FUNCTION VALIDATION - Only these functions exist, automatically available in the execution environment:
+FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
 - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
 - get_general_data(columns, filters) → pandas.DataFrame
-
-
-❌ THESE FUNCTIONS DO NOT EXIST:
-get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
@@ -122,9 +186,9 @@ CRITICAL REQUIREMENTS:
      
      SUPPORTED TIMEFRAMES:
      • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
-     • Custom aggregations: "5m", "10m", "15m", "30m" (from 1-minute data)
-                           "2h", "4h", "6h", "8h" (from 1-hour data)  
-                           "2w", "3w" (from 1-week data)
+     • Custom aggregations: "5m", "10m", "15m", "30m"
+                           "2h", "4h", "6h", "8h"
+                           "2w", "3w"
      
      TIMEFRAME SELECTION GUIDE:
      - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
@@ -142,23 +206,23 @@ CRITICAL REQUIREMENTS:
   * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
      Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
   * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
-     Columns: ticker, name, sector, industry, market_cap,  primary_exchange, active, description, total_shares
+     Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
-AVAILABLE FILTERS (use in filters parameter):
-- sector: "{sectors_str}"
-- industry: "{industries_str}"
-- primary_exchange: "{exchanges_str}"
+AVAILABLE FILTERS (use in filters parameter):{f'''
+- sector: "{sectors_str}"''' if sectors_str else ""}{f'''
+- industry: "{industries_str}"''' if industries_str else ""}{f'''
+- primary_exchange: "{exchanges_str}"''' if exchanges_str else ""}
 - market_cap_min: float (e.g., 1000000000 for $1B minimum)
 - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-FILTER EXAMPLES:
-- Technology stocks: filters={{"sector": "Technology"}}
-- Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}
-- NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}
+FILTER EXAMPLES:{f'''
+- Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
+- Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
+- NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
+- Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
+- NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
 - Small cap stocks: filters={{"market_cap_max": 2000000000}}
 - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
-
-EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - don't worry about this.
 
 TICKER USAGE:
 - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
@@ -170,18 +234,17 @@ TICKER USAGE:
 
 CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 - DO NOT use .tail(1) or .head(1) to limit results per ticker
-- Return every occurrence that meets your criteria across the entire dataset
+- Return every occurrence that meets the criteria across the entire datasetç
 - Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
 
 CRITICAL: INSTANCE STRUCTURE
-- DO NOT include 'signal': True field - if returned, it inherently met criteria
 - Include relevant price data: 'open', 'close', 'entry_price' when available
                 - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
 - REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
 
 CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
 - MUST include ALL calculated indicator values that triggered your strategy
-- Examples: 'rsi': 75.2, 'macd': 0.45, 'volume_ratio': 2.3, 'gap_percent': 4.1
+- Examples: 'volume_ratio': 2.3, 'gap_percent': 4.1
 - Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
 - Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
 - Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
@@ -193,12 +256,6 @@ CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM + 1 BAR BUFFER (NO ADDITIONAL BUFFER
 - Examples: RSI needs 14 bars → min_bars=15, MACD needs 26 bars → min_bars=27
 - If you need multiple indicators, use the MAXIMUM of their individual minimums
 - Example: RSI(14) + SMA(50) strategy → min_bars=51 (not 64, not 55)
-
-DATA VALIDATION:
-- Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
-- Use proper DataFrame column checks when needed: if 'column_name' in df.columns
-- Handle missing data gracefully with pandas methods like dropna()
-- Return empty list [] when no valid data is available
 
 CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
 - Always convert calculated columns to numeric before groupby operations:
@@ -232,47 +289,7 @@ ERROR HANDLING NOTE:
 
 EXAMPLE PATTERNS:
 ```python
-# Example 1: Volume Breakout - demonstrates returning ALL instances (critical concept)
-def strategy():
-    instances = []
-    
-    bar_data = get_bar_data(
-        timeframe="1d",
-        columns=["ticker", "timestamp", "close", "volume"],
-        min_bars=20,  # Need 20 bars for volume average calculation
-        filters={{"market_cap_min": 1000000000}}  # Large cap stocks
-    )
-    
-    if bar_data is None or len(bar_data) == 0:
-        return instances
-    
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
-    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-    
-    # Calculate 20-day volume average
-    df['volume_avg_20'] = df.groupby('ticker')['volume'].rolling(20).mean().reset_index(0, drop=True)
-    df = df.dropna()  # Remove rows with NaN values
-    df['volume_ratio'] = df['volume'] / df['volume_avg_20']
-    
-    # CRITICAL: Find ALL volume breakouts (no .tail(1) or .groupby().last())
-    breakouts = df[df['volume_ratio'] >= 2.0]  # Volume 2x average
-    
-    for _, row in breakouts.iterrows():
-        instances.append({{
-            'ticker': row['ticker'],
-            'timestamp': int(row['timestamp']),
-            'entry_price': float(row['close']),
-            # CRITICAL: Include ALL calculated indicator values that triggered the signal
-            'volume_ratio': round(float(row['volume_ratio']), 3),
-            'volume': int(row['volume']),
-            'volume_avg_20': int(row['volume_avg_20']),
-            'volume_breakout_strength': round(float(row['volume_ratio'] - 2.0), 3),
-            'score': round(min(1.0, (row['volume_ratio'] - 2.0) / 3.0), 3)
-        }})
-        
-    return instances
-
-# Example 2: Multi-timeframe RSI + Trend Strategy - demonstrates proper indicator inclusion
+# Example 1: Multi-timeframe RSI + Trend Strategy
 def strategy():
     instances = []
     
@@ -340,7 +357,7 @@ def strategy():
     
     return instances
 
-# Example 3: Gap Strategy with Specific Tickers - demonstrates ticker filtering and gap calculation
+# Example 2: Gap Strategy with Specific Tickers
 def strategy():
     instances = []
     
@@ -376,10 +393,8 @@ def strategy():
             'ticker': row['ticker'],
             'timestamp': int(row['timestamp']),
             'entry_price': float(row['open']),
-            # CRITICAL: Include calculated values that define the signal
             'gap_percent': round(float(row['gap_percent']), 3),
             'prev_close': round(float(row['prev_close']), 2),
-            'gap_direction': 'up' if row['gap_percent'] > 0 else 'down',
             'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
             'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
         }})
@@ -388,10 +403,8 @@ def strategy():
 ```
 
 COMMON MISTAKES TO AVOID:
-- qualifying_instances = df[condition].groupby('ticker').tail(1) - limits to 1 per ticker
 - latest_df = df.groupby('ticker').last() - only latest data
 - df.drop_duplicates(subset=['ticker']) - this removes valid instances
-- 'signal': True - unnecessary field, if returned it inherently met criteria
 - No 'score' field - score is required for ranking
 - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
@@ -399,7 +412,7 @@ COMMON MISTAKES TO AVOID:
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
 - BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
 - NO DATE FILTERING: Using only daily data for precise stop timing
-- Appending instances only after exit is determined – always record the entry as an instance, even when you can't yet determine an exit.
+- Appending instances only after exit is determined – ALWAYS record the entry as an instance, even when you can't yet determine an exit.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
@@ -423,10 +436,6 @@ PATTERN RECOGNITION:
 - Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
   min_bars=1 (current data only), Score: Based on fundamental strength
 
-TICKER EXTRACTION FROM PROMPTS:
-- If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
-- If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
-
 SECURITY RULES:
 - Only use whitelisted imports
 - CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
@@ -439,9 +448,10 @@ CODE OPTIMIZATIONS:
 - Minimize the number of shift() and index manipulation operations
 
 DATA VALIDATION:
-- Always validate DataFrame columns exist before using them
-- Check for None/empty data at every step
-- Use proper data type conversions (int, float, str)
+- Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
+- Use proper DataFrame column checks when needed: if 'column_name' in df.columns
+- Handle missing data gracefully with pandas methods like dropna()
+- Return empty list [] when no valid data is available
 - Handle edge cases like division by zero
 
 **CRITICAL STOP LOSS IMPLEMENTATION**: 
@@ -478,8 +488,10 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
 - Do not worry about the styling of the plot.
 - Plot equity curves of the P/L performance of strategies overtime.
-- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title for styling purposes.
+- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
 - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+- If the plot refers to several tickers, do not include this.
+
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (required) (e.g., "MRNA", "AAPL")
@@ -490,12 +502,11 @@ RETURN FORMAT:
   * Order these fields logically that would make it best for the reader to understand the table of instances.
 - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
-- DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
 - ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
 - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
-Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
+Generate clean, robust Python code."""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
@@ -648,7 +659,7 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
         Generate strategy code using OpenAI with optimized prompts
         """
         try:
-            system_instruction = self._get_system_instruction()
+            system_instruction = self._get_system_instruction(prompt)
             
             # Create concise user prompt based on context
             if existing_strategy:
@@ -674,41 +685,34 @@ Generate clean, robust Python code that returns ALL matching instances and lets 
                 user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
                 user_prompt += f"\n- Ensure proper error handling for edge cases"
             
-            # Use only o3 model as requested
-            models_to_try = [
-                ("o3", None),                # o3 model only
-            ]
-            
+            model_name = "o3"
             last_error = None
             
-            for model_name, max_tokens in models_to_try:
-                try:
-                    
-                    logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
-                    
-                    response = self.openai_client.responses.create(
-                        model=model_name,
-                        reasoning={"effort": "low"},
-                        input=f"{user_prompt}",
-                        instructions=f"{system_instruction}",
-                        user=f"user:0",
-                        timeout=120.0  # 2 minute timeout for other models
-                    )
-                    
-                    strategy_code = response.output_text
-                    # Extract Python code from response
-                    strategy_code = self._extract_python_code(strategy_code)
-                    
-                    logger.info(f"Generated strategy code with {model_name} ({len(strategy_code)} characters)")
-                    return strategy_code
-                    
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"Model {model_name} failed: {e}")
-                    continue
+            try:
+                
+                logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
+                
+                response = self.openai_client.responses.create(
+                    model=model_name,
+                    reasoning={"effort": "low"},
+                    input=f"{user_prompt}",
+                    instructions=f"{system_instruction}",
+                    user=f"user:0",
+                    timeout=120.0  # 2 minute timeout for other models
+                )
+                
+                strategy_code = response.output_text
+                # Extract Python code from response
+                strategy_code = self._extract_python_code(strategy_code)
+                
+                logger.info(f"Generated strategy code with {model_name} ({len(strategy_code)} characters)")
+                return strategy_code
+                
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {model_name} failed: {e}")
             
-            # If all models failed, raise the last error
-            raise last_error if last_error else Exception("All models failed")
+            
             
         except Exception as e:
             logger.error(f"OpenAI code generation failed: {e}")

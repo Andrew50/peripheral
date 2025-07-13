@@ -9,14 +9,15 @@ import type { AlertData } from '$lib/utils/types/types';
 import { enqueueTick } from './streamHub';
 
 // Define the type for function status updates from backend (simplified)
-export type FunctionStatusUpdate = {
-	type: 'FunctionStatus';
-	userMessage: string;
+export type AgentStatusUpdate = {
+	messageType: 'AgentStatusUpdate';
+	type: string; // e.g., 'FunctionUpdate', 'WebSearch'
+	data: any; // The actual data - string for FunctionUpdate, object for WebSearch
 };
 
 // Define the type for title updates from backend
 export type TitleUpdate = {
-	type: 'title_update';
+	type: 'titleUpdate';
 	conversation_id: string;
 	title: string;
 };
@@ -31,7 +32,7 @@ export type ChatResponse = {
 };
 
 // Store to hold the current function status message
-export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
+export const agentStatusStore = writable<AgentStatusUpdate | null>(null);
 
 // Store to hold the latest title update
 export const titleUpdateStore = writable<TitleUpdate | null>(null);
@@ -171,14 +172,14 @@ export function connect() {
 		}
 
 		// Check message type first
-		if (data && data.type === 'FunctionStatus') {
-			const statusUpdate = data as FunctionStatusUpdate;
-			functionStatusStore.set(statusUpdate);
-			return; // Handled function status update
+		if (data && data.messageType === 'AgentStatusUpdate') {
+			const statusUpdate = data as AgentStatusUpdate;
+			agentStatusStore.set(statusUpdate);
+			return; // Handled agent status update
 		}
 
 		// Handle title updates
-		if (data && data.type === 'title_update') {
+		if (data && data.type === 'titleUpdate') {
 			const titleUpdate = data as TitleUpdate;
 			titleUpdateStore.set(titleUpdate);
 			return; // Handled title update
