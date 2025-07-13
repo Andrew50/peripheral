@@ -598,6 +598,13 @@ class AccessorStrategyEngine:
                 logger.error(f"Data accessor error in get_general_data(columns={columns}, filters={filters}): {e}")
                 logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
                 raise  # Re-raise to maintain error propagation
+        def bound_generate_equity_curve(instances: [], group_column=None):
+            try:
+                return self.data_accessor.generate_equity_curve(instances, group_column)
+            except Exception as e:
+                logger.error(f"Data accessor error in generate_equity_curve(instances={instances}, group_column={group_column}): {e}")
+                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                raise  # Re-raise to maintain error propagation
         
         safe_globals = {
             # Built-ins for safe execution (including __import__ for import statements)
@@ -636,6 +643,7 @@ class AccessorStrategyEngine:
             # Bound data accessor functions (use this engine's instance)
             'get_bar_data': bound_get_bar_data,
             'get_general_data': bound_get_general_data,
+            'generate_equity_curve': bound_generate_equity_curve,
             
             # Math and datetime - make datetime module fully available
             'datetime': datetime,
