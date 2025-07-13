@@ -28,7 +28,6 @@ jobs:
     - name: Detect changes
       id: changes
       run: |
-      run: |
         echo "🔍 Detecting changes..."
 
         # Default to HEAD~1 for single commit pushes
@@ -46,7 +45,7 @@ jobs:
           echo "Defaulting to $BASE_REF for diff"
         fi
 
-        
+
         # List changed files
         CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD)
         echo "📋 Changed files:"
