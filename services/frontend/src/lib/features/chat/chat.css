@@ -679,6 +679,9 @@
 	margin-bottom: 1rem;
 	background: transparent;
 	font-size: 0.8rem;
+	/* Slight rounding for table corners */
+	border-radius: 0.35rem;
+	overflow: hidden; /* Ensure borders follow the rounding */
 }
 
 .content-chunks th {
