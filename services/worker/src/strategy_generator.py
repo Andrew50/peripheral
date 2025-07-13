@@ -171,7 +171,6 @@ CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
 - Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
 
 CRITICAL: INSTANCE STRUCTURE
-- DO NOT include 'signal': True field - if returned, it inherently met criteria
 - Include relevant price data: 'open', 'close', 'entry_price' when available
                 - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
 - REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
@@ -223,7 +222,7 @@ ERROR HANDLING NOTE:
 
 EXAMPLE PATTERNS:
 ```python
-# Example 1: Volume Breakout - demonstrates returning ALL instances (critical concept)
+# Example 1: Volume Breakout
 def strategy():
     instances = []
     
@@ -263,7 +262,7 @@ def strategy():
         
     return instances
 
-# Example 2: Multi-timeframe RSI + Trend Strategy - demonstrates proper indicator inclusion
+# Example 2: Multi-timeframe RSI + Trend Strategy
 def strategy():
     instances = []
     
@@ -331,7 +330,7 @@ def strategy():
     
     return instances
 
-# Example 3: Gap Strategy with Specific Tickers - demonstrates ticker filtering and gap calculation
+# Example 3: Gap Strategy with Specific Tickers
 def strategy():
     instances = []
     
@@ -381,7 +380,6 @@ def strategy():
 COMMON MISTAKES TO AVOID:
 - latest_df = df.groupby('ticker').last() - only latest data
 - df.drop_duplicates(subset=['ticker']) - this removes valid instances
-- 'signal': True - unnecessary field, if returned it inherently met criteria
 - No 'score' field - score is required for ranking
 - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
 - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
