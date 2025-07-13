@@ -5,29 +5,26 @@ import { goto } from '$app/navigation';
 // AUTH TYPES
 // ============================================================================
 
-export interface AuthUser {
-	profilePic: string;
-	username: string;
+export interface User {
 	authToken: string;
+	profilePic: string;
 }
 
 export interface AuthLayoutData {
+	isAuthenticated: boolean;
 	isPublicViewing: boolean;
 	sharedConversationId: string | null;
-	isAuthenticated: boolean;
-	user: AuthUser | null;
+	user: User | null;
 }
 
 export interface LoginResponse {
 	token: string;
 	profilePic: string;
-	username: string;
 }
 
 export interface GoogleCallbackResponse {
 	token: string;
 	profilePic: string;
-	username: string;
 }
 
 // ============================================================================
@@ -43,7 +40,6 @@ export function logout(redirectPath: string = '/login') {
 
 	// Clear all session data
 	sessionStorage.removeItem('authToken');
-	sessionStorage.removeItem('username');
 	sessionStorage.removeItem('profilePic');
 
 	// Redirect to specified path
@@ -53,25 +49,24 @@ export function logout(redirectPath: string = '/login') {
 /**
  * Set auth cookies with consistent options
  */
-export function setAuthCookies(token: string, profilePic: string, username: string) {
-	if (!browser) return;
+export function setAuthCookies(token: string, profilePic: string) {
+	const domain = window.location.hostname;
+	const isSecure = window.location.protocol === 'https:';
+	const sameSite = 'lax';
+	const cookieOptions = `path=/; domain=${domain}; max-age=21600; samesite=${sameSite}${isSecure ? '; secure' : ''}`;
 
-	const cookieOptions = 'path=/; max-age=21600; SameSite=Lax'; // 6 hours
-
-	document.cookie = `authToken=${token}; ${cookieOptions}`;
+	document.cookie = `authToken=${encodeURIComponent(token)}; ${cookieOptions}`;
 	document.cookie = `profilePic=${encodeURIComponent(profilePic || '')}; ${cookieOptions}`;
-	document.cookie = `username=${encodeURIComponent(username || '')}; ${cookieOptions}`;
 }
 
 /**
  * Set sessionStorage with auth data
  */
-export function setAuthSessionStorage(token: string, profilePic: string, username: string) {
-	if (!browser) return;
-
-	sessionStorage.setItem('authToken', token);
-	sessionStorage.setItem('profilePic', profilePic || '');
-	sessionStorage.setItem('username', username || '');
+export function setAuthSessionStorage(token: string, profilePic: string) {
+	if (typeof sessionStorage !== 'undefined') {
+		sessionStorage.setItem('authToken', token);
+		sessionStorage.setItem('profilePic', profilePic || '');
+	}
 }
 
 /**
@@ -79,7 +74,7 @@ export function setAuthSessionStorage(token: string, profilePic: string, usernam
  */
 export function getCookie(name: string): string | null {
 	if (!browser) return null;
-	
+
 	const value = `; ${document.cookie}`;
 	const parts = value.split(`; ${name}=`);
 	if (parts.length === 2) {
@@ -95,9 +90,16 @@ export function getCookie(name: string): string | null {
  */
 export function getAuthState(): boolean {
 	if (!browser) return false;
-	
+
 	const sessionToken = sessionStorage.getItem('authToken');
 	const cookieToken = getCookie('authToken');
-	
+
 	return !!(sessionToken || cookieToken);
+}
+
+export function clearAuth() {
+	if (typeof sessionStorage !== 'undefined') {
+		sessionStorage.removeItem('authToken');
+		sessionStorage.removeItem('profilePic');
+	}
 }

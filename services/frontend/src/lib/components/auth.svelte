@@ -11,8 +11,9 @@
 
 	const dispatch = createEventDispatcher();
 
-	export let loginMenu: boolean = false;
+	export let mode: 'login' | 'signup' = 'login';
 	export let modalMode: boolean = false;
+	export let inviteCode: string = '';
 	let email = '';
 	let password = '';
 	let errorMessage = writable('');
@@ -30,13 +31,13 @@
 	});
 
 	// Clear error message and reset form when switching between login/signup
-	$: if (loginMenu !== undefined) {
+	$: if (mode) {
 		errorMessage.set('');
 	}
 
 	onMount(() => {
 		if (browser) {
-			document.title = loginMenu ? 'Login | Peripheral' : 'Sign Up |	 Peripheral';
+			document.title = mode === 'login' ? 'Login | Peripheral' : 'Sign Up | Peripheral';
 			isLoaded = true;
 
 			// Check for redirect parameters
@@ -48,7 +49,7 @@
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			if (loginMenu) {
+			if (mode === 'login') {
 				signIn(email, password);
 			} else {
 				signUp(email, password);
@@ -66,7 +67,7 @@
 	// Handle successful authentication with deep linking
 	function handleAuthSuccess(user: LoginResponse) {
 		// Dispatch success event for modal usage
-		dispatch('authSuccess', { type: loginMenu ? 'login' : 'signup', user });
+		dispatch('authSuccess', { type: mode, user });
 
 		// Handle deep linking
 		if (redirectType === 'checkout' && redirectPlan) {
@@ -84,8 +85,8 @@
 			const r = await publicRequest<LoginResponse>('login', { email: email, password: password });
 			if (browser) {
 				// Set auth data using centralized utilities
-				setAuthCookies(r.token, r.profilePic, r.username);
-				setAuthSessionStorage(r.token, r.profilePic, r.username);
+				setAuthCookies(r.token, r.profilePic);
+				setAuthSessionStorage(r.token, r.profilePic);
 			}
 
 			handleAuthSuccess(r);
@@ -109,7 +110,14 @@
 	async function signUp(email: string, password: string) {
 		loading = true;
 		try {
-			await publicRequest('signup', { email: email, password: password });
+			const signupData: any = { email: email, password: password };
+
+			// Include invite code if provided
+			if (inviteCode && inviteCode.trim() !== '') {
+				signupData.inviteCode = inviteCode.trim();
+			}
+
+			await publicRequest('signup', signupData);
 			await signIn(email, password);
 		} catch (error) {
 			console.log(error);
@@ -155,6 +163,11 @@
 			errorMessage.set('Failed to initialize Google login');
 		}
 	}
+
+	// Exported method to set invite code from parent component
+	export function setInviteCode(code: string) {
+		inviteCode = code;
+	}
 </script>
 
 <!-- Use consistent light theme design -->
@@ -164,14 +177,14 @@
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
-				{loginMenu ? 'Sign into Peripheral' : 'Execute with Peripheral'}
+				{mode === 'login' ? 'Sign into Peripheral' : 'Execute with Peripheral'}
 			</h1>
 		</div>
 
 		<!-- Auth Form -->
 		<form
 			on:submit|preventDefault={() => {
-				if (loginMenu) {
+				if (mode === 'login') {
 					signIn(email, password);
 				} else {
 					signUp(email, password);
@@ -258,15 +271,11 @@
 
 			<!-- Submit Button -->
 			<div class="form-group">
-				<button
-					type="submit"
-					class="submit-button"
-					disabled={loading}
-				>
+				<button type="submit" class="submit-button" disabled={loading}>
 					{#if loading}
 						<div class="loader"></div>
 					{:else}
-						{loginMenu ? 'Sign In' : 'Create Account'}
+						{mode === 'login' ? 'Sign In' : 'Create Account'}
 					{/if}
 				</button>
 			</div>
@@ -274,7 +283,7 @@
 
 		<!-- Toggle Auth Mode -->
 		<div class="auth-toggle">
-			{#if loginMenu}
+			{#if mode === 'login'}
 				<p>
 					Don't have an account?
 					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
@@ -292,15 +301,26 @@
 <style>
 	/* Global styles */
 	:global(*) {
-			box-sizing: border-box;
+		box-sizing: border-box;
 	}
 	/* Use splash.css color system for consistency */
 	.auth-page {
 		width: 100%;
 		min-height: 70vh;
-		background: linear-gradient(135deg, var(--color-light, #B8E3E9) 0%, var(--color-accent, #93B1B5) 100%);
-		color: var(--color-dark, #0B2E33);
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		background: linear-gradient(
+			135deg,
+			var(--color-light, #b8e3e9) 0%,
+			var(--color-accent, #93b1b5) 100%
+		);
+		color: var(--color-dark, #0b2e33);
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		display: flex;
 		flex-direction: column;
 		position: relative;
@@ -330,7 +350,7 @@
 		font-size: 2rem;
 		font-weight: 700;
 		margin: 0 0 0.5rem 0;
-		color: var(--color-dark, #0B2E33);
+		color: var(--color-dark, #0b2e33);
 		line-height: 1.2;
 	}
 
@@ -349,7 +369,7 @@
 		background: rgba(255, 255, 255, 1);
 		border: 1.5px solid #000000;
 		border-radius: 12px;
-		color: var(--color-dark, #0B2E33);
+		color: var(--color-dark, #0b2e33);
 		font-family: 'Inter', sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
@@ -385,7 +405,6 @@
 		margin: 1.5rem 0;
 	}
 
-
 	.form-group {
 		width: 100%;
 	}
@@ -398,20 +417,20 @@
 		border: 1.5px solid #000000;
 		border-radius: 12px;
 		background: rgba(255, 255, 255, 1);
-		color: #0B2E33;
+		color: #0b2e33;
 		font-size: 0.95rem;
 		font-family: 'Inter', sans-serif;
 		transition: all 0.3s ease;
 	}
 
 	.auth-input::placeholder {
-		color: #4F7C82;
+		color: #4f7c82;
 		opacity: 0.6;
 	}
 
 	.auth-input:focus {
 		outline: none;
-		border-color: var(--color-primary, #4F7C82);
+		border-color: var(--color-primary, #4f7c82);
 		background: rgba(255, 255, 255, 0.9);
 		box-shadow: 0 0 0 3px rgba(79, 124, 130, 0.1);
 	}
@@ -425,7 +444,7 @@
 	.submit-button {
 		width: 100%;
 		height: 52px;
-		background: var(--color-dark, #0B2E33);
+		background: var(--color-dark, #0b2e33);
 		color: white;
 		border: none;
 		border-radius: 12px;
@@ -496,8 +515,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* Responsive Design */

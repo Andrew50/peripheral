@@ -19,13 +19,11 @@
 			if (!sessionStorage.getItem('authToken')) {
 				sessionStorage.setItem('authToken', data.user.authToken);
 				sessionStorage.setItem('profilePic', data.user.profilePic || '');
-				sessionStorage.setItem('username', data.user.username || '');
 			}
 		} else if (data.isPublicViewing) {
 			// Clear any existing auth data for public viewing
 			sessionStorage.removeItem('authToken');
 			sessionStorage.removeItem('profilePic');
-			sessionStorage.removeItem('username');
 		}
 	});
 </script>

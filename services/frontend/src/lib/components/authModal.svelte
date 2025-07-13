@@ -80,7 +80,7 @@
 				<!-- Auth component -->
 				<div class="auth-wrapper">
 					<Auth
-						loginMenu={currentMode === 'login'}
+						mode={currentMode}
 						modalMode={true}
 						on:authSuccess={handleAuthSuccess}
 						on:toggleMode={toggleMode}
