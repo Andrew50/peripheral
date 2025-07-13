@@ -115,8 +115,6 @@ class StrategyWorker:
         try:
             client.ping()
             
-            # Test queue access
-            self._test_queue_access(client)
             
         except Exception as e:
             logger.error(f"❌ Redis connection failed: {e}")
@@ -124,25 +122,6 @@ class StrategyWorker:
         
         return client
 
-    def _test_queue_access(self, redis_client: redis.Redis):
-        """Test access to both priority and normal queues"""
-        try:
-            
-            # Test priority queue
-            priority_length = redis_client.llen('strategy_queue_priority')
-            
-            # Test normal queue
-            normal_length = redis_client.llen('strategy_queue')
-            logger.info(f"   📄 Normal queue length: {normal_length + priority_length}")
-            
-            # Test publish capability
-            test_channel = "worker_test_channel"
-            test_message = {"test": "message", "timestamp": datetime.utcnow().isoformat()}
-            subscribers = redis_client.publish(test_channel, json.dumps(test_message))
-            
-        except Exception as e:
-            logger.error(f"❌ Queue access test failed: {e}")
-            raise
     
     def _init_database(self):
         """Initialize database connection"""
@@ -187,56 +166,66 @@ class StrategyWorker:
             pass
     
     def _fetch_strategy_code(self, strategy_id: str) -> str:
-        """Fetch strategy code from database by strategy_id with connection recovery"""
+        """Fetch strategy code from database by strategy_id"""
+        result = self._fetch_multiple_strategy_codes([strategy_id])
+        
+        if strategy_id not in result:
+            raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+        
+        return result[strategy_id]
+    
+    
+    def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
+        """Fetch multiple strategy codes from database in a single query"""
+        if not strategy_ids:
+            return {}
+        
+        # Remove duplicates and None values
+        unique_ids = list(set(filter(None, strategy_ids)))
+        if not unique_ids:
+            return {}
+        
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Test connection health before use
                 self._ensure_db_connection()
                 
                 with self.db_conn.cursor() as cursor:
-                    # Fetch from consolidated strategies table
                     cursor.execute(
-                        "SELECT pythonCode FROM strategies WHERE strategyId = %s AND is_active = true",
-                        (strategy_id,)
+                        "SELECT strategyId, pythonCode FROM strategies WHERE strategyId = ANY(%s) AND is_active = true",
+                        (unique_ids,)
                     )
-                    result = cursor.fetchone()
+                    results = cursor.fetchall()
                     
-                    if result and result['pythoncode']:
-                        return result['pythoncode']
+                    # Build result dictionary
+                    strategy_codes = {}
+                    for row in results:
+                        if row['pythoncode']:  # Only include strategies with code
+                            strategy_codes[row['strategyid']] = row['pythoncode']
                     
-                    raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+                    # Log missing strategies
+                    missing_strategies = set(unique_ids) - set(strategy_codes.keys())
+                    if missing_strategies:
+                        logger.warning(f"Strategies not found or missing Python code: {missing_strategies}")
+                    
+                    return strategy_codes
                     
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
                 logger.warning(f"Database connection error on attempt {attempt + 1}/{max_retries}: {e}")
                 if attempt < max_retries - 1:
-                    # Try to reconnect
                     try:
                         self.db_conn.close()
                     except Exception:
                         logger.debug("Error closing database connection (expected during reconnection)")
                     self.db_conn = self._init_database()
                 else:
-                    logger.error(f"Failed to fetch strategy code after {max_retries} attempts")
+                    logger.error(f"Failed to fetch strategy codes after {max_retries} attempts")
                     raise
             except Exception as e:
-                logger.error(f"Failed to fetch strategy code for strategy_id {strategy_id}: {e}")
+                logger.error(f"Failed to fetch strategy codes for strategy_ids {unique_ids}: {e}")
                 raise
-    
-    
-    def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
-        """Fetch multiple strategy codes from database"""
-        strategy_codes = {}
         
-        for strategy_id in strategy_ids:
-            try:
-                strategy_codes[strategy_id] = self._fetch_strategy_code(strategy_id)
-            except Exception as e:
-                logger.error(f"Failed to fetch strategy {strategy_id}: {e}")
-                # Continue with other strategies
-                continue
-        
-        return strategy_codes
+        return {}
     
     def run(self):
         """Main queue processing loop with priority queue support"""
@@ -1022,55 +1011,6 @@ def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
     }
     # Alert tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
-
-
-def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: int,
-                           prompt: str, strategy_id: int = -1) -> None:
-    """Add a strategy creation task to the PRIORITY queue"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": "create_strategy",
-        "args": {
-            "user_id": user_id,
-            "prompt": prompt,
-            "strategy_id": strategy_id
-        },
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "priority": "high"  # Mark as high priority
-    }
-    # Strategy creation/editing tasks go to PRIORITY queue
-    redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
-    logger.info(f"Added strategy creation task {task_id} to PRIORITY queue")
-
-
-def add_task_with_priority(redis_client: redis.Redis, task_id: str, task_type: str, 
-                          args: Dict[str, Any], priority: str = "normal") -> None:
-    """Add a task to the appropriate queue based on priority level"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": task_type,
-        "args": args,
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "priority": priority
-    }
-    
-    if priority == "high" or task_type == "create_strategy":
-        # High priority tasks (including all strategy creation/editing)
-        redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
-        logger.info(f"Added {task_type} task {task_id} to PRIORITY queue")
-    else:
-        # Normal priority tasks
-        redis_client.lpush('strategy_queue', json.dumps(task_data))
-        logger.info(f"Added {task_type} task {task_id} to normal queue")
-
-
-def get_task_result(redis_client: redis.Redis, task_id: str) -> Dict[str, Any]:
-    """Get task result from Redis"""
-    result_json = redis_client.get(f"task_result:{task_id}")
-    if result_json:
-        return json.loads(result_json)
-    return None
-
 
 # Utility functions for queue management
 def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:

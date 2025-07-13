@@ -77,8 +77,8 @@
 <style>
 	.thinking-trace {
 		margin: 0.75rem 0 0 0;
-		border: 1px solid rgba(255, 255, 255, 0.8);
-		border-radius: 0.5rem;
+		border: 1px solid rgba(255, 255, 255, 0.4);
+		border-radius: 1rem;
 		padding: 0.75rem;
 	}
 
