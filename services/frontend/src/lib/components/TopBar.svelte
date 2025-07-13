@@ -669,7 +669,7 @@
 	.top-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		justify-content: space-between; /* Restore space-between for proper positioning */
 		align-items: center;

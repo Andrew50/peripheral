@@ -55,7 +55,7 @@
 .bottom-bar {
 	height: 40px;
 	min-height: 40px;
-	background-color: #0f0f0f;
+	background-color: #121212;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -78,7 +78,7 @@
 
 .sidebar {
 	height: 100%;
-	background-color: #0f0f0f;
+	background-color: #121212;
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -100,7 +100,7 @@
 	width: 45px;
 	display: flex;
 	flex-direction: column;
-	background-color: #0f0f0f;
+	background-color: #121212;
 	z-index: 2;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
@@ -286,7 +286,7 @@
 .ticker-info-container {
 	flex-shrink: 0;
 	border-top: 1px solid var(--c3);
-	background: #0f0f0f;
+	background: #121212;
 	height: var(--ticker-height);
 	overflow-y: auto;
 	overflow-x: hidden;
@@ -494,7 +494,7 @@
 /* Add styles for left sidebar */
 .left-sidebar {
 	height: 100%;
-	background-color: #0f0f0f;
+	background-color: #121212;
 	display: flex;
 	flex-direction: column;
 	position: relative;

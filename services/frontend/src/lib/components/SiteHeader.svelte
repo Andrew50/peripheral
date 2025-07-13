@@ -191,7 +191,7 @@
 	}
 
 	.logo-text {
-		color: var(--color-dark);
+		color: #f5f9ff;
 		font-size: 1.25rem;
 		font-weight: 700;
 		margin: 0;

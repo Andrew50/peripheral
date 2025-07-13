@@ -14,11 +14,14 @@
 	
 	// Show dropdown toggle if there are timeline items to show
 	$: showDropdownToggle = timeline.length > 1 && onToggleDropdown;
+	
+	// For web searches, we only show chips (no status text)
+	$: shouldShowStatusHeader = currentStatus && typeof currentStatus === 'string' && currentStatus.trim().length > 0;
 </script>
 
-{#if currentStatus || filteredTimeline.length > 0}
-	<div class="simple-timeline">
-		{#if currentStatus}
+{#if shouldShowStatusHeader || filteredTimeline.length > 0}
+	<div class="thinking-trace">
+		{#if shouldShowStatusHeader}
 			<div class="status-header">
 				<div class="current-status">
 					{currentStatus}
@@ -51,7 +54,18 @@
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
-							{event.message}
+							{#if event.type === 'websearch' && event.data?.query}
+								<div class="timeline-websearch">
+									<div class="web-search-chip glass glass--pill glass--responsive">
+										<svg viewBox="0 0 24 24" width="14" height="14" class="search-icon">
+											<path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/>
+										</svg>
+										<span class="search-query">{event.data.query}</span>
+									</div>
+								</div>
+							{:else}
+								{event.message}
+							{/if}
 						</div>
 					</div>
 				{/each}
@@ -61,10 +75,10 @@
 {/if}
 
 <style>
-	.simple-timeline {
+	.thinking-trace {
 		margin: 0.75rem 0 0 0;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 0.5rem;
+		border: 1px solid rgba(255, 255, 255, 0.4);
+		border-radius: 1rem;
 		padding: 0.75rem;
 	}
 
@@ -177,5 +191,44 @@
 		flex: 1;
 		font-size: 0.8rem;
 		color: var(--text-secondary, #ccc);
+	}
+
+	.timeline-websearch {
+		margin-top: 0.25rem;
+		display: inline-block;
+		width: fit-content;
+	}
+
+	.web-search-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		background: var(--c-green);
+		border-radius: 0.75rem;
+		font-size: 0.75rem;
+		color: var(--text-primary);
+		border: 1px solid var(--c-green-dark);
+		animation: fadeInUp 0.3s ease-out;
+	}
+
+	.web-search-chip .search-icon {
+		flex-shrink: 0;
+		opacity: 0.8;
+	}
+
+	.web-search-chip .search-query {
+		font-weight: 300;
+	}
+
+	@keyframes fadeInUp {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>

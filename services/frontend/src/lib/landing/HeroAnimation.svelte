@@ -1129,7 +1129,7 @@
 		margin: 0 0 1.5rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
-		color: var(--color-dark);
+		color: #f5f9ff;
 		text-shadow:
 			0 2px 12px rgba(0, 0, 0, 0.2),
 			0 1px 0 rgba(255, 255, 255, 0.01);

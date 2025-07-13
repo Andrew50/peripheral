@@ -18,7 +18,7 @@
 		font: {
 			family: 'Geist, system-ui, sans-serif',
 			size: 10,
-			color: '#0B2E33' // Dark color for hero background
+			color: '#1a1a1a' // Dark color for hero background
 		},
 		paper_bgcolor: 'transparent',
 		plot_bgcolor: 'transparent', 
@@ -27,10 +27,10 @@
 		showlegend: false, // Disable legend in hero for space
 		hoverlabel: {
 			bgcolor: '#ffffff',
-			bordercolor: '#4f7c82',
+			bordercolor: '#666666',
 			borderwidth: 1,
 			font: {
-				color: '#0B2E33',
+				color: '#1a1a1a',
 				size: 11,
 				family: 'Geist, system-ui, sans-serif'
 			},
@@ -38,10 +38,10 @@
 			align: 'left' as const
 		},
 		xaxis: {
-			gridcolor: 'rgba(11, 46, 51, 0.15)',
-			linecolor: 'rgba(11, 46, 51, 0.3)',
-			tickfont: { color: '#0B2E33', size: 9 },
-			titlefont: { color: '#0B2E33', size: 10 },
+			gridcolor: 'rgba(26, 26, 26, 0.15)',
+			linecolor: 'rgba(26, 26, 26, 0.3)',
+			tickfont: { color: '#1a1a1a', size: 9 },
+			titlefont: { color: '#1a1a1a', size: 10 },
 			automargin: true,
 			tickangle: 0, // Keep horizontal for space
 			title: {
@@ -49,23 +49,23 @@
 			}
 		},
 		yaxis: {
-			gridcolor: 'rgba(11, 46, 51, 0.15)',
-			linecolor: 'rgba(11, 46, 51, 0.3)',
-			tickfont: { color: '#0B2E33', size: 9 },
-			titlefont: { color: '#0B2E33', size: 10 },
+			gridcolor: 'rgba(26, 26, 26, 0.15)',
+			linecolor: 'rgba(26, 26, 26, 0.3)',
+			tickfont: { color: '#1a1a1a', size: 9 },
+			titlefont: { color: '#1a1a1a', size: 10 },
 			automargin: true
 		}
 	};
 
-	// Hero color palette - matches hero theme
+	// Hero color palette - neutral theme
 	const heroColorPalette = [
-		'#4f7c82', // Primary brand color
-		'#2196F3', // Blue
+		'#666666', // Primary neutral color
+		'#999999', // Light gray
 		'#FF9800', // Orange
 		'#4CAF50', // Green
 		'#9C27B0', // Purple
 		'#F44336', // Red
-		'#00BCD4', // Cyan
+		'#777777', // Medium gray
 		'#FFC107'  // Amber
 	];
 

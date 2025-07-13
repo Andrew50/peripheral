@@ -40,6 +40,12 @@ spec:
                 secretKeyRef:
                   name: openai-secret
                   key: OPENAI_API_KEY
+            # Gemini API key
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-secret
+                  key: GEMINI_API_KEY
             # Redis connection
             - name: REDIS_HOST
               value: "cache"

@@ -251,7 +251,7 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
 	if tool.StatusMessage != "" {
-		socket.SendChatFunctionStatus(e.userID, formatStatusMessage(tool.StatusMessage, argsMap))
+		socket.SendAgentStatusUpdate(e.userID, "FunctionUpdate", formatStatusMessage(tool.StatusMessage, argsMap))
 	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()

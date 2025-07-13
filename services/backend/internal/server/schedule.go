@@ -210,8 +210,8 @@ var (
 			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "UpdateAllOHLCV",
-			Function:       marketdata.UpdateAllOHLCV,
+			Name:           "UpdateSecurityTables",
+			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -220,8 +220,8 @@ var (
 			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "UpdateSecurityTables",
-			Function:       simpleSecuritiesUpdateJob,
+			Name:           "UpdateAllOHLCV",
+			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,

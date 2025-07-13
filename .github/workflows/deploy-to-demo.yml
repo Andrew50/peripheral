@@ -9,6 +9,11 @@ on:
       branch:
         description: 'Branch to deploy'
         required: false
+      force_full_deploy:
+        description: 'Force full deployment (ignore change detection)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,7 +25,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect_changes:
+    uses: ./.github/workflows/detect-changes.yml
   deploy-demo:
+    needs: [detect_changes]
+    if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
     uses: ./.github/workflows/deploy-demo-test.yml
     with:
       environment: 'demo'
@@ -30,6 +39,8 @@ jobs:
       google_redirect_url: 'https://demo.peripheral.io/auth/google/callback'
       ingress_host: 'demo.peripheral.io'
       #      public_base_url: 'https://peripheral.io'
+      strategy: ${{ needs.detect_changes.outputs.strategy }}
+      services_changed: ${{ needs.detect_changes.outputs.services_changed }}
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
@@ -39,6 +50,7 @@ jobs:
       POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}

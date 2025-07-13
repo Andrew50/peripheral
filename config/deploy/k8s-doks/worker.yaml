@@ -55,6 +55,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-secret
+                  key: GEMINI_API_KEY
           resources:
             requests:
               cpu: "100m"
