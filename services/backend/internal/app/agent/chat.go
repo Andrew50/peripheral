@@ -726,6 +726,29 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 					break
 				}
 			}
+		} else if chunk.Type == "plot" {
+			// Handle titleTicker for plot chunks
+			if contentMap, ok := chunk.Content.(map[string]any); ok {
+				var titleIcon string
+				if titleTicker, exists := contentMap["titleTicker"].(string); exists && titleTicker != "" {
+					titleIcon, _ = helpers.GetIcon(conn, titleTicker)
+				}
+
+				// Create new content with titleIcon added
+				newContent := make(map[string]any)
+				for k, v := range contentMap {
+					newContent[k] = v
+				}
+				newContent["titleIcon"] = titleIcon
+
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    chunk.Type,
+					Content: newContent,
+				})
+			} else {
+				// If content is not a map, keep the original chunk
+				processedChunks = append(processedChunks, chunk)
+			}
 		} else {
 			// Keep non-instruction chunks as they are
 			processedChunks = append(processedChunks, chunk)
