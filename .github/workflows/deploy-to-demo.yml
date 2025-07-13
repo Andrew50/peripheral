@@ -9,6 +9,11 @@ on:
       branch:
         description: 'Branch to deploy'
         required: false
+      force_full_deploy:
+        description: 'Force full deployment (ignore change detection)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,6 +25,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect_changes:
+    uses: ./github/workflows/detect-changes.yml
+    with:
+      environment: 'demo'
+      k8s_namespace: 'demo'
+    secrets:
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
   deploy-demo:
     uses: ./.github/workflows/deploy-demo-test.yml
     with:
@@ -30,6 +43,8 @@ jobs:
       google_redirect_url: 'https://demo.peripheral.io/auth/google/callback'
       ingress_host: 'demo.peripheral.io'
       #      public_base_url: 'https://peripheral.io'
+      strategy: ${{ needs.detect_changes.outputs.strategy }}
+      services_changed: ${{ needs.detect_changes.outputs.services_changed }}
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
