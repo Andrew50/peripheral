@@ -886,7 +886,7 @@ func StartCLI() {
 			description: "Run a specific job",
 			execute: func(args []string) {
 				if len(args) < 1 {
-					////fmt.Println("Error: job name is required")
+					////fmt.Println("Error: job name is required") //?
 					printUsage()
 					return
 				}
