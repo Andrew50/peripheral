@@ -165,6 +165,7 @@
 			...userLayout.yaxis,
 			side: yAxisSide,
 			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+			linecolor: 'rgba(255, 255, 255, 0.8)',
 			title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
 			tickfont: { 
 				color: '#f1f5f9', 
@@ -177,6 +178,8 @@
 			},
 		},
 		legend: {
+			...(baseLayout.legend ?? {}),
+			...(userLayout.legend ?? {}),
 			tickfont: { 
 				color: '#f1f5f9', 
 				size: 11,
