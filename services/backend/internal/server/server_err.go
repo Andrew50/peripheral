@@ -45,7 +45,7 @@ var appErrorTable = map[error]appErrorInfo{
 
 // resolveAppError converts an error (possibly wrapped) to an HTTP status code
 // and a public-facing message. If the error does not match any sentinel, a
-// generic 500 response is returned.
+// generic 500 response is returned..
 func resolveAppError(err error) (int, string) {
 	for sentinel, info := range appErrorTable {
 		if errors.Is(err, sentinel) {
