@@ -115,8 +115,6 @@ class StrategyWorker:
         try:
             client.ping()
             
-            # Test queue access
-            self._test_queue_access(client)
             
         except Exception as e:
             logger.error(f"❌ Redis connection failed: {e}")
@@ -124,25 +122,6 @@ class StrategyWorker:
         
         return client
 
-    def _test_queue_access(self, redis_client: redis.Redis):
-        """Test access to both priority and normal queues"""
-        try:
-            
-            # Test priority queue
-            priority_length = redis_client.llen('strategy_queue_priority')
-            
-            # Test normal queue
-            normal_length = redis_client.llen('strategy_queue')
-            logger.info(f"   📄 Normal queue length: {normal_length + priority_length}")
-            
-            # Test publish capability
-            test_channel = "worker_test_channel"
-            test_message = {"test": "message", "timestamp": datetime.utcnow().isoformat()}
-            subscribers = redis_client.publish(test_channel, json.dumps(test_message))
-            
-        except Exception as e:
-            logger.error(f"❌ Queue access test failed: {e}")
-            raise
     
     def _init_database(self):
         """Initialize database connection"""
