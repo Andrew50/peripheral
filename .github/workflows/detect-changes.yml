@@ -1,0 +1,231 @@
+name: Detect Changes
+
+on:
+  workflow_call:
+    inputs:
+      base_branch:
+        required: false
+        type: string
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      database-migrations: ${{ steps.changes.outputs.database-migrations }}
+      database-config: ${{ steps.changes.outputs.database-config }}
+      database-code: ${{ steps.changes.outputs.database-code }}
+      backend-code: ${{ steps.changes.outputs.backend-code }}
+      frontend-code: ${{ steps.changes.outputs.frontend-code }}
+      worker-code: ${{ steps.changes.outputs.worker-code }}
+      cache-code: ${{ steps.changes.outputs.cache-code }}
+      deployment-config: ${{ steps.changes.outputs.deployment-config }}
+      summary: ${{ steps.summary.outputs.summary }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Detect changes
+      id: changes
+      run: |
+      run: |
+        echo "🔍 Detecting changes..."
+
+        # Default to HEAD~1 for single commit pushes
+        BASE_REF="HEAD~1"
+
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_REF=$(git merge-base origin/${{ github.base_ref }} HEAD)
+          echo "PR detected: diffing against $BASE_REF"
+        elif [ -n "${{ inputs.base_branch }}" ]; then
+          BASE_REF="${{ inputs.base_branch }}"
+          echo "Using input base branch $BASE_REF for diff"
+        else
+          # Default to HEAD~1 for single commit pushes
+          BASE_REF="HEAD~1"
+          echo "Defaulting to $BASE_REF for diff"
+        fi
+
+        
+        # List changed files
+        CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD)
+        echo "📋 Changed files:"
+        echo "$CHANGED_FILES"
+        echo ""
+
+        # Database migrations
+        MIGRATIONS=$(echo "$CHANGED_FILES" | grep '^services/db/migrations/' || echo '')
+        echo "database-migrations<<EOF" >> $GITHUB_OUTPUT
+        echo "$MIGRATIONS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Database configuration (postgres.conf, etc.)
+        DB_CONFIG=$(echo "$CHANGED_FILES" | grep -E '^services/db/(config/|.*\.conf|.*\.yaml)' | grep -v Dockerfile || echo '')
+        echo "database-config<<EOF" >> $GITHUB_OUTPUT
+        echo "$DB_CONFIG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Database code (Dockerfile, scripts, container logic)
+        DB_CODE=$(echo "$CHANGED_FILES" | grep -E '^services/db/(Dockerfile|scripts/|init/)' || echo '')
+        echo "database-code<<EOF" >> $GITHUB_OUTPUT
+        echo "$DB_CODE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Backend service
+        BACKEND_CODE=$(echo "$CHANGED_FILES" | grep '^services/backend/' || echo '')
+        echo "backend-code<<EOF" >> $GITHUB_OUTPUT
+        echo "$BACKEND_CODE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Frontend service
+        FRONTEND_CODE=$(echo "$CHANGED_FILES" | grep '^services/frontend/' || echo '')
+        echo "frontend-code<<EOF" >> $GITHUB_OUTPUT
+        echo "$FRONTEND_CODE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Worker service
+        WORKER_CODE=$(echo "$CHANGED_FILES" | grep '^services/worker/' || echo '')
+        echo "worker-code<<EOF" >> $GITHUB_OUTPUT
+        echo "$WORKER_CODE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Cache service
+        CACHE_CODE=$(echo "$CHANGED_FILES" | grep '^services/cache/' || echo '')
+        echo "cache-code<<EOF" >> $GITHUB_OUTPUT
+        echo "$CACHE_CODE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Deployment configuration
+        DEPLOYMENT_CONFIG=$(echo "$CHANGED_FILES" | grep -E '^config/deploy/' || echo '')
+        echo "deployment-config<<EOF" >> $GITHUB_OUTPUT
+        echo "$DEPLOYMENT_CONFIG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Generate summary
+      id: summary
+      run: |
+        MIGRATIONS="${{ steps.changes.outputs.database-migrations }}"
+        DB_CONFIG="${{ steps.changes.outputs.database-config }}"
+        DB_CODE="${{ steps.changes.outputs.database-code }}"
+        BACKEND="${{ steps.changes.outputs.backend-code }}"
+        FRONTEND="${{ steps.changes.outputs.frontend-code }}"
+        WORKER="${{ steps.changes.outputs.worker-code }}"
+        CACHE="${{ steps.changes.outputs.cache-code }}"
+        DEPLOY_CONFIG="${{ steps.changes.outputs.deployment-config }}"
+        
+        echo "📊 CHANGE DETECTION SUMMARY"
+        echo "================================"
+        
+        # Database changes
+        if [ -n "$MIGRATIONS" ]; then
+          echo "🔥 DATABASE MIGRATIONS DETECTED:"
+          echo "$MIGRATIONS" | sed 's/^/  /'
+          NEEDS_MIGRATION="true"
+        else
+          echo "❌ No database migrations"
+          NEEDS_MIGRATION="false"
+        fi
+        
+        if [ -n "$DB_CONFIG" ]; then
+          echo "🔄 DATABASE CONFIG CHANGES:"
+          echo "$DB_CONFIG" | sed 's/^/  /'
+          NEEDS_DB_RESTART="true"
+        else
+          echo "❌ No database config changes"
+          NEEDS_DB_RESTART="false"
+        fi
+        
+        if [ -n "$DB_CODE" ]; then
+          echo "🚨 DATABASE CODE CHANGES (REBUILD REQUIRED):"
+          echo "$DB_CODE" | sed 's/^/  /'
+          NEEDS_DB_REBUILD="true"
+        else
+          echo "❌ No database code changes"
+          NEEDS_DB_REBUILD="false"
+        fi
+        
+        echo ""
+        
+        # Service changes
+        SERVICES_CHANGED=""
+        
+        if [ -n "$BACKEND" ]; then
+          echo "🚀 BACKEND SERVICE CHANGES:"
+          echo "$BACKEND" | sed 's/^/  /'
+          SERVICES_CHANGED="$SERVICES_CHANGED backend"
+        else
+          echo "❌ No backend changes"
+        fi
+        
+        if [ -n "$FRONTEND" ]; then
+          echo "🎨 FRONTEND SERVICE CHANGES:"
+          echo "$FRONTEND" | sed 's/^/  /'
+          SERVICES_CHANGED="$SERVICES_CHANGED frontend"
+        else
+          echo "❌ No frontend changes"
+        fi
+        
+        if [ -n "$WORKER" ]; then
+          echo "⚙️ WORKER SERVICE CHANGES:"
+          echo "$WORKER" | sed 's/^/  /'
+          SERVICES_CHANGED="$SERVICES_CHANGED worker"
+        else
+          echo "❌ No worker changes"
+        fi
+        
+        if [ -n "$CACHE" ]; then
+          echo "💾 CACHE SERVICE CHANGES:"
+          echo "$CACHE" | sed 's/^/  /'
+          SERVICES_CHANGED="$SERVICES_CHANGED cache"
+        else
+          echo "❌ No cache changes"
+        fi
+        
+        if [ -n "$DEPLOY_CONFIG" ]; then
+          echo "⚙️ DEPLOYMENT CONFIG CHANGES:"
+          echo "$DEPLOY_CONFIG" | sed 's/^/  /'
+        else
+          echo "❌ No deployment config changes"
+        fi
+        
+        echo ""
+        
+        # Determine deployment strategy
+        if [ "$NEEDS_DB_REBUILD" = "true" ]; then
+          STRATEGY="database-rebuild"
+          echo "🚨 DEPLOYMENT STRATEGY: DATABASE REBUILD (Manual approval required)"
+        elif [ "$NEEDS_DB_RESTART" = "true" ]; then
+          STRATEGY="database-restart"
+          echo "🔄 DEPLOYMENT STRATEGY: DATABASE RESTART + App deployment"
+        elif [ "$NEEDS_MIGRATION" = "true" ]; then
+          STRATEGY="migrate-then-deploy"
+          echo "🔥 DEPLOYMENT STRATEGY: HOT MIGRATION + App deployment"
+        elif [ -n "$SERVICES_CHANGED" ]; then
+          STRATEGY="app-only"
+          echo "🚀 DEPLOYMENT STRATEGY: APPLICATION ONLY"
+          echo "   Services to deploy:$SERVICES_CHANGED"
+        else
+          STRATEGY="no-changes"
+          echo "✅ DEPLOYMENT STRATEGY: NO CHANGES (Skip deployment)"
+        fi
+        
+        # Create summary for other jobs
+        SUMMARY=$(cat <<EOF
+        {
+          "strategy": "$STRATEGY",
+          "needs_migration": $NEEDS_MIGRATION,
+          "needs_db_restart": $NEEDS_DB_RESTART,
+          "needs_db_rebuild": $NEEDS_DB_REBUILD,
+          "services_changed": "$SERVICES_CHANGED",
+          "migration_files": $(echo "$MIGRATIONS" | wc -l),
+          "total_changed_files": $(echo "$CHANGED_FILES" | wc -l)
+        }
+        EOF
+        )
+        
+        echo "summary<<EOF" >> $GITHUB_OUTPUT
+        echo "$SUMMARY" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Also set individual strategy output for easy access
+        echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
