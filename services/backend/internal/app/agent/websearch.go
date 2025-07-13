@@ -30,11 +30,12 @@ type WebSearchResult struct {
 }
 
 // RunWebSearch performs a web search using the Gemini API
-func RunWebSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
+func RunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
+
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)

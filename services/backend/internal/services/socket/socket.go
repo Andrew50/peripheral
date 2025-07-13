@@ -159,16 +159,17 @@ func SendChatInitializationUpdate(userID int, messageID string, conversationID s
 	}
 }
 
-// FunctionStatusUpdate represents a status update message sent to the client
+// AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
 // It contains a user-friendly message describing the current step.
-type FunctionStatusUpdate struct {
-	Type        string `json:"type"` // Will be "FunctionStatus"
+type AgentStatusUpdate struct {
+	Type        string `json:"type"` // Will be "AgentStatusUpdate"
+	Value       string `json:"value,omitempty"`
 	UserMessage string `json:"userMessage"`
 }
 
-// SendChatFunctionStatus sends a status update about a running function to a specific user.
-func SendChatFunctionStatus(userID int, userMessage string) {
+// SendAgentStatusUpdate sends a status update about a running function to a specific user.
+func SendAgentStatusUpdate(userID int, userMessage string) {
 	// Use a default message if the specific one is empty
 	messageToSend := userMessage
 	if messageToSend == "" {
@@ -176,8 +177,8 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 		messageToSend = "Processing..."
 	}
 
-	statusUpdate := FunctionStatusUpdate{
-		Type:        "FunctionStatus",
+	statusUpdate := AgentStatusUpdate{
+		Type:        "AgentStatusUpdate",
 		UserMessage: messageToSend,
 	}
 
@@ -192,7 +193,7 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 	UserToClientMutex.RUnlock()
 
 	if !ok {
-		////fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: client not found for userID: %d\n", userID)
 		return
 	}
 
@@ -203,7 +204,7 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 	default:
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
-		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
 	}
 }
 
