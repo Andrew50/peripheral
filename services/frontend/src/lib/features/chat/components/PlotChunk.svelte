@@ -388,7 +388,18 @@
 <div class="chunk-plot-container">
 	{#if plotData.title}
 		<div class="plot-title">
-			{plotData.title}
+			{#if plotData.titleIcon}
+				<div class="plot-title-with-icon">
+					<img 
+						src={plotData.titleIcon.startsWith('data:') ? plotData.titleIcon : `data:image/png;base64,${plotData.titleIcon}`}
+						alt="Ticker icon"
+						class="plot-ticker-icon"
+					/>
+					<span class="plot-title-text">{plotData.title}</span>
+				</div>
+			{:else}
+				{plotData.title}
+			{/if}
 		</div>
 	{/if}
 
@@ -407,8 +418,30 @@
 		font-size: 1.2rem;
 		font-weight: 600;
 		color: var(--text-primary, #fff);
-		line-height: 1.4;
 		text-align: center;
+	}
+
+	.plot-title-with-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		width: 100%;
+	}
+
+	.plot-ticker-icon {
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+
+	.plot-title-text {
+		text-align: center;
+		flex-grow: 0;
+		flex-shrink: 1;
+		font-size: 1.2rem;
 	}
 
 	.plot-container {

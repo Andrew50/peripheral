@@ -35,11 +35,10 @@ type BacktestInstanceRow struct {
 
 // BacktestSummary contains summary statistics of the backtest (API compatibility)
 type BacktestSummary struct {
-	TotalInstances    int      `json:"totalInstances"`
-	PositiveInstances int      `json:"positiveInstances,omitempty"`
-	DateRange         []string `json:"dateRange"`
-	SymbolsProcessed  int      `json:"symbolsProcessed"`
-	Columns           []string `json:"columns"`
+	TotalInstances   int      `json:"totalInstances"`
+	DateRange        []string `json:"dateRange"`
+	SymbolsProcessed int      `json:"symbolsProcessed"`
+	Columns          []string `json:"columns"`
 }
 
 // BacktestResponse represents the complete backtest response (API compatibility)
@@ -53,18 +52,20 @@ type BacktestResponse struct {
 
 // StrategyPlot represents a captured plotly plot (lightweight version for API response)
 type StrategyPlot struct {
-	Data      []map[string]any `json:"data,omitempty"`      // traces of data
-	PlotID    int              `json:"plotID"`              // Plot ID for the chart
-	ChartType string           `json:"chartType,omitempty"` // "line", "bar", "scatter", "histogram", "heatmap"
-	Length    int              `json:"length,omitempty"`    // Length of the data array
-	Title     string           `json:"title,omitempty"`     // Chart title
-	Layout    map[string]any   `json:"layout,omitempty"`    // Minimal layout (axis labels, dimensions)
+	Data        []map[string]any `json:"data,omitempty"`        // traces of data
+	PlotID      int              `json:"plotID"`                // Plot ID for the chart
+	ChartType   string           `json:"chartType,omitempty"`   // "line", "bar", "scatter", "histogram", "heatmap"
+	Length      int              `json:"length,omitempty"`      // Length of the data array
+	Title       string           `json:"title,omitempty"`       // Chart title
+	Layout      map[string]any   `json:"layout,omitempty"`      // Minimal layout (axis labels, dimensions)
+	TitleTicker string           `json:"titleTicker,omitempty"` // Ticker for the title
 }
 
 // StrategyPlotData represents the full plotly data for caching
 type StrategyPlotData struct {
-	PlotID int            `json:"plotID"`
-	Data   map[string]any `json:"data"` // Full plotly figure object
+	PlotID      int            `json:"plotID"`
+	Data        map[string]any `json:"data"`                  // Full plotly figure object
+	TitleTicker string         `json:"titleTicker,omitempty"` // Ticker for the titleq
 }
 type ResponseImage struct {
 	Data   string `json:"data"`
@@ -268,13 +269,15 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	for i, plot := range result.StrategyPlots {
 		// Store full data for caching
 		fullPlotData[i] = StrategyPlotData{
-			PlotID: plot.PlotID,
-			Data:   plot.Data,
+			PlotID:      plot.PlotID,
+			Data:        plot.Data,
+			TitleTicker: plot.TitleTicker,
 		}
 
 		// Create lightweight version for API response
 		lightweightPlots[i] = StrategyPlot{
-			PlotID: plot.PlotID,
+			PlotID:      plot.PlotID,
+			TitleTicker: plot.TitleTicker,
 		}
 
 		// Extract metadata from the full plot data

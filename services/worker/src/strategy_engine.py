@@ -690,6 +690,14 @@ class AccessorStrategyEngine:
                 plotID = self.plot_counter 
                 self.plot_counter += 1
                 
+                # Extract title and ticker before extracting plot data
+                cleaned_title, title_ticker = self._extract_plot_title_with_ticker(fig)
+                
+                # If ticker was extracted, update the figure's title to use cleaned version
+                if title_ticker and hasattr(fig, 'layout') and hasattr(fig.layout, 'title'):
+                    if hasattr(fig.layout.title, 'text'):
+                        fig.layout.title.text = cleaned_title
+                
                 # Extract entire plot data (full figure object)
                 figure_data = self._extract_plot_data(fig)
                 
@@ -710,7 +718,8 @@ class AccessorStrategyEngine:
                 
                 plot_data = {
                     'plotID': plotID,
-                    'data': figure_data  # Entire figure object with data, layout, config
+                    'data': figure_data,  # Entire figure object with data, layout, config
+                    'titleTicker': title_ticker  # Add ticker field (None if no ticker found)
                 }
                 self.plots_collection.append(plot_data)
             except Exception as e:
@@ -720,7 +729,8 @@ class AccessorStrategyEngine:
                 self.plot_counter += 1
                 fallback_plot = {
                     'plotID': plotID,
-                    'data': {}  # Empty object
+                    'data': {},  # Empty object
+                    'titleTicker': None  # No ticker in fallback case
                 }
                 self.plots_collection.append(fallback_plot)
                 # Add None to response_images for failed plot
@@ -856,10 +866,73 @@ class AccessorStrategyEngine:
     def _extract_plot_data(self, fig) -> dict:
         """Extract trace data from plotly figure using Plotly's built-in serialization (fig.to_dict())."""
         try:        
-            return json.loads(fig.to_json())
+            plot_data = json.loads(fig.to_json())
+            # Decode any binary data before sending to frontend
+            return self._decode_binary_arrays(plot_data)
         except Exception as e:
             print(f"[extract_plot_data] Exception in fig.to_json(): {e}")
             return {}
+    
+    def _decode_binary_arrays(self, data):
+        """Recursively decode binary arrays in plot data"""
+        import base64
+        import numpy as np
+        
+        if isinstance(data, dict):
+            if 'bdata' in data and 'dtype' in data:
+                # This is a binary encoded array
+                try:
+                    # Decode base64
+                    binary_data = base64.b64decode(data['bdata'])
+                    
+                    # Convert to appropriate numpy array based on dtype
+                    if data['dtype'] == 'f8':
+                        arr = np.frombuffer(binary_data, dtype=np.float64)
+                    elif data['dtype'] == 'f4':
+                        arr = np.frombuffer(binary_data, dtype=np.float32)
+                    elif data['dtype'] == 'i8':
+                        arr = np.frombuffer(binary_data, dtype=np.int64)
+                    elif data['dtype'] == 'i4':
+                        arr = np.frombuffer(binary_data, dtype=np.int32)
+                    else:
+                        print(f"Unknown dtype: {data['dtype']}")
+                        return []
+                    
+                    # Convert to regular Python list for JSON serialization
+                    return arr.tolist()
+                except Exception as e:
+                    print(f"Error decoding binary data: {e}")
+                    return []
+            else:
+                # Regular dict - recurse through values
+                return {k: self._decode_binary_arrays(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._decode_binary_arrays(item) for item in data]
+        else:
+            return data
+
+    def _extract_plot_title_with_ticker(self, fig) -> Tuple[str, Optional[str]]:
+        """Extract title and ticker from plotly figure. Returns (cleaned_title, ticker)"""
+        try:
+            title = 'Untitled Plot'
+            if hasattr(fig, 'layout') and hasattr(fig.layout, 'title'):
+                if hasattr(fig.layout.title, 'text') and fig.layout.title.text:
+                    title = str(fig.layout.title.text)
+            
+            # Check for [TICKER] at the beginning
+            ticker = None
+            if title.startswith('[') and ']' in title:
+                end_bracket = title.index(']')
+                ticker_part = title[1:end_bracket]  # Extract content between brackets
+                if ticker_part and ticker_part.isupper() and len(ticker_part) <= 10:  # Basic ticker validation
+                    ticker = ticker_part
+                    # Clean the title by removing [TICKER] and any leading space
+                    cleaned_title = title[end_bracket + 1:].lstrip()
+                    title = cleaned_title if cleaned_title else 'Untitled Plot'
+            
+            return title, ticker
+        except Exception:
+            return 'Untitled Plot', None
 
     def _extract_plot_title(self, fig) -> str:
         """Extract title from plotly figure"""

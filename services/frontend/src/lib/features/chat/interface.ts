@@ -94,6 +94,7 @@ export type PlotData = {
 	data: PlotTrace[];
 	title?: string;
 	layout?: PlotLayout;
+	titleIcon?: string;
 };
 
 export type PlotTrace = {

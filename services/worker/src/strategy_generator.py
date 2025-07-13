@@ -476,8 +476,10 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - Always show the plot using .show()
 - Almost always include plots in the strategy to help the user understand the data
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-- Do not worry about the styling of the plot, just ensure the data is correct and serialisable.
+- Do not worry about the styling of the plot.
 - Plot equity curves of the P/L performance of strategies overtime.
+- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title for styling purposes.
+- ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (required) (e.g., "MRNA", "AAPL")
