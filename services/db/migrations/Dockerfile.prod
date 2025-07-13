@@ -1,0 +1,5 @@
+# Dockerfile.migrations
+FROM migrate/db-migrations:v4.15.2
+RUN apk add --no-cache postgresql-client
+# Copy in migration SQL files
+COPY . /migrations

@@ -29,6 +29,31 @@ spec:
                 values:
                 - db
             topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: db-migrate
+          image: ${DOCKER_USERNAME}/db-migrations:${DOCKER_TAG}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$DB_HOST" -p 5432 -U "$DB_USER"; do
+                echo "Waiting for Postgres..."
+                sleep 2
+              done
+              migrate -path /migrations -database "postgres://$DB_USER:$DB_PASS@$DB_HOST:5432/$DB_NAME?sslmode=disable" up
+          env:
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_NAME
+              value: "postgres"
+            - name: DB_HOST
+              value: "db.demo.svc.cluster.local"
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_ROOT_PASSWORD
+
       containers:
         - name: backend 
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
