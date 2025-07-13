@@ -22,7 +22,6 @@
 			family: 'Geist, Inter, system-ui, sans-serif'
 		},
 		namelength: -1,
-		align: 'left' as const
 	};
 
 	const defaultLayout = {
@@ -87,14 +86,44 @@
 			...userLayout.xaxis,
 			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
 			linecolor: 'rgba(255, 255, 255, 0.8)',
-			title: capitalizeAxisTitle(userLayout.xaxis?.title || '')
+			title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
+			tickfont: { 
+				color: '#f1f5f9', 
+				size: 11,
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
+			titlefont: { 
+				color: '#f8fafc',
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
 		},
+		hoverlabel: defaultHoverLabel,
 		yaxis: {
 			...baseLayout.yaxis,
 			...userLayout.yaxis,
 			side: yAxisSide,
 			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			title: capitalizeAxisTitle(userLayout.yaxis?.title || '')
+			title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
+			tickfont: { 
+				color: '#f1f5f9', 
+				size: 11,
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
+			titlefont: { 
+				color: '#f8fafc',
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
+		},
+		legend: {
+			tickfont: { 
+				color: '#f1f5f9', 
+				size: 11,
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
+			titlefont: { 
+				color: '#f8fafc',
+				family: 'Geist, Inter, system-ui, sans-serif'
+			},
 		}
 	});
 
