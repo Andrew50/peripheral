@@ -400,7 +400,7 @@
 	align-items: flex-start;
 	width: 100%;
 	border-bottom: 1px solid var(--ui-border, #333);
-	padding-bottom: 0.75rem;
+	padding-bottom: 0.25rem;
 }
 
 .message {
@@ -814,8 +814,8 @@ button[data-ticker].ticker-button:hover,
 	justify-content: space-between !important;
 	align-items: center !important;
 	gap: 1rem;
-	margin-top: 0.75rem;
-	padding: 0.5rem 0;
+	margin-top: 0.25rem;
+	padding: 0.25rem 0;
 	width: 100%;
 }
 
