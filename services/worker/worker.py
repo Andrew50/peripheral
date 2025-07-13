@@ -1002,55 +1002,6 @@ def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
     # Alert tasks go to normal queue
     redis_client.lpush('strategy_queue', json.dumps(task_data))
 
-
-def add_create_strategy_task(redis_client: redis.Redis, task_id: str, user_id: int,
-                           prompt: str, strategy_id: int = -1) -> None:
-    """Add a strategy creation task to the PRIORITY queue"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": "create_strategy",
-        "args": {
-            "user_id": user_id,
-            "prompt": prompt,
-            "strategy_id": strategy_id
-        },
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "priority": "high"  # Mark as high priority
-    }
-    # Strategy creation/editing tasks go to PRIORITY queue
-    redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
-    logger.info(f"Added strategy creation task {task_id} to PRIORITY queue")
-
-
-def add_task_with_priority(redis_client: redis.Redis, task_id: str, task_type: str, 
-                          args: Dict[str, Any], priority: str = "normal") -> None:
-    """Add a task to the appropriate queue based on priority level"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": task_type,
-        "args": args,
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "priority": priority
-    }
-    
-    if priority == "high" or task_type == "create_strategy":
-        # High priority tasks (including all strategy creation/editing)
-        redis_client.lpush('strategy_queue_priority', json.dumps(task_data))
-        logger.info(f"Added {task_type} task {task_id} to PRIORITY queue")
-    else:
-        # Normal priority tasks
-        redis_client.lpush('strategy_queue', json.dumps(task_data))
-        logger.info(f"Added {task_type} task {task_id} to normal queue")
-
-
-def get_task_result(redis_client: redis.Redis, task_id: str) -> Dict[str, Any]:
-    """Get task result from Redis"""
-    result_json = redis_client.get(f"task_result:{task_id}")
-    if result_json:
-        return json.loads(result_json)
-    return None
-
-
 # Utility functions for queue management
 def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:
     """Get comprehensive queue statistics"""
