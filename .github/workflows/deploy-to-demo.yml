@@ -28,6 +28,7 @@ jobs:
   detect_changes:
     uses: ./.github/workflows/detect-changes.yml
   deploy-demo:
+    needs: [detect_changes]
     uses: ./.github/workflows/deploy-demo-test.yml
     with:
       environment: 'demo'
