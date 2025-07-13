@@ -12,15 +12,28 @@
 		showTips: false
 	};
 
+	const defaultHoverLabel = {
+		bgcolor: '#1e293b',
+		bordercolor: '#475569',
+		borderwidth: 1,
+		font: {
+			color: '#ffffff',
+			size: 13,
+			family: 'Geist, Inter, system-ui, sans-serif'
+		},
+		namelength: -1,
+		align: 'left' as const
+	};
+
 	const defaultLayout = {
 		font: {
-			family: 'Inter, system-ui, sans-serif',
+			family: 'Geist, Inter, system-ui, sans-serif',
 			size: 12,
 			color: '#f8fafc' // text-slate-50 (less transparent)
 		},
 		paper_bgcolor: 'transparent', // Match chat background
 		plot_bgcolor: 'transparent', // Match chat background
-		margin: { l: 45, r: 60, t: 10, b: 30, autoexpand: true },
+		margin: { l: 45, r: 60, t: 40, b: 40, autoexpand: true },
 		autosize: true,
 		showlegend: true,
 		legend: {
@@ -30,26 +43,14 @@
 			orientation: 'h' as const,
 			x: 0.5,
 			xanchor: 'center' as const,
-			y: -0.3,
-			yanchor: 'top' as const
+			y: 1,
+			yanchor: 'bottom' as const
 		},
-		hoverlabel: {
-			bgcolor: '#1e293b', // Solid dark background (no transparency)
-			bordercolor: '#475569',
-			borderwidth: 1,
-			font: {
-				color: '#ffffff', // Pure white text for maximum contrast
-				size: 13,
-				family: 'Inter, system-ui, sans-serif'
-			},
-			namelength: -1, // Show full trace names
-			align: 'left' as const
-		},
+		hoverlabel: defaultHoverLabel,
 		xaxis: {
-			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.3)',
-			tickfont: { color: '#f1f5f9', size: 11 }, // text-slate-100 (less transparent)
-			titlefont: { color: '#f8fafc' }, // text-slate-50 (even less transparent)
+			tickfont: { color: '#f1f5f9', size: 11 },
+			titlefont: { color: '#f8fafc' },
 			automargin: true,
 			tickangle: -45,
 			title: {
@@ -57,25 +58,42 @@
 			}
 		},
 		yaxis: {
-			gridcolor: 'rgba(71, 85, 105, 0.3)',
 			linecolor: 'rgba(71, 85, 105, 0.5)',
-			tickfont: { color: '#f1f5f9', size: 11 }, // text-slate-100 (less transparent)
-			titlefont: { color: '#f8fafc' }, // text-slate-50 (even less transparent)
+			tickfont: { color: '#f1f5f9', size: 11 },
+			titlefont: { color: '#f8fafc' },
 			automargin: true
 		}
 	};
 
 	// Color palette for multiple traces
 	const colorPalette = [
-		'#60a5fa', // blue-400
-		'#34d399', // emerald-400
-		'#f87171', // red-400
-		'#fbbf24', // amber-400
-		'#c084fc', // purple-400
-		'#fb7185', // rose-400
-		'#38bdf8', // sky-400
-		'#4ade80' // green-400
+		'#FFD43B', // sunflower yellow
+		'#64C9CF', // turquoise
+		'#FC6B3F', // vivid orange
+		'#A17BFE', // soft indigo
+		'#03DAC6', // aqua
+		'#F6BD60', // warm sand
+		'#9DC2FF', // sky blue
+		'#F95738', // vermilion
+		'#45C4B0', // teal
+		'#FF99C8'  // cotton-candy pink
 	];
+
+	// Helper function to create standard layout configurations
+	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.08) => ({
+		...baseLayout,
+		xaxis: {
+			...baseLayout.xaxis,
+			...userLayout.xaxis,
+			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`
+		},
+		yaxis: {
+			...baseLayout.yaxis,
+			...userLayout.yaxis,
+			side: yAxisSide,
+			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`
+		}
+	});
 
 	// Chart type configurations - consolidates all chart-specific logic
 	const chartTypeConfigs = {
@@ -93,17 +111,7 @@
 				}
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => {
-				// Standard single y-axis on right
-				return {
-					...baseLayout,
-					yaxis: {
-						...baseLayout.yaxis,
-						...userLayout.yaxis,
-						side: 'right' as const
-					}
-				};
-			}
+			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout)
 		},
 		scatter: {
 			configureTrace: (trace: any, index: number) => {
@@ -121,40 +129,28 @@
 				}
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => {
-				// Y-axis on left for scatter plots
-				return {
-					...baseLayout,
-					xaxis: {
-						...baseLayout.xaxis,
-						...userLayout.xaxis,
-						gridcolor: 'rgba(71, 85, 105, 0.25)' // Reduced alpha from 0.3 to 0.15
-					},
-					yaxis: {
-						...baseLayout.yaxis,
-						...userLayout.yaxis,
-						side: 'left' as const,
-						gridcolor: 'rgba(71, 85, 105, 0.25)' // Reduced alpha from 0.3 to 0.15
-					}
-				};
-			}
+			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout, 'left', 0.1)
 		},
 		bar: {
 			configureTrace: (trace: any, index: number, options?: { allTraces?: any[] }) => {
 				// Set trace type
 				if (!trace.type) trace.type = 'bar';
 
-				// Apply colors
+				// Apply colors and styling
 				const color = colorPalette[index % colorPalette.length];
-				if (!trace.marker?.color) {
-					if (!trace.marker) trace.marker = {};
-					trace.marker.color = color;
-				}
-				
-				// Ensure bars are fully opaque
 				if (!trace.marker) trace.marker = {};
+				
+				if (!trace.marker.color) trace.marker.color = color;
 				trace.marker.opacity = 1;
 				trace.opacity = 1;
+
+				// Add feint border lines around bars
+				if (!trace.marker.line) {
+					trace.marker.line = {
+						color: 'rgba(71, 85, 105, 0.4)',
+						width: 0.5
+					};
+				}
 
 				// Handle bar positioning for dual y-axis charts (only if allTraces provided)
 				if (options?.allTraces && options.allTraces.some((t) => t.yaxis === 'y2')) {
@@ -183,17 +179,7 @@
 				}
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => {
-				// Standard single y-axis on right
-				return {
-					...baseLayout,
-					yaxis: {
-						...baseLayout.yaxis,
-						...userLayout.yaxis,
-						side: 'right' as const
-					}
-				};
-			}
+			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout)
 		},
 		histogram: {
 			configureTrace: (trace: any, index: number) => {
@@ -205,17 +191,21 @@
 				// Set trace type
 				if (!trace.type) trace.type = 'histogram';
 
-				// Apply colors
+				// Apply colors and styling
 				const color = colorPalette[index % colorPalette.length];
-				if (!trace.marker?.color) {
-					if (!trace.marker) trace.marker = {};
-					trace.marker.color = color;
-				}
-				
-				// Ensure histogram bars are fully opaque
 				if (!trace.marker) trace.marker = {};
+				
+				if (!trace.marker.color) trace.marker.color = color;
 				trace.marker.opacity = 1;
 				trace.opacity = 1;
+
+				// Add feint border lines around histogram bars
+				if (!trace.marker.line) {
+					trace.marker.line = {
+						color: 'rgba(71, 85, 105, 0.4)',
+						width: 0.5
+					};
+				}
 
 				// Clean up empty arrays
 				if (trace.y && Array.isArray(trace.y) && trace.y.length === 0) {
@@ -243,18 +233,10 @@
 
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => {
-				// Standard single y-axis on right
-				return {
-					...baseLayout,
-					barmode: 'group' as const, // Use group mode to avoid transparency issues
-					yaxis: {
-						...baseLayout.yaxis,
-						...userLayout.yaxis,
-						side: 'right' as const
-					}
-				};
-			}
+			configureLayout: (baseLayout: any, userLayout: any) => ({
+				...createStandardLayout(baseLayout, userLayout),
+				barmode: 'group' as const
+			})
 		},
 		heatmap: {
 			configureTrace: (trace: any, index: number) => {
@@ -284,17 +266,7 @@
 
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => {
-				// Standard single y-axis on right
-				return {
-					...baseLayout,
-					yaxis: {
-						...baseLayout.yaxis,
-						...userLayout.yaxis,
-						side: 'right' as const
-					}
-				};
-			}
+			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout)
 		}
 	};
 
@@ -313,19 +285,9 @@
 
 		// Add hover styling for trace names
 		processedTrace.hoverlabel = {
-			bgcolor: '#1e293b',
-			bordercolor: '#475569',
-			borderwidth: 1,
-			font: {
-				color: '#ffffff',
-				size: 13,
-				family: 'Inter, system-ui, sans-serif'
-			},
-			namelength: -1,
+			...defaultHoverLabel,
 			...processedTrace.hoverlabel // Allow override if specified
 		};
-
-
 
 		// Use chart type configuration if available
 		const chartConfig = chartTypeConfigs[plotData.chart_type];
@@ -342,21 +304,17 @@
 			return configuredTrace;
 		}
 
-
-
 		// Fallback for unknown chart types (preserve original behavior)
 		return processedTrace;
 	}
 
 	// Process trace data reactively
 	$: processedData = plotData.data
-		.map((trace, index) => processTraceData(trace, index))
-		.filter((trace) => trace !== null);
-
-
+		.map((trace: any, index: number) => processTraceData(trace, index))
+		.filter((trace: any) => trace !== null);
 
 	// Check if any traces use secondary y-axis
-	$: hasSecondaryYAxis = plotData.data.some((trace) => trace.yaxis === 'y2');
+	$: hasSecondaryYAxis = plotData.data.some((trace: any) => trace.yaxis === 'y2');
 
 	// Declare layout variable
 	let layout: any;
@@ -377,7 +335,7 @@
 		if (hasSecondaryYAxis) {
 			// Check if we have any bar traces for proper barmode setting
 			const hasBarTraces = plotData.data.some(
-				(trace) => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')
+				(trace: any) => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')
 			);
 
 			// Configure dual y-axis layout
@@ -387,12 +345,19 @@
 				margin: { l: 60, r: 80, t: 10, b: 30, autoexpand: true },
 				// For histograms, use 'group' mode to avoid transparency; for bar charts, use overlay for positioning
 				barmode: plotData.chart_type === 'histogram' ? ('group' as const) : (hasBarTraces ? ('overlay' as const) : userLayoutWithoutDimensions.barmode),
+				// X-axis with feint gridlines
+				xaxis: {
+					...baseLayout.xaxis,
+					...userLayoutWithoutDimensions.xaxis,
+					gridcolor: 'rgba(71, 85, 105, 0.08)'
+				},
 				// Primary y-axis (left side)
 				yaxis: {
 					...defaultLayout.yaxis,
 					...userLayoutWithoutDimensions.yaxis,
 					side: 'left' as const,
-					title: userLayoutWithoutDimensions.yaxis?.title || ''
+					title: userLayoutWithoutDimensions.yaxis?.title || '',
+					gridcolor: 'rgba(71, 85, 105, 0.08)'
 				},
 				// Secondary y-axis (right side)
 				yaxis2: {
@@ -412,20 +377,10 @@
 				layout = chartConfig.configureLayout(baseLayout, userLayoutWithoutDimensions);
 			} else {
 				// Fallback for unknown chart types
-				layout = {
-					...baseLayout,
-					yaxis: {
-						...defaultLayout.yaxis,
-						...userLayoutWithoutDimensions.yaxis,
-						side: 'right' as const
-					}
-				};
+				layout = createStandardLayout(baseLayout, userLayoutWithoutDimensions);
 			}
 		}
-
-
 	}
-
 </script>
 
 <div class="chunk-plot-container">
@@ -446,13 +401,12 @@
 	}
 
 	.plot-title {
-		font-size: 1rem;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-size: 1.2rem;
 		font-weight: 600;
 		color: var(--text-primary, #fff);
-		margin-bottom: 0.75rem;
-		padding-bottom: 0.25rem;
-		border-bottom: 1px solid rgba(71, 85, 105, 0.2);
 		line-height: 1.4;
+		text-align: center;
 	}
 
 	.plot-container {
