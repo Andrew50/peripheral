@@ -10,8 +10,9 @@ import { enqueueTick } from './streamHub';
 
 // Define the type for function status updates from backend (simplified)
 export type AgentStatusUpdate = {
-	type: 'AgentStatusUpdate';
-	userMessage: string;
+	messageType: 'AgentStatusUpdate';
+	type: string; // e.g., 'FunctionUpdate'
+	value: string;
 };
 
 // Define the type for title updates from backend
@@ -171,7 +172,7 @@ export function connect() {
 		}
 
 		// Check message type first
-		if (data && data.type === 'AgentStatusUpdate') {
+		if (data && data.messageType === 'AgentStatusUpdate') {
 			const statusUpdate = data as AgentStatusUpdate;
 			agentStatusStore.set(statusUpdate);
 			return; // Handled agent status update

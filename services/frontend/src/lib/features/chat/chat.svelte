@@ -582,8 +582,9 @@
 
 			// <-- Set initial status immediately -->
 			agentStatusStore.set({
-				type: 'AgentStatusUpdate',
-				userMessage: 'Thinking...'
+				messageType: 'AgentStatusUpdate',
+				type: 'FunctionUpdate',
+				value: 'Thinking...'
 			});
 
 			// Scroll to show the user's message and loading state
@@ -1342,14 +1343,15 @@
 		const statusUpdate = $agentStatusStore;
 
 		// Only add if this is a new message different from the last one
-		if (statusUpdate.userMessage && statusUpdate.userMessage !== lastStatusMessage) {
-			lastStatusMessage = statusUpdate.userMessage;
+		// Handle based on type - for now, all types are treated the same
+		if (statusUpdate.value && statusUpdate.value !== lastStatusMessage) {
+			lastStatusMessage = statusUpdate.value;
 
 			// Add new timeline event with the raw message from backend
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.userMessage,
+					message: statusUpdate.value,
 					timestamp: new Date()
 				}
 			];
@@ -1431,7 +1433,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.userMessage || 'Thinking...'}
+									currentStatus={$agentStatusStore?.value || 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>
