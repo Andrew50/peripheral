@@ -1,9 +1,71 @@
 <script lang="ts">
 	import Plot from 'svelte-plotly.js';
 	import type { PlotData } from '../interface';
+	import { onDestroy } from 'svelte';
 
 	export let plotData: PlotData;
 	export const plotKey: string = ''; // Unique identifier for this plot
+
+	// Reference to the entire plot chunk container
+	let chunkContainer: HTMLDivElement;
+	let copyImageFeedback = false;
+	let copyImageTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Function to copy plot as image to clipboard
+	async function copyPlotImage() {
+		try {
+			if (!chunkContainer) {
+				console.error('Plot chunk container not available');
+				return;
+			}
+
+			// Import html2canvas dynamically
+			const html2canvas = await import('html2canvas');
+			
+			// Capture the entire chunk container as canvas with padding
+			const canvas = await html2canvas.default(chunkContainer, {
+				backgroundColor: '#121212', // Match chat background color
+				scale: 2, // Higher quality
+				logging: false,
+				useCORS: true,
+				y: -32, // Add top padding
+			});
+
+			// Convert canvas to blob
+			const blob = await new Promise<Blob>((resolve) => {
+				canvas.toBlob((blob) => {
+					resolve(blob!);
+				}, 'image/png');
+			});
+
+			// Copy to clipboard
+			await navigator.clipboard.write([
+				new ClipboardItem({
+					'image/png': blob
+				})
+			]);
+
+			// Show success feedback
+			copyImageFeedback = true;
+			if (copyImageTimeout) {
+				clearTimeout(copyImageTimeout);
+			}
+			copyImageTimeout = setTimeout(() => {
+				copyImageFeedback = false;
+				copyImageTimeout = null;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy plot image:', error);
+			// Could show an error message to user here
+		}
+	}
+
+	// Cleanup timeout on component destroy
+	onDestroy(() => {
+		if (copyImageTimeout) {
+			clearTimeout(copyImageTimeout);
+		}
+	});
 
 	// Default styling that matches the app theme
 	const defaultConfig = {
@@ -425,7 +487,7 @@
 	}
 </script>
 
-<div class="chunk-plot-container">
+<div class="chunk-plot-container" bind:this={chunkContainer}>
 	{#if plotData.title}
 		<div class="plot-title">
 			{#if plotData.titleIcon}
@@ -450,11 +512,43 @@
 	<div class="watermark">
 		Powered by <span class="watermark-brand">Peripheral.io</span>
 	</div>
+	
+	<div class="plot-actions">
+		<button 
+			class="copy-image-btn glass glass--small glass--responsive {copyImageFeedback ? 'copied' : ''}"
+			on:click={copyPlotImage}
+			title="Copy plot as image"
+		>
+			{#if copyImageFeedback}
+				<svg viewBox="0 0 24 24" width="14" height="14">
+					<path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z" fill="currentColor"/>
+				</svg>
+			{:else}
+				<svg viewBox="0 0 24 24" width="14" height="14">
+					<path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" fill="currentColor"/>
+				</svg>
+			{/if}
+		</button>
+	</div>
 </div>
 
 <style>
 	.chunk-plot-container {
 		margin-bottom: 1rem;
+	}
+
+	.plot-actions {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		margin-top: 8px;
+		margin-right: 8px;
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	.chunk-plot-container:hover .plot-actions {
+		opacity: 1;
 	}
 
 	.plot-title {
@@ -507,6 +601,55 @@
 	.watermark-brand {
 		font-size: 20px;
 		font-weight: 600;
+	}
+
+	.copy-image-btn {
+		/* Glass effect provided by global .glass classes */
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.3rem;
+		color: var(--text-secondary, #aaa);
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-size: 0.75rem;
+	}
+
+	.copy-image-btn:hover {
+		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-border: #fff;
+		color: var(--text-primary, #fff);
+		border-color: #fff;
+	}
+
+	.copy-image-btn.copied {
+		--glass-bg: rgba(76, 175, 80, 0.2);
+		--glass-border: #4caf50;
+		color: #4caf50;
+		animation: copySuccess 0.3s ease;
+	}
+
+	.copy-image-btn.copied:hover {
+		--glass-bg: rgba(76, 175, 80, 0.3);
+		--glass-border: #4caf50;
+		color: #4caf50;
+	}
+
+	.copy-image-btn svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	@keyframes copySuccess {
+		0% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.1);
+		}
+		100% {
+			transform: scale(1);
+		}
 	}
 
 	/* Responsive adjustments */
