@@ -6,6 +6,13 @@ on:
       base_branch:
         required: false
         type: string
+    outputs:
+      strategy:
+        description: "Deployment strategy"
+        value: ${{ jobs.detect.outputs.strategy }}
+      services_changed:
+        description: "Changed services"
+        value: ${{ jobs.detect.outputs.services_changed }}
 jobs:
   detect:
     runs-on: ubuntu-latest
