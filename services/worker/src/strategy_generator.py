@@ -108,9 +108,8 @@ FUNCTION VALIDATION - Only these functions exist, automatically available in the
 - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
 - get_general_data(columns, filters) → pandas.DataFrame
 
-
 ❌ THESE FUNCTIONS DO NOT EXIST:
-get_security_details(), get_fundamental_data(),  etc.
+get_security_details(), get_fundamental_data(), etc.
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
@@ -158,8 +157,6 @@ FILTER EXAMPLES:
 - Small cap stocks: filters={{"market_cap_max": 2000000000}}
 - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 
-EXECUTION NOTE: Data requests are automatically batched during execution for efficiency - don't worry about this.
-
 TICKER USAGE:
 - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
 - For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
@@ -181,7 +178,7 @@ CRITICAL: INSTANCE STRUCTURE
 
 CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
 - MUST include ALL calculated indicator values that triggered your strategy
-- Examples: 'rsi': 75.2, 'macd': 0.45, 'volume_ratio': 2.3, 'gap_percent': 4.1
+- Examples: 'volume_ratio': 2.3, 'gap_percent': 4.1
 - Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
 - Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
 - Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
@@ -193,12 +190,6 @@ CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM + 1 BAR BUFFER (NO ADDITIONAL BUFFER
 - Examples: RSI needs 14 bars → min_bars=15, MACD needs 26 bars → min_bars=27
 - If you need multiple indicators, use the MAXIMUM of their individual minimums
 - Example: RSI(14) + SMA(50) strategy → min_bars=51 (not 64, not 55)
-
-DATA VALIDATION:
-- Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
-- Use proper DataFrame column checks when needed: if 'column_name' in df.columns
-- Handle missing data gracefully with pandas methods like dropna()
-- Return empty list [] when no valid data is available
 
 CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
 - Always convert calculated columns to numeric before groupby operations:
@@ -388,7 +379,6 @@ def strategy():
 ```
 
 COMMON MISTAKES TO AVOID:
-- qualifying_instances = df[condition].groupby('ticker').tail(1) - limits to 1 per ticker
 - latest_df = df.groupby('ticker').last() - only latest data
 - df.drop_duplicates(subset=['ticker']) - this removes valid instances
 - 'signal': True - unnecessary field, if returned it inherently met criteria
@@ -423,10 +413,6 @@ PATTERN RECOGNITION:
 - Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
   min_bars=1 (current data only), Score: Based on fundamental strength
 
-TICKER EXTRACTION FROM PROMPTS:
-- If prompt mentions specific ticker (e.g., "MRNA gaps up"), use filters={{"tickers": ["MRNA"]}}
-- If prompt mentions "stocks" or "companies" generally, use filters={{}} or sector filters
-
 SECURITY RULES:
 - Only use whitelisted imports
 - CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
@@ -439,9 +425,10 @@ CODE OPTIMIZATIONS:
 - Minimize the number of shift() and index manipulation operations
 
 DATA VALIDATION:
-- Always validate DataFrame columns exist before using them
-- Check for None/empty data at every step
-- Use proper data type conversions (int, float, str)
+- Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
+- Use proper DataFrame column checks when needed: if 'column_name' in df.columns
+- Handle missing data gracefully with pandas methods like dropna()
+- Return empty list [] when no valid data is available
 - Handle edge cases like division by zero
 
 **CRITICAL STOP LOSS IMPLEMENTATION**: 
@@ -478,8 +465,10 @@ PLOTLY PLOT GENERATION (REQUIRED):
 - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
 - Do not worry about the styling of the plot.
 - Plot equity curves of the P/L performance of strategies overtime.
-- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title for styling purposes.
+- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
 - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+- If the plot refers to several tickers, do not include this.
+
 RETURN FORMAT:
 - *ALWAYS* Return List[Dict] where each dict contains:
   * 'ticker': str (required) (e.g., "MRNA", "AAPL")
@@ -490,12 +479,11 @@ RETURN FORMAT:
   * Order these fields logically that would make it best for the reader to understand the table of instances.
 - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
 - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
-- DO NOT include 'signal': True - it's redundant
 - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
 - ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
 - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
-Generate clean, robust Python code that returns ALL matching instances and lets the execution engine handle mode-specific filtering."""
+Generate clean, robust Python code."""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
