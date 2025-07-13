@@ -234,7 +234,7 @@ jobs:
         run: config/deploy/scripts-do/deploy-to-k8s.sh
 
       - name: Run DB Migrations Job
-        if: inputs.needs_migration == 'true'
+        if: false #inputs.needs_migration == 'true'
         run: |
           # Substitute env vars into job manifest
           envsubst < config/deploy/k8s-doks/db-migrate-job.yaml > db-migrate-job.yaml
