@@ -80,19 +80,21 @@
 	];
 
 	// Helper function to create standard layout configurations
-	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.08) => ({
+	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => ({
 		...baseLayout,
 		xaxis: {
 			...baseLayout.xaxis,
 			...userLayout.xaxis,
 			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			linecolor: 'rgba(255, 255, 255, 0.8)'
+			linecolor: 'rgba(255, 255, 255, 0.8)',
+			title: capitalizeAxisTitle(userLayout.xaxis?.title || '')
 		},
 		yaxis: {
 			...baseLayout.yaxis,
 			...userLayout.yaxis,
 			side: yAxisSide,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`
+			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+			title: capitalizeAxisTitle(userLayout.yaxis?.title || '')
 		}
 	});
 
@@ -276,6 +278,17 @@
 		return field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 	}
 
+	// Helper function to properly capitalize axis titles
+	function capitalizeAxisTitle(title: string): string {
+		if (!title || typeof title !== 'string') return title;
+		
+		return title
+			.replace(/_/g, ' ') // Replace underscores with spaces
+			.split(' ') // Split into words
+			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+			.join(' '); // Join back together
+	}
+
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
 
@@ -351,14 +364,13 @@
 					...baseLayout.xaxis,
 					...userLayoutWithoutDimensions.xaxis,
 					gridcolor: 'rgba(255, 255, 255, 0.08)',
-					linecolor: 'rgba(255, 255, 255, 0.3)'
+					linecolor: 'rgba(255, 255, 255, 0.3)',
 				},
 				// Primary y-axis (left side)
 				yaxis: {
 					...defaultLayout.yaxis,
 					...userLayoutWithoutDimensions.yaxis,
 					side: 'left' as const,
-					title: userLayoutWithoutDimensions.yaxis?.title || '',
 					gridcolor: 'rgba(255, 255, 255, 0.08)'
 				},
 				// Secondary y-axis (right side)
@@ -367,7 +379,6 @@
 					...userLayoutWithoutDimensions.yaxis2,
 					side: 'right' as const,
 					overlaying: 'y' as const,
-					title: userLayoutWithoutDimensions.yaxis2?.title || '',
 					// Ensure grid lines don't overlap by disabling on secondary axis
 					showgrid: false
 				}
