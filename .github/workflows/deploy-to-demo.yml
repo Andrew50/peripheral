@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   deploy-demo:
-    uses: ./.github/workflows/deploy-demo-test.yml
+    uses: ./.github/workflows/deploy-demo-test.yml@do-demo
     with:
       environment: 'demo'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
