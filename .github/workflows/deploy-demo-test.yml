@@ -209,10 +209,17 @@ jobs:
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
           echo "Using cluster: ${CLUSTER_NAME}"
 
+      - name: Log in to DO Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.digitalocean.com
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
       - name: Build Docker Images
         run: config/deploy/scripts-do/build-images.sh
 
-      - name: Login & Push Docker Images
+      - name: Push Docker Images
         run: config/deploy/scripts-do/push-images.sh
 
       - name: Setup Kubernetes Context

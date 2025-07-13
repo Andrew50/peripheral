@@ -14,8 +14,6 @@ echo "Pushing Docker images to DigitalOcean Container Registry with tag: $DOCKER
 echo "Registry: $DOCKER_USERNAME"
 
 # Ensure we're logged into DO registry
-echo "Ensuring DO registry authentication..."
-doctl registry login --expiry-seconds 3600
 
 push_image() {
   local service="$1"
