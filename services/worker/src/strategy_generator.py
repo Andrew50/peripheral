@@ -110,7 +110,7 @@ FUNCTION VALIDATION - Only these functions exist, automatically available in the
 
 
 ❌ THESE FUNCTIONS DO NOT EXIST:
-get_security_details(), get_price_data(), get_fundamental_data(), get_multiple_symbols_data(), etc.
+get_security_details(), get_fundamental_data(), get_multiple_symbols_data(), etc.
 
 CRITICAL REQUIREMENTS:
 - Function named 'strategy()' with NO parameters
