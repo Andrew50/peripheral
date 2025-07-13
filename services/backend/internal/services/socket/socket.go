@@ -161,26 +161,36 @@ func SendChatInitializationUpdate(userID int, messageID string, conversationID s
 
 // AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
-// It contains a user-friendly message describing the current step.
 type AgentStatusUpdate struct {
-	MessageType string `json:"messageType"` // Always "AgentStatusUpdate"
-	Type        string `json:"type"`        // Specific type like "FunctionUpdate"
-	Value       string `json:"value"`       // The actual message content
+	MessageType string      `json:"messageType"`    // Always "AgentStatusUpdate"
+	Type        string      `json:"type"`           // Specific type like "FunctionUpdate", "WebSearch"
+	Data        interface{} `json:"data,omitempty"` // Additional structured data for specific types
 }
 
 // SendAgentStatusUpdate sends a status update about a running function to a specific user.
 func SendAgentStatusUpdate(userID int, statusType string, value string) {
-	// Use a default message if the specific one is empty
-	messageToSend := value
-	if messageToSend == "" {
-		// Use a generic message instead of revealing the function name
-		messageToSend = "Processing..."
+	var data interface{}
+
+	// Handle different status types
+	switch statusType {
+	case "WebSearch":
+		// For web searches, create structured data with query
+		data = map[string]interface{}{
+			"query": value,
+		}
+	default:
+		// For other types (like FunctionUpdate), use the value directly
+		messageToSend := value
+		if messageToSend == "" {
+			messageToSend = "Processing..."
+		}
+		data = messageToSend
 	}
 
 	statusUpdate := AgentStatusUpdate{
 		MessageType: "AgentStatusUpdate",
 		Type:        statusType,
-		Value:       messageToSend,
+		Data:        data,
 	}
 
 	jsonData, err := json.Marshal(statusUpdate)

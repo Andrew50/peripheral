@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"sort"
+
+	"backend/internal/services/socket"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -35,7 +37,7 @@ func RunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
-
+	socket.SendAgentStatusUpdate(userID, "WebSearch", args.Query)
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)

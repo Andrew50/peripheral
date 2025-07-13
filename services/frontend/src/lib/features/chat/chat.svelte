@@ -584,7 +584,7 @@
 			agentStatusStore.set({
 				messageType: 'AgentStatusUpdate',
 				type: 'FunctionUpdate',
-				value: 'Thinking...'
+				data: 'Thinking...'
 			});
 
 			// Scroll to show the user's message and loading state
@@ -668,17 +668,19 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
-				// Clear processing state
-				isProcessingMessage = false;
-				processingTimeline = [];
-				lastStatusMessage = '';
+							// Clear processing state
+			isProcessingMessage = false;
+			processingTimeline = [];
+			lastStatusMessage = '';
 
-				// If we didn't have a conversation ID before, we should have one now
-				// Load conversation history to get the new conversation ID
-				if (!currentConversationId) {
-					await loadConversationHistory(false); // Don't scroll since we just added the message
-					await loadConversations(); // Refresh conversation list
-				}
+
+
+			// If we didn't have a conversation ID before, we should have one now
+			// Load conversation history to get the new conversation ID
+			if (!currentConversationId) {
+				await loadConversationHistory(false); // Don't scroll since we just added the message
+				await loadConversations(); // Refresh conversation list
+			}
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
@@ -821,13 +823,15 @@
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
 
-			// Clear processing state immediately on cancellation
-			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
+					// Clear processing state immediately on cancellation
+		isProcessingMessage = false;
+		processingTimeline = [];
+		lastStatusMessage = '';
 
-			isLoading = false;
-			currentAbortController = null;
+
+
+		isLoading = false;
+		currentAbortController = null;
 		}
 	}
 
@@ -1342,17 +1346,26 @@
 	$: if ($agentStatusStore && browser && isProcessingMessage) {
 		const statusUpdate = $agentStatusStore;
 
-		// Only add if this is a new message different from the last one
-		// Handle based on type - for now, all types are treated the same
-		if (statusUpdate.value && statusUpdate.value !== lastStatusMessage) {
-			lastStatusMessage = statusUpdate.value;
-
-			// Add new timeline event with the raw message from backend
+		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
+			// Add function update message to timeline
+			lastStatusMessage = statusUpdate.data;
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.value,
-					timestamp: new Date()
+					message: statusUpdate.data,
+					timestamp: new Date(),
+					type: 'message'
+				}
+			];
+		} else if (statusUpdate.type === 'WebSearch' && statusUpdate.data?.query) {
+			// Add web search event to timeline in chronological order
+			processingTimeline = [
+				...processingTimeline,
+				{
+					message: `Searching: ${statusUpdate.data.query}`,
+					timestamp: new Date(),
+					type: 'websearch',
+					data: statusUpdate.data
 				}
 			];
 		}
@@ -1433,7 +1446,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.value || 'Thinking...'}
+									currentStatus={$agentStatusStore?.type === 'FunctionUpdate' ? $agentStatusStore.data : 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>

@@ -11,8 +11,8 @@ import { enqueueTick } from './streamHub';
 // Define the type for function status updates from backend (simplified)
 export type AgentStatusUpdate = {
 	messageType: 'AgentStatusUpdate';
-	type: string; // e.g., 'FunctionUpdate'
-	value: string;
+	type: string; // e.g., 'FunctionUpdate', 'WebSearch'
+	data: any; // The actual data - string for FunctionUpdate, object for WebSearch
 };
 
 // Define the type for title updates from backend
