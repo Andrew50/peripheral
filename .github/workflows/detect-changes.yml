@@ -26,6 +26,8 @@ jobs:
       cache-code: ${{ steps.changes.outputs.cache-code }}
       deployment-config: ${{ steps.changes.outputs.deployment-config }}
       summary: ${{ steps.summary.outputs.summary }}
+      strategy: ${{ steps.summary.outputs.strategy }}
+      services_changed: ${{ steps.summary.outputs.services_changed }}
     
     steps:
     - uses: actions/checkout@v4
@@ -237,3 +239,4 @@ jobs:
         
         # Also set individual strategy output for easy access
         echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+        echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
