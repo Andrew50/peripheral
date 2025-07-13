@@ -66,7 +66,7 @@ done
 
 
 docker build \
-  build_args="--progress=plain --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $DOCKER_USERNAME/db:migration" \
+  --progress=plain --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $DOCKER_USERNAME/db:migration \
   -t "$DOCKER_USERNAME/db:migrations" \
   -f "services/db/migrations/Dockerfile.prod" \
   "services/db/migrations"
