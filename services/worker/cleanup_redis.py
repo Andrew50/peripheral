@@ -22,7 +22,7 @@ def cleanup_stale_heartbeats():
         port=redis_port,
         password=redis_password if redis_password else None,
         decode_responses=True
-    ) 
+    )
     
     try:
         # Test connection
