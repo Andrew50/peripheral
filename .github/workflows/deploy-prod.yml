@@ -39,6 +39,7 @@ jobs:
       POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
       POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}

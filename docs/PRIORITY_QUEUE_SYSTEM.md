@@ -106,9 +106,6 @@ Completed create_strategy task abc123 from priority queue in 25.3s
 
 ### Queue Management Functions
 
-```python
-# Get queue statistics
-stats = get_queue_statistics(redis_client)
 
 # Clear specific queue
 cleared_count = clear_queue(redis_client, 'strategy_queue_priority')
