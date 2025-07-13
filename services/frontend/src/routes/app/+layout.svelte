@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { isPublicViewing as isPublicViewingStore } from '$lib/utils/stores/stores';
 	import type { AuthLayoutData } from '$lib/auth';
-
+	import AlertPopup from '$lib/components/alertPopup.svelte';
 	export let data: AuthLayoutData;
 
 	// Set up client-side state based on server-provided data
@@ -19,15 +19,14 @@
 			if (!sessionStorage.getItem('authToken')) {
 				sessionStorage.setItem('authToken', data.user.authToken);
 				sessionStorage.setItem('profilePic', data.user.profilePic || '');
-				sessionStorage.setItem('username', data.user.username || '');
 			}
 		} else if (data.isPublicViewing) {
 			// Clear any existing auth data for public viewing
 			sessionStorage.removeItem('authToken');
 			sessionStorage.removeItem('profilePic');
-			sessionStorage.removeItem('username');
 		}
 	});
 </script>
+<AlertPopup />
 
 <slot />

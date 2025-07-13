@@ -12,7 +12,7 @@
 
 <SiteHeader {isAuthenticated} />
 
-<Auth loginMenu={true} />
+<Auth mode="login" />
 
 <ChipSection />
 

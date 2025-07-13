@@ -45,6 +45,7 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
+	"validateInvite":                   ValidateInvite,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -829,6 +830,7 @@ func StartServer(conn *data.Conn) {
 	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
 	http.Handle("/healthz", withPanicRecovery(HealthCheck()))
 	http.Handle("/billing/webhook", withPanicRecovery(stripeWebhookHandler(conn)))
+	http.Handle("/webhook/twitterapi/v1", withPanicRecovery(twitterWebhookHandler(conn)))
 
 	server := &http.Server{
 		Addr:         ":5058",

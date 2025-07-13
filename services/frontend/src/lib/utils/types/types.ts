@@ -91,11 +91,13 @@ export interface StreamInfo {
 	startTimestamp: number | null;
 	replaySpeed: number;
 }
-export interface AlertData {
+export interface  AlertData {
 	message: string;
 	alertId: number;
 	timestamp: number;
 	securityId: number;
+	type: string;
+	tickers: string[];
 }
 export interface AlertLog {
 	alertLogId: number;

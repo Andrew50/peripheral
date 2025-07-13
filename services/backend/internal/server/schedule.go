@@ -172,15 +172,15 @@ var (
 			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
 		},
 		{
-			Name:           "UpdateAllOHLCV",
-			Function:       marketdata.UpdateAllOHLCV,
+			Name:           "UpdateSecurityTables",
+			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},
 		{
-			Name:           "UpdateSecurityTables",
-			Function:       simpleSecuritiesUpdateJob,
+			Name:           "UpdateAllOHLCV",
+			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -531,7 +531,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 			default:
 				err = fmt.Errorf("panic: %v", x)
 			}
-			_ = alerts.LogCriticalAlert(err)
+			_ = alerts.LogCriticalAlert(err, jobName)
 			log.Printf("❌ Job %s panicked: %v", jobName, err)
 		}
 	}()
@@ -557,7 +557,7 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Handle completion logging based on execution result
 	if err != nil {
 		log.Printf("❌ Job %s FAILED after %v: %v", jobName, duration, err)
-		_ = alerts.LogCriticalAlert(err)
+		_ = alerts.LogCriticalAlert(err, jobName)
 		return
 	}
 
@@ -612,7 +612,22 @@ func startPolygonWebSocket(conn *data.Conn) error {
 	defer polygonInitMutex.Unlock()
 
 	if !polygonInitialized {
-		err := socket.StartPolygonWS(conn, useBS)
+		// Check if OHLCV data is fresh (within 7 days)
+		dataFresh, err := marketdata.CheckOHLCVDataFreshness(conn)
+		if err != nil {
+			log.Printf("❌ Failed to check OHLCV data freshness: %v", err)
+			// Send critical alert about the freshness check failure
+			_ = alerts.LogCriticalAlert(fmt.Errorf("failed to check OHLCV data freshness: %w", err), "startPolygonWebSocket")
+			// Default to disabling realtime if check fails
+			dataFresh = false
+		}
+
+		if !dataFresh {
+			// Send critical alert about stale data
+			_ = alerts.LogCriticalAlert(fmt.Errorf("OHLCV data is stale (older than 7 days) - realtime streaming disabled"), "startPolygonWebSocket")
+		}
+
+		err = socket.StartPolygonWS(conn, useBS, dataFresh)
 		if err != nil {
 			//log.Printf("Failed to start Polygon WebSocket: %v", err)
 			return err

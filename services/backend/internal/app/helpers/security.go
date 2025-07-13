@@ -933,6 +933,21 @@ func GetIcons(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, err
 	return results, nil
 }
 
+// GetIcon performs operations to get a single icon for a ticker.
+func GetIcon(conn *data.Conn, ticker string) (string, error) {
+	// Validate ticker input
+	if ticker == "" {
+		return "", nil // Return empty string for empty ticker
+	}
+
+	var icon string
+	err := conn.DB.QueryRow(context.Background(), "SELECT COALESCE(icon, '') from securities where ticker = $1 and maxDate is NULL", ticker).Scan(&icon)
+	if err != nil {
+		return "", nil // Return empty string on error, don't propagate error
+	}
+	return icon, nil
+}
+
 type GetCurrentSecurityIDArgs struct {
 	Ticker string `json:"ticker"`
 }

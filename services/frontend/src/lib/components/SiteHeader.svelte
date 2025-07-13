@@ -11,30 +11,47 @@
 	let isHeaderVisible = true;
 	let isHeaderTransparent = true;
 	let prevScrollY = 0;
+	// Mobile sidebar state
+	let isSidebarOpen = false;
+	
 	import '$lib/styles/splash.css';
+	
 	function handleScroll() {
 		const currentY = window.scrollY;
 		const isOnSplashPage = window.location.pathname === '/';
+		
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
 			isHeaderVisible = true;
 		} else if (isOnSplashPage && $timelineProgress === 1) {
 			isHeaderVisible = false;
 		}
+		
 		// Make header transparent near the top of the page
-		isHeaderTransparent =  currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
+		isHeaderTransparent = currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
+		
 		prevScrollY = currentY;
 	}
 
 	// Navigation helpers
 	function navigateTo(path: string) {
 		if (!browser) return;
+		// Close sidebar on navigation
+		isSidebarOpen = false;
 		if (window.location.pathname === path) {
 			// Already on the desired route – just scroll to top for a snappy UX
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} else {
 			goto(path);
 		}
+	}
+
+	function toggleSidebar() {
+		isSidebarOpen = !isSidebarOpen;
+	}
+
+	function closeSidebar() {
+		isSidebarOpen = false;
 	}
 
 	onMount(() => {
@@ -49,8 +66,38 @@
 	});
 	
 </script>
+
 <!-- Window scroll listener -->
 <svelte:window on:scroll={handleScroll} />
+
+<!-- Mobile sidebar overlay -->
+{#if isSidebarOpen}
+	<div class="sidebar-overlay" on:click={closeSidebar}></div>
+{/if}
+
+<!-- Mobile sidebar -->
+<div class="sidebar" class:open={isSidebarOpen}>
+	<div class="sidebar-header">
+		<div class="logo-section">
+			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<p class="logo-text">Peripheral</p>
+		</div>
+		<button class="close-button" on:click={closeSidebar}>
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+				<path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			</svg>
+		</button>
+	</div>
+	<nav class="sidebar-nav">
+		<button class="sidebar-nav-button" on:click={() => navigateTo('/pricing')}>Pricing</button>
+		{#if isAuthenticated}
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}>Go to Terminal</button>
+		{:else}
+			<button class="sidebar-nav-button" on:click={() => navigateTo('/login')}>Login</button>
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
+		{/if}
+	</nav>
+</div>
 
 <!-- Pill-style global site header reused across all pages -->
 <header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
@@ -59,7 +106,9 @@
 			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text">Peripheral</p>
 		</div>
-		<div class="navigation">
+		
+		<!-- Desktop navigation -->
+		<div class="navigation desktop-nav">
 			<button class="nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
 			{#if isAuthenticated}
 				<button class="nav-button primary" on:click={() => navigateTo('/app')}>Go to Terminal</button>
@@ -68,6 +117,13 @@
 				<button class="nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
 			{/if}
 		</div>
+
+		<!-- Mobile hamburger menu -->
+		<button class="hamburger-menu mobile-only" on:click={toggleSidebar}>
+			<div class="hamburger-line"></div>
+			<div class="hamburger-line"></div>
+			<div class="hamburger-line"></div>
+		</button>
 	</nav>
 </header>
 
@@ -105,7 +161,7 @@
 	}
 
 	.logo-text {
-		color: var(--color-dark);
+		color: #f5f9ff;
 		font-size: 1.25rem;
 		font-weight: 700;
 		margin: 0;
@@ -150,6 +206,115 @@
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 	}
 
+	/* Hamburger Menu */
+	.hamburger-menu {
+		display: none;
+		flex-direction: column;
+		justify-content: space-between;
+		width: 18px;
+		height: 14px;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.hamburger-line {
+		width: 100%;
+		height: 1.5px;
+		background-color: var(--color-dark);
+		border-radius: 1px;
+		transition: all 0.3s ease;
+	}
+
+	/* Sidebar */
+	.sidebar-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100vw;
+		height: 100vh;
+		background: rgba(0, 0, 0, 0.5);
+		z-index: 1999;
+	}
+
+	.sidebar {
+		position: fixed;
+		top: 0;
+		right: -100vw;
+		width: 100vw;
+		height: 100vh;
+		background: #ffffff;
+		z-index: 2000;
+		transition: right 0.3s ease;
+		box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+	}
+
+	.sidebar.open {
+		right: 0;
+	}
+
+	.sidebar-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1.5rem 1.5rem 1rem 1.5rem;
+		border-bottom: none;
+	}
+
+	.close-button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		color: #000;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.sidebar-nav {
+		display: flex;
+		flex-direction: column;
+		padding: 2rem 1.5rem;
+		gap: 2rem;
+	}
+
+	.sidebar-nav-button {
+		padding: 0;
+		border: none;
+		border-radius: 0;
+		font-size: 1.25rem;
+		font-weight: 400;
+		cursor: pointer;
+		text-decoration: none;
+		background: transparent;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		text-align: left;
+		transition: all 0.15s ease;
+		color: #000;
+		line-height: 1.4;
+	}
+
+	.sidebar-nav-button.primary {
+		background: transparent;
+		color: #000;
+		border: none;
+		font-weight: 400;
+	}
+
+	.sidebar-nav-button:hover {
+		color: #666;
+		background: none;
+	}
+
+	.sidebar-nav-button.primary:hover {
+		color: #666;
+		background: none;
+	}
+
 	#site-header {
 		position: fixed;
 		top: var(--header-top);
@@ -183,22 +348,60 @@
 		pointer-events: none;
 		transition: transform 0.4s cubic-bezier(.4, 0, .2, 1), opacity 0.4s cubic-bezier(.4, 0, .2, 1);
 	}
+	
 	:global(*) {
-			box-sizing: border-box;
+		box-sizing: border-box;
 	}
+
+	/* Mobile-specific styles */
+	.mobile-only {
+		display: none;
+	}
+
+	.desktop-nav {
+		display: flex;
+	}
+
 	/* Responsive tweaks */
 	@media (max-width: 768px) {
+		/* Mobile header becomes rectangle */
+		#site-header {
+			top: 0;
+			left: 0;
+			transform: none;
+			width: 100vw;
+			max-width: none;
+			height: 60px;
+			border-radius: 0;
+			background: #f5f9ff;
+			backdrop-filter: blur(16px);
+			border: none;
+			border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+		}
+
+		#site-header.transparent {
+			background: transparent;
+			backdrop-filter: none;
+			border-bottom: none;
+			box-shadow: none;
+		}
+
+		#site-header.hidden-up {
+			transform: translateY(-100%);
+		}
+
 		.header-content {
 			padding: 0 1rem;
 		}
 
-		.navigation {
-			gap: 0.5rem;
+		/* Hide desktop navigation, show mobile menu */
+		.desktop-nav {
+			display: none;
 		}
 
-		.nav-button {
-			padding: 0.4rem 1rem;
-			font-size: 0.8rem;
+		.mobile-only {
+			display: flex;
 		}
 
 		.logo-image {
@@ -207,6 +410,12 @@
 
 		.logo-text {
 			font-size: 1.1rem;
+		}
+
+		/* Adjust root variables for mobile */
+		:global(:root) {
+			--header-h: 60px;
+			--header-top: 0;
 		}
 	}
 </style> 

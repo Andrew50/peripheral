@@ -51,22 +51,14 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     if 'x' in plottable_data and 'y' in plottable_data:
         x_data = plottable_data['x']
         y_data = plottable_data['y']
-        
-        if len(y_data) < 50:
-            ax.plot(x_data, y_data, 'o-', label=trace_name, alpha=0.8)
-        else:
-            ax.plot(x_data, y_data, '-', label=trace_name, alpha=0.8)
+        ax.plot(x_data, y_data, 'o', linestyle='', label=trace_name, alpha=1)
         plotted = True
     
     # Strategy 2: Y data only (create index for x)
     elif 'y' in plottable_data:
         y_data = plottable_data['y']
         x_data = list(range(len(y_data)))
-        
-        if len(y_data) < 50:
-            ax.plot(x_data, y_data, 'o-', label=trace_name, alpha=0.8)
-        else:
-            ax.plot(x_data, y_data, '-', label=trace_name, alpha=0.8)
+        ax.plot(x_data, y_data, 'o', linestyle='', label=trace_name, alpha=0.8)
         plotted = True
     
     # Strategy 3: X data only (histogram-like - show distribution)
@@ -97,7 +89,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     return plotted
 
 
-def plotly_to_matplotlib_png(plotly_fig) -> str:
+def plotly_to_matplotlib_png(plotly_fig, plotID, strategy_id) -> str:
     """
     Convert any Plotly figure to a simple matplotlib PNG for LLM analysis
     
@@ -140,9 +132,13 @@ def plotly_to_matplotlib_png(plotly_fig) -> str:
         # Extract title if available
         try:
             if hasattr(plotly_fig, 'layout') and hasattr(plotly_fig.layout, 'title'):
+                # Correctly fetch title text from the figure layout; fallback to a default if missing
                 title_text = getattr(plotly_fig.layout.title, 'text', None)
                 if title_text:
-                    ax.set_title(title_text)
+                    title_text = f"Plot {plotID} Strategy ID: {strategy_id} - " + title_text
+                else: 
+                    title_text = f"Plot {plotID} Strategy ID: {strategy_id}"
+                ax.set_title(title_text)
         except Exception:
             pass  # Title is optional
         

@@ -31,7 +31,6 @@
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get, writable } from 'svelte/store';
 	import {
@@ -143,9 +142,9 @@
 	let lastBottomWindow: BottomWindow | null = null;
 
 	// Initialize with default question mark avatar
-	let profilePic = '';
-	let username = '';
-	let profilePicError = false;
+	//let profilePic = '';
+	// Username removed - using email for avatar generation when needed
+	//let profilePicError = false;
 	let profileIconKey = 0;
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
@@ -377,8 +376,7 @@
 
 			// Initialize subscription status if user is authenticated
 			const authToken = sessionStorage.getItem('authToken');
-			const username = sessionStorage.getItem('username');
-			if (authToken && username) {
+			if (authToken) {
 				// Only fetch if we haven't already triggered it above
 				if (!sessionId) {
 					fetchSubscriptionStatus();
@@ -732,7 +730,7 @@
 	// Add reactive statement for profile display
 	$: {
 		// Recalculate the profile display whenever these values change
-		if (profilePic || username || profilePicError) {
+		if (profilePic || profilePicError) {
 			currentProfileDisplay = calculateProfileDisplay();
 		}
 	}
@@ -743,9 +741,9 @@
 			return profilePic;
 		}
 
-		// If username is available, generate avatar with initial
-		if (username) {
-			const initial = username.charAt(0).toUpperCase();
+		// Generate default avatar with '?' initial since we no longer have username
+		{
+			const initial = '?';
 			// Use a simpler SVG format to ensure browser compatibility
 			const avatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
 
@@ -777,11 +775,10 @@
 		profilePicError = true;
 
 		// Generate a fallback immediately
-		if (username) {
-			const initial = username.charAt(0).toUpperCase();
+		// Generate default avatar with '?' initial since we no longer have username
+		{
+			const initial = '?';
 			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${initial}</text></svg>`;
-		} else {
-			profilePic = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 		}
 
 		// Update the stored value with our fallback
@@ -838,7 +835,7 @@
 	}
 
 	// Add reactive statements to update the profile icon when data changes
-	$: if (profilePic || username) {
+	$: if (profilePic) {
 		// Increment key to force re-render when profile data changes
 		profileIconKey++;
 	}
@@ -1088,7 +1085,7 @@
 	}
 
 	function openPricingSettings() {
-		goto('/pricing');
+		window.location.href = "/pricing";
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1140,6 +1137,62 @@
 		if (document.title !== siteTitle) {
 			document.title = siteTitle;
 		}
+	}
+
+	// Default profile picture generation
+	let profilePic = '';
+	let profilePicError = false;
+	let userEmail = '';
+
+	onMount(async () => {
+		// ... existing code ...
+
+		const authToken = sessionStorage.getItem('authToken');
+		if (authToken) {
+			// ... existing logic for other API calls ...
+		}
+
+		// ... existing code ...
+	});
+
+	// ... existing code ...
+
+	// Generate initial avatar SVG from email address
+	function generateInitialAvatar(email: string) {
+		const initial = email ? email.charAt(0).toUpperCase() : 'U';
+		const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+		const colorIndex = initial.charCodeAt(0) % colors.length;
+		const bgColor = colors[colorIndex];
+
+		return `data:image/svg+xml,${encodeURIComponent(`
+			<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+				<rect width="32" height="32" rx="16" fill="${bgColor}"/>
+				<text x="16" y="20" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">${initial}</text>
+			</svg>
+		`)}`;
+	}
+
+	// ... existing code ...
+
+	// Update avatar generation logic
+	$: if (profilePic || userEmail) {
+		// Use profilePic if available, otherwise generate from email
+		profilePic = profilePic || generateInitialAvatar(userEmail);
+	} else {
+		// Default placeholder
+		profilePic = generateInitialAvatar('');
+	}
+
+	// ... existing code ...
+
+	// Update subscription check condition
+	$: if (
+		browser &&
+		sessionStorage.getItem('authToken') &&
+		!$subscriptionStatus.isActive &&
+		!$subscriptionStatus.loading
+	) {
+		// ... existing subscription logic ...
 	}
 </script>
 
@@ -1497,7 +1550,7 @@
 
 			<div class="bottom-bar-right">
 				<!-- Upgrade button - only show if user is authenticated but not subscribed -->
-				{#if browser && sessionStorage.getItem('authToken') && sessionStorage.getItem('username') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+				{#if browser && sessionStorage.getItem('authToken') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
 					<button
 						class="toggle-button upgrade-button"
 						on:click={openPricingSettings}
@@ -1592,19 +1645,19 @@
 			{/if}
 			-->
 
-				<span class="value">
-					{#if $streamInfo.timestamp !== undefined}
-						{formatTimestamp($streamInfo.timestamp)}
-					{:else}
-						Loading Time...
-					{/if}
-				</span>
-				<!-- Site logo (clickable) -->
-				<a href="/" class="bottom-logo-link">
-					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-				</a>
-			</div>
+			<span class="value">
+				{#if $streamInfo.timestamp !== undefined}
+					{formatTimestamp($streamInfo.timestamp)}
+				{:else}
+					Loading Time...
+				{/if}
+			</span>
+			<!-- Site logo (clickable) -->
+			<a  class="bottom-logo-link" on:click={() => window.location.href = "/"}>
+				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+			</a>
 		</div>
+	</div>
 
 		{#if showSettingsPopup}
 			<div
@@ -1656,7 +1709,7 @@
 	.top-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
@@ -1842,41 +1895,6 @@
 		flex-shrink: 0;
 	}
 
-	/* Sidebar controls styles */
-	.sidebar-controls {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: auto;
-		min-width: 200px;
-		height: 40px;
-		gap: 8px;
-	}
-
-	.alert-controls-right {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: 100%;
-		padding-right: 8px;
-	}
-
-	.create-alert-btn {
-		padding: 6px 12px;
-		font-size: 13px;
-		font-weight: 600;
-		color: #ffffff;
-		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 6px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-	}
-
-	.create-alert-btn:hover {
-		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 0.4);
-	}
 
 	/* Upgrade button styles */
 	.upgrade-button {
@@ -1908,7 +1926,7 @@
 		right: 0;
 		width: 45px; /* same width as sidebar-buttons */
 		height: 40px; /* same height as top bar */
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1929,11 +1947,6 @@
 		display: block;
 	}
 
-	/* Hide original bottom bar profile button */
-	.bottom-bar .profile-button {
-		display: none;
-	}
-
 	/* Bottom bar logo */
 	.bottom-bar .bottom-logo {
 		height: 28px;
@@ -1944,6 +1957,8 @@
 	.bottom-logo-link {
 		display: inline-flex;
 		align-items: center;
+		cursor: pointer;
+		
 	}
 
 	/* New layout structure styles */
@@ -1970,7 +1985,7 @@
 	.sidebar-header {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0f0f0f;
+		background-color: #121212;
 		display: flex;
 		align-items: center;
 		padding: 0 10px;
@@ -2041,7 +2056,108 @@
 		position: fixed;
 		inset: 0; /* top:0; right:0; bottom:0; left:0; */
 		z-index: 9999; /* above everything */
-		background: #0f0f0f; /* match site background so it feels native */
+		background: #121212; /* match site background so it feels native */
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* New layout structure styles */
+	.main-horizontal-container {
+		display: flex;
+		flex: 1;
+		height: 100%;
+	}
+
+	.center-section {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0; /* Allows flex child to shrink below content size */
+	}
+
+	.sidebar {
+		display: flex !important;
+		flex-direction: column;
+		height: 100%;
+		border-left: 4px solid var(--c1);
+	}
+
+	.sidebar-header {
+		height: 40px;
+		min-height: 40px;
+		background-color: #121212;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		flex-shrink: 0;
+		width: 100%;
+		z-index: 10;
+		border-bottom: 4px solid var(--c1);
+	}
+
+	.sidebar-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	/* ───── Alert tab styles ─────────────────────────────────────────────────── */
+	.alert-tab-container {
+		display: flex;
+		align-items: center;
+		flex-grow: 1;
+		min-width: 0;
+		gap: 0;
+	}
+
+	.sidebar-header .watchlist-tab {
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		color: rgba(255, 255, 255, 0.9);
+		padding: 6px 12px;
+		background: transparent;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border: 1px solid transparent;
+		cursor: pointer;
+		transition: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	}
+
+	.sidebar-header .watchlist-tab:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.sidebar-header .watchlist-tab:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+	}
+
+	.sidebar-header .watchlist-tab.active {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: transparent;
+		color: #ffffff;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+	}
+
+	/* Mobile full-screen chat container */
+	.mobile-chat-container {
+		position: fixed;
+		inset: 0; /* top:0; right:0; bottom:0; left:0; */
+		z-index: 9999; /* above everything */
+		background: #121212; /* match site background so it feels native */
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;

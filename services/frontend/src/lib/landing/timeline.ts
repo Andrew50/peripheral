@@ -18,7 +18,7 @@ export interface TimelineActions {
   setChart: (keys: string[], chartType: 'candle' | 'line') => void;
 }
 export const sampleQuery = "Analyze the impact of tariffs on tech and retail stocks between 2018 and 2025.";
-export const totalScroll = 10000; // px of wheel delta required for full timeline
+export const totalScroll = 5000; // px of wheel delta required for full timeline
 
 // Global store containing the hero animation progress (0 → 1)
 export const timelineProgress = writable(0);
@@ -50,17 +50,7 @@ export function createTimelineEvents({
       backward: () => removeLastMessage()
     },
     {
-      trigger: 0.1, 
-      forward: () => addAssistantMessage([
-        {
-          type: "text",
-          content: "## Key takeaways\n\n Tech showed larger swings: large downside in the early 2025 tariff threat; strong upside after China's Aug 23 2019 retaliation.\n\n• Retail was consistently resilient. $$WMT-0$$ posted positive 1- and 3-month returns in 5 of 6 events; $$COST-0$$ outperformed tech during the worst tech draw-downs (Feb 2020, Jan 2025).\n\n• Aug 23 2019 (China retaliation) delivered the best across-board results, suggesting markets had largely priced in U.S. escalation but viewed China's response as a catalyst for negotiation.\n"
-        },
-      ]),
-      backward: () => removeLastMessage()
-    },
-    {
-      trigger: 0.2,
+      trigger: 0.10,
       forward: () => addAssistantMessage([
         {
             "type": "table",
@@ -86,29 +76,62 @@ export function createTimelineEvents({
       },
     // Immediately after the table is injected, scroll it into view & focus first row
     {
-      trigger: 0.205,
+      trigger: 0.105,
       forward: () => highlightEventForward(-1),   // scroll table only
       backward: () => setChart([ChartKey("QQQ", 0, "1d")], "candle")
     },
     {
-      trigger: 0.30,
+      trigger: 0.20,
       forward: () => {highlightEventForward(2), setChart([ChartKey("QQQ", Date.UTC(2019, 8, 1), "1d"), ChartKey("WMT", Date.UTC(2019, 8, 1), "1d"), ChartKey("COST", Date.UTC(2019, 8, 1), "1d")], "line")}    // now highlight third row
     },
     {
-      trigger: 0.40,
+      trigger: 0.30,
       forward: () => highlightEventForward(5),
       backward: () => highlightEventForward(2)
     },
     {
-      trigger: 0.75,
+      trigger: 0.4,
+      forward: () => {
+        addAssistantMessage([
+          {
+            type: "plot",
+            content: {
+              "chart_type": "scatter",
+              "title": "Stock Performance After Tariff Events",
+              "data": [
+                {
+                  "x": [1, 2, 3, 4, 5],
+                  "y": [1, 4, 2, 8, 5],
+                  "type": "scatter",
+                  "mode": "markers+lines",
+                  "name": "Test Data"
+                }
+              ],
+              "layout": {
+                "xaxis": {"title": "X"},
+                "yaxis": {"title": "Y"}
+              }
+            }
+          }
+        ]);
+      },
+      backward: () => removeLastMessage()
+    },
+    {
+      trigger: 0.405,
+      forward: () => highlightEventForward(-2), // -2 will scroll plot into view
+      backward: () => {}
+    },
+    {
+      trigger: 0.75, 
       forward: () => addAssistantMessage([
         {
-          "type": "text",
-          "content": "Here's how that looks on the chart."
-        }
+          type: "text",
+          content: "## Key takeaways\n\n Tech showed larger swings: large downside in the early 2025 tariff threat; strong upside after China's Aug 23 2019 retaliation.\n\n• Retail was consistently resilient. $$WMT-0$$ posted positive 1- and 3-month returns in 5 of 6 events; $$COST-0$$ outperformed tech during the worst tech draw-downs (Feb 2020, Jan 2025).\n\n• Aug 23 2019 (China retaliation) delivered the best across-board results, suggesting markets had largely priced in U.S. escalation but viewed China's response as a catalyst for negotiation.\n"
+        },
       ]),
       backward: () => removeLastMessage()
-    }
+    },
   ];
 } [
 

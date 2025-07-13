@@ -4,10 +4,10 @@
 /* Design System Variables */
 :root {
 	/* Landing page primary color palette */
-	--color-dark: #0B2E33;
-	--color-primary: #4F7C82;
-	--color-accent: #93B1B5;
-	--color-light: #B8E3E9;
+	--color-dark: #1a1a1a;
+	--color-primary: #666666;
+	--color-accent: #999999;
+	--color-light: #cccccc;
 
 	/* Shared sizing variables referenced across the landing page */
 	--pill-size: 40px;
@@ -23,13 +23,13 @@
 	--landing-text-primary: #f9fafb;
 	--landing-text-secondary: #9ca3af;
 	--landing-text-muted: #6b7280;
-	--landing-accent-blue: #3b82f6;
-	--landing-accent-blue-hover: #2563eb;
-	--landing-accent-blue-light: #60a5fa;
+	--landing-accent-blue: #666666;
+	--landing-accent-blue-hover: #555555;
+	--landing-accent-blue-light: #777777;
 	--landing-success: #22c55e;
 	--landing-error: #ef4444;
 	--landing-border: rgba(255, 255, 255, 0.1);
-	--landing-border-focus: rgba(59, 130, 246, 0.5);
+	--landing-border-focus: rgba(102, 102, 102, 0.5);
 	--landing-glass-bg: rgba(255, 255, 255, 0.03);
 	--landing-glass-border: rgba(255, 255, 255, 0.08);
 	--landing-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
@@ -83,7 +83,7 @@
 .landing-orb-1 {
 	width: 400px;
 	height: 400px;
-	background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%);
+	background: radial-gradient(circle, rgba(102, 102, 102, 0.4) 0%, transparent 70%);
 	top: -200px;
 	left: -200px;
 	animation-delay: 0s;
@@ -92,7 +92,7 @@
 .landing-orb-2 {
 	width: 600px;
 	height: 600px;
-	background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+	background: radial-gradient(circle, rgba(153, 153, 153, 0.3) 0%, transparent 70%);
 	top: 40%;
 	right: -300px;
 	animation-delay: -10s;
@@ -101,7 +101,7 @@
 .landing-orb-3 {
 	width: 500px;
 	height: 500px;
-	background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
+	background: radial-gradient(circle, rgba(119, 119, 119, 0.2) 0%, transparent 70%);
 	bottom: -250px;
 	left: 20%;
 	animation-delay: -5s;
@@ -191,7 +191,7 @@
 .landing-button.primary:hover {
 	background: var(--landing-accent-blue-hover);
 	transform: translateY(-1px);
-	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+	box-shadow: 0 4px 12px rgba(102, 102, 102, 0.3);
 }
 
 .landing-button.secondary {
@@ -211,7 +211,7 @@
 }
 
 .landing-button.outline:hover {
-	background: rgba(59, 130, 246, 0.1);
+	background: rgba(102, 102, 102, 0.1);
 	transform: translateY(-1px);
 }
 
@@ -254,7 +254,7 @@
 	outline: none;
 	border-color: var(--landing-border-focus);
 	background: rgba(255, 255, 255, 0.08);
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+	box-shadow: 0 0 0 3px rgba(102, 102, 102, 0.1);
 }
 
 .landing-input:disabled {

@@ -139,7 +139,7 @@ func convertDBMessagesToConversationData(conn *data.Conn, userID int, dbMessages
 	var totalTokenCount int
 
 	for _, dbMsg := range dbMessages {
-		contentChunks := processContentChunksForTables(context.Background(), conn, userID, dbMsg.ContentChunks)
+		contentChunks := processContentChunksForFrontend(context.Background(), conn, userID, dbMsg.ContentChunks)
 		chatMsg := ChatMessage{
 			MessageID:        dbMsg.MessageID,
 			Query:            dbMsg.Query,
