@@ -446,6 +446,10 @@
 	<div class="plot-container">
 		<Plot data={processedData} {layout} config={defaultConfig} fillParent={true} debounce={250} />
 	</div>
+	
+	<div class="watermark">
+		Powered by <span class="watermark-brand">Peripheral.io</span>
+	</div>
 </div>
 
 <style>
@@ -489,6 +493,20 @@
 		height: 350px;
 		width: 100%;
 		overflow: hidden;
+	}
+
+	.watermark {
+		text-align: right;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-size: 13px;
+		color: rgba(255, 255, 255, 1);
+		margin-top: 4px;
+		margin-right: 8px;
+	}
+
+	.watermark-brand {
+		font-size: 20px;
+		font-weight: 600;
 	}
 
 	/* Responsive adjustments */
