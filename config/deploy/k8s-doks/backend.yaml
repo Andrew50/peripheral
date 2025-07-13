@@ -30,7 +30,7 @@ spec:
                 - db
             topologyKey: kubernetes.io/hostname
       containers:
-        - name: backend
+        - name: backend 
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
           #command: ["/app/main"] # hanlded by the docker file
