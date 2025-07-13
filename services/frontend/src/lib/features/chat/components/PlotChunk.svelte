@@ -85,7 +85,8 @@
 		xaxis: {
 			...baseLayout.xaxis,
 			...userLayout.xaxis,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`
+			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+			linecolor: 'rgba(255, 255, 255, 0.8)'
 		},
 		yaxis: {
 			...baseLayout.yaxis,
@@ -349,7 +350,8 @@
 				xaxis: {
 					...baseLayout.xaxis,
 					...userLayoutWithoutDimensions.xaxis,
-					gridcolor: 'rgba(71, 85, 105, 0.08)'
+					gridcolor: 'rgba(255, 255, 255, 0.08)',
+					linecolor: 'rgba(255, 255, 255, 0.3)'
 				},
 				// Primary y-axis (left side)
 				yaxis: {
@@ -357,7 +359,7 @@
 					...userLayoutWithoutDimensions.yaxis,
 					side: 'left' as const,
 					title: userLayoutWithoutDimensions.yaxis?.title || '',
-					gridcolor: 'rgba(71, 85, 105, 0.08)'
+					gridcolor: 'rgba(255, 255, 255, 0.08)'
 				},
 				// Secondary y-axis (right side)
 				yaxis2: {
