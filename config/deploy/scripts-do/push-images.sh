@@ -78,15 +78,7 @@ elif [[ "$TARGET_BRANCH" == "dev" ]]; then
 fi
 
 echo "Pushing db-migrations image..."
-push_image "db-migrations" "$DOCKER_TAG"
-
-if [[ "$TARGET_BRANCH" == "prod" ]]; then
-  docker tag "$DOCKER_USERNAME/db-migrations:$DOCKER_TAG" "$DOCKER_USERNAME/db-migrations:latest"
-  push_image "db-migrations" "latest"
-elif [[ "$TARGET_BRANCH" == "dev" ]]; then
-  docker tag "$DOCKER_USERNAME/db-migrations:$DOCKER_TAG" "$DOCKER_USERNAME/db-migrations:development"
-  push_image "db-migrations" "development"
-fi
+push_image "db" "migrations"
 
 wait
 

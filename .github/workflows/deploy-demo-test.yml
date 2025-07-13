@@ -33,7 +33,7 @@ on:
       services_changed:
         required: false
         type: string
-      needs_migration:
+      migration_needed:
         required: false
         type: string
 #      public_base_url:
@@ -196,6 +196,8 @@ jobs:
           echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
           echo "Services to deploy: ${{ inputs.services_changed }}"   
 
+          echo "MIGRATION_NEEDED=${{ inputs.mig }}"
+
           CONFIG_DIR="config/deploy/k8s-doks"
           echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
           echo "Using Config Directory: ${CONFIG_DIR}"
@@ -234,7 +236,7 @@ jobs:
         run: config/deploy/scripts-do/deploy-to-k8s.sh
 
       - name: Run DB Migrations Job
-        if: false #inputs.needs_migration == 'true'
+        if: false #inputs.migration_needed == 'true'
         run: |
           # Substitute env vars into job manifest
           envsubst < config/deploy/k8s-doks/db-migrate-job.yaml > db-migrate-job.yaml

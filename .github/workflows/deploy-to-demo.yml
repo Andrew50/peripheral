@@ -41,7 +41,7 @@ jobs:
       #      public_base_url: 'https://peripheral.io'
       strategy: ${{ needs.detect_changes.outputs.strategy }}
       services_changed: ${{ needs.detect_changes.outputs.services_changed }}
-      needs_migration: ${{ needs.detect_changes.outputs.needs_migration }}
+      migration_needed: ${{ needs.detect_changes.outputs.migration_needed }}
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}

@@ -120,10 +120,10 @@ jobs:
         if [ -n "$MIGRATIONS" ]; then
           echo "🔥 DATABASE MIGRATIONS DETECTED:"
           echo "$MIGRATIONS" | sed 's/^/  /'
-          NEEDS_MIGRATION="true"
+          MIGRATION_NEEDED="true"
         else
           echo "❌ No database migrations"
-          NEEDS_MIGRATION="false"
+          MIGRATION_NEEDED="false"
         fi
         
         if [ -n "$DB_CONFIG" ]; then
@@ -190,7 +190,7 @@ jobs:
         elif [ "$NEEDS_DB_RESTART" = "true" ]; then
           STRATEGY="database-restart"
           echo "🔄 DEPLOYMENT STRATEGY: DATABASE RESTART + App deployment"
-        elif [ "$NEEDS_MIGRATION" = "true" ]; then
+        elif [ "$MIGRATION_NEEDED" = "true" ]; then
           STRATEGY="migrate-then-deploy"
           echo "🔥 DEPLOYMENT STRATEGY: HOT MIGRATION + App deployment"
         elif [ -n "$SERVICES_CHANGED" ]; then
@@ -208,7 +208,7 @@ jobs:
         SUMMARY=$(cat <<EOF
         {
           "strategy": "$STRATEGY",
-          "needs_migration": $NEEDS_MIGRATION,
+          "migration_needed": $MIGRATION_NEEDED,
           "needs_db_restart": $NEEDS_DB_RESTART,
           "needs_db_rebuild": $NEEDS_DB_REBUILD,
           "services_changed": "$SERVICES_CHANGED",
@@ -225,4 +225,4 @@ jobs:
         # Also set individual strategy output for easy access
         echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
         echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
-        echo "needs_migration=$NEEDS_MIGRATION" >> $GITHUB_OUTPUT
+        echo "migration_needed=$MIGRATION_NEEDED" >> $GITHUB_OUTPUT

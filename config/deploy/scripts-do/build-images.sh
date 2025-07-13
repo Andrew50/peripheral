@@ -24,13 +24,8 @@ build_service() {
   local dockerfile 
   local context
 
-  if [[ "$srv" == "db-migrations" ]]; then
-    dockerfile="services/db/migrations/Dockerfile.prod"
-    context="services/db/migrations"
-  else
-    dockerfile="services/${srv}/Dockerfile.prod"
-    context="services/$srv"
-  fi
+  dockerfile="services/${srv}/Dockerfile.prod"
+  context="services/$srv"
   echo "Building $srv from $dockerfile..."
   
 
@@ -69,7 +64,12 @@ for srv in "${SERVICES_ARRAY[@]}"; do
   pids+=($!)
 done
 
-build_service "db-migrations"
+
+docker build \
+  $build_args \
+  -t "$DOCKER_USERNAME/db:migrations" \
+  -f "services/db/migrations/Dockerfile.prod" \
+  "services/db/migrations"
 
 # Wait for all remaining builds to complete
 wait
