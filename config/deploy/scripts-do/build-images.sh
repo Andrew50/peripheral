@@ -21,7 +21,7 @@ echo "Building ${#SERVICES_ARRAY[@]} services with optimizations..."
 build_service() {
   local srv="$1"
 
-  local dockerfile
+  local dockerfile 
   local context
 
   if [[ "$srv" == "db-migrations" ]]; then
