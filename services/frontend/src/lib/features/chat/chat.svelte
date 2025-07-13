@@ -35,7 +35,7 @@
 	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import {
-		functionStatusStore,
+		agentStatusStore,
 		titleUpdateStore,
 		setMessageIdUpdateCallback,
 		sendChatQuery
@@ -581,8 +581,8 @@
 			messagesStore.update((current) => [...current, loadingMessage as Message]);
 
 			// <-- Set initial status immediately -->
-			functionStatusStore.set({
-				type: 'FunctionStatus',
+			agentStatusStore.set({
+				type: 'AgentStatusUpdate',
 				userMessage: 'Thinking...'
 			});
 
@@ -614,7 +614,7 @@
 
 				// Check if request was cancelled while awaiting
 				if (requestCancelled) {
-					functionStatusStore.set(null);
+					agentStatusStore.set(null);
 					// Try to clean up pending message on backend
 					await cleanupPendingMessage(currentProcessingQuery);
 					return;
@@ -628,7 +628,7 @@
 				}
 
 				// Clear status store on success
-				functionStatusStore.set(null);
+				agentStatusStore.set(null);
 
 				// Update conversation ID if this was a new chat
 				if (typedResponse.conversation_id && !currentConversationId) {
@@ -681,7 +681,7 @@
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
-					functionStatusStore.set(null);
+					agentStatusStore.set(null);
 					// Try to clean up pending message on backend
 					await cleanupPendingMessage(currentProcessingQuery);
 					return;
@@ -690,7 +690,7 @@
 				console.error('Error fetching response:', error);
 
 				// Clear status store on error
-				functionStatusStore.set(null);
+				agentStatusStore.set(null);
 
 				// Check if the error contains backend response data with messageID and conversationID
 				let errorMessageId = 'temp_error_' + Date.now();
@@ -725,7 +725,7 @@
 			console.error('Error in handleSubmit:', error);
 
 			// Clear status store on any error
-			functionStatusStore.set(null);
+			agentStatusStore.set(null);
 
 			// Check if the error contains backend response data with messageID and conversationID
 			let errorMessageId = 'temp_error_' + Date.now();
@@ -799,7 +799,7 @@
 	async function handleCancelRequest() {
 		if (isLoading) {
 			requestCancelled = true;
-			functionStatusStore.set(null);
+			agentStatusStore.set(null);
 
 			// Cancel WebSocket request if active
 			if (currentWebSocketCancel) {
@@ -1338,8 +1338,8 @@
 	}
 
 	// Reactive block to capture function status messages and build timeline
-	$: if ($functionStatusStore && browser && isProcessingMessage) {
-		const statusUpdate = $functionStatusStore;
+	$: if ($agentStatusStore && browser && isProcessingMessage) {
+		const statusUpdate = $agentStatusStore;
 
 		// Only add if this is a new message different from the last one
 		if (statusUpdate.userMessage && statusUpdate.userMessage !== lastStatusMessage) {
@@ -1431,7 +1431,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$functionStatusStore?.userMessage || 'Thinking...'}
+									currentStatus={$agentStatusStore?.userMessage || 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>
