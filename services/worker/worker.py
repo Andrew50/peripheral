@@ -166,56 +166,66 @@ class StrategyWorker:
             pass
     
     def _fetch_strategy_code(self, strategy_id: str) -> str:
-        """Fetch strategy code from database by strategy_id with connection recovery"""
+        """Fetch strategy code from database by strategy_id"""
+        result = self._fetch_multiple_strategy_codes([strategy_id])
+        
+        if strategy_id not in result:
+            raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+        
+        return result[strategy_id]
+    
+    
+    def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
+        """Fetch multiple strategy codes from database in a single query"""
+        if not strategy_ids:
+            return {}
+        
+        # Remove duplicates and None values
+        unique_ids = list(set(filter(None, strategy_ids)))
+        if not unique_ids:
+            return {}
+        
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Test connection health before use
                 self._ensure_db_connection()
                 
                 with self.db_conn.cursor() as cursor:
-                    # Fetch from consolidated strategies table
                     cursor.execute(
-                        "SELECT pythonCode FROM strategies WHERE strategyId = %s AND is_active = true",
-                        (strategy_id,)
+                        "SELECT strategyId, pythonCode FROM strategies WHERE strategyId = ANY(%s) AND is_active = true",
+                        (unique_ids,)
                     )
-                    result = cursor.fetchone()
+                    results = cursor.fetchall()
                     
-                    if result and result['pythoncode']:
-                        return result['pythoncode']
+                    # Build result dictionary
+                    strategy_codes = {}
+                    for row in results:
+                        if row['pythoncode']:  # Only include strategies with code
+                            strategy_codes[row['strategyid']] = row['pythoncode']
                     
-                    raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+                    # Log missing strategies
+                    missing_strategies = set(unique_ids) - set(strategy_codes.keys())
+                    if missing_strategies:
+                        logger.warning(f"Strategies not found or missing Python code: {missing_strategies}")
+                    
+                    return strategy_codes
                     
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
                 logger.warning(f"Database connection error on attempt {attempt + 1}/{max_retries}: {e}")
                 if attempt < max_retries - 1:
-                    # Try to reconnect
                     try:
                         self.db_conn.close()
                     except Exception:
                         logger.debug("Error closing database connection (expected during reconnection)")
                     self.db_conn = self._init_database()
                 else:
-                    logger.error(f"Failed to fetch strategy code after {max_retries} attempts")
+                    logger.error(f"Failed to fetch strategy codes after {max_retries} attempts")
                     raise
             except Exception as e:
-                logger.error(f"Failed to fetch strategy code for strategy_id {strategy_id}: {e}")
+                logger.error(f"Failed to fetch strategy codes for strategy_ids {unique_ids}: {e}")
                 raise
-    
-    
-    def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
-        """Fetch multiple strategy codes from database"""
-        strategy_codes = {}
         
-        for strategy_id in strategy_ids:
-            try:
-                strategy_codes[strategy_id] = self._fetch_strategy_code(strategy_id)
-            except Exception as e:
-                logger.error(f"Failed to fetch strategy {strategy_id}: {e}")
-                # Continue with other strategies
-                continue
-        
-        return strategy_codes
+        return {}
     
     def run(self):
         """Main queue processing loop with priority queue support"""
