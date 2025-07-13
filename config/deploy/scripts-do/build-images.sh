@@ -20,9 +20,21 @@ echo "Building ${#SERVICES_ARRAY[@]} services with optimizations..."
 # Start builds in parallel with limited concurrency
 build_service() {
   local srv="$1"
-  local dockerfile="services/${srv}/Dockerfile.prod"
+
+  local dockerfile
+  local context
+
+  if [[ "$srv" == "db-migrations" ]]; then
+    dockerfile="services/db/migrations/Dockerfile.prod"
+    context="services/db/migrations"
+  else
+    dockerfile="services/${srv}/Dockerfile.prod"
+    context="services/$srv"
+  fi
   echo "Building $srv from $dockerfile..."
   
+
+
   # Prepare build args
   build_args="--progress=plain --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $DOCKER_USERNAME/$srv:latest"
   
@@ -56,6 +68,8 @@ for srv in "${SERVICES_ARRAY[@]}"; do
   build_service "$srv" &
   pids+=($!)
 done
+
+build_service "db-migrations"
 
 # Wait for all remaining builds to complete
 wait
