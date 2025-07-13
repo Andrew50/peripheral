@@ -225,3 +225,4 @@ jobs:
         # Also set individual strategy output for easy access
         echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
         echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
+        echo "needs_migration=$NEEDS_MIGRATION" >> $GITHUB_OUTPUT
