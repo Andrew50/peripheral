@@ -13,7 +13,7 @@
 	min-height: 40px;
 	padding: 0 1rem 0 1rem;
 	border-bottom: 4px solid var(--c1);
-	background: #0f0f0f;
+	background: #121212;
 	flex-shrink: 0;
 }
 
@@ -1487,7 +1487,7 @@ button[data-ticker].ticker-button:hover,
 	min-height: 40px;
 	padding: 0 1rem 0 1rem;
 	border-bottom: 4px solid var(--c1);
-	background: #0f0f0f;
+	background: #121212;
 	flex-shrink: 0;
 }
 

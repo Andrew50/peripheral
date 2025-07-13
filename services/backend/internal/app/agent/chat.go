@@ -2,6 +2,7 @@
 package agent
 
 import (
+	"backend/internal/app/helpers"
 	"backend/internal/app/limits"
 	"backend/internal/app/strategy"
 	"backend/internal/data"
@@ -220,7 +221,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}, fmt.Errorf("error updating pending message to completed: %w", err)
 			}
 			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
-			processedChunks := processContentChunksForTables(ctx, conn, userID, v.ContentChunks)
+			processedChunks := processContentChunksForFrontend(ctx, conn, userID, v.ContentChunks)
 
 			// Record usage and deduct 1 credit now that chat completed successfully
 			metadata := map[string]interface{}{
@@ -366,7 +367,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 
 				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
-				processedChunks := processContentChunksForTables(ctx, conn, userID, finalResponse.ContentChunks)
+				processedChunks := processContentChunksForFrontend(ctx, conn, userID, finalResponse.ContentChunks)
 				return QueryResponse{
 					ContentChunks:  processedChunks,
 					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
@@ -493,6 +494,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
+						PlotID:     backtestPlotChunkContent.PlotID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
 						Length:     plot.Length,
@@ -510,8 +512,8 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 	return processedChunks
 }
 
-// processContentChunksForTables iterates through chunks and generates tables for "backtest_table" type.
-func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
+// processContentChunksForFrontend iterates through chunks and generates tables for "backtest_table" type.
+func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
 	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
 
@@ -707,17 +709,45 @@ func processContentChunksForTables(ctx context.Context, conn *data.Conn, userID 
 			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == plotID {
+					var titleIcon string
+					if plot.TitleTicker != "" {
+						titleIcon, _ = helpers.GetIcon(conn, plot.TitleTicker)
+					}
 					processedChunks = append(processedChunks, ContentChunk{
 						Type: "plot",
 						Content: map[string]any{
 							"chart_type": plot.ChartType,
 							"data":       plot.Data,
 							"title":      plot.Title,
+							"titleIcon":  titleIcon,
 							"layout":     plot.Layout,
 						},
 					})
 					break
 				}
+			}
+		} else if chunk.Type == "plot" {
+			// Handle titleTicker for plot chunks
+			if contentMap, ok := chunk.Content.(map[string]any); ok {
+				var titleIcon string
+				if titleTicker, exists := contentMap["titleTicker"].(string); exists && titleTicker != "" {
+					titleIcon, _ = helpers.GetIcon(conn, titleTicker)
+				}
+
+				// Create new content with titleIcon added
+				newContent := make(map[string]any)
+				for k, v := range contentMap {
+					newContent[k] = v
+				}
+				newContent["titleIcon"] = titleIcon
+
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    chunk.Type,
+					Content: newContent,
+				})
+			} else {
+				// If content is not a map, keep the original chunk
+				processedChunks = append(processedChunks, chunk)
 			}
 		} else {
 			// Keep non-instruction chunks as they are

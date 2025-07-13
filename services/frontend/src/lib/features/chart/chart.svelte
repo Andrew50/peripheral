@@ -1429,7 +1429,7 @@
 				textColor: 'white',
 				background: {
 					type: ColorType.Solid,
-					color: '#0f0f0f'
+					color: '#121212'
 				},
 				attributionLogo: false
 			},

@@ -98,7 +98,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "success",
-			"message": fmt.Sprintf("Processed %d tweets", len(extractedTweets)),
+			"message": "success",
 		})
 		// Queue the extracted data for background processing
 		err = processTwitterWebhookEvent(extractedTweets)
@@ -117,11 +117,11 @@ func processTwitterWebhookEvent(tweets []ExtractedTweetData) error {
 		// Extract ticker symbols from the tweet text
 		tickers := extractTickersFromTweet(tweet.Text)
 
-		socket.SendAlertToUser(1, socket.AlertMessage{
+		socket.SendAlertToAllUsers(socket.AlertMessage{
 			AlertID:    1,
 			Timestamp:  time.Now().Unix() * 1000,
 			SecurityID: 1,
-			Message:    fmt.Sprintf("@%s: %s", tweet.Username, tweet.Text),
+			Message:    tweet.Text,
 			Channel:    "alert",
 			Tickers:    tickers,
 		})
