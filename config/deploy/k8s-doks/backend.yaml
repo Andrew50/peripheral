@@ -109,6 +109,11 @@ spec:
                 secretKeyRef:
                   name: gemini-secret
                   key: GEMINI_FREE_KEYS
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-secret
+                  key: GEMINI_API_KEY
             - name: POLYGON_API_KEY
               valueFrom:
                 secretKeyRef:
