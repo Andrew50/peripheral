@@ -1321,3 +1321,7 @@ def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) 
     """
     accessor = get_data_accessor()
     return accessor.get_general_data(columns=columns, filters=filters)
+
+def generate_equity_curve(instances, group_column=None):
+    pass
+
