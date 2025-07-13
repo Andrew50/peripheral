@@ -156,10 +156,12 @@ export type ConversationData = {
 	timestamp: string | Date;
 };
 
-// Simplified timeline event - just use the raw messages from backend
+// Timeline event that can handle different types of events
 export type TimelineEvent = {
 	message: string; // The actual status message from backend
 	timestamp: Date;
+	type?: 'message' | 'websearch'; // Type of event
+	data?: any; // For web search queries or other structured data
 };
 
 // Message type for chat history

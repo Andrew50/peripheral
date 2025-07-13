@@ -159,26 +159,38 @@ func SendChatInitializationUpdate(userID int, messageID string, conversationID s
 	}
 }
 
-// FunctionStatusUpdate represents a status update message sent to the client
+// AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
-// It contains a user-friendly message describing the current step.
-type FunctionStatusUpdate struct {
-	Type        string `json:"type"` // Will be "FunctionStatus"
-	UserMessage string `json:"userMessage"`
+type AgentStatusUpdate struct {
+	MessageType string      `json:"messageType"`    // Always "AgentStatusUpdate"
+	Type        string      `json:"type"`           // Specific type like "FunctionUpdate", "WebSearch"
+	Data        interface{} `json:"data,omitempty"` // Additional structured data for specific types
 }
 
-// SendChatFunctionStatus sends a status update about a running function to a specific user.
-func SendChatFunctionStatus(userID int, userMessage string) {
-	// Use a default message if the specific one is empty
-	messageToSend := userMessage
-	if messageToSend == "" {
-		// Use a generic message instead of revealing the function name
-		messageToSend = "Processing..."
+// SendAgentStatusUpdate sends a status update about a running function to a specific user.
+func SendAgentStatusUpdate(userID int, statusType string, value string) {
+	var data interface{}
+
+	// Handle different status types
+	switch statusType {
+	case "WebSearch":
+		// For web searches, create structured data with query
+		data = map[string]interface{}{
+			"query": value,
+		}
+	default:
+		// For other types (like FunctionUpdate), use the value directly
+		messageToSend := value
+		if messageToSend == "" {
+			messageToSend = "Processing..."
+		}
+		data = messageToSend
 	}
 
-	statusUpdate := FunctionStatusUpdate{
-		Type:        "FunctionStatus",
-		UserMessage: messageToSend,
+	statusUpdate := AgentStatusUpdate{
+		MessageType: "AgentStatusUpdate",
+		Type:        statusType,
+		Data:        data,
 	}
 
 	jsonData, err := json.Marshal(statusUpdate)
@@ -192,7 +204,7 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 	UserToClientMutex.RUnlock()
 
 	if !ok {
-		////fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: client not found for userID: %d\n", userID)
 		return
 	}
 
@@ -203,14 +215,14 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 	default:
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
-		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
 	}
 }
 
 // TitleUpdate represents a conversation title update message sent to the client
 // when the title is generated or updated asynchronously.
 type TitleUpdate struct {
-	Type           string `json:"type"` // Will be "title_update"
+	Type           string `json:"type"` // Will be "titleUpdate"
 	ConversationID string `json:"conversation_id"`
 	Title          string `json:"title"`
 }
@@ -218,7 +230,7 @@ type TitleUpdate struct {
 // SendTitleUpdate sends a title update for a conversation to a specific user.
 func SendTitleUpdate(userID int, conversationID string, title string) {
 	titleUpdate := TitleUpdate{
-		Type:           "title_update",
+		Type:           "titleUpdate",
 		ConversationID: conversationID,
 		Title:          title,
 	}

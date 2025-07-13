@@ -35,7 +35,7 @@
 	import { isPlotData, getPlotData, plotDataToText, generatePlotKey } from './plotUtils';
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import {
-		functionStatusStore,
+		agentStatusStore,
 		titleUpdateStore,
 		setMessageIdUpdateCallback,
 		sendChatQuery
@@ -581,9 +581,10 @@
 			messagesStore.update((current) => [...current, loadingMessage as Message]);
 
 			// <-- Set initial status immediately -->
-			functionStatusStore.set({
-				type: 'FunctionStatus',
-				userMessage: 'Thinking...'
+			agentStatusStore.set({
+				messageType: 'AgentStatusUpdate',
+				type: 'FunctionUpdate',
+				data: 'Thinking...'
 			});
 
 			// Scroll to show the user's message and loading state
@@ -614,7 +615,7 @@
 
 				// Check if request was cancelled while awaiting
 				if (requestCancelled) {
-					functionStatusStore.set(null);
+					agentStatusStore.set(null);
 					// Try to clean up pending message on backend
 					await cleanupPendingMessage(currentProcessingQuery);
 					return;
@@ -628,7 +629,7 @@
 				}
 
 				// Clear status store on success
-				functionStatusStore.set(null);
+				agentStatusStore.set(null);
 
 				// Update conversation ID if this was a new chat
 				if (typedResponse.conversation_id && !currentConversationId) {
@@ -667,21 +668,23 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
-				// Clear processing state
-				isProcessingMessage = false;
-				processingTimeline = [];
-				lastStatusMessage = '';
+							// Clear processing state
+			isProcessingMessage = false;
+			processingTimeline = [];
+			lastStatusMessage = '';
 
-				// If we didn't have a conversation ID before, we should have one now
-				// Load conversation history to get the new conversation ID
-				if (!currentConversationId) {
-					await loadConversationHistory(false); // Don't scroll since we just added the message
-					await loadConversations(); // Refresh conversation list
-				}
+
+
+			// If we didn't have a conversation ID before, we should have one now
+			// Load conversation history to get the new conversation ID
+			if (!currentConversationId) {
+				await loadConversationHistory(false); // Don't scroll since we just added the message
+				await loadConversations(); // Refresh conversation list
+			}
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
-					functionStatusStore.set(null);
+					agentStatusStore.set(null);
 					// Try to clean up pending message on backend
 					await cleanupPendingMessage(currentProcessingQuery);
 					return;
@@ -690,7 +693,7 @@
 				console.error('Error fetching response:', error);
 
 				// Clear status store on error
-				functionStatusStore.set(null);
+				agentStatusStore.set(null);
 
 				// Check if the error contains backend response data with messageID and conversationID
 				let errorMessageId = 'temp_error_' + Date.now();
@@ -725,7 +728,7 @@
 			console.error('Error in handleSubmit:', error);
 
 			// Clear status store on any error
-			functionStatusStore.set(null);
+			agentStatusStore.set(null);
 
 			// Check if the error contains backend response data with messageID and conversationID
 			let errorMessageId = 'temp_error_' + Date.now();
@@ -799,7 +802,7 @@
 	async function handleCancelRequest() {
 		if (isLoading) {
 			requestCancelled = true;
-			functionStatusStore.set(null);
+			agentStatusStore.set(null);
 
 			// Cancel WebSocket request if active
 			if (currentWebSocketCancel) {
@@ -820,13 +823,15 @@
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
 
-			// Clear processing state immediately on cancellation
-			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
+					// Clear processing state immediately on cancellation
+		isProcessingMessage = false;
+		processingTimeline = [];
+		lastStatusMessage = '';
 
-			isLoading = false;
-			currentAbortController = null;
+
+
+		isLoading = false;
+		currentAbortController = null;
 		}
 	}
 
@@ -1338,19 +1343,29 @@
 	}
 
 	// Reactive block to capture function status messages and build timeline
-	$: if ($functionStatusStore && browser && isProcessingMessage) {
-		const statusUpdate = $functionStatusStore;
+	$: if ($agentStatusStore && browser && isProcessingMessage) {
+		const statusUpdate = $agentStatusStore;
 
-		// Only add if this is a new message different from the last one
-		if (statusUpdate.userMessage && statusUpdate.userMessage !== lastStatusMessage) {
-			lastStatusMessage = statusUpdate.userMessage;
-
-			// Add new timeline event with the raw message from backend
+		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
+			// Add function update message to timeline
+			lastStatusMessage = statusUpdate.data;
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.userMessage,
-					timestamp: new Date()
+					message: statusUpdate.data,
+					timestamp: new Date(),
+					type: 'message'
+				}
+			];
+		} else if (statusUpdate.type === 'WebSearch' && statusUpdate.data?.query) {
+			// Add web search event to timeline in chronological order
+			processingTimeline = [
+				...processingTimeline,
+				{
+					message: `Searching: ${statusUpdate.data.query}`,
+					timestamp: new Date(),
+					type: 'websearch',
+					data: statusUpdate.data
 				}
 			];
 		}
@@ -1431,7 +1446,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$functionStatusStore?.userMessage || 'Thinking...'}
+									currentStatus={$agentStatusStore?.type === 'FunctionUpdate' ? $agentStatusStore.data : 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>
