@@ -16,7 +16,7 @@ export type FunctionStatusUpdate = {
 
 // Define the type for title updates from backend
 export type TitleUpdate = {
-	type: 'title_update';
+	type: 'titleUpdate';
 	conversation_id: string;
 	title: string;
 };
@@ -178,7 +178,7 @@ export function connect() {
 		}
 
 		// Handle title updates
-		if (data && data.type === 'title_update') {
+		if (data && data.type === 'titleUpdate') {
 			const titleUpdate = data as TitleUpdate;
 			titleUpdateStore.set(titleUpdate);
 			return; // Handled title update

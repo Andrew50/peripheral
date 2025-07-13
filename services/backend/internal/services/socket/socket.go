@@ -210,7 +210,7 @@ func SendChatFunctionStatus(userID int, userMessage string) {
 // TitleUpdate represents a conversation title update message sent to the client
 // when the title is generated or updated asynchronously.
 type TitleUpdate struct {
-	Type           string `json:"type"` // Will be "title_update"
+	Type           string `json:"type"` // Will be "titleUpdate"
 	ConversationID string `json:"conversation_id"`
 	Title          string `json:"title"`
 }
@@ -218,7 +218,7 @@ type TitleUpdate struct {
 // SendTitleUpdate sends a title update for a conversation to a specific user.
 func SendTitleUpdate(userID int, conversationID string, title string) {
 	titleUpdate := TitleUpdate{
-		Type:           "title_update",
+		Type:           "titleUpdate",
 		ConversationID: conversationID,
 		Title:          title,
 	}
