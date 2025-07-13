@@ -681,7 +681,7 @@ var (
 			Function:      wrapWithContext(RunTwitterSearch),
 			StatusMessage: "Searching Twitter...",
 		},*/ //COMMENTED out for now since we ran out of credits
-		"getLatestTweets": {
+		/*"getLatestTweets": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLatestTweets",
 				Description: "Get the latest tweets from a list of Twitter handles.",
@@ -695,7 +695,7 @@ var (
 			},
 			Function:      wrapWithContext(GetLatestTweets),
 			StatusMessage: "Searching Twitter...",
-		},
+		},*/
 		// [END SEARCH TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {
