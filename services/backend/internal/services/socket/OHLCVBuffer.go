@@ -29,19 +29,19 @@ type OHLCVBuffer struct {
 	mu               sync.Mutex
 	lastFlush        time.Time
 	stopTimeout      chan struct{}
-	loaderReady      bool
-	loaderCheckTime  time.Time
+	enableRealtime   bool
 }
 
 var ohlcvBuffer *OHLCVBuffer
 
 // Initialize the OHLCV buffer
-func InitOHLCVBuffer(conn *data.Conn) {
+func InitOHLCVBuffer(conn *data.Conn, enableRealtime bool) {
 	ohlcvBuffer = &OHLCVBuffer{
-		buffer:      make([]OHLCVRecord, 0, 5000), // Pre-allocate for performance
-		dbConn:      conn,
-		lastFlush:   time.Now(),
-		stopTimeout: make(chan struct{}),
+		buffer:         make([]OHLCVRecord, 0, 5000), // Pre-allocate for performance
+		dbConn:         conn,
+		lastFlush:      time.Now(),
+		stopTimeout:    make(chan struct{}),
+		enableRealtime: enableRealtime,
 	}
 	ohlcvBuffer.startTimeoutFlusher()
 }
@@ -74,43 +74,10 @@ func (b *OHLCVBuffer) flushIfStale() {
 	}
 }
 
-// checkLoaderReady checks if the OHLCV loader has completed at least once
-// by verifying that last_loaded_at in ohlcv_update_state is more recent than the initial seed date
-func (b *OHLCVBuffer) checkLoaderReady() bool {
-	// Cache the result for 5 minutes to avoid frequent DB queries
-	if time.Since(b.loaderCheckTime) < 5*time.Minute && b.loaderReady {
-		return true
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Check if loader has run for 1-minute timeframe (the most critical one for real-time streaming)
-	var lastLoaded time.Time
-	err := b.dbConn.DB.QueryRow(ctx, `SELECT last_loaded_at FROM ohlcv_update_state WHERE timeframe = '1-minute' LIMIT 1`).Scan(&lastLoaded)
-	if err != nil {
-		log.Printf("⚠️  Failed to check loader status: %v", err)
-		return false
-	}
-
-	// If last_loaded_at is after the initial seed date (2008-01-01), loader has run
-	seedDate := time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC)
-	b.loaderReady = lastLoaded.After(seedDate)
-	b.loaderCheckTime = time.Now()
-
-	if !b.loaderReady {
-		log.Printf("📊 Real-time streaming paused - waiting for OHLCV loader to complete initial run (last_loaded_at: %v)", lastLoaded)
-	} else if time.Since(b.loaderCheckTime) > 5*time.Minute {
-		log.Printf("✅ OHLCV loader detected as ready - real-time streaming enabled")
-	}
-
-	return b.loaderReady
-}
-
 // Add a new OHLCV bar to the buffer
 func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAgg) {
-	// Check if loader has completed at least once before allowing streaming
-	if !b.checkLoaderReady() {
+	// Check if realtime insertion is enabled
+	if !b.enableRealtime {
 		return
 	}
 
