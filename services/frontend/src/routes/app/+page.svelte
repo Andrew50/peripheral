@@ -1085,7 +1085,7 @@
 	}
 
 	function openPricingSettings() {
-		window.location.href = "/pricing";
+		window.location.href = '/pricing';
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1645,19 +1645,19 @@
 			{/if}
 			-->
 
-			<span class="value">
-				{#if $streamInfo.timestamp !== undefined}
-					{formatTimestamp($streamInfo.timestamp)}
-				{:else}
-					Loading Time...
-				{/if}
-			</span>
-			<!-- Site logo (clickable) -->
-			<a  class="bottom-logo-link" on:click={() => window.location.href = "/"}>
-				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-			</a>
+				<span class="value">
+					{#if $streamInfo.timestamp !== undefined}
+						{formatTimestamp($streamInfo.timestamp)}
+					{:else}
+						Loading Time...
+					{/if}
+				</span>
+				<!-- Site logo (clickable) -->
+				<a class="bottom-logo-link" on:click={() => (window.location.href = '/')}>
+					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+				</a>
+			</div>
 		</div>
-	</div>
 
 		{#if showSettingsPopup}
 			<div
@@ -1993,7 +1993,6 @@
 		display: inline-flex;
 		align-items: center;
 		cursor: pointer;
-		
 	}
 
 	/* New layout structure styles */

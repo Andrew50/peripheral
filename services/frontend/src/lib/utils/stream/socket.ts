@@ -66,14 +66,14 @@ let isConnecting = false;
 export type TimeType = 'regular' | 'extended';
 export type ChannelType = //"fast" | "slow" | "quote" | "close" | "all"
 
-		| 'fast-regular'
-		| 'fast-extended'
-		| 'slow-regular'
-		| 'slow-extended'
-		| 'close-regular'
-		| 'close-extended'
-		| 'quote'
-		| 'all'; //all trades
+	| 'fast-regular'
+	| 'fast-extended'
+	| 'slow-regular'
+	| 'slow-extended'
+	| 'close-regular'
+	| 'close-extended'
+	| 'quote'
+	| 'all'; //all trades
 
 export type StreamData = TradeData | QuoteData | CloseData | number;
 export type StreamCallback = (v: TradeData | QuoteData | CloseData | number) => void;
@@ -223,7 +223,18 @@ export function connect() {
 							tickData.isExtended = true;
 						}
 
-						enqueueTick(tickData);
+						// Skip price updates if price is -1 (indicates skip OHLC condition)
+						if (data.price >= 0) {
+							enqueueTick(tickData);
+						} else {
+							// Still enqueue for volume updates but without price
+							const volumeOnlyData = {
+								securityid: securityId,
+								data: data,
+								isExtended: channelName.includes('-slow-extended')
+							};
+							enqueueTick(volumeOnlyData);
+						}
 					}
 				}
 

@@ -28,7 +28,7 @@ extract_description() {
   fi
 }
 
-PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U postgres -d "$DB_NAME" "$@"; }
+PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U postgres -h localhost -p 5433 -d "$DB_NAME" "$@"; }
 
 # ───────────────────────  sanity checks  ──────────────────────
 TABLE_EXISTS=$(PSQL -c "SELECT to_regclass('public.schema_versions') IS NOT NULL;")

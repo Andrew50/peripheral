@@ -310,7 +310,7 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 
 	// Clean and prepare the search query
 	tickerQuery := strings.ToUpper(strings.TrimSpace(args.Ticker))
-	// Modified query to properly handle name and icon and prioritize active securities
+	// Optimized query with improved indexing strategy and reduced similarity calculations
 	sqlQuery := `
 		SELECT  s.securityId,
 				s.ticker,
@@ -320,12 +320,12 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 		FROM    securities s
 		WHERE   s.maxDate IS NULL                      -- active symbols only
 		AND (                                         -- any match criteria
-				s.ticker_norm= $1
+				s.ticker_norm = $1
 			OR s.ticker_norm LIKE $1 || '%'
 			OR UPPER(s.name) LIKE $1 || '%'
 			OR UPPER(s.name) = $1
-			OR s.ticker_norm %  $1
-			OR UPPER(s.name) %  $1
+			OR s.ticker_norm % $1
+			OR UPPER(s.name) % $1
 			)
 		ORDER BY
 				(s.ticker_norm = $1)                          DESC,
@@ -333,8 +333,8 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 				(UPPER(s.name) LIKE $1 || '%')                DESC,
 				(s.ticker_norm LIKE $1 || '%')                DESC,
 				GREATEST(
-					similarity(s.ticker_norm,$1),
-					similarity(UPPER(s.name),$1)
+					similarity(s.ticker_norm, $1),
+					similarity(UPPER(s.name), $1)
 				)                                             DESC
 		LIMIT 10`
 

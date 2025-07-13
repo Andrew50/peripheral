@@ -103,6 +103,32 @@ var (
 		}
 	}
 
+	// updateTimeframeVolumeOnly updates only volume without affecting price data
+	// Used when price is -1 (skip OHLC condition) but volume should still be updated
+	func updateTimeframeVolumeOnly(td *TimeframeData, timestamp int64, volume float64, timeframe int) {
+		td.Mutex.Lock()         // Acquire write lock
+		defer td.Mutex.Unlock() // Ensure the lock is released
+
+		if timestamp >= td.rolloverTimestamp { // if out of order ticks
+			if td.Size > 0 {
+				copy(td.Aggs[1:], td.Aggs[0:minIntsAggs(td.Size, AggsLength-1)])
+			}
+			// Use the last valid price from the previous bar, or 0 if no previous data
+			var lastPrice float64
+			if td.Size > 0 {
+				lastPrice = td.Aggs[0][3] // Use last close price
+			}
+			td.Aggs[0] = []float64{lastPrice, lastPrice, lastPrice, lastPrice, volume}
+			td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
+			if td.Size < AggsLength {
+				td.Size++
+			}
+		} else {
+			// Only update volume, leave price data unchanged
+			td.Aggs[0][4] += float64(volume) // Volume
+		}
+	}
+
 	func minIntsAggs(a, b int) int {
 		if a < b {
 			return a
@@ -148,6 +174,10 @@ var (
 
 		volume := float64(intVolume)
 
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		// but still allow volume updates
+		shouldSkipPriceUpdate := price < 0
+
 		AggDataMutex.RLock() // Acquire read lock
 		sd, exists := AggData[securityID]
 		AggDataMutex.RUnlock() // Release read lock
@@ -156,21 +186,44 @@ var (
 			return fmt.Errorf("fid0w0f")
 		}
 
-		if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
-			if hourAggs {
-				updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
+		// Only update price-related aggregations if not skipping price updates
+		if !shouldSkipPriceUpdate {
+			if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
+				if hourAggs {
+					updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
+				}
+				if dayAggs {
+					updateTimeframe(sd.DayData, timestamp, price, volume, Day)
+				}
 			}
-			if dayAggs {
-				updateTimeframe(sd.DayData, timestamp, price, volume, Day)
+
+			if secondAggs {
+				updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
 			}
-		}
 
-		if secondAggs {
-			updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
-		}
+			if minuteAggs {
+				updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
+			}
+		} else {
+			// When skipping price updates, only update volume if volume > 0
+			if volume > 0 {
+				if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
+					if hourAggs {
+						updateTimeframeVolumeOnly(sd.HourData, timestamp, volume, Hour)
+					}
+					if dayAggs {
+						updateTimeframeVolumeOnly(sd.DayData, timestamp, volume, Day)
+					}
+				}
 
-		if minuteAggs {
-			updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
+				if secondAggs {
+					updateTimeframeVolumeOnly(sd.SecondDataExtended, timestamp, volume, Second)
+				}
+
+				if minuteAggs {
+					updateTimeframeVolumeOnly(sd.MinuteDataExtended, timestamp, volume, Minute)
+				}
+			}
 		}
 
 		return nil

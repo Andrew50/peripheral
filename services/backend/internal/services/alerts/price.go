@@ -15,6 +15,11 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 			return fmt.Errorf("no price data available for security ID %d", *alert.SecurityID)
 		}
 
+		// Skip alert processing if price is -1 (indicates skip OHLC condition)
+		if price < 0 {
+			return nil
+		}
+
 		if *directionPtr {
 			if price >= *alert.Price {
 				if err := dispatchAlert(conn, alert); err != nil {

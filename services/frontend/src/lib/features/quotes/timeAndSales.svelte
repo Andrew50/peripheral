@@ -45,6 +45,12 @@
 		if (!filterTaS && newTrade.size < 100) {
 			return;
 		}
+
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		if (newTrade.price < 0) {
+			return;
+		}
+
 		if (divideTaS) {
 			newTrade.size = Math.floor(newTrade.size / 100);
 		}

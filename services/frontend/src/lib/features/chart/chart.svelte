@@ -190,7 +190,7 @@
 		extendedHours: false
 	};
 	let isPanning = false;
-	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
+	//const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
 	let lastFetchedSecurityId: number | null = null;
@@ -1070,17 +1070,20 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-		// Early returns for invalid data or conditions
+		// Early returns for invalid data
 		if (
 			!trade?.price ||
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isSwitchingTickers ||
-			trade.conditions?.some((condition) => excludedConditions.has(condition))
+			isSwitchingTickers
+			//|| trade.conditions?.some((condition) => excludedConditions.has(condition))
 		) {
 			return;
 		}
+
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		const shouldSkipPriceUpdate = trade.price < 0;
 
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
@@ -1114,29 +1117,38 @@
 			if (!chartLatestDataReached) return;
 			const now = Date.now();
 
-			if (!pendingBarUpdate) {
-				pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+			// Only update price-related data if not skipping price updates
+			if (!shouldSkipPriceUpdate) {
+				if (!pendingBarUpdate) {
+					pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+				}
+
+				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
+				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
+				pendingBarUpdate.close = trade.price;
 			}
 
-			if (!pendingVolumeUpdate) {
-				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
-				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
-					pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+			// Always update volume (unless size is 0)
+			if (trade.size > 0) {
+				if (!pendingVolumeUpdate) {
+					const lastVolumeRaw = chartVolumeSeries.data().at(-1);
+					if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
+						pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+					}
+				}
+
+				if (pendingVolumeUpdate) {
+					pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
+					// Only update color if we have valid price data
+					if (!shouldSkipPriceUpdate) {
+						pendingVolumeUpdate.color =
+							pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
+					}
 				}
 			}
 
-			pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
-			pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
-			pendingBarUpdate.close = trade.price;
-
-			if (pendingVolumeUpdate) {
-				pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
-				pendingVolumeUpdate.color =
-					pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
-			}
-
 			if (now - lastUpdateTime >= updateThrottleMs) {
-				if (pendingBarUpdate) {
+				if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 					chartCandleSeries.update(pendingBarUpdate);
 					pendingBarUpdate = null;
 				}
@@ -1153,7 +1165,7 @@
 		} else {
 			if (!chartLatestDataReached) return;
 
-			if (pendingBarUpdate) {
+			if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 				chartCandleSeries.update(pendingBarUpdate);
 				pendingBarUpdate = null;
 			}
@@ -1163,30 +1175,47 @@
 			}
 			lastUpdateTime = Date.now();
 
-			const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
-				trade.timestamp,
-				currentChartInstance.extendedHours
-			);
-			const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
-			const flooredDifference =
-				Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-			const newTime = UTCSecondstoESTSeconds(
-				referenceStartTime / 1000 + flooredDifference
-			) as UTCTimestamp;
+			// Only create new bar if we have valid price data
+			if (!shouldSkipPriceUpdate) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
 
-			chartCandleSeries.update({
-				time: newTime,
-				open: trade.price,
-				high: trade.price,
-				low: trade.price,
-				close: trade.price
-			});
+				chartCandleSeries.update({
+					time: newTime,
+					open: trade.price,
+					high: trade.price,
+					low: trade.price,
+					close: trade.price
+				});
+			}
 
-			chartVolumeSeries.update({
-				time: newTime,
-				value: trade.size,
-				color: '#089981'
-			});
+			// Always update volume if size > 0
+			if (trade.size > 0) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
+
+				chartVolumeSeries.update({
+					time: newTime,
+					value: trade.size,
+					color: '#089981'
+				});
+			}
 
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();

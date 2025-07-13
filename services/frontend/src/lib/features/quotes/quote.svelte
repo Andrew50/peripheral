@@ -34,8 +34,20 @@
 	let lastFetchedWhyMovingTicker: string | null = null;
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
+		if (!chartInstance?.ticker) {
+			// Clear content when no ticker is selected
+			whyMovingContent = null;
+			lastFetchedWhyMovingTicker = null;
+			return;
+		}
+
 		if (chartInstance?.ticker) {
 			instance.set(chartInstance);
+
+			// Clear whyMovingContent when ticker changes (before fetching new data)
+			if (chartInstance.ticker !== lastFetchedWhyMovingTicker) {
+				whyMovingContent = null;
+			}
 
 			// Fetch "Why It's Moving" once per new ticker (private endpoint, skip for public viewing)
 			if (

@@ -53,8 +53,8 @@ log "Using migration script: $MIGRATE_SCRIPT"
 log "Starting temporary PostgreSQL instance for migrations..."
 # We use the official entrypoint to ensure the data directory is initialized
 # correctly on the very first run if needed.
-# Start it in the background.
-docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf &
+# Start it in the background on port 5433 to prevent other services from connecting during migrations.
+docker-entrypoint.sh postgres -p 5433 -c config_file=/etc/postgresql/postgresql.conf &
 PG_PID=$!
 log "Temporary PostgreSQL PID: $PG_PID"
 
@@ -68,7 +68,7 @@ WAIT_INTERVAL=1 # Check interval
 SECONDS=0 # Start timer
 
 # Loop until pg_isready succeeds or timeout occurs
-until pg_isready -U postgres -h localhost -q; do
+until pg_isready -U postgres -h localhost -p 5433 -q; do
   if ! kill -0 "$PG_PID" 2>/dev/null; then
     error_log "Temporary PostgreSQL process (PID: $PG_PID) exited unexpectedly during startup wait."
     # Optional: attempt to show recent postgres logs if possible/needed for debugging
