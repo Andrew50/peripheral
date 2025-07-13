@@ -24,7 +24,6 @@ jobs:
       frontend-code: ${{ steps.changes.outputs.frontend-code }}
       worker-code: ${{ steps.changes.outputs.worker-code }}
       cache-code: ${{ steps.changes.outputs.cache-code }}
-      deployment-config: ${{ steps.changes.outputs.deployment-config }}
       summary: ${{ steps.summary.outputs.summary }}
       strategy: ${{ steps.summary.outputs.strategy }}
       services_changed: ${{ steps.summary.outputs.services_changed }}
@@ -102,13 +101,7 @@ jobs:
         echo "cache-code<<EOF" >> $GITHUB_OUTPUT
         echo "$CACHE_CODE" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-        
-        # Deployment configuration
-        DEPLOYMENT_CONFIG=$(echo "$CHANGED_FILES" | grep -E '^config/deploy/' || echo '')
-        echo "deployment-config<<EOF" >> $GITHUB_OUTPUT
-        echo "$DEPLOYMENT_CONFIG" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-    
+            
     - name: Generate summary
       id: summary
       run: |
@@ -119,7 +112,6 @@ jobs:
         FRONTEND="${{ steps.changes.outputs.frontend-code }}"
         WORKER="${{ steps.changes.outputs.worker-code }}"
         CACHE="${{ steps.changes.outputs.cache-code }}"
-        DEPLOY_CONFIG="${{ steps.changes.outputs.deployment-config }}"
         
         echo "📊 CHANGE DETECTION SUMMARY"
         echo "================================"
@@ -187,13 +179,6 @@ jobs:
           SERVICES_CHANGED="$SERVICES_CHANGED cache"
         else
           echo "❌ No cache changes"
-        fi
-        
-        if [ -n "$DEPLOY_CONFIG" ]; then
-          echo "⚙️ DEPLOYMENT CONFIG CHANGES:"
-          echo "$DEPLOY_CONFIG" | sed 's/^/  /'
-        else
-          echo "❌ No deployment config changes"
         fi
         
         echo ""
