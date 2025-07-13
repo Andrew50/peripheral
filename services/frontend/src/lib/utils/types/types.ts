@@ -96,6 +96,8 @@ export interface AlertData {
 	alertId: number;
 	timestamp: number;
 	securityId: number;
+	channel: string;
+	ticker: string;
 }
 export interface AlertLog {
 	alertLogId: number;

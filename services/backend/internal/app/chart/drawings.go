@@ -2,6 +2,7 @@ package chart
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -60,6 +61,16 @@ func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
+
+	// Get security ID before deletion for WebSocket update
+	var securityID int
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT securityId FROM horizontal_lines WHERE id = $1 AND userId = $2`,
+		args.ID, userID).Scan(&securityID)
+	if err != nil {
+		return nil, fmt.Errorf("horizontal line not found: %v", err)
+	}
+
 	cmdTag, err := conn.DB.Exec(context.Background(), `DELETE FROM horizontal_lines WHERE id = $1 AND userId = $2`, args.ID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
@@ -67,6 +78,16 @@ func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
 	}
+
+	// NEW: Send WebSocket update after successful deletion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		lineData := map[string]interface{}{
+			"id": args.ID,
+		}
+		socket.SendHorizontalLineUpdate(userID, "remove", securityID, lineData)
+	}
+
 	return nil, nil
 }
 
@@ -93,6 +114,20 @@ func SetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error inserting horizontal line: %v", err)
 	}
+
+	// NEW: Send WebSocket update after successful insertion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		lineData := map[string]interface{}{
+			"id":         id,
+			"securityId": line.SecurityID,
+			"price":      line.Price,
+			"color":      line.Color,
+			"lineWidth":  line.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "add", line.SecurityID, lineData)
+	}
+
 	return id, nil
 }
 
@@ -124,6 +159,19 @@ func UpdateHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("no horizontal line found with id %d", args.ID)
+	}
+
+	// NEW: Send WebSocket update after successful update
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		lineData := map[string]interface{}{
+			"id":         args.ID,
+			"securityId": args.SecurityID,
+			"price":      args.Price,
+			"color":      args.Color,
+			"lineWidth":  args.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "update", args.SecurityID, lineData)
 	}
 
 	return nil, nil

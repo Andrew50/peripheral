@@ -2,6 +2,7 @@ import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import type { Instance } from '$lib/utils/types/types';
 import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
+import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
 
 // Centralized ticker formatting regex pattern
 const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9.]{1,6})-(\d+)\$\$/g;
@@ -75,7 +76,7 @@ export function formatChipDate(timestampMs?: number): string {
 	}
 	try {
 		const date = new Date(timestampMs);
-		
+
 		// Format the date in EST timezone
 		const estDate = new Intl.DateTimeFormat('en-US', {
 			timeZone: 'America/New_York',
@@ -83,12 +84,12 @@ export function formatChipDate(timestampMs?: number): string {
 			month: '2-digit',
 			day: '2-digit'
 		}).formatToParts(date);
-		
+
 		// Extract parts and format as YYYY-MM-DD
 		const year = estDate.find(part => part.type === 'year')?.value || '';
 		const month = estDate.find(part => part.type === 'month')?.value || '';
 		const day = estDate.find(part => part.type === 'day')?.value || '';
-		
+
 		return ` (${year}-${month}-${day})`; // Add leading space
 	} catch (e) {
 		console.error('Error formatting chip date:', e);
@@ -275,6 +276,64 @@ export async function handleTickerButtonClick(event: MouseEvent) {
 			}
 		} else {
 			console.error('Missing data attributes on ticker button');
+		}
+	}
+}
+
+export async function handleTickerButtonRightClick(event: MouseEvent) {
+	const target = event.target as HTMLButtonElement; // Assert as Button Element
+	if (target && target.classList.contains('ticker-button')) {
+		event.preventDefault();
+		event.stopPropagation();
+		const ticker = target.dataset.ticker;
+		const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
+
+		if (ticker && timestampMsStr) {
+			const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
+
+			if (isNaN(timestampMs)) {
+				console.error('Invalid timestampMs on ticker button for right-click:', timestampMsStr);
+				return; // Don't proceed if timestamp is invalid
+			}
+
+			console.log(`Right-click on ticker button: ${ticker} at ${timestampMs}`);
+
+			try {
+				target.disabled = true;
+				// We need securityId to create a complete instance for the right-click menu.
+				type SecurityIdResponse = { securityId?: number };
+				const response = await publicRequest<SecurityIdResponse>(
+					'getSecurityIDFromTickerTimestamp',
+					{
+						ticker: ticker,
+						timestampMs: timestampMs // Pass timestamp as number
+					}
+				);
+
+				const securityId = response?.securityId;
+
+				if (securityId && !isNaN(securityId)) {
+					const instance: Instance = {
+						ticker: ticker,
+						securityId: securityId,
+						timestamp: timestampMs // Pass timestamp as number (milliseconds)
+					};
+
+					console.log('Constructed instance for right-click:', instance);
+					await queryInstanceRightClick(event, instance, 'embedded');
+				} else {
+					console.error(
+						'Failed to retrieve a valid securityId from backend for right-click:',
+						response
+					);
+				}
+			} catch (error) {
+				console.error('Error handling ticker button right-click:', error);
+			} finally {
+				target.disabled = false;
+			}
+		} else {
+			console.error('Missing data attributes on ticker button for right-click');
 		}
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 	//"github.com/go-redis/redis/v8"
@@ -49,6 +50,9 @@ type Job struct {
 	ExecutionMutex     sync.Mutex
 	IsRunning          bool
 	SkipOnWeekends     bool
+	RetryOnFailure     bool          // Whether to retry the job on failure
+	MaxRetries         int           // Maximum number of retry attempts
+	RetryDelay         time.Duration // Delay between retry attempts
 }
 
 // JobScheduler manages and executes jobs
@@ -64,6 +68,7 @@ type JobScheduler struct {
 // Redis key prefix for job last run times
 const jobLastRunKeyPrefix = "job:lastrun:"
 const jobLastCompletionKeyPrefix = "job:lastcompletion:"
+const jobRetryCountKeyPrefix = "job:retrycount:"
 
 // getJobLastRunKey returns the Redis key for storing a job's last run time
 func getJobLastRunKey(jobName string) string {
@@ -73,6 +78,11 @@ func getJobLastRunKey(jobName string) string {
 // getJobLastCompletionKey returns the Redis key for storing a job's last completion time
 func getJobLastCompletionKey(jobName string) string {
 	return jobLastCompletionKeyPrefix + jobName
+}
+
+// getJobRetryCountKey returns the Redis key for storing a job's retry count
+func getJobRetryCountKey(jobName string) string {
+	return jobRetryCountKeyPrefix + jobName
 }
 
 // loadJobLastRunTimes loads the last run times for all jobs from Redis
@@ -132,6 +142,30 @@ func (s *JobScheduler) saveJobLastCompletionTime(job *Job) error {
 	return err
 }
 
+// saveJobRetryCount saves a job's retry count to Redis
+func (s *JobScheduler) saveJobRetryCount(job *Job, retryCount int) error {
+	ctx := context.Background()
+	err := s.Conn.Cache.Set(ctx, getJobRetryCountKey(job.Name), retryCount, 0).Err()
+	return err
+}
+
+// loadJobRetryCount loads a job's retry count from Redis
+func (s *JobScheduler) loadJobRetryCount(job *Job) int {
+	ctx := context.Background()
+	retryCountStr, err := s.Conn.Cache.Get(ctx, getJobRetryCountKey(job.Name)).Result()
+	if err == nil && retryCountStr != "" {
+		if count, err := strconv.Atoi(retryCountStr); err == nil {
+			return count
+		}
+	}
+	return 0
+}
+
+// resetJobRetryCount resets a job's retry count to 0
+func (s *JobScheduler) resetJobRetryCount(job *Job) error {
+	return s.saveJobRetryCount(job, 0)
+}
+
 // Define job functions for security detail updates
 // These wrappers avoid redeclaring functions that exist in other files
 func securityDetailUpdateJob(conn *data.Conn) error {
@@ -171,6 +205,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 4, Minute: 0}}, // Run at 4:00 AM daily
 			RunOnInit:      true,
 			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
+			RetryOnFailure: true,
+			MaxRetries:     3,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "UpdateAllOHLCV",
@@ -178,6 +215,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     100,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "UpdateSecurityTables",
@@ -185,6 +225,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
@@ -202,6 +245,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     30 * time.Second,
 		},
 		//TODO: FIX THIS SHIT
 		/*{
@@ -217,6 +263,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     30 * time.Second,
 		},
 		{
 			Name:           "UpdateSecurityDetails",
@@ -224,6 +273,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Run at 9:00 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "StopServices",
@@ -231,6 +283,7 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
 			RunOnInit:      false,
 			SkipOnWeekends: true,
+			RetryOnFailure: false, // Don't retry stop services
 		},
 		{
 			Name:           "UpdateSectors",
@@ -238,6 +291,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "UpdateSecurityCik",
@@ -245,6 +301,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 30}}, // Run at 9:30 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "StartWorkerMonitor",
@@ -252,6 +311,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 55}}, // Start before other services
 			RunOnInit:      true,
 			SkipOnWeekends: false, // Monitor should run 24/7
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     30 * time.Second,
 		},
 		{
 			Name:           "UpdateYearlySubscriptionCredits",
@@ -259,6 +321,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Daily at 4:05 AM ET
 			RunOnInit:      true,
 			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 	}
 )
@@ -313,6 +378,19 @@ func clearJobCache(conn *data.Conn) error {
 	} else if len(lastCompletionKeys) > 0 {
 		// Delete all last completion keys
 		err = conn.Cache.Del(ctx, lastCompletionKeys...).Err()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Get all keys with the job retry count prefix
+	retryCountKeys, err := conn.Cache.Keys(ctx, jobRetryCountKeyPrefix+"*").Result()
+	if err != nil {
+		return err
+		// Log error getting job retry count keys
+	} else if len(retryCountKeys) > 0 {
+		// Delete all retry count keys
+		err = conn.Cache.Del(ctx, retryCountKeys...).Err()
 		return err
 	}
 	return nil
@@ -425,6 +503,12 @@ func (s *JobScheduler) checkAndRunJobs(now time.Time) {
 		if shouldRun {
 			go s.executeJob(job, now)
 		}
+
+		// Check if there's a pending retry for this job
+		if s.hasPendingRetry(job) {
+			log.Printf("🔄 Found pending retry for job %s, executing immediately", job.Name)
+			go s.executeJob(job, now)
+		}
 	}
 }
 
@@ -479,6 +563,16 @@ func (s *JobScheduler) shouldRunJob(job *Job, now time.Time) bool {
 	}
 
 	return false
+}
+
+// hasPendingRetry checks if a job has a pending retry that should be executed
+func (s *JobScheduler) hasPendingRetry(job *Job) bool {
+	if !job.RetryOnFailure {
+		return false
+	}
+
+	currentRetryCount := s.loadJobRetryCount(job)
+	return currentRetryCount > 0 && currentRetryCount <= job.MaxRetries
 }
 
 // getNextScheduledTime returns the next time the job should run
@@ -550,7 +644,8 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Log job start
 	log.Printf("🚀 Starting job: %s at %s", jobName, startTime.Format("2006-01-02 15:04:05"))
 
-	err := job.Function(s.Conn)
+	// Execute job with retry logic
+	err := s.executeJobWithRetry(job, startTime)
 
 	// Calculate execution duration
 	duration := time.Since(startTime).Round(time.Millisecond)
@@ -575,7 +670,12 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	// Job completed successfully
 	log.Printf("✅ Job %s completed successfully in %v", jobName, duration)
 
-	// Post-processing placeholder for OHLCV job (previous DB state verification moved into per-timeframe cleanup).
+	// Reset retry count on successful completion
+	if job.RetryOnFailure {
+		if err := s.resetJobRetryCount(job); err != nil {
+			log.Printf("⚠️ Error resetting retry count for %s: %v", job.Name, err)
+		}
+	}
 
 	// Update completion time
 	completionTime := time.Now()
@@ -585,6 +685,65 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	if err := s.saveJobLastCompletionTime(job); err != nil {
 		log.Printf("❌ Error saving job completion time for %s: %v", job.Name, err)
 	}
+}
+
+// executeJobWithRetry executes a job with retry logic if configured
+func (s *JobScheduler) executeJobWithRetry(job *Job, startTime time.Time) error {
+	jobName := job.Name
+	currentRetryCount := s.loadJobRetryCount(job)
+
+	// Execute the job
+	err := job.Function(s.Conn)
+
+	// If job succeeded or retry is not enabled, return immediately
+	if err == nil || !job.RetryOnFailure {
+		return err
+	}
+
+	// Job failed and retry is enabled
+	log.Printf("❌ Job %s failed (attempt %d/%d): %v", jobName, currentRetryCount+1, job.MaxRetries+1, err)
+
+	// Check if we've exceeded max retries
+	if currentRetryCount >= job.MaxRetries {
+		log.Printf("❌ Job %s exceeded maximum retries (%d), giving up", jobName, job.MaxRetries)
+		return err
+	}
+
+	// Increment retry count
+	currentRetryCount++
+	if err := s.saveJobRetryCount(job, currentRetryCount); err != nil {
+		log.Printf("⚠️ Error saving retry count for %s: %v", job.Name, err)
+	}
+
+	// Log retry attempt
+	log.Printf("🔄 Scheduling retry for job %s in %v (attempt %d/%d)", jobName, job.RetryDelay, currentRetryCount, job.MaxRetries)
+
+	// Schedule retry after delay
+	go func() {
+		select {
+		case <-time.After(job.RetryDelay):
+			// Check if scheduler is still running
+			s.mutex.Lock()
+			if !s.IsRunning {
+				s.mutex.Unlock()
+				log.Printf("⚠️ Scheduler stopped, cancelling retry for job %s", jobName)
+				return
+			}
+			s.mutex.Unlock()
+
+			// Execute retry
+			log.Printf("🔄 Retrying job %s (attempt %d/%d)", jobName, currentRetryCount, job.MaxRetries)
+			retryErr := s.executeJobWithRetry(job, startTime)
+			if retryErr != nil {
+				log.Printf("❌ Job %s retry failed (attempt %d/%d): %v", jobName, currentRetryCount, job.MaxRetries, retryErr)
+			}
+		case <-s.StopChan:
+			log.Printf("⚠️ Scheduler stopped, cancelling retry for job %s", jobName)
+		}
+	}()
+
+	// Return the original error for immediate logging and alerting
+	return err
 }
 
 // COMMENTED OUT: initAggregates function disabled

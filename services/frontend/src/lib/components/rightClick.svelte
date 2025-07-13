@@ -2,7 +2,7 @@
 <script lang="ts" context="module">
 	import '$lib/styles/global.css';
 	import type { Writable } from 'svelte/store';
-	import type { Instance, Setup } from '$lib/utils/types/types';
+	import type { Instance } from '$lib/utils/types/types';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	//import { embedInstance } from '$lib/components/entry.svelte';
@@ -70,10 +70,20 @@
 </script>
 
 <script lang="ts">
-	import { entryOpen, currentWatchlistId } from '$lib/utils/stores/stores';
+	import {
+		currentWatchlistId,
+		watchlists,
+		flagWatchlistId,
+		flagWatchlist
+	} from '$lib/utils/stores/stores';
 	import { browser } from '$app/environment';
 	import { onMount, tick } from 'svelte';
 	let rightClickMenu: HTMLElement;
+
+	$: currentWatchlistName = Array.isArray($watchlists)
+		? ($watchlists.find((w) => w.watchlistId === $currentWatchlistId)?.watchlistName ?? '')
+		: '';
+
 	onMount(() => {
 		rightClickQuery.subscribe(async (v: RightClickQuery) => {
 			if (browser) {
@@ -195,17 +205,23 @@
 	>
 		<div class="header content-padding">
 			<div class="header-text">
-				<b>{$rightClickQuery.instance.ticker || ''}</b> {$rightClickQuery.instance.timestamp
-					? UTCTimestampToESTString($rightClickQuery.instance.timestamp, $rightClickQuery.instance.timeframe?.includes('d') || $rightClickQuery.instance.timeframe?.includes('w') || $rightClickQuery.instance.timeframe?.includes('m'))
+				<b>{$rightClickQuery.instance.ticker || ''}</b>
+				{$rightClickQuery.instance.timestamp
+					? UTCTimestampToESTString(
+							$rightClickQuery.instance.timestamp,
+							$rightClickQuery.instance.timeframe?.includes('d') ||
+								$rightClickQuery.instance.timeframe?.includes('w') ||
+								$rightClickQuery.instance.timeframe?.includes('m')
+						)
 					: ''}
 			</div>
 		</div>
 
-		<div class="section content-padding">
-			<!--<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
+		<!--<button class="wide-button" on:click={() => startReplay($rightClickQuery.instance)}
 				>Begin Replay</button
 			>-->
-			{#if $rightClickQuery.source === 'chart'}
+		{#if $rightClickQuery.source === 'chart'}
+			<div class="section content-padding">
 				<div class="separator"></div>
 				<button class="wide-button" on:click={() => newPriceAlert($rightClickQuery.instance)}
 					>Set Alert on {$rightClickQuery.instance.ticker} at {$rightClickQuery.instance.price?.toFixed(
@@ -220,6 +236,11 @@
 							Number($rightClickQuery.instance.securityId || 0)
 						)}>Add Horizontal Line at {$rightClickQuery.instance.price?.toFixed(2)}</button
 				>
+			</div>
+		{/if}
+
+		{#if $rightClickQuery.source === 'list' || $rightClickQuery.source === 'embedded'}
+			{#if $currentWatchlistId !== flagWatchlistId}
 				<button
 					class="wide-button"
 					on:click={() =>
@@ -229,11 +250,19 @@
 							$rightClickQuery.instance.ticker
 						)}
 				>
-					Add {$rightClickQuery.instance.ticker} to Watchlist
+					Add {$rightClickQuery.instance.ticker} to {currentWatchlistName
+						? `${currentWatchlistName} Watchlist`
+						: 'Watchlist'}
 				</button>
 			{/if}
-		</div>
-
+			<div class="section content-padding">
+				<button class="wide-button" on:click={() => flagSecurity($rightClickQuery.instance)}
+					>{$flagWatchlist.some((i) => i.securityId === $rightClickQuery.instance.securityId)
+						? 'Unflag'
+						: 'Flag'}</button
+				>
+			</div>
+		{/if}
 		<div class="section content-padding">
 			<!--<button
 				class="wide-button"
@@ -249,17 +278,10 @@
 			</button>
 		</div>
 
-		{#if $rightClickQuery.source === 'embedded'}
-			<div class="section content-padding">
+		<!--{#if $rightClickQuery.source === 'embedded'}
+			<!--<div class="section content-padding">
 				<button class="wide-button" on:click={() => completeRequest('edit')}> Edit </button>
-			</div>
-		{:else if $rightClickQuery.source === 'list'}
-			<div class="section content-padding">
-				<button class="wide-button" on:click={() => flagSecurity($rightClickQuery.instance)}
-					>{$rightClickQuery.instance.flagged ? 'Unflag' : 'Flag'}</button
-				>
-			</div>
-		{/if}
+			</div>-->
 	</div>
 {/if}
 
@@ -278,17 +300,6 @@
 		padding: clamp(6px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
 		border-bottom: 1px solid var(--ui-border);
 		margin-bottom: clamp(2px, 0.5vw, 4px);
-	}
-
-	.ticker {
-		font-size: clamp(14px, 1.5vw, 16px);
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.timestamp {
-		color: var(--text-secondary);
-		margin-top: clamp(1px, 0.3vw, 2px);
 	}
 
 	.section {

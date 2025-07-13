@@ -15,7 +15,14 @@
 		queryChart,
 		showExtendedHoursToggle
 	} from './interface';
-	import { streamInfo, settings, activeAlerts, isPublicViewing } from '$lib/utils/stores/stores';
+	import {
+		streamInfo,
+		settings,
+		activeAlerts,
+		isPublicViewing,
+		horizontalLines,
+		type HorizontalLine
+	} from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
@@ -472,20 +479,37 @@
 			for (const line of $drawingMenuProps.horizontalLines) {
 				chartCandleSeries.removePriceLine(line.line);
 			}
+			// CRITICAL: Clear the local lines array to prevent stale state during hot reloads
+			drawingMenuProps.update((v) => ({
+				...v,
+				horizontalLines: []
+			}));
 			if (!$isPublicViewing) {
 				privateRequest<HorizontalLine[]>('getHorizontalLines', {
 					securityId: inst.securityId
 				}).then((res: HorizontalLine[]) => {
 					if (res !== null && res.length > 0) {
-						for (const line of res) {
-							addHorizontalLine(
-								line.price,
-								currentChartInstance.securityId,
-								line.id,
-								line.color || '#FFFFFF',
-								(line.lineWidth || 1) as LineWidth
+						// Update the store with the loaded lines - the reactive block will handle rendering
+						horizontalLines.update((lines) => {
+							// Remove existing lines for this security
+							const filteredLines = lines.filter(
+								(line) => line.securityId !== currentChartInstance.securityId
 							);
-						}
+
+							// Add the new lines
+							const newLines = res.map((line) => ({
+								id: line.id,
+								securityId: currentChartInstance.securityId,
+								price: line.price,
+								color: line.color || '#FFFFFF',
+								lineWidth: line.lineWidth || 1
+							}));
+
+							return [...filteredLines, ...newLines];
+						});
+
+						// Note: Removed the imperative addHorizontalLine loop here
+						// The reactive block will detect the store change and render the lines
 					}
 				});
 			}
@@ -834,7 +858,7 @@
 			price: price
 		});
 
-		// Update the stored price in horizontalLines array
+		// Update the stored price in local horizontalLines array (for immediate visual feedback)
 		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
@@ -861,6 +885,13 @@
 				},
 				true
 			);
+
+			// Update the store - reactive block will handle chart updates
+			if (lineData.id > 0) {
+				horizontalLines.update((lines) =>
+					lines.map((line) => (line.id === lineData.id ? { ...line, price: lineData.price } : line))
+				);
+			}
 		}
 
 		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
@@ -896,6 +927,8 @@
 					chartCandleSeries: chartCandleSeries,
 					selectedLine: line.line,
 					selectedLinePrice: line.price,
+					selectedLineColor: line.color,
+					selectedLineWidth: line.lineWidth,
 					clientX: event.clientX,
 					clientY: event.clientY,
 					active: false,
@@ -1319,6 +1352,104 @@
 				}
 			}
 		});
+	}
+
+	// Add subscription to horizontalLines store to update chart lines
+	$: if (
+		$horizontalLines &&
+		chartCandleSeries &&
+		chartSecurityId &&
+		!$drawingMenuProps.isDragging
+	) {
+		// Get current lines for this security from drawingMenuProps
+		const currentDrawingLines = $drawingMenuProps.horizontalLines || [];
+
+		// Get lines for current security from the store
+		const storeLines = $horizontalLines.filter((line) => line.securityId === chartSecurityId);
+
+		// Find lines that exist in store but not in drawingMenuProps (need to add)
+		const linesToAdd = storeLines.filter(
+			(storeLine) => !currentDrawingLines.find((drawingLine) => drawingLine.id === storeLine.id)
+		);
+
+		// Find lines that exist in drawingMenuProps but not in store (need to remove)
+		const linesToRemove = currentDrawingLines.filter(
+			(drawingLine) =>
+				drawingLine.id > 0 && !storeLines.find((storeLine) => storeLine.id === drawingLine.id)
+		);
+
+		// Find lines that exist in both but might have different properties (need to update)
+		const linesToUpdate = storeLines.filter((storeLine) => {
+			const drawingLine = currentDrawingLines.find((dl) => dl.id === storeLine.id);
+			return (
+				drawingLine &&
+				(drawingLine.price !== storeLine.price ||
+					drawingLine.color !== storeLine.color ||
+					drawingLine.lineWidth !== storeLine.lineWidth)
+			);
+		});
+
+		// Remove lines that no longer exist in store
+		linesToRemove.forEach((lineToRemove) => {
+			chartCandleSeries.removePriceLine(lineToRemove.line);
+		});
+
+		// Update drawingMenuProps to match store
+		if (linesToAdd.length > 0 || linesToRemove.length > 0 || linesToUpdate.length > 0) {
+			drawingMenuProps.update((props) => {
+				let updatedLines = [...props.horizontalLines];
+
+				// Remove lines
+				updatedLines = updatedLines.filter(
+					(line) => !linesToRemove.find((removeMe) => removeMe.id === line.id)
+				);
+
+				// Add new lines
+				linesToAdd.forEach((lineToAdd) => {
+					const priceLine = chartCandleSeries.createPriceLine({
+						price: lineToAdd.price,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth,
+						lineStyle: 0, // Solid line
+						axisLabelVisible: true
+					});
+
+					updatedLines.push({
+						id: lineToAdd.id,
+						price: lineToAdd.price,
+						line: priceLine,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth
+					});
+				});
+
+				// Update existing lines
+				linesToUpdate.forEach((lineToUpdate) => {
+					const existingLineIndex = updatedLines.findIndex((ul) => ul.id === lineToUpdate.id);
+					if (existingLineIndex !== -1) {
+						const existingLine = updatedLines[existingLineIndex];
+						existingLine.line.applyOptions({
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						});
+
+						// Update the stored properties
+						updatedLines[existingLineIndex] = {
+							...existingLine,
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						};
+					}
+				});
+
+				return {
+					...props,
+					horizontalLines: updatedLines
+				};
+			});
+		}
 	}
 
 	function change(
@@ -2126,46 +2257,47 @@
 	}
 
 	// Function to calculate optimal position for event-info popup
-	function calculateEventInfoPosition(containerWidth: number, containerHeight: number) {
-		// Try to get the actual legend element and its dimensions
-		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
-		let legendRight = 300; // Default right edge position
-		let legendBottom = 100; // Default bottom position
-
-		if (legendElement) {
-			const legendRect = legendElement.getBoundingClientRect();
-			const chartContainer = document.querySelector(`#chart_container-${chartId}`);
-			const chartRect = chartContainer?.getBoundingClientRect();
-
-			if (chartRect) {
-				// Calculate legend's right edge and bottom relative to chart container
-				legendRight = legendRect.right - chartRect.left;
-				legendBottom = legendRect.bottom - chartRect.top;
-			}
-		}
-
-		const margin = 10; // Margin from legend and edges
+	function calculateEventInfoPosition(
+		containerWidth: number,
+		containerHeight: number,
+		eventX: number,
+		eventY: number
+	) {
+		const margin = 10; // Margin from edges
 		const minPopupWidth = 200; // Minimum popup width
+		const maxPopupWidth = 350; // Maximum popup width
+		const popupWidth = Math.max(
+			minPopupWidth,
+			Math.min(maxPopupWidth, containerWidth - margin * 2)
+		);
 
-		// Calculate available space to the right of legend
-		const availableWidth = containerWidth - legendRight - margin * 2;
+		// Estimate popup height (we'll use a reasonable default since we can't measure before rendering)
+		const estimatedPopupHeight = 150; // Adjust based on typical content
 
-		// Set popup width to available space (with min/max constraints)
-		const popupWidth = Math.max(minPopupWidth, Math.min(availableWidth, 350));
+		// Calculate initial position centered on the event
+		let leftPosition = eventX - popupWidth / 2;
+		let topPosition = eventY - estimatedPopupHeight - margin; // Position above the event by default
 
-		// Position to the right of the legend with margin
-		let leftPosition = legendRight + margin;
-
-		// Ensure popup doesn't go beyond right edge
-		if (leftPosition + popupWidth > containerWidth - margin) {
+		// Adjust horizontal position to stay within container bounds
+		if (leftPosition < margin) {
+			leftPosition = margin;
+		} else if (leftPosition + popupWidth > containerWidth - margin) {
 			leftPosition = containerWidth - popupWidth - margin;
 		}
 
-		// Ensure popup doesn't go beyond left edge (shouldn't happen but safety check)
-		leftPosition = Math.max(margin, leftPosition);
+		// Adjust vertical position to stay within container bounds
+		if (topPosition < margin) {
+			// If there's not enough space above, position below the event
+			topPosition = eventY + margin;
+		}
 
-		// For vertical positioning, start at top but ensure it doesn't go beyond bottom
-		let topPosition = 5;
+		// Ensure popup doesn't go beyond bottom edge
+		if (topPosition + estimatedPopupHeight > containerHeight - margin) {
+			topPosition = containerHeight - estimatedPopupHeight - margin;
+		}
+
+		// Final bounds check
+		topPosition = Math.max(margin, topPosition);
 		const maxHeight = containerHeight - topPosition - margin;
 
 		return {
@@ -2291,7 +2423,12 @@
 {#if selectedEvent}
 	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
 	{@const containerHeight = chartContainer?.clientHeight || 600}
-	{@const position = calculateEventInfoPosition(width, containerHeight)}
+	{@const position = calculateEventInfoPosition(
+		width,
+		containerHeight,
+		selectedEvent.x,
+		selectedEvent.y
+	)}
 	<div
 		class="event-info"
 		style="
@@ -2385,22 +2522,8 @@
 		min-width: 200px;
 		overflow-y: auto;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: scale(0.95);
-		transform-origin: top left;
-		opacity: 0;
-		animation: fadeInDown 0.2s ease-out forwards;
 		word-wrap: break-word;
 		hyphens: auto;
-	}
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: scale(0.85);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
 	}
 
 	.event-header {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"backend/internal/app/alerts"
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
@@ -37,6 +38,13 @@ func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, err
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+
+		// Set LLM execution flag for this function call
+		conn.IsLLMExecution = true
+		defer func() {
+			conn.IsLLMExecution = false
+		}()
+
 		return fn(conn, userID, args)
 	}
 }
@@ -168,6 +176,24 @@ var (
 			},
 			Function:      wrapWithContext(watchlist.NewWatchlistItem),
 			StatusMessage: "Adding item to watchlist...",
+		},
+		"deleteWatchlist": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "deleteWatchlist",
+				Description: "Delete a watchlist and all its items.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"watchlistId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the watchlist to delete.",
+						},
+					},
+					Required: []string{"watchlistId"},
+				},
+			},
+			Function:      wrapWithContext(watchlist.DeleteWatchlist),
+			StatusMessage: "Deleting watchlist...",
 		},
 		//singles
 
@@ -698,6 +724,78 @@ var (
 			StatusMessage: "Searching Twitter...",
 		},
 		// [END SEARCH TOOLS]
+		// [ALERT TOOLS]
+		"createPriceAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "createPriceAlert",
+				Description: "Create a new price alert for a specific security. The alert will trigger when the price reaches the specified level.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"price": {
+							Type:        genai.TypeNumber,
+							Description: "The price level at which the alert should trigger.",
+						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The security ID of the stock to create the alert for.",
+						},
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol of the stock (e.g., 'AAPL', 'NVDA').",
+						},
+					},
+					Required: []string{"price", "securityId", "ticker"},
+				},
+			},
+			Function:      wrapWithContext(alerts.NewAlert),
+			StatusMessage: "Creating price alert...",
+		},
+		"getAlerts": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getAlerts",
+				Description: "Get all current price alerts for the user, including active and triggered alerts.",
+				Parameters: &genai.Schema{
+					Type:       genai.TypeObject,
+					Properties: map[string]*genai.Schema{}, // No parameters needed
+					Required:   []string{},
+				},
+			},
+			Function:      wrapWithContext(alerts.GetAlerts),
+			StatusMessage: "Fetching alerts...",
+		},
+		"getAlertLogs": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getAlertLogs",
+				Description: "Get all triggered/fired price alerts for the user. These are alerts that have been activated.",
+				Parameters: &genai.Schema{
+					Type:       genai.TypeObject,
+					Properties: map[string]*genai.Schema{}, // No parameters needed
+					Required:   []string{},
+				},
+			},
+			Function:      wrapWithContext(alerts.GetAlertLogs),
+			StatusMessage: "Fetching alert history...",
+		},
+		"deleteAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "deleteAlert",
+				Description: "Delete a specific price alert by its alert ID.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"alertId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the alert to delete.",
+						},
+					},
+					Required: []string{"alertId"},
+				},
+			},
+			Function:      wrapWithContext(alerts.DeleteAlert),
+			StatusMessage: "Deleting alert...",
+		},
+		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
 		"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{

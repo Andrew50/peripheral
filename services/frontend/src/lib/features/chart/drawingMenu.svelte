@@ -48,36 +48,44 @@
 		lineWidth: LineWidth = 1 as LineWidth
 	) {
 		price = parseFloat(price.toFixed(2));
-		const chartSeries = get(drawingMenuProps).chartCandleSeries;
-		if (!chartSeries) {
-			return;
-		}
 
-		const priceLine = chartSeries.createPriceLine({
-			price: price,
-			color: color,
-			lineWidth: lineWidth,
-			lineStyle: 0, // Solid line
-			axisLabelVisible: true
-		});
-		get(drawingMenuProps).horizontalLines.push({
-			id,
-			price,
-			line: priceLine,
-			color,
-			lineWidth
-		});
 		if (id == -1) {
-			// only add to backend if it's being added not from a ticker load but from a new added line
+			// This is a user-initiated line creation (Alt+H) - add to backend and store
 			privateRequest<number>('setHorizontalLine', {
 				price: price,
 				securityId: securityId,
 				color: color,
 				lineWidth: lineWidth
 			}).then((res: number) => {
-				get(drawingMenuProps).horizontalLines[get(drawingMenuProps).horizontalLines.length - 1].id =
-					res;
+				// Update the store with the new line - reactive block will handle rendering
+				horizontalLines.update((lines) => {
+					const newLine = {
+						id: res,
+						securityId: securityId,
+						price: price,
+						color: color,
+						lineWidth: lineWidth
+					};
+
+					// Check if line already exists to avoid duplicates
+					const existingIndex = lines.findIndex((line) => line.id === res);
+					if (existingIndex !== -1) {
+						// Update existing line
+						lines[existingIndex] = newLine;
+						return [...lines];
+					} else {
+						// Add new line
+						return [...lines, newLine];
+					}
+				});
 			});
+		} else {
+			// This is for lines loaded from backend - they should already be in the store
+			// This branch is now primarily for backwards compatibility
+			// The reactive block should handle the actual rendering
+			console.warn(
+				'addHorizontalLine called with existing ID - this should be handled by the reactive block'
+			);
 		}
 	}
 </script>
@@ -86,6 +94,7 @@
 	import '$lib/styles/global.css';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { horizontalLines } from '$lib/utils/stores/stores';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	let menuElement: HTMLDivElement;
@@ -124,20 +133,18 @@
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
 
+		let deletedLineId = -1;
+
 		// If the line has an ID, delete it from the server
 		if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
+			deletedLineId = $drawingMenuProps.horizontalLines[lineIndex].id;
 			privateRequest('deleteHorizontalLine', {
-				id: $drawingMenuProps.horizontalLines[lineIndex].id
+				id: deletedLineId
 			});
+
+			// Update the store to remove the line - reactive block will handle chart removal
+			horizontalLines.update((lines) => lines.filter((line) => line.id !== deletedLineId));
 		}
-
-		// Remove the line from the chart
-		$drawingMenuProps.chartCandleSeries.removePriceLine($drawingMenuProps.selectedLine);
-
-		// Remove the line from our array
-		$drawingMenuProps.horizontalLines = $drawingMenuProps.horizontalLines.filter(
-			(l) => l.line !== $drawingMenuProps.selectedLine
-		);
 
 		// Close the menu
 		$drawingMenuProps.active = false;
@@ -154,34 +161,34 @@
 		const color = $drawingMenuProps.selectedLineColor;
 		const lineWidth = $drawingMenuProps.selectedLineWidth;
 
-		$drawingMenuProps.selectedLine.applyOptions({
-			price,
-			color,
-			lineWidth
-		});
-
-		// Update the stored properties in horizontalLines array
+		// Find the line ID from the local state
 		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
 
 		if (lineIndex !== -1) {
-			$drawingMenuProps.horizontalLines[lineIndex].price = price;
-			$drawingMenuProps.horizontalLines[lineIndex].color = color;
-			$drawingMenuProps.horizontalLines[lineIndex].lineWidth = lineWidth;
+			const lineId = $drawingMenuProps.horizontalLines[lineIndex].id;
+			const securityId = $drawingMenuProps.securityId;
 
 			// Update in backend
 			privateRequest<void>(
 				'updateHorizontalLine',
 				{
-					id: $drawingMenuProps.horizontalLines[lineIndex].id,
+					id: lineId,
 					price,
 					color,
 					lineWidth,
-					securityId: $drawingMenuProps.securityId
+					securityId: securityId
 				},
 				true
 			);
+
+			// Update the store - reactive block will handle chart updates
+			if (lineId > 0 && securityId) {
+				horizontalLines.update((lines) =>
+					lines.map((line) => (line.id === lineId ? { ...line, price, color, lineWidth } : line))
+				);
+			}
 		}
 
 		// Keep the menu open

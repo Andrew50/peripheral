@@ -10,19 +10,97 @@
 
 	import { tick } from 'svelte';
 	import { get } from 'svelte/store';
+	import { onMount } from 'svelte';
 
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
 	let previousWatchlistId: number;
 	let newNameInput: HTMLInputElement;
 	let showWatchlistInput = false;
-	let showDropdown = false;
 
-	// Compute visible watchlists
-	$: visibleWatchlists = $visibleWatchlistIds
-		.slice(0, 3)
-		.map((id) => $watchlists?.find((w) => w.watchlistId === id))
-		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
+	let tabsContainer: HTMLElement;
+	let moreButton: HTMLElement;
+	let visibleCount = 10; // Start with a higher number, will be calculated dynamically
+	let resizeTimeout: number;
+
+	// Compute visible watchlists based on available space
+	$: visibleWatchlists = (() => {
+		if (!Array.isArray($watchlists)) return [];
+
+		// Use the visibleWatchlistIds store but limit based on available space
+		return $visibleWatchlistIds
+			.slice(0, visibleCount) // Use dynamic count instead of hard-coded 3
+			.map((id) => $watchlists?.find((w) => w.watchlistId === id))
+			.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
+	})();
+
+	// Calculate how many tabs can fit
+	function calculateVisibleTabs() {
+		if (!tabsContainer || !moreButton || !Array.isArray($watchlists)) return;
+
+		const containerWidth = tabsContainer.offsetWidth;
+		const moreButtonWidth = moreButton.offsetWidth + 8; // Include gap
+		const availableWidth = containerWidth - moreButtonWidth;
+
+		// Get all tab elements to measure their actual widths
+		const tabElements = tabsContainer.querySelectorAll('.watchlist-tab');
+		let averageTabWidth: number;
+
+		if (tabElements.length > 0) {
+			// Calculate average tab width including gaps from existing tabs
+			let totalTabWidth = 0;
+			tabElements.forEach((tab) => {
+				const rect = tab.getBoundingClientRect();
+				totalTabWidth += rect.width;
+			});
+
+			// Add gap between tabs (assuming 4px gap from CSS)
+			const totalGaps = Math.max(0, tabElements.length - 1) * 4;
+			averageTabWidth = (totalTabWidth + totalGaps) / tabElements.length;
+		} else {
+			// Fallback: estimate tab width based on CSS (padding + content + border)
+			// 12px left + 12px right padding + ~20px for single character + 2px border = ~46px
+			console.log('no tab elements fallback width used');
+			averageTabWidth = 46;
+		}
+
+		// Calculate how many tabs can fit
+		const maxTabs = Math.floor(availableWidth / averageTabWidth);
+		const newVisibleCount = Math.max(1, Math.min(maxTabs, $watchlists.length));
+
+		if (newVisibleCount !== visibleCount) {
+			visibleCount = newVisibleCount;
+		}
+	}
+
+	// Debounced resize handler
+	function handleResize() {
+		clearTimeout(resizeTimeout);
+		resizeTimeout = setTimeout(() => {
+			calculateVisibleTabs();
+		}, 100);
+	}
+
+	onMount(() => {
+		// Initial calculation
+		tick().then(() => {
+			calculateVisibleTabs();
+		});
+
+		// Add resize listener
+		window.addEventListener('resize', handleResize);
+
+		return () => {
+			window.removeEventListener('resize', handleResize);
+		};
+	});
+
+	// Recalculate when watchlists change
+	$: if (Array.isArray($watchlists)) {
+		tick().then(() => {
+			calculateVisibleTabs();
+		});
+	}
 
 	function switchToWatchlist(watchlistId: number) {
 		if (watchlistId === currentWatchlistId) return;
@@ -33,7 +111,6 @@
 			addToVisibleTabs(watchlistId);
 			selectWatchlist(String(watchlistId));
 		}
-		showDropdown = false;
 	}
 
 	function handleWatchlistSelection(value: string) {
@@ -81,8 +158,16 @@
 
 	function handleWatchlistChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
-		handleWatchlistSelection(target.value);
-		// No need to reset the value; keeping it allows the dropdown to reopen with the current selection.
+		const selectedValue = target.value;
+		handleWatchlistSelection(selectedValue);
+
+		// Reset the dropdown value to the current watchlist if the action was cancelled or completed
+		if (selectedValue === 'delete' || selectedValue === 'new') {
+			// Use tick to ensure the DOM is updated before resetting
+			tick().then(() => {
+				target.value = currentWatchlistId?.toString() || '';
+			});
+		}
 	}
 
 	function newWatchlist() {
@@ -107,7 +192,7 @@
 	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
 </script>
 
-<div class="watchlist-tabs-container">
+<div class="watchlist-tabs-container" bind:this={tabsContainer}>
 	{#if !showWatchlistInput}
 		<div class="watchlist-tabs">
 			{#each visibleWatchlists as watchlist}
@@ -121,43 +206,32 @@
 			{/each}
 
 			<div class="dropdown-wrapper">
-				<button
-					class="more-button"
-					title="More Watchlists"
-					on:click={() => (showDropdown = !showDropdown)}
+				<select
+					class="dropdown-select default-select"
+					bind:this={moreButton}
+					value={currentWatchlistId?.toString()}
+					on:change={handleWatchlistChange}
+					title="Select Watchlist"
 				>
-					⋯
-				</button>
-
-				{#if showDropdown}
-					<div class="watchlist-dropdown">
-						<select
-							class="dropdown-select default-select"
-							value={currentWatchlistId?.toString()}
-							on:change={handleWatchlistChange}
-							on:blur={() => (showDropdown = false)}
-						>
-							<option value="" disabled>Select Watchlist</option>
-							{#if Array.isArray($watchlists)}
-								<optgroup label="My Watchlists">
-									{#each $watchlists as watchlist}
-										<option value={watchlist.watchlistId.toString()}>
-											{watchlist.watchlistName === 'flag'
-												? 'Flag (Protected)'
-												: watchlist.watchlistName}
-										</option>
-									{/each}
-								</optgroup>
-								<optgroup label="Actions">
-									<option value="new">+ Create New Watchlist</option>
-									{#if currentWatchlistId !== undefined && currentWatchlistId !== flagWatchlistId}
-										<option value="delete">- Delete Current Watchlist</option>
-									{/if}
-								</optgroup>
+					<option value="" disabled>Select Watchlist</option>
+					{#if Array.isArray($watchlists)}
+						<optgroup label="My Watchlists">
+							{#each $watchlists as watchlist}
+								<option value={watchlist.watchlistId.toString()}>
+									{watchlist.watchlistName === 'flag'
+										? 'Flag (Protected)'
+										: watchlist.watchlistName}
+								</option>
+							{/each}
+						</optgroup>
+						<optgroup label="Actions">
+							<option value="new">+ Create New Watchlist</option>
+							{#if currentWatchlistId !== undefined && currentWatchlistId !== flagWatchlistId}
+								<option value="delete">- Delete Current Watchlist</option>
 							{/if}
-						</select>
-					</div>
-				{/if}
+						</optgroup>
+					{/if}
+				</select>
 			</div>
 		</div>
 	{:else}
@@ -201,8 +275,7 @@
 	}
 
 	/* Base style to match .metadata-button */
-	.watchlist-tab,
-	.more-button {
+	.watchlist-tab {
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
@@ -222,16 +295,14 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.watchlist-tab:hover,
-	.more-button:hover {
+	.watchlist-tab:hover {
 		background: rgba(255, 255, 255, 0.15);
 		border-color: transparent;
 		color: #ffffff;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 	}
 
-	.watchlist-tab:focus,
-	.more-button:focus {
+	.watchlist-tab:focus {
 		outline: none;
 		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
 	}
@@ -251,33 +322,34 @@
 		padding: 6px 12px;
 	}
 
-	.more-button {
-		padding: 6px 8px;
-		min-width: 28px;
-		height: 28px;
-		justify-content: center;
-	}
-
 	.dropdown-wrapper {
 		position: relative;
-		/* Push the dropdown (three-dots button) to the far right within the flex container */
+		/* Push the dropdown to the far right within the flex container */
 		margin-left: auto;
 	}
 
-	.watchlist-dropdown {
-		position: absolute;
-		top: 100%;
-		right: 0;
-		margin-top: 4px;
-		z-index: 100;
-		min-width: 200px;
+	.dropdown-select {
+		min-width: 150px;
+		background: rgba(0, 0, 0, 0.9);
+		border: 1px solid transparent;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		padding: 6px 10px;
+		border-radius: 6px;
+		cursor: pointer;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 	}
 
-	.dropdown-select {
-		width: 100%;
-		background: rgba(0, 0, 0, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+	.dropdown-select:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: transparent;
+		color: #ffffff;
+	}
+
+	.dropdown-select:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
 	}
 
 	.new-watchlist-section {

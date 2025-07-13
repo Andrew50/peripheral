@@ -8,20 +8,71 @@ import { handleAlert } from './alert';
 import type { AlertData } from '$lib/utils/types/types';
 import { enqueueTick } from './streamHub';
 
-// Define the type for function status updates from backend (simplified)
+// Type definitions for dynamic updates - moved to top
+export type WatchlistUpdate = {
+	type: 'watchlist_update';
+	action: 'add' | 'remove' | 'update' | 'create' | 'delete';
+	watchlistId?: number;
+	watchlistName?: string;
+	item?: {
+		watchlistItemId: number;
+		securityId: number;
+		ticker: string;
+		[key: string]: any;
+	};
+	itemId?: number;
+};
+
+export type HorizontalLineUpdate = {
+	type: 'horizontal_line_update';
+	action: 'add' | 'remove' | 'update';
+	securityId: number;
+	line: {
+		id: number;
+		securityId: number;
+		price: number;
+		color: string;
+		lineWidth: number;
+	};
+};
+
+export type AlertUpdate = {
+	type: 'alert_update';
+	action: 'add' | 'remove' | 'update' | 'trigger';
+	alert: {
+		alertId: number;
+		alertType: string;
+		alertPrice?: number;
+		securityId?: number;
+		ticker?: string;
+		active: boolean;
+		direction?: boolean;
+		triggeredTimestamp?: number;
+	};
+};
+
+export type StrategyUpdate = {
+	type: 'strategy_update';
+	action: 'add' | 'remove' | 'update';
+	strategy: {
+		strategyId: number;
+		name: string;
+		activeScreen?: boolean;
+		[key: string]: any;
+	};
+};
+
 export type FunctionStatusUpdate = {
 	type: 'function_status';
 	userMessage: string;
 };
 
-// Define the type for title updates from backend
 export type TitleUpdate = {
 	type: 'title_update';
 	conversation_id: string;
 	title: string;
 };
 
-// Define the type for chat responses from backend
 export type ChatResponse = {
 	type: 'chat_response';
 	request_id: string;
@@ -29,6 +80,385 @@ export type ChatResponse = {
 	data?: any;
 	error?: string;
 };
+
+// NEW: Import stores for dynamic updates
+let storesInitialized = false;
+let storeModule: any = null;
+let initializationPromise: Promise<void> | null = null;
+
+// Initialize store references when needed - improved with retry logic
+async function initializeStoreReferences(): Promise<void> {
+	if (!browser) return;
+
+	// Return existing promise if initialization is already in progress
+	if (initializationPromise) {
+		return initializationPromise;
+	}
+
+	// If already initialized, return immediately
+	if (storesInitialized && storeModule) {
+		return Promise.resolve();
+	}
+
+	initializationPromise = (async () => {
+		try {
+			storeModule = await import('$lib/utils/stores/stores');
+
+			// Verify that essential stores are available
+			if (!storeModule.watchlists || !storeModule.currentWatchlistId) {
+				throw new Error('Essential watchlist stores not available');
+			}
+
+			storesInitialized = true;
+			console.log('✅ Store module initialized successfully for socket updates');
+		} catch (error) {
+			console.warn('❌ Failed to initialize store references:', error);
+			storesInitialized = false;
+			storeModule = null;
+			// Reset promise so it can be retried
+			initializationPromise = null;
+			throw error;
+		}
+	})();
+
+	return initializationPromise;
+}
+
+// NEW: Frontend update handler functions
+
+// Handle watchlist updates
+async function handleWatchlistUpdate(update: WatchlistUpdate) {
+	if (!browser) return;
+
+	try {
+		await initializeStoreReferences();
+	} catch (error) {
+		console.warn('❌ Store module not available for watchlist update, skipping:', error);
+		return;
+	}
+
+	if (!storeModule) {
+		console.warn('❌ Store module not available for watchlist update');
+		return;
+	}
+
+	try {
+		console.log('📋 Processing watchlist update:', update.action, update);
+		switch (update.action) {
+			case 'add':
+				if (update.item) {
+					// Add to current watchlist items if it's the active watchlist
+					const currentWatchlistId = get(storeModule.currentWatchlistId);
+					if (update.watchlistId === currentWatchlistId) {
+						storeModule.currentWatchlistItems.update((items: any[]) => {
+							const currentItems = Array.isArray(items) ? items : [];
+							// Check if item already exists to avoid duplicates
+							if (!currentItems.find((item: any) =>
+								item.securityId === update.item!.securityId ||
+								item.ticker === update.item!.ticker
+							)) {
+								return [...currentItems, update.item!];
+							}
+							return currentItems;
+						});
+					}
+
+					// Add to flag watchlist if applicable
+					const flagWatchlistId = storeModule.flagWatchlistId;
+					if (update.watchlistId === flagWatchlistId) {
+						storeModule.flagWatchlist.update((items: any[]) => {
+							const currentItems = Array.isArray(items) ? items : [];
+							if (!currentItems.find((item: any) =>
+								item.securityId === update.item!.securityId ||
+								item.ticker === update.item!.ticker
+							)) {
+								return [...currentItems, update.item!];
+							}
+							return currentItems;
+						});
+					}
+				}
+				break;
+
+			case 'remove':
+				if (update.itemId) {
+					// Remove from current watchlist items
+					storeModule.currentWatchlistItems.update((items: any[]) =>
+						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
+					);
+
+					// Remove from flag watchlist
+					storeModule.flagWatchlist.update((items: any[]) =>
+						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
+					);
+				}
+				break;
+
+			case 'create':
+				if (update.watchlistId && update.watchlistName) {
+					// Check if watchlist already exists to prevent duplicates
+					const currentWatchlists = get(storeModule.watchlists);
+					const exists = Array.isArray(currentWatchlists) &&
+						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
+
+					if (!exists) {
+						storeModule.watchlists.update((lists: any[]) => {
+							const currentLists = Array.isArray(lists) ? lists : [];
+							const newWatchlist = {
+								watchlistId: update.watchlistId,
+								watchlistName: update.watchlistName
+							};
+							return [...currentLists, newWatchlist];
+						});
+
+						// NEW: Also update visibleWatchlistIds to make the new watchlist visible
+						try {
+							const { addToVisibleTabs } = await import('$lib/features/watchlist/watchlistUtils');
+							addToVisibleTabs(update.watchlistId);
+							console.log('✅ Added new watchlist to visible tabs');
+						} catch (error) {
+							console.warn('❌ Failed to add watchlist to visible tabs:', error);
+						}
+					} else {
+						console.log('📋 Watchlist already exists, skipping duplicate creation');
+					}
+				}
+				break;
+
+			case 'delete':
+				if (update.watchlistId) {
+					// Check if watchlist exists before trying to delete
+					const currentWatchlists = get(storeModule.watchlists);
+					const exists = Array.isArray(currentWatchlists) &&
+						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
+
+					if (exists) {
+						storeModule.watchlists.update((lists: any[]) =>
+							Array.isArray(lists) ? lists.filter((list: any) => list.watchlistId !== update.watchlistId) : []
+						);
+
+						// NEW: Also remove from visibleWatchlistIds
+						try {
+							const { visibleWatchlistIds } = await import('$lib/features/watchlist/watchlistUtils');
+							visibleWatchlistIds.update((ids: number[]) =>
+								Array.isArray(ids) ? ids.filter((id: number) => id !== update.watchlistId) : []
+							);
+							console.log('✅ Removed deleted watchlist from visible tabs');
+						} catch (error) {
+							console.warn('❌ Failed to remove watchlist from visible tabs:', error);
+						}
+
+						// If the deleted watchlist was the current one, try to select another
+						const currentWatchlistId = get(storeModule.currentWatchlistId);
+						if (currentWatchlistId === update.watchlistId) {
+							try {
+								const { selectWatchlist } = await import('$lib/features/watchlist/watchlistUtils');
+								const remainingWatchlists = get(storeModule.watchlists);
+								if (Array.isArray(remainingWatchlists) && remainingWatchlists.length > 0) {
+									selectWatchlist(String(remainingWatchlists[0].watchlistId));
+									console.log('✅ Selected new current watchlist after deletion');
+								}
+							} catch (error) {
+								console.warn('❌ Failed to select new current watchlist:', error);
+							}
+						}
+					} else {
+						console.log('📋 Watchlist does not exist, skipping deletion');
+					}
+				}
+				break;
+
+			case 'update':
+				// Handle watchlist name updates
+				if (update.watchlistName && update.watchlistId) {
+					storeModule.watchlists.update((lists: any[]) =>
+						Array.isArray(lists) ? lists.map((list: any) =>
+							list.watchlistId === update.watchlistId
+								? { ...list, watchlistName: update.watchlistName! }
+								: list
+						) : []
+					);
+				}
+				break;
+
+			default:
+				console.warn('❌ Unknown watchlist update action:', update.action);
+		}
+
+		console.log('✅ Successfully processed watchlist update:', update.action);
+	} catch (error) {
+		console.warn('❌ Error handling watchlist update:', error);
+	}
+}
+
+// Handle horizontal line updates
+function handleHorizontalLineUpdate(update: HorizontalLineUpdate) {
+	if (!browser) return;
+
+	try {
+		console.log('📏 Processing horizontal line update:', update.action, update);
+
+		// Import horizontalLines store dynamically to avoid circular dependencies
+		import('$lib/utils/stores/stores').then(({ horizontalLines }) => {
+			horizontalLines.update((lines) => {
+				const currentLines = Array.isArray(lines) ? lines : [];
+
+				switch (update.action) {
+					case 'add':
+						// Add new line if it doesn't already exist
+						if (!currentLines.find(line => line.id === update.line.id)) {
+							return [...currentLines, {
+								id: update.line.id,
+								securityId: update.line.securityId,
+								price: update.line.price,
+								color: update.line.color,
+								lineWidth: update.line.lineWidth
+							}];
+						}
+						return currentLines;
+
+					case 'remove':
+						// Remove line by ID
+						return currentLines.filter(line => line.id !== update.line.id);
+
+					case 'update':
+						// Update existing line
+						return currentLines.map(line =>
+							line.id === update.line.id
+								? {
+									...line,
+									price: update.line.price,
+									color: update.line.color,
+									lineWidth: update.line.lineWidth
+								}
+								: line
+						);
+
+					default:
+						console.warn('Unknown horizontal line action:', update.action);
+						return currentLines;
+				}
+			});
+
+			console.log('📏 Horizontal line store updated successfully');
+		}).catch(error => {
+			console.warn('❌ Error updating horizontal line store:', error);
+		});
+
+		// Keep the custom event for backwards compatibility
+		if (typeof window !== 'undefined') {
+			window.dispatchEvent(new CustomEvent('horizontalLineUpdate', {
+				detail: update
+			}));
+		}
+	} catch (error) {
+		console.warn('❌ Error handling horizontal line update:', error);
+	}
+}
+
+// Handle alert updates
+async function handleAlertUpdate(update: AlertUpdate) {
+	if (!browser) return;
+
+	try {
+		await initializeStoreReferences();
+	} catch (error) {
+		console.warn('❌ Store module not available for alert update, skipping:', error);
+		return;
+	}
+
+	if (!storeModule) {
+		console.warn('❌ Store module not available for alert update');
+		return;
+	}
+
+	try {
+		console.log('🔔 Processing alert update:', update.action, update);
+		switch (update.action) {
+			case 'add':
+				storeModule.activeAlerts.update((alerts: any[]) => {
+					const currentAlerts = Array.isArray(alerts) ? alerts : [];
+					return [...currentAlerts, update.alert];
+				});
+				break;
+
+			case 'remove':
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				);
+				storeModule.inactiveAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				);
+				break;
+
+			case 'update':
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.map((alert: any) =>
+						alert.alertId === update.alert.alertId ? { ...alert, ...update.alert } : alert
+					) : []
+				);
+				break;
+
+			case 'trigger':
+				// Move from active to inactive alerts
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				);
+				storeModule.inactiveAlerts.update((alerts: any[]) => {
+					const currentAlerts = Array.isArray(alerts) ? alerts : [];
+					return [...currentAlerts, { ...update.alert, active: false }];
+				});
+				break;
+		}
+	} catch (error) {
+		console.warn('Error handling alert update:', error);
+	}
+}
+
+// Handle strategy updates
+async function handleStrategyUpdate(update: StrategyUpdate) {
+	if (!browser) return;
+
+	try {
+		await initializeStoreReferences();
+	} catch (error) {
+		console.warn('❌ Store module not available for strategy update, skipping:', error);
+		return;
+	}
+
+	if (!storeModule) {
+		console.warn('❌ Store module not available for strategy update');
+		return;
+	}
+
+	try {
+		console.log('📊 Processing strategy update:', update.action, update);
+		switch (update.action) {
+			case 'add':
+				storeModule.strategies.update((strategies: any[]) => {
+					const currentStrategies = Array.isArray(strategies) ? strategies : [];
+					return [...currentStrategies, { ...update.strategy, activeScreen: true }];
+				});
+				break;
+
+			case 'remove':
+				storeModule.strategies.update((strategies: any[]) =>
+					Array.isArray(strategies) ? strategies.filter((strat: any) => strat.strategyId !== update.strategy.strategyId) : []
+				);
+				break;
+
+			case 'update':
+				storeModule.strategies.update((strategies: any[]) =>
+					Array.isArray(strategies) ? strategies.map((strat: any) =>
+						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } : strat
+					) : []
+				);
+				break;
+		}
+	} catch (error) {
+		console.warn('Error handling strategy update:', error);
+	}
+}
 
 // Store to hold the current function status message
 export const functionStatusStore = writable<FunctionStatusUpdate | null>(null);
@@ -195,6 +625,37 @@ export function connect() {
 				}
 			}
 			return; // Handled chat response
+		}
+
+		// NEW: Handle dynamic updates
+		if (data && data.type === 'watchlist_update') {
+			console.log('📋 Watchlist Update Received:', data);
+			handleWatchlistUpdate(data as WatchlistUpdate).catch(error => {
+				console.warn('❌ Error in watchlist update handler:', error);
+			});
+			return;
+		}
+
+		if (data && data.type === 'horizontal_line_update') {
+			console.log('📏 Horizontal Line Update Received:', data);
+			handleHorizontalLineUpdate(data as HorizontalLineUpdate);
+			return;
+		}
+
+		if (data && data.type === 'alert_update') {
+			console.log('🔔 Alert Update Received:', data);
+			handleAlertUpdate(data as AlertUpdate).catch(error => {
+				console.warn('❌ Error in alert update handler:', error);
+			});
+			return;
+		}
+
+		if (data && data.type === 'strategy_update') {
+			console.log('📊 Strategy Update Received:', data);
+			handleStrategyUpdate(data as StrategyUpdate).catch(error => {
+				console.warn('❌ Error in strategy update handler:', error);
+			});
+			return;
 		}
 
 		// Handle other message types (based on channel)
@@ -439,7 +900,7 @@ function sendChatQueryNow(
 	} catch (error) {
 		// Clean up on send failure
 		pendingChatRequests.delete(requestId);
-		reject(error);
+		reject(error instanceof Error ? error : new Error(String(error)));
 	}
 }
 

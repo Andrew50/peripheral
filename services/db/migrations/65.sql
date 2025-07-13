@@ -2,12 +2,10 @@
    Screener continuous-aggregate definition – 58 calculated fields
    =============================================================== */
 
--- 1. Make sure the TimescaleDB extension is present.
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
 ------------------------------------------------------------------
--- 2. Base table that will hold materialised rows
+-- 1. Base table that will hold materialised rows
 ------------------------------------------------------------------
+DROP TABLE IF EXISTS screener;
 CREATE TABLE IF NOT EXISTS screener (
     calc_time               TIMESTAMPTZ NOT NULL,          -- bucketed time of calculation
     security_id             BIGINT      NOT NULL,
@@ -86,55 +84,62 @@ CREATE TABLE IF NOT EXISTS screener (
 );
 
 -- Promote to hypertable for automatic partitioning
-SELECT create_hypertable('screener', 'calc_time', if_not_exists => TRUE);
+SELECT create_hypertable('screener', 'calc_time', if_not_exists => TRUE, migrate_data => TRUE);
 
 -- Helpful index for latest snapshot look-ups
 CREATE INDEX IF NOT EXISTS screener_latest_idx
     ON screener (ticker, calc_time DESC);
 
 ------------------------------------------------------------------
--- 3. Continuous aggregate view (1-minute buckets)
+-- 3. Helper function for %-change to keep the SELECT readable
 ------------------------------------------------------------------
--- Refresh every minute; backfill 32 days.
-CREATE MATERIALIZED VIEW screener_ca
-WITH (
-    timescaledb.continuous,
-    timescaledb.refresh_lag = INTERVAL '2 minutes',
-    timescaledb.refresh_interval = INTERVAL '1 minute',
-    timescaledb.compress = FALSE
-) AS
+CREATE OR REPLACE FUNCTION pct(curr NUMERIC, ref NUMERIC)
+RETURNS NUMERIC LANGUAGE SQL IMMUTABLE AS $$
+    SELECT CASE
+             WHEN ref IS NULL OR ref = 0 OR curr IS NULL THEN NULL
+             ELSE (curr - ref)/ref*100
+           END;
+$$;
+
+------------------------------------------------------------------
+-- 4. Materialized view for screener data (1-minute buckets)
+------------------------------------------------------------------
+-- This is a regular materialized view since continuous aggregates don't support CTEs
+-- Using WITH NO DATA to avoid heavy computation during migration
+CREATE MATERIALIZED VIEW screener_ca AS
 WITH
     -- === runtime helpers ====================================================
     params AS (
         SELECT
             NOW()                       AS now_utc,
             NOW() AT TIME ZONE 'America/New_York'  AS now_et,
-            NOW() AT TIME ZONE 'America/New_York'::DATE
+            (NOW() AT TIME ZONE 'America/New_York')::DATE
                                       + TIME '04:00' AS pre_start_et,
-            NOW() AT TIME ZONE 'America/New_York'::DATE
+            (NOW() AT TIME ZONE 'America/New_York')::DATE
                                       + TIME '09:30' AS reg_start_et,
-            NOW() AT TIME ZONE 'America/New_York'::DATE
+            (NOW() AT TIME ZONE 'America/New_York')::DATE
                                       + TIME '16:00' AS reg_end_et,
-            NOW() AT TIME ZONE 'America/New_York'::DATE
+            (NOW() AT TIME ZONE 'America/New_York')::DATE
                                       + TIME '20:00' AS ext_end_et
     ),
 
     -- === latest daily bar ====================================================
     daily_last AS (
-        SELECT DISTINCT ON (ticker)
-            ticker,
-            securityid,
-            close  AS d_close,
-            high   AS d_high,
-            low    AS d_low,
-            open   AS d_open,
-            volume AS d_volume,
-            market_cap,
-            sector,
-            industry,
-            time_bucket('1 day', "timestamp") AS bar_day
-        FROM ohlcv_1d
-        ORDER BY ticker, "timestamp" DESC
+        SELECT DISTINCT ON (o.ticker)
+            o.ticker,
+            s.securityid,
+            o.close  AS d_close,
+            o.high   AS d_high,
+            o.low    AS d_low,
+            o.open   AS d_open,
+            o.volume AS d_volume,
+            s.market_cap,
+            s.sector,
+            s.industry,
+            time_bucket('1 day', o."timestamp") AS bar_day
+        FROM ohlcv_1d o
+        JOIN securities s ON o.ticker = s.ticker
+        ORDER BY o.ticker, o."timestamp" DESC
     ),
 
     -- === 52-week extremes ====================================================
@@ -151,8 +156,8 @@ WITH
     pm_slice AS (
         SELECT
             o.ticker,
-            MIN(o."timestamp")  KEEP (WHERE o.ticker IS NOT NULL) AS pm_open_ts,
-            MAX(o."timestamp")  KEEP (WHERE o.ticker IS NOT NULL) AS pm_close_ts,
+            MIN(o."timestamp") AS pm_open_ts,
+            MAX(o."timestamp") AS pm_close_ts,
             MIN(o.low)  AS pm_low,
             MAX(o.high) AS pm_high,
             SUM(o.volume) AS pm_volume
@@ -190,34 +195,80 @@ WITH
 
     -- === intraday returns windows ===========================================
     intraday_refs AS (
-        SELECT
-            o.ticker,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '1 minute' FROM params))  AS price_1m,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '15 minutes' FROM params)) AS price_15m,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '1 hour' FROM params))    AS price_1h,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '4 hours' FROM params))   AS price_4h
-        FROM ohlcv_1m o, params p
-        WHERE o."timestamp" >= p.now_utc - INTERVAL '4 hours'
-        GROUP BY o.ticker
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            (SELECT close FROM ohlcv_1m 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '1 minute' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1m,
+            (SELECT close FROM ohlcv_1m 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '15 minutes' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_15m,
+            (SELECT close FROM ohlcv_1m 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '1 hour' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1h,
+            (SELECT close FROM ohlcv_1m 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '4 hours' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_4h
+        FROM ohlcv_1m o
+        WHERE o."timestamp" >= (SELECT now_utc - INTERVAL '4 hours' FROM params)
     ),
 
     -- === daily/historical reference closes ==================================
     daily_refs AS (
-        SELECT
-            o.ticker,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '1 day'  FROM params)) AS price_1d,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '7 days' FROM params)) AS price_1w,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '1 month' FROM params)) AS price_1mo,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '3 months' FROM params)) AS price_3mo,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '6 months' FROM params)) AS price_6mo,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '1 year'   FROM params)) AS price_1y,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '5 years'  FROM params)) AS price_5y,
-            MAX(o.close) FILTER (WHERE o."timestamp" <= (SELECT now_utc - INTERVAL '10 years' FROM params)) AS price_10y,
-            MAX(o.close) FILTER (WHERE DATE_TRUNC('year', o."timestamp" AT TIME ZONE 'America/New_York')
-                                  = DATE_TRUNC('year',(SELECT now_et FROM params)))               AS price_ytd,
-            MIN(o.close)  AS price_all
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '1 day' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1d,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '7 days' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1w,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '1 month' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1mo,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '3 months' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_3mo,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '6 months' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_6mo,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '1 year' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_1y,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '5 years' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_5y,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND "timestamp" <= (SELECT now_utc - INTERVAL '10 years' FROM params)
+             ORDER BY "timestamp" DESC LIMIT 1) AS price_10y
         FROM ohlcv_1d o
-        GROUP BY o.ticker
+    ),
+
+    -- === YTD and All-time reference prices ==================================
+    ytd_all_data AS (
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+               AND DATE_TRUNC('year', "timestamp" AT TIME ZONE 'America/New_York') 
+                   = DATE_TRUNC('year', (SELECT now_et FROM params))
+             ORDER BY "timestamp" ASC LIMIT 1) AS price_ytd,
+            (SELECT close FROM ohlcv_1d 
+             WHERE ticker = o.ticker 
+             ORDER BY "timestamp" ASC LIMIT 1) AS price_all
+        FROM ohlcv_1d o
     ),
 
     -- === moving averages (50d & 200d) =======================================
@@ -247,10 +298,18 @@ WITH
         FROM (
             SELECT
                 ticker,
-                AVG(GREATEST(close - LAG(close) OVER w,0))  AS avg_gain,
-                AVG(GREATEST(LAG(close) OVER w - close,0))  AS avg_loss
-            FROM ohlcv_1d
-            WINDOW w AS (PARTITION BY ticker ORDER BY "timestamp" DESC ROWS BETWEEN 14 PRECEDING AND 1 PRECEDING)
+                AVG(gain) AS avg_gain,
+                AVG(loss) AS avg_loss
+            FROM (
+                SELECT
+                    ticker,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY "timestamp" DESC) AS rn,
+                    GREATEST(close - LAG(close) OVER (PARTITION BY ticker ORDER BY "timestamp" DESC), 0)  AS gain,
+                    GREATEST(LAG(close) OVER (PARTITION BY ticker ORDER BY "timestamp" DESC) - close, 0) AS loss
+                FROM ohlcv_1d
+            ) diffs
+            WHERE rn <= 14
+            GROUP BY ticker
         ) sub
     ),
 
@@ -282,7 +341,28 @@ WITH
             MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '15 minutes' FROM params)) AS low_15m,
             -- trailing 1-hour
             MAX(high) FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params)) AS high_1h,
-            MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params)) AS low_1h
+            MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params)) AS low_1h,
+
+            /* ---- calculated intraday ranges (pct) ---- */
+            CASE
+                WHEN (MIN(low) FILTER (WHERE rn = 1)) = 0 THEN NULL
+                ELSE (MAX(high) FILTER (WHERE rn = 1) - MIN(low) FILTER (WHERE rn = 1))
+                     / (MIN(low) FILTER (WHERE rn = 1)) * 100
+            END AS range_1m_pct,
+
+            CASE
+                WHEN (MIN(low) FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '15 minutes' FROM params))) = 0 THEN NULL
+                ELSE (MAX(high) FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '15 minutes' FROM params))
+                      - MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '15 minutes' FROM params)))
+                     / (MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '15 minutes' FROM params))) * 100
+            END AS range_15m_pct,
+
+            CASE
+                WHEN (MIN(low) FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params))) = 0 THEN NULL
+                ELSE (MAX(high) FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params))
+                      - MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params)))
+                     / (MIN(low)  FILTER (WHERE "timestamp" >= (SELECT now_utc - INTERVAL '1 hour' FROM params))) * 100
+            END AS range_1h_pct
         FROM (
             SELECT
                 o.*,
@@ -384,9 +464,12 @@ SELECT
     END                                                AS pre_market_change_pct,
 
     /* extended hours change vs previous close */
-    (d.d_close - pc.prev_close)                        AS extended_hours_change,
-    CASE WHEN pc.prev_close = 0 THEN NULL
-         ELSE (d.d_close - pc.prev_close)/pc.prev_close*100
+    CASE WHEN (SELECT now_et >= reg_end_et FROM params) THEN (d.d_close - pc.prev_close) ELSE NULL END AS extended_hours_change,
+    CASE WHEN (SELECT now_et >= reg_end_et FROM params) THEN 
+         CASE WHEN pc.prev_close = 0 THEN NULL
+              ELSE (d.d_close - pc.prev_close)/pc.prev_close*100
+         END 
+         ELSE NULL 
     END                                                AS extended_hours_change_pct,
 
     /* intraday % changes */
@@ -401,10 +484,10 @@ SELECT
     pct(d.d_close, dr.price_1mo)   AS change_1m_pct,
     pct(d.d_close, dr.price_3mo)   AS change_3m_pct,
     pct(d.d_close, dr.price_6mo)   AS change_6m_pct,
-    pct(d.d_close, dr.price_ytd)   AS change_ytd_1y_pct,
+    pct(d.d_close, ytd.price_ytd)  AS change_ytd_1y_pct,
     pct(d.d_close, dr.price_5y)    AS change_5y_pct,
     pct(d.d_close, dr.price_10y)   AS change_10y_pct,
-    pct(d.d_close, dr.price_all)   AS change_all_time_pct,
+    pct(d.d_close, ytd.price_all)  AS change_all_time_pct,
 
     /* from open */
     d.d_close - d.d_open                           AS change_from_open,
@@ -434,7 +517,7 @@ SELECT
 
     /* pre-market volume/dollar/rel-vol */
     pm.pm_volume                AS pre_market_volume,
-    pm.pm_volume * pm.pm_close  AS pre_market_dollar_volume,
+    pm.pm_volume * d.d_close    AS pre_market_dollar_volume,
     CASE WHEN v.avg_volume_14d = 0 THEN NULL ELSE d.d_volume / v.avg_volume_14d END AS relative_volume_14,
     CASE WHEN v.avg_volume_14d = 0 THEN NULL ELSE pm.pm_volume / v.avg_volume_14d END AS pre_market_vol_over_14d_vol,
 
@@ -457,30 +540,19 @@ LEFT JOIN pm_values          pm  ON pm.ticker = d.ticker
 LEFT JOIN prev_close         pc  ON pc.ticker = d.ticker
 LEFT JOIN intraday_refs      ir  ON ir.ticker = d.ticker
 LEFT JOIN daily_refs         dr  ON dr.ticker = d.ticker
+LEFT JOIN ytd_all_data       ytd ON ytd.ticker = d.ticker
 LEFT JOIN dma                ma  ON ma.ticker = d.ticker
 LEFT JOIN rsi_calc           r   ON r.ticker  = d.ticker
 LEFT JOIN volumes            v   ON v.ticker  = d.ticker
 LEFT JOIN intraday_ranges    rng ON rng.ticker= d.ticker
 LEFT JOIN volas              vola ON vola.ticker = d.ticker
-LEFT JOIN beta               b   ON b.ticker  = d.ticker;
+LEFT JOIN beta               b   ON b.ticker  = d.ticker
+WITH NO DATA;
 
 ------------------------------------------------------------------
--- 4. Helper function for %-change to keep the SELECT readable
+-- 5. Note: This materialized view needs manual refresh
 ------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION pct(curr NUMERIC, ref NUMERIC)
-RETURNS NUMERIC LANGUAGE SQL IMMUTABLE AS $$
-    SELECT CASE
-             WHEN ref IS NULL OR ref = 0 OR curr IS NULL THEN NULL
-             ELSE (curr - ref)/ref*100
-           END;
-$$;
-
-------------------------------------------------------------------
--- 5. Policy: refresh the most-recent 2-day window every minute - handle by scheduler
-------------------------------------------------------------------
-/*CALL add_continuous_aggregate_policy(
-    'screener_ca',
-    start_offset => INTERVAL '2 days',
-    end_offset   => INTERVAL '0 minutes',
-    schedule_interval => INTERVAL '1 minute'
-);*/
+-- Since this view uses CTEs and complex logic, it cannot be a continuous aggregate.
+-- The view was created WITH NO DATA to avoid heavy computation during migration.
+-- You'll need to refresh it manually or set up a cron job/scheduler to call:
+-- REFRESH MATERIALIZED VIEW screener_ca;

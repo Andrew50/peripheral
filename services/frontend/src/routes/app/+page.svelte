@@ -1653,9 +1653,13 @@
 					{/if}
 				</span>
 				<!-- Site logo (clickable) -->
-				<a class="bottom-logo-link" on:click={() => (window.location.href = '/')}>
+				<button
+					class="bottom-logo-link"
+					on:click={() => (window.location.href = '/')}
+					aria-label="Go to home page"
+				>
 					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-				</a>
+				</button>
 			</div>
 		</div>
 
@@ -1724,12 +1728,6 @@
 		align-items: center;
 		gap: 4px;
 		flex: 1;
-	}
-
-	.top-bar-right {
-		display: flex;
-		align-items: center;
-		padding-left: 16px;
 	}
 
 	/* Base styles for metadata buttons */
@@ -1895,42 +1893,6 @@
 		flex-shrink: 0;
 	}
 
-	/* Sidebar controls styles */
-	.sidebar-controls {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: auto;
-		min-width: 200px;
-		height: 40px;
-		gap: 8px;
-	}
-
-	.alert-controls-right {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: 100%;
-		padding-right: 8px;
-	}
-
-	.create-alert-btn {
-		padding: 6px 12px;
-		font-size: 13px;
-		font-weight: 600;
-		color: #ffffff;
-		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 6px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		transition: all 0.2s ease;
-	}
-
-	.create-alert-btn:hover {
-		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 0.4);
-	}
-
 	/* Upgrade button styles */
 	.upgrade-button {
 		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -1993,6 +1955,9 @@
 		display: inline-flex;
 		align-items: center;
 		cursor: pointer;
+		background: none;
+		border: none;
+		padding: 0;
 	}
 
 	/* New layout structure styles */
