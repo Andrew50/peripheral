@@ -132,9 +132,13 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, strategy_id) -> str:
         # Extract title if available
         try:
             if hasattr(plotly_fig, 'layout') and hasattr(plotly_fig.layout, 'title'):
-                title_text = getattr(f"Plot {plotID} Strategy ID: {strategy_id}", plotly_fig.layout.title, 'text', None)
+                # Correctly fetch title text from the figure layout; fallback to a default if missing
+                title_text = getattr(plotly_fig.layout.title, 'text', None)
                 if title_text:
-                    ax.set_title(title_text)
+                    title_text = f"Plot {plotID} Strategy ID: {strategy_id} - " + title_text
+                else: 
+                    title_text = f"Plot {plotID} Strategy ID: {strategy_id}"
+                ax.set_title(title_text)
         except Exception:
             pass  # Title is optional
         
