@@ -49,8 +49,8 @@ build_service() {
     $build_args \
     -t "$DOCKER_USERNAME/$srv:${DOCKER_TAG}" \
     -f "$dockerfile" \
-    "services/$srv"
-  
+    "$context"
+
   echo "✅ $srv build completed"
 }
 
