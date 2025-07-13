@@ -76,7 +76,6 @@ type ResponseImage struct {
 type WorkerBacktestResult struct {
 	Success        bool               `json:"success"`
 	StrategyID     int                `json:"strategy_id"`
-	ExecutionMode  string             `json:"execution_mode,omitempty"`
 	Instances      []map[string]any   `json:"instances"`
 	Summary        WorkerSummary      `json:"summary"`
 	StrategyPrints string             `json:"strategy_prints,omitempty"`
