@@ -207,6 +207,8 @@ jobs:
           STRATEGY="no-changes"
           echo "✅ DEPLOYMENT STRATEGY: NO CHANGES (Skip deployment)"
         fi
+
+        echo "SERVICES CHANGED: $SERVICES_CHANGED"
         
         # Create summary for other jobs
         SUMMARY=$(cat <<EOF

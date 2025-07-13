@@ -29,6 +29,7 @@ jobs:
     uses: ./.github/workflows/detect-changes.yml
   deploy-demo:
     needs: [detect_changes]
+    if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
     uses: ./.github/workflows/deploy-demo-test.yml
     with:
       environment: 'demo'
