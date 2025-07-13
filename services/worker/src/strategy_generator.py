@@ -222,47 +222,7 @@ ERROR HANDLING NOTE:
 
 EXAMPLE PATTERNS:
 ```python
-# Example 1: Volume Breakout
-def strategy():
-    instances = []
-    
-    bar_data = get_bar_data(
-        timeframe="1d",
-        columns=["ticker", "timestamp", "close", "volume"],
-        min_bars=20,  # Need 20 bars for volume average calculation
-        filters={{"market_cap_min": 1000000000}}  # Large cap stocks
-    )
-    
-    if bar_data is None or len(bar_data) == 0:
-        return instances
-    
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "close", "volume"])
-    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-    
-    # Calculate 20-day volume average
-    df['volume_avg_20'] = df.groupby('ticker')['volume'].rolling(20).mean().reset_index(0, drop=True)
-    df = df.dropna()  # Remove rows with NaN values
-    df['volume_ratio'] = df['volume'] / df['volume_avg_20']
-    
-    # CRITICAL: Find ALL volume breakouts (no .tail(1) or .groupby().last())
-    breakouts = df[df['volume_ratio'] >= 2.0]  # Volume 2x average
-    
-    for _, row in breakouts.iterrows():
-        instances.append({{
-            'ticker': row['ticker'],
-            'timestamp': int(row['timestamp']),
-            'entry_price': float(row['close']),
-            # CRITICAL: Include ALL calculated indicator values that triggered the signal
-            'volume_ratio': round(float(row['volume_ratio']), 3),
-            'volume': int(row['volume']),
-            'volume_avg_20': int(row['volume_avg_20']),
-            'volume_breakout_strength': round(float(row['volume_ratio'] - 2.0), 3),
-            'score': round(min(1.0, (row['volume_ratio'] - 2.0) / 3.0), 3)
-        }})
-        
-    return instances
-
-# Example 2: Multi-timeframe RSI + Trend Strategy
+# Example 1: Multi-timeframe RSI + Trend Strategy
 def strategy():
     instances = []
     
@@ -330,7 +290,7 @@ def strategy():
     
     return instances
 
-# Example 3: Gap Strategy with Specific Tickers
+# Example 2: Gap Strategy with Specific Tickers
 def strategy():
     instances = []
     
@@ -366,10 +326,8 @@ def strategy():
             'ticker': row['ticker'],
             'timestamp': int(row['timestamp']),
             'entry_price': float(row['open']),
-            # CRITICAL: Include calculated values that define the signal
             'gap_percent': round(float(row['gap_percent']), 3),
             'prev_close': round(float(row['prev_close']), 2),
-            'gap_direction': 'up' if row['gap_percent'] > 0 else 'down',
             'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
             'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
         }})
@@ -387,7 +345,7 @@ COMMON MISTAKES TO AVOID:
 into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
 - BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
 - NO DATE FILTERING: Using only daily data for precise stop timing
-- Appending instances only after exit is determined – always record the entry as an instance, even when you can't yet determine an exit.
+- Appending instances only after exit is determined – ALWAYS record the entry as an instance, even when you can't yet determine an exit.
 
 ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
 ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
@@ -660,41 +618,34 @@ Generate clean, robust Python code."""
                 user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
                 user_prompt += f"\n- Ensure proper error handling for edge cases"
             
-            # Use only o3 model as requested
-            models_to_try = [
-                ("o3", None),                # o3 model only
-            ]
-            
+            model_name = "o3"
             last_error = None
             
-            for model_name, max_tokens in models_to_try:
-                try:
-                    
-                    logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
-                    
-                    response = self.openai_client.responses.create(
-                        model=model_name,
-                        reasoning={"effort": "low"},
-                        input=f"{user_prompt}",
-                        instructions=f"{system_instruction}",
-                        user=f"user:0",
-                        timeout=120.0  # 2 minute timeout for other models
-                    )
-                    
-                    strategy_code = response.output_text
-                    # Extract Python code from response
-                    strategy_code = self._extract_python_code(strategy_code)
-                    
-                    logger.info(f"Generated strategy code with {model_name} ({len(strategy_code)} characters)")
-                    return strategy_code
-                    
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"Model {model_name} failed: {e}")
-                    continue
+            try:
+                
+                logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
+                
+                response = self.openai_client.responses.create(
+                    model=model_name,
+                    reasoning={"effort": "low"},
+                    input=f"{user_prompt}",
+                    instructions=f"{system_instruction}",
+                    user=f"user:0",
+                    timeout=120.0  # 2 minute timeout for other models
+                )
+                
+                strategy_code = response.output_text
+                # Extract Python code from response
+                strategy_code = self._extract_python_code(strategy_code)
+                
+                logger.info(f"Generated strategy code with {model_name} ({len(strategy_code)} characters)")
+                return strategy_code
+                
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {model_name} failed: {e}")
             
-            # If all models failed, raise the last error
-            raise last_error if last_error else Exception("All models failed")
+            
             
         except Exception as e:
             logger.error(f"OpenAI code generation failed: {e}")
