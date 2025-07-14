@@ -49,7 +49,9 @@ jobs:
       #     cache-dependency-path: services/backend/go.sum
 
       - name: 🐍 Setup Python
-        if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis' || matrix.test-suite == 'get-bar-data-filters'
+        if: matrix.test-suite == 'python-integration-tests' || 
+            matrix.test-suite == 'friday-gap-analysis' || 
+            matrix.test-suite == 'get-bar-data-filters'
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
@@ -57,7 +59,9 @@ jobs:
           cache-dependency-path: services/worker/requirements.txt
 
       - name: 📦 Install Python dependencies
-        if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis' || matrix.test-suite == 'get-bar-data-filters'
+        if: matrix.test-suite == 'python-integration-tests' || 
+            matrix.test-suite == 'friday-gap-analysis' || 
+            matrix.test-suite == 'get-bar-data-filters'
         run: |
           cd services/worker
           pip install -r requirements.txt

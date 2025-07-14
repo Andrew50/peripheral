@@ -3,9 +3,21 @@ dialect = postgres
 templater = jinja
 
 [sqlfluff:rules]
-capitalisation.identifiers = { extended_capitalisation_policy = camelCase }
-capitalisation.functions   = { extended_capitalisation_policy = camelCase }
-capitalisation.keywords    = { capitalisation_policy          = upper      }
-capitalisation.literals    = { extended_capitalisation_policy = upper      }
-layout.indent              = { indent_unit = space, tab_space_size = 4, indent_size = 4 }
-layout.spacing             = { indent_unit = space, tab_space_size = 4, indent_size = 4 } 
+# Capitalisation rules - allow both snake_case and camelCase for identifiers
+capitalisation.identifiers.extended_capitalisation_policy = all
+capitalisation.functions.extended_capitalisation_policy = all
+capitalisation.keywords.capitalisation_policy = upper
+capitalisation.literals.extended_capitalisation_policy = upper
+
+# Layout rules
+layout.indent.indent_unit = space
+layout.indent.tab_space_size = 4
+layout.indent.indent_size = 4
+layout.spacing.indent_unit = space
+layout.spacing.tab_space_size = 4
+layout.spacing.indent_size = 4
+
+# Disable some rules that might conflict with existing code
+layout.spacing.around_operators = True
+layout.spacing.before_comma = False
+layout.spacing.after_comma = True 
