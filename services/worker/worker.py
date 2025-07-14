@@ -767,8 +767,8 @@ class StrategyWorker:
                 "result": result,
                 "prints": prints,
                 "plots": plots,
-                "response_images": response_images,
-                "execution_id": execution_id,
+                "responseImages": response_images,
+                "executionID": execution_id,
             }
             
         except Exception as e:
@@ -782,8 +782,8 @@ class StrategyWorker:
                 "result": result,
                 "prints": prints,
                 "plots": plots,
-                "response_images": response_images,
-                "execution_id": execution_id,
+                "responseImages": response_images,
+                "executionID": execution_id,
             }
     
     def _publish_progress(self, task_id: str, stage: str, message: str, data: Dict[str, Any] = None):
@@ -1027,20 +1027,51 @@ class StrategyWorker:
             logger.error(f"❌ Failed to cleanup stale heartbeats: {e}")
 
     def _clear_queues_on_startup(self):
-        """Clear worker queues on startup"""
+        """Clear worker queues and stuck tasks on startup"""
         try:
             # Clear main queues
             priority_cleared = clear_queue(self.redis_client, 'strategy_queue_priority')
             normal_cleared = clear_queue(self.redis_client, 'strategy_queue')
             
-            total_cleared = priority_cleared + normal_cleared
-            if total_cleared > 0:
-                logger.info(f"🧹 Cleared {total_cleared} tasks from queues on startup (Priority: {priority_cleared}, Normal: {normal_cleared})")
+            # Clear stuck task results
+            task_results_cleared = self._clear_redis_pattern('task_result:*')
+            
+            # Clear stuck task assignments
+            task_assignments_cleared = self._clear_redis_pattern('task_assignment:*')
+            
+            total_queue_cleared = priority_cleared + normal_cleared
+            total_stuck_cleared = task_results_cleared + task_assignments_cleared
+            
+            if total_queue_cleared > 0 or total_stuck_cleared > 0:
+                logger.info(f"🧹 Startup cleanup: {total_queue_cleared} queue tasks (P:{priority_cleared}, N:{normal_cleared}), {total_stuck_cleared} stuck tasks (Results:{task_results_cleared}, Assignments:{task_assignments_cleared})")
             else:
-                logger.info("🧹 No tasks to clear from queues on startup")
+                logger.info("🧹 No tasks to clear on startup")
                 
         except Exception as e:
             logger.error(f"❌ Failed to clear queues on startup: {e}")
+    
+    def _clear_redis_pattern(self, pattern: str) -> int:
+        """Clear all Redis keys matching a pattern"""
+        try:
+            cleared_count = 0
+            cursor = 0
+            
+            while True:
+                cursor, keys = self.redis_client.scan(cursor=cursor, match=pattern, count=100)
+                
+                if keys:
+                    # Delete keys in batches
+                    deleted = self.redis_client.delete(*keys)
+                    cleared_count += deleted
+                
+                if cursor == 0:
+                    break
+            
+            return cleared_count
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to clear Redis pattern {pattern}: {e}")
+            return 0
 
 
 
