@@ -7,13 +7,16 @@
 	background-color: var(--c2);
 	overflow: hidden;
 }
+
 h1 {
 	font-size: 24px;
 	color: var(--f1);
 }
+
 .content {
 	text-align: center;
 }
+
 main {
 	display: flex;
 	justify-content: center;

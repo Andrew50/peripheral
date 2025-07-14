@@ -329,7 +329,7 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		// define the minimal schema explicitly with a bigint timestamp column
 		// and no constraints.
 		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
-			ticker        text      NOT NULL,
+			ticker        text,
 			volume        numeric,
 			open          numeric,
 			close         numeric,
@@ -348,11 +348,21 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 			return err
 		}
 
+		// Count and log records with null/empty tickers for monitoring
+		var nullTickerCount int64
+		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE ticker IS NULL OR ticker = ''`, stageTable)
+		if err := c.QueryRow(ctx, countSQL).Scan(&nullTickerCount); err != nil {
+			log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
+		} else if nullTickerCount > 0 {
+			log.Printf("⚠️  Filtering out %d records with null/empty tickers from batch", nullTickerCount)
+		}
+
 		// Step 2: Upsert into main table.
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
 SELECT ticker, volume, open, close, high, low,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
+WHERE ticker IS NOT NULL AND ticker != ''
 ON CONFLICT (ticker, "timestamp") DO UPDATE SET
     volume        = EXCLUDED.volume,
     open          = EXCLUDED.open,
@@ -702,7 +712,7 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		stageTable := fmt.Sprintf("%s_stage_%d", table, pgc.PID())
 
 		createStageSQL := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS %s (
-			ticker        text      NOT NULL,
+			ticker        text,
 			volume        numeric,
 			open          numeric,
 			close         numeric,
@@ -722,10 +732,20 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 			return err
 		}
 
+		// Count and log records with null/empty tickers for monitoring
+		var nullTickerCount int64
+		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE ticker IS NULL OR ticker = ''`, stageTable)
+		if err := c.QueryRow(ctx, countSQL).Scan(&nullTickerCount); err != nil {
+			log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
+		} else if nullTickerCount > 0 {
+			log.Printf("⚠️  Filtering out %d records with null/empty tickers from %s", nullTickerCount, key)
+		}
+
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
 SELECT ticker, volume, open, close, high, low,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
+WHERE ticker IS NOT NULL AND ticker != ''
 ON CONFLICT (ticker, "timestamp") DO UPDATE SET
     volume        = EXCLUDED.volume,
     open          = EXCLUDED.open,

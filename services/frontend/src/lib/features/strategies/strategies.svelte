@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { strategies } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 
 	// Simple Strategy interface for the new prompt-based system
@@ -19,7 +20,6 @@
 
 	// Stores
 	const loading = writable(false);
-	const strategies = writable<Strategy[]>([]);
 	const creating = writable(false);
 	let newPrompt = '';
 
@@ -209,8 +209,8 @@ Examples:
 		padding: 1rem;
 		max-width: 1200px;
 		margin: 0 auto;
-		font-family:
-			-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+			sans-serif;
 	}
 
 	.header {

@@ -260,6 +260,180 @@ func SendTitleUpdate(userID int, conversationID string, title string) {
 	}
 }
 
+// NEW: Dynamic update message types and broadcasting functions
+
+// WatchlistUpdate represents a watchlist update message sent to the client
+type WatchlistUpdate struct {
+	Type          string                 `json:"type"` // Will be "watchlist_update"
+	Action        string                 `json:"action"`
+	WatchlistID   *int                   `json:"watchlistId,omitempty"`
+	WatchlistName *string                `json:"watchlistName,omitempty"`
+	Item          map[string]interface{} `json:"item,omitempty"`
+	ItemID        *int                   `json:"itemId,omitempty"`
+}
+
+// HorizontalLineUpdate represents a horizontal line update message sent to the client
+type HorizontalLineUpdate struct {
+	Type       string                 `json:"type"` // Will be "horizontal_line_update"
+	Action     string                 `json:"action"`
+	SecurityID int                    `json:"securityId"`
+	Line       map[string]interface{} `json:"line"`
+}
+
+// AlertUpdate represents an alert update message sent to the client
+type AlertUpdate struct {
+	Type   string                 `json:"type"` // Will be "alert_update"
+	Action string                 `json:"action"`
+	Alert  map[string]interface{} `json:"alert"`
+}
+
+// StrategyUpdate represents a strategy update message sent to the client
+type StrategyUpdate struct {
+	Type     string                 `json:"type"` // Will be "strategy_update"
+	Action   string                 `json:"action"`
+	Strategy map[string]interface{} `json:"strategy"`
+}
+
+// SendWatchlistUpdate sends a watchlist update to a specific user
+func SendWatchlistUpdate(userID int, action string, watchlistID *int, watchlistName *string, item map[string]interface{}, itemID *int) {
+	fmt.Printf("📋 Sending watchlist update to user %d: %s\n", userID, action)
+
+	update := WatchlistUpdate{
+		Type:          "watchlist_update",
+		Action:        action,
+		WatchlistID:   watchlistID,
+		WatchlistName: watchlistName,
+		Item:          item,
+		ItemID:        itemID,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling watchlist update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendWatchlistUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent watchlist update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendWatchlistUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendHorizontalLineUpdate sends a horizontal line update to a specific user
+func SendHorizontalLineUpdate(userID int, action string, securityID int, line map[string]interface{}) {
+	fmt.Printf("📏 Sending horizontal line update to user %d: %s (securityID: %d)\n", userID, action, securityID)
+
+	update := HorizontalLineUpdate{
+		Type:       "horizontal_line_update",
+		Action:     action,
+		SecurityID: securityID,
+		Line:       line,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling horizontal line update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendHorizontalLineUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent horizontal line update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendHorizontalLineUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendAlertUpdate sends an alert update to a specific user
+func SendAlertUpdate(userID int, action string, alert map[string]interface{}) {
+	fmt.Printf("🔔 Sending alert update to user %d: %s\n", userID, action)
+
+	update := AlertUpdate{
+		Type:   "alert_update",
+		Action: action,
+		Alert:  alert,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling alert update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendAlertUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent alert update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendAlertUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendStrategyUpdate sends a strategy update to a specific user
+func SendStrategyUpdate(userID int, action string, strategy map[string]interface{}) {
+	fmt.Printf("📊 Sending strategy update to user %d: %s\n", userID, action)
+
+	update := StrategyUpdate{
+		Type:     "strategy_update",
+		Action:   action,
+		Strategy: strategy,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling strategy update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendStrategyUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent strategy update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendStrategyUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
 func (c *Client) writePump() {
 	// ticker := time.NewTicker(pingPeriod) // Keep connection alive if needed
 	defer func() {

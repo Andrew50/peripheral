@@ -128,17 +128,49 @@
 </div>
 
 <style>
+	/* Critical CSS to prevent white flash and scrollbar issues */
+	:global(*) {
+		box-sizing: border-box;
+	}
+
+	:global(html),
+	:global(body) {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
+		background-color: #1a1c21;
+		color: #f9fafb;
+		font-family:
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
+		position: fixed;
+		top: 0;
+		left: 0;
+		/* Prevent overscroll/bounce effects */
+		overscroll-behavior: none;
+		/* Prevent pull-to-refresh on mobile */
+		overscroll-behavior-y: none;
+	}
+
 	.container {
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		min-height: 100vh; /* Use min-height */
+		min-height: 100vh;
 		width: 100%;
-		background-color: var(--c2, #1a1c21); /* Use theme background */
-		color: var(--f1, #f9fafb); /* Use theme text color */
-		font-family: var(--font-primary, 'Inter', sans-serif);
+		background-color: #1a1c21;
+		color: #f9fafb;
+		font-family: 'Inter', sans-serif;
 		padding: 1rem;
 		box-sizing: border-box;
+		position: relative;
+		z-index: 1;
 	}
 
 	.loading-container {
@@ -151,44 +183,43 @@
 
 	.loading-container p {
 		margin: 0;
-		color: var(--f2, #9ca3af); /* Use secondary text color */
+		color: #9ca3af;
 		font-size: 1rem;
 	}
 
 	.loading-container p:first-of-type {
-		color: var(--f1, #f9fafb); /* Make first line primary color */
+		color: #f9fafb;
 		font-size: 1.1rem;
 		font-weight: 500;
 	}
 
 	.error {
-		/* Use theme error color */
-		color: var(--c5, #ef4444);
+		color: #ef4444;
 		text-align: center;
 		max-width: 450px;
 		padding: 1.5rem 2rem;
-		background-color: var(--c1, rgba(45, 49, 57, 0.8)); /* Use theme background */
-		border-radius: var(--radius-md, 6px);
-		border: 1px solid var(--c5, #ef4444);
+		background-color: rgba(45, 49, 57, 0.8);
+		border-radius: 6px;
+		border: 1px solid #ef4444;
 	}
 
 	.error h2 {
 		margin-top: 0;
 		margin-bottom: 1rem;
-		color: var(--f1, #f9fafb);
+		color: #f9fafb;
 	}
 
 	.error p {
 		margin-bottom: 0.5rem;
-		color: var(--f2, #9ca3af);
+		color: #9ca3af;
 	}
 
 	/* Simple CSS Spinner */
 	.spinner {
 		width: 40px;
 		height: 40px;
-		border: 4px solid var(--c4, #374151); /* Use separator color for track */
-		border-top: 4px solid var(--c3, #3b82f6); /* Use accent color for spinner */
+		border: 4px solid #374151;
+		border-top: 4px solid #3b82f6;
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin-bottom: 0.5rem;

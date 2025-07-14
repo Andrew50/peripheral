@@ -16,7 +16,10 @@
 		currentWatchlistItems
 	} from '$lib/utils/stores/stores';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { addInstanceToWatchlist as addToWatchlist } from '$lib/features/watchlist/watchlistUtils';
+	import {
+		addInstanceToWatchlist as addToWatchlist,
+		addMultipleInstancesToWatchlist
+	} from '$lib/features/watchlist/watchlistUtils';
 	import { newPriceAlert } from '$lib/features/alerts/interface';
 	import type { Watchlist } from '$lib/utils/types/types';
 	import { get } from 'svelte/store';
@@ -118,6 +121,10 @@
 	// Watchlist control functions
 	function addInstanceToWatchlist(securityId?: number) {
 		addToWatchlist(currentWatchlistId, securityId);
+	}
+
+	function addMultipleToWatchlist() {
+		addMultipleInstancesToWatchlist(currentWatchlistId);
 	}
 
 	function newWatchlist() {
@@ -610,8 +617,8 @@
 					<div class="watchlist-controls-right">
 						<button
 							class="add-item-button metadata-button"
-							title="Add Symbol"
-							on:click={() => addInstanceToWatchlist()}>+</button
+							title="Add Symbol (Multi-add)"
+							on:click={() => addMultipleToWatchlist()}>+</button
 						>
 					</div>
 				{/if}

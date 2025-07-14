@@ -102,11 +102,14 @@ function processRegularHoursData(t: any) {
 
 	// Update regular price cache and store
 	if (t.price !== undefined) {
-		priceCache.set(securityid, t.price);
-		getColumnStore(securityid, 'price').set({
-			price: t.price,
-			formatted: t.price.toFixed(2)
-		});
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		if (t.price >= 0) {
+			priceCache.set(securityid, t.price);
+			getColumnStore(securityid, 'price').set({
+				price: t.price,
+				formatted: t.price.toFixed(2)
+			});
+		}
 	}
 
 	// Update prevClose cache and store
@@ -144,7 +147,10 @@ function processExtendedHoursData(t: any) {
 
 	// Update extended price cache
 	if (t.price !== undefined) {
-		extendedPriceCache.set(securityid, t.price);
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		if (t.price >= 0) {
+			extendedPriceCache.set(securityid, t.price);
+		}
 	}
 
 	// Update extendedClose cache

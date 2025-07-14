@@ -368,7 +368,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 	}
 
 	// Wait for result with timeout and progress callbacks
-	result, err := waitForBacktestResultWithProgress(ctx, conn, taskID, 5*time.Minute, progressCallback)
+	result, err := waitForBacktestResultWithProgress(ctx, conn, taskID, 10*time.Minute, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}

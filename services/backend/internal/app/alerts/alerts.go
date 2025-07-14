@@ -1,10 +1,11 @@
 package alerts
 
 import (
+	"backend/internal/app/limits"
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/services/alerts"
-	"backend/internal/app/limits"
+	"backend/internal/services/socket"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -197,6 +198,32 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		Direction:  newAlert.Direction,
 	})
 
+	// NEW: Send WebSocket update after successful creation
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		alertData := map[string]interface{}{
+			"alertId":   newAlert.AlertID,
+			"alertType": "price",
+			"active":    newAlert.Active,
+		}
+
+		// Safely add pointer values, handling nil cases
+		if newAlert.Price != nil {
+			alertData["alertPrice"] = *newAlert.Price
+		}
+		if newAlert.SecurityID != nil {
+			alertData["securityId"] = *newAlert.SecurityID
+		}
+		if newAlert.Ticker != nil {
+			alertData["ticker"] = *newAlert.Ticker
+		}
+		if newAlert.Direction != nil {
+			alertData["direction"] = *newAlert.Direction
+		}
+
+		socket.SendAlertUpdate(userID, "add", alertData)
+	}
+
 	return newAlert, nil
 }
 
@@ -248,5 +275,15 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 
 	// Remove from memory without decrementing counter (already handled above if needed)
 	alerts.RemoveAlertFromMemory(args.AlertID)
+
+	// NEW: Send WebSocket update after successful deletion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		alertData := map[string]interface{}{
+			"alertId": args.AlertID,
+		}
+		socket.SendAlertUpdate(userID, "remove", alertData)
+	}
+
 	return nil, nil
 }

@@ -24,8 +24,23 @@ export function initializeVisibleWatchlists(
 	currentWatchlistId: number
 ) {
 	if (watchlistsArray && watchlistsArray.length > 0) {
-		// Always set the first 3 watchlists as visible
-		visibleWatchlistIds.set(watchlistsArray.slice(0, 3).map((w) => w.watchlistId));
+		// Always prioritize flag watchlist if it exists
+		const flagWatchlist = watchlistsArray.find((w) => w.watchlistId === flagWatchlistId);
+		const otherWatchlists = watchlistsArray.filter((w) => w.watchlistId !== flagWatchlistId);
+
+		let initialVisibleIds: number[] = [];
+
+		if (flagWatchlist) {
+			// Add flag watchlist first
+			initialVisibleIds.push(flagWatchlist.watchlistId);
+			// Add all other watchlists - space limiting will be handled by UI
+			initialVisibleIds.push(...otherWatchlists.map((w) => w.watchlistId));
+		} else {
+			// No flag watchlist, add all watchlists
+			initialVisibleIds = watchlistsArray.map((w) => w.watchlistId);
+		}
+
+		visibleWatchlistIds.set(initialVisibleIds);
 	}
 }
 // Helper function to update both stores when adding items
@@ -78,10 +93,25 @@ export function selectWatchlist(watchlistIdString: string) {
 	privateRequest<WatchlistItem[]>('getWatchlistItems', { watchlistId: watchlistId })
 		.then((v: WatchlistItem[]) => {
 			currentWatchlistItems.set(v || []);
+
+			// Also update flagWatchlist if this is the flag watchlist
+			if (watchlistId === flagWatchlistId) {
+				// Import flagWatchlist here to avoid circular dependency
+				import('$lib/utils/stores/stores').then(({ flagWatchlist }) => {
+					flagWatchlist.set(v || []);
+				});
+			}
 		})
 		.catch((err) => {
 			console.error('Error fetching watchlist items:', err);
 			currentWatchlistItems.set([]);
+
+			// Also update flagWatchlist if this is the flag watchlist
+			if (watchlistId === flagWatchlistId) {
+				import('$lib/utils/stores/stores').then(({ flagWatchlist }) => {
+					flagWatchlist.set([]);
+				});
+			}
 		});
 }
 
@@ -92,7 +122,7 @@ export function createNewWatchlist(watchlistName: string): Promise<number> {
 	}
 
 	const existingWatchlist = get(watchlists).find(
-		(w) => w.watchlistName.toLowerCase() === watchlistName.toLowerCase()
+		(w: Watchlist) => w.watchlistName.toLowerCase() === watchlistName.toLowerCase()
 	);
 
 	if (existingWatchlist) {
@@ -140,6 +170,11 @@ export function deleteWatchlist(watchlistId: number): Promise<void> {
 
 			return updatedWatchlists;
 		});
+
+		// Also remove from visible watchlists
+		visibleWatchlistIds.update((ids: number[]) =>
+			Array.isArray(ids) ? ids.filter((id: number) => id !== watchlistId) : []
+		);
 	});
 }
 
@@ -266,6 +301,63 @@ export function addInstanceToWatchlist(
 		}
 	);
 }
+
+// New function for multi-add functionality
+export function addMultipleInstancesToWatchlist(currentWatchlistId?: number) {
+	console.log('addMultipleInstancesToWatchlist', currentWatchlistId);
+	if (get(isPublicViewing)) {
+		showAuthModal('watchlists', 'signup');
+		return;
+	}
+
+	if (!currentWatchlistId) {
+		console.error('No current watchlist ID available');
+		return;
+	}
+
+	// Start the multi-add process
+	addNextSymbol(currentWatchlistId);
+}
+
+// Helper function to add the next symbol in the multi-add process
+async function addNextSymbol(targetWatchlistId: number) {
+	const inst = { ticker: '' };
+
+	try {
+		const i: WatchlistItem = await queryInstanceInput(['ticker'], ['ticker'], inst, 'ticker', 'Add Symbol to Watchlist');
+
+		// Check if the security is already in the current list
+		const aList = get(currentWatchlistItems);
+		const empty = !Array.isArray(aList);
+
+		if (!empty && aList.find((l: WatchlistItem) => l.securityId === i.securityId)) {
+			console.log('Security already in watchlist');
+			// Continue with next symbol even if this one was a duplicate
+			setTimeout(() => addNextSymbol(targetWatchlistId), 100);
+			return;
+		}
+
+		// Add the symbol to the watchlist
+		const watchlistItemId: number = await privateRequest<number>('newWatchlistItem', {
+			watchlistId: targetWatchlistId,
+			securityId: i.securityId
+		});
+
+		const newItem = { ...i, watchlistItemId: watchlistItemId };
+		updateWatchlistStores(newItem, targetWatchlistId);
+		console.log(`Added ${i.ticker} to watchlist`);
+
+		// Continue with next symbol automatically
+		setTimeout(() => {
+			addNextSymbol(targetWatchlistId);
+		}, 100);
+
+	} catch (error) {
+		// If user cancelled or there was an error, stop the multi-add process
+		console.log('Multi-add process ended:', error);
+	}
+}
+
 // Add new watchlist to front of visible tabs
 export function addToVisibleTabs(newWatchlistId: number) {
 	if (!newWatchlistId) return;
@@ -274,7 +366,29 @@ export function addToVisibleTabs(newWatchlistId: number) {
 		// If it's already visible, do nothing
 		if (ids.includes(newWatchlistId)) return ids;
 
-		// Add to front and keep max 3 tabs
-		return [newWatchlistId, ...ids].slice(0, 3);
+		// Get current watchlists to check for flag watchlist
+		const currentWatchlists = get(watchlists);
+		const flagWatchlist = currentWatchlists?.find((w: Watchlist) => w.watchlistId === flagWatchlistId);
+
+		let newIds: number[];
+
+		if (flagWatchlist && !ids.includes(flagWatchlistId)) {
+			// Flag watchlist exists but isn't in visible tabs - add it first
+			newIds = [flagWatchlistId, newWatchlistId, ...ids];
+		} else if (ids.includes(flagWatchlistId)) {
+			// Flag watchlist is already visible - add new watchlist after flag
+			const flagIndex = ids.indexOf(flagWatchlistId);
+			newIds = [
+				...ids.slice(0, flagIndex + 1), // Keep flag and everything before it
+				newWatchlistId,
+				...ids.slice(flagIndex + 1) // Add everything after flag
+			];
+		} else {
+			// No flag watchlist - add to front
+			newIds = [newWatchlistId, ...ids];
+		}
+
+		// Return all tabs - space limiting will be handled by the UI components
+		return newIds;
 	});
 }
