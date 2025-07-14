@@ -26,9 +26,13 @@ type Conn struct {
 	PolygonKey      string
 	GeminiPool      *GeminiKeyPool
 	PerplexityKey   string
-	XAPIKey         string
+	GrokAPIKey      string
 	TwitterAPIioKey string
 	OpenAIKey       string
+	XAPIKey         string
+	XAPISecretKey   string
+	XAccessToken    string
+	XAccessSecret   string
 	IsLLMExecution  bool // Track if function is called by LLM agent
 }
 
@@ -59,9 +63,15 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	// Get API keys from environment variables
 	polygonKey := getEnv("POLYGON_API_KEY", "")
 	perplexityKey := getEnv("PERPLEXITY_API_KEY", "")
-	XAPIKey := getEnv("X_API_KEY", "")
+	grokAPIKey := getEnv("GROK_API_KEY", "")
 	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
 	openAIKey := getEnv("OPENAI_API_KEY", "")
+
+	xAPIKey := getEnv("X_API_KEY", "")
+	xAPISecretKey := getEnv("X_API_SECRET", "")
+	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
+	xAccessSecret := getEnv("X_ACCESS_SECRET", "")
+
 	var dbURL string
 	var cacheURL string
 
@@ -225,9 +235,13 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		PolygonKey:      polygonKey,
 		GeminiPool:      geminiPool,
 		PerplexityKey:   perplexityKey,
-		XAPIKey:         XAPIKey,
+		GrokAPIKey:      grokAPIKey,
 		TwitterAPIioKey: twitterAPIioKey,
 		OpenAIKey:       openAIKey,
+		XAPIKey:         xAPIKey,
+		XAPISecretKey:   xAPISecretKey,
+		XAccessToken:    xAccessToken,
+		XAccessSecret:   xAccessSecret,
 		IsLLMExecution:  false, // Initialize the new field
 	}
 

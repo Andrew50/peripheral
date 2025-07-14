@@ -143,8 +143,33 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openai-api-key
+                  name: openai-secret
                   key: OPENAI_API_KEY
+            - name: GROK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: grok-secret
+                  key: GROK_API_KEY
+            - name: X_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: x-secret
+                  key: X_API_KEY
+            - name: X_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: x-api-secret
+                  key: X_API_SECRET
+            - name: X_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: x-access-token
+                  key: X_ACCESS_TOKEN
+            - name: X_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: x-access-secret
+                  key: X_ACCESS_SECRET
             # Add Stripe secrets for billing
             - name: STRIPE_SECRET_KEY
               valueFrom:

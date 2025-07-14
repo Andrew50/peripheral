@@ -2,6 +2,7 @@ package server
 
 import (
 	"backend/internal/data"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"backend/internal/services/socket"
+
+	"github.com/dghubble/oauth1"
 )
 
 // TwitterWebhookPayload represents only the fields we need from Twitter webhook
@@ -101,7 +104,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			"message": "success",
 		})
 		// Queue the extracted data for background processing
-		err = processTwitterWebhookEvent(extractedTweets)
+		err = processTwitterWebhookEvent(conn, extractedTweets)
 		if err != nil {
 			log.Printf("Error queueing Twitter webhook event: %v", err)
 			http.Error(w, "Error processing webhook", http.StatusInternalServerError)
@@ -111,12 +114,12 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 }
 
 // processTwitterWebhookEvent processes the extracted tweet data
-func processTwitterWebhookEvent(tweets []ExtractedTweetData) error {
+func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) error {
 	fmt.Println("queueTwitterWebhookEvent extractedTweets", tweets)
 	for _, tweet := range tweets {
 		// Extract ticker symbols from the tweet text
 		tickers := extractTickersFromTweet(tweet.Text)
-
+		SendTweet(conn, "testing tweet: "+tweet.Text)
 		socket.SendAlertToAllUsers(socket.AlertMessage{
 			AlertID:    1,
 			Timestamp:  time.Now().Unix() * 1000,
@@ -145,6 +148,30 @@ func extractTickersFromTweet(tweet string) []string {
 	}
 
 	return tickers
+}
+
+func SendTweet(conn *data.Conn, tweet string) {
+	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
+	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
+	client := cfg.Client(oauth1.NoContext, token)
+
+	payload := map[string]any{"text": tweet}
+	body, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest("POST", "https://api.x.com/2/tweets", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending tweet: %v", err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("Tweet sent successfully")
 }
 
 // twitterWebhookHandler is the HTTP handler wrapper
