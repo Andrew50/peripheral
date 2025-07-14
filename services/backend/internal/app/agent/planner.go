@@ -761,9 +761,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 				// Try to extract and append images to allImages with multiple type assertions
 				// First try []ResponseImage
 				if imageList, ok := responseImages.([]ResponseImage); ok {
-					for _, img := range imageList {
-						allImages = append(allImages, img)
-					}
+					allImages = append(allImages, imageList...)
 				} else if imageList, ok := responseImages.([]interface{}); ok {
 					// Try []interface{} (common after JSON unmarshaling)
 					for _, img := range imageList {

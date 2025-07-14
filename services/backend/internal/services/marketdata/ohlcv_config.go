@@ -58,13 +58,15 @@ func loadS3Config() s3Config {
 
 // newS3Client returns a tuned AWS S3 client for high-throughput, low-latency transfers.
 //
-//lint:ignore SA1019 Using deprecated resolver until AWS SDK upgrade completes.
+//nolint:staticcheck // SA1019: Using deprecated resolver until AWS SDK upgrade completes.
 func newS3Client(cfg s3Config) (*s3.Client, error) {
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(cfg.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
+		//nolint:staticcheck // SA1019: Using deprecated resolver until AWS SDK upgrade completes.
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
+				//nolint:staticcheck // SA1019: Using deprecated Endpoint struct until AWS SDK upgrade completes.
 				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil
 			}),
 		),

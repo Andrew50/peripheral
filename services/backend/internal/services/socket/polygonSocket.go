@@ -20,8 +20,6 @@ var nextDispatchTimes = struct {
 	times map[string]time.Time
 }{times: make(map[string]time.Time)}
 
-var useAlerts bool
-
 const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 
 var tickerToSecurityID map[string]int
@@ -337,7 +335,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
 func StartPolygonWS(conn *data.Conn, _useAlerts bool, enableRealtime bool) error {
-	useAlerts = _useAlerts
 	if err := initTickerToSecurityIDMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
