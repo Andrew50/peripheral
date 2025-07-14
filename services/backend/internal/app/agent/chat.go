@@ -425,7 +425,7 @@ type AgentPlotChunkData struct {
 func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
 	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
-
+	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		if chunk.Type == "backtest_table" {
 			var backtestTableChunkContent BacktestTableChunkData
@@ -509,6 +509,56 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 						Length:     plot.Length,
 						XAxisTitle: xAxisTitle,
 						YAxisTitle: yAxisTitle,
+					}
+					processedChunks = append(processedChunks, chunk)
+					break
+				}
+			}
+		} else if chunk.Type == "agent_plot" {
+			var agentPlotChunkContent AgentPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal agent plot chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &agentPlotChunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid agent plot chunk format]",
+				})
+				continue
+			}
+			if agentResultsMap[agentPlotChunkContent.ExecutionID] == nil {
+				agentResultsMap[agentPlotChunkContent.ExecutionID], err = GetPythonAgentResultFromCache(ctx, conn, agentPlotChunkContent.ExecutionID)
+				if err != nil {
+					continue
+				}
+			}
+			agentPlots := agentResultsMap[agentPlotChunkContent.ExecutionID].Plots
+			for _, plot := range agentPlots {
+				if plot.PlotID == agentPlotChunkContent.PlotID {
+					var xAxisTitle, yAxisTitle string
+					if xaxis, ok := plot.Layout["xaxis"].(map[string]any); ok && xaxis != nil {
+						if title, titleOk := xaxis["title"].(string); titleOk {
+							xAxisTitle = title
+						}
+					}
+					if yaxis, ok := plot.Layout["yaxis"].(map[string]any); ok && yaxis != nil {
+						if title, titleOk := yaxis["title"].(string); titleOk {
+							yAxisTitle = title
+						}
+					}
+					chunk.Content = AgentPlotChunkData{
+						ExecutionID: agentPlotChunkContent.ExecutionID,
+						PlotID:      agentPlotChunkContent.PlotID,
+						ChartType:   plot.ChartType,
+						ChartTitle:  plot.Title,
+						Length:      plot.Length,
+						XAxisTitle:  xAxisTitle,
+						YAxisTitle:  yAxisTitle,
 					}
 					processedChunks = append(processedChunks, chunk)
 					break

@@ -227,8 +227,6 @@ class PythonAgentGenerator:
         - If data is invalid, simply return an empty list: return []
 
         COMMON MISTAKES TO AVOID:
-        - latest_df = df.groupby('ticker').last() - only latest data
-        - df.drop_duplicates(subset=['ticker']) - this removes valid instances
         - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
         - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
         - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
@@ -269,6 +267,7 @@ class PythonAgentGenerator:
         - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
         - This should SUPER comprehensive. The user will not have access to the data and information other than what is printed and the instance list.
         - Plan in advance the statistics you will print and determine the calculations/intermediary steps needed to get that data.
+        - Do not print any time data in timestamp. Always print in the human readable format DD/MM/YYYY HH:MM:SS.
 
         PLOTLY PLOT GENERATION (REQUIRED):
         - Use plotly to generate plots of useful visualizations of the data
@@ -276,8 +275,8 @@ class PythonAgentGenerator:
         - Always show the plot using .show()
         - Almost always include plots in the strategy to help the user understand the data
         - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-        - Do not worry about the styling of the plot.
-        - Plot equity curves of the P/L performance of strategies overtime.
+        - You should style the plot to be visually appealing and informative, specifically focusing on the colors of the layout based on the data. E.g. positive data should be green, negative data should be red, etc.
+        - Ensure to name all traces in the plot.
         - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
