@@ -412,6 +412,15 @@ type BacktestPlotChunkData struct {
 	XAxisTitle string `json:"xAxisTitle,omitempty"`
 	YAxisTitle string `json:"yAxisTitle,omitempty"`
 }
+type AgentPlotChunkData struct {
+	ExecutionID string `json:"executionID"`
+	PlotID      int    `json:"plotID"`
+	ChartType   string `json:"chartType,omitempty"`
+	ChartTitle  string `json:"chartTitle,omitempty"`
+	Length      int    `json:"length,omitempty"`
+	XAxisTitle  string `json:"xAxisTitle,omitempty"`
+	YAxisTitle  string `json:"yAxisTitle,omitempty"`
+}
 
 func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
@@ -516,7 +525,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
 	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
-
+	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
 		if chunk.Type == "backtest_table" {
@@ -708,6 +717,55 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 			}
 			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
 			for _, plot := range strategyPlots {
+				if plot.PlotID == plotID {
+					var titleIcon string
+					if plot.TitleTicker != "" {
+						titleIcon, _ = helpers.GetIcon(conn, plot.TitleTicker)
+					}
+					processedChunks = append(processedChunks, ContentChunk{
+						Type: "plot",
+						Content: map[string]any{
+							"chart_type": plot.ChartType,
+							"data":       plot.Data,
+							"title":      plot.Title,
+							"titleIcon":  titleIcon,
+							"layout":     plot.Layout,
+						},
+					})
+					break
+				}
+			}
+		} else if chunk.Type == "agent_plot" {
+			var chunkContent AgentPlotChunkData
+			contentBytes, err := json.Marshal(chunk.Content)
+			if err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Could not marshal agent plot chunk content]",
+				})
+				continue
+			}
+			if err := json.Unmarshal(contentBytes, &chunkContent); err != nil {
+				processedChunks = append(processedChunks, ContentChunk{
+					Type:    "text",
+					Content: "[Internal Error: Invalid agent plot chunk format]",
+				})
+				continue
+			}
+			executionID := chunkContent.ExecutionID
+			plotID := chunkContent.PlotID
+			if agentResultsMap[executionID] == nil {
+				agentResultsMap[executionID], err = GetPythonAgentResultFromCache(ctx, conn, executionID)
+				if err != nil {
+					processedChunks = append(processedChunks, ContentChunk{
+						Type:    "text",
+						Content: fmt.Sprintf("[Internal Error: Could not get agent results: %v]", err),
+					})
+					continue
+				}
+			}
+			agentPlots := agentResultsMap[executionID].Plots
+			for _, plot := range agentPlots {
 				if plot.PlotID == plotID {
 					var titleIcon string
 					if plot.TitleTicker != "" {
