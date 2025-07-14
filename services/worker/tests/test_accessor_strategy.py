@@ -131,7 +131,7 @@ class MockAccessorStrategyEngine:
         """Mock screening execution"""
         try:
             # Validate the strategy code
-            if not self.validator.validate_code(strategy_code):
+            if not self.validator.validate_strategy_code(strategy_code):
                 return {
                     'success': False,
                     'error': 'Strategy validation failed'

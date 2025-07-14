@@ -32,10 +32,13 @@ on:
       services_changed:
         required: false
         type: string
-      # public_base_url:
-      #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
-      #   required: true
-      #   type: string
+      migration_needed:
+        required: false
+        type: string
+#      public_base_url:
+#        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
+#        required: true
+#        type: string
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN:
         required: true
@@ -58,6 +61,16 @@ on:
       GOOGLE_CLIENT_ID:
         required: true
       GOOGLE_CLIENT_SECRET:
+        required: true
+      GROK_API_KEY:
+        required: true
+      X_API_KEY:
+        required: true
+      X_API_SECRET:
+        required: true
+      X_ACCESS_TOKEN:
+        required: true
+      X_ACCESS_SECRET:
         required: true
       JWT_SECRET:
         required: true
@@ -99,6 +112,11 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
@@ -170,6 +188,11 @@ jobs:
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_SECRET: [$(if [ -n "$X_API_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_TOKEN: [$(if [ -n "$X_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_SECRET: [$(if [ -n "$X_ACCESS_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"
@@ -181,7 +204,6 @@ jobs:
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
 
- 
       - name: Setup For Deployment
         run: |
           chmod +x config/deploy/scripts-do/*.sh
@@ -190,15 +212,10 @@ jobs:
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
           
-      - name: Setup For Deployment
-        run: |
-          chmod +x config/deploy/scripts-do/*.sh
-          
-          DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
-          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
-          
           echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
           echo "Services to deploy: ${{ inputs.services_changed }}"   
+
+          echo "MIGRATION_NEEDED=${{ inputs.mig }}"
 
           CONFIG_DIR="config/deploy/k8s-doks"
           echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
@@ -212,10 +229,17 @@ jobs:
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
           echo "Using cluster: ${CLUSTER_NAME}"
 
+      - name: Log in to DO Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.digitalocean.com
+          username: nathanvosburg-atlantis
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
       - name: Build Docker Images
         run: config/deploy/scripts-do/build-images.sh
 
-      - name: Login & Push Docker Images
+      - name: Push Docker Images
         run: config/deploy/scripts-do/push-images.sh
 
       - name: Setup Kubernetes Context
@@ -229,6 +253,25 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts-do/deploy-to-k8s.sh
+
+      - name: Run DB Migrations Job
+        if: false #inputs.migration_needed == 'true'
+        run: |
+          # Substitute env vars into job manifest
+          envsubst < config/deploy/k8s-doks/db-migrate-job.yaml > db-migrate-job.yaml
+          
+          # Apply the Job manifest (creates the job)
+          kubectl apply -f db-migrate-job.yaml -n $K8S_NAMESPACE
+          
+          # Wait for job to complete (timeout after 5 mins)
+          kubectl wait --for=condition=complete job/db-migrate-job -n $K8S_NAMESPACE --timeout=300s
+          
+          POD=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=db-migrate-job -o jsonpath='{.items[0].metadata.name}')
+          echo "Logs from migration job pod:"
+          kubectl logs "$POD" -n $K8S_NAMESPACE
+          
+          # Cleanup the job resources (job + pods)
+          kubectl delete job db-migrate-job -n $K8S_NAMESPACE
 
       - name: Cleanup
         if: always()
