@@ -51,7 +51,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             BRANCH_NAME="${{ github.ref_name }}"
             echo "Current branch: $BRANCH_NAME"
-            
+
             PR_COUNT=$(gh api graphql -f query='
               query($owner:String!, $repo:String!, $headRef:String!) {
                 repository(owner:$owner, name:$repo) {
@@ -60,7 +60,7 @@ jobs:
                   }
                 }
               }' -f owner="${{ github.repository_owner }}" -f repo="${{ github.event.repository.name }}" -f headRef="$BRANCH_NAME" --jq '.data.repository.pullRequests.totalCount')
-            
+
             if [[ $PR_COUNT -gt 0 ]]; then
               echo "This push is on a branch with an open PR - skipping duplicate run"
               echo "should_run=false" >> $GITHUB_OUTPUT
@@ -68,21 +68,21 @@ jobs:
               exit 0
             fi
           fi
-          
+
           if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/ben" || "${{ github.ref }}" == "refs/heads/aj") ]]; then
             echo "Running for push to ben/aj branch - will not fail on errors"
             echo "should_run=true" >> $GITHUB_OUTPUT
             echo "continue_on_error=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
             echo "Running for PR to main branch"
             echo "should_run=true" >> $GITHUB_OUTPUT
             echo "continue_on_error=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           if [[ ("${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "prod") || \
                 ("${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.head_branch }}" == "prod") ]]; then
             echo "Skipping lint and build for prod deployment"
@@ -90,7 +90,7 @@ jobs:
             echo "continue_on_error=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
               echo "Branch protection check passed, proceeding with tests"
@@ -103,7 +103,7 @@ jobs:
             fi
             exit 0
           fi
-          
+
           echo "Running tests by default"
           echo "should_run=true" >> $GITHUB_OUTPUT
           echo "continue_on_error=false" >> $GITHUB_OUTPUT
@@ -114,28 +114,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "sha=0000000000000000000000000000000000000000" >> $GITHUB_OUTPUT # Default to initial commit
-          
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           echo "Getting last successful workflow run SHA..."
           WORKFLOW_FILENAME="lint-and-build.yml" # Assuming this is the current workflow's filename
           BRANCH_NAME="${{ github.ref_name }}"
-          
+
           LAST_RUN_ID=$(gh api \
             -H "Accept: application/vnd.github+json" \
             "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILENAME/runs?branch=$BRANCH_NAME&status=success&per_page=1" \
             --jq '.workflow_runs[0].id')
-          
+
           if [ -n "$LAST_RUN_ID" ] && [ "$LAST_RUN_ID" != "null" ]; then
             echo "Found last successful run: $LAST_RUN_ID"
             LAST_SUCCESS_SHA=$(gh api \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/actions/runs/$LAST_RUN_ID" \
               --jq '.head_sha')
-            
+
             if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "null" ]; then
               echo "Last successful commit SHA: $LAST_SUCCESS_SHA"
               echo "sha=$LAST_SUCCESS_SHA" >> $GITHUB_OUTPUT
@@ -270,7 +270,16 @@ jobs:
         with:
           version: latest # Or specify the version pre-baked in your container
           working-directory: services/backend
-          args: --out-format=colored-line-number --timeout=3m --config=.golangci.yml --max-issues-per-linter=10 --max-same-issues=5 --build-tags=all --allow-parallel-runners --go=1.24 --path-prefix=services/backend
+          args: >-
+            --out-format=colored-line-number
+            --timeout=3m
+            --config=.golangci.yml
+            --max-issues-per-linter=10
+            --max-same-issues=5
+            --build-tags=all
+            --allow-parallel-runners
+            --go=1.24
+            --path-prefix=services/backend
           # Disable PR diff fetching to avoid 20k line limit issues
           only-new-issues: false
           skip-cache: true
@@ -331,7 +340,7 @@ jobs:
         run: |
           # Using npm ci for reliable installs from package-lock.json
           npm ci
-          
+
           # Install additional test dependencies if not already in package.json as devDependencies
           echo "Ensuring testing libraries are available..."
           npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
@@ -374,7 +383,7 @@ jobs:
              echo "// Jest setup file - CommonJS format" > jest.setup.cjs
              echo "require('@testing-library/jest-dom');" >> jest.setup.cjs
           fi
-          
+
           # Create minimal SvelteKit type structure if it doesn't exist
           mkdir -p .svelte-kit/types
           if [ ! -f "src/app.d.ts" ]; then
