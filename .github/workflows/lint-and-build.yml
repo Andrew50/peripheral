@@ -227,9 +227,10 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
 
       - name: 🔍 Run golangci-lint format check (check only)
+        working-directory: services/backend
         run: |
           echo "🔍 Running Go linting with camelCase enforcement (check only)..."
-          golangci-lint run --timeout 5m --config services/backend/.golangci.yml ./services/backend/... --no-fix
+          golangci-lint run --timeout 5m --config .golangci.yml ./... --no-fix
 
       - name: Create job summary for Go Format
         if: always()
@@ -327,7 +328,7 @@ jobs:
         run: |
           echo "🔍 Running ESLint with camelCase enforcement (check only)..."
           cd services/frontend
-          npx eslint 'src/**/*.{js,ts,svelte}' --config .eslintrc.js
+          npx eslint --no-flat-config 'src/**/*.{js,ts,svelte}'
 
       - name: 🎨 Run Stylelint with camelCase enforcement (check only)
         run: |
