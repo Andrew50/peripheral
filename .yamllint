@@ -12,7 +12,7 @@ rules:
     max: 1
     max-end: 1
   hyphens:
-    max-spaces-before: 1
+    max-spaces-after: 1
   indentation:
     spaces: 2
     indent-sequences: true

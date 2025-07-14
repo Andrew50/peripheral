@@ -34,7 +34,6 @@ linters:
     - gosec
     # - forbidigo
   disable:
-    - gosimple
     # - staticcheck # Ensure staticcheck runs with its specific config above
     - govet
     - ineffassign
