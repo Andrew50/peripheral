@@ -128,8 +128,11 @@ jobs:
         run: |
           echo "📦 Installing Node.js dependencies..."
           cd services/frontend
+          # Temporarily rename root eslintrc to avoid dependency resolution conflicts
+          mv ../../.eslintrc.js ../../.eslintrc.js.bak || true
           npm ci
-          npm install --save-dev stylelint stylelint-config-standard
+          # Restore root eslintrc
+          mv ../../.eslintrc.js.bak ../../.eslintrc.js || true
           cd ../..
 
       - name: 🔧 Generate ESLint configuration for camelCase enforcement

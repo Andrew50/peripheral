@@ -122,8 +122,8 @@
 					const price = v.price;
 					const prevClose = s.prevClose;
 
-					// Skip price updates if price is -1 (indicates skip OHLC condition)
-					const shouldSkipPriceUpdate = price < 0;
+					// Skip price updates based on shouldUpdatePrice flag
+					const shouldSkipPriceUpdate = !v.shouldUpdatePrice;
 
 					// Only update instance price if not skipping price updates
 					if (!shouldSkipPriceUpdate) {
@@ -159,7 +159,7 @@
 								prevClose
 							};
 						}
-						// skip if price is -1, but already skipped in polygonSocket.go to not send to slow streams
+						// skip if shouldUpdatePrice is false, but already skipped in polygonSocket.go to not send to slow streams
 						if (type === 'price' && v?.price) {
 							const dir =
 								lastPrice === undefined

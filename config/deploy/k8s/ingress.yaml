@@ -15,7 +15,7 @@ metadata:
     # Buffers - Significantly increased for large chat responses
     nginx.ingress.kubernetes.io/proxy-buffer-size: "1m"     # Increased from 256k to 1MB
     nginx.ingress.kubernetes.io/proxy-buffers-number: "16"  # Increased from 8 to 16
-    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "2m" # Increased from 512k to 2MB
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "2m"  # Increased from 512k to 2MB
 
     # SSL redirect off (since Cloudflare is terminating SSL)
     nginx.ingress.kubernetes.io/ssl-redirect: "false"

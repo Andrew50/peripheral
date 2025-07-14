@@ -1,13 +1,12 @@
 # golangci-lint configuration file for temporarily disabling some linters
 # The goal is to get the CI pipeline to pass while addressing issues gradually
-
+version: "2"
 run:
   timeout: 5m
   build-tags:
     - all
     - !test
-
-linters-settings:
+linter-settings:
   errcheck:
     check-type-assertions: false
     exclude-functions:
@@ -15,16 +14,13 @@ linters-settings:
       - (*github.com/polygon-io/client-go/websocket.Client).Close
       - (*sql.Rows).Scan
       - (io.Reader).Read
-
   unused:
     check-exported: false
-
   # ⬇️  NEW: keep staticcheck but drop SA9003 (empty branch)
   staticcheck:
     checks:
       - all            # keep every other check …
       - '-SA9003'      # … except the empty-branch rule
-
   forbidigo:
     # Block debug prints & accidental panics in library code
     forbid:
@@ -32,7 +28,6 @@ linters-settings:
         message: "use a structured logger, not fmt.Print*"
       - name: "log\\.Printf"      # same for std log
       - name: "^panic\\("         # panic only in main() or tests
-
 linters:
   enable:
     - revive
@@ -43,26 +38,20 @@ linters:
     # - staticcheck # Ensure staticcheck runs with its specific config above
     - govet
     - ineffassign
-
 issues:
-  exclude-rules:
+  exclude:
     - linters: [errcheck]
       text: "Error return value is not checked"
-
     - linters: [govet]
       text: "copylocks"
-
     - linters: [govet]
       text: "printf"
-
     - linters: [unused]
       text: "func .* is unused"
       source: "^//go:build !test"
-
     # ⬇️  NEW: belt-and-suspenders rule—filters any stray SA9003 hits
     - linters: [staticcheck]
       text: "empty branch (SA9003)"
-
   max-issues-per-linter: 0
   max-same-issues: 0
 
