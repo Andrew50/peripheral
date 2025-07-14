@@ -316,7 +316,7 @@ class SecurityValidator:
                 return False
             # Step 5: Additional pattern checks 
             self._check_prohibited_patterns(code)
-            return
+            return True
         except (SyntaxError, SecurityError, PythonCodeError) as e:
             logger.warning(f"Code failed validation: {e}")
             raise
