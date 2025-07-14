@@ -537,7 +537,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	textConfig := responses.ResponseTextConfigParam{
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name:   "atlantis_response",
+				Name:   "peripheral_response",
 				Schema: oaSchema,
 				Strict: openai.Bool(true),
 			},
