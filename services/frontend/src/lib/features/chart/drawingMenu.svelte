@@ -83,9 +83,9 @@
 			// This is for lines loaded from backend - they should already be in the store
 			// This branch is now primarily for backwards compatibility
 			// The reactive block should handle the actual rendering
-			console.warn(
-				'addHorizontalLine called with existing ID - this should be handled by the reactive block'
-			);
+			// console.warn(
+			// 	'addHorizontalLine called with existing ID - this should be handled by the reactive block'
+			// );
 		}
 	}
 </script>
@@ -96,6 +96,35 @@
 	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { horizontalLines } from '$lib/utils/stores/stores';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
+
+	// Helper function to convert viewport coordinates to chart-relative coordinates
+	function getRelativeMouseY(event: MouseEvent): number | null {
+		if (!$drawingMenuProps.chartCandleSeries) return null;
+
+		// Find the chart container - we need to look for it dynamically since we don't have chartId here
+		// Look for the closest chart container from the event target
+		let chartContainer: HTMLElement | null = null;
+
+		// First try to find the chart container by traversing up from the event target
+		let target = event.target as HTMLElement | null;
+		while (target && target !== document.body) {
+			if (target.id && target.id.startsWith('chart_container-')) {
+				chartContainer = target;
+				break;
+			}
+			target = target.parentElement;
+		}
+
+		// Fallback: search for any chart container
+		if (!chartContainer) {
+			chartContainer = document.querySelector('.chart[id*="chart_container"]') as HTMLElement;
+		}
+
+		if (!chartContainer) return null;
+
+		const rect = chartContainer.getBoundingClientRect();
+		return event.clientY - rect.top;
+	}
 
 	let menuElement: HTMLDivElement;
 	let adjustedMenuStyle: string = '';
@@ -195,22 +224,27 @@
 	}
 
 	function handleClickOutside(event: MouseEvent) {
+		// console.log('🖱️ handleClickOutside called');
 		event.stopImmediatePropagation();
 		if (!$drawingMenuProps.active || $drawingMenuProps.isDragging) {
+			// console.log('❌ Menu not active or dragging, returning early');
 			return;
 		}
-		if (!menuElement) return;
+		if (!menuElement) {
+			// console.log('❌ No menu element, returning early');
+			return;
+		}
 
 		const deleteButton = menuElement.querySelector('button');
 		if (
 			menuElement.contains(event.target as Node) ||
 			(deleteButton && deleteButton.contains(event.target as Node))
 		) {
-			('clicked inside menu');
+			// console.log('✅ Clicked inside menu, keeping menu open');
 			return;
 		}
 
-		const clickY = event.clientY;
+		const relativeY = getRelativeMouseY(event);
 		const isClickInMenu =
 			event.target === menuElement || menuElement.contains(event.target as Node);
 
@@ -218,18 +252,28 @@
 		const chartCandleSeries = $drawingMenuProps.chartCandleSeries;
 		let isClickNearLine = false;
 
-		if (selectedLine && chartCandleSeries) {
+		if (selectedLine && chartCandleSeries && relativeY !== null) {
 			const linePrice = selectedLine.options().price;
 			const lineY = chartCandleSeries.priceToCoordinate(linePrice) || 0;
 			const CLICK_THRESHOLD = 5; // pixels
-			isClickNearLine = Math.abs(clickY - lineY) <= CLICK_THRESHOLD;
+			isClickNearLine = Math.abs(relativeY - lineY) <= CLICK_THRESHOLD;
+			// console.log('🔍 Click near line check:', {
+			// 	relativeY,
+			// 	lineY,
+			// 	distance: Math.abs(relativeY - lineY),
+			// 	threshold: CLICK_THRESHOLD,
+			// 	isClickNearLine
+			// });
 		}
 
 		if (!isClickInMenu && !isClickNearLine) {
+			// console.log('❌ Click outside menu and not near line, closing menu');
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
 				active: false
 			}));
+		} else {
+			// console.log('✅ Click near line or in menu, keeping menu open');
 		}
 	}
 
@@ -246,10 +290,44 @@
 	function positionMenuWithinChart() {
 		if (!menuElement) return;
 
-		// Get the chart container
+		// Get the chart container - try both selectors for compatibility
 		const chartContainer =
-			menuElement.closest('.chart-wrapper') || document.querySelector('.chart-wrapper');
-		if (!chartContainer) return;
+			menuElement.closest('.chart') ||
+			menuElement.closest('.chart-wrapper') ||
+			document.querySelector('.chart') ||
+			document.querySelector('.chart-wrapper');
+
+		if (!chartContainer) {
+			// console.warn(
+			// 	'Could not find chart container for menu positioning, using fallback positioning'
+			// );
+			// Fallback: position relative to viewport with some padding
+			const viewportWidth = window.innerWidth;
+			const viewportHeight = window.innerHeight;
+
+			let menuX = $drawingMenuProps.clientX;
+			let menuY = $drawingMenuProps.clientY;
+
+			// Ensure menu stays within viewport bounds
+			if (menuX + 200 > viewportWidth) {
+				// 200px is menu width
+				menuX = viewportWidth - 220; // 200px width + 20px padding
+			}
+			if (menuY + 300 > viewportHeight) {
+				// Estimate menu height
+				menuY = viewportHeight - 320; // 300px height + 20px padding
+			}
+			if (menuX < 10) menuX = 10;
+			if (menuY < 10) menuY = 10;
+
+			adjustedMenuStyle = `
+				position: fixed;
+				left: ${menuX}px; 
+				top: ${menuY}px;
+				pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
+			`;
+			return;
+		}
 
 		// Get the dimensions of the chart container
 		const chartRect = chartContainer.getBoundingClientRect();
@@ -258,7 +336,7 @@
 		const menuWidth = menuElement.offsetWidth;
 		const menuHeight = menuElement.offsetHeight;
 
-		// Calculate the proposed position
+		// Calculate the proposed position using viewport coordinates (for fixed positioning)
 		let menuX = $drawingMenuProps.clientX;
 		let menuY = $drawingMenuProps.clientY;
 
@@ -282,8 +360,9 @@
 			menuY = chartRect.top + 10; // 10px padding
 		}
 
-		// Update the position
+		// Update the position with fixed positioning
 		adjustedMenuStyle = `
+			position: fixed;
 			left: ${menuX}px; 
 			top: ${menuY}px;
 			pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
@@ -321,6 +400,16 @@
 	// Position menu whenever relevant properties change
 	$: if ($drawingMenuProps.active && !$drawingMenuProps.isDragging && menuElement) {
 		positionMenuWithinChart();
+	}
+
+	// Debug logging for drawingMenuProps changes
+	$: {
+		// console.log('📊 drawingMenuProps changed:', {
+		// 	active: $drawingMenuProps.active,
+		// 	isDragging: $drawingMenuProps.isDragging,
+		// 	selectedLine: $drawingMenuProps.selectedLine ? 'exists' : 'null',
+		// 	selectedLineId: $drawingMenuProps.selectedLineId
+		// });
 	}
 
 	// Handle input changes
@@ -425,7 +514,7 @@
 
 <style>
 	.drawing-menu {
-		position: absolute;
+		/* Position will be set dynamically via inline styles */
 		z-index: 9000;
 		background-color: rgba(20, 20, 20, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.2);

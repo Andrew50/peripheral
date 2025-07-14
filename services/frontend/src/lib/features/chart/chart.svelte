@@ -280,6 +280,14 @@
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
+	// Helper function to convert viewport coordinates to chart-relative coordinates
+	function getRelativeMouseY(event: MouseEvent): number | null {
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (!chartContainer) return null;
+		const rect = chartContainer.getBoundingClientRect();
+		return event.clientY - rect.top;
+	}
+
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
 	let isSwitchingTickers = false; // Track chart switching overlay state
@@ -850,7 +858,10 @@
 		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine)
 			return;
 
-		const price = chartCandleSeries.coordinateToPrice(event.clientY);
+		const relativeY = getRelativeMouseY(event);
+		if (relativeY === null) return;
+
+		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
 		// Update the line position visually
@@ -868,13 +879,18 @@
 	}
 
 	function handleMouseUp() {
-		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
+		console.log('🖱️ handleMouseUp called');
+		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			console.log('❌ Not dragging or no selected line, returning early');
+			return;
+		}
 
 		const lineData = $drawingMenuProps.horizontalLines.find(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
 
 		if (lineData) {
+			console.log('✅ Updating line position in backend');
 			// Update line position in backend
 			privateRequest<void>(
 				'updateHorizontalLine',
@@ -894,34 +910,64 @@
 			}
 		}
 
+		console.log('✅ Setting isDragging to false');
 		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 
 	function startDragging(event: MouseEvent) {
-		if (!$drawingMenuProps.selectedLine) return;
+		//console.log('🔄 startDragging called');
+		if (!$drawingMenuProps.selectedLine) {
+			//console.log('❌ No selected line, returning early');
+			return;
+		}
 
 		event.preventDefault();
 		event.stopPropagation();
 
+		//console.log('✅ Setting isDragging to true');
 		drawingMenuProps.update((v) => ({ ...v, isDragging: true }));
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 	}
 
 	function determineClickedLine(event: MouseEvent) {
-		const mouseY = event.clientY;
+		//console.log('🔍 determineClickedLine called');
+		const relativeY = getRelativeMouseY(event);
+		//console.log('📍 relativeY:', relativeY);
+		if (relativeY === null) {
+			//console.log('❌ relativeY is null, returning false');
+			return false;
+		}
+
 		const pixelBuffer = 5;
+		const upperPrice = chartCandleSeries.coordinateToPrice(relativeY - pixelBuffer) || 0;
+		const lowerPrice = chartCandleSeries.coordinateToPrice(relativeY + pixelBuffer) || 0;
 
-		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
-		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
+		//console.log('💰 Price range - upper:', upperPrice, 'lower:', lowerPrice);
 
-		if (upperPrice == 0 || lowerPrice == 0) return false;
+		if (upperPrice == 0 || lowerPrice == 0) {
+			//console.log('❌ Invalid price range, returning false');
+			return false;
+		}
+
+		console.log('📊 Checking', $drawingMenuProps.horizontalLines.length, 'horizontal lines');
 
 		// Only check regular horizontal lines, not alert lines
 		for (const line of $drawingMenuProps.horizontalLines) {
+			/*console.log(
+				'🔍 Checking line:',
+				line.id,
+				'price:',
+				line.price,
+				'range:',
+				lowerPrice,
+				'to',
+				upperPrice
+			);*/
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
+				//console.log('✅ Line clicked! Line ID:', line.id, 'Price:', line.price);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
@@ -931,7 +977,7 @@
 					selectedLineWidth: line.lineWidth,
 					clientX: event.clientX,
 					clientY: event.clientY,
-					active: false,
+					active: false, // Keep false until mouseup to distinguish drag vs click
 					selectedLineId: line.id
 				}));
 
@@ -941,6 +987,7 @@
 			}
 		}
 
+		//console.log('❌ No line found in range');
 		setTimeout(() => {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
@@ -960,7 +1007,7 @@
 		}
 
 		if (determineClickedLine(event)) {
-			('determineClickedLine');
+			//console.log('🎯 Line detected in determineClickedLine, setting up drag/click handlers');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -970,6 +1017,7 @@
 				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
 
 				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+					//console.log('🔄 Drag detected, starting drag operation');
 					// It's a drag - start dragging and remove this temporary listener
 					document.removeEventListener('mousemove', handleMouseMoveForDrag);
 					document.removeEventListener('mouseup', handleMouseUpForClick);
@@ -981,9 +1029,18 @@
 			const handleMouseUpForClick = (upEvent: MouseEvent) => {
 				const deltaX = Math.abs(upEvent.clientX - mouseDownStartX);
 				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
+				/*
+				console.log(
+					'🖱️ Mouse up detected, deltaX:',
+					deltaX,
+					'deltaY:',
+					deltaY,
+					'threshold:',
+					DRAG_THRESHOLD
+				);*/
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					('click');
+					//console.log('✅ Click confirmed, activating menu');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -991,6 +1048,8 @@
 						clientX: upEvent.clientX,
 						clientY: upEvent.clientY
 					}));
+				} else {
+					//console.log('❌ Movement exceeded threshold, not activating menu');
 				}
 
 				// Clean up listeners
@@ -1626,7 +1685,10 @@
 			event.preventDefault();
 			if (!chartCandleSeries) return;
 
-			const price = chartCandleSeries.coordinateToPrice(event.clientY);
+			const relativeY = getRelativeMouseY(event);
+			if (relativeY === null) return;
+
+			const price = chartCandleSeries.coordinateToPrice(relativeY);
 			if (typeof price !== 'number') return;
 
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);

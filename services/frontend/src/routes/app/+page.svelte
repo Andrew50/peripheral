@@ -1534,6 +1534,7 @@
 					</svg>
 				</button>
 
+				<!-- 
 				<button
 					class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
 					on:click={() => openBottomWindow('strategies')}
@@ -1546,6 +1547,7 @@
 				>
 					Screener
 				</button>
+				-->
 			</div>
 
 			<div class="bottom-bar-right">
