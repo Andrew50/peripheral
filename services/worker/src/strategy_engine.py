@@ -1326,8 +1326,8 @@ class AccessorStrategyEngine:
                 return node.value
             elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
                 return node.s
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"_extract_string_value: {e}")
         return None
 
     def _extract_int_value(self, node: ast.AST) -> Optional[int]:
@@ -1338,8 +1338,8 @@ class AccessorStrategyEngine:
             elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
                 if isinstance(node.n, int):
                     return node.n
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"_extract_int_value: {e}")
         return None
     
     def _analyze_filters_ast(self, filters_node: Optional[ast.AST]) -> Dict[str, Any]:
