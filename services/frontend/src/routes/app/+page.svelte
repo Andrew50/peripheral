@@ -127,7 +127,7 @@
 
 	let bottomWindows: BottomWindow[] = [];
 	let nextWindowId = 1;
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' | 'pricing' = 'chart'; // For settings window
+	let activeTab: 'interface' | 'account' | 'appearance' | 'usage' = 'interface'; // For settings window
 
 	// Replay controls
 	let replaySpeed = 1.0;
@@ -1085,7 +1085,7 @@
 	}
 
 	function openPricingSettings() {
-		window.location.href = "/pricing";
+		window.location.href = '/pricing';
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1534,6 +1534,7 @@
 					</svg>
 				</button>
 
+				<!-- 
 				<button
 					class="toggle-button {bottomWindows.some((w) => w.type === 'strategies') ? 'active' : ''}"
 					on:click={() => openBottomWindow('strategies')}
@@ -1546,6 +1547,7 @@
 				>
 					Screener
 				</button>
+				-->
 			</div>
 
 			<div class="bottom-bar-right">
@@ -1645,19 +1647,23 @@
 			{/if}
 			-->
 
-			<span class="value">
-				{#if $streamInfo.timestamp !== undefined}
-					{formatTimestamp($streamInfo.timestamp)}
-				{:else}
-					Loading Time...
-				{/if}
-			</span>
-			<!-- Site logo (clickable) -->
-			<a  class="bottom-logo-link" on:click={() => window.location.href = "/"}>
-				<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
-			</a>
+				<span class="value">
+					{#if $streamInfo.timestamp !== undefined}
+						{formatTimestamp($streamInfo.timestamp)}
+					{:else}
+						Loading Time...
+					{/if}
+				</span>
+				<!-- Site logo (clickable) -->
+				<button
+					class="bottom-logo-link"
+					on:click={() => (window.location.href = '/')}
+					aria-label="Go to home page"
+				>
+					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+				</button>
+			</div>
 		</div>
-	</div>
 
 		{#if showSettingsPopup}
 			<div
@@ -1724,12 +1730,6 @@
 		align-items: center;
 		gap: 4px;
 		flex: 1;
-	}
-
-	.top-bar-right {
-		display: flex;
-		align-items: center;
-		padding-left: 16px;
 	}
 
 	/* Base styles for metadata buttons */
@@ -1895,7 +1895,6 @@
 		flex-shrink: 0;
 	}
 
-
 	/* Upgrade button styles */
 	.upgrade-button {
 		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -1958,7 +1957,9 @@
 		display: inline-flex;
 		align-items: center;
 		cursor: pointer;
-		
+		background: none;
+		border: none;
+		padding: 0;
 	}
 
 	/* New layout structure styles */

@@ -216,10 +216,6 @@ type ResponseImage struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-// const finalResponseModel = "gemini-2.5-flash"
-// const openAIPlannerModel = "o4-mini"
-// const openAIFinalResponseModel = "o3"
-
 func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
@@ -761,9 +757,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 				// Try to extract and append images to allImages with multiple type assertions
 				// First try []ResponseImage
 				if imageList, ok := responseImages.([]ResponseImage); ok {
-					for _, img := range imageList {
-						allImages = append(allImages, img)
-					}
+					allImages = append(allImages, imageList...)
 				} else if imageList, ok := responseImages.([]interface{}); ok {
 					// Try []interface{} (common after JSON unmarshaling)
 					for _, img := range imageList {

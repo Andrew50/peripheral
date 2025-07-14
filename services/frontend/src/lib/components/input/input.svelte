@@ -464,6 +464,9 @@
 		});
 	}
 
+	// Debounce timer for API calls
+	// let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Handle input changes (typing, pasting, etc.)
 	function handleInputChange(event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -483,7 +486,7 @@
 			inputString: newValue
 		}));
 
-		// Make the API call non-blocking to avoid UI delays
+		// Call determineInputType immediately on every input change
 		setTimeout(() => {
 			determineInputType(newValue);
 		}, 0);
@@ -680,6 +683,12 @@
 			try {
 				// Remove document click handler if it exists
 				removeDocumentListener();
+
+				// Clear debounce timer if it exists
+				// if (debounceTimer) {
+				// 	clearTimeout(debounceTimer);
+				// 	debounceTimer = null;
+				// }
 
 				unsubscribe();
 			} catch (error) {

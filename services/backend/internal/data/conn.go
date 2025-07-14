@@ -29,6 +29,7 @@ type Conn struct {
 	XAPIKey         string
 	TwitterAPIioKey string
 	OpenAIKey       string
+	IsLLMExecution  bool // Track if function is called by LLM agent
 }
 
 // Result structs for thread-safe communication
@@ -227,6 +228,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		XAPIKey:         XAPIKey,
 		TwitterAPIioKey: twitterAPIioKey,
 		OpenAIKey:       openAIKey,
+		IsLLMExecution:  false, // Initialize the new field
 	}
 
 	cleanup := func() {

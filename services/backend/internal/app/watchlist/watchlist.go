@@ -2,6 +2,7 @@ package watchlist
 
 import (
 	"backend/internal/data"
+	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -50,7 +51,13 @@ func NewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	var watchlistID int
 	err = conn.DB.QueryRow(context.Background(), "INSERT INTO watchlists (watchlistName,userId) values ($1,$2) RETURNING watchlistId", args.WatchlistName, userID).Scan(&watchlistID)
 	if err != nil {
-		return nil, fmt.Errorf("0n8912")
+		return nil, fmt.Errorf("0n8912: %v", err)
+	}
+
+	// NEW: Send WebSocket update after successful creation
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		socket.SendWatchlistUpdate(userID, "create", &watchlistID, &args.WatchlistName, nil, nil)
 	}
 
 	return watchlistID, err
@@ -75,6 +82,13 @@ func DeleteWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("watchlist not found or you don't have permission to delete it")
 	}
+
+	// NEW: Send WebSocket update after successful deletion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		socket.SendWatchlistUpdate(userID, "delete", &args.ID, nil, nil, nil)
+	}
+
 	return nil, err
 }
 
@@ -153,6 +167,16 @@ func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	if err != nil {
 		return nil, fmt.Errorf("m0ivn0d %v", err)
 	}
+
+	// Get watchlist ID before deletion for WebSocket update
+	var watchlistID int
+	err = conn.DB.QueryRow(context.Background(),
+		`SELECT watchlistId FROM watchlistItems WHERE watchlistItemId = $1`,
+		args.WatchlistItemID).Scan(&watchlistID)
+	if err != nil {
+		return nil, fmt.Errorf("watchlist item not found: %v", err)
+	}
+
 	cmdTag, err := conn.DB.Exec(context.Background(), `
 		DELETE FROM watchlistItems 
 		WHERE watchlistItemId = $1 
@@ -164,6 +188,13 @@ func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("watchlist item not found or you don't have permission to delete it")
 	}
+
+	// NEW: Send WebSocket update after successful deletion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		socket.SendWatchlistUpdate(userID, "remove", &watchlistID, nil, nil, &args.WatchlistItemID)
+	}
+
 	return nil, nil
 }
 
@@ -200,5 +231,25 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, err
 	}
+
+	// NEW: Send WebSocket update after successful insertion
+	// Only send WebSocket update if called by LLM (frontend handles its own updates)
+	if conn.IsLLMExecution {
+		// Get ticker for the security
+		var ticker string
+		err = conn.DB.QueryRow(context.Background(),
+			`SELECT ticker FROM securities WHERE securityId = $1 AND maxDate IS NULL LIMIT 1`,
+			args.SecurityID).Scan(&ticker)
+		if err == nil {
+			// Create item data for WebSocket update
+			item := map[string]interface{}{
+				"watchlistItemId": watchlistID,
+				"securityId":      args.SecurityID,
+				"ticker":          ticker,
+			}
+			socket.SendWatchlistUpdate(userID, "add", &args.WatchlistID, nil, item, nil)
+		}
+	}
+
 	return watchlistID, err
 }

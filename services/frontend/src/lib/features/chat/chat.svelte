@@ -29,6 +29,7 @@
 		formatRuntime,
 		cleanHtmlContent,
 		handleTickerButtonClick,
+		handleTickerButtonRightClick,
 		cleanContentChunk,
 		getContentChunkTextForCopy
 	} from './utils';
@@ -477,6 +478,7 @@
 		// Add delegated event listener for ticker buttons
 		if (messagesContainer) {
 			messagesContainer.addEventListener('click', handleTickerButtonClick);
+			messagesContainer.addEventListener('contextmenu', handleTickerButtonRightClick);
 		}
 
 		// Setup message ID update callback
@@ -487,6 +489,7 @@
 			document.removeEventListener('click', handleClickOutside); // Clean up click outside listener
 			if (messagesContainer) {
 				messagesContainer.removeEventListener('click', handleTickerButtonClick);
+				messagesContainer.removeEventListener('contextmenu', handleTickerButtonRightClick);
 			}
 			// Clean up callback
 			setMessageIdUpdateCallback(null);
@@ -1991,8 +1994,8 @@
 		<div class="public-viewing-notice">
 			<p>
 				You are viewing a shared conversation. <button
-					class="auth-link" 
-					on:click={() => window.location.href = '/login'}>Sign in</button
+					class="auth-link"
+					on:click={() => (window.location.href = '/login')}>Sign in</button
 				> to start your own chat.
 			</p>
 		</div>

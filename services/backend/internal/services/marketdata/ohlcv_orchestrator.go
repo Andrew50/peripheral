@@ -171,9 +171,15 @@ END$$;`, tbl, tbl)
 	var indexSQLs []string
 	switch tbl {
 	case "ohlcv_1m":
-		indexSQLs = []string{`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_idx ON ohlcv_1m (ticker, "timestamp" DESC)`}
+		indexSQLs = []string{
+			`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_idx ON ohlcv_1m (ticker, "timestamp" DESC)`,
+			`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc ON ohlcv_1m (ticker, "timestamp" DESC) INCLUDE (open, high, low, close, volume)`,
+		}
 	case "ohlcv_1d":
-		indexSQLs = []string{`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_idx ON ohlcv_1d (ticker, "timestamp" DESC)`}
+		indexSQLs = []string{
+			`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_idx ON ohlcv_1d (ticker, "timestamp" DESC)`,
+			`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc ON ohlcv_1d (ticker, "timestamp" DESC) INCLUDE (open, high, low, close, volume)`,
+		}
 	}
 	for _, q := range indexSQLs {
 		if _, err := data.ExecWithRetry(ctx, db, q); err != nil {

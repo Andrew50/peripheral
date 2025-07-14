@@ -273,7 +273,7 @@ class SecurityValidator:
             pass
         return None
 
-    def validate_code(self, code: str) -> bool:
+    def validate_strategy_code(self, code: str) -> bool:
         """
         Comprehensive code validation including:
         1. Syntax compilation check
@@ -283,29 +283,13 @@ class SecurityValidator:
         5. Return value structure validation
         """
         try:
-            # Step 1: Basic validation
-            if not code or not code.strip():
-                raise StrategyComplianceError("Strategy code cannot be empty")
-
-            # Step 2: Check if code compiles
-            if not self._check_compilation(code):
-                return False
-
-            # Step 3: Parse AST for validation
+            self.validate_code(code)
             tree = ast.parse(code)
-            
-            # Step 4: Security checks
-            if not self._check_ast_security(tree):
-                return False
-            
-            # Step 5: Strategy compliance checks
+            # Step 1: Strategy compliance checks
             if not self._check_strategy_compliance(tree, code):
                 return False
                 
-            # Step 6: Additional pattern checks
-            self._check_prohibited_patterns(code)
-                
-            # Step 7: Validate strategy function structure
+            # Step 2: Validate strategy function structure
             if not self._validate_strategy_structure(tree):
                 return False
                 
@@ -313,6 +297,27 @@ class SecurityValidator:
             return True
             
         except (SyntaxError, SecurityError, StrategyComplianceError) as e:
+            logger.warning(f"Code failed validation: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during validation: {e}")
+            return False
+    def validate_code(self, code: str) -> bool:
+        try: 
+            if not code or not code.strip():
+                raise PythonCodeError("Code cannot be empty")
+            if not self._check_compilation(code):
+                return False 
+            # Step 3: Parse AST for validation
+            tree = ast.parse(code)
+            
+            # Step 4: Security checks
+            if not self._check_ast_security(tree):
+                return False
+            # Step 5: Additional pattern checks 
+            self._check_prohibited_patterns(code)
+            return True
+        except (SyntaxError, SecurityError, PythonCodeError) as e:
             logger.warning(f"Code failed validation: {e}")
             raise
         except Exception as e:
@@ -628,4 +633,8 @@ class SecurityError(Exception):
 
 class StrategyComplianceError(Exception):
     """Raised when code doesn't comply with DataFrame strategy requirements"""
+    pass
+
+class PythonCodeError(Exception):
+    """Raised when generic Python code validation fails"""
     pass

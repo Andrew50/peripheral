@@ -4,7 +4,7 @@
 	import { browser } from '$app/environment';
 
 	import { timelineProgress } from '$lib/landing/timeline';
-	
+
 	// Auth state prop
 	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
@@ -13,23 +13,23 @@
 	let prevScrollY = 0;
 	// Mobile sidebar state
 	let isSidebarOpen = false;
-	
+
 	import '$lib/styles/splash.css';
-	
+
 	function handleScroll() {
 		const currentY = window.scrollY;
 		const isOnSplashPage = window.location.pathname === '/';
-		
+
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
 			isHeaderVisible = true;
 		} else if (isOnSplashPage && $timelineProgress === 1) {
 			isHeaderVisible = false;
 		}
-		
+
 		// Make header transparent near the top of the page
 		isHeaderTransparent = currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
-		
+
 		prevScrollY = currentY;
 	}
 
@@ -64,7 +64,6 @@
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
 	});
-	
 </script>
 
 <!-- Window scroll listener -->
@@ -72,7 +71,14 @@
 
 <!-- Mobile sidebar overlay -->
 {#if isSidebarOpen}
-	<div class="sidebar-overlay" on:click={closeSidebar}></div>
+	<div
+		class="sidebar-overlay"
+		on:click={closeSidebar}
+		on:keydown={(e) => e.key === 'Escape' && closeSidebar()}
+		role="button"
+		tabindex="0"
+		aria-label="Close sidebar"
+	></div>
 {/if}
 
 <!-- Mobile sidebar -->
@@ -84,17 +90,26 @@
 		</div>
 		<button class="close-button" on:click={closeSidebar}>
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-				<path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+				<path
+					d="M18 6L6 18M6 6L18 18"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+				/>
 			</svg>
 		</button>
 	</div>
 	<nav class="sidebar-nav">
 		<button class="sidebar-nav-button" on:click={() => navigateTo('/pricing')}>Pricing</button>
 		{#if isAuthenticated}
-			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}>Go to Terminal</button>
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}
+				>Go to Terminal</button
+			>
 		{:else}
 			<button class="sidebar-nav-button" on:click={() => navigateTo('/login')}>Login</button>
-			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/signup')}
+				>Sign up</button
+			>
 		{/if}
 	</nav>
 </div>
@@ -102,16 +117,24 @@
 <!-- Pill-style global site header reused across all pages -->
 <header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
 	<nav class="header-content">
-		<div class="logo-section" on:click={() => navigateTo('/') } style="cursor: pointer;">
+		<button
+			class="logo-section"
+			on:click={() => navigateTo('/')}
+			on:keydown={(e) => e.key === 'Enter' && navigateTo('/')}
+			aria-label="Go to home page"
+			style="cursor: pointer; background: none; border: none; padding: 0;"
+		>
 			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text">Peripheral</p>
-		</div>
-		
+		</button>
+
 		<!-- Desktop navigation -->
 		<div class="navigation desktop-nav">
 			<button class="nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
 			{#if isAuthenticated}
-				<button class="nav-button primary" on:click={() => navigateTo('/app')}>Go to Terminal</button>
+				<button class="nav-button primary" on:click={() => navigateTo('/app')}
+					>Go to Terminal</button
+				>
 			{:else}
 				<button class="nav-button secondary" on:click={() => navigateTo('/login')}>Login</button>
 				<button class="nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
@@ -130,8 +153,8 @@
 <style>
 	/* Expose required colour variables so header looks identical everywhere */
 	:global(:root) {
-		--color-dark: #0B2E33;
-		--color-primary: #4F7C82;
+		--color-dark: #0b2e33;
+		--color-primary: #4f7c82;
 		--header-h: 48px;
 		--header-top: 16px;
 	}
@@ -143,7 +166,14 @@
 		align-items: center;
 		width: 100%;
 		height: 100%;
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		position: relative;
 	}
 
@@ -165,7 +195,14 @@
 		font-size: 1.25rem;
 		font-weight: 700;
 		margin: 0;
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		letter-spacing: -0.02em;
 	}
 
@@ -184,7 +221,14 @@
 		cursor: pointer;
 		text-decoration: none;
 		background: transparent;
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		white-space: nowrap;
 		transition: all 0.15s ease;
 	}
@@ -291,7 +335,14 @@
 		cursor: pointer;
 		text-decoration: none;
 		background: transparent;
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		text-align: left;
 		transition: all 0.15s ease;
 		color: #000;
@@ -327,10 +378,17 @@
 		backdrop-filter: blur(16px);
 		border: 1px solid rgba(255, 255, 255, 0.25);
 		border-radius: 999px;
-		transition: all 0.4s cubic-bezier(.4, 0, .2, 1);
+		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		z-index: 1050;
 		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		cursor: pointer;
 	}
 
@@ -346,9 +404,11 @@
 		transform: translateX(-50%) translateY(-120%);
 		opacity: 0;
 		pointer-events: none;
-		transition: transform 0.4s cubic-bezier(.4, 0, .2, 1), opacity 0.4s cubic-bezier(.4, 0, .2, 1);
+		transition:
+			transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+			opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 	}
-	
+
 	:global(*) {
 		box-sizing: border-box;
 	}
@@ -418,4 +478,4 @@
 			--header-top: 0;
 		}
 	}
-</style> 
+</style>

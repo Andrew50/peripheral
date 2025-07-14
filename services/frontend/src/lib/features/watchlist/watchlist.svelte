@@ -14,6 +14,7 @@
 	import { showAuthModal } from '$lib/stores/authModal';
 	import {
 		addInstanceToWatchlist as addToWatchlist,
+		addMultipleInstancesToWatchlist,
 		selectWatchlist,
 		createNewWatchlist,
 		deleteWatchlist,
@@ -40,6 +41,15 @@
 				currentWatchlistItems.update((items: WatchlistItem[]) => {
 					return items.filter((i: WatchlistItem) => i.watchlistItemId !== item.watchlistItemId);
 				});
+
+				// Also update flagWatchlist if this is the flag watchlist
+				if (currentWatchlistId === flagWatchlistId) {
+					import('$lib/utils/stores/stores').then(({ flagWatchlist }) => {
+						flagWatchlist.update((items: WatchlistItem[]) => {
+							return items.filter((i: WatchlistItem) => i.watchlistItemId !== item.watchlistItemId);
+						});
+					});
+				}
 			}
 		);
 	}
@@ -56,7 +66,6 @@
 
 	// Get all visible watchlists in their fixed positions
 	$: visibleWatchlists = $visibleWatchlistIds
-		.slice(0, 3) // Show max 3 tabs
 		.map((id) => $watchlists?.find((w) => w.watchlistId === id))
 		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
 
@@ -341,8 +350,8 @@
 			<!-- Add Symbol button -->
 			<button
 				class="add-symbol-button"
-				title="Add Symbol"
-				on:click={() => addToWatchlist($globalCurrentWatchlistId)}
+				title="Add Symbol (Multi-add)"
+				on:click={() => addMultipleInstancesToWatchlist($globalCurrentWatchlistId)}
 			>
 				+
 			</button>

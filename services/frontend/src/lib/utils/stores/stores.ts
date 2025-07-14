@@ -1,5 +1,5 @@
 //stores.ts
-import { writable, derived, type Writable } from 'svelte/store';
+import { writable, derived, type Writable, get } from 'svelte/store';
 //export let currentTimestamp = writable(0);
 import type {
 	Settings,
@@ -352,6 +352,9 @@ function initStoresWithAuth() {
 									return [{ watchlistId: newId, watchlistName: 'flag' }, ...newList];
 								});
 
+								// Initialize the flagWatchlist store with empty array for new flag watchlist
+								flagWatchlist.set([]);
+
 								// Initialize visible watchlists and default selection after flag creation
 								import('$lib/features/watchlist/watchlistUtils').then(
 									({ initializeVisibleWatchlists, selectWatchlist }) => {
@@ -370,6 +373,16 @@ function initStoresWithAuth() {
 							});
 					} else {
 						flagWatchlistId = flagWatch.watchlistId;
+
+						// Initialize the flagWatchlist store with existing items
+						privateRequest<any[]>('getWatchlistItems', { watchlistId: flagWatch.watchlistId })
+							.then((items: any[]) => {
+								flagWatchlist.set(items || []);
+							})
+							.catch((err) => {
+								console.error('Error loading flag watchlist items:', err);
+								flagWatchlist.set([]);
+							});
 
 						// Initialize visible watchlists and default selection when watchlists are loaded
 						import('$lib/features/watchlist/watchlistUtils').then(
@@ -530,4 +543,31 @@ export async function fetchCombinedSubscriptionAndUsage(forceRefresh = false) {
 			error: 'Failed to load subscription and usage data'
 		}));
 	}
+}
+
+// Add horizontal lines interface and store
+export interface HorizontalLine {
+	id: number;
+	securityId: number;
+	price: number;
+	color: string;
+	lineWidth: number;
+}
+
+export const horizontalLines: Writable<HorizontalLine[]> = writable([]);
+
+// NEW: Centralized synchronization for flag watchlist
+// This ensures that if the flag watchlist is being viewed, its contents
+// are always in sync with the main 'currentWatchlistItems' store.
+if (browser) {
+	flagWatchlist.subscribe((flaggedItems) => {
+		// Get the current value of the selected watchlist ID
+		const selectedWatchlistId = get(currentWatchlistId);
+
+		// If the currently selected watchlist is the flag watchlist, update
+		// the main items store with the new content from the flag watchlist.
+		if (selectedWatchlistId === flagWatchlistId) {
+			currentWatchlistItems.set(flaggedItems || []);
+		}
+	});
 }

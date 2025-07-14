@@ -121,53 +121,70 @@
 					}
 					const price = v.price;
 					const prevClose = s.prevClose;
-					// Update the instance with the price
-					(instance as any)['price'] = price;
 
-					// Update related fields on the instance based on type
-					if (type === 'change') {
-						// Calculate raw change and store it
-						if (price && prevClose) {
-							(instance as any)['change'] = price - prevClose;
-							s.change = (price - prevClose).toFixed(2);
-						}
-					} else if (type === 'change %') {
-						// Calculate percentage change and store it
-						if (price && prevClose) {
-							(instance as any)['change%'] = (price / prevClose - 1) * 100;
-						}
-					} else if (type === 'change % extended') {
-						// Calculate extended percentage change
-						if (price && prevClose) {
-							(instance as any)['change%extended'] = (price / prevClose - 1) * 100;
-						}
-					} else if (type === 'market cap' && instance.totalShares) {
-						// Calculate market cap
-						(instance as any)['marketCap'] = price * instance.totalShares;
-					}
+					// Skip price updates if price is -1 (indicates skip OHLC condition)
+					const shouldSkipPriceUpdate = price < 0;
 
-					if (type === 'market cap') {
+					// Only update instance price if not skipping price updates
+					if (!shouldSkipPriceUpdate) {
+						// Update the instance with the price
+						(instance as any)['price'] = price;
+
+						// Update related fields on the instance based on type
+						if (type === 'change') {
+							// Calculate raw change and store it
+							if (price && prevClose) {
+								(instance as any)['change'] = price - prevClose;
+								s.change = (price - prevClose).toFixed(2);
+							}
+						} else if (type === 'change %') {
+							// Calculate percentage change and store it
+							if (price && prevClose) {
+								(instance as any)['change%'] = (price / prevClose - 1) * 100;
+							}
+						} else if (type === 'change % extended') {
+							// Calculate extended percentage change
+							if (price && prevClose) {
+								(instance as any)['change%extended'] = (price / prevClose - 1) * 100;
+							}
+						} else if (type === 'market cap' && instance.totalShares) {
+							// Calculate market cap
+							(instance as any)['marketCap'] = price * instance.totalShares;
+						}
+
+						if (type === 'market cap') {
+							return {
+								...s,
+								price,
+								prevClose
+							};
+						}
+						// skip if price is -1, but already skipped in polygonSocket.go to not send to slow streams
+						if (type === 'price' && v?.price) {
+							const dir =
+								lastPrice === undefined
+									? 0
+									: v.price > lastPrice
+										? 1
+										: v.price < lastPrice
+											? -1
+											: 0;
+
+							updateSlices(v.price);
+							lastPrice = v.price;
+
+							if (dir && !disableFlash) firePulse(dir);
+						}
 						return {
 							...s,
 							price,
-							prevClose
+							prevClose,
+							change: price && prevClose ? getChange(price, prevClose) : ''
 						};
+					} else {
+						// When skipping price updates, only return current state without price changes
+						return s;
 					}
-					if (type === 'price' && v?.price) {
-						const dir =
-							lastPrice === undefined ? 0 : v.price > lastPrice ? 1 : v.price < lastPrice ? -1 : 0;
-
-						updateSlices(v.price);
-						lastPrice = v.price;
-
-						if (dir && !disableFlash) firePulse(dir);
-					}
-					return {
-						...s,
-						price,
-						prevClose,
-						change: price && prevClose ? getChange(price, prevClose) : ''
-					};
 				});
 			}
 		});
