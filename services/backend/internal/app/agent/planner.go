@@ -518,7 +518,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
 	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts, true)
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
 	}
@@ -683,7 +683,7 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 }
 
 // buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
-func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string, finalRound bool) (responses.ResponseInputParam, error) {
+func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	conversationMessages, err := buildOpenAIConversationHistory(userQuery, conversationHistory)
 	if err != nil {
@@ -705,7 +705,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 		var allImages []ResponseImage
 		for _, result := range executionResults {
 			// Skip results that had errors
-			if result.Error != nil && finalRound {
+			if result.Error != nil {
 				continue
 			}
 
