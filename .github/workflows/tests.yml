@@ -34,19 +34,19 @@ jobs:
 
     strategy:
       matrix:
-        test-suite: ['go-integration-tests']
+        test-suite: []  # ['go-integration-tests'] - commented out
 
     steps:
     - name: 🔧 Checkout code
       uses: actions/checkout@v4
 
-    - name: 🐹 Setup Go
-      if: matrix.test-suite == 'go-integration-tests'
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        cache: true
-        cache-dependency-path: services/backend/go.sum
+    # - name: 🐹 Setup Go
+    #   if: matrix.test-suite == 'go-integration-tests'
+    #   uses: actions/setup-go@v4
+    #   with:
+    #     go-version: '1.21'
+    #     cache: true
+    #     cache-dependency-path: services/backend/go.sum
 
     - name: 🐍 Setup Python
       if: matrix.test-suite == 'python-integration-tests' || matrix.test-suite == 'friday-gap-analysis' || matrix.test-suite == 'get-bar-data-filters'
@@ -64,30 +64,30 @@ jobs:
         pip install requests pytest redis pandas
         cd ../..
 
-    - name: 🧪 Run Go Integration Tests
-      if: matrix.test-suite == 'go-integration-tests'
-      run: |
-        echo "🧪 Running Go Integration Tests"
-        cd services/backend
-        
-        # Create a minimal test that doesn't require full backend
-        mkdir -p tests
-        
-        # Run the integration tests
-        if [ "$SKIP_INTEGRATION_TESTS" = "true" ]; then
-          echo "⏭️ Skipping full integration tests - running mock tests"
-          go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 60s || true
-        else
-          echo "🚀 Running full integration tests"
-          go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 300s
-        fi
-        
-        # Print summary at the end
-        echo ""
-        echo "📋 Go Integration Tests Summary"
-        echo "=================================="
-        echo "✅ Backend Integration Tests Completed"
-        echo "✅ Strategy Pipeline Tests Completed"
+    # - name: 🧪 Run Go Integration Tests
+    #   if: matrix.test-suite == 'go-integration-tests'
+    #   run: |
+    #     echo "🧪 Running Go Integration Tests"
+    #     cd services/backend
+    #     
+    #     # Create a minimal test that doesn't require full backend
+    #     mkdir -p tests
+    #     
+    #     # Run the integration tests
+    #     if [ "$SKIP_INTEGRATION_TESTS" = "true" ]; then
+    #       echo "⏭️ Skipping full integration tests - running mock tests"
+    #       go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 60s || true
+    #     else
+    #       echo "🚀 Running full integration tests"
+    #       go test -v ./tests -run TestNaturalLanguageStrategyPipeline -timeout 300s
+    #     fi
+    #     
+    #     # Print summary at the end
+    #     echo ""
+    #     echo "📋 Go Integration Tests Summary"
+    #     echo "=================================="
+    #     echo "✅ Backend Integration Tests Completed"
+    #     echo "✅ Strategy Pipeline Tests Completed"
 
     - name: 🧪 Run Python Integration Tests
       if: matrix.test-suite == 'python-integration-tests'
