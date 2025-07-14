@@ -15,6 +15,7 @@ import (
 
 	"time"
 
+	"backend/internal/app/agent"
 	"backend/internal/services/socket"
 
 	"github.com/dghubble/oauth1"
@@ -146,8 +147,29 @@ func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 		Tickers:    tickers,
 	})
 	storeTweet(conn, tweet)
-	SendTweetToPeripheralTwitterAccount(conn, tweet.Text)
 
+	peripheralContentToTweet, err := CreatePeripheralTweetFromNews(conn, tweet)
+	if err != nil {
+		log.Printf("Error creating peripheral tweet: %v", err)
+		return
+	}
+	SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+
+}
+
+type PeripheralTweet struct {
+	Text string                 `json:"text" jsonschema:"required"`
+	Plot map[string]interface{} `json:"plot,omitempty" jsonschema:"required"`
+}
+
+func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (PeripheralTweet, error) { // to implement don't forget
+
+	prompt := tweet.Text
+	agentResult, err := agent.RunGeneralAgent[PeripheralTweet](conn, "generalAgentSystemPrompt", "peripheralTweetSystemPrompt", prompt)
+	if err != nil {
+		return PeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
+	}
+	return agentResult, nil
 }
 
 type alreadySeenTweetGeminiResponseStruct struct {
@@ -271,12 +293,12 @@ func storeTweet(conn *data.Conn, tweet ExtractedTweetData) {
 	}
 }
 
-func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet string) {
+func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet PeripheralTweet) { // TODO: Implement plot rendering and image upload
 	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
 	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
 	client := cfg.Client(oauth1.NoContext, token)
 
-	payload := map[string]any{"text": tweet}
+	payload := map[string]any{"text": tweet.Text}
 	body, _ := json.Marshal(payload)
 	fmt.Println("body", string(body))
 
