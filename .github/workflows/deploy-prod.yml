@@ -25,7 +25,7 @@ jobs:
     with:
       environment: 'prod'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
-      #k8s_context: 'prod-cluster'
+      # k8s_context: 'prod-cluster'
       k8s_namespace: 'prod'
       google_redirect_url: 'https://peripheral.io/auth/google/callback'
       ingress_host: 'peripheral.io'

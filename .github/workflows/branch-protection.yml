@@ -22,17 +22,17 @@ jobs:
         id: branch_check
         run: |
           echo "Pull request from: $GITHUB_HEAD_REF to: $GITHUB_BASE_REF"
-          
+
           if [ "$GITHUB_HEAD_REF" != "main" ]; then
             echo "::error::Error: Pull requests to 'prod' are only allowed from 'main' branch"
             echo "Current source branch: $GITHUB_HEAD_REF"
             echo "passed=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          
+
           echo "passed=true" >> $GITHUB_OUTPUT
           echo "Source branch check passed: PR from 'main' to 'prod' is allowed"
-      
+
       - name: Provide instructions for branch protection setup
         run: |
           echo "IMPORTANT: Branch protection is now ENABLED"
