@@ -6,7 +6,7 @@ metadata:
     # Timeouts - Increased for chat responses
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1200"  # Increased from 600 to 1200
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"  # Increased from 600 to 1200
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"    # Increased from 600 to 1200
     nginx.ingress.kubernetes.io/send-timeout: "1200"        # Increased from 600 to 1200
 
     # Increase body size for large uploads
@@ -119,20 +119,20 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"     # 1 hour for long-running connections
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"     # 1 hour for long-running connections
     nginx.ingress.kubernetes.io/send-timeout: "3600"
-    
+
     # WebSocket specific settings
     nginx.ingress.kubernetes.io/enable-websocket: "true"
     nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
     nginx.ingress.kubernetes.io/websocket-timeout: "3600"
-    
+
     # Disable buffering for real-time communication
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-    
+
     # Connection optimization
     nginx.ingress.kubernetes.io/upstream-keepalive-connections: "1000"
     nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "3600"
-    
+
     # SSL redirect off
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 
