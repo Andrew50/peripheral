@@ -23,7 +23,7 @@ spec:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
-          #command: ["/app/main"]  # handled by the docker file
+          # command: ["/app/main"]  # handled by the docker file
           ports:
             - containerPort: 5058
           readinessProbe:

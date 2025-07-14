@@ -221,16 +221,16 @@ jobs:
           cache: true
           cache-dependency-path: services/backend/go.sum
 
-      - name: 📦 Install golangci-lint
+      - name: 🔍 Go format check (camelCase enforcement)
         uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
-
-      - name: 🔍 Run golangci-lint format check (check only)
-        working-directory: services/backend
-        run: |
-          echo "🔍 Running Go linting with camelCase enforcement (check only)..."
-          golangci-lint run --timeout 5m --config .golangci.yml ./... --no-fix
+          working-directory: services/backend
+          args: >-
+            --timeout=5m
+            --config .golangci.yml
+            ./...
+            --no-fix
 
       - name: Create job summary for Go Format
         if: always()
@@ -276,7 +276,7 @@ jobs:
       - name: 🔍 Run Pylint with camelCase enforcement (check only)
         run: |
           echo "🔍 Running Python linting with camelCase enforcement (check only)..."
-          pylint services/worker/ --rcfile=services/worker/.pylintrc --output-format=text --exit-zero
+          pylint services/worker/ --rcfile=services/worker/.pylintrc --output-format=text
 
       - name: Create job summary for Python Format
         if: always()
