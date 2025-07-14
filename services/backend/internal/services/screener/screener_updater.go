@@ -36,6 +36,64 @@ const (
 //     We therefore compare against `now()` which returns TIMESTAMPTZ and rely on
 //     Timescale/PG to coerce correctly.
 
+var dropContinuousAggregatesQuery = `
+-- Drop existing continuous aggregates if they exist
+DROP MATERIALIZED VIEW IF EXISTS pm_stats CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS sma_dma_tech CASCADE;
+`
+
+var createPmStatsQuery = `
+-- Continuous aggregate: 1-minute pre-market statistics for _all_ tickers (last 7 days only)
+CREATE MATERIALIZED VIEW IF NOT EXISTS pm_stats
+  WITH (timescaledb.continuous)
+AS
+SELECT
+    time_bucket('1 minute'::interval, "timestamp") AS bucket,
+    ticker,
+    first(close, "timestamp") AS pm_open,
+    last(close,  "timestamp") AS pm_close,
+    min(low)                   AS pm_low,
+    max(high)                  AS pm_high,
+    sum(volume)                AS pm_volume,
+    count(*)                   AS bar_count
+FROM ohlcv_1m
+WHERE "timestamp" >= now() - INTERVAL '7 days'  -- keep CA small & hot
+  AND (
+    (EXTRACT(hour   FROM ("timestamp" AT TIME ZONE 'America/New_York')) BETWEEN 4 AND 8) OR
+    (EXTRACT(hour   FROM ("timestamp" AT TIME ZONE 'America/New_York')) = 9 AND
+     EXTRACT(minute FROM ("timestamp" AT TIME ZONE 'America/New_York')) < 30)
+  )
+GROUP BY time_bucket('1 minute'::interval, "timestamp"), ticker
+WITH NO DATA;
+`
+
+var createSmaDmaTechQuery = `
+-- Continuous aggregate: daily technical inputs for _all_ tickers (rolling 1 year)
+CREATE MATERIALIZED VIEW IF NOT EXISTS sma_dma_tech
+  WITH (timescaledb.continuous)
+AS
+SELECT
+    time_bucket('1 day'::interval, "timestamp") AS bucket,
+    ticker,
+    avg(close) AS close_avg,
+    max(high)  AS high_max,
+    min(low)   AS low_min,
+    close,
+    high,
+    low,
+    volume
+FROM ohlcv_1d
+WHERE "timestamp" >= now() - INTERVAL '365 days'
+GROUP BY time_bucket('1 day'::interval, "timestamp"), ticker, close, high, low, volume
+WITH NO DATA;
+`
+
+var createHelperIndexesQuery = `
+-- Helpful descending indexes for hot data paths
+CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_idx ON ohlcv_1m (ticker, "timestamp" DESC);
+CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_idx ON ohlcv_1d (ticker, "timestamp" DESC);
+`
+
 var initQuery = `
 CREATE OR REPLACE FUNCTION public.refresh_screener() RETURNS void
 LANGUAGE plpgsql
@@ -107,22 +165,22 @@ BEGIN
     ),
 
     /*----------------------------------------------------------------------
-      4.  Pre‑market stats in *one* scan (<= 5 h 30 m)
+      4.  Pre-market stats (via continuous aggregate pm_stats)
     ----------------------------------------------------------------------*/
     pm_raw AS (
-        SELECT o.ticker,
-               FIRST_VALUE(o.close)  OVER w AS pm_open,
-               LAST_VALUE (o.close)  OVER w AS pm_close,
-               MIN(o.low)            OVER w AS pm_low,
-               MAX(o.high)           OVER w AS pm_high,
-               SUM(o.volume)         OVER w AS pm_volume,
-               COUNT(*)              OVER w AS bar_cnt
-        FROM   ohlcv_1m o
+        SELECT s.ticker,
+               FIRST_VALUE(s.pm_open)  OVER w AS pm_open,
+               LAST_VALUE (s.pm_close) OVER w AS pm_close,
+               MIN(s.pm_low)           OVER w AS pm_low,
+               MAX(s.pm_high)          OVER w AS pm_high,
+               SUM(s.pm_volume)        OVER w AS pm_volume,
+               COUNT(*)                OVER w AS bar_cnt
+        FROM   pm_stats s
         JOIN   active a USING (ticker)
         CROSS  JOIN params p
-        WHERE  o."timestamp" >= p.pre_start_et
-          AND  o."timestamp" <  p.reg_start_et
-        WINDOW w AS (PARTITION BY o.ticker)
+        WHERE  s.bucket >= p.pre_start_et
+          AND  s.bucket <  p.reg_start_et
+        WINDOW w AS (PARTITION BY s.ticker)
     ),
     pm AS (
         SELECT DISTINCT ON (ticker)
@@ -430,6 +488,25 @@ func StartScreenerUpdater(conn *data.Conn) error {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		log.Fatalf("cannot load ET timezone: %v", err)
+	}
+
+	if _, err := conn.DB.Exec(context.Background(), createPmStatsQuery); err != nil {
+		return fmt.Errorf("cannot create pm_stats continuous aggregate: %v", err)
+	}
+	if _, err := conn.DB.Exec(context.Background(), createSmaDmaTechQuery); err != nil {
+		return fmt.Errorf("cannot create sma_dma_tech continuous aggregate: %v", err)
+	}
+	// Refresh continuous aggregates one by one. Multi-statement queries can trigger
+	// implicit transactions, which `refresh_continuous_aggregate` forbids.
+	if _, err := conn.DB.Exec(context.Background(), "CALL refresh_continuous_aggregate('pm_stats', NULL, NULL)"); err != nil {
+		return fmt.Errorf("cannot refresh pm_stats continuous aggregate: %v", err)
+	}
+	if _, err := conn.DB.Exec(context.Background(), "CALL refresh_continuous_aggregate('sma_dma_tech', NULL, NULL)"); err != nil {
+		return fmt.Errorf("cannot refresh sma_dma_tech continuous aggregate: %v", err)
+	}
+
+	if _, err := conn.DB.Exec(context.Background(), createHelperIndexesQuery); err != nil {
+		return fmt.Errorf("cannot create helper indexes: %v", err)
 	}
 
 	if _, err := conn.DB.Exec(context.Background(), initQuery); err != nil {
