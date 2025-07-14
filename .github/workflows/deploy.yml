@@ -11,10 +11,10 @@ on:
         description: 'Branch to deploy'
         required: true
         type: string
-        #      k8s_context:
-        #description: 'Kubernetes context to use'
-        #required: true
-        #type: string
+        # k8s_context:
+        # description: 'Kubernetes context to use'
+        # required: true
+        # type: string
       k8s_namespace:
         description: 'Kubernetes namespace to deploy to'
         required: true
@@ -27,10 +27,10 @@ on:
         description: 'Site Domain'
         required: true
         type: string
-#      public_base_url:
-#        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
-#        required: true
-#        type: string
+      # public_base_url:
+      #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
+      #   required: true
+      #   type: string
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -108,7 +108,7 @@ jobs:
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
       ENVIRONMENT: ${{ inputs.environment }}
       INGRESS_HOST: ${{ inputs.ingress_host }}
-      #PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
+      # PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
 
     steps:
       - name: Debug Event Information

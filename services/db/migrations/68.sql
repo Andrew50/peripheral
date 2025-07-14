@@ -86,3 +86,9 @@ CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
 CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
         ON ohlcv_1m (ticker, "timestamp" DESC)
         INCLUDE (open, high, low, close, volume);
+
+INSERT INTO schema_versions (version, description)
+VALUES (
+    68,
+    'Create screener table'
+) ON CONFLICT (version) DO NOTHING;

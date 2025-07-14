@@ -101,9 +101,11 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	log.Printf("🔧 Pre-load setup for %s", tbl)
 
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s SET (autovacuum_enabled = FALSE)`, tbl)); err != nil {
-		return fmt.Errorf("disable autovacuum: %w", err)
-	}
+	/*
+		if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s SET (autovacuum_enabled = FALSE)`, tbl)); err != nil {
+			return fmt.Errorf("disable autovacuum: %w", err)
+		}
+	*/
 
 	dropSQL := fmt.Sprintf(`DO $$
 DECLARE idx record;
@@ -146,9 +148,11 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	log.Printf("🔧 Post-load cleanup for %s", tbl)
 
 	// Re-enable autovacuum
-	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s RESET (autovacuum_enabled)`, tbl)); err != nil {
-		return fmt.Errorf("re-enable autovacuum for %s: %w", tbl, err)
-	}
+	/*
+		if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s RESET (autovacuum_enabled)`, tbl)); err != nil {
+			return fmt.Errorf("re-enable autovacuum for %s: %w", tbl, err)
+		}
+	*/
 
 	// Re-add compression policy only if it does not already exist to avoid
 	// duplicate-object errors (SQLSTATE 42710). The TimescaleDB catalog view
@@ -168,18 +172,14 @@ END$$;`, tbl, tbl)
 		return fmt.Errorf("re-add compression policy for %s: %w", tbl, err)
 	}
 
-	var indexSQLs []string
-	switch tbl {
-	case "ohlcv_1m":
-		indexSQLs = []string{
-			`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_idx ON ohlcv_1m (ticker, "timestamp" DESC)`,
-			`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc ON ohlcv_1m (ticker, "timestamp" DESC) INCLUDE (open, high, low, close, volume)`,
-		}
-	case "ohlcv_1d":
-		indexSQLs = []string{
-			`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_idx ON ohlcv_1d (ticker, "timestamp" DESC)`,
-			`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc ON ohlcv_1d (ticker, "timestamp" DESC) INCLUDE (open, high, low, close, volume)`,
-		}
+	// Recreate helpful covering indexes on source tables
+	indexSQLs := []string{
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
+        ON ohlcv_1m (ticker, "timestamp" DESC)
+        INCLUDE (open, high, low, close, volume)`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
+        ON ohlcv_1d (ticker, "timestamp" DESC)
+        INCLUDE (open, high, low, close, volume)`,
 	}
 	for _, q := range indexSQLs {
 		if _, err := data.ExecWithRetry(ctx, db, q); err != nil {
