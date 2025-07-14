@@ -20,18 +20,7 @@ module.exports = {
         // Enforce camelCase for all identifiers
         camelcase: ['error', { properties: 'always' }],
 
-        // TypeScript naming conventions
-        '@typescript-eslint/naming-convention': [
-            'error',
-            { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
-            { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
-            { selector: 'typeLike', format: ['PascalCase'] },
-            { selector: 'enumMember', format: ['PascalCase'] },
-            { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
-            { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
-        ],
-
-        // Disallow snake_case explicitly
+        // TypeScript naming conventions - enforce camelCase and disallow snake_case
         '@typescript-eslint/naming-convention': [
             'error',
             { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },

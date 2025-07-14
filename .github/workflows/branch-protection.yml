@@ -43,4 +43,4 @@ jobs:
           echo "3. Enable 'Require pull requests before merging'"
           echo "4. Enable 'Require status checks to pass before merging'"
           echo "5. Search for and select 'Verify Source Branch' as a required status check"
-          echo "6. Save the branch protection rule" 
+          echo "6. Save the branch protection rule"
