@@ -51,6 +51,8 @@ class StrategyWorker:
         
         # Initialize Redis connection
         self.redis_client = self._init_redis()
+        # Clear queues on startup
+        self._clear_queues_on_startup()
         # Clean up any stale heartbeats from previous instances
         self._cleanup_stale_heartbeats()
         # Initialize Database connection  
@@ -1023,6 +1025,22 @@ class StrategyWorker:
             logger.info(f"🧹 Cleaned up heartbeat key for worker {self.worker_id}")
         except Exception as e:
             logger.error(f"❌ Failed to cleanup stale heartbeats: {e}")
+
+    def _clear_queues_on_startup(self):
+        """Clear worker queues on startup"""
+        try:
+            # Clear main queues
+            priority_cleared = clear_queue(self.redis_client, 'strategy_queue_priority')
+            normal_cleared = clear_queue(self.redis_client, 'strategy_queue')
+            
+            total_cleared = priority_cleared + normal_cleared
+            if total_cleared > 0:
+                logger.info(f"🧹 Cleared {total_cleared} tasks from queues on startup (Priority: {priority_cleared}, Normal: {normal_cleared})")
+            else:
+                logger.info("🧹 No tasks to clear from queues on startup")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to clear queues on startup: {e}")
 
 
 
