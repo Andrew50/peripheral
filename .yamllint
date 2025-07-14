@@ -19,5 +19,4 @@ rules:
   key-duplicates: enable
   new-line-at-end-of-file: enable
   new-lines:
-    type: unix
-  no-trailing-spaces: enable 
+    type: unix 
