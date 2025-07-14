@@ -63,10 +63,10 @@ spec:
                   fieldPath: metadata.name
           resources:
             requests:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
-              cpu: "2000m"
+              cpu: "1000m"
               memory: "2Gi"
           livenessProbe:
             exec:
@@ -107,7 +107,7 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 100
     - type: Resource
       resource:
         name: memory
