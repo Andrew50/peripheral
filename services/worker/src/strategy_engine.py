@@ -161,7 +161,6 @@ class AccessorStrategyEngine:
             
             result = {
                 'success': True,
-                #'execution_mode': 'backtest',
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,

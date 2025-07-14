@@ -28,6 +28,7 @@ from src.strategy_generator import StrategyGenerator
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from src.data_accessors import DataAccessorProvider
+from src.pythonAgentGenerator import PythonAgentGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +51,8 @@ class StrategyWorker:
         
         # Initialize Redis connection
         self.redis_client = self._init_redis()
+        # Clear queues on startup
+        self._clear_queues_on_startup()
         # Clean up any stale heartbeats from previous instances
         self._cleanup_stale_heartbeats()
         # Initialize Database connection  
@@ -61,6 +64,8 @@ class StrategyWorker:
         self.strategy_engine = AccessorStrategyEngine()
         self.security_validator = SecurityValidator()
         self.strategy_generator = StrategyGenerator()
+        self.python_agent_generator = PythonAgentGenerator()
+    
         
         # Log initial queue status
         self.log_queue_status()
@@ -185,6 +190,13 @@ class StrategyWorker:
         if not unique_ids:
             return {}
         
+        # Convert string IDs to integers for database query
+        try:
+            unique_int_ids = [int(id_str) for id_str in unique_ids]
+        except ValueError as e:
+            logger.error(f"Failed to convert strategy_ids to integers: {unique_ids}, error: {e}")
+            return {}
+        
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -193,15 +205,15 @@ class StrategyWorker:
                 with self.db_conn.cursor() as cursor:
                     cursor.execute(
                         "SELECT strategyId, pythonCode FROM strategies WHERE strategyId = ANY(%s) AND is_active = true",
-                        (unique_ids,)
+                        (unique_int_ids,)
                     )
                     results = cursor.fetchall()
                     
-                    # Build result dictionary
+                    # Build result dictionary - convert integer keys back to strings
                     strategy_codes = {}
                     for row in results:
                         if row['pythoncode']:  # Only include strategies with code
-                            strategy_codes[row['strategyid']] = row['pythoncode']
+                            strategy_codes[str(row['strategyid'])] = row['pythoncode']
                     
                     # Log missing strategies
                     missing_strategies = set(unique_ids) - set(strategy_codes.keys())
@@ -304,12 +316,6 @@ class StrategyWorker:
                 if not task_id or not task_type:
                     logger.error(f"❌ Invalid task data - missing task_id or task_type: {task_data}")
                     continue
-                    
-                if task_type not in ['backtest', 'screening', 'alert', 'create_strategy']:
-                    error_msg = f"Unknown task type: {task_type}"
-                    logger.error(f"❌ {error_msg}")
-                    self._set_task_result(task_id, "error", {"error": error_msg})
-                    continue
 
                 try:
                     # Set task status to running
@@ -347,6 +353,11 @@ class StrategyWorker:
                         elif task_type == 'create_strategy':
                             logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
                             result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
+                        elif task_type == 'general_python_agent':
+                            result = asyncio.run(self._execute_general_python_agent(task_id=task_id, user_id=args.get('user_id'), prompt=args.get('prompt')))
+                        else: # unknown task type
+                          
+                            raise Exception(f"Unknown task type: {task_type}.")
                     except asyncio.TimeoutError as timeout_error:
                         logger.error(f"⏰ Task {task_id} timed out: {timeout_error}")
                         raise Exception(f"Task execution timed out: {str(timeout_error)}")
@@ -360,11 +371,7 @@ class StrategyWorker:
                     finally:
                         # Clear current task tracking
                         self._current_task_id = None
-                    
-                    # Validate result
-                    if result is None:
-                        raise Exception(f"Task {task_type} returned None result")
-                    
+                
                     if not isinstance(result, dict):
                         logger.warning(f"⚠️ Task {task_id} returned non-dict result: {type(result)}")
                         result = {"result": result, "warning": "Non-dict result wrapped"}
@@ -718,6 +725,67 @@ class StrategyWorker:
             
             return error_result
     
+    async def _execute_general_python_agent(self, task_id: str = None, user_id: int = None, 
+                                           prompt: str = None, **kwargs) -> Dict[str, Any]:
+        # Initialize defaults to avoid scope issues
+        result, prints, plots, response_images = [], "", [], []
+        
+        try:
+            # Validate input parameters
+            if not user_id:
+                raise ValueError("user_id is required for general Python agent")
+            if not prompt or not prompt.strip():
+                raise ValueError("prompt is required for general Python agent")
+            
+            # Publish progress update
+            if task_id:
+                self._publish_progress(task_id, "initializing", "Starting general Python agent execution...")         
+            
+            # Execute with timeout
+            result, prints, plots, response_images, execution_id, error = await asyncio.wait_for(
+                self.python_agent_generator.start_general_python_agent(
+                    user_id=user_id,
+                    prompt=prompt
+                ),
+                timeout=240.0  # 4 minute timeout
+            )
+            
+            # Check if there was an error
+            if error:
+                logger.error(f"❌ General Python agent execution FAILED for task {task_id}: {error}")
+                if task_id:
+                    self._publish_progress(task_id, "error", f"Execution failed: {str(error)}")
+                raise error
+            
+            # Success case
+            logger.info(f"✅ General Python agent execution SUCCESS for task {task_id}")
+            if task_id:
+                self._publish_progress(task_id, "completed", "Python agent execution completed successfully")
+            
+            return {
+                "success": True,
+                "result": result,
+                "prints": prints,
+                "plots": plots,
+                "response_images": response_images,
+                "execution_id": execution_id,
+            }
+            
+        except Exception as e:
+            logger.error(f"💥 General Python agent task {task_id} failed: {e}")
+            
+            if task_id:
+                self._publish_progress(task_id, "error", f"Error: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "result": result,
+                "prints": prints,
+                "plots": plots,
+                "response_images": response_images,
+                "execution_id": execution_id,
+            }
+    
     def _publish_progress(self, task_id: str, stage: str, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks"""
         try:
@@ -958,59 +1026,23 @@ class StrategyWorker:
         except Exception as e:
             logger.error(f"❌ Failed to cleanup stale heartbeats: {e}")
 
-
-# Utility functions for adding tasks to queue
-def add_backtest_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
-                     symbols: List[str] = None, start_date: str = None, end_date: str = None,
-                     securities: List[str] = None) -> None:
-    """Add a backtest task to the queue"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": "backtest",
-        "args": {
-            "strategy_id": strategy_id,
-            "symbols": symbols,
-            "start_date": start_date,
-            "end_date": end_date,
-            "securities": securities
-        },
-        "created_at": datetime.utcnow().isoformat() + "Z"
-    }
-    # Backtest tasks go to normal queue
-    redis_client.lpush('strategy_queue', json.dumps(task_data))
+    def _clear_queues_on_startup(self):
+        """Clear worker queues on startup"""
+        try:
+            # Clear main queues
+            priority_cleared = clear_queue(self.redis_client, 'strategy_queue_priority')
+            normal_cleared = clear_queue(self.redis_client, 'strategy_queue')
+            
+            total_cleared = priority_cleared + normal_cleared
+            if total_cleared > 0:
+                logger.info(f"🧹 Cleared {total_cleared} tasks from queues on startup (Priority: {priority_cleared}, Normal: {normal_cleared})")
+            else:
+                logger.info("🧹 No tasks to clear from queues on startup")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to clear queues on startup: {e}")
 
 
-def add_screening_task(redis_client: redis.Redis, task_id: str, strategy_ids: List[str],
-                      universe: List[str] = None, limit: int = 100) -> None:
-    """Add a screening task to the queue"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": "screening",
-        "args": {
-            "strategy_ids": strategy_ids,
-            "universe": universe,
-            "limit": limit
-        },
-        "created_at": datetime.utcnow().isoformat() + "Z"
-    }
-    # Screening tasks go to normal queue
-    redis_client.lpush('strategy_queue', json.dumps(task_data))
-
-
-def add_alert_task(redis_client: redis.Redis, task_id: str, strategy_id: str,
-                  symbols: List[str] = None) -> None:
-    """Add an alert task to the queue"""
-    task_data = {
-        "task_id": task_id,
-        "task_type": "alert",
-        "args": {
-            "strategy_id": strategy_id,
-            "symbols": symbols
-        },
-        "created_at": datetime.utcnow().isoformat() + "Z"
-    }
-    # Alert tasks go to normal queue
-    redis_client.lpush('strategy_queue', json.dumps(task_data))
 
 # Utility functions for queue management
 def get_queue_statistics(redis_client: redis.Redis) -> Dict[str, Any]:

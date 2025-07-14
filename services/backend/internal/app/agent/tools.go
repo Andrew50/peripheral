@@ -485,10 +485,25 @@ var (
 			Function:      wrapWithContext(strategy.RunScreening),
 			StatusMessage: "Running screener...",
 		},
+		"runPythonAgent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runPythonAgent",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis that would require a Python execution for deterministic results. This agent already has access to market data. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
+					},
+					Required: []string{"prompt"},
+				},
+			},
+			Function:      RunPythonAgent,
+			StatusMessage: "Running Python agent...",
+		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getDailySnapshot",
-				Description: "Get the current (regular or extended hours) price, change, volume, OHLC, previous close for a specified stock.",
+				Description: "Get the current price (regular or extended hours), change, volume, OHLC, previous close for a specified stock.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -506,7 +521,7 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Retrieves the last price (regular or extended hours)for a specified ticker symbol.",
+				Description: "Retrieves the last price (regular or extended hours) for a specified ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
