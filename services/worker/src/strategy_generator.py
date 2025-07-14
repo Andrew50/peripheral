@@ -56,6 +56,7 @@ class StrategyGenerator:
     def __init__(self):
         self.validator = SecurityValidator()
         self.openai_client = None
+        self.gemini_client = None
         self._init_openai_client()
         self._init_gemini_client()
         
@@ -168,345 +169,345 @@ class StrategyGenerator:
         
         return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
-Allowed imports: 
-- pandas, numpy, datetime, math, plotly. 
-- for datetime.datetime, ALWAYS do from datetime import datetime as dt
+            Allowed imports: 
+            - pandas, numpy, datetime, math, plotly. 
+            - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
-FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
-- get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
-- get_general_data(columns, filters) → pandas.DataFrame
+            FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
+            - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
+            - get_general_data(columns, filters) → pandas.DataFrame
 
-CRITICAL REQUIREMENTS:
-- Function named 'strategy()' with NO parameters
-- Use data accessor functions with filters:
-  * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
-     Columns: ticker, timestamp, open, high, low, close, volume
-  * get_bar_data(timeframe="5m", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> numpy array
-     For precise date filtering - essential for multi-timeframe strategies and exact stop loss timing
-     
-     SUPPORTED TIMEFRAMES:
-     • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
-     • Custom aggregations: "5m", "10m", "15m", "30m"
-                           "2h", "4h", "6h", "8h"
-                           "2w", "3w"
-     
-     TIMEFRAME SELECTION GUIDE:
-     - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
-     - Swing Trading: Use "1h", "4h", "1d" 
-     - Position Trading: Use "1d", "1w"
-     - Multi-timeframe: Combine different intervals for confirmation
-     
-     Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
-        - This cannot exceed 10,000. Use the minimum needed.
-        - 1 bar: Simple current patterns (volume spikes, price thresholds)
-        - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
-        - 20+ bars: Technical indicators (moving averages, RSI)
-        - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
+            CRITICAL REQUIREMENTS:
+            - Function named 'strategy()' with NO parameters
+            - Use data accessor functions with filters:
+            * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
+                Columns: ticker, timestamp, open, high, low, close, volume
+            * get_bar_data(timeframe="5m", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> numpy array
+                For precise date filtering - essential for multi-timeframe strategies and exact stop loss timing
+                
+                SUPPORTED TIMEFRAMES:
+                • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
+                • Custom aggregations: "5m", "10m", "15m", "30m"
+                                    "2h", "4h", "6h", "8h"
+                                    "2w", "3w"
+                
+                TIMEFRAME SELECTION GUIDE:
+                - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
+                - Swing Trading: Use "1h", "4h", "1d" 
+                - Position Trading: Use "1d", "1w"
+                - Multi-timeframe: Combine different intervals for confirmation
+                
+                Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
+                    - This cannot exceed 10,000. Use the minimum needed.
+                    - 1 bar: Simple current patterns (volume spikes, price thresholds)
+                    - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
+                    - 20+ bars: Technical indicators (moving averages, RSI)
+                    - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
 
-  * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
-     Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
-  * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
-     Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
+            * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
+                Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
+            * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
+                Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
-AVAILABLE FILTERS (use in filters parameter):{f'''
-- sector: "{sectors_str}"''' if sectors_str else ""}{f'''
-- industry: "{industries_str}"''' if industries_str else ""}{f'''
-- primary_exchange: "{exchanges_str}"''' if exchanges_str else ""}
-- market_cap_min: float (e.g., 1000000000 for $1B minimum)
-- market_cap_max: float (e.g., 10000000000 for $10B maximum)
+            AVAILABLE FILTERS (use in filters parameter):{f'''
+            - sector: "{sectors_str}"''' if sectors_str else ""}{f'''
+            - industry: "{industries_str}"''' if industries_str else ""}{f'''
+            - primary_exchange: "{exchanges_str}"''' if exchanges_str else ""}
+            - market_cap_min: float (e.g., 1000000000 for $1B minimum)
+            - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-FILTER EXAMPLES:{f'''
-- Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
-- Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-- NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
-- Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
-- NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
-- Small cap stocks: filters={{"market_cap_max": 2000000000}}
-- Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
+            FILTER EXAMPLES:{f'''
+            - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
+            - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
+            - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
+            - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
+            - NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
+            - Small cap stocks: filters={{"market_cap_max": 2000000000}}
+            - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 
-TICKER USAGE:
-- Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
-- For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
-- For universe-wide strategies, use filters={{}} or filters with sector/industry constraints
-- Return results with 'ticker' field (string), not 'securityid'
-- For Bitcoin exposure, use "IBIT" (iShares Bitcoin Trust ETF)
-- For Ethereum exposure, use "ETHE" (Grayscale Ethereum Trust)
+            TICKER USAGE:
+            - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
+            - For specific tickers mentioned in prompts, use filters={{"tickers": ["TICKER_NAME"]}}
+            - For universe-wide strategies, use filters={{}} or filters with sector/industry constraints
+            - Return results with 'ticker' field (string), not 'securityid'
+            - For Bitcoin exposure, use "IBIT" (iShares Bitcoin Trust ETF)
+            - For Ethereum exposure, use "ETHE" (Grayscale Ethereum Trust)
 
-CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
-- DO NOT use .tail(1) or .head(1) to limit results per ticker
-- Return every occurrence that meets the criteria across the entire datasetç
-- Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
+            CRITICAL: RETURN ALL MATCHING INSTANCES, NOT JUST THE LATEST
+            - DO NOT use .tail(1) or .head(1) to limit results per ticker
+            - Return every occurrence that meets the criteria across the entire datasetç
+            - Example: If MRNA gaps up 1% on 5 different days, return all 5 instances
 
-CRITICAL: INSTANCE STRUCTURE
-- Include relevant price data: 'open', 'close', 'entry_price' when available
-                - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
-- REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
+            CRITICAL: INSTANCE STRUCTURE
+            - Include relevant price data: 'open', 'close', 'entry_price' when available
+                            - Use proper timestamp format: int(row['timestamp']) for Unix timestamp (in seconds)
+            - REQUIRED: Include 'score': float (0.0 to 1.0) - higher score = stronger signal
 
-CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
-- MUST include ALL calculated indicator values that triggered your strategy
-- Examples: 'volume_ratio': 2.3, 'gap_percent': 4.1
-- Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
-- Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
-- Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
-- DO NOT include static thresholds or constants (e.g., 'rsi_threshold': 30)
-- This data is ESSENTIAL for backtesting, analysis, and understanding why signals triggered
+            CRITICAL: ALWAYS INCLUDE INDICATOR VALUES IN INSTANCES
+            - MUST include ALL calculated indicator values that triggered your strategy
+            - Examples: 'volume_ratio': 2.3, 'gap_percent': 4.1
+            - Include intermediate calculations: 'sma_20': 150.5, 'ema_12': 148.2, 'bb_upper': 155.0
+            - Include percentage changes: 'change_1d_pct': 3.2, 'change_5d_pct': 8.7
+            - Include ratios and scores: 'momentum_score': 0.85, 'strength_ratio': 1.4
+            - DO NOT include static thresholds or constants (e.g., 'rsi_threshold': 30)
+            - This data is ESSENTIAL for backtesting, analysis, and understanding why signals triggered
 
-CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM + 1 BAR BUFFER (NO ADDITIONAL BUFFER)
-- min_bars = EXACT number of bars required for calculation, NOT a suggestion
-- Examples: RSI needs 14 bars → min_bars=15, MACD needs 26 bars → min_bars=27
-- If you need multiple indicators, use the MAXIMUM of their individual minimums
-- Example: RSI(14) + SMA(50) strategy → min_bars=51 (not 64, not 55)
+            CRITICAL: min_bars MUST BE ABSOLUTE MINIMUM + 1 BAR BUFFER (NO ADDITIONAL BUFFER)
+            - min_bars = EXACT number of bars required for calculation, NOT a suggestion
+            - Examples: RSI needs 14 bars → min_bars=15, MACD needs 26 bars → min_bars=27
+            - If you need multiple indicators, use the MAXIMUM of their individual minimums
+            - Example: RSI(14) + SMA(50) strategy → min_bars=51 (not 64, not 55)
 
-CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
-- Always convert calculated columns to numeric before groupby operations:
-  df['calculated_column'] = pd.to_numeric(df['calculated_column'], errors='coerce')
-- Remove NaN values before quantile operations:
-  df = df.dropna(subset=['calculated_column'])
-- For percentage calculations, ensure no division by zero:
-  df = df[df['denominator'] != 0]
-- Example safe quantile calculation:
-  df['change_pct'] = pd.to_numeric(df['change_pct'], errors='coerce')
-  df = df.dropna(subset=['change_pct'])
-  quantile_val = df.groupby('timestamp')['change_pct'].quantile(0.9)
+            CRITICAL: DATA TYPE SAFETY FOR QUANTILE/STATISTICAL OPERATIONS:
+            - Always convert calculated columns to numeric before groupby operations:
+            df['calculated_column'] = pd.to_numeric(df['calculated_column'], errors='coerce')
+            - Remove NaN values before quantile operations:
+            df = df.dropna(subset=['calculated_column'])
+            - For percentage calculations, ensure no division by zero:
+            df = df[df['denominator'] != 0]
+            - Example safe quantile calculation:
+            df['change_pct'] = pd.to_numeric(df['change_pct'], errors='coerce')
+            df = df.dropna(subset=['change_pct'])
+            quantile_val = df.groupby('timestamp')['change_pct'].quantile(0.9)
 
-CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
-- Timestamps returned by get_bar_data() are Unix timestamps in SECONDS (not milliseconds)
-- When converting to datetime, always use unit="s":
-  df['dt'] = pd.to_datetime(df['timestamp'], unit="s")  # CORRECT
-- NEVER use unit="ms" as this will cause incorrect datetime conversions
-- For time-based filtering, convert to datetime first, then use .dt accessor for time operations
-- For market hours (like Friday 3:45-3:55 PM), convert to Eastern Time:
-  df['datetime_et'] = pd.to_datetime(df['timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+            CRITICAL: TIMESTAMP FORMAT AND CONVERSION:
+            - Timestamps returned by get_bar_data() are Unix timestamps in SECONDS (not milliseconds)
+            - When converting to datetime, always use unit="s":
+            df['dt'] = pd.to_datetime(df['timestamp'], unit="s")  # CORRECT
+            - NEVER use unit="ms" as this will cause incorrect datetime conversions
+            - For time-based filtering, convert to datetime first, then use .dt accessor for time operations
+            - For market hours (like Friday 3:45-3:55 PM), convert to Eastern Time:
+            df['datetime_et'] = pd.to_datetime(df['timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
 
-X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
-- X-minute bars may not align exactly with specific times like 15:45, 15:55
-- Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
+            X-MINUTE TIMEFRAME AND TIME ALIGNMENT:
+            - X-minute bars may not align exactly with specific times like 15:45, 15:55
+            - Use time ranges instead of exact matches: (time >= 15:45) & (time <= 15:50) for 15:45-15:50 period
 
-ERROR HANDLING NOTE:
-- The strategy executor automatically wraps your strategy function in try-except blocks
-- You do NOT need to include try-except in your strategy code
-- If data is invalid, simply return an empty list: return []
+            ERROR HANDLING NOTE:
+            - The strategy executor automatically wraps your strategy function in try-except blocks
+            - You do NOT need to include try-except in your strategy code
+            - If data is invalid, simply return an empty list: return []
 
-EXAMPLE PATTERNS:
-```python
-# Example 1: Multi-timeframe RSI + Trend Strategy
-def strategy():
-    instances = []
+            EXAMPLE PATTERNS:
+            ```python
+            # Example 1: Multi-timeframe RSI + Trend Strategy
+            def strategy():
+                instances = []
+                
+                # Get daily data for RSI calculation
+                bar_data_1d = get_bar_data(
+                    timeframe="1d",
+                    columns=["ticker", "timestamp", "close"],
+                    min_bars=21,  # Need 20 bars for RSI calculation (14 + buffer)
+                    filters={{"sector": "Technology"}}  # Filter to technology sector
+                )
+                
+                # Get hourly data for short-term trend
+                bar_data_1h = get_bar_data(
+                    timeframe="1h",
+                    columns=["ticker", "timestamp", "close"],
+                    min_bars=5,   # Need 5 hours for short-term moving average
+                    filters={{"sector": "Technology"}}
+                )
+                
+                if bar_data_1d is None or len(bar_data_1d) == 0 or bar_data_1h is None or len(bar_data_1h) == 0:
+                    return instances
+                
+                df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
+                df_1h = pd.DataFrame(bar_data_1h, columns=["ticker", "timestamp", "close"])
+                
+                # Calculate RSI for each ticker
+                def calculate_rsi(prices, period=14):
+                    delta = prices.diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+                    rs = gain / loss
+                    return 100 - (100 / (1 + rs))
+                
+                common_tickers = set(df_1d['ticker']).intersection(set(df_1h['ticker']))
+                
+                for ticker in common_tickers:
+                    ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp')
+                    ticker_1h = df_1h[df_1h['ticker'] == ticker].sort_values('timestamp')
+                    
+                    if len(ticker_1d) < 15 or len(ticker_1h) < 5:
+                        continue
+                    
+                    # Calculate daily RSI
+                    ticker_1d['rsi'] = calculate_rsi(ticker_1d['close'])
+                    latest_1d = ticker_1d.iloc[-1]
+                    
+                    # Calculate hourly trend (5-hour SMA)
+                    ticker_1h['sma_5'] = ticker_1h['close'].rolling(5).mean()
+                    latest_1h = ticker_1h.iloc[-1]
+                    trend_strength = (latest_1h['close'] / latest_1h['sma_5']) - 1
+                    
+                    # Strategy trigger: RSI oversold + positive hourly trend
+                    if latest_1d['rsi'] < 30 and trend_strength > 0.02:  # RSI < 30 + 2%+ above hourly SMA
+                        instances.append({{
+                            'ticker': ticker,
+                            'timestamp': int(latest_1d['timestamp']),
+                            'entry_price': float(latest_1d['close']),
+                            # CRITICAL: Include ALL calculated indicators - essential for analysis
+                            'rsi': round(float(latest_1d['rsi']), 2),
+                            'trend_strength_1h': round(float(trend_strength), 3),
+                            'sma_5_1h': round(float(latest_1h['sma_5']), 2),
+                            'rsi_oversold_depth': round(float(30 - latest_1d['rsi']), 2),
+                            'score': round(min(1.0, (30 - latest_1d['rsi']) / 20 + trend_strength), 3)
+                        }})
+                
+                return instances
+
+            # Example 2: Gap Strategy with Specific Tickers
+            def strategy():
+                instances = []
+                
+                target_tickers = ["AAPL", "TSLA", "NVDA"]  # Specific tickers from prompt
+                
+                bar_data = get_bar_data(
+                    timeframe="1d",
+                    columns=["ticker", "timestamp", "open", "close"],
+                    min_bars=2,  # Need 2 bars: previous close + current open
+                    filters={{"tickers": target_tickers}}
+                )
+                
+                if bar_data is None or len(bar_data) == 0:
+                    return instances
+                
+                df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
+                df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
+                
+                # Calculate gaps: compare current open vs previous close
+                df['prev_close'] = df.groupby('ticker')['close'].shift(1)
+                df = df.dropna()  # Remove rows without previous close
+                df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
+                
+                # CRITICAL: Ensure numeric dtype for calculations
+                df['gap_percent'] = pd.to_numeric(df['gap_percent'], errors='coerce')
+                df = df.dropna(subset=['gap_percent'])
+                
+                # Find significant gaps (3%+ up or down)
+                significant_gaps = df[abs(df['gap_percent']) >= 3.0]
+                
+                for _, row in significant_gaps.iterrows():
+                    instances.append({{
+                        'ticker': row['ticker'],
+                        'timestamp': int(row['timestamp']),
+                        'entry_price': float(row['open']),
+                        'gap_percent': round(float(row['gap_percent']), 3),
+                        'prev_close': round(float(row['prev_close']), 2),
+                        'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
+                        'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
+                    }})
+                
+                return instances
+            ```
     
-    # Get daily data for RSI calculation
-    bar_data_1d = get_bar_data(
-        timeframe="1d",
-        columns=["ticker", "timestamp", "close"],
-        min_bars=21,  # Need 20 bars for RSI calculation (14 + buffer)
-        filters={{"sector": "Technology"}}  # Filter to technology sector
-    )
-    
-    # Get hourly data for short-term trend
-    bar_data_1h = get_bar_data(
-        timeframe="1h",
-        columns=["ticker", "timestamp", "close"],
-        min_bars=5,   # Need 5 hours for short-term moving average
-        filters={{"sector": "Technology"}}
-    )
-    
-    if bar_data_1d is None or len(bar_data_1d) == 0 or bar_data_1h is None or len(bar_data_1h) == 0:
-        return instances
-    
-    df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
-    df_1h = pd.DataFrame(bar_data_1h, columns=["ticker", "timestamp", "close"])
-    
-    # Calculate RSI for each ticker
-    def calculate_rsi(prices, period=14):
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        return 100 - (100 / (1 + rs))
-    
-    common_tickers = set(df_1d['ticker']).intersection(set(df_1h['ticker']))
-    
-    for ticker in common_tickers:
-        ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp')
-        ticker_1h = df_1h[df_1h['ticker'] == ticker].sort_values('timestamp')
-        
-        if len(ticker_1d) < 15 or len(ticker_1h) < 5:
-            continue
-        
-        # Calculate daily RSI
-        ticker_1d['rsi'] = calculate_rsi(ticker_1d['close'])
-        latest_1d = ticker_1d.iloc[-1]
-        
-        # Calculate hourly trend (5-hour SMA)
-        ticker_1h['sma_5'] = ticker_1h['close'].rolling(5).mean()
-        latest_1h = ticker_1h.iloc[-1]
-        trend_strength = (latest_1h['close'] / latest_1h['sma_5']) - 1
-        
-        # Strategy trigger: RSI oversold + positive hourly trend
-        if latest_1d['rsi'] < 30 and trend_strength > 0.02:  # RSI < 30 + 2%+ above hourly SMA
-            instances.append({{
-                'ticker': ticker,
-                'timestamp': int(latest_1d['timestamp']),
-                'entry_price': float(latest_1d['close']),
-                # CRITICAL: Include ALL calculated indicators - essential for analysis
-                'rsi': round(float(latest_1d['rsi']), 2),
-                'trend_strength_1h': round(float(trend_strength), 3),
-                'sma_5_1h': round(float(latest_1h['sma_5']), 2),
-                'rsi_oversold_depth': round(float(30 - latest_1d['rsi']), 2),
-                'score': round(min(1.0, (30 - latest_1d['rsi']) / 20 + trend_strength), 3)
-            }})
-    
-    return instances
+            COMMON MISTAKES TO AVOID:
+            - latest_df = df.groupby('ticker').last() - only latest data
+            - df.drop_duplicates(subset=['ticker']) - this removes valid instances
+            - No 'score' field - score is required for ranking
+            - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
+            - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
+            - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
+            into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
+            - BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
+            - NO DATE FILTERING: Using only daily data for precise stop timing
+            - Appending instances only after exit is determined – ALWAYS record the entry as an instance, even when you can't yet determine an exit.
 
-# Example 2: Gap Strategy with Specific Tickers
-def strategy():
-    instances = []
-    
-    target_tickers = ["AAPL", "TSLA", "NVDA"]  # Specific tickers from prompt
-    
-    bar_data = get_bar_data(
-        timeframe="1d",
-        columns=["ticker", "timestamp", "open", "close"],
-        min_bars=2,  # Need 2 bars: previous close + current open
-        filters={{"tickers": target_tickers}}
-    )
-    
-    if bar_data is None or len(bar_data) == 0:
-        return instances
-    
-    df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
-    df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-    
-    # Calculate gaps: compare current open vs previous close
-    df['prev_close'] = df.groupby('ticker')['close'].shift(1)
-    df = df.dropna()  # Remove rows without previous close
-    df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
-    
-    # CRITICAL: Ensure numeric dtype for calculations
-    df['gap_percent'] = pd.to_numeric(df['gap_percent'], errors='coerce')
-    df = df.dropna(subset=['gap_percent'])
-    
-    # Find significant gaps (3%+ up or down)
-    significant_gaps = df[abs(df['gap_percent']) >= 3.0]
-    
-    for _, row in significant_gaps.iterrows():
-        instances.append({{
-            'ticker': row['ticker'],
-            'timestamp': int(row['timestamp']),
-            'entry_price': float(row['open']),
-            'gap_percent': round(float(row['gap_percent']), 3),
-            'prev_close': round(float(row['prev_close']), 2),
-            'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
-            'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
-        }})
-    
-    return instances
-```
+            ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
+            ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
+            ✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
+            ✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
+            ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
+            ✅ GOOD STOP LOSS: if open <= stop: exit_price = open  # CORRECT - handles gaps
+            ✅ GOOD STOP LOSS: Check gap first, then intraday  # CORRECT - proper order
+            ✅ DATE FILTERING: get_bar_data(start_date=day_start, end_date=day_end)  # CORRECT - precise timing
 
-COMMON MISTAKES TO AVOID:
-- latest_df = df.groupby('ticker').last() - only latest data
-- df.drop_duplicates(subset=['ticker']) - this removes valid instances
-- No 'score' field - score is required for ranking
-- aggregate_mode=True for individual stock patterns - use only for market-wide calculations
-- using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
-- Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
-into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
-- BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
-- NO DATE FILTERING: Using only daily data for precise stop timing
-- Appending instances only after exit is determined – ALWAYS record the entry as an instance, even when you can't yet determine an exit.
+            PATTERN RECOGNITION:
+            - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
+            min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
+            - Volume patterns: Compare current vs historical average - return ALL volume spikes  
+            min_bars=1 for simple threshold, min_bars=20+ for rolling average
+            Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
+            - Price patterns: Use moving averages, RSI - return ALL qualifying instances
+            min_bars=20+ for indicators, Score: Based on instance strength (RSI distance from 50, etc.)
+            - Breakout patterns: Identify price breakouts - return ALL breakouts
+            min_bars=2+ for comparison, Score: min(1.0, breakout_strength / max_expected)
+            - Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
+            min_bars=1 (current data only), Score: Based on fundamental strength
 
-✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
-✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
-✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
-✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
-✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
-✅ GOOD STOP LOSS: if open <= stop: exit_price = open  # CORRECT - handles gaps
-✅ GOOD STOP LOSS: Check gap first, then intraday  # CORRECT - proper order
-✅ DATE FILTERING: get_bar_data(start_date=day_start, end_date=day_end)  # CORRECT - precise timing
+            SECURITY RULES:
+            - Only use whitelisted imports
+            - CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
+            - No file operations, network access, or dangerous functions
+            - No exec, eval, or dynamic code execution
+            - Use only standard mathematical and data manipulation operations
 
-PATTERN RECOGNITION:
-- Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
-  min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
-- Volume patterns: Compare current vs historical average - return ALL volume spikes  
-  min_bars=1 for simple threshold, min_bars=20+ for rolling average
-  Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
-- Price patterns: Use moving averages, RSI - return ALL qualifying instances
-  min_bars=20+ for indicators, Score: Based on instance strength (RSI distance from 50, etc.)
-- Breakout patterns: Identify price breakouts - return ALL breakouts
-  min_bars=2+ for comparison, Score: min(1.0, breakout_strength / max_expected)
-- Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
-  min_bars=1 (current data only), Score: Based on fundamental strength
+            CODE OPTIMIZATIONS: 
+            - Drop intermediate columns once they are no longer needed that are not output in the final instance list
+            - Minimize the number of shift() and index manipulation operations
 
-SECURITY RULES:
-- Only use whitelisted imports
-- CRITICAL: DO NOT use math.fabs() - use the built-in abs() function instead.
-- No file operations, network access, or dangerous functions
-- No exec, eval, or dynamic code execution
-- Use only standard mathematical and data manipulation operations
+            DATA VALIDATION:
+            - Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
+            - Use proper DataFrame column checks when needed: if 'column_name' in df.columns
+            - Handle missing data gracefully with pandas methods like dropna()
+            - Return empty list [] when no valid data is available
+            - Handle edge cases like division by zero
 
-CODE OPTIMIZATIONS: 
-- Drop intermediate columns once they are no longer needed that are not output in the final instance list
-- Minimize the number of shift() and index manipulation operations
+            **CRITICAL STOP LOSS IMPLEMENTATION**: 
+            BE EXTREMELY CAREFUL WITH stop loss prices. Markets can gap through stops, resulting in much worse exits than expected.
 
-DATA VALIDATION:
-- Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
-- Use proper DataFrame column checks when needed: if 'column_name' in df.columns
-- Handle missing data gracefully with pandas methods like dropna()
-- Return empty list [] when no valid data is available
-- Handle edge cases like division by zero
+            # Step 1: Check for overnight gaps FIRST
+            if day_open <= stop_loss_price:
+                exit_price = day_open  # ✅ Use actual gap-down price, NOT stop price
+                exit_reason = 'gap_below_stop'
+            # Step 2: Only then check intraday stop hits
+            elif day_low <= stop_loss_price:
+                exit_price = stop_loss_price  # ✅ Safe - no gap occurred
+                exit_reason = 'intraday_stop_hit'
 
-**CRITICAL STOP LOSS IMPLEMENTATION**: 
-BE EXTREMELY CAREFUL WITH stop loss prices. Markets can gap through stops, resulting in much worse exits than expected.
+            ENHANCED PRECISION WITH DATE FILTERING:
+            For exact stop timing, use multi-timeframe analysis:
+            1. Daily data identifies potential stop days
+            2. Use start_date/end_date to get intraday bars for specific days
+            3. Walk through intraday bars to find exact stop hit timing
+            4. Always check gap-down scenarios first before intraday analysis
 
-# Step 1: Check for overnight gaps FIRST
-if day_open <= stop_loss_price:
-    exit_price = day_open  # ✅ Use actual gap-down price, NOT stop price
-    exit_reason = 'gap_below_stop'
-# Step 2: Only then check intraday stop hits
-elif day_low <= stop_loss_price:
-    exit_price = stop_loss_price  # ✅ Safe - no gap occurred
-    exit_reason = 'intraday_stop_hit'
+            Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
 
-ENHANCED PRECISION WITH DATE FILTERING:
-For exact stop timing, use multi-timeframe analysis:
-1. Daily data identifies potential stop days
-2. Use start_date/end_date to get intraday bars for specific days
-3. Walk through intraday bars to find exact stop hit timing
-4. Always check gap-down scenarios first before intraday analysis
+            PRINTING DATA (REQUIRED): 
+            - Use print() to print useful data for the user
+            - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
+            - This should SUPER comprehensive. The user will not have access to the data and information other than what is printed and the instance list.
 
-Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
+            PLOTLY PLOT GENERATION (REQUIRED):
+            - Use plotly to generate plots of useful visualizations of the data
+            - Histograms of performance metrics, returns, etc 
+            - Always show the plot using .show()
+            - Almost always include plots in the strategy to help the user understand the data
+            - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
+            - Do not worry about the styling of the plot.
+            - Plot equity curves of the P/L performance of strategies overtime.
+            - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
+            - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+            - If the plot refers to several tickers, do not include this.
 
-PRINTING DATA (REQUIRED): 
-- Use print() to print useful data for the user
-- This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
-- This should SUPER comprehensive. The user will not have access to the data and information other than what is printed and the instance list.
+            RETURN FORMAT:
+            - *ALWAYS* Return List[Dict] where each dict contains:
+            * 'ticker': str (required) (e.g., "MRNA", "AAPL")
+            * 'timestamp': int (required) (Unix timestamp, NOT datetime or timestamptz)
+            * 'entry_price': float (price at instance time - open, close, etc.)
+            * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
+            * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
+            * Order these fields logically that would make it best for the reader to understand the table of instances.
+            - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
+            - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
+            - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
+            - ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
+            - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
-PLOTLY PLOT GENERATION (REQUIRED):
-- Use plotly to generate plots of useful visualizations of the data
-- Histograms of performance metrics, returns, etc 
-- Always show the plot using .show()
-- Almost always include plots in the strategy to help the user understand the data
-- ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-- Do not worry about the styling of the plot.
-- Plot equity curves of the P/L performance of strategies overtime.
-- (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
-- ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
-- If the plot refers to several tickers, do not include this.
-
-RETURN FORMAT:
-- *ALWAYS* Return List[Dict] where each dict contains:
-  * 'ticker': str (required) (e.g., "MRNA", "AAPL")
-  * 'timestamp': int (required) (Unix timestamp, NOT datetime or timestamptz)
-  * 'entry_price': float (price at instance time - open, close, etc.)
-  * 'score': float (REQUIRED, 0.0 to 1.0, higher = stronger instance. Rounded to 3 decimal places)
-  * Additional fields as needed for strategy results (gap_percent, volume_ratio, etc. Rounded to 3 decimal places)
-  * Order these fields logically that would make it best for the reader to understand the table of instances.
-- CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
-- NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
-- ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
-- ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
-- Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
-
-Generate clean, robust Python code."""
+            Generate clean, robust Python code."""
     
     async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
@@ -748,7 +749,7 @@ Generate clean, robust Python code."""
             # First, use the existing validator for security checks
             logger.info("🛡️ Running security validation...")
             try:
-                is_valid = self.validator.validate_code(strategy_code)
+                is_valid = self.validator.validate_strategy_code(strategy_code)
                 logger.info(f"🛡️ Security validation result: {is_valid}")
             except Exception as security_error:
                 logger.error(f"🚨 Security validation crashed: {security_error}")

@@ -216,10 +216,6 @@ type ResponseImage struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-// const finalResponseModel = "gemini-2.5-flash"
-// const openAIPlannerModel = "o4-mini"
-// const openAIFinalResponseModel = "o3"
-
 func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
