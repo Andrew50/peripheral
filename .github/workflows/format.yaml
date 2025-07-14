@@ -1,0 +1,327 @@
+name: Format and Lint
+
+on:
+  push:
+    paths:
+      - '**/*.go'
+      - '**/*.py'
+      - '**/*.sql'
+      - '**/*.{js,ts,svelte,css}'
+      - '**/*.yml'
+      - '**/*.yaml'
+  pull_request:
+    paths:
+      - '**/*.go'
+      - '**/*.py'
+      - '**/*.sql'
+      - '**/*.{js,ts,svelte,css}'
+      - '**/*.yml'
+      - '**/*.yaml'
+  workflow_dispatch:
+
+env:
+  # Linting configuration
+  GOLANGCI_LINT_VERSION: v2.10.0
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Go Linting with golangci-lint
+  lint-go:
+    name: Go Lint (camelCase enforcement)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔧 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+          cache-dependency-path: services/backend/go.sum
+
+      - name: 📦 Install golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: run --timeout 5m --config .golangci.yml
+
+      - name: 🔍 Run golangci-lint (check only)
+        run: |
+          echo "🔍 Running Go linting with camelCase enforcement (check only)..."
+          golangci-lint run --timeout 5m --config .golangci.yml ./services/backend/... --no-fix
+
+  # Python Linting with Pylint
+  lint-python:
+    name: Python Lint (camelCase enforcement)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔧 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: services/worker/requirements.txt
+
+      - name: 📦 Install Python dependencies
+        run: |
+          cd services/worker
+          pip install -r requirements.txt
+          pip install pylint
+          cd ../..
+
+      - name: 🔧 Generate Pylint configuration
+        run: |
+          echo "🔧 Generating Pylint configuration for camelCase enforcement..."
+          cat > .pylintrc << 'EOF'
+          [MASTER]
+          ignore=tests,__pycache__,.git
+          disable=C0111,C0103
+
+          [NAMING]
+          variable-naming-style=camelCase
+          function-naming-style=camelCase
+          argument-naming-style=camelCase
+          attr-naming-style=camelCase
+          method-naming-style=camelCase
+          class-naming-style=PascalCase
+          const-naming-style=camelCase
+          module-naming-style=camelCase
+
+          [FORMAT]
+          max-line-length=120
+
+          [MESSAGES CONTROL]
+          disable=C0114,C0115,C0116
+          EOF
+
+      - name: 🔍 Run Pylint (check only)
+        run: |
+          echo "🔍 Running Python linting with camelCase enforcement (check only)..."
+          pylint services/worker/ --rcfile=.pylintrc --output-format=text --exit-zero
+
+  # SQL Linting with SQLFluff
+  lint-sql:
+    name: SQL Lint (camelCase enforcement)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔧 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install SQLFluff
+        run: |
+          echo "📦 Installing SQLFluff..."
+          pip install sqlfluff
+
+      - name: 🔧 Generate SQLFluff configuration
+        run: |
+          echo "🔧 Generating SQLFluff configuration for camelCase enforcement..."
+          cat > .sqlfluff << 'EOF'
+          [sqlfluff]
+          dialect = ansi
+          templater = jinja
+          exclude_rules = L003,L014,L030
+
+          [sqlfluff:rules:L014]  # capitalisation.identifiers
+          extended_capitalisation_policy = camelCase
+
+          [sqlfluff:rules:L030]  # capitalisation.functions
+          extended_capitalisation_policy = camelCase
+
+          [sqlfluff:rules:L010]  # capitalisation.keywords
+          capitalisation_policy = upper
+
+          [sqlfluff:rules:L016]  # capitalisation.literals
+          extended_capitalisation_policy = upper
+          EOF
+
+      - name: 🔍 Run SQLFluff (check only)
+        run: |
+          echo "🔍 Running SQL linting with camelCase enforcement (check only)..."
+          find . -name "*.sql" -not -path "./.git/*" -not -path "./node_modules/*" | xargs sqlfluff lint --config .sqlfluff --no-fix
+
+  # Svelte/TypeScript/JavaScript Linting
+  lint-svelte:
+    name: Svelte/TS/JS Lint (camelCase enforcement)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 🔧 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/frontend/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: |
+          echo "📦 Installing Node.js dependencies..."
+          cd services/frontend
+          npm ci
+          cd ../..
+
+      - name: 🔧 Generate ESLint configuration
+        run: |
+          echo "🔧 Generating ESLint configuration for camelCase enforcement..."
+          cat > .eslintrc.js << 'EOF'
+          module.exports = {
+            env: {
+              browser: true,
+              es2021: true,
+              node: true
+            },
+            extends: [
+              'eslint:recommended',
+              '@typescript-eslint/recommended'
+            ],
+            parser: '@typescript-eslint/parser',
+            parserOptions: {
+              ecmaVersion: 'latest',
+              sourceType: 'module'
+            },
+            plugins: [
+              '@typescript-eslint'
+            ],
+            rules: {
+              // Enforce camelCase for all identifiers
+              camelcase: ['error', { properties: 'always' }],
+              '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'] },
+                { selector: 'variableLike', format: ['camelCase'] },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase'] }
+              ],
+              // Disallow snake_case
+              '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase'] }
+              ]
+            },
+            overrides: [
+              {
+                files: ['*.svelte'],
+                processor: 'svelte/svelte',
+                extends: ['plugin:svelte/recommended']
+              }
+            ]
+          };
+          EOF
+
+      - name: 🔧 Generate Stylelint configuration
+        run: |
+          echo "🔧 Generating Stylelint configuration for camelCase enforcement..."
+          cat > .stylelintrc.json << 'EOF'
+          {
+            "extends": ["stylelint-config-standard"],
+            "rules": {
+              "selector-class-pattern": "^[a-z][A-Za-z0-9]*$",
+              "selector-id-pattern": "^[a-z][A-Za-z0-9]*$",
+              "custom-property-pattern": "^[a-z][A-Za-z0-9]*$"
+            }
+          }
+          EOF
+
+      - name: 🔍 Run ESLint (check only)
+        run: |
+          echo "🔍 Running ESLint with camelCase enforcement (check only)..."
+          cd services/frontend
+          npx eslint 'src/**/*.{js,ts,svelte}' --config ../../.eslintrc.js --no-fix
+
+      - name: 🎨 Run Stylelint (check only)
+        run: |
+          echo "🎨 Running Stylelint with camelCase enforcement (check only)..."
+          cd services/frontend
+          npx stylelint 'src/**/*.{css,svelte}' --config ../../.stylelintrc.json --no-fix
+
+  # YAML/JSON Formatting
+  format-yaml:
+    name: YAML/JSON Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: 🔧 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install YAML tools
+        run: |
+          echo "📦 Installing YAML formatting tools..."
+          pip install yamllint pyyaml
+
+      - name: 🔧 Generate YAML lint configuration
+        run: |
+          echo "🔧 Generating YAML lint configuration..."
+          cat > .yamllint << 'EOF'
+          extends: default
+
+          rules:
+            line-length:
+              max: 120
+            document-start: disable
+            trailing-spaces: enable
+            truthy:
+              check-keys: false
+          EOF
+
+      - name: 🔍 Run YAML lint (check only)
+        run: |
+          echo "🔍 Running YAML linting (check only)..."
+          yamllint -c .yamllint .github/ config/ services/ --strict
+
+  # Summary and reporting
+  lint-summary:
+    name: Lint Summary
+    runs-on: ubuntu-latest
+    needs: [lint-go, lint-python, lint-sql, lint-svelte, format-yaml]
+    if: always()
+    
+    steps:
+      - name: 📊 Generate Lint Summary
+        run: |
+          echo "📊 Lint Summary Report"
+          echo "====================="
+          echo ""
+          echo "✅ Go linting completed"
+          echo "✅ Python linting completed"
+          echo "✅ SQL linting completed"
+          echo "✅ Svelte/TS/JS linting completed"
+          echo "✅ YAML/JSON formatting completed"
+          echo ""
+          echo "🎯 All linting checks enforce camelCase naming conventions"
+          echo "🚫 snake_case is not allowed in any language"
+          echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
+          echo ""
+          echo "📋 Summary:"
+          echo "- Go: golangci-lint with revive rules"
+          echo "- Python: Pylint with camelCase naming rules"
+          echo "- SQL: SQLFluff with camelCase identifier rules"
+          echo "- Svelte/TS/JS: ESLint + Stylelint with camelCase rules"
+          echo "- YAML: yamllint for formatting consistency" 

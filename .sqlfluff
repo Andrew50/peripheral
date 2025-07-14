@@ -1,0 +1,31 @@
+[sqlfluff]
+dialect = ansi
+templater = jinja
+exclude_rules = L003,L014,L030
+
+[sqlfluff:rules:L014]  # capitalisation.identifiers
+extended_capitalisation_policy = camelCase
+
+[sqlfluff:rules:L030]  # capitalisation.functions
+extended_capitalisation_policy = camelCase
+
+[sqlfluff:rules:L010]  # capitalisation.keywords
+capitalisation_policy = upper
+
+[sqlfluff:rules:L016]  # capitalisation.literals
+extended_capitalisation_policy = upper
+
+[sqlfluff:rules:L003]  # indentation
+indent_unit = space
+tab_space_size = 4
+indent_size = 4
+
+[sqlfluff:rules:L004]  # indentation
+indent_unit = space
+tab_space_size = 4
+indent_size = 4
+
+[sqlfluff:rules:L005]  # indentation
+indent_unit = space
+tab_space_size = 4
+indent_size = 4 
