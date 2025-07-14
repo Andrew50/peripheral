@@ -127,7 +127,7 @@
 
 	let bottomWindows: BottomWindow[] = [];
 	let nextWindowId = 1;
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' | 'pricing' = 'chart'; // For settings window
+	let activeTab: 'interface' | 'account' | 'appearance' | 'usage' = 'interface'; // For settings window
 
 	// Replay controls
 	let replaySpeed = 1.0;

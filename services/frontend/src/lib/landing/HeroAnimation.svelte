@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { onMount, onDestroy } from 'svelte';
-	import { startPricingPreload } from '$lib/utils/pricing-loader';
+	// Pricing preload removed - now handled directly in pricing page
 	import { createChart } from 'lightweight-charts';
 	import { fade } from 'svelte/transition';
 	import type { TimelineEvent } from '$lib/landing/timeline';
@@ -546,7 +546,7 @@
 		document.documentElement.style.setProperty('--hero-total-scroll', `${totalScroll}px`);
 		updateHeroProgress();
 		window.addEventListener('scroll', updateHeroProgress, { passive: true });
-		startPricingPreload();
+		// Pricing preload removed - now handled directly in pricing page
 
 		// Set loaded flag for fade-in
 		isLoaded = true;

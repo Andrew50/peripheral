@@ -11,12 +11,33 @@
 	import { subscriptionStatus, fetchCombinedSubscriptionAndUsage } from '$lib/utils/stores/stores';
 	import { privateRequest } from '$lib/utils/helpers/backend';
 
+	// Export initialTab prop to handle external tab selection
+	export let initialTab: 'interface' | 'account' | 'appearance' | 'usage' | 'chart' | 'format' =
+		'interface';
+
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'account';
+	let originalSettings: Settings = { ...get(settings) }; // Store original settings for comparison
+	let hasChanges = false; // Track if settings have been modified
 
-	// Add profile picture state
-	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
+	// Map old tab names to new ones for backward compatibility
+	function mapTabName(tab: string): 'interface' | 'account' | 'appearance' | 'usage' {
+		switch (tab) {
+			case 'chart':
+			case 'format':
+				return 'interface';
+			case 'account':
+				return 'account';
+			case 'appearance':
+				return 'appearance';
+			case 'usage':
+				return 'usage';
+			default:
+				return 'interface';
+		}
+	}
+
+	let activeTab: 'interface' | 'account' | 'appearance' | 'usage' = mapTabName(initialTab);
 
 	// Delete account variables
 	let showDeleteConfirmation = false;
@@ -43,19 +64,23 @@
 		initializeComponent();
 	});
 
+	// Function to check if settings have changed
+	function checkForChanges() {
+		hasChanges = JSON.stringify(tempSettings) !== JSON.stringify(originalSettings);
+	}
+
 	function saveSettings() {
-		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
-			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
-				settings.set(tempSettings);
-				errorMessage = '';
-			});
-		} else {
-			errorMessage = 'Chart rows and columns must be greater than 0';
-		}
+		privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
+			settings.set(tempSettings);
+			originalSettings = { ...tempSettings }; // Update original settings after save
+			hasChanges = false; // Reset change flag
+			errorMessage = '';
+		});
 	}
 
 	function resetSettings() {
-		tempSettings = { ...get(settings) };
+		tempSettings = { ...originalSettings }; // Reset to original settings
+		hasChanges = false; // Reset change flag
 		saveSettings();
 	}
 
@@ -63,11 +88,6 @@
 		if (event.key === 'Enter') {
 			saveSettings();
 		}
-	}
-
-	// Generate simple default avatar
-	function generateDefaultAvatar() {
-		return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#2a2e36"/><text x="50" y="60" font-family="Arial" font-size="36" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
 	}
 
 	// Function to handle subscription cancellation
@@ -125,16 +145,16 @@
 	<!-- Full settings view for all authenticated users -->
 	<div class="tabs">
 		<button
-			class="tab {activeTab === 'chart' ? 'active' : ''}"
-			on:click={() => (activeTab = 'chart')}
+			class="tab {activeTab === 'interface' ? 'active' : ''}"
+			on:click={() => (activeTab = 'interface')}
 		>
-			Chart
+			Interface
 		</button>
 		<button
-			class="tab {activeTab === 'format' ? 'active' : ''}"
-			on:click={() => (activeTab = 'format')}
+			class="tab {activeTab === 'usage' ? 'active' : ''}"
+			on:click={() => (activeTab = 'usage')}
 		>
-			Format
+			Usage
 		</button>
 		<button
 			class="tab {activeTab === 'account' ? 'active' : ''}"
@@ -142,50 +162,34 @@
 		>
 			Account
 		</button>
-		<button
+		<!-- <button
 			class="tab {activeTab === 'appearance' ? 'active' : ''}"
 			on:click={() => (activeTab = 'appearance')}
 		>
 			Appearance
-		</button>
+		</button> -->
 	</div>
 
 	<div class="settings-content">
-		<!-- Chart Settings Tab -->
-		{#if activeTab === 'chart'}
-			<div class="chart-settings">
-				<h3>Chart Settings</h3>
+		<!-- Interface Settings Tab -->
+		{#if activeTab === 'interface'}
+			<div class="interface-settings">
+				<h3>Interface Settings</h3>
 
 				<div class="settings-section">
-					<h4>Chart Layout</h4>
-					<label class="setting-item">
-						<span>Chart Rows:</span>
-						<input
-							type="number"
-							bind:value={tempSettings.chartRows}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
-					</label>
-
-					<label class="setting-item">
-						<span>Chart Columns:</span>
-						<input
-							type="number"
-							bind:value={tempSettings.chartColumns}
-							min="1"
-							on:keypress={handleKeyPress}
-						/>
-					</label>
-
+					<h4>Chart</h4>
 					<label class="setting-item">
 						<span>Show Dollar Volume:</span>
-						<input type="checkbox" bind:checked={tempSettings.dolvol} />
+						<input type="checkbox" bind:checked={tempSettings.dolvol} on:change={checkForChanges} />
 					</label>
 
 					<label class="setting-item">
 						<span>Show SEC Filings:</span>
-						<input type="checkbox" bind:checked={tempSettings.showFilings} />
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.showFilings}
+							on:change={checkForChanges}
+						/>
 					</label>
 				</div>
 
@@ -198,29 +202,31 @@
 							bind:value={tempSettings.adrPeriod}
 							min="1"
 							on:keypress={handleKeyPress}
+							on:change={checkForChanges}
 						/>
 					</label>
 				</div>
-			</div>
-		{/if}
 
-		<!-- Format Settings Tab -->
-		{#if activeTab === 'format'}
-			<div class="format-settings">
-				<h3>Format Settings</h3>
-
-				<div class="settings-section">
+				<!-- <div class="settings-section">
 					<h4>Time & Sales</h4>
 					<label class="setting-item">
 						<span>Show trades less than 100 shares:</span>
-						<input type="checkbox" bind:checked={tempSettings.filterTaS} />
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.filterTaS}
+							on:change={checkForChanges}
+						/>
 					</label>
 
 					<label class="setting-item">
 						<span>Divide Time and Sales by 100:</span>
-						<input type="checkbox" bind:checked={tempSettings.divideTaS} />
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.divideTaS}
+							on:change={checkForChanges}
+						/>
 					</label>
-				</div>
+				</div> -->
 			</div>
 		{/if}
 
@@ -228,190 +234,6 @@
 		{#if activeTab === 'account'}
 			<div class="account-settings">
 				<h3>Account Settings</h3>
-
-				<div class="profile-section">
-					<h2>Profile</h2>
-					<div class="profile-content">
-						<div class="profile-picture-container">
-							{#if profilePic}
-								<img src={profilePic} alt="Profile" class="profile-image" />
-							{:else}
-								<img src={generateDefaultAvatar()} alt="Profile" class="profile-image" />
-							{/if}
-						</div>
-					</div>
-				</div>
-
-				<!-- Subscription Management -->
-				<div class="subscription-section">
-					<h4>Subscription</h4>
-					{#if $subscriptionStatus.loading}
-						<p>Loading subscription information...</p>
-					{:else if $subscriptionStatus.error}
-						<p class="error-text">{$subscriptionStatus.error}</p>
-					{:else if $subscriptionStatus.isActive}
-						<div class="subscription-info">
-							{#if $subscriptionStatus.isCanceling}
-								<p class="subscription-status">Status: <span class="canceling">Canceling</span></p>
-								{#if $subscriptionStatus.currentPlan}
-									<p>Plan: {$subscriptionStatus.currentPlan}</p>
-								{/if}
-								{#if $subscriptionStatus.currentPeriodEnd}
-									<p>
-										Access until: {new Date(
-											$subscriptionStatus.currentPeriodEnd * 1000
-										).toLocaleDateString()}
-									</p>
-								{/if}
-								<p class="canceling-note">
-									Your subscription will remain active until the end of your current billing period.
-								</p>
-							{:else}
-								<p class="subscription-status">Status: <span class="active">Active</span></p>
-								{#if $subscriptionStatus.currentPlan}
-									<p>Plan: {$subscriptionStatus.currentPlan}</p>
-								{/if}
-								{#if $subscriptionStatus.currentPeriodEnd}
-									<p>
-										Next billing: {new Date(
-											$subscriptionStatus.currentPeriodEnd * 1000
-										).toLocaleDateString()}
-									</p>
-								{/if}
-							{/if}
-							<div class="subscription-buttons">
-								<button class="manage-subscription-button" on:click={handleManageSubscription}>
-									Manage Subscription
-								</button>
-								{#if !$subscriptionStatus.isCanceling}
-									{#if !showCancelConfirmation}
-										<button
-											class="cancel-subscription-button"
-											on:click={() => (showCancelConfirmation = true)}
-										>
-											Cancel Subscription
-										</button>
-									{:else}
-										<div class="cancel-confirmation">
-											<p class="warning-text">
-												⚠️ This will cancel your subscription at the end of your current billing
-												period.
-											</p>
-											<p>Type <strong>CANCEL</strong> to confirm:</p>
-											<input
-												type="text"
-												bind:value={cancelConfirmationText}
-												placeholder="Type CANCEL here"
-												class="cancel-input"
-											/>
-											<div class="cancel-buttons">
-												<button
-													class="cancel-button"
-													on:click={() => {
-														showCancelConfirmation = false;
-														cancelConfirmationText = '';
-													}}
-												>
-													Keep Subscription
-												</button>
-												<button
-													class="confirm-cancel-button"
-													disabled={cancelConfirmationText !== 'CANCEL' || cancelingSubscription}
-													on:click={handleCancelSubscription}
-												>
-													{cancelingSubscription ? 'Canceling...' : 'Cancel Subscription'}
-												</button>
-											</div>
-										</div>
-									{/if}
-								{/if}
-							</div>
-						</div>
-					{:else}
-						<div class="subscription-info">
-							<p class="subscription-status">Status: <span class="inactive">Free Plan</span></p>
-							<p>Upgrade to access premium features</p>
-							<button class="upgrade-button" on:click={() => goto('/pricing')}> View Plans </button>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Usage Information -->
-				<div class="subscription-section">
-					<h4>Usage & Limits</h4>
-					{#if $subscriptionStatus.loading}
-						<p>Loading usage information...</p>
-					{:else if $subscriptionStatus.error}
-						<p class="error-text">{$subscriptionStatus.error}</p>
-					{:else}
-						<div class="usage-info">
-							<!-- Queries Section -->
-							<div class="usage-section">
-								<h5>Queries</h5>
-								<div class="usage-item">
-									<span class="usage-label">Total Queries:</span>
-									<span class="usage-value">{$subscriptionStatus.totalCreditsRemaining || 0}</span>
-								</div>
-								<div class="usage-item">
-									<span class="usage-label">Subscription Queries:</span>
-									<span class="usage-value"
-										>{$subscriptionStatus.subscriptionCreditsRemaining || 0}</span
-									>
-								</div>
-								<div class="usage-item">
-									<span class="usage-label">Purchased Queries:</span>
-									<span class="usage-value"
-										>{$subscriptionStatus.purchasedCreditsRemaining || 0}</span
-									>
-								</div>
-								{#if $subscriptionStatus.isActive}
-									<div class="usage-item">
-										<span class="usage-label">Monthly Allocation:</span>
-										<span class="usage-value"
-											>{$subscriptionStatus.subscriptionCreditsAllocated || 0}</span
-										>
-									</div>
-								{/if}
-							</div>
-
-							<!-- Alerts Section -->
-							<div class="usage-section">
-								<h5>Alerts</h5>
-								<div class="usage-item">
-									<span class="usage-label">Active Alerts:</span>
-									<span class="usage-value">
-										{$subscriptionStatus.activeAlerts || 0}
-										{#if $subscriptionStatus.alertsLimit !== undefined}
-											/ {$subscriptionStatus.alertsLimit}
-										{/if}
-									</span>
-								</div>
-								<div class="usage-item">
-									<span class="usage-label">Strategy Alerts:</span>
-									<span class="usage-value">
-										{$subscriptionStatus.activeStrategyAlerts || 0}
-										{#if $subscriptionStatus.strategyAlertsLimit !== undefined}
-											/ {$subscriptionStatus.strategyAlertsLimit}
-										{/if}
-									</span>
-								</div>
-							</div>
-
-							<!-- Purchase Queries Button -->
-							{#if $subscriptionStatus.isActive}
-								<button
-									class="upgrade-button"
-									on:click={() => goto('/pricing')}
-									style="margin-top: 1rem;"
-								>
-									Purchase More Queries
-								</button>
-							{:else}
-								<p class="upgrade-note">Upgrade to a paid plan to purchase additional queries</p>
-							{/if}
-						</div>
-					{/if}
-				</div>
 
 				<!-- Account Actions -->
 				<div class="account-actions">
@@ -466,7 +288,7 @@
 		{/if}
 
 		<!-- Appearance Settings Tab -->
-		{#if activeTab === 'appearance'}
+		<!-- {#if activeTab === 'appearance'}
 			<div class="appearance-settings">
 				<h3>Appearance Settings</h3>
 
@@ -477,14 +299,14 @@
 							<button
 								class="color-scheme-option {tempSettings.colorScheme === key ? 'selected' : ''}"
 								on:click={() => {
-									tempSettings.colorScheme = key;
-									applyColorScheme(key);
+									tempSettings = { ...tempSettings, colorScheme: key };
+									applyColorScheme(scheme);
 								}}
 							>
 								<div class="color-preview">
-									<div class="color-bar" style="background-color: {scheme.primary}"></div>
-									<div class="color-bar" style="background-color: {scheme.secondary}"></div>
-									<div class="color-bar" style="background-color: {scheme.accent}"></div>
+									<div class="color-bar" style="background-color: {scheme.c1}"></div>
+									<div class="color-bar" style="background-color: {scheme.c2}"></div>
+									<div class="color-bar" style="background-color: {scheme.c3}"></div>
 								</div>
 								<span class="scheme-name">{scheme.name}</span>
 							</button>
@@ -492,13 +314,199 @@
 					</div>
 				</div>
 			</div>
+		{/if} -->
+
+		<!-- Usage Tab -->
+		{#if activeTab === 'usage'}
+			<div class="usage-settings">
+				<h3>Usage</h3>
+				<div class="usage-layout">
+					<!-- Usage Information -->
+					<div class="settings-section">
+						<h4>Usage & Limits</h4>
+						{#if $subscriptionStatus.loading}
+							<p>Loading usage information...</p>
+						{:else if $subscriptionStatus.error}
+							<p class="error-text">{$subscriptionStatus.error}</p>
+						{:else}
+							<div class="usage-info">
+								<!-- Queries Section -->
+								<div class="usage-section">
+									<h5>Queries</h5>
+									<div class="usage-item">
+										<span class="usage-label">Total Queries:</span>
+										<span class="usage-value">{$subscriptionStatus.totalCreditsRemaining || 0}</span
+										>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Subscription Queries:</span>
+										<span class="usage-value"
+											>{$subscriptionStatus.subscriptionCreditsRemaining || 0}</span
+										>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Purchased Queries:</span>
+										<span class="usage-value"
+											>{$subscriptionStatus.purchasedCreditsRemaining || 0}</span
+										>
+									</div>
+									{#if $subscriptionStatus.isActive}
+										<div class="usage-item">
+											<span class="usage-label">Monthly Allocation:</span>
+											<span class="usage-value"
+												>{$subscriptionStatus.subscriptionCreditsAllocated || 0}</span
+											>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Alerts Section -->
+								<div class="usage-section">
+									<h5>Alerts</h5>
+									<div class="usage-item">
+										<span class="usage-label">Active Alerts:</span>
+										<span class="usage-value">
+											{$subscriptionStatus.activeAlerts || 0}
+											{#if $subscriptionStatus.alertsLimit !== undefined}
+												/ {$subscriptionStatus.alertsLimit}
+											{/if}
+										</span>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Strategy Alerts:</span>
+										<span class="usage-value">
+											{$subscriptionStatus.activeStrategyAlerts || 0}
+											{#if $subscriptionStatus.strategyAlertsLimit !== undefined}
+												/ {$subscriptionStatus.strategyAlertsLimit}
+											{/if}
+										</span>
+									</div>
+								</div>
+
+								<!-- Purchase Queries Button -->
+								{#if !$subscriptionStatus.isActive}
+									<p class="upgrade-note">Upgrade to a paid plan to purchase additional queries</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+
+					<!-- Subscription Management -->
+					<div class="settings-section">
+						<h4>Subscription</h4>
+						{#if $subscriptionStatus.loading}
+							<p>Loading subscription information...</p>
+						{:else if $subscriptionStatus.error}
+							<p class="error-text">{$subscriptionStatus.error}</p>
+						{:else if $subscriptionStatus.isActive}
+							<div class="subscription-info">
+								{#if $subscriptionStatus.isCanceling}
+									<p class="subscription-status">
+										Status: <span class="canceling">Canceling</span>
+									</p>
+									{#if $subscriptionStatus.currentPlan}
+										<p>Plan: {$subscriptionStatus.currentPlan}</p>
+									{/if}
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p>
+											Access until: {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
+									<p class="canceling-note">
+										Your subscription will remain active until the end of your current billing
+										period.
+									</p>
+								{:else}
+									<p class="subscription-status">Status: <span class="active">Active</span></p>
+									{#if $subscriptionStatus.currentPlan}
+										<p>Plan: {$subscriptionStatus.currentPlan}</p>
+									{/if}
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p>
+											Next billing: {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
+								{/if}
+								<div class="subscription-buttons">
+									<button class="manage-subscription-button" on:click={handleManageSubscription}>
+										Manage Subscription
+									</button>
+									{#if !$subscriptionStatus.isCanceling}
+										{#if !showCancelConfirmation}
+											<button
+												class="cancel-subscription-button"
+												on:click={() => (showCancelConfirmation = true)}
+											>
+												Cancel Subscription
+											</button>
+										{:else}
+											<div class="cancel-confirmation">
+												<p class="warning-text">
+													⚠️ This will cancel your subscription at the end of your current billing
+													period.
+												</p>
+												<p>Type <strong>CANCEL</strong> to confirm:</p>
+												<input
+													type="text"
+													bind:value={cancelConfirmationText}
+													placeholder="Type CANCEL here"
+													class="cancel-input"
+												/>
+												<div class="cancel-buttons">
+													<button
+														class="cancel-button"
+														on:click={() => {
+															showCancelConfirmation = false;
+															cancelConfirmationText = '';
+														}}
+													>
+														Keep Subscription
+													</button>
+													<button
+														class="confirm-cancel-button"
+														disabled={cancelConfirmationText !== 'CANCEL' || cancelingSubscription}
+														on:click={handleCancelSubscription}
+													>
+														{cancelingSubscription ? 'Canceling...' : 'Cancel Subscription'}
+													</button>
+												</div>
+											</div>
+										{/if}
+									{/if}
+									<button class="upgrade-button" on:click={() => goto('/pricing')}>
+										Purchase More Queries
+									</button>
+								</div>
+							</div>
+						{:else}
+							<div class="subscription-info">
+								<p class="subscription-status">Status: <span class="inactive">Free Plan</span></p>
+								<p>Upgrade to access premium features</p>
+								<button class="upgrade-button" on:click={() => goto('/pricing')}>
+									View Plans
+								</button>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
 		{/if}
 
-		<!-- Settings Actions -->
-		<div class="settings-actions">
-			<button class="save-button" on:click={saveSettings}>Save Settings</button>
-			<button class="reset-button" on:click={resetSettings}>Reset to Default</button>
-		</div>
+		<!-- Settings Actions - Only show in Interface tab -->
+		{#if activeTab === 'interface'}
+			<div class="settings-actions">
+				<button class="save-button {hasChanges ? 'has-changes' : ''}" on:click={saveSettings}
+					>Save Settings</button
+				>
+				<button class="reset-button {hasChanges ? 'has-changes' : ''}" on:click={resetSettings}
+					>Reset</button
+				>
+			</div>
+		{/if}
 	</div>
 
 	{#if errorMessage}
@@ -540,8 +548,8 @@
 	}
 
 	.tab.active {
-		color: var(--c3);
-		border-bottom-color: var(--c3);
+		color: var(--f1);
+		border-bottom-color: var(--f1);
 		background-color: rgba(255, 255, 255, 0.03);
 	}
 
@@ -551,10 +559,10 @@
 		overflow-y: auto;
 	}
 
-	.chart-settings,
-	.format-settings,
+	.interface-settings,
 	.account-settings,
-	.appearance-settings {
+	.appearance-settings,
+	.usage-settings {
 		max-width: 600px;
 	}
 
@@ -599,61 +607,7 @@
 	.setting-item input[type='checkbox'] {
 		width: 18px;
 		height: 18px;
-		accent-color: var(--c3);
-	}
-
-	.profile-section {
-		margin-bottom: 2rem;
-		padding: 1.5rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		text-align: center;
-	}
-
-	.profile-picture-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.profile-picture {
-		width: 80px;
-		height: 80px;
-		border-radius: 50%;
-		overflow: hidden;
-		border: 3px solid var(--c3);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.profile-image {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-
-	.username-display {
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.subscription-section {
-		margin-bottom: 2rem;
-		padding: 1.5rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-	}
-
-	.subscription-section h4 {
-		margin: 0 0 1rem 0;
-		color: var(--f1);
-		font-size: 1rem;
-		font-weight: 600;
+		accent-color: var(--f1);
 	}
 
 	.subscription-info {
@@ -695,7 +649,7 @@
 	.manage-subscription-button,
 	.upgrade-button {
 		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
+		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -708,7 +662,7 @@
 
 	.manage-subscription-button:hover,
 	.upgrade-button:hover {
-		background-color: var(--c3-hover);
+		background-color: var(--secondary-button-hover, #4b5563);
 	}
 
 	.cancel-subscription-button {
@@ -934,7 +888,7 @@
 	}
 
 	.color-scheme-option.selected {
-		border-color: var(--c3);
+		border-color: var(--f1);
 		background-color: rgba(255, 255, 255, 0.03);
 	}
 
@@ -962,7 +916,7 @@
 		gap: 1rem;
 		margin-top: 2rem;
 		padding-top: 2rem;
-		border-top: 1px solid var(--c3);
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.save-button,
@@ -978,21 +932,39 @@
 	}
 
 	.save-button {
-		background-color: var(--c3);
+		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
+		transition: background-color 0.2s;
 	}
 
 	.save-button:hover {
-		background-color: var(--c3-hover);
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.save-button.has-changes {
+		background-color: #3b82f6;
+	}
+
+	.save-button.has-changes:hover {
+		background-color: #2563eb;
 	}
 
 	.reset-button {
 		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
+		transition: background-color 0.2s;
 	}
 
 	.reset-button:hover {
 		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.reset-button.has-changes {
+		background-color: #3b82f6;
+	}
+
+	.reset-button.has-changes:hover {
+		background-color: #2563eb;
 	}
 
 	.error-message {
@@ -1067,5 +1039,20 @@
 		color: var(--f1);
 		font-weight: 600;
 		font-size: 1rem;
+	}
+
+	.usage-settings {
+		max-width: 1200px;
+	}
+
+	.usage-layout {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2rem;
+	}
+
+	.usage-layout > .settings-section {
+		flex: 1;
+		min-width: 300px;
 	}
 </style>
