@@ -60,6 +60,7 @@ export interface TradeData {
 	exchange: number;
 	prevClose: number;
 	conditions: Array<number>;
+	shouldUpdatePrice: boolean;
 }
 export interface QuoteData {
 	timestamp: number;
