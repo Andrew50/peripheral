@@ -92,7 +92,7 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 		}
 		response.ResponseImages = responseImages
 	}
-	if err := SetPythonAgentResultToCache(ctx, conn, workerResult.ExecutionID, workerResult); err != nil {
+	if err := SetPythonAgentResultToCache(ctx, conn, workerResult.ExecutionID, &response); err != nil {
 		log.Printf("Error setting python agent result to cache: %v", err)
 	}
 	for i := range response.Plots {
@@ -199,7 +199,7 @@ func waitForPythonAgentResultWithProgress(ctx context.Context, conn *data.Conn, 
 		}
 	}
 }
-func SetPythonAgentResultToCache(ctx context.Context, conn *data.Conn, executionID string, result *WorkerPythonAgentResult) error {
+func SetPythonAgentResultToCache(ctx context.Context, conn *data.Conn, executionID string, result *RunPythonAgentResponse) error {
 	cacheKey := fmt.Sprintf("python_agent_result_%s", executionID)
 	cacheValue, err := json.Marshal(result)
 	if err != nil {
@@ -208,7 +208,7 @@ func SetPythonAgentResultToCache(ctx context.Context, conn *data.Conn, execution
 	conn.Cache.Set(ctx, cacheKey, string(cacheValue), 0)
 	return nil
 }
-func GetPythonAgentResultFromCache(ctx context.Context, conn *data.Conn, executionID string) (*WorkerPythonAgentResult, error) {
+func GetPythonAgentResultFromCache(ctx context.Context, conn *data.Conn, executionID string) (*RunPythonAgentResponse, error) {
 	cacheKey := fmt.Sprintf("python_agent_result_%s", executionID)
 	cacheValue, err := conn.Cache.Get(ctx, cacheKey).Result()
 	if err != nil {
@@ -216,7 +216,7 @@ func GetPythonAgentResultFromCache(ctx context.Context, conn *data.Conn, executi
 			return nil, nil // NEED TO IMPLEMENT THIS
 		}
 	}
-	var result WorkerPythonAgentResult
+	var result RunPythonAgentResponse
 	if err := json.Unmarshal([]byte(cacheValue), &result); err != nil {
 		return nil, fmt.Errorf("error unmarshaling result: %v", err)
 	}
