@@ -119,7 +119,7 @@ func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) er
 	for _, tweet := range tweets {
 		// Extract ticker symbols from the tweet text
 		tickers := extractTickersFromTweet(tweet.Text)
-		SendTweet(conn, "testing tweet: "+tweet.Text)
+		SendTweet(conn, tweet.Text)
 		socket.SendAlertToAllUsers(socket.AlertMessage{
 			AlertID:    1,
 			Timestamp:  time.Now().Unix() * 1000,
