@@ -32,7 +32,6 @@ class SandboxConfig:
     allowed_builtins: Dict[str, Any]
     execution_timeout: float = 30.0
     enable_plots: bool = True
-    enable_stdout_capture: bool = True
     max_output_size: int = 1024 * 1024  # 1MB max output
 
 
@@ -91,7 +90,7 @@ class PythonSandbox:
             logger.info("🚀 Starting code execution...")
             try:
                 result = await asyncio.wait_for(
-                    self._execute_with_capture(code, safe_globals, safe_locals, execution_id),
+                    self._execute_with_capture(code, safe_globals, safe_locals),
                     timeout=self.config.execution_timeout
                 )
                 
@@ -100,7 +99,7 @@ class PythonSandbox:
                 return SandboxResult(
                     success=True,
                     result=result['return_value'],
-                    prints=result['stdout'],
+                    prints=result['prints'],
                     stderr=result['stderr'],
                     plots=self.plots_collection,
                     response_images=self.response_images,
@@ -137,7 +136,7 @@ class PythonSandbox:
         self.plot_counter = 0
     
     async def _execute_with_capture(self, code: str, safe_globals: Dict[str, Any], 
-                                  safe_locals: Dict[str, Any], execution_id: str = None) -> Dict[str, Any]:
+                                  safe_locals: Dict[str, Any]) -> Dict[str, Any]:
         """Execute code with stdout/stderr and plot capture"""
         
         stdout_buffer = io.StringIO()
@@ -145,42 +144,24 @@ class PythonSandbox:
         return_value = None
         
         try:
-            # Capture stdout/stderr if enabled
-            if self.config.enable_stdout_capture:
-                with contextlib.redirect_stdout(stdout_buffer), \
-                     contextlib.redirect_stderr(stderr_buffer), \
-                     self._plotly_capture_context():
-                    
-                    # Execute the code
-                    exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
-                    
-                    # If there's a main function or return value, capture it
-                    if 'code' in safe_locals and callable(safe_locals['code']):
-                        return_value = safe_locals['code']()
-                    elif len(safe_locals) == 1:
-                        # If only one variable was created, return it
-                        return_value = list(safe_locals.values())[0]
-            else:
-                # Execute without capture
-                with self._plotly_capture_context():
-                    exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
-                    
-                    if 'code' in safe_locals and callable(safe_locals['code']):
-                        return_value = safe_locals['code']()
-                    elif len(safe_locals) == 1:
-                        return_value = list(safe_locals.values())[0]
-            
-            # Get captured output
-            stdout_content = stdout_buffer.getvalue()
+            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
+            # Execute with stdout/stderr capture
+            code_func = safe_locals.get('code')
+            if not code_func or not callable(code_func):
+                func = safe_locals.get('main')
+                if func and callable(func):
+                    code_func = func
+                
+            function_prints = ""
+            with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
+                return_value = code_func()
+            function_prints = stdout_buffer.getvalue()
             stderr_content = stderr_buffer.getvalue()
             
-            # Limit output size
-            if len(stdout_content) > self.config.max_output_size:
-                stdout_content = stdout_content[:self.config.max_output_size] + "\n... (output truncated)"
             
             return {
                 'return_value': return_value,
-                'stdout': stdout_content,
+                'prints': function_prints,
                 'stderr': stderr_content
             }
             
@@ -301,7 +282,7 @@ class PythonSandbox:
                 
                 # Generate PNG as base64
                 try:
-                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, self.execution_id)
+                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Execution ID", self.execution_id)
                     if png_base64:
                         self.response_images.append(png_base64)
                         logger.debug(f"Generated PNG for plot {plot_id}")
@@ -535,7 +516,7 @@ def create_default_config() -> SandboxConfig:
         },
         execution_timeout=30.0,
         enable_plots=True,
-        enable_stdout_capture=True
+        max_output_size=1024 * 1024 # 1MB max output
     )
 
 

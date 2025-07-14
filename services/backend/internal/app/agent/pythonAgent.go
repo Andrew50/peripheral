@@ -24,15 +24,22 @@ type Plot struct {
 	TitleTicker string           `json:"titleTicker,omitempty"`
 }
 
+// PythonAgentPlotData represents the full plotly data from Python
+type PythonAgentPlotData struct {
+	PlotID      int            `json:"plotID"`
+	Data        map[string]any `json:"data"`                  // Full plotly figure object
+	TitleTicker string         `json:"titleTicker,omitempty"` // Ticker for the title
+}
+
 type RunPythonAgentArgs struct {
 	Prompt string `json:"prompt"`
 }
 type RunPythonAgentResponse struct {
 	Result         any             `json:"result,omitempty"`
-	ExecutionID    string          `json:"execution_id,omitempty"`
+	ExecutionID    string          `json:"executionID,omitempty"`
 	Prints         string          `json:"prints,omitempty"`
 	Plots          []Plot          `json:"plots,omitempty"`
-	ResponseImages []ResponseImage `json:"response_images,omitempty"`
+	ResponseImages []ResponseImage `json:"responseImages,omitempty"`
 }
 
 func RunPythonAgent(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -63,20 +70,29 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 		response.Prints = workerResult.Prints
 	}
 	if len(workerResult.Plots) > 0 {
-		response.Plots = workerResult.Plots
+		// Convert PythonAgentPlotData to Plot with extraction
+		plots := make([]Plot, len(workerResult.Plots))
+		for i, plotData := range workerResult.Plots {
+			plots[i] = Plot{
+				PlotID:      plotData.PlotID,
+				TitleTicker: plotData.TitleTicker,
+			}
+			// Extract plot attributes from the full plotly data
+			extractPythonAgentPlotAttributes(&plots[i], plotData.Data)
+		}
+		response.Plots = plots
 	}
 	if len(workerResult.ResponseImages) > 0 {
 		responseImages := make([]ResponseImage, len(workerResult.ResponseImages))
 		for i, img := range workerResult.ResponseImages {
 			responseImages[i] = ResponseImage{
-				Data:   img.Data,
+				Data:   img, // img is now a string, not a struct
 				Format: "png",
 			}
 		}
 		response.ResponseImages = responseImages
 	}
-	err = SetPythonAgentResultToCache(ctx, conn, workerResult.ExecutionID, workerResult)
-	if err != nil {
+	if err := SetPythonAgentResultToCache(ctx, conn, workerResult.ExecutionID, workerResult); err != nil {
 		log.Printf("Error setting python agent result to cache: %v", err)
 	}
 	for i := range response.Plots {
@@ -86,13 +102,13 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 }
 
 type WorkerPythonAgentResult struct {
-	Success        bool            `json:"success"`
-	Result         any             `json:"result,omitempty"`
-	Prints         string          `json:"prints,omitempty"`
-	Plots          []Plot          `json:"plots,omitempty"`
-	ResponseImages []ResponseImage `json:"response_images,omitempty"`
-	ExecutionID    string          `json:"execution_id,omitempty"`
-	ErrorMessage   string          `json:"error,omitempty"`
+	Success        bool                  `json:"success"`
+	Result         any                   `json:"result,omitempty"`
+	Prints         string                `json:"prints,omitempty"`
+	Plots          []PythonAgentPlotData `json:"plots,omitempty"`
+	ResponseImages []string              `json:"responseImages,omitempty"`
+	ExecutionID    string                `json:"executionID,omitempty"`
+	ErrorMessage   string                `json:"error,omitempty"`
 }
 
 func callWorkerPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunPythonAgentArgs, progressCallback ProgressCallback) (*WorkerPythonAgentResult, error) {
@@ -165,7 +181,7 @@ func waitForPythonAgentResultWithProgress(ctx context.Context, conn *data.Conn, 
 						fmt.Println("resultJSON", string(resultJSON))
 						err = json.Unmarshal(resultJSON, &result)
 						if err != nil {
-							return nil, fmt.Errorf("error unmarshaling backtest result: %v", err)
+							return nil, fmt.Errorf("error unmarshaling python agent result: %v", err)
 						}
 					}
 
@@ -211,4 +227,116 @@ func InvalidatePythonAgentResultCache(ctx context.Context, conn *data.Conn, exec
 	cacheKey := fmt.Sprintf("python_agent_result_%s", executionID)
 
 	return conn.Cache.Del(ctx, cacheKey).Err()
+}
+
+// extractPythonAgentPlotAttributes extracts chart attributes from plotly JSON data (similar to backtest)
+func extractPythonAgentPlotAttributes(plot *Plot, plotData map[string]any) {
+	if plotData == nil {
+		return
+	}
+
+	// Safely convert plotData["data"] to []map[string]any
+	if dataSlice, ok := plotData["data"].([]interface{}); ok {
+		converted := make([]map[string]any, len(dataSlice))
+		for i, v := range dataSlice {
+			if m, ok := v.(map[string]any); ok {
+				converted[i] = m
+			} else {
+				converted[i] = nil // or handle error as needed
+			}
+		}
+		plot.Data = converted
+	}
+
+	// Extract chart title
+	if layout, ok := plotData["layout"].(map[string]any); ok {
+		if title, ok := layout["title"].(map[string]any); ok {
+			if titleText, ok := title["text"].(string); ok {
+				plot.Title = titleText
+			}
+		} else if titleStr, ok := layout["title"].(string); ok {
+			plot.Title = titleStr
+		}
+	}
+
+	// Extract chart type and length from data traces
+	if dataTraces, ok := plotData["data"].([]interface{}); ok && len(dataTraces) > 0 {
+		plot.Length = len(dataTraces)
+
+		// Get chart type from first trace
+		if firstTrace, ok := dataTraces[0].(map[string]any); ok {
+			if traceType, ok := firstTrace["type"].(string); ok {
+				plot.ChartType = mapPythonAgentPlotlyTypeToChartType(traceType, firstTrace)
+			}
+		}
+	}
+
+	// Extract minimal layout information
+	if layout, ok := plotData["layout"].(map[string]any); ok {
+		minimalLayout := make(map[string]any)
+
+		// Extract axis titles
+		if xaxis, ok := layout["xaxis"].(map[string]any); ok {
+			if xaxisTitle, ok := xaxis["title"].(map[string]any); ok {
+				if titleText, ok := xaxisTitle["text"].(string); ok {
+					minimalLayout["xaxis"] = map[string]any{"title": titleText}
+				}
+			} else if titleStr, ok := xaxis["title"].(string); ok {
+				minimalLayout["xaxis"] = map[string]any{"title": titleStr}
+			}
+		}
+
+		if yaxis, ok := layout["yaxis"].(map[string]any); ok {
+			if yaxisTitle, ok := yaxis["title"].(map[string]any); ok {
+				if titleText, ok := yaxisTitle["text"].(string); ok {
+					minimalLayout["yaxis"] = map[string]any{"title": titleText}
+				}
+			} else if titleStr, ok := yaxis["title"].(string); ok {
+				minimalLayout["yaxis"] = map[string]any{"title": titleStr}
+			}
+		}
+
+		// Extract dimensions
+		if width, ok := layout["width"]; ok {
+			minimalLayout["width"] = width
+		}
+		if height, ok := layout["height"]; ok {
+			minimalLayout["height"] = height
+		}
+
+		plot.Layout = minimalLayout
+	}
+}
+
+// mapPythonAgentPlotlyTypeToChartType converts plotly trace types to standard chart types
+func mapPythonAgentPlotlyTypeToChartType(traceType string, trace map[string]any) string {
+	switch traceType {
+	case "scatter":
+		if mode, ok := trace["mode"].(string); ok {
+			if mode == "lines" {
+				return "line"
+			}
+		}
+		return "scatter"
+	case "line":
+		return "line"
+	case "bar":
+		return "bar"
+	case "histogram":
+		return "histogram"
+	case "heatmap":
+		return "heatmap"
+	case "box":
+		return "bar" // Fallback
+	case "violin":
+		return "bar" // Fallback
+	case "pie":
+		return "bar" // Fallback
+	case "candlestick":
+		return "line" // Fallback
+	case "ohlc":
+		return "line" // Fallback
+	default:
+		return "line"
+	}
 }
