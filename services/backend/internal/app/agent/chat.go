@@ -178,9 +178,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error building planning prompt: %w", err)
 			}
-			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "defaultSystemPrompt", activeResults, accumulatedThoughts)
 		} else {
-			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "IntermediateSystemPrompt", activeResults, accumulatedThoughts)
 		}
 		if err != nil {
 			// Mark as error instead of deleting for debugging

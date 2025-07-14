@@ -216,20 +216,16 @@ type ResponseImage struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, systemPromptFile string, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
-	if initialRound {
-		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
-	} else {
-		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
+	if systemPromptFile == "" {
+		systemPromptFile = "defaultSystemPrompt"
+	}
+	systemPrompt, err = getSystemInstruction(systemPromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
 	plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {
