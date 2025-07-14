@@ -864,9 +864,11 @@
 		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
-		// Update the line position visually
+		// Update the line position visually, preserving custom color and width
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price
+			price: price,
+			color: $drawingMenuProps.selectedLineColor,
+			lineWidth: $drawingMenuProps.selectedLineWidth
 		});
 
 		// Update the stored price in local horizontalLines array (for immediate visual feedback)
