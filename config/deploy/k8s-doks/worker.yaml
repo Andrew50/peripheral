@@ -63,10 +63,10 @@ spec:
           resources:
             requests:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "256Mi"
             limits:
-              cpu: "200m"
-              memory: "512Mi"
+              cpu: "1000m"
+              memory: "2Gi"
           livenessProbe:
             exec:
               command:
@@ -112,7 +112,7 @@ spec:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 80
+          averageUtilization: 100
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30

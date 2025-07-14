@@ -33,6 +33,9 @@ on:
       services_changed:
         required: false
         type: string
+      migration_needed:
+        required: false
+        type: string
 #      public_base_url:
 #        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
 #        required: true
@@ -182,7 +185,6 @@ jobs:
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
 
- 
       - name: Setup For Deployment
         run: |
           chmod +x config/deploy/scripts-do/*.sh
@@ -191,15 +193,10 @@ jobs:
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
           
-      - name: Setup For Deployment
-        run: |
-          chmod +x config/deploy/scripts-do/*.sh
-          
-          DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
-          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
-          
           echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
           echo "Services to deploy: ${{ inputs.services_changed }}"   
+
+          echo "MIGRATION_NEEDED=${{ inputs.mig }}"
 
           CONFIG_DIR="config/deploy/k8s-doks"
           echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
@@ -213,10 +210,17 @@ jobs:
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
           echo "Using cluster: ${CLUSTER_NAME}"
 
+      - name: Log in to DO Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.digitalocean.com
+          username: nathanvosburg-atlantis
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
       - name: Build Docker Images
         run: config/deploy/scripts-do/build-images.sh
 
-      - name: Login & Push Docker Images
+      - name: Push Docker Images
         run: config/deploy/scripts-do/push-images.sh
 
       - name: Setup Kubernetes Context
@@ -230,6 +234,25 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts-do/deploy-to-k8s.sh
+
+      - name: Run DB Migrations Job
+        if: false #inputs.migration_needed == 'true'
+        run: |
+          # Substitute env vars into job manifest
+          envsubst < config/deploy/k8s-doks/db-migrate-job.yaml > db-migrate-job.yaml
+          
+          # Apply the Job manifest (creates the job)
+          kubectl apply -f db-migrate-job.yaml -n $K8S_NAMESPACE
+          
+          # Wait for job to complete (timeout after 5 mins)
+          kubectl wait --for=condition=complete job/db-migrate-job -n $K8S_NAMESPACE --timeout=300s
+          
+          POD=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=db-migrate-job -o jsonpath='{.items[0].metadata.name}')
+          echo "Logs from migration job pod:"
+          kubectl logs "$POD" -n $K8S_NAMESPACE
+          
+          # Cleanup the job resources (job + pods)
+          kubectl delete job db-migrate-job -n $K8S_NAMESPACE
 
       - name: Cleanup
         if: always()
