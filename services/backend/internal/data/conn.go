@@ -72,7 +72,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
 	xAccessSecret := getEnv("X_ACCESS_SECRET", "")
 
-	geminiAPIKey := getEnv("GEMINI_API_KEY", "")
+	geminiAPIKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
 
 	var dbURL string
 	var cacheURL string
