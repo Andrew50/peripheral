@@ -174,10 +174,10 @@ END$$;`, tbl, tbl)
 
 	// Recreate helpful covering indexes on source tables
 	indexSQLs := []string{
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
+		`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
         ON ohlcv_1m (ticker, "timestamp" DESC)
         INCLUDE (open, high, low, close, volume)`,
-		`CREATE INDEX CONCURRENTLY IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
+		`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
         ON ohlcv_1d (ticker, "timestamp" DESC)
         INCLUDE (open, high, low, close, volume)`,
 	}

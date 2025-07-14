@@ -130,63 +130,58 @@ jobs:
           echo "📦 Installing Node.js dependencies..."
           cd services/frontend
           npm ci
+          npm install --save-dev @typescript-eslint/eslint-plugin @typescript-eslint/parser
           cd ../..
 
       - name: 🔧 Generate ESLint configuration
         run: |
           echo "🔧 Generating ESLint configuration for camelCase enforcement..."
-          cat > eslint.config.js << 'EOF'
-          import js from '@eslint/js';
-          import tseslint from '@typescript-eslint/eslint-plugin';
-          import tsparser from '@typescript-eslint/parser';
-          import svelte from 'eslint-plugin-svelte';
-          import svelteParser from 'svelte-eslint-parser';
-
-          export default [
-            {
-              ignores: ['node_modules/**', 'dist/**', 'build/**', '**/*.config.js']
+          cat > .eslintrc.js << 'EOF'
+          module.exports = {
+            env: {
+              browser: true,
+              es2021: true,
+              node: true
             },
-            js.configs.recommended,
-            {
-              files: ['**/*.{js,ts,svelte}'],
-              languageOptions: {
-                ecmaVersion: 'latest',
-                sourceType: 'module',
-                parser: tsparser,
-                parserOptions: {
-                  ecmaVersion: 'latest',
-                  sourceType: 'module'
-                }
-              },
-              plugins: {
-                '@typescript-eslint': tseslint,
-                svelte: svelte
-              },
-              rules: {
-                // Enforce camelCase for all identifiers
-                camelcase: ['error', { properties: 'always' }],
-                '@typescript-eslint/naming-convention': [
-                  'error',
-                  { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
-                  { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
-                  { selector: 'typeLike', format: ['PascalCase'] },
-                  { selector: 'enumMember', format: ['PascalCase'] }
-                ]
-              }
+            extends: [
+              'eslint:recommended',
+              '@typescript-eslint/recommended'
+            ],
+            parser: '@typescript-eslint/parser',
+            parserOptions: {
+              ecmaVersion: 'latest',
+              sourceType: 'module'
             },
-            {
-              files: ['**/*.svelte'],
-              languageOptions: {
-                parser: svelteParser,
-                parserOptions: {
-                  parser: tsparser
-                }
-              },
-              rules: {
-                'svelte/valid-compile': 'error'
+            plugins: [
+              '@typescript-eslint',
+              'svelte'
+            ],
+            rules: {
+              // Enforce camelCase for all identifiers
+              camelcase: ['error', { properties: 'always' }],
+              '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase'] },
+                { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+                { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
+              ],
+              // Additional rules for code quality
+              'no-unused-vars': 'off',
+              '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+              'prefer-const': 'error',
+              'no-var': 'error'
+            },
+            overrides: [
+              {
+                files: ['*.svelte'],
+                processor: 'svelte/svelte',
+                extends: ['plugin:svelte/recommended']
               }
-            }
-          ];
+            ]
+          };
           EOF
 
       - name: 🔧 Generate Stylelint configuration
@@ -207,7 +202,7 @@ jobs:
         run: |
           echo "🔍 Running ESLint with camelCase enforcement (check only)..."
           cd services/frontend
-          npx eslint 'src/**/*.{js,ts,svelte}' --config ../../eslint.config.js
+          npx eslint 'src/**/*.{js,ts,svelte}' --config ../../.eslintrc.js
 
       - name: 🎨 Run Stylelint (check only)
         run: |
