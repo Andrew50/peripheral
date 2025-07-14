@@ -14,6 +14,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
+	"google.golang.org/genai"
 )
 
 // Conn encapsulates database connections and API clients
@@ -31,6 +32,7 @@ type Conn struct {
 	XAPISecretKey   string
 	XAccessToken    string
 	XAccessSecret   string
+	GeminiClient    *genai.Client
 	IsLLMExecution  bool // Track if function is called by LLM agent
 }
 
@@ -69,6 +71,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	xAPISecretKey := getEnv("X_API_SECRET", "")
 	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
 	xAccessSecret := getEnv("X_ACCESS_SECRET", "")
+
+	geminiAPIKey := getEnv("GEMINI_API_KEY", "")
 
 	var dbURL string
 	var cacheURL string
@@ -222,6 +226,15 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	polygonClient.HTTP.SetDisableWarn(true)
 	polygonClient.HTTP.SetLogger(NoOp{})
 
+	// Create gemini client
+	geminiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  geminiAPIKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create Gemini client: %v", err))
+	}
 	// Create local connection object (no global variable)
 	localConn := &Conn{
 		DB:              dbRes.conn,
@@ -237,6 +250,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		XAccessToken:    xAccessToken,
 		XAccessSecret:   xAccessSecret,
 		IsLLMExecution:  false, // Initialize the new field
+		GeminiClient:    geminiClient,
 	}
 
 	cleanup := func() {
