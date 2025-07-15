@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"backend/internal/data/polygon"
+	"backend/internal/services/socket" // added for condition code maps reuse
 
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
@@ -757,12 +758,9 @@ func requestIncompleteBar(
 	// ------------------------
 	// 6) Single-pass aggregator
 	// ------------------------
-	tradeConditionsToSkipOhlc := map[int32]struct{}{
-		2: {}, 5: {}, 10: {}, 15: {}, 16: {}, 20: {}, 21: {}, 22: {}, 29: {}, 33: {}, 38: {}, 52: {}, 53: {},
-	}
-	tradeConditionsToSkipVolume := map[int32]struct{}{
-		15: {}, 16: {}, 38: {},
-	}
+	tradeConditionsToSkipOhlc := socket.TradeConditionsToSkipOhlc
+	tradeConditionsToSkipVolume := socket.TradeConditionsToSkipVolume
+	tradeConditionsToExcludeCompletely := socket.TradeConditionsToExcludeCompletely
 
 	for _, cd := range combined {
 		// Only process data that's within the final time range
@@ -774,6 +772,18 @@ func requestIncompleteBar(
 		}
 
 		if cd.isTrade {
+			// First check if trade should be completely excluded (ignore both price and volume)
+			shouldExclude := false
+			for _, cond := range cd.conditions {
+				if _, found := tradeConditionsToExcludeCompletely[cond]; found {
+					shouldExclude = true
+					break
+				}
+			}
+			if shouldExclude {
+				continue
+			}
+
 			// Evaluate whether to skip O/H/L/C or volume based on conditions
 			skipOhlc := false
 			skipVol := false

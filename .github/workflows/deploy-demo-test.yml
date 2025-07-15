@@ -11,10 +11,9 @@ on:
         description: 'Branch to deploy'
         required: true
         type: string
-        #      k8s_context:
-        #description: 'Kubernetes context to use'
-        #required: true
-        #type: string
+        # description: 'Kubernetes context to use'
+        # required: true
+        # type: string
       k8s_namespace:
         description: 'Kubernetes namespace to deploy to'
         required: true
@@ -99,10 +98,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Removed the needs: [check-build] dependency
-    if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
+    if: (github.event_name != 'pull_request' || success())  # Keep success() check logic
     env:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      DOCKER_USERNAME: registry.digitalocean.com/nathanvosburg-atlantis # fornow
+      DOCKER_USERNAME: registry.digitalocean.com/nathanvosburg-atlantis  # fornow
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
@@ -130,7 +129,7 @@ jobs:
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
       ENVIRONMENT: ${{ inputs.environment }}
       INGRESS_HOST: ${{ inputs.ingress_host }}
-      #PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
+      # PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
 
     steps:
       - name: Debug Event Information

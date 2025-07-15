@@ -864,9 +864,11 @@
 		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
-		// Update the line position visually
+		// Update the line position visually, preserving custom color and width
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price
+			price: price,
+			color: $drawingMenuProps.selectedLineColor,
+			lineWidth: $drawingMenuProps.selectedLineWidth
 		});
 
 		// Update the stored price in local horizontalLines array (for immediate visual feedback)
@@ -1174,8 +1176,8 @@
 			return;
 		}
 
-		// Skip price updates if price is -1 (indicates skip OHLC condition)
-		const shouldSkipPriceUpdate = trade.price < 0;
+		// Skip price updates based on shouldUpdatePrice flag
+		const shouldSkipPriceUpdate = !trade.shouldUpdatePrice;
 
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
@@ -1267,7 +1269,7 @@
 			}
 			lastUpdateTime = Date.now();
 
-			// Only create new bar if we have valid price data
+			// Only create new bar if we should update price
 			if (!shouldSkipPriceUpdate) {
 				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
 					trade.timestamp,

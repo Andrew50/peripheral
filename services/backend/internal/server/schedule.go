@@ -219,6 +219,7 @@ var (
 			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
 		},
+		/* TODO ENABLE THIS BEFORE PR !!!!!!!!!!!! */
 		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
@@ -229,6 +230,7 @@ var (
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
+		/**/
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
@@ -240,8 +242,9 @@ var (
 			},
 		*/
 		{
-			Name:           "StartScreenerUpdater",
-			Function:       screener.StartScreenerUpdater,
+			Name: "StartScreenerUpdater",
+			//Function: screener.StartScreenerUpdater,
+			Function:       startScreenerUpdater,               // TODO: ENABLE THIS BEFORE PR !!!!!!!!!!!!
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -778,6 +781,34 @@ func startAlertLoop(conn *data.Conn) error {
 	return nil
 }
 */
+
+// startScreenerUpdater starts the screener updater if data is fresh
+func startScreenerUpdater(conn *data.Conn) error {
+	// Check if OHLCV data is fresh (within 7 days)
+	dataFresh, err := marketdata.CheckOHLCVDataFreshness(conn)
+	if err != nil {
+		log.Printf("❌ Failed to check OHLCV data freshness for screener: %v", err)
+		// Send critical alert about the freshness check failure
+		_ = alerts.LogCriticalAlert(fmt.Errorf("failed to check OHLCV data freshness for screener: %w", err), "startScreenerUpdater")
+		// Default to disabling screener if check fails
+		dataFresh = false
+	}
+
+	if !dataFresh {
+		// Send critical alert about stale data
+		_ = alerts.LogCriticalAlert(fmt.Errorf("OHLCV data is stale (older than 7 days) - screener updater disabled"), "startScreenerUpdater")
+		log.Printf("⚠️ Screener updater disabled due to stale OHLCV data")
+		return nil
+	}
+
+	// Data is fresh, start the screener updater
+	err = screener.StartScreenerUpdater(conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // startPolygonWebSocket starts the Polygon WebSocket if not already running
 func startPolygonWebSocket(conn *data.Conn) error {

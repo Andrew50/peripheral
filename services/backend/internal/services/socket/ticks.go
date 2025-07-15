@@ -25,12 +25,13 @@ type TickData interface {
 
 // TradeData represents a structure for handling TradeData data.
 type TradeData struct {
-	Price      float64 `json:"price"`
-	Size       int64   `json:"size"`
-	Timestamp  int64   `json:"timestamp"`
-	ExchangeID int     `json:"exchange"`
-	Conditions []int32 `json:"conditions"`
-	Channel    string  `json:"channel"`
+	Price             float64 `json:"price"`
+	Size              int64   `json:"size"`
+	Timestamp         int64   `json:"timestamp"`
+	ExchangeID        int     `json:"exchange"`
+	Conditions        []int32 `json:"conditions"`
+	Channel           string  `json:"channel"`
+	ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
 }
 
 func (t TradeData) GetPrice() float64 {

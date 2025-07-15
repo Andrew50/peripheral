@@ -36,7 +36,7 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: DB_ROOT_PASSWORD
-            - name: PGDATA                    # ← new: tell Postgres where to keep its cluster 
+            - name: PGDATA  # ← new: tell Postgres where to keep its cluster
               value: /home/postgres/pgdata/data
           lifecycle:
             preStop:

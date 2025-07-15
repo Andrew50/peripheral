@@ -28,7 +28,7 @@ import (
 
 const (
 	refreshInterval   = 10 * time.Second // how often to refresh
-	refreshTimeout    = 5 * time.Minute  // per‑refresh timeout
+	refreshTimeout    = 15 * time.Second // per‑refresh timeout (reduced for AAPL-only)
 	extendedCloseHour = 20               // 8 PM Eastern
 )
 
@@ -88,10 +88,27 @@ GROUP BY time_bucket('1 day'::interval, "timestamp"), ticker, close, high, low, 
 WITH NO DATA;
 `
 
+var create52wExtremesViewQuery = `
+-- 52-week high / low per ticker (materialized view refreshed daily)
+CREATE MATERIALIZED VIEW IF NOT EXISTS ohlcv_52w_extremes
+AS
+SELECT ticker,
+       MAX(high) AS wk52_high,
+       MIN(low)  AS wk52_low
+FROM   ohlcv_1d
+WHERE  "timestamp" >= now() - INTERVAL '52 weeks'
+GROUP  BY ticker
+WITH NO DATA;`
+
 var createHelperIndexesQuery = `
--- Helpful descending indexes for hot data paths
-CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_idx ON ohlcv_1m (ticker, "timestamp" DESC);
-CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_idx ON ohlcv_1d (ticker, "timestamp" DESC);
+-- Helpful covering indexes on source tables (run once)
+CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
+        ON ohlcv_1d (ticker, "timestamp" DESC)
+        INCLUDE (open, high, low, close, volume);
+
+CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
+        ON ohlcv_1m (ticker, "timestamp" DESC)
+        INCLUDE (open, high, low, close, volume);
 `
 
 var initQuery = `
@@ -122,7 +139,7 @@ BEGIN
     ),
 
     /*----------------------------------------------------------------------
-      2.  Latest *two* daily bars in one shot (<= 3 d look‑back)
+      2.  Latest *two* daily bars in one shot (<= 3 d look-back)
     ----------------------------------------------------------------------*/
     latest_pair AS (
         SELECT l.ticker,
@@ -151,17 +168,15 @@ BEGIN
         SELECT ticker, prev_close FROM latest_pair WHERE rn = 1
     ),
 
-    /*----------------------------------------------------------------------
-      3.  52 week extremes   (<= 52 w)  – active universe only
-    ----------------------------------------------------------------------*/
+    /*---------------------------------------------------------------------*/
+
+    /*---------------------------------------------------------------------
+      3.  52 week extremes   (materialized view)
+    ---------------------------------------------------------------------*/
     extremes AS (
-        SELECT o.ticker,
-               MAX(o.high) AS wk52_high,
-               MIN(o.low)  AS wk52_low
-        FROM   ohlcv_1d o
+        SELECT e.ticker, e.wk52_high, e.wk52_low
+        FROM   ohlcv_52w_extremes e
         JOIN   active a USING (ticker)
-        WHERE  o."timestamp" >= (SELECT now_utc - INTERVAL '52 weeks' FROM params)
-        GROUP  BY o.ticker
     ),
 
     /*----------------------------------------------------------------------
@@ -485,35 +500,71 @@ $FUNC$;`
 // StartScreenerUpdater refreshes the screener table every 10 s and stops once
 // extended‑hours trading closes (20:00 ET).
 func StartScreenerUpdater(conn *data.Conn) error {
+	log.Println("🚀 Starting screener updater for AAPL...")
+
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		log.Fatalf("cannot load ET timezone: %v", err)
+		log.Fatalf("❌ cannot load ET timezone: %v", err)
 	}
 
+	log.Println("📊 Creating pm_stats continuous aggregate...")
 	if _, err := conn.DB.Exec(context.Background(), createPmStatsQuery); err != nil {
+		log.Printf("❌ Failed to create pm_stats continuous aggregate: %v", err)
 		return fmt.Errorf("cannot create pm_stats continuous aggregate: %v", err)
 	}
+	log.Println("✅ pm_stats continuous aggregate created")
+
+	log.Println("📈 Creating sma_dma_tech continuous aggregate...")
 	if _, err := conn.DB.Exec(context.Background(), createSmaDmaTechQuery); err != nil {
+		log.Printf("❌ Failed to create sma_dma_tech continuous aggregate: %v", err)
 		return fmt.Errorf("cannot create sma_dma_tech continuous aggregate: %v", err)
 	}
-	// Refresh continuous aggregates one by one. Multi-statement queries can trigger
-	// implicit transactions, which `refresh_continuous_aggregate` forbids.
+	log.Println("✅ sma_dma_tech continuous aggregate created")
+
+	log.Println("📊 Creating 52-week extremes materialized view...")
+	if _, err := conn.DB.Exec(context.Background(), create52wExtremesViewQuery); err != nil {
+		log.Printf("❌ Failed to create 52-week extremes materialized view: %v", err)
+		return fmt.Errorf("cannot create 52-week extremes materialized view: %v", err)
+	}
+	log.Println("✅ 52-week extremes materialized view created")
+
+	log.Println("🔄 Refreshing pm_stats continuous aggregate...")
 	if _, err := conn.DB.Exec(context.Background(), "CALL refresh_continuous_aggregate('pm_stats', NULL, NULL)"); err != nil {
+		log.Printf("❌ Failed to refresh pm_stats continuous aggregate: %v", err)
 		return fmt.Errorf("cannot refresh pm_stats continuous aggregate: %v", err)
 	}
+	log.Println("✅ pm_stats continuous aggregate refreshed")
+
+	log.Println("🔄 Refreshing sma_dma_tech continuous aggregate...")
 	if _, err := conn.DB.Exec(context.Background(), "CALL refresh_continuous_aggregate('sma_dma_tech', NULL, NULL)"); err != nil {
+		log.Printf("❌ Failed to refresh sma_dma_tech continuous aggregate: %v", err)
 		return fmt.Errorf("cannot refresh sma_dma_tech continuous aggregate: %v", err)
 	}
+	log.Println("✅ sma_dma_tech continuous aggregate refreshed")
 
+	log.Println("🔄 Refreshing 52-week extremes materialized view...")
+	if _, err := conn.DB.Exec(context.Background(), "REFRESH MATERIALIZED VIEW ohlcv_52w_extremes"); err != nil {
+		log.Printf("❌ Failed to refresh 52-week extremes materialized view: %v", err)
+		return fmt.Errorf("cannot refresh 52-week extremes materialized view: %v", err)
+	}
+	log.Println("✅ 52-week extremes materialized view refreshed")
+
+	log.Println("🔍 Creating helper indexes...")
 	if _, err := conn.DB.Exec(context.Background(), createHelperIndexesQuery); err != nil {
+		log.Printf("❌ Failed to create helper indexes: %v", err)
 		return fmt.Errorf("cannot create helper indexes: %v", err)
 	}
+	log.Println("✅ Helper indexes created")
 
+	log.Println("⚙️  Initializing screener function...")
 	if _, err := conn.DB.Exec(context.Background(), initQuery); err != nil {
+		log.Printf("❌ Failed to initialize screener: %v", err)
 		return fmt.Errorf("cannot initialize screener: %v", err)
 	}
+	log.Println("✅ Screener function initialized")
 
 	// immediate prime
+	log.Println("🎯 Performing initial screener refresh...")
 	doRefresh(conn)
 
 	ticker := time.NewTicker(refreshInterval)
@@ -528,6 +579,7 @@ func StartScreenerUpdater(conn *data.Conn) error {
 
 		select {
 		case <-ticker.C:
+			log.Println("⏰ Timer tick: refreshing screener...")
 			doRefresh(conn)
 		}
 	}
@@ -540,6 +592,7 @@ func doRefresh(conn *data.Conn) {
 	log.Printf("🔄 screener refresh for single ticker (AAPL) … (timeout %s)", refreshTimeout)
 	started := time.Now()
 
+	log.Println("➡️  Executing refresh_screener() function in database...")
 	if _, err := conn.DB.Exec(ctx, "SELECT refresh_screener()"); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			log.Printf("⚠️  screener refresh timed out after %s: %v", time.Since(started), err)

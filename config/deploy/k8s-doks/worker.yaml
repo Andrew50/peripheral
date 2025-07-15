@@ -5,7 +5,7 @@ metadata:
   labels:
     app: worker
 spec:
-  replicas: 3 # Start with 3 workers
+  replicas: 3  # Start with 3 workers
   selector:
     matchLabels:
       app: worker
@@ -72,7 +72,9 @@ spec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis; r = redis.Redis(host='cache', port=6379,
+                  password='${REDIS_PASSWORD}', decode_responses=True); r.ping()
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -82,7 +84,9 @@ spec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis; r = redis.Redis(host='cache', port=6379,
+                  password='${REDIS_PASSWORD}', decode_responses=True); r.ping()
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
