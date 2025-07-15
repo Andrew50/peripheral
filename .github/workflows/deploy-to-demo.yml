@@ -30,7 +30,7 @@ jobs:
   deploy-demo:
     needs: [detect_changes]
     if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
-    uses: ./.github/workflows/deploy-demo-test.yml
+    uses: ./.github/workflows/deploy-demo-from-prod.yml
     with:
       environment: 'demo'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
@@ -43,6 +43,8 @@ jobs:
       services_changed: ${{ needs.detect_changes.outputs.services_changed }}
       migration_needed: ${{ needs.detect_changes.outputs.migration_needed }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
