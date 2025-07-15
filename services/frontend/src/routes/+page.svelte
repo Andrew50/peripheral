@@ -63,7 +63,7 @@
 	};
 
 	const { defaultKey, chartsByKey, defaultChartData } = data;
-</script> 
+</script>
 
 <SiteHeader {isAuthenticated} />
 
