@@ -547,9 +547,10 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 	}()
 
 	// Prepare batches of keys.
-	batches := make([][]string, 0, (len(keys)+copyBatchSize-1)/copyBatchSize)
-	for i := 0; i < len(keys); i += copyBatchSize {
-		end := i + copyBatchSize
+	batchSize := getBatchSize(table)
+	batches := make([][]string, 0, (len(keys)+batchSize-1)/batchSize)
+	for i := 0; i < len(keys); i += batchSize {
+		end := i + batchSize
 		if end > len(keys) {
 			end = len(keys)
 		}
