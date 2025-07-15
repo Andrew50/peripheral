@@ -36,8 +36,8 @@ jobs:
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #k8s_context: 'prod-cluster'
       k8s_namespace: 'demo'
-      google_redirect_url: 'https://demo.peripheral.io/auth/google/callback'
-      ingress_host: 'demo.peripheral.io'
+      google_redirect_url: 'https://peripheral.io/auth/google/callback'
+      ingress_host: 'peripheral.io'
       #      public_base_url: 'https://peripheral.io'
       strategy: ${{ needs.detect_changes.outputs.strategy }}
       services_changed: ${{ needs.detect_changes.outputs.services_changed }}
