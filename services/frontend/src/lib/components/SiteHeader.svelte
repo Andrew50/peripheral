@@ -2,6 +2,7 @@
 	import { goto, preloadCode } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 
 	import { timelineProgress } from '$lib/landing/timeline';
 
@@ -13,6 +14,9 @@
 	let prevScrollY = 0;
 	// Mobile sidebar state
 	let isSidebarOpen = false;
+
+	// Detect if we're on the pricing page
+	$: isOnPricingPage = $page.url.pathname === '/pricing';
 
 	import '$lib/styles/splash.css';
 
@@ -130,7 +134,7 @@
 
 		<!-- Desktop navigation -->
 		<div class="navigation desktop-nav">
-			<button class="nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
+			<button class="nav-button secondary" class:pricing-page={isOnPricingPage} on:click={() => navigateTo('/pricing')}>Pricing</button>
 			{#if isAuthenticated}
 				<button class="nav-button primary" on:click={() => navigateTo('/app')}
 					>Go to Terminal</button
@@ -235,7 +239,7 @@
 
 	.nav-button.secondary {
 		background: transparent;
-		color: #000000;
+		color: #ffffff;
 		border: 1px solid var(--color-primary);
 	}
 
@@ -248,6 +252,12 @@
 	.nav-button.secondary:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	}
+
+	/* Pricing page specific styling - white text for pricing button */
+	.nav-button.secondary.pricing-page {
+		color: #f5f9ff;
+		border: 1px solid rgba(245, 249, 255, 0.3);
 	}
 
 	/* Hamburger Menu */
