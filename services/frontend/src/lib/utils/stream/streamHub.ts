@@ -102,8 +102,8 @@ function processRegularHoursData(t: any) {
 
 	// Update regular price cache and store
 	if (t.price !== undefined) {
-		// Skip price updates if price is -1 (indicates skip OHLC condition)
-		if (t.price >= 0) {
+		// Skip price updates if shouldUpdatePrice is false
+		if (t.shouldUpdatePrice !== false) {
 			priceCache.set(securityid, t.price);
 			getColumnStore(securityid, 'price').set({
 				price: t.price,
@@ -147,8 +147,8 @@ function processExtendedHoursData(t: any) {
 
 	// Update extended price cache
 	if (t.price !== undefined) {
-		// Skip price updates if price is -1 (indicates skip OHLC condition)
-		if (t.price >= 0) {
+		// Skip price updates if shouldUpdatePrice is false
+		if (t.shouldUpdatePrice !== false) {
 			extendedPriceCache.set(securityid, t.price);
 		}
 	}

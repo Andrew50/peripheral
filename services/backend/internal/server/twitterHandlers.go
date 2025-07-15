@@ -119,7 +119,7 @@ func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) er
 	for _, tweet := range tweets {
 		// Extract ticker symbols from the tweet text
 		tickers := extractTickersFromTweet(tweet.Text)
-		SendTweet(conn, "testing tweet: "+tweet.Text)
+		SendTweet(conn, tweet.Text)
 		socket.SendAlertToAllUsers(socket.AlertMessage{
 			AlertID:    1,
 			Timestamp:  time.Now().Unix() * 1000,
@@ -157,6 +157,7 @@ func SendTweet(conn *data.Conn, tweet string) {
 
 	payload := map[string]any{"text": tweet}
 	body, _ := json.Marshal(payload)
+	fmt.Println("body", string(body))
 
 	req, err := http.NewRequest("POST", "https://api.x.com/2/tweets", bytes.NewBuffer(body))
 	if err != nil {
@@ -170,7 +171,10 @@ func SendTweet(conn *data.Conn, tweet string) {
 		log.Printf("Error sending tweet: %v", err)
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode != http.StatusCreated { // 201 on success
+		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
+		return
+	}
 	fmt.Println("Tweet sent successfully")
 }
 

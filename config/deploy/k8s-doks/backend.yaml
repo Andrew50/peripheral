@@ -9,7 +9,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate # Ensures no more than 1 pod exists during updates
+    type: Recreate  # Ensures no more than 1 pod exists during updates
   selector:
     matchLabels:
       app: backend
@@ -18,27 +18,27 @@ spec:
       labels:
         app: backend
     spec:
-      restartPolicy: Always # Update the restart policy to "Always"
+      restartPolicy: Always  # Update the restart policy to "Always"
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - db
-            topologyKey: kubernetes.io/hostname
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - db
+              topologyKey: kubernetes.io/hostname
       containers:
-        - name: backend 
+        - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
           imagePullPolicy: Always
-          #command: ["/app/main"] # hanlded by the docker file
+          # command: ["/app/main"] # hanlded by the docker file
           ports:
             - containerPort: 5058
           readinessProbe:
             httpGet:
-              path: /healthz # add a trivial handler that just returns 200
+              path: /healthz  # add a trivial handler that just returns 200
               port: 5058
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -229,4 +229,4 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 80 #requried even though min = max = 1
+          averageUtilization: 80  # requried even though min = max = 1

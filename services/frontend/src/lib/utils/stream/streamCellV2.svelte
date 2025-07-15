@@ -53,8 +53,8 @@
 
 	// Handle price formatting and pulse effects
 	$: if (type === 'price' && data?.price !== undefined) {
-		// Skip processing if price is -1 (indicates skip OHLC condition)
-		if (data.price >= 0) {
+		// Skip processing if shouldUpdatePrice is false
+		if (data.shouldUpdatePrice) {
 			handlePriceUpdate(data.price);
 		}
 	}

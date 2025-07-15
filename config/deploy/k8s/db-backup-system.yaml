@@ -76,7 +76,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 1800 # 30 minutes timeout
+      activeDeadlineSeconds: 1800  # 30 minutes timeout
       template:
         metadata:
           labels:
@@ -144,7 +144,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate # Only one monitor should run
+    type: Recreate  # Only one monitor should run
   selector:
     matchLabels:
       app: db-health-monitor
@@ -263,7 +263,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      activeDeadlineSeconds: 3600 # 1 hour timeout
+      activeDeadlineSeconds: 3600  # 1 hour timeout
       template:
         metadata:
           labels:
@@ -281,20 +281,21 @@ spec:
                   echo "=== Backup Verification Started ===" | tee -a /backups/verification.log
 
                   # Find the most recent backup
-                  LATEST_BACKUP=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c '%Y %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
+                  LATEST_BACKUP=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c '%Y %n' {} \; | \
+                    sort -nr | head -1 | cut -d' ' -f2-)
 
                   if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP" ]; then
                     echo "Verifying backup: $LATEST_BACKUP" | tee -a /backups/verification.log
-                    
+
                     # Check file size
                     BACKUP_SIZE=$(stat -c%s "$LATEST_BACKUP")
                     echo "Backup size: $BACKUP_SIZE bytes" | tee -a /backups/verification.log
-                    
+
                     if [ "$BACKUP_SIZE" -lt 1000 ]; then
                       echo "ERROR: Backup file too small!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     # Test extraction
                     if gunzip -t "$LATEST_BACKUP"; then
                       echo "Backup compression integrity: OK" | tee -a /backups/verification.log
@@ -302,7 +303,7 @@ spec:
                       echo "ERROR: Backup compression corrupted!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     # Test SQL content
                     if gunzip -c "$LATEST_BACKUP" | head -20 | grep -q "PostgreSQL database dump"; then
                       echo "Backup content integrity: OK" | tee -a /backups/verification.log
@@ -310,7 +311,7 @@ spec:
                       echo "ERROR: Backup content invalid!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     echo "=== Backup Verification Successful ===" | tee -a /backups/verification.log
                   else
                     echo "ERROR: No backup files found!" | tee -a /backups/verification.log
@@ -358,7 +359,8 @@ data:
 
     # Show current backup statistics
     BACKUP_COUNT=$(find /backups -name "backup_*.sql.gz" -type f | wc -l)
-    TOTAL_SIZE=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c%s {} \; | awk '{sum+=$1} END {print sum/1024/1024 " MB"}')
+    TOTAL_SIZE=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c%s {} \; | \
+      awk '{sum+=$1} END {print sum/1024/1024 " MB"}')
 
     echo "Current statistics: $BACKUP_COUNT backups, $TOTAL_SIZE total" | tee -a /backups/retention.log
     echo "=== Backup Retention Cleanup Completed ===" | tee -a /backups/retention.log
@@ -381,7 +383,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      activeDeadlineSeconds: 600 # 10 minutes timeout
+      activeDeadlineSeconds: 600  # 10 minutes timeout
       template:
         metadata:
           labels:

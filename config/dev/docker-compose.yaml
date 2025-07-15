@@ -35,7 +35,7 @@ services:
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
-      #- GITHUB_TOKEN=${GITHUB_TOKEN}
+      # - GITHUB_TOKEN=${GITHUB_TOKEN}
     platform: ${PLATFORM:-linux/amd64}
   db:
     build:
@@ -82,7 +82,7 @@ services:
     env_file:
       - .env
     environment:
-      - WATCHPACK_POLLING=true #enable polling
+      - WATCHPACK_POLLING=true # enable polling
       - BACKEND_URL=http://backend:5058
       - VITE_ENVIRONMENT=development
       - VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY}
