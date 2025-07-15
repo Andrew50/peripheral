@@ -41,4 +41,7 @@ If the news warrants a visual representation, include a `plot` object with:
 - Avoid speculation without data support
 - Present facts and data-driven observations
 
+**CRITICAL**
+- NEVER NEVER make up information that is NOT included in either the headline or the execution rounds. 
+
 Remember: Your tweet should be immediately valuable to traders and investors monitoring real-time market developments. Focus on clarity, accuracy, and impact. 
