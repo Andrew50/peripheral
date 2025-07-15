@@ -1,7 +1,7 @@
 /* =============================================================
    1.  LIVE SNAPSHOT TABLE  (no hypertable, no compression)
    ============================================================= */
-DROP MATERIALIZED VIEW IF EXISTS screener;
+DROP TABLE IF EXISTS screener;
 CREATE TABLE screener (
     ticker                      TEXT        PRIMARY KEY,      -- one row per ticker
     calc_time                   TIMESTAMPTZ NOT NULL,

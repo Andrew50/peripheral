@@ -107,8 +107,7 @@ services:
     hostname: redis
     volumes:
       - cache:/data
-    command: >-
-      redis-server --maxclients 1000 --tcp-keepalive 60 --timeout 300 \ --appendonly yes --maxmemory 800mb --maxmemory-policy allkeys-lru \ --io-threads 4
+    command: redis-server --maxclients 1000 --tcp-keepalive 60 --timeout 300 --appendonly yes --maxmemory 800mb --maxmemory-policy allkeys-lru --io-threads 4
     restart: unless-stopped
     deploy:
       resources:
