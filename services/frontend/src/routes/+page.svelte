@@ -363,8 +363,11 @@
 	/* Responsive Design */
 	@media (max-width: 768px) {
 		.hero-title-section {
-			padding: 4rem 1rem 3rem 1rem;
-			min-height: 50vh;
+			padding: 2rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
 		}
 
 		.subsection {
@@ -394,8 +397,11 @@
 
 	@media (max-width: 480px) {
 		.hero-title-section {
-			padding: 3rem 1rem 2rem 1rem;
-			min-height: 40vh;
+			padding: 1.5rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
 		}
 
 		.subsection {
