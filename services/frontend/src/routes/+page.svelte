@@ -5,7 +5,6 @@
 	import ChipSection from '$lib/landing/ChipSection.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import HeroAnimation from '$lib/landing/HeroAnimation.svelte';
 	import '$lib/styles/splash.css';
 	import { getAuthState, getCookie } from '$lib/auth';
 
@@ -55,14 +54,7 @@
 		}
 	];
 
-	// Data returned from the server-side `load` function
-	export let data: {
-		defaultKey: string;
-		chartsByKey: Record<string, any>;
-		defaultChartData: any;
-	};
 
-	const { defaultKey, chartsByKey, defaultChartData } = data;
 </script>
 
 <SiteHeader {isAuthenticated} />
@@ -211,6 +203,7 @@
 		line-height: 1.6;
 		margin-top: 0;
 		font-weight: 400;
+		font-family: 'Geist', 'Inter', sans-serif;
 	}
 
 	.gradient-text {
@@ -228,7 +221,8 @@
 		-webkit-text-fill-color: transparent;
 		animation: gradient-shift 8s ease infinite;
 		font-size: 1em;
-		font-weight: 900;
+		font-family: 'Geist', 'Inter', sans-serif;
+		font-weight: 800;
 	}
 
 	@keyframes gradient-shift {
