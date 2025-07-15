@@ -68,6 +68,9 @@
 		<p class="hero-subtitle">
 			Peripheral is the terminal to envision and execute your trading ideas.<br />
 		</p>
+		<a href="/signup" class="hero-cta-button">
+			Get Started for Free
+		</a>
 	</div>
 </section>
 <section>
@@ -168,7 +171,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 26rem 0.5rem 17rem 0.5rem;
+	padding: 10rem 0.5rem 17rem 0.5rem;
 		background: #000000;
 		width: 100%;
 		display: flex;
@@ -204,6 +207,35 @@
 		margin-top: 0;
 		font-weight: 400;
 		font-family: 'Geist', 'Inter', sans-serif;
+	}
+
+	.hero-cta-button {
+		display: inline-block;
+		background: white;
+		color: black;
+		text-decoration: none;
+		padding: 1rem 2rem;
+		border-radius: 2rem;
+		font-size: 1.1rem;
+		font-weight: 600;
+		font-family: 'Geist', 'Inter', sans-serif;
+		transition: all 0.3s ease;
+		box-shadow: 
+			0 4px 14px 0 rgba(255, 255, 255, 0.1),
+			0 2px 4px 0 rgba(0, 0, 0, 0.1);
+		margin-top: 1rem;
+	}
+
+	.hero-cta-button:hover {
+		transform: translateY(-2px);
+		box-shadow: 
+			0 8px 25px 0 rgba(255, 255, 255, 0.2),
+			0 4px 8px 0 rgba(0, 0, 0, 0.15);
+		background: rgba(255, 255, 255, 0.95);
+	}
+
+	.hero-cta-button:active {
+		transform: translateY(0);
 	}
 
 	.gradient-text {
