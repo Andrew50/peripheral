@@ -1,0 +1,283 @@
+name: Demo Deployment Workflow
+# this will be merged with deploy.yaml sometime
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment (demo)'
+        required: true
+        type: string
+      target_branch:
+        description: 'Branch to deploy'
+        required: true
+        type: string
+        #      k8s_context:
+        #description: 'Kubernetes context to use'
+        #required: true
+        #type: string
+      k8s_namespace:
+        description: 'Kubernetes namespace to deploy to'
+        required: true
+        type: string
+      google_redirect_url:
+        description: 'Google OAuth redirect URL'
+        required: true
+        type: string
+      ingress_host:
+        description: 'Site Domain'
+        required: true
+        type: string
+      strategy:
+        required: false
+        type: string
+      services_changed:
+        required: false
+        type: string
+      migration_needed:
+        required: false
+        type: string
+#      public_base_url:
+#        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
+#        required: true
+#        type: string
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+      DIGITALOCEAN_ACCESS_TOKEN:
+        required: true
+      DB_ROOT_PASSWORD:
+        required: true
+      REDIS_PASSWORD:
+        required: true
+      POLYGON_API_KEY:
+        required: true
+      POLYGON_S3_KEY:
+        required: true
+      POLYGON_S3_SECRET:
+        required: true
+      GROK_API_KEY:
+        required: true
+      X_API_KEY:
+        required: true
+      X_API_SECRET:
+        required: true
+      X_ACCESS_TOKEN:
+        required: true
+      X_ACCESS_SECRET:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      GEMINI_FREE_KEYS:
+        required: true
+      GEMINI_API_KEY:
+        required: true
+      GOOGLE_CLIENT_ID:
+        required: true
+      GOOGLE_CLIENT_SECRET:
+        required: true
+      JWT_SECRET:
+        required: true
+      CLOUDFLARE_TUNNEL_TOKEN:
+        required: true
+      TELEGRAM_BOT_TOKEN_B64:
+        required: true
+      TELEGRAM_CHAT_ID_B64:
+        required: true
+      STRIPE_SECRET_KEY:
+        required: true
+      STRIPE_WEBHOOK_SECRET:
+        required: true
+      STRIPE_PUBLISHABLE_KEY:
+        required: true
+
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Removed the needs: [check-build] dependency
+    if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
+      POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      
+      GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
+      K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      INGRESS_HOST: ${{ inputs.ingress_host }}
+      #PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
+
+    steps:
+      - name: Debug Event Information
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "Base or ref name: ${{ github.base_ref || github.ref_name }}"
+          echo "Environment: ${{ inputs.environment }}"
+
+      - name: Set checkout target
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
+            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+          else
+            echo "CHECKOUT_REF=${{ inputs.target_branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ inputs.target_branch }}" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          token: ${{ github.token }}
+          fetch-depth: 1
+          lfs: false
+      
+      - name: Show Git Information
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          git status
+          echo "Branch: $(git branch --show-current)"
+          git --version
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Verify Secrets Presence
+        run: |
+          echo "DOCKER_USERNAME: [$(if [ -n "$DOCKER_USERNAME" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DOCKER_TOKEN: [$(if [ -n "$DOCKER_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DIGITALOCEAN_ACCESS_TOKEN: [$(if [ -n "$DIGITALOCEAN_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DOCKER_USERNAME: [$(if [ -n "$DOCKER_USERNAME" ]; then echo SET; else echo MISSING; fi)]"
+          echo "DB_ROOT_PASSWORD: [$(if [ -n "$DB_ROOT_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
+          echo "REDIS_PASSWORD: [$(if [ -n "$REDIS_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_API_KEY: [$(if [ -n "$POLYGON_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_KEY: [$(if [ -n "$POLYGON_S3_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_SECRET: [$(if [ -n "$POLYGON_S3_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GEMINI_API_KEY: [$(if [ -n "$GEMINI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
+          echo "All secrets and inputs must show as 'SET' above for successful deployment."
+
+
+      - name: Setup For Deployment
+        run: |
+          chmod +x config/deploy/scripts-do/*.sh
+          
+          echo "Logging into Docker Hub..."
+          echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          DOCKER_TAG="main"
+          echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
+          echo "Using Docker tag: $DOCKER_TAG"
+          
+          echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
+          echo "Services to deploy: ${{ inputs.services_changed }}"   
+
+          echo "MIGRATION_NEEDED=${{ inputs.mig }}"
+
+          CONFIG_DIR="config/deploy/k8s-doks"
+          echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
+          echo "Using Config Directory: ${CONFIG_DIR}"
+          
+          TMP_DIR="config/deploy/tmp"
+          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
+          echo "Using Temp Directory: ${TMP_DIR}"
+
+          CLUSTER_NAME="atlantis-cluster"
+          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
+          echo "Using cluster: ${CLUSTER_NAME}"
+
+      - name: Log in to DO Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.digitalocean.com
+          username: nathanvosburg-atlantis
+          password: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Setup Kubernetes Context
+        run: |
+          doctl kubernetes cluster kubeconfig save $CLUSTER_NAME
+          kubectl config current-context
+          kubectl get nodes
+
+      - name: Update Kubernetes Secrets
+        run: config/deploy/scripts-do/setup-configs.sh
+
+      - name: Deploy to Kubernetes
+        run: config/deploy/scripts-do/deploy-to-k8s.sh
+
+      - name: Cleanup
+        if: always()
+        run: config/deploy/scripts-do/cleanup.sh
+
+      - name: Send Telegram alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN_B64: ${{ env.TELEGRAM_BOT_TOKEN_B64 }}
+          TELEGRAM_CHAT_ID_B64: ${{ env.TELEGRAM_CHAT_ID_B64 }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN_B64" ] || [ -z "$TELEGRAM_CHAT_ID_B64" ]; then
+            echo "Telegram credentials missing; skipping alert."
+            exit 0
+          fi
+          BOT_TOKEN=$(echo "$TELEGRAM_BOT_TOKEN_B64" | base64 -d | tr -d '\n')
+          CHAT_ID=$(echo "$TELEGRAM_CHAT_ID_B64" | base64 -d | tr -d '\n')
+          MESSAGE="🚨 Deployment to *$ENVIRONMENT* failed on branch *$TARGET_BRANCH* in workflow *$WORKFLOW* (demo).\nSee run: https://github.com/$REPO/actions/runs/$RUN_ID"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode=Markdown \
+            -d disable_web_page_preview=true

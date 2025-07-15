@@ -17,13 +17,16 @@ spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchExpressions:
                   - key: app
                     operator: In
                     values:
                       - backend
-            topologyKey: kubernetes.io/hostname
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: db
           image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
@@ -56,10 +59,10 @@ spec:
           resources:
             requests:
               cpu: 300m
-              memory: 1500Mi
+              memory: 500Mi
             limits:
               cpu: 1000m
-              memory: 2000Mi
+              memory: 4000Mi
           volumeMounts:
             - name: db-pvc
               mountPath: /home/postgres/pgdata

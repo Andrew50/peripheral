@@ -27,22 +27,24 @@ concurrency:
 jobs:
   detect_changes:
     uses: ./.github/workflows/detect-changes.yml
-  deploy-demo:
+  deploy-demo-from-prod:
     needs: [detect_changes]
     if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
-    uses: ./.github/workflows/deploy-demo-test.yml
+    uses: ./.github/workflows/deploy-demo-from-prod.yml
     with:
       environment: 'demo'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
       #k8s_context: 'prod-cluster'
       k8s_namespace: 'demo'
-      google_redirect_url: 'https://demo.peripheral.io/auth/google/callback'
-      ingress_host: 'demo.peripheral.io'
+      google_redirect_url: 'https://peripheral.io/auth/google/callback'
+      ingress_host: 'peripheral.io'
       #      public_base_url: 'https://peripheral.io'
       strategy: ${{ needs.detect_changes.outputs.strategy }}
       services_changed: ${{ needs.detect_changes.outputs.services_changed }}
       migration_needed: ${{ needs.detect_changes.outputs.migration_needed }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
