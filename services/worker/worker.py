@@ -600,7 +600,7 @@ class StrategyWorker:
         
         try:
             # Validate input parameters
-            if not user_id:
+            if user_id is None:
                 raise ValueError("user_id is required for strategy creation")
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for strategy creation")
@@ -729,10 +729,11 @@ class StrategyWorker:
                                            prompt: str = None, **kwargs) -> Dict[str, Any]:
         # Initialize defaults to avoid scope issues
         result, prints, plots, response_images = [], "", [], []
+        execution_id = None  # Initialize to avoid UnboundLocalError
         
         try:
             # Validate input parameters
-            if not user_id:
+            if user_id is None:
                 raise ValueError("user_id is required for general Python agent")
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for general Python agent")

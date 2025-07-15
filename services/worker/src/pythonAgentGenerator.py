@@ -277,6 +277,7 @@ class PythonAgentGenerator:
         - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
         - You should style the plot to be visually appealing and informative, specifically focusing on the colors of the layout based on the data. E.g. positive data should be green, negative data should be red, etc.
         - Ensure to name all traces in the plot.
+        - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
         - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
@@ -287,6 +288,7 @@ class PythonAgentGenerator:
         - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
         - REGARDLESS OF THE QUERY: NEVER return pandas/numpy types (datetime64, int64, float64) OR dataframes - they cause JSON serialization errors.
         - DO NOT RUN YOUR FUNCTION AT ALL. DO NOT USE if __name__ == "__main__". THIS WILL CAUSE AN ERROR.
+        - NEVER RETURN large amounts of OHLCV data. This will make the user unhappy.
         Generate clean, robust Python code. DO NOT return any text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
 
 
