@@ -41,6 +41,11 @@ If the news warrants a visual representation, include a `plot` object with:
 - Avoid speculation without data support
 - Present facts and data-driven observations
 
+
+**Style and Voicing Guidelines** 
+- NEVER say general statements like expect volume/volatility 
+- NEVER use hashtags
+
 **CRITICAL**
 - NEVER NEVER make up information that is NOT included in either the headline or the execution rounds. 
 
