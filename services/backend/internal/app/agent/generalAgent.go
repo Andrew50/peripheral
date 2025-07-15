@@ -27,12 +27,20 @@ type ExecutionPlan struct {
 	DiscardResults []int64 `json:"discard_results,omitempty"`
 }
 
-func RunGeneralAgent[T any](conn *data.Conn, systemPromptFile string, finalSystemPromptFile string, prompt string) (T, error) {
+func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string) (T, error) {
 	var zeroResult T
-	systemPrompt, err := getSystemInstruction(systemPromptFile)
+	systemPrompt, err := getSystemInstruction("generalAgentSystemPrompt")
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)
 	}
+	var additionalSystemPrompt string
+	if additionalSystemPromptFile != "" {
+		additionalSystemPrompt, err = getSystemInstruction(additionalSystemPromptFile)
+		if err != nil {
+			return zeroResult, fmt.Errorf("error getting additional system instruction: %w", err)
+		}
+	}
+	systemPrompt = systemPrompt + "\n" + additionalSystemPrompt
 
 	var executor *Executor
 	var activeResults []ExecuteResult
