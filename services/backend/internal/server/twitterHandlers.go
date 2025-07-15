@@ -155,7 +155,7 @@ func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 		return
 	}
 	fmt.Println("Peripheral tweet", peripheralContentToTweet)
-	//SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+	SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
 
 }
 
