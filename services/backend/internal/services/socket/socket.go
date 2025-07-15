@@ -6,6 +6,8 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +24,66 @@ var (
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
 )
+
+// extractDomain extracts the domain from a URL
+func extractDomain(rawURL string) string {
+	// Handle URLs that might not have protocol
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		rawURL = "https://" + rawURL
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// Fallback: simple string manipulation
+		cleaned := strings.TrimPrefix(rawURL, "https://")
+		cleaned = strings.TrimPrefix(cleaned, "http://")
+		parts := strings.Split(cleaned, "/")
+		if len(parts) > 0 {
+			return parts[0]
+		}
+		return ""
+	}
+
+	return parsedURL.Hostname()
+}
+
+// generateFaviconURL creates a Google favicon URL for the given domain
+func generateFaviconURL(domain string) string {
+	if domain == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://www.google.com/s2/favicons?sz=16&domain=%s", domain)
+}
+
+// processCitationsWithFavicons processes citations to add favicon URLs
+func processCitationsWithFavicons(citations []interface{}) []interface{} {
+	processedCitations := make([]interface{}, len(citations))
+
+	for i, citation := range citations {
+		// Convert to map for processing
+		if citationMap, ok := citation.(map[string]interface{}); ok {
+			// Create a copy to avoid modifying original
+			processed := make(map[string]interface{})
+			for k, v := range citationMap {
+				processed[k] = v
+			}
+
+			// Add favicon URL if URL exists
+			if urlStr, hasURL := processed["url"].(string); hasURL {
+				domain := extractDomain(urlStr)
+				if domain != "" {
+					processed["urlIcon"] = generateFaviconURL(domain)
+				}
+			}
+			processedCitations[i] = processed
+		} else {
+			// Keep original if not a map
+			processedCitations[i] = citation
+		}
+	}
+
+	return processedCitations
+}
 
 // ReplayData represents a structure for handling ReplayData data.
 type ReplayData struct {
@@ -179,8 +241,26 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 			"query": value,
 		}
 	case "WebSearchCitations":
-		data = map[string]interface{}{
-			"citations": value,
+		// For WebSearchCitations, process citations with favicons
+		// Convert from JSON to process flexibly regardless of struct type
+		jsonBytes, err := json.Marshal(value)
+		if err == nil {
+			var citations []interface{}
+			if err := json.Unmarshal(jsonBytes, &citations); err == nil {
+				data = map[string]interface{}{
+					"citations": processCitationsWithFavicons(citations),
+				}
+			} else {
+				// Fallback if unmarshaling fails
+				data = map[string]interface{}{
+					"citations": value,
+				}
+			}
+		} else {
+			// Fallback if marshaling fails
+			data = map[string]interface{}{
+				"citations": value,
+			}
 		}
 	default:
 		// For other types (like FunctionUpdate), use the value directly

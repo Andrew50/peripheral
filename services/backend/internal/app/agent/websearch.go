@@ -42,7 +42,7 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
-	socket.SendAgentStatusUpdate(userID, "WebSearchQuery", args.Query)
+	go socket.SendAgentStatusUpdate(userID, "WebSearchQuery", args.Query)
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
@@ -51,14 +51,16 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error running web search: %w", err)
 	}
-	socket.SendAgentStatusUpdate(userID, "WebSearchCitations", websearchResult.Citations)
+	go socket.SendAgentStatusUpdate(userID, "WebSearchCitations", websearchResult.Citations)
 	return websearchResult, nil
 }
 
 func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebSearchResult, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	res, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Input: responses.ResponseNewParamsInputUnion{
 			OfString: openai.String(prompt),
 		},
