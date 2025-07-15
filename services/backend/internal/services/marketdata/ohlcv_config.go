@@ -114,7 +114,7 @@ var copyBatchSize = func() int {
 
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
-	return 4 // TODO: remove this if we can get db stable
+	return 1 // TODO: remove this if we can get db stable
 	/*
 		cpus := runtime.NumCPU()
 		if cpus > 8 {
