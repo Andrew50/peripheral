@@ -61,6 +61,12 @@ on:
         required: true
       X_API_KEY:
         required: true
+      X_API_SECRET:
+        required: true
+      X_ACCESS_TOKEN:
+        required: true
+      X_ACCESS_SECRET:
+        required: true
       OPENAI_API_KEY:
         required: true
       GEMINI_FREE_KEYS:
