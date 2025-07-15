@@ -128,7 +128,7 @@ jobs:
       TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
       TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_PROD_WEBHOOK_SECRET }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
       
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
