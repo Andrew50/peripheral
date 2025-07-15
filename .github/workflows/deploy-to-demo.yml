@@ -27,7 +27,7 @@ concurrency:
 jobs:
   detect_changes:
     uses: ./.github/workflows/detect-changes.yml
-  deploy-demo:
+  deploy-demo-from-prod:
     needs: [detect_changes]
     if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
     uses: ./.github/workflows/deploy-demo-from-prod.yml

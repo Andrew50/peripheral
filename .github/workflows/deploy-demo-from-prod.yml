@@ -139,7 +139,37 @@ jobs:
           echo "GitHub ref: ${{ github.ref }}"
           echo "Base or ref name: ${{ github.base_ref || github.ref_name }}"
           echo "Environment: ${{ inputs.environment }}"
+
+      - name: Set checkout target
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "CHECKOUT_REF=${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.base_ref }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.branch }}" ]; then
+            echo "CHECKOUT_REF=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+          else
+            echo "CHECKOUT_REF=${{ inputs.target_branch }}" >> $GITHUB_ENV
+            echo "TARGET_BRANCH=${{ inputs.target_branch }}" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          token: ${{ github.token }}
+          fetch-depth: 1
+          lfs: false
       
+      - name: Show Git Information
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          git status
+          echo "Branch: $(git branch --show-current)"
+          git --version
+
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
