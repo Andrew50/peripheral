@@ -1,7 +1,33 @@
 /* =============================================================
    1.  LIVE SNAPSHOT TABLE  (no hypertable, no compression)
    ============================================================= */
-DROP TABLE IF EXISTS screener;
+-- Check and drop screener based on its type
+DO $$
+BEGIN
+    -- Check if screener exists as a materialized view
+    IF EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'screener' 
+        AND c.relkind = 'm'
+        AND n.nspname = 'public'
+    ) THEN
+        DROP MATERIALIZED VIEW screener;
+        RAISE NOTICE 'Dropped materialized view: screener';
+    END IF;
+    
+    -- Check if screener exists as a regular table
+    IF EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'screener' 
+        AND c.relkind = 'r'
+        AND n.nspname = 'public'
+    ) THEN
+        DROP TABLE screener;
+        RAISE NOTICE 'Dropped table: screener';
+    END IF;
+END $$;
 CREATE TABLE screener (
     ticker                      TEXT        PRIMARY KEY,      -- one row per ticker
     calc_time                   TIMESTAMPTZ NOT NULL,

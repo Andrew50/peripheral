@@ -3,18 +3,24 @@ package server
 import (
 	"backend/internal/data"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+
 	"time"
 
+	"backend/internal/app/agent"
 	"backend/internal/services/socket"
 
 	"github.com/dghubble/oauth1"
+	"github.com/go-redis/redis/v8"
+	"google.golang.org/genai"
 )
 
 // TwitterWebhookPayload represents only the fields we need from Twitter webhook
@@ -25,23 +31,23 @@ type TwitterWebhookPayload struct {
 
 // Tweet represents only the fields we need from each tweet
 type Tweet struct {
-	URL       string `json:"url"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"createdAt"`
-	Author    Author `json:"author"`
+	URL       string `json:"url,omitempty"`
+	Text      string `json:"text,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Author    Author `json:"author,omitempty"`
 }
 
 // Author represents only the username field we need
 type Author struct {
-	Username string `json:"userName"`
+	Username string `json:"userName,omitempty"`
 }
 
 // ExtractedTweetData represents the clean data we extract for processing
 type ExtractedTweetData struct {
-	URL       string `json:"url"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"createdAt"`
-	Username  string `json:"username"`
+	URL       string `json:"url,omitempty"`
+	Text      string `json:"text,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 // HandleTwitterWebhook processes incoming Twitter webhook events
@@ -117,20 +123,125 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) error {
 	fmt.Println("queueTwitterWebhookEvent extractedTweets", tweets)
 	for _, tweet := range tweets {
-		// Extract ticker symbols from the tweet text
-		tickers := extractTickersFromTweet(tweet.Text)
-		SendTweet(conn, tweet.Text)
-		socket.SendAlertToAllUsers(socket.AlertMessage{
-			AlertID:    1,
-			Timestamp:  time.Now().Unix() * 1000,
-			SecurityID: 1,
-			Message:    tweet.Text,
-			Channel:    "alert",
-			Tickers:    tickers,
-		})
+		processTweet(conn, tweet)
 	}
 	return nil
 }
+
+func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
+
+	seen := determineIfAlreadySeenTweet(conn, tweet)
+	fmt.Println("seen", seen)
+	/*if seen {
+		storeTweet(conn, tweet)
+		return
+	}*/
+	// Extract ticker symbols from the tweet text
+	tickers := extractTickersFromTweet(tweet.Text)
+
+	socket.SendAlertToAllUsers(socket.AlertMessage{
+		AlertID:    1,
+		Timestamp:  time.Now().Unix() * 1000,
+		SecurityID: 1,
+		Message:    tweet.Text,
+		Channel:    "alert",
+		Tickers:    tickers,
+	})
+	storeTweet(conn, tweet)
+
+	peripheralContentToTweet, err := CreatePeripheralTweetFromNews(conn, tweet)
+	if err != nil {
+		log.Printf("Error creating peripheral tweet: %v", err)
+		return
+	}
+	fmt.Println("Peripheral tweet", peripheralContentToTweet)
+	//SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+
+}
+
+type PeripheralTweet struct {
+	Text string      `json:"text" jsonschema:"required"`
+	Plot interface{} `json:"plot" jsonschema:"required"`
+}
+
+func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (PeripheralTweet, error) { // to implement don't forget
+
+	prompt := tweet.Text
+	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
+	agentResult, err := agent.RunGeneralAgent[PeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt)
+	if err != nil {
+		return PeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
+	}
+	return agentResult, nil
+}
+
+type alreadySeenTweetGeminiResponseStruct struct {
+	Duplicate bool `json:"duplicate"`
+}
+
+func duplicateDetectionSchema() *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"duplicate"},
+		Properties: map[string]*genai.Schema{
+			"duplicate": {
+				Type:        genai.TypeBoolean,
+				Description: "Whether the tweet is a duplicate of any recent tweets",
+			},
+		},
+		Title:       "DuplicateDetectionResponse",
+		Description: "Response indicating if a tweet is a duplicate",
+	}
+}
+func determineIfAlreadySeenTweet(conn *data.Conn, tweet ExtractedTweetData) bool {
+	// TODO: Implement LLM-based duplicate detection
+	// For now, return false to allow all tweets through
+	recentTweets := getStoredTweets(conn)
+	recentTweetsString := strings.Join(recentTweets, "\n")
+	geminiClient := conn.GeminiClient
+	if geminiClient == nil {
+		log.Printf("\nGemini client not initialized!!!")
+		return false
+	}
+
+	prompt := fmt.Sprintf("Already Seen Tweets: %s\nNew Tweet: %s", recentTweetsString, tweet.Text)
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: "You are an assistant tasked to determine if a tweet's content has already been seen. You will be given a list of tweets and a new tweet. Determine whether the content of the tweet or anything related to the tweet has already been seen."},
+			},
+		},
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   duplicateDetectionSchema(),
+	}
+	model := "gemini-2.5-flash-lite-preview-06-17"
+	geminiResponse, err := geminiClient.Models.GenerateContent(context.Background(), model, genai.Text(prompt), config)
+	if err != nil {
+		log.Printf("Error generating content: %v", err)
+		return false
+	}
+	candidate := geminiResponse.Candidates[0]
+	var sb strings.Builder
+	if candidate.Content != nil {
+		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
+			if part.Text != "" {
+				sb.WriteString(part.Text)
+				sb.WriteString("\n")
+			}
+		}
+	}
+	resultText := strings.TrimSpace(sb.String())
+	var response alreadySeenTweetGeminiResponseStruct
+	if err := json.Unmarshal([]byte(resultText), &response); err != nil {
+		log.Printf("Error unmarshalling Gemini response: %v", err)
+		return false
+	}
+	return response.Duplicate
+}
+
 func extractTickersFromTweet(tweet string) []string {
 	// Regex pattern to match $ followed by 1-6 alphanumeric characters, stopping at space or end
 	pattern := `\$([A-Za-z0-9]{1,6})(?:\s|$)`
@@ -150,12 +261,47 @@ func extractTickersFromTweet(tweet string) []string {
 	return tickers
 }
 
-func SendTweet(conn *data.Conn, tweet string) {
+func getStoredTweets(conn *data.Conn) []string {
+	cutoff := time.Now().Add(-18 * time.Hour).Unix()
+
+	// Get tweets from the last 18 hours using ZRangeByScore
+	results, err := conn.Cache.ZRangeByScore(context.Background(), "twitterTweets", &redis.ZRangeBy{
+		Min: strconv.FormatInt(cutoff, 10),
+		Max: "+inf",
+	}).Result()
+
+	if err != nil {
+		log.Printf("Error retrieving stored tweets: %v", err)
+		return []string{}
+	}
+
+	return results
+}
+func storeTweet(conn *data.Conn, tweet ExtractedTweetData) {
+	timestamp := time.Now().Unix()
+	conn.Cache.ZAdd(context.Background(), "twitterTweets", &redis.Z{
+		Score:  float64(timestamp),
+		Member: tweet.Text,
+	})
+	// Cleanup old tweets (optional, can be done periodically)
+	cutoff := time.Now().Add(-18 * time.Hour).Unix()
+	conn.Cache.ZRemRangeByScore(context.Background(), "twitterTweets", "-inf", strconv.FormatInt(cutoff, 10))
+
+	/* query := `INSERT INTO news_tweets (tweet_text, created_at, url, username) VALUES ($1, $2, $3, $4)`
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := conn.DB.Exec(ctx, query, tweet.Text, tweet.CreatedAt, tweet.URL, tweet.Username)
+	if err != nil {
+		log.Printf("Error storing tweet: %v", err)
+	}*/
+}
+
+func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet PeripheralTweet) { // TODO: Implement plot rendering and image upload
 	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
 	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
 	client := cfg.Client(oauth1.NoContext, token)
 
-	payload := map[string]any{"text": tweet}
+	payload := map[string]any{"text": tweet.Text}
 	body, _ := json.Marshal(payload)
 	fmt.Println("body", string(body))
 
