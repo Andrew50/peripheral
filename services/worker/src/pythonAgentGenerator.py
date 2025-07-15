@@ -288,6 +288,7 @@ class PythonAgentGenerator:
         - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
         - REGARDLESS OF THE QUERY: NEVER return pandas/numpy types (datetime64, int64, float64) OR dataframes - they cause JSON serialization errors.
         - DO NOT RUN YOUR FUNCTION AT ALL. DO NOT USE if __name__ == "__main__". THIS WILL CAUSE AN ERROR.
+        - NEVER RETURN large amounts of OHLCV data. This will make the user unhappy.
         Generate clean, robust Python code. DO NOT return any text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
 
 
