@@ -42,8 +42,19 @@ export function logout(redirectPath: string = '/login') {
 	sessionStorage.removeItem('authToken');
 	sessionStorage.removeItem('profilePic');
 
+	// Clear cookies - use multiple approaches to ensure they're cleared regardless of original settings
+	const domain = window.location.hostname;
+
+	// Method 1: Clear with current domain and path
+	document.cookie = `authToken=; path=/; domain=${domain}; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+	document.cookie = `profilePic=; path=/; domain=${domain}; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+
+	// Method 2: Clear without domain (for localhost or subdomain issues)
+	document.cookie = `authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+	document.cookie = `profilePic=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+
 	// Redirect to specified path
-	window.location.href = "/";
+	window.location.href = redirectPath;
 }
 
 /**

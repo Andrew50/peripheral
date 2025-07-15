@@ -249,6 +249,32 @@
 					};
 				}
 
+				// Add value labels above bars
+				if (trace.y && Array.isArray(trace.y) && !trace.text) {
+					// Format values for display
+					trace.text = trace.y.map((value: any) => {
+						if (typeof value === 'number') {
+							// Format numbers with appropriate precision
+							if (Math.abs(value) >= 1000000) {
+								return (value / 1000000).toFixed(1) + 'M';
+							} else if (Math.abs(value) >= 1000) {
+								return (value / 1000).toFixed(1) + 'K';
+							} else if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+								return value.toFixed(3);
+							} else {
+								return value.toFixed(1);
+							}
+						}
+						return String(value);
+					});
+					trace.textposition = 'outside';
+					trace.textfont = {
+						color: '#f1f5f9',
+						size: 10,
+						family: 'Inter, system-ui, sans-serif'
+					};
+				}
+
 				// Handle bar positioning for dual y-axis charts (only if allTraces provided)
 				if (options?.allTraces && options.allTraces.some((t) => t.yaxis === 'y2')) {
 					const isSecondaryAxis = trace.yaxis === 'y2';

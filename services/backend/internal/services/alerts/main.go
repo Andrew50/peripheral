@@ -3,7 +3,8 @@ package alerts
 import (
 	"backend/internal/data"
 	"backend/internal/data/postgres"
-	"backend/internal/services/socket"
+
+	//"backend/internal/services/socket"
 	"backend/internal/app/limits"
 	"context"
 	"fmt"
@@ -51,11 +52,11 @@ func AddAlert(conn *data.Conn, alert Alert) {
 func RemoveAlert(conn *data.Conn, alertID int) error {
 	mu.Lock()
 	defer mu.Unlock()
-	
+
 	// Get the alert before removing it to access user information
 	if alertInterface, exists := alerts.Load(alertID); exists {
 		alert := alertInterface.(Alert)
-		
+
 		// Only decrement counter for real alerts (not system alerts like strategy processor)
 		if alert.UserID > 0 {
 			// Determine which counter to decrement based on alert type
@@ -72,7 +73,7 @@ func RemoveAlert(conn *data.Conn, alertID int) error {
 			}
 		}
 	}
-	
+
 	alerts.Delete(alertID)
 	return nil
 }
@@ -211,30 +212,32 @@ func initAlerts(conn *data.Conn) error {
 	log.Printf("Added strategy alert processor")
 
 	// Validate alert securities exist in data map
-	var alertErrors []error
-	alerts.Range(func(_, value interface{}) bool {
-		alert := value.(Alert)
-		if alert.SecurityID != nil {
-			if _, exists := socket.AggData[*alert.SecurityID]; !exists {
-				alertErrors = append(alertErrors,
-					fmt.Errorf("alert ID %d references non-existent security ID %d",
-						alert.AlertID, *alert.SecurityID))
+	/*
+		var alertErrors []error
+		alerts.Range(func(_, value interface{}) bool {
+			alert := value.(Alert)
+			if alert.SecurityID != nil {
+				if _, exists := socket.AggData[*alert.SecurityID]; !exists {
+					alertErrors = append(alertErrors,
+						fmt.Errorf("alert ID %d references non-existent security ID %d",
+							alert.AlertID, *alert.SecurityID))
+				}
 			}
-		}
-		return true
-	})
+			return true
+		})
 
-	// Report any alert validation errors
-	if len(alertErrors) > 0 {
-		var errMsg string
-		for i, err := range alertErrors {
-			if i > 0 {
-				errMsg += "; "
+		// Report any alert validation errors
+		if len(alertErrors) > 0 {
+			var errMsg string
+			for i, err := range alertErrors {
+				if i > 0 {
+					errMsg += "; "
+				}
+				errMsg += err.Error()
 			}
-			errMsg += err.Error()
+			return fmt.Errorf("errors validating alerts: %s", errMsg)
 		}
-		return fmt.Errorf("errors validating alerts: %s", errMsg)
-	}
+	*/
 
 	////fmt.Println("Finished initializing alerts")
 	return nil

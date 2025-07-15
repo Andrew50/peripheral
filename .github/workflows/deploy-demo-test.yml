@@ -63,6 +63,16 @@ on:
         required: true
       GOOGLE_CLIENT_SECRET:
         required: true
+      GROK_API_KEY:
+        required: true
+      X_API_KEY:
+        required: true
+      X_API_SECRET:
+        required: true
+      X_ACCESS_TOKEN:
+        required: true
+      X_ACCESS_SECRET:
+        required: true
       JWT_SECRET:
         required: true
       CLOUDFLARE_TUNNEL_TOKEN:
@@ -103,6 +113,11 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
@@ -174,6 +189,11 @@ jobs:
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_SECRET: [$(if [ -n "$X_API_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_TOKEN: [$(if [ -n "$X_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_SECRET: [$(if [ -n "$X_ACCESS_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"

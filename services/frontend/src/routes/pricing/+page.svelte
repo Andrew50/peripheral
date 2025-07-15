@@ -3,21 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
-	// Import the new helper functions
-	import {
-		redirectToCheckout,
-		redirectToCustomerPortal,
-		formatPrice,
-		getPlanFeatures,
-		getPlanPrice,
-		getPriceId,
-		getCreditPriceId,
-		getPlanDisplayName,
-		getCreditProductDisplayName,
-		type DatabasePlan,
-		type DatabaseCreditProduct,
-		type PublicPricingConfiguration
-	} from '$lib/utils/helpers/stripe';
 	import {
 		subscriptionStatus,
 		fetchSubscriptionStatus,
@@ -27,18 +12,217 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
 	import { getAuthState } from '$lib/auth';
+	// ===== LOCAL TYPE DEFINITIONS =====
+	interface DatabasePlan {
+		id: number;
+		product_key: string;
+		queries_limit: number;
+		alerts_limit: number;
+		strategy_alerts_limit: number;
+		realtime_charts: boolean;
+		sub_minute_charts: boolean;
+		multi_chart: boolean;
+		multi_strategy_screening: boolean;
+		watchlist_alerts: boolean;
+		prices: Array<{
+			id: number;
+			price_cents: number;
+			stripe_price_id_live: string | null;
+			stripe_price_id_test: string | null;
+			billing_period: string;
+		}> | null;
+		created_at: string;
+		updated_at: string;
+	}
 
-	// Individual loading states for better UX
-	let loadingStates: Record<string, boolean> = {
-		plus: false,
-		pro: false,
-		manage: false,
-		cancel: false,
-		reactivate: false,
-		credits100: false,
-		credits250: false,
-		credits1000: false
-	};
+	interface DatabaseCreditProduct {
+		id: number;
+		product_key: string;
+		credit_amount: number;
+		price_cents: number;
+		stripe_price_id_test: string | null;
+		stripe_price_id_live: string | null;
+		created_at: string;
+		updated_at: string;
+	}
+
+	interface PublicPricingConfiguration {
+		plans: DatabasePlan[];
+		creditProducts: DatabaseCreditProduct[];
+		environment: string;
+	}
+
+	// ===== INLINED HELPER FUNCTIONS =====
+
+	// Load Stripe.js with publishable key
+	async function getStripe() {
+		if (!browser) return null;
+		const stripeKey = (import.meta as any).env.VITE_PUBLIC_STRIPE_KEY;
+		if (!stripeKey) {
+			console.warn('Stripe publishable key not found in environment variables');
+			return null;
+		}
+		try {
+			const stripeModule = await import('@stripe/stripe-js');
+			return await stripeModule.loadStripe(stripeKey);
+		} catch (error) {
+			console.error('Failed to load Stripe:', error);
+			return null;
+		}
+	}
+
+	// Redirect to Stripe Checkout
+	async function redirectToCheckout(sessionId: string): Promise<void> {
+		const stripe = await getStripe();
+		if (!stripe) {
+			throw new Error('Stripe failed to load');
+		}
+		const result = await stripe.redirectToCheckout({ sessionId });
+		if (result.error) {
+			throw new Error(result.error.message);
+		}
+	}
+
+	// Open Stripe Customer Portal
+	function redirectToCustomerPortal(portalUrl: string): void {
+		if (browser) {
+			window.location.href = portalUrl;
+		}
+	}
+
+	// Format price in cents to display price
+	function formatPrice(priceCents: number, billingPeriod: string): string {
+		if (priceCents === 0) return '$0';
+		if (billingPeriod === 'year') {
+			return `$${(priceCents / 100 / 12).toFixed(2).replace(/\.00$/, '')}`;
+		}
+		return `$${(priceCents / 100).toFixed(2).replace(/\.00$/, '')}`;
+	}
+
+	// Get the appropriate price for a plan based on billing period
+	function getPlanPrice(plan: DatabasePlan, billingPeriod: string): number {
+		if (plan.product_key.toLowerCase() === 'free') {
+			return 0;
+		}
+		if (!plan.prices || plan.prices.length === 0) {
+			return 0;
+		}
+		const apiPeriod = billingPeriod === 'month' ? 'monthly' : 'yearly';
+		const priceInfo = plan.prices.find((p) => p.billing_period === apiPeriod);
+		if (priceInfo) {
+			return priceInfo.price_cents;
+		}
+		return plan.prices[0].price_cents;
+	}
+
+	// Get the appropriate price ID based on environment and billing period
+	function getPriceId(
+		plan: DatabasePlan,
+		environment: string,
+		billingPeriod: string = 'month'
+	): string | null {
+		if (plan.product_key.toLowerCase() === 'free') {
+			return null;
+		}
+		if (!plan.prices || plan.prices.length === 0) {
+			return null;
+		}
+		const apiPeriod = billingPeriod === 'month' ? 'monthly' : 'yearly';
+		const priceInfo = plan.prices.find((p) => p.billing_period === apiPeriod);
+		if (priceInfo) {
+			return environment === 'test'
+				? priceInfo.stripe_price_id_test
+				: priceInfo.stripe_price_id_live;
+		}
+		return null;
+	}
+
+	// Get the appropriate credit product price ID based on environment
+	function getCreditPriceId(
+		creditProduct: DatabaseCreditProduct,
+		environment: string
+	): string | null {
+		return environment === 'test'
+			? creditProduct.stripe_price_id_test
+			: creditProduct.stripe_price_id_live;
+	}
+
+	// Get plan display name
+	function getPlanDisplayName(plan: DatabasePlan): string {
+		const displayNames: Record<string, string> = {
+			free: 'Free',
+			plus: 'Plus',
+			pro: 'Pro',
+			enterprise: 'Enterprise'
+		};
+		return displayNames[plan.product_key.toLowerCase()] || plan.product_key;
+	}
+
+	// Get credit product display name
+	function getCreditProductDisplayName(creditProduct: DatabaseCreditProduct): string {
+		const displayNames: Record<string, string> = {
+			credits100: '100 Credits',
+			credits250: '250 Credits',
+			credits1000: '1000 Credits'
+		};
+		return displayNames[creditProduct.product_key] || `${creditProduct.credit_amount} Credits`;
+	}
+
+	// Get plan features dynamically from plan data
+	function getPlanFeatures(plan: DatabasePlan): string[] {
+		const features: string[] = [];
+
+		// Data type feature - based on realtime_charts
+		if (plan.realtime_charts) {
+			features.push('Realtime data');
+		} else {
+			features.push('Delayed data');
+		}
+
+		// Queries limit
+		if (plan.queries_limit > 0) {
+			features.push(`${plan.queries_limit} queries/mo`);
+		}
+
+		// Strategy alerts limit
+		if (plan.strategy_alerts_limit > 0) {
+			features.push(`${plan.strategy_alerts_limit} active strategies`);
+		}
+
+		// Strategy screening type
+		if (plan.multi_strategy_screening) {
+			features.push('Multi strategy screening');
+		} else if (plan.strategy_alerts_limit > 0) {
+			features.push('Single strategy screening');
+		}
+
+		// Alerts limit
+		if (plan.alerts_limit > 0) {
+			features.push(`${plan.alerts_limit} news or price alerts`);
+		}
+
+		// Watchlist alerts
+		if (plan.watchlist_alerts) {
+			features.push('Watchlist alerts');
+		}
+
+		// Multi chart layouts
+		if (plan.multi_chart) {
+			features.push('Multi chart layouts');
+		}
+
+		// Sub-minute charts
+		if (plan.sub_minute_charts) {
+			features.push('Sub-minute charts');
+		}
+
+		return features;
+	}
+
+	// ===== COMPONENT STATE =====
+
+	// Single loading state instead of object
+	let busyKey: string | null = null;
 
 	// Success/error feedback
 	let feedbackMessage = '';
@@ -54,25 +238,32 @@
 	let pricingLoading = true;
 	let pricingError = '';
 
-	// Selected billing period state – allows users to toggle between monthly and yearly pricing
+	// Selected billing period state
 	let billingPeriod: 'month' | 'year' = 'year';
 
-	// Include Free plan regardless of selected billing period so it always shows
-	$: filteredPlans = plans.filter(
-		(plan) => plan.product_key?.toLowerCase() === 'free' || plan.billing_period === billingPeriod
-	);
+	// Create filtered plans that include Free plan and match billing period
+	$: filteredPlans = plans.filter((plan) => {
+		// Always include Free plan
+		if (plan.product_key?.toLowerCase() === 'free') {
+			return true;
+		}
+		// For other plans, check if they have prices for the selected billing period
+		if (!plan.prices || plan.prices.length === 0) {
+			return false;
+		}
+		const apiPeriod = billingPeriod === 'month' ? 'monthly' : 'yearly';
+		return plan.prices.some((p) => p.billing_period === apiPeriod);
+	});
 
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
-	
-	// Function to determine if the current user is authenticated (for backward compatibility)
+
+	// Function to determine if the current user is authenticated
 	const isAuthenticatedFn = (): boolean => {
 		return isAuthenticated;
 	};
 
-	// Helper function to safely check if a plan is the current plan (only when authenticated)
-	// This implements a conservative approach: only highlight current plan when user is logged in
-	// and subscription data is fully loaded without errors
+	// Helper function to safely check if a plan is the current plan
 	const isCurrentPlan = (plan: DatabasePlan): boolean => {
 		const planDisplayName = getPlanDisplayName(plan);
 		return (
@@ -95,7 +286,7 @@
 		);
 	};
 
-	// Helper to check if a Pro plan should show "Upgrade" instead of "Subscribe" when the user is on Plus
+	// Helper to check if a Pro plan should show "Upgrade" instead of "Subscribe"
 	const isUpgradeEligible = (plan: DatabasePlan): boolean => {
 		return (
 			isAuthenticatedFn() &&
@@ -104,6 +295,19 @@
 		);
 	};
 
+	// Helper function to check if a plan is popular (using backend data)
+	const isPlanPopular = (plan: DatabasePlan): boolean => {
+		// For now, hardcode Plus as popular until backend provides this data
+		return plan.product_key?.toLowerCase() === 'plus';
+	};
+
+	// Helper function to check if a credit product is popular (using backend data)
+	const isCreditProductPopular = (creditProduct: DatabaseCreditProduct): boolean => {
+		// For now, hardcode credits250 as popular until backend provides this data
+		return creditProduct.product_key === 'credits250';
+	};
+
+	// Helper function to validate authentication
 	const validateAuthentication = async (): Promise<boolean> => {
 		console.log('🔍 [validateAuthentication] Starting validation...');
 
@@ -157,14 +361,6 @@
 			creditProducts = config.creditProducts;
 			environment = config.environment;
 
-			// Initialize dynamic loading states for any new plans
-			plans.forEach((plan) => {
-				const key = plan.product_key?.toLowerCase() || 'unknown';
-				if (!(key in loadingStates)) {
-					loadingStates[key] = false;
-				}
-			});
-
 			console.log('✅ [loadPricingConfiguration] Pricing configuration loaded:', {
 				plans,
 				creditProducts,
@@ -177,22 +373,6 @@
 			pricingLoading = false;
 		}
 	}
-
-	// Helper function to check if a plan is popular (hardcoded)
-	const isPlanPopular = (productKey: string): boolean => {
-		if (!productKey) return false;
-		const popularPlans = ['plus'];
-		return popularPlans.includes(productKey.toLowerCase());
-	};
-
-	// Helper function to check if a credit product is popular (hardcoded)
-	const isCreditProductPopular = (productKey: string): boolean => {
-		if (!productKey) return false;
-		const popularProducts = ['credits250'];
-		return popularProducts.includes(productKey.toLowerCase());
-	};
-
-	// Note: getPlanDisplayName and getPlanPrice are imported from stripe.ts
 
 	// Initialize component
 	async function initializeComponent() {
@@ -254,11 +434,11 @@
 		}
 
 		// Ensure we have a loading state entry for this plan
-		if (!(planKey in loadingStates)) {
-			loadingStates[planKey] = false;
+		if (busyKey === planKey) {
+			return; // Prevent double clicks
 		}
 
-		loadingStates[planKey] = true;
+		busyKey = planKey;
 		feedbackMessage = '';
 		feedbackType = '';
 
@@ -293,13 +473,17 @@
 			console.error('❌ [processUpgrade] Error creating checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
 			feedbackType = 'error';
-			loadingStates[planKey] = false;
+			busyKey = null; // Clear busy state on error
 		}
 	}
 
 	// Process credit purchase
 	async function processCreditPurchase(creditKey: string) {
-		loadingStates[creditKey] = true;
+		if (busyKey === creditKey) {
+			return; // Prevent double clicks
+		}
+
+		busyKey = creditKey;
 		feedbackMessage = '';
 		feedbackType = '';
 
@@ -336,7 +520,7 @@
 			console.error('❌ [processCreditPurchase] Error creating credit checkout session:', error);
 			feedbackMessage = 'Failed to start checkout. Please try again.';
 			feedbackType = 'error';
-			loadingStates[creditKey] = false;
+			busyKey = null; // Clear busy state on error
 		}
 	}
 
@@ -349,7 +533,7 @@
 			return;
 		}
 
-		loadingStates.manage = true;
+		busyKey = 'manage';
 		feedbackMessage = '';
 		feedbackType = '';
 
@@ -362,7 +546,7 @@
 			console.error('Error opening customer portal:', error);
 			feedbackMessage = 'Failed to open customer portal. Please try again.';
 			feedbackType = 'error';
-			loadingStates.manage = false;
+			busyKey = null; // Clear busy state on error
 		}
 	}
 
@@ -376,7 +560,7 @@
 			return;
 		}
 
-		loadingStates.cancel = true;
+		busyKey = 'cancel';
 		feedbackMessage = '';
 		feedbackType = '';
 
@@ -390,14 +574,13 @@
 			console.error('Error cancelling subscription:', error);
 			feedbackMessage = 'Failed to cancel subscription. Please try again.';
 			feedbackType = 'error';
-		} finally {
-			loadingStates.cancel = false;
+			busyKey = null; // Clear busy state on error
 		}
 	}
 
 	// Handle reactivate subscription
 	async function handleReactivateSubscription() {
-		loadingStates.reactivate = true;
+		busyKey = 'reactivate';
 		feedbackMessage = '';
 		feedbackType = '';
 
@@ -410,8 +593,7 @@
 			console.error('Error reactivating subscription:', error);
 			feedbackMessage = 'Failed to reactivate subscription. Please try again.';
 			feedbackType = 'error';
-		} finally {
-			loadingStates.reactivate = false;
+			busyKey = null; // Clear busy state on error
 		}
 	}
 
@@ -429,8 +611,6 @@
 	$: if (feedbackMessage && feedbackType === 'error') {
 		clearFeedback();
 	}
-
-	// Note: getPlanDisplayName is imported from stripe.ts
 
 	// Run initialization on mount
 	onMount(async () => {
@@ -645,16 +825,14 @@
 							<div
 								class="plan-card {isCurrentPlan(plan)
 									? 'current-plan'
-									: ''} {isCurrentPlanCanceling(plan) ? 'canceling-plan' : ''} {isPlanPopular(
-									plan.product_key || ''
-								)
+									: ''} {isCurrentPlanCanceling(plan) ? 'canceling-plan' : ''} {isPlanPopular(plan)
 									? 'featured'
 									: ''}"
 							>
 								<div class="plan-header">
 									{#if isCurrentPlanCanceling(plan)}
 										<div class="canceling-badge">Canceling</div>
-									{:else if isPlanPopular(plan.product_key || '')}
+									{:else if isPlanPopular(plan)}
 										<div class="popular-badge">Most Popular</div>
 									{/if}
 									<h3>{getPlanDisplayName(plan)}</h3>
@@ -674,9 +852,9 @@
 									<button
 										class="landing-button primary full-width"
 										on:click={handleReactivateSubscription}
-										disabled={loadingStates.reactivate}
+										disabled={busyKey === 'reactivate'}
 									>
-										{#if loadingStates.reactivate}
+										{#if busyKey === 'reactivate'}
 											<div class="landing-loader"></div>
 										{:else}
 											Reactivate Subscription
@@ -691,7 +869,7 @@
 									{/if}
 								{:else if isCurrentPlan(plan)}
 									<button class="subscribe-button" on:click={handleCancelSubscription} disabled>
-										{#if loadingStates.cancel}
+										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
 										{:else}
 											Active Subscription
@@ -711,9 +889,9 @@
 											? 'pro'
 											: ''}"
 										on:click={() => handleUpgrade(plan.product_key?.toLowerCase() || '')}
-										disabled={loadingStates[plan.product_key?.toLowerCase() || '']}
+										disabled={busyKey === (plan.product_key?.toLowerCase() || '')}
 									>
-										{#if loadingStates[plan.product_key?.toLowerCase() || '']}
+										{#if busyKey === (plan.product_key?.toLowerCase() || '')}
 											<div class="landing-loader"></div>
 										{:else if isUpgradeEligible(plan)}
 											Upgrade
@@ -740,13 +918,13 @@
 							<div
 								class="credit-card {!$subscriptionStatus.isActive
 									? 'disabled'
-									: ''} {isCreditProductPopular(product.product_key) ? 'featured' : ''}"
+									: ''} {isCreditProductPopular(product) ? 'featured' : ''}"
 								title={!$subscriptionStatus.isActive
 									? 'Active subscription required to purchase queries'
 									: ''}
 							>
 								<div class="credit-header">
-									{#if isCreditProductPopular(product.product_key)}
+									{#if isCreditProductPopular(product)}
 										<div class="popular-badge">Best Value</div>
 									{/if}
 									<h3>{getCreditProductDisplayName(product)}</h3>
@@ -759,9 +937,9 @@
 								<button
 									class="landing-button primary full-width"
 									on:click={() => handleCreditPurchase(product.product_key)}
-									disabled={loadingStates[product.product_key] || !$subscriptionStatus.isActive}
+									disabled={busyKey === product.product_key}
 								>
-									{#if loadingStates[product.product_key]}
+									{#if busyKey === product.product_key}
 										<div class="landing-loader"></div>
 									{:else if !$subscriptionStatus.isActive}
 										Subscription Required

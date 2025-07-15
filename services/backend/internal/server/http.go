@@ -132,6 +132,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		// TODO: replace with real auth logic
 		return nil, nil
 	},
+	"deleteAccount": DeleteAccount,
 
 	// --- pricing / billing ----------------------------------------------------
 	"getUserConversation":        agent.GetUserConversation,

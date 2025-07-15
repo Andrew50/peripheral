@@ -507,13 +507,16 @@ func generateState() string {
 }
 
 // DeleteAccount deletes a user account and all associated data
-func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+func DeleteAccount(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Println("Delete account attempt started")
+
+	// Validate userID
+	if userID <= 0 {
+		return nil, fmt.Errorf("%w: invalid user ID", ErrInvalidInput)
+	}
 
 	// Parse arguments to get confirmation
 	var args struct {
-		UserID       int    `json:"userId,omitempty"`       // Only needed for public API calls
-		AuthType     string `json:"authType,omitempty"`     // Only needed for public API calls
 		Confirmation string `json:"confirmation,omitempty"` // Required for both public and private calls
 	}
 
@@ -524,20 +527,6 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 	// Check confirmation string for regular delete account
 	if args.Confirmation != "DELETE" {
 		return nil, fmt.Errorf("%w: confirmation must be 'DELETE'", ErrInvalidInput)
-	}
-
-	var userID int
-	var authType string
-
-	// If userID is provided (for public API), use that instead of the token
-	if args.UserID > 0 {
-		userID = args.UserID
-		authType = args.AuthType
-
-		// Extra verification that only authenticated users can delete accounts
-		if userID <= 0 {
-			return nil, fmt.Errorf("%w: invalid user ID", ErrInvalidInput)
-		}
 	}
 
 	// Create a timeout context to prevent hanging
@@ -560,13 +549,12 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 		}
 	}()
 
-	// Get auth type for logging purposes if it wasn't provided
-	if authType == "" {
-		err = tx.QueryRow(ctx, "SELECT auth_type FROM users WHERE userId = $1", userID).Scan(&authType)
-		if err != nil {
-			log.Printf("ERROR: Failed to get user account type for deletion: %v", err)
-			return nil, fmt.Errorf("failed to get user account: %v", err)
-		}
+	// Get auth type for logging purposes
+	var authType string
+	err = tx.QueryRow(ctx, "SELECT auth_type FROM users WHERE userId = $1", userID).Scan(&authType)
+	if err != nil {
+		log.Printf("ERROR: Failed to get user account type for deletion: %v", err)
+		return nil, fmt.Errorf("failed to get user account: %v", err)
 	}
 
 	log.Printf("Deleting account with ID: %d, type: %s", userID, authType)
@@ -578,10 +566,52 @@ func DeleteAccount(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error
 		return nil, err
 	}
 
-	// Delete setups
-	_, err = tx.Exec(ctx, "DELETE FROM setups WHERE userId = $1", userID)
+	// Delete studies
+	_, err = tx.Exec(ctx, "DELETE FROM studies WHERE userId = $1", userID)
 	if err != nil {
-		log.Printf("ERROR: Failed to delete setups for user %d: %v", userID, err)
+		log.Printf("ERROR: Failed to delete studies for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete strategies
+	_, err = tx.Exec(ctx, "DELETE FROM strategies WHERE userId = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete strategies for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete horizontal lines
+	_, err = tx.Exec(ctx, "DELETE FROM horizontal_lines WHERE userId = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete horizontal lines for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete trades
+	_, err = tx.Exec(ctx, "DELETE FROM trades WHERE userId = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete trades for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete trade executions
+	_, err = tx.Exec(ctx, "DELETE FROM trade_executions WHERE userId = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete trade executions for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete alerts
+	_, err = tx.Exec(ctx, "DELETE FROM alerts WHERE userId = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete alerts for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	// Delete conversations
+	_, err = tx.Exec(ctx, "DELETE FROM conversations WHERE user_id = $1", userID)
+	if err != nil {
+		log.Printf("ERROR: Failed to delete conversations for user %d: %v", userID, err)
 		return nil, err
 	}
 

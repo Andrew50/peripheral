@@ -1,6 +1,22 @@
 package socket
 
+/*
+
 import (
+	"backend/internal/app/chart"
+	"backend/internal/data"
+	"backend/internal/data/polygon"
+	"backend/internal/data/postgres"
+	"backend/internal/data/utils"
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+/*
+import (
+
 	"backend/internal/app/chart"
 	"backend/internal/data"
 	"backend/internal/data/polygon"
@@ -12,9 +28,11 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
 )
 
 const (
+
 	AggsLength = 200
 	OHLCV      = 5
 	Second     = 1
@@ -28,134 +46,196 @@ const (
 	minuteAggs = false
 	hourAggs   = false
 	dayAggs    = false
+
 )
 
 var (
+
 	AggData      = make(map[int]*SecurityData)
 	AggDataMutex sync.RWMutex
 
 	// Add initialization tracking
 	aggsInitialized     bool
 	aggsInitializedLock sync.RWMutex
+
 )
 
 // TimeframeData represents a structure for handling TimeframeData data.
-type TimeframeData struct {
-	Aggs              [][]float64
-	Size              int
-	rolloverTimestamp int64
-	extendedHours     bool
-	Mutex             sync.RWMutex
-}
+
+	type TimeframeData struct {
+		Aggs              [][]float64
+		Size              int
+		rolloverTimestamp int64
+		extendedHours     bool
+		Mutex             sync.RWMutex
+	}
 
 // SecurityData represents a structure for handling SecurityData data.
-type SecurityData struct {
-	SecondDataExtended *TimeframeData
-	MinuteDataExtended *TimeframeData
-	HourData           *TimeframeData
-	DayData            *TimeframeData
-	Dolvol             float64
-	Mcap               float64
-	Adr                float64
-}
 
-func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
-	td.Mutex.Lock()         // Acquire write lock
-	defer td.Mutex.Unlock() // Ensure the lock is released
+	type SecurityData struct {
+		SecondDataExtended *TimeframeData
+		MinuteDataExtended *TimeframeData
+		HourData           *TimeframeData
+		DayData            *TimeframeData
+		Dolvol             float64
+		Mcap               float64
+		Adr                float64
+	}
 
-	if timestamp >= td.rolloverTimestamp { // if out of order ticks
-		if td.Size > 0 {
-			copy(td.Aggs[1:], td.Aggs[0:minIntsAggs(td.Size, AggsLength-1)])
+	func updateTimeframe(td *TimeframeData, timestamp int64, price float64, volume float64, timeframe int) {
+		td.Mutex.Lock()         // Acquire write lock
+		defer td.Mutex.Unlock() // Ensure the lock is released
+
+		if timestamp >= td.rolloverTimestamp { // if out of order ticks
+			if td.Size > 0 {
+				copy(td.Aggs[1:], td.Aggs[0:minIntsAggs(td.Size, AggsLength-1)])
+			}
+			td.Aggs[0] = []float64{price, price, price, price, volume}
+			td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
+			if td.Size < AggsLength {
+				td.Size++
+			}
+		} else {
+			td.Aggs[0][1] = maxFloat64Aggs(td.Aggs[0][1], price) // High
+			td.Aggs[0][2] = min64(td.Aggs[0][2], price)          // Low
+			td.Aggs[0][3] = price                                // Close
+			td.Aggs[0][4] += float64(volume)                     // Volume
 		}
-		td.Aggs[0] = []float64{price, price, price, price, volume}
-		td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
-		if td.Size < AggsLength {
-			td.Size++
+	}
+
+	// updateTimeframeVolumeOnly updates only volume without affecting price data
+	// Used when price is -1 (skip OHLC condition) but volume should still be updated
+	func updateTimeframeVolumeOnly(td *TimeframeData, timestamp int64, volume float64, timeframe int) {
+		td.Mutex.Lock()         // Acquire write lock
+		defer td.Mutex.Unlock() // Ensure the lock is released
+
+		if timestamp >= td.rolloverTimestamp { // if out of order ticks
+			if td.Size > 0 {
+				copy(td.Aggs[1:], td.Aggs[0:minIntsAggs(td.Size, AggsLength-1)])
+			}
+			// Use the last valid price from the previous bar, or 0 if no previous data
+			var lastPrice float64
+			if td.Size > 0 {
+				lastPrice = td.Aggs[0][3] // Use last close price
+			}
+			td.Aggs[0] = []float64{lastPrice, lastPrice, lastPrice, lastPrice, volume}
+			td.rolloverTimestamp = nextPeriodStart(timestamp, timeframe)
+			if td.Size < AggsLength {
+				td.Size++
+			}
+		} else {
+			// Only update volume, leave price data unchanged
+			td.Aggs[0][4] += float64(volume) // Volume
 		}
-	} else {
-		td.Aggs[0][1] = maxFloat64Aggs(td.Aggs[0][1], price) // High
-		td.Aggs[0][2] = min64(td.Aggs[0][2], price)          // Low
-		td.Aggs[0][3] = price                                // Close
-		td.Aggs[0][4] += float64(volume)                     // Volume
 	}
-}
 
-func minIntsAggs(a, b int) int {
-	if a < b {
-		return a
+	func minIntsAggs(a, b int) int {
+		if a < b {
+			return a
+		}
+		return b
 	}
-	return b
-}
 
-func maxFloat64Aggs(a, b float64) float64 {
-	if a > b {
-		return a
+	func maxFloat64Aggs(a, b float64) float64 {
+		if a > b {
+			return a
+		}
+		return b
 	}
-	return b
-}
 
-func min64(a, b float64) float64 {
-	if a < b {
-		return a
+	func min64(a, b float64) float64 {
+		if a < b {
+			return a
+		}
+		return b
 	}
-	return b
-}
 
 // Function to check if aggs are initialized
-func areAggsInitialized() bool {
-	aggsInitializedLock.RLock()
-	defer aggsInitializedLock.RUnlock()
-	return aggsInitialized
-}
+
+	func areAggsInitialized() bool {
+		aggsInitializedLock.RLock()
+		defer aggsInitializedLock.RUnlock()
+		return aggsInitialized
+	}
 
 // Function to set aggs initialization status
-func setAggsInitialized(value bool) {
-	aggsInitializedLock.Lock()
-	defer aggsInitializedLock.Unlock()
-	aggsInitialized = value
-}
 
-func appendTick(_ *data.Conn, securityID int, timestamp int64, price float64, intVolume int64) error {
-	// Check if aggs are initialized
-	if !areAggsInitialized() {
-		return fmt.Errorf("aggregates not yet initialized")
+	func setAggsInitialized(value bool) {
+		aggsInitializedLock.Lock()
+		defer aggsInitializedLock.Unlock()
+		aggsInitialized = value
 	}
 
-	volume := float64(intVolume)
-
-	AggDataMutex.RLock() // Acquire read lock
-	sd, exists := AggData[securityID]
-	AggDataMutex.RUnlock() // Release read lock
-
-	if !exists {
-		return fmt.Errorf("fid0w0f")
-	}
-
-	if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
-		if hourAggs {
-			updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
+	func appendTick(_ *data.Conn, securityID int, timestamp int64, price float64, intVolume int64) error {
+		// Check if aggs are initialized
+		if !areAggsInitialized() {
+			return fmt.Errorf("aggregates not yet initialized")
 		}
-		if dayAggs {
-			updateTimeframe(sd.DayData, timestamp, price, volume, Day)
+
+		volume := float64(intVolume)
+
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		// but still allow volume updates
+		shouldSkipPriceUpdate := price < 0
+
+		AggDataMutex.RLock() // Acquire read lock
+		sd, exists := AggData[securityID]
+		AggDataMutex.RUnlock() // Release read lock
+
+		if !exists {
+			return fmt.Errorf("fid0w0f")
 		}
-	}
 
-	if secondAggs {
-		updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
-	}
+		// Only update price-related aggregations if not skipping price updates
+		if !shouldSkipPriceUpdate {
+			if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
+				if hourAggs {
+					updateTimeframe(sd.HourData, timestamp, price, volume, Hour)
+				}
+				if dayAggs {
+					updateTimeframe(sd.DayData, timestamp, price, volume, Day)
+				}
+			}
 
-	if minuteAggs {
-		updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
-	}
+			if secondAggs {
+				updateTimeframe(sd.SecondDataExtended, timestamp, price, volume, Second)
+			}
 
-	return nil
-}
+			if minuteAggs {
+				updateTimeframe(sd.MinuteDataExtended, timestamp, price, volume, Minute)
+			}
+		} else {
+			// When skipping price updates, only update volume if volume > 0
+			if volume > 0 {
+				if utils.IsTimestampRegularHours(time.Unix(timestamp, timestamp*int64(time.Millisecond))) {
+					if hourAggs {
+						updateTimeframeVolumeOnly(sd.HourData, timestamp, volume, Hour)
+					}
+					if dayAggs {
+						updateTimeframeVolumeOnly(sd.DayData, timestamp, volume, Day)
+					}
+				}
+
+				if secondAggs {
+					updateTimeframeVolumeOnly(sd.SecondDataExtended, timestamp, volume, Second)
+				}
+
+				if minuteAggs {
+					updateTimeframeVolumeOnly(sd.MinuteDataExtended, timestamp, volume, Minute)
+				}
+			}
+		}
+
+		return nil
+	}
 
 /*
+
 	func getPeriodStart(timestamp int64, tf int) int64 {
 	    return timestamp - (timestamp % int64(tf))
 	}
 */
+/*
 func nextPeriodStart(timestamp int64, tf int) int64 {
 	return timestamp - (timestamp % int64(tf)) + int64(tf)
 }
@@ -219,8 +299,8 @@ func initAggregatesInternal(conn *data.Conn) error {
 	ctx := context.Background()
 
 	query := `
-        SELECT securityId 
-        FROM securities 
+        SELECT securityId
+        FROM securities
         WHERE maxDate is NULL = true`
 
 	rows, err := conn.DB.Query(ctx, query)
@@ -534,6 +614,7 @@ func slidingWindowStats(bars []models.Agg, startTime, endTime time.Time) (float6
 
 	return totalVol, totalPct, count
 }*/
+/*
 func initSecurityData(conn *data.Conn, securityID int) *SecurityData {
 	sd := &SecurityData{}
 

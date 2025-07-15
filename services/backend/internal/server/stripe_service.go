@@ -756,6 +756,30 @@ func handleStripePriceUpdated(conn *data.Conn, event stripe.Event) error {
 	// Determine the environment to update the correct Stripe price ID column
 	isLiveMode := price.Livemode
 
+	// Check current price in database before updating
+	var currentPriceCents int64
+	var checkQuery string
+	if isLiveMode {
+		checkQuery = `SELECT price_cents FROM prices WHERE stripe_price_id_live = $1`
+	} else {
+		checkQuery = `SELECT price_cents FROM prices WHERE stripe_price_id_test = $1`
+	}
+
+	err := conn.DB.QueryRow(ctx, checkQuery, price.ID).Scan(&currentPriceCents)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			log.Printf("Warning: Price update webhook received for price ID %s, but no matching price found in database", price.ID)
+			return nil // Don't fail the webhook since this might be a price we don't track
+		}
+		return fmt.Errorf("error checking current price in database: %v", err)
+	}
+
+	// Only update if price has actually changed
+	if currentPriceCents == price.UnitAmount {
+		// Price hasn't changed, no need to update or log
+		return nil
+	}
+
 	// Update the price in our database
 	var updateQuery string
 	if isLiveMode {
@@ -780,13 +804,11 @@ func handleStripePriceUpdated(conn *data.Conn, event stripe.Event) error {
 	}
 
 	rowsAffected := result.RowsAffected()
-
-	if rowsAffected == 0 {
-		log.Printf("Warning: Price update webhook received for price ID %s, but no matching price found in database", price.ID)
-		return nil // Don't fail the webhook since this might be a price we don't track
+	if rowsAffected > 0 {
+		log.Printf("Successfully updated price %s to %d cents (was %d cents) in %s mode",
+			price.ID, price.UnitAmount, currentPriceCents, map[bool]string{true: "live", false: "test"}[isLiveMode])
 	}
 
-	log.Printf("Successfully updated price %s to %d cents in %s mode", price.ID, price.UnitAmount, map[bool]string{true: "live", false: "test"}[isLiveMode])
 	return nil
 }
 
@@ -812,6 +834,32 @@ func SyncPricingFromStripe(conn *data.Conn) error {
 		if stripePrice.UnitAmount == 0 {
 			log.Printf("⚠️ Skipping price %s - no unit amount", stripePrice.ID)
 			skippedCount++
+			continue
+		}
+
+		// Check current price in database before updating
+		var currentPriceCents int64
+		var checkQuery string
+		if stripePrice.Livemode {
+			checkQuery = `SELECT price_cents FROM prices WHERE stripe_price_id_live = $1`
+		} else {
+			checkQuery = `SELECT price_cents FROM prices WHERE stripe_price_id_test = $1`
+		}
+
+		err := conn.DB.QueryRow(ctx, checkQuery, stripePrice.ID).Scan(&currentPriceCents)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				log.Printf("⚠️ Price %s not found in database (may be untracked)", stripePrice.ID)
+				skippedCount++
+				continue
+			}
+			log.Printf("❌ Error checking current price for %s: %v", stripePrice.ID, err)
+			continue
+		}
+
+		// Only update if price has actually changed
+		if currentPriceCents == stripePrice.UnitAmount {
+			// Price hasn't changed, skip update
 			continue
 		}
 
@@ -845,13 +893,11 @@ func SyncPricingFromStripe(conn *data.Conn) error {
 		rowsAffected := result.RowsAffected()
 		if rowsAffected > 0 {
 			updatedCount++
-			log.Printf("✅ Updated price %s: %d cents (%s mode)",
+			log.Printf("✅ Updated price %s: %d cents (was %d cents) (%s mode)",
 				stripePrice.ID,
 				stripePrice.UnitAmount,
+				currentPriceCents,
 				map[bool]string{true: "live", false: "test"}[stripePrice.Livemode])
-		} else {
-			log.Printf("⚠️ Price %s not found in database (may be untracked)", stripePrice.ID)
-			skippedCount++
 		}
 	}
 

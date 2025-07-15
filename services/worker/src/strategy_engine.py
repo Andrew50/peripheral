@@ -161,7 +161,6 @@ class AccessorStrategyEngine:
             
             result = {
                 'success': True,
-                #'execution_mode': 'backtest',
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
@@ -712,7 +711,7 @@ class AccessorStrategyEngine:
                 # Generate PNG as base64 and add to response_images using matplotlib
                 try:
 
-                    png_base64 = plotly_to_matplotlib_png(fig, plotID, strategy_id)
+                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id)
                     if png_base64:
                         self.response_images.append(png_base64)
                         logger.debug(f"Generated PNG using matplotlib for plot {plotID}")

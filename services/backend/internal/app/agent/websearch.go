@@ -240,7 +240,7 @@ func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+conn.XAPIKey)
+	httpReq.Header.Set("Authorization", "Bearer "+conn.GrokAPIKey)
 	cli := &http.Client{Timeout: 60 * time.Second}
 	resp, err := cli.Do(httpReq)
 	if err != nil {

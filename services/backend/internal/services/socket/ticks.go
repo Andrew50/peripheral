@@ -84,6 +84,9 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 		totalSize := int64(0)
 		var lastTrade TradeData
 		conditionsMap := make(map[int32]bool)
+		var lastValidPrice float64
+		hasValidPrice := false
+
 		for _, tick := range ticks {
 			if trade, ok := tick.(*TradeData); ok {
 				totalSize += trade.Size
@@ -91,14 +94,27 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 				for _, condition := range trade.Conditions {
 					conditionsMap[condition] = true
 				}
+				// Track the last valid price (not -1)
+				if trade.Price >= 0 {
+					lastValidPrice = trade.Price
+					hasValidPrice = true
+				}
 			}
 		}
+
 		uniqueConditions := make([]int32, 0, len(conditionsMap))
 		for condition := range conditionsMap {
 			uniqueConditions = append(uniqueConditions, condition)
 		}
+
+		// Use the last valid price if available, otherwise use the last trade's price
+		finalPrice := lastTrade.Price
+		if hasValidPrice {
+			finalPrice = lastValidPrice
+		}
+
 		aggregatedTrade := TradeData{
-			Price:      lastTrade.Price,
+			Price:      finalPrice,
 			Size:       totalSize,
 			Timestamp:  lastTrade.Timestamp,
 			ExchangeID: lastTrade.ExchangeID,

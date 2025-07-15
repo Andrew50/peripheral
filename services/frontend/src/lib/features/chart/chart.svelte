@@ -15,7 +15,14 @@
 		queryChart,
 		showExtendedHoursToggle
 	} from './interface';
-	import { streamInfo, settings, activeAlerts, isPublicViewing } from '$lib/utils/stores/stores';
+	import {
+		streamInfo,
+		settings,
+		activeAlerts,
+		isPublicViewing,
+		horizontalLines,
+		type HorizontalLine
+	} from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
@@ -190,7 +197,7 @@
 		extendedHours: false
 	};
 	let isPanning = false;
-	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
+	//const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
 	let lastFetchedSecurityId: number | null = null;
@@ -272,6 +279,14 @@
 	let pendingVolumeUpdate: any = null;
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
+
+	// Helper function to convert viewport coordinates to chart-relative coordinates
+	function getRelativeMouseY(event: MouseEvent): number | null {
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (!chartContainer) return null;
+		const rect = chartContainer.getBoundingClientRect();
+		return event.clientY - rect.top;
+	}
 
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
@@ -472,20 +487,37 @@
 			for (const line of $drawingMenuProps.horizontalLines) {
 				chartCandleSeries.removePriceLine(line.line);
 			}
+			// CRITICAL: Clear the local lines array to prevent stale state during hot reloads
+			drawingMenuProps.update((v) => ({
+				...v,
+				horizontalLines: []
+			}));
 			if (!$isPublicViewing) {
 				privateRequest<HorizontalLine[]>('getHorizontalLines', {
 					securityId: inst.securityId
 				}).then((res: HorizontalLine[]) => {
 					if (res !== null && res.length > 0) {
-						for (const line of res) {
-							addHorizontalLine(
-								line.price,
-								currentChartInstance.securityId,
-								line.id,
-								line.color || '#FFFFFF',
-								(line.lineWidth || 1) as LineWidth
+						// Update the store with the loaded lines - the reactive block will handle rendering
+						horizontalLines.update((lines) => {
+							// Remove existing lines for this security
+							const filteredLines = lines.filter(
+								(line) => line.securityId !== currentChartInstance.securityId
 							);
-						}
+
+							// Add the new lines
+							const newLines = res.map((line) => ({
+								id: line.id,
+								securityId: currentChartInstance.securityId,
+								price: line.price,
+								color: line.color || '#FFFFFF',
+								lineWidth: line.lineWidth || 1
+							}));
+
+							return [...filteredLines, ...newLines];
+						});
+
+						// Note: Removed the imperative addHorizontalLine loop here
+						// The reactive block will detect the store change and render the lines
 					}
 				});
 			}
@@ -826,7 +858,10 @@
 		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine)
 			return;
 
-		const price = chartCandleSeries.coordinateToPrice(event.clientY);
+		const relativeY = getRelativeMouseY(event);
+		if (relativeY === null) return;
+
+		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
 		// Update the line position visually
@@ -834,7 +869,7 @@
 			price: price
 		});
 
-		// Update the stored price in horizontalLines array
+		// Update the stored price in local horizontalLines array (for immediate visual feedback)
 		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
@@ -844,13 +879,18 @@
 	}
 
 	function handleMouseUp() {
-		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
+		console.log('🖱️ handleMouseUp called');
+		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			console.log('❌ Not dragging or no selected line, returning early');
+			return;
+		}
 
 		const lineData = $drawingMenuProps.horizontalLines.find(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
 
 		if (lineData) {
+			console.log('✅ Updating line position in backend');
 			// Update line position in backend
 			privateRequest<void>(
 				'updateHorizontalLine',
@@ -861,44 +901,83 @@
 				},
 				true
 			);
+
+			// Update the store - reactive block will handle chart updates
+			if (lineData.id > 0) {
+				horizontalLines.update((lines) =>
+					lines.map((line) => (line.id === lineData.id ? { ...line, price: lineData.price } : line))
+				);
+			}
 		}
 
+		console.log('✅ Setting isDragging to false');
 		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 
 	function startDragging(event: MouseEvent) {
-		if (!$drawingMenuProps.selectedLine) return;
+		//console.log('🔄 startDragging called');
+		if (!$drawingMenuProps.selectedLine) {
+			//console.log('❌ No selected line, returning early');
+			return;
+		}
 
 		event.preventDefault();
 		event.stopPropagation();
 
+		//console.log('✅ Setting isDragging to true');
 		drawingMenuProps.update((v) => ({ ...v, isDragging: true }));
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 	}
 
 	function determineClickedLine(event: MouseEvent) {
-		const mouseY = event.clientY;
+		//console.log('🔍 determineClickedLine called');
+		const relativeY = getRelativeMouseY(event);
+		//console.log('📍 relativeY:', relativeY);
+		if (relativeY === null) {
+			//console.log('❌ relativeY is null, returning false');
+			return false;
+		}
+
 		const pixelBuffer = 5;
+		const upperPrice = chartCandleSeries.coordinateToPrice(relativeY - pixelBuffer) || 0;
+		const lowerPrice = chartCandleSeries.coordinateToPrice(relativeY + pixelBuffer) || 0;
 
-		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
-		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
+		//console.log('💰 Price range - upper:', upperPrice, 'lower:', lowerPrice);
 
-		if (upperPrice == 0 || lowerPrice == 0) return false;
+		if (upperPrice == 0 || lowerPrice == 0) {
+			//console.log('❌ Invalid price range, returning false');
+			return false;
+		}
+
+		console.log('📊 Checking', $drawingMenuProps.horizontalLines.length, 'horizontal lines');
 
 		// Only check regular horizontal lines, not alert lines
 		for (const line of $drawingMenuProps.horizontalLines) {
+			/*console.log(
+				'🔍 Checking line:',
+				line.id,
+				'price:',
+				line.price,
+				'range:',
+				lowerPrice,
+				'to',
+				upperPrice
+			);*/
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
+				//console.log('✅ Line clicked! Line ID:', line.id, 'Price:', line.price);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
 					selectedLine: line.line,
 					selectedLinePrice: line.price,
+					selectedLineColor: line.color,
+					selectedLineWidth: line.lineWidth,
 					clientX: event.clientX,
 					clientY: event.clientY,
-					active: false,
+					active: false, // Keep false until mouseup to distinguish drag vs click
 					selectedLineId: line.id
 				}));
 
@@ -908,6 +987,7 @@
 			}
 		}
 
+		//console.log('❌ No line found in range');
 		setTimeout(() => {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
@@ -927,7 +1007,7 @@
 		}
 
 		if (determineClickedLine(event)) {
-			('determineClickedLine');
+			//console.log('🎯 Line detected in determineClickedLine, setting up drag/click handlers');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -937,6 +1017,7 @@
 				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
 
 				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+					//console.log('🔄 Drag detected, starting drag operation');
 					// It's a drag - start dragging and remove this temporary listener
 					document.removeEventListener('mousemove', handleMouseMoveForDrag);
 					document.removeEventListener('mouseup', handleMouseUpForClick);
@@ -948,9 +1029,18 @@
 			const handleMouseUpForClick = (upEvent: MouseEvent) => {
 				const deltaX = Math.abs(upEvent.clientX - mouseDownStartX);
 				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
+				/*
+				console.log(
+					'🖱️ Mouse up detected, deltaX:',
+					deltaX,
+					'deltaY:',
+					deltaY,
+					'threshold:',
+					DRAG_THRESHOLD
+				);*/
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					('click');
+					//console.log('✅ Click confirmed, activating menu');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -958,6 +1048,8 @@
 						clientX: upEvent.clientX,
 						clientY: upEvent.clientY
 					}));
+				} else {
+					//console.log('❌ Movement exceeded threshold, not activating menu');
 				}
 
 				// Clean up listeners
@@ -1070,17 +1162,20 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-		// Early returns for invalid data or conditions
+		// Early returns for invalid data
 		if (
 			!trade?.price ||
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isSwitchingTickers ||
-			trade.conditions?.some((condition) => excludedConditions.has(condition))
+			isSwitchingTickers
+			//|| trade.conditions?.some((condition) => excludedConditions.has(condition))
 		) {
 			return;
 		}
+
+		// Skip price updates if price is -1 (indicates skip OHLC condition)
+		const shouldSkipPriceUpdate = trade.price < 0;
 
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
@@ -1114,29 +1209,38 @@
 			if (!chartLatestDataReached) return;
 			const now = Date.now();
 
-			if (!pendingBarUpdate) {
-				pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+			// Only update price-related data if not skipping price updates
+			if (!shouldSkipPriceUpdate) {
+				if (!pendingBarUpdate) {
+					pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+				}
+
+				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
+				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
+				pendingBarUpdate.close = trade.price;
 			}
 
-			if (!pendingVolumeUpdate) {
-				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
-				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
-					pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+			// Always update volume (unless size is 0)
+			if (trade.size > 0) {
+				if (!pendingVolumeUpdate) {
+					const lastVolumeRaw = chartVolumeSeries.data().at(-1);
+					if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
+						pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+					}
+				}
+
+				if (pendingVolumeUpdate) {
+					pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
+					// Only update color if we have valid price data
+					if (!shouldSkipPriceUpdate) {
+						pendingVolumeUpdate.color =
+							pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
+					}
 				}
 			}
 
-			pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
-			pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
-			pendingBarUpdate.close = trade.price;
-
-			if (pendingVolumeUpdate) {
-				pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
-				pendingVolumeUpdate.color =
-					pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
-			}
-
 			if (now - lastUpdateTime >= updateThrottleMs) {
-				if (pendingBarUpdate) {
+				if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 					chartCandleSeries.update(pendingBarUpdate);
 					pendingBarUpdate = null;
 				}
@@ -1153,7 +1257,7 @@
 		} else {
 			if (!chartLatestDataReached) return;
 
-			if (pendingBarUpdate) {
+			if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 				chartCandleSeries.update(pendingBarUpdate);
 				pendingBarUpdate = null;
 			}
@@ -1163,30 +1267,47 @@
 			}
 			lastUpdateTime = Date.now();
 
-			const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
-				trade.timestamp,
-				currentChartInstance.extendedHours
-			);
-			const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
-			const flooredDifference =
-				Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-			const newTime = UTCSecondstoESTSeconds(
-				referenceStartTime / 1000 + flooredDifference
-			) as UTCTimestamp;
+			// Only create new bar if we have valid price data
+			if (!shouldSkipPriceUpdate) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
 
-			chartCandleSeries.update({
-				time: newTime,
-				open: trade.price,
-				high: trade.price,
-				low: trade.price,
-				close: trade.price
-			});
+				chartCandleSeries.update({
+					time: newTime,
+					open: trade.price,
+					high: trade.price,
+					low: trade.price,
+					close: trade.price
+				});
+			}
 
-			chartVolumeSeries.update({
-				time: newTime,
-				value: trade.size,
-				color: '#089981'
-			});
+			// Always update volume if size > 0
+			if (trade.size > 0) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
+
+				chartVolumeSeries.update({
+					time: newTime,
+					value: trade.size,
+					color: '#089981'
+				});
+			}
 
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();
@@ -1290,6 +1411,104 @@
 				}
 			}
 		});
+	}
+
+	// Add subscription to horizontalLines store to update chart lines
+	$: if (
+		$horizontalLines &&
+		chartCandleSeries &&
+		chartSecurityId &&
+		!$drawingMenuProps.isDragging
+	) {
+		// Get current lines for this security from drawingMenuProps
+		const currentDrawingLines = $drawingMenuProps.horizontalLines || [];
+
+		// Get lines for current security from the store
+		const storeLines = $horizontalLines.filter((line) => line.securityId === chartSecurityId);
+
+		// Find lines that exist in store but not in drawingMenuProps (need to add)
+		const linesToAdd = storeLines.filter(
+			(storeLine) => !currentDrawingLines.find((drawingLine) => drawingLine.id === storeLine.id)
+		);
+
+		// Find lines that exist in drawingMenuProps but not in store (need to remove)
+		const linesToRemove = currentDrawingLines.filter(
+			(drawingLine) =>
+				drawingLine.id > 0 && !storeLines.find((storeLine) => storeLine.id === drawingLine.id)
+		);
+
+		// Find lines that exist in both but might have different properties (need to update)
+		const linesToUpdate = storeLines.filter((storeLine) => {
+			const drawingLine = currentDrawingLines.find((dl) => dl.id === storeLine.id);
+			return (
+				drawingLine &&
+				(drawingLine.price !== storeLine.price ||
+					drawingLine.color !== storeLine.color ||
+					drawingLine.lineWidth !== storeLine.lineWidth)
+			);
+		});
+
+		// Remove lines that no longer exist in store
+		linesToRemove.forEach((lineToRemove) => {
+			chartCandleSeries.removePriceLine(lineToRemove.line);
+		});
+
+		// Update drawingMenuProps to match store
+		if (linesToAdd.length > 0 || linesToRemove.length > 0 || linesToUpdate.length > 0) {
+			drawingMenuProps.update((props) => {
+				let updatedLines = [...props.horizontalLines];
+
+				// Remove lines
+				updatedLines = updatedLines.filter(
+					(line) => !linesToRemove.find((removeMe) => removeMe.id === line.id)
+				);
+
+				// Add new lines
+				linesToAdd.forEach((lineToAdd) => {
+					const priceLine = chartCandleSeries.createPriceLine({
+						price: lineToAdd.price,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth,
+						lineStyle: 0, // Solid line
+						axisLabelVisible: true
+					});
+
+					updatedLines.push({
+						id: lineToAdd.id,
+						price: lineToAdd.price,
+						line: priceLine,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth
+					});
+				});
+
+				// Update existing lines
+				linesToUpdate.forEach((lineToUpdate) => {
+					const existingLineIndex = updatedLines.findIndex((ul) => ul.id === lineToUpdate.id);
+					if (existingLineIndex !== -1) {
+						const existingLine = updatedLines[existingLineIndex];
+						existingLine.line.applyOptions({
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						});
+
+						// Update the stored properties
+						updatedLines[existingLineIndex] = {
+							...existingLine,
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						};
+					}
+				});
+
+				return {
+					...props,
+					horizontalLines: updatedLines
+				};
+			});
+		}
 	}
 
 	function change(
@@ -1466,7 +1685,10 @@
 			event.preventDefault();
 			if (!chartCandleSeries) return;
 
-			const price = chartCandleSeries.coordinateToPrice(event.clientY);
+			const relativeY = getRelativeMouseY(event);
+			if (relativeY === null) return;
+
+			const price = chartCandleSeries.coordinateToPrice(relativeY);
 			if (typeof price !== 'number') return;
 
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
@@ -2097,46 +2319,47 @@
 	}
 
 	// Function to calculate optimal position for event-info popup
-	function calculateEventInfoPosition(containerWidth: number, containerHeight: number) {
-		// Try to get the actual legend element and its dimensions
-		const legendElement = document.querySelector(`#chart_container-${chartId} .legend`);
-		let legendRight = 300; // Default right edge position
-		let legendBottom = 100; // Default bottom position
-
-		if (legendElement) {
-			const legendRect = legendElement.getBoundingClientRect();
-			const chartContainer = document.querySelector(`#chart_container-${chartId}`);
-			const chartRect = chartContainer?.getBoundingClientRect();
-
-			if (chartRect) {
-				// Calculate legend's right edge and bottom relative to chart container
-				legendRight = legendRect.right - chartRect.left;
-				legendBottom = legendRect.bottom - chartRect.top;
-			}
-		}
-
-		const margin = 10; // Margin from legend and edges
+	function calculateEventInfoPosition(
+		containerWidth: number,
+		containerHeight: number,
+		eventX: number,
+		eventY: number
+	) {
+		const margin = 10; // Margin from edges
 		const minPopupWidth = 200; // Minimum popup width
+		const maxPopupWidth = 350; // Maximum popup width
+		const popupWidth = Math.max(
+			minPopupWidth,
+			Math.min(maxPopupWidth, containerWidth - margin * 2)
+		);
 
-		// Calculate available space to the right of legend
-		const availableWidth = containerWidth - legendRight - margin * 2;
+		// Estimate popup height (we'll use a reasonable default since we can't measure before rendering)
+		const estimatedPopupHeight = 150; // Adjust based on typical content
 
-		// Set popup width to available space (with min/max constraints)
-		const popupWidth = Math.max(minPopupWidth, Math.min(availableWidth, 350));
+		// Calculate initial position centered on the event
+		let leftPosition = eventX - popupWidth / 2;
+		let topPosition = eventY - estimatedPopupHeight - margin; // Position above the event by default
 
-		// Position to the right of the legend with margin
-		let leftPosition = legendRight + margin;
-
-		// Ensure popup doesn't go beyond right edge
-		if (leftPosition + popupWidth > containerWidth - margin) {
+		// Adjust horizontal position to stay within container bounds
+		if (leftPosition < margin) {
+			leftPosition = margin;
+		} else if (leftPosition + popupWidth > containerWidth - margin) {
 			leftPosition = containerWidth - popupWidth - margin;
 		}
 
-		// Ensure popup doesn't go beyond left edge (shouldn't happen but safety check)
-		leftPosition = Math.max(margin, leftPosition);
+		// Adjust vertical position to stay within container bounds
+		if (topPosition < margin) {
+			// If there's not enough space above, position below the event
+			topPosition = eventY + margin;
+		}
 
-		// For vertical positioning, start at top but ensure it doesn't go beyond bottom
-		let topPosition = 5;
+		// Ensure popup doesn't go beyond bottom edge
+		if (topPosition + estimatedPopupHeight > containerHeight - margin) {
+			topPosition = containerHeight - estimatedPopupHeight - margin;
+		}
+
+		// Final bounds check
+		topPosition = Math.max(margin, topPosition);
 		const maxHeight = containerHeight - topPosition - margin;
 
 		return {
@@ -2262,7 +2485,12 @@
 {#if selectedEvent}
 	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
 	{@const containerHeight = chartContainer?.clientHeight || 600}
-	{@const position = calculateEventInfoPosition(width, containerHeight)}
+	{@const position = calculateEventInfoPosition(
+		width,
+		containerHeight,
+		selectedEvent.x,
+		selectedEvent.y
+	)}
 	<div
 		class="event-info"
 		style="
@@ -2356,22 +2584,8 @@
 		min-width: 200px;
 		overflow-y: auto;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: scale(0.95);
-		transform-origin: top left;
-		opacity: 0;
-		animation: fadeInDown 0.2s ease-out forwards;
 		word-wrap: break-word;
 		hyphens: auto;
-	}
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: scale(0.85);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
 	}
 
 	.event-header {

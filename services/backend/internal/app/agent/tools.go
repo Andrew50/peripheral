@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"backend/internal/app/alerts"
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
+	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -36,6 +38,13 @@ func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, err
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+
+		// Set LLM execution flag for this function call
+		conn.IsLLMExecution = true
+		defer func() {
+			conn.IsLLMExecution = false
+		}()
+
 		return fn(conn, userID, args)
 	}
 }
@@ -167,6 +176,24 @@ var (
 			},
 			Function:      wrapWithContext(watchlist.NewWatchlistItem),
 			StatusMessage: "Adding item to watchlist...",
+		},
+		"deleteWatchlist": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "deleteWatchlist",
+				Description: "Delete a watchlist and all its items.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"watchlistId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the watchlist to delete.",
+						},
+					},
+					Required: []string{"watchlistId"},
+				},
+			},
+			Function:      wrapWithContext(watchlist.DeleteWatchlist),
+			StatusMessage: "Deleting watchlist...",
 		},
 		//singles
 
@@ -485,10 +512,25 @@ var (
 			Function:      wrapWithContext(strategy.RunScreening),
 			StatusMessage: "Running screener...",
 		},
+		"runPythonAgent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runPythonAgent",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
+					},
+					Required: []string{"prompt"},
+				},
+			},
+			Function:      RunPythonAgent,
+			StatusMessage: "Running Python agent...",
+		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getDailySnapshot",
-				Description: "Get the current (regular or extended hours) price, change, volume, OHLC, previous close for a specified stock.",
+				Description: "Get the current price (regular or extended hours), change, volume, OHLC, previous close for a specified stock.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -506,7 +548,7 @@ var (
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getLastPrice",
-				Description: "Retrieves the last price (regular or extended hours)for a specified ticker symbol.",
+				Description: "Retrieves the last price (regular or extended hours) for a specified ticker symbol.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -697,6 +739,135 @@ var (
 			StatusMessage: "Searching Twitter...",
 		},*/
 		// [END SEARCH TOOLS]
+		// [ALERT TOOLS]
+		"createPriceAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "createPriceAlert",
+				Description: "Create a new price alert for a specific security. The alert will trigger when the price reaches the specified level.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"price": {
+							Type:        genai.TypeNumber,
+							Description: "The price level at which the alert should trigger.",
+						},
+						"securityId": {
+							Type:        genai.TypeInteger,
+							Description: "The security ID of the stock to create the alert for.",
+						},
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol of the stock (e.g., 'AAPL', 'NVDA').",
+						},
+					},
+					Required: []string{"price", "securityId", "ticker"},
+				},
+			},
+			Function:      wrapWithContext(alerts.NewAlert),
+			StatusMessage: "Creating price alert...",
+		},
+		"getAlerts": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getAlerts",
+				Description: "Get all current price alerts for the user, including active and triggered alerts.",
+				Parameters: &genai.Schema{
+					Type:       genai.TypeObject,
+					Properties: map[string]*genai.Schema{}, // No parameters needed
+					Required:   []string{},
+				},
+			},
+			Function:      wrapWithContext(alerts.GetAlerts),
+			StatusMessage: "Fetching alerts...",
+		},
+		"getAlertLogs": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getAlertLogs",
+				Description: "Get all triggered/fired price alerts for the user. These are alerts that have been activated.",
+				Parameters: &genai.Schema{
+					Type:       genai.TypeObject,
+					Properties: map[string]*genai.Schema{}, // No parameters needed
+					Required:   []string{},
+				},
+			},
+			Function:      wrapWithContext(alerts.GetAlertLogs),
+			StatusMessage: "Fetching alert history...",
+		},
+		"deleteAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "deleteAlert",
+				Description: "Delete a specific price alert by its alert ID.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"alertId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the alert to delete.",
+						},
+					},
+					Required: []string{"alertId"},
+				},
+			},
+			Function:      wrapWithContext(alerts.DeleteAlert),
+			StatusMessage: "Deleting alert...",
+		},
+		// [END ALERT TOOLS]
+		// [SCREENER TOOLS]
+		"runScreener": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runScreener",
+				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"returnColumns": {
+							Type:        genai.TypeArray,
+							Description: "Array of column names to return in results. Available columns: security_id, open, high, low, close, wk52_low, wk52_high, pre_market_open, pre_market_high, pre_market_low, pre_market_close, market_cap, sector, industry, pre_market_change, pre_market_change_pct, extended_hours_change, extended_hours_change_pct, change_1_pct, change_15_pct, change_1h_pct, change_4h_pct, change_1d_pct, change_1w_pct, change_1m_pct, change_3m_pct, change_6m_pct, change_ytd_1y_pct, change_5y_pct, change_10y_pct, change_all_time_pct, change_from_open, change_from_open_pct, price_over_52wk_high, price_over_52wk_low, rsi, dma_200, dma_50, price_over_50dma, price_over_200dma, beta_1y_vs_spy, beta_1m_vs_spy, volume, avg_volume_1m, dollar_volume, avg_dollar_volume_1m, pre_market_volume, pre_market_dollar_volume, relative_volume_14, pre_market_vol_over_14d_vol, range_1m_pct, range_15m_pct, range_1h_pct, day_range_pct, volatility_1w, volatility_1m, pre_market_range_pct. At least one column is required.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+						"orderBy": {
+							Type:        genai.TypeString,
+							Description: "Optional. Column name to order results by. Must be one of the available columns.",
+						},
+						"sortDirection": {
+							Type:        genai.TypeString,
+							Description: "Optional. Sort direction for ordering results. Must be 'ASC' or 'DESC' (case insensitive). Defaults to 'ASC' if not specified.",
+						},
+						"limit": {
+							Type:        genai.TypeInteger,
+							Description: "Maximum number of results to return. Must be between 1 and 10,000. Defaults to 100 if not specified.",
+						},
+						"filters": {
+							Type:        genai.TypeArray,
+							Description: "Array of filter objects to apply to the screener query. Each filter specifies a column, operator, and value.",
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"column": {
+										Type:        genai.TypeString,
+										Description: "Column name to filter on. Must be one of the available screener columns.",
+									},
+									"operator": {
+										Type:        genai.TypeString,
+										Description: "Comparison operator. Options: '=', '!=', '>', '<', '>=', '<=', 'LIKE' (for strings), 'IN' (for arrays), 'topn', 'bottomn', 'topn_pct', 'bottomn_pct' (for ranking).",
+									},
+									"value": {
+										Type:        genai.TypeUnspecified,
+										Description: "Value to compare against. Type must match column type. For IN operator, use array. For ranking operators (topn/bottomn), use positive integer.",
+									},
+								},
+								Required: []string{"column", "operator", "value"},
+							},
+						},
+					},
+					Required: []string{"returnColumns", "limit"},
+				},
+			},
+			Function:      wrapWithContext(screener.GetScreenerData),
+			StatusMessage: "Screening stocks...",
+		},
+		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {
 			FunctionDeclaration: &genai.FunctionDeclaration{

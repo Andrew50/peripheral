@@ -58,14 +58,14 @@ func loadS3Config() s3Config {
 
 // newS3Client returns a tuned AWS S3 client for high-throughput, low-latency transfers.
 //
-//lint:ignore SA1019 Using deprecated resolver until AWS SDK upgrade completes.
+//nolint:staticcheck // SA1019: Using deprecated resolver until AWS SDK upgrade completes.
 func newS3Client(cfg s3Config) (*s3.Client, error) {
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(cfg.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc( //nolint:staticcheck // SA1019: Using deprecated resolver until AWS SDK upgrade completes.
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil
+				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil //nolint:staticcheck // SA1019: Using deprecated Endpoint struct until AWS SDK upgrade completes.
 			}),
 		),
 	)
@@ -112,7 +112,7 @@ var copyBatchSize = func() int {
 
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
-	return 1 // TODO: remove this if we can get db stable
+	return 4 // TODO: remove this if we can get db stable
 	/*
 		cpus := runtime.NumCPU()
 		if cpus > 8 {
