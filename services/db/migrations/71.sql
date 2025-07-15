@@ -1,4 +1,4 @@
--- Migration: 072_update_plus_yearly_price_id
+-- Migration: 071_update_plus_yearly_price_id
 -- Description: Update Plus yearly subscription price ID to new Stripe price ID
 
 BEGIN;
@@ -41,7 +41,7 @@ END $$;
 -- Update schema version
 INSERT INTO schema_versions (version, description)
 VALUES (
-    72,
+    71,
     'Update Plus yearly subscription price ID to new Stripe price ID'
 ) ON CONFLICT (version) DO NOTHING;
 
