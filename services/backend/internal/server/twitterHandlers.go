@@ -31,23 +31,23 @@ type TwitterWebhookPayload struct {
 
 // Tweet represents only the fields we need from each tweet
 type Tweet struct {
-	URL       string `json:"url"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"createdAt"`
-	Author    Author `json:"author"`
+	URL       string `json:"url,omitempty"`
+	Text      string `json:"text,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Author    Author `json:"author,omitempty"`
 }
 
 // Author represents only the username field we need
 type Author struct {
-	Username string `json:"userName"`
+	Username string `json:"userName,omitempty"`
 }
 
 // ExtractedTweetData represents the clean data we extract for processing
 type ExtractedTweetData struct {
-	URL       string `json:"url"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"createdAt"`
-	Username  string `json:"username"`
+	URL       string `json:"url,omitempty"`
+	Text      string `json:"text,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 // HandleTwitterWebhook processes incoming Twitter webhook events
@@ -131,10 +131,11 @@ func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) er
 func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 
 	seen := determineIfAlreadySeenTweet(conn, tweet)
-	if seen {
+	fmt.Println("seen", seen)
+	/*if seen {
 		storeTweet(conn, tweet)
 		return
-	}
+	}*/
 	// Extract ticker symbols from the tweet text
 	tickers := extractTickersFromTweet(tweet.Text)
 
@@ -153,19 +154,21 @@ func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 		log.Printf("Error creating peripheral tweet: %v", err)
 		return
 	}
-	SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+	fmt.Println("Peripheral tweet", peripheralContentToTweet)
+	//SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
 
 }
 
 type PeripheralTweet struct {
-	Text string                 `json:"text" jsonschema:"required"`
-	Plot map[string]interface{} `json:"plot,omitempty" jsonschema:"required"`
+	Text string      `json:"text" jsonschema:"required"`
+	Plot interface{} `json:"plot" jsonschema:"required"`
 }
 
 func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (PeripheralTweet, error) { // to implement don't forget
 
 	prompt := tweet.Text
-	agentResult, err := agent.RunGeneralAgent[PeripheralTweet](conn, "generalAgentSystemPrompt", "peripheralTweetSystemPrompt", prompt)
+	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
+	agentResult, err := agent.RunGeneralAgent[PeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt)
 	if err != nil {
 		return PeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
@@ -284,13 +287,13 @@ func storeTweet(conn *data.Conn, tweet ExtractedTweetData) {
 	cutoff := time.Now().Add(-18 * time.Hour).Unix()
 	conn.Cache.ZRemRangeByScore(context.Background(), "twitterTweets", "-inf", strconv.FormatInt(cutoff, 10))
 
-	query := `INSERT INTO news_tweets (tweet_text, created_at, url, username) VALUES ($1, $2, $3, $4)`
+	/* query := `INSERT INTO news_tweets (tweet_text, created_at, url, username) VALUES ($1, $2, $3, $4)`
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := conn.DB.Exec(ctx, query, tweet.Text, tweet.CreatedAt, tweet.URL, tweet.Username)
 	if err != nil {
 		log.Printf("Error storing tweet: %v", err)
-	}
+	}*/
 }
 
 func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet PeripheralTweet) { // TODO: Implement plot rendering and image upload
