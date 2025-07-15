@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -165,7 +164,9 @@ func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.C
 		DoNotReference:            true,
 	}
 	model := "o3"
-	rawSchema := ref.Reflect(reflect.TypeOf((*T)(nil)).Elem())
+
+	var zero T
+	rawSchema := ref.Reflect(zero)
 	b, _ := json.Marshal(rawSchema)
 	var oaSchema map[string]any
 	_ = json.Unmarshal(b, &oaSchema)
@@ -236,6 +237,7 @@ func _buildGeneralAgentOpenAIFinalResponseInput(query string, executionResults [
 			var ok bool
 
 			if resultMap, ok = result.Result.(map[string]interface{}); ok {
+				// Result is already a map, use it directly
 			} else {
 				// If direct cast fails, convert any type to map through JSON marshaling
 				// Marshal the result to JSON
@@ -396,7 +398,7 @@ func _generalGeminiGenerateExecutionPlan(ctx context.Context, conn *data.Conn, s
 		}
 	}
 	geminiResultText := strings.TrimSpace(sb.String())
-
+	fmt.Println("geminiResultText", geminiResultText)
 	var executionPlan ExecutionPlan
 	planParseErr := json.Unmarshal([]byte(geminiResultText), &executionPlan)
 	if planParseErr == nil && executionPlan.Stage != "" {
