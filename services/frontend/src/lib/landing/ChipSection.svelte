@@ -55,7 +55,7 @@
     font-size: clamp(2rem, 4vw, 3rem);
     font-weight: 800;
     margin: 0;
-    color: var(--color-dark);
+    color: #ffffff;
     position: relative;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -100,7 +100,7 @@
     border: 1px solid rgba(11, 46, 51, 0.15);
     border-radius: 9999px;
     font-size: 0.95rem;
-    color: var(--color-dark);
+    color: black;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
@@ -118,6 +118,7 @@
 
   .chip-text {
     line-height: 1.3;
+    color: black;
   }
 
   /* Animation keyframes */

@@ -161,57 +161,50 @@
 	// Get credit product display name
 	function getCreditProductDisplayName(creditProduct: DatabaseCreditProduct): string {
 		const displayNames: Record<string, string> = {
-			credits100: '100 Credits',
-			credits250: '250 Credits',
-			credits1000: '1000 Credits'
+			credits100: '100 Queries',
+			credits250: '250 Queries',
+			credits1000: '1000 Queries'
 		};
-		return displayNames[creditProduct.product_key] || `${creditProduct.credit_amount} Credits`;
+		return displayNames[creditProduct.product_key] || `${creditProduct.credit_amount} Queries`;
 	}
 
 	// Get plan features dynamically from plan data
 	function getPlanFeatures(plan: DatabasePlan): string[] {
 		const features: string[] = [];
 
-		// Data type feature - based on realtime_charts
+		// 1. Queries limit
+		if (plan.queries_limit > 0) {
+			features.push(`${plan.queries_limit} queries/mo`);
+		}
+
+		// 2. Data quality - based on realtime_charts
 		if (plan.realtime_charts) {
 			features.push('Realtime data');
 		} else {
 			features.push('Delayed data');
 		}
 
-		// Queries limit
-		if (plan.queries_limit > 0) {
-			features.push(`${plan.queries_limit} queries/mo`);
+		// 3. Strategy screening - simplified to just "Realtime strategy screening"
+		if (plan.strategy_alerts_limit > 0) {
+			features.push('Realtime strategy screening');
 		}
 
-		// Strategy alerts limit
+		// 4. Number of active strategies
 		if (plan.strategy_alerts_limit > 0) {
 			features.push(`${plan.strategy_alerts_limit} active strategies`);
 		}
 
-		// Strategy screening type
-		if (plan.multi_strategy_screening) {
-			features.push('Multi strategy screening');
-		} else if (plan.strategy_alerts_limit > 0) {
-			features.push('Single strategy screening');
-		}
-
-		// Alerts limit
+		// 5. Number of active alerts
 		if (plan.alerts_limit > 0) {
 			features.push(`${plan.alerts_limit} news or price alerts`);
 		}
 
-		// Watchlist alerts
+		// 6. Watchlist alerts
 		if (plan.watchlist_alerts) {
 			features.push('Watchlist alerts');
 		}
 
-		// Multi chart layouts
-		if (plan.multi_chart) {
-			features.push('Multi chart layouts');
-		}
-
-		// Sub-minute charts
+		// Sub-minute charts (keeping this as it's not multi chart)
 		if (plan.sub_minute_charts) {
 			features.push('Sub-minute charts');
 		}
@@ -297,14 +290,14 @@
 
 	// Helper function to check if a plan is popular (using backend data)
 	const isPlanPopular = (plan: DatabasePlan): boolean => {
-		// For now, hardcode Plus as popular until backend provides this data
-		return plan.product_key?.toLowerCase() === 'plus';
+		// Move "Most Popular" to Pro plan instead of Plus
+		return plan.product_key?.toLowerCase() === 'pro';
 	};
 
 	// Helper function to check if a credit product is popular (using backend data)
 	const isCreditProductPopular = (creditProduct: DatabaseCreditProduct): boolean => {
-		// For now, hardcode credits250 as popular until backend provides this data
-		return creditProduct.product_key === 'credits250';
+		// For now, hardcode credits1000 as popular until backend provides this data
+		return creditProduct.product_key === 'credits1000';
 	};
 
 	// Helper function to validate authentication
@@ -766,7 +759,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="landing-background landing-reset">
 	<!-- Main Pricing Content -->
-	<div class="landing-container" style="padding-top: 200px;">
+	<div class="landing-container" style="padding-top: 280px;">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
@@ -827,7 +820,7 @@
 									? 'current-plan'
 									: ''} {isCurrentPlanCanceling(plan) ? 'canceling-plan' : ''} {isPlanPopular(plan)
 									? 'featured'
-									: ''}"
+									: ''} {plan.product_key?.toLowerCase() === 'free' ? 'free-plan' : ''}"
 							>
 								<div class="plan-header">
 									{#if isCurrentPlanCanceling(plan)}
@@ -868,7 +861,7 @@
 										</p>
 									{/if}
 								{:else if isCurrentPlan(plan)}
-									<button class="subscribe-button" on:click={handleCancelSubscription} disabled>
+									<button class="subscribe-button active-subscription" on:click={handleCancelSubscription} disabled>
 										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
 										{:else}
@@ -969,6 +962,7 @@
 	.pricing-hero {
 		text-align: center;
 		margin-bottom: 3rem;
+		margin-top: 6rem;
 	}
 
 	.loading-message {
@@ -1050,7 +1044,7 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		border: 2px solid rgba(0, 0, 0, 0.5);
+		border: 2px solid rgba(255, 255, 255, 0.3);
 		border-radius: 24px;
 	}
 
@@ -1065,15 +1059,9 @@
 		position: relative;
 	}
 
-	.plan-card.current-plan::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--landing-success);
-		border-radius: 8px 8px 0 0;
+	/* Free plan styling - visible border */
+	.plan-card.free-plan {
+		border: 2px solid rgba(255, 255, 255, 0.3);
 	}
 
 	/* Canceling plan styling */
@@ -1430,7 +1418,7 @@
 		position: relative;
 		z-index: 1;
 		background: none;
-		border: 2px solid rgba(0, 0, 0, 0.5);
+		border: 2px solid rgba(255, 255, 255, 0.3);
 		padding: 0.875rem 2rem;
 		font-size: 1rem;
 		font-weight: 600;
@@ -1471,6 +1459,11 @@
 		background: rgba(255, 255, 255, 0.08);
 		color: rgba(255, 255, 255, 0.8);
 		cursor: not-allowed;
+	}
+
+	/* Active subscription button - green text */
+	.subscribe-button.active-subscription {
+		color: var(--landing-success);
 	}
 
 	@media (max-width: 640px) {
