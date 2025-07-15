@@ -152,7 +152,8 @@
 		background: linear-gradient(
 			180deg,
 			#000000 0%,
-			rgba(3, 1, 85, 0.75) 50%,
+			rgba(3, 1, 85, 0.75) 40%,
+			rgba(2, 1, 50, 0.8) 70%,
 			#010022 100%
 		);
 		color: var(--color-dark);
@@ -166,6 +167,7 @@
 			sans-serif;
 		display: flex;
 		flex-direction: column;
+		min-height: 100vh;
 	}
 
 	.hero-title-section {
@@ -278,7 +280,6 @@
 		position: relative;
 		z-index: 10;
 		padding: 6rem 2rem;
-		background: rgba(255, 255, 255, 0.02);
 		width: 100%;
 		flex-shrink: 0;
 	}
