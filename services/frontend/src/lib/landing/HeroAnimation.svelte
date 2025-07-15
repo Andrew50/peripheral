@@ -1432,6 +1432,8 @@
 		flex-direction: column;
 		width: 100%;
 		align-items: flex-end; /* user alignment */
+		position: relative;
+		z-index: 1;
 	}
 
 	.message.user {
@@ -1457,6 +1459,8 @@
 		width: 100%;
 		max-width: 100%;
 		text-align: left;
+		position: relative;
+		z-index: 1;
 	}
 
 	/* Force Inter font inside chat */
@@ -1500,6 +1504,8 @@
 	/* Content chunk styling */
 	.hero-chat-container :global(.chunk-text) {
 		margin: 0;
+		position: relative;
+		z-index: 1;
 	}
 
 	.hero-chat-container :global(.chunk-text h1),
@@ -1531,6 +1537,8 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		overflow: hidden;
 		font-size: 0.75rem;
+		position: relative;
+		z-index: 1;
 	}
 
 	.hero-chat-container :global(.table-caption) {
@@ -1541,11 +1549,15 @@
 		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		background: rgba(255, 255, 255, 0.1);
 		font-size: 0.85rem;
+		position: relative;
+		z-index: 2;
 	}
 
 	.hero-chat-container :global(.chunk-table) {
 		overflow-x: auto;
 		max-width: 100%;
+		position: relative;
+		z-index: 1;
 	}
 
 	.hero-chat-container :global(.chunk-table table) {

@@ -2,15 +2,55 @@
 	import { goto } from '$app/navigation';
   import { chipIdeas } from './chipIdeas';
   import type { ChipIdea } from './chipIdeas';
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   
+  let isMobile = false;
+  
+  onMount(() => {
+    if (browser) {
+      // Check if screen is mobile size
+      const checkMobile = () => {
+        isMobile = window.innerWidth <= 768;
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  });
 
-  const chipsPerRow = 7;
-
-  // Group chip ideas into rows of 7
-  const rows: ChipIdea[][] = [];
-  for (let i = 0; i < chipIdeas.length; i += chipsPerRow) {
-    rows.push(chipIdeas.slice(i, i + chipsPerRow));
+  // Reactive statement to create rows based on screen size
+  $: {
+    // Clear existing rows
+    rows.length = 0;
+    
+    if (isMobile) {
+      // Mobile: 4 chips per row, double the rows (8 rows total)
+      const chipsPerRow = 4;
+      const targetRows = 8;
+      const chipsNeeded = targetRows * chipsPerRow; // 32 chips needed
+      
+      // Create extended chip array by repeating chips if needed
+      const extendedChips = [];
+      for (let i = 0; i < chipsNeeded; i++) {
+        extendedChips.push(chipIdeas[i % chipIdeas.length]);
+      }
+      
+      // Create rows
+      for (let i = 0; i < extendedChips.length; i += chipsPerRow) {
+        rows.push(extendedChips.slice(i, i + chipsPerRow));
+      }
+    } else {
+      // Desktop: 7 chips per row (original behavior)
+      const chipsPerRow = 7;
+      for (let i = 0; i < chipIdeas.length; i += chipsPerRow) {
+        rows.push(chipIdeas.slice(i, i + chipsPerRow));
+      }
+    }
   }
+  
+  let rows: ChipIdea[][] = [];
 </script>
 
 <section class="chip-section">
@@ -55,7 +95,7 @@
     font-size: clamp(2rem, 4vw, 3rem);
     font-weight: 800;
     margin: 0;
-    color: var(--color-dark);
+    color: #ffffff;
     position: relative;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -77,13 +117,13 @@
   .chip-track {
     display: flex;
     gap: 0.75rem;
-    animation: scrollLeft 90s linear infinite;
+    animation: scrollLeft 70s linear infinite;
     width: fit-content;
   }
 
   /* Reverse rows scroll in opposite direction */
   .chip-row.reverse .chip-track {
-    animation: scrollRight 90s linear infinite;
+    animation: scrollRight 70s linear infinite;
   }
 
   /* Pause animation on hover */
@@ -100,7 +140,7 @@
     border: 1px solid rgba(11, 46, 51, 0.15);
     border-radius: 9999px;
     font-size: 0.95rem;
-    color: var(--color-dark);
+    color: black;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
@@ -118,6 +158,7 @@
 
   .chip-text {
     line-height: 1.3;
+    color: black;
   }
 
   /* Animation keyframes */
@@ -141,12 +182,12 @@
 
   /* Responsive: slower animation and smaller chips on mobile */
   @media (max-width: 768px) {
-    .chip-section {
-      padding: 3rem 1rem;
+    .chip-rows {
+      gap: 0.8rem; /* Reduced gap for more rows */
     }
 
     .chip-track {
-      animation-duration: 120s;
+      animation-duration: 70s;
     }
 
     .chip {

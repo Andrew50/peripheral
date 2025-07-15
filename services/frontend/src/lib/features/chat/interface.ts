@@ -160,7 +160,7 @@ export type ConversationData = {
 export type TimelineEvent = {
 	message: string; // The actual status message from backend
 	timestamp: Date;
-	type?: 'message' | 'websearch'; // Type of event
+	type?: 'message' | 'webSearchQuery'; // Type of event
 	data?: any; // For web search queries or other structured data
 };
 

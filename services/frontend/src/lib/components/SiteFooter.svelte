@@ -85,7 +85,7 @@
 	.tagline-text {
 		font-size: clamp(2.5rem, 7vw, 5rem);
 		font-weight: 900;
-		color: var(--color-dark);
+		color: #ffffff;
 		text-align: center;
 		margin: 0;
 		letter-spacing: -0.04em;
@@ -130,9 +130,10 @@
 		width: 100vw;
 		left: 50%;
 		transform: translateX(-50%);
-		padding: 3rem 0 1rem 0;
+		padding: 3rem 0 2rem 0;
 		flex-shrink: 0;
 		margin-top: auto;
+		margin-bottom: 0;
 	}
 
 	.footer-content {
@@ -173,7 +174,7 @@
 	.footer-links button {
 		background: none;
 		border: none;
-		color: #9ca3af;
+		color: #ffffff;
 		cursor: pointer;
 		font-size: 0.9rem;
 		padding: 0;
@@ -221,7 +222,8 @@
 		font-size: clamp(4rem, 14vw, 12rem);
 		font-weight: 900;
 		color: #f5f9ff;
-		padding: 0.5rem 0 0.5rem 0;
+		padding: 0.5rem 0 0 0;
+		margin-bottom: 0;
 		line-height: 1;
 		letter-spacing: -0.06em;
 		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

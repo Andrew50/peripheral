@@ -216,20 +216,16 @@ type ResponseImage struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, initialRound bool, _ []ExecuteResult, _ []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, systemPromptFile string, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
-	if initialRound {
-		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
-	} else {
-		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
+	if systemPromptFile == "" {
+		systemPromptFile = "defaultSystemPrompt"
+	}
+	systemPrompt, err = getSystemInstruction(systemPromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
 	plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {
@@ -522,7 +518,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
 	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts, true)
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
 	}
@@ -541,7 +537,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	textConfig := responses.ResponseTextConfigParam{
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name:   "atlantis_response",
+				Name:   "peripheral_response",
 				Schema: oaSchema,
 				Strict: openai.Bool(true),
 			},
@@ -687,7 +683,7 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 }
 
 // buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
-func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string, finalRound bool) (responses.ResponseInputParam, error) {
+func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	conversationMessages, err := buildOpenAIConversationHistory(userQuery, conversationHistory)
 	if err != nil {
@@ -709,7 +705,7 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 		var allImages []ResponseImage
 		for _, result := range executionResults {
 			// Skip results that had errors
-			if result.Error != nil && finalRound {
+			if result.Error != nil {
 				continue
 			}
 

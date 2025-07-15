@@ -5,7 +5,6 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
-	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -354,7 +353,7 @@ var (
 			Function:      wrapWithContext(filings.GetStockEdgarFilings),
 			StatusMessage: "Searching SEC filings...",
 		},
-		"getEarningsText": {
+		/*"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",
 				Description: "Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
@@ -379,8 +378,8 @@ var (
 			},
 			Function:      wrapWithContext(filings.GetEarningsText),
 			StatusMessage: "Getting earnings transcript...",
-		},
-		"getFilingText": {
+		},*/
+		/*"getFilingText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getFilingText",
 				Description: "Retrieves the text content of a SEC filing from a specified url.",
@@ -397,7 +396,7 @@ var (
 			},
 			Function:      wrapWithContext(filings.GetFilingText),
 			StatusMessage: "Reading filing...",
-		},
+		},*/
 		"getExhibitList": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitList",
@@ -515,7 +514,7 @@ var (
 		"runPythonAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runPythonAgent",
-				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -676,7 +675,7 @@ var (
 		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runStrategyAgent",
-				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. This agent does not have access to websearch. First websearch any required information and then pass it in with the query.Pass strategyId = -1 to create a new strategy.",
+				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. This agent does not have access to websearch. If the query requires finding dates, first websearch any required information and then pass it in with the query. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -693,7 +692,7 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis.",
+				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis. Web searches are EXPENSIVE. If you need to do the same websearch on several tickers or multiple websearchs, figure out how to BEST group them into as few websearches as possible",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -702,7 +701,7 @@ var (
 					Required: []string{"query"},
 				},
 			},
-			Function:      wrapWithContext(RunWebSearch),
+			Function:      wrapWithContext(AgentRunWebSearch),
 			StatusMessage: "Searching the web...",
 		},
 		/*"runTwitterSearch": {
@@ -812,7 +811,7 @@ var (
 		},
 		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
-		"runScreener": {
+		/*"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runScreener",
 				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments.",
@@ -866,7 +865,7 @@ var (
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
 			StatusMessage: "Screening stocks...",
-		},
+		},*/
 		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {

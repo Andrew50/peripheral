@@ -5,7 +5,6 @@
 	import ChipSection from '$lib/landing/ChipSection.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import HeroAnimation from '$lib/landing/HeroAnimation.svelte';
 	import '$lib/styles/splash.css';
 	import { getAuthState, getCookie } from '$lib/auth';
 
@@ -30,14 +29,14 @@
 			description:
 				'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
 			content: '',
-			image: '/study.png'
+			image: '/query_glass.png'
 		},
 		{
 			title: 'Never miss a trade.',
 			description:
 				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
 			content: '',
-			image: '/splash-deploy.png'
+			image: '/alert_glass.png'
 		},
 		{
 			title: 'Analysis at the speed of now',
@@ -55,26 +54,30 @@
 		}
 	];
 
-	// Data returned from the server-side `load` function
-	export let data: {
-		defaultKey: string;
-		chartsByKey: Record<string, any>;
-		defaultChartData: any;
-	};
 
-	
-	const { defaultKey, chartsByKey, defaultChartData } = data;
 </script>
 
 <SiteHeader {isAuthenticated} />
 
+<!-- Title Section - Extracted from HeroAnimation -->
+<section class="hero-title-section">
+	<div class="hero-title-container">
+		<h1 class="hero-title">
+			The <span class="gradient-text">best</span> way to trade.
+		</h1>
+		<p class="hero-subtitle">
+			Peripheral is the terminal to envision and execute your trading ideas.<br />
+		</p>
+	</div>
+</section>
+<section>
+
 <main class="landing-container">
-	<HeroAnimation {defaultKey} {chartsByKey} />
-	<!-- Subsections -->
+	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
 		<div class="subsections-content">
 			{#each subsections as subsection, index}
-				<div class="subsection" class:reverse={index % 2 === 0}>
+				<div class="subsection" class:reverse={index % 2 === 0} class:frictionless={index === 3} class:speed-analysis={index === 2} class:never-miss={index === 1}>
 					<div class="subsection-text">
 						<h2 class="subsection-title">{subsection.title}</h2>
 						<p class="subsection-description">{subsection.description}</p>
@@ -87,19 +90,57 @@
 			{/each}
 		</div>
 	</section>
+	
+	<!-- HeroAnimation moved below subsections 
+	<HeroAnimation {defaultKey} {chartsByKey} />
+-->
+	
 	<!-- Ideas Chips Section -->
 	<ChipSection />
 	<!-- Footer -->
 	<SiteFooter />
 </main>
+</section>
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-	/* Global styles */
+	/* Critical global styles - applied immediately to prevent layout shift */
+	:root {
+		/* CSS variables for layout */
+	}
+
+	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
 		box-sizing: border-box;
+	}
+
+	/* Remove scrollbars globally */
+	:global(html) {
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE and Edge */
+	}
+
+	:global(html::-webkit-scrollbar) {
+		display: none; /* Chrome, Safari, Opera */
+	}
+
+	:global(body) {
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE and Edge */
+	}
+
+	:global(body::-webkit-scrollbar) {
+		display: none; /* Chrome, Safari, Opera */
+	}
+
+	/* Override width restrictions from global landing styles - moved to top for immediate application */
+	:global(.landing-container) {
+		max-width: none !important;
+		width: 100% !important;
+		margin: 0 !important;
+		padding: 0 !important; /* remove side gutters */
 	}
 
 	.landing-container {
@@ -107,7 +148,7 @@
 		width: 100%;
 		background: linear-gradient(
 			180deg,
-			rgba(5, 1, 136, 0) 0%,
+			#000000 0%,
 			rgba(3, 1, 85, 0.75) 50%,
 			#010022 100%
 		);
@@ -122,6 +163,82 @@
 			sans-serif;
 		display: flex;
 		flex-direction: column;
+	}
+
+	.hero-title-section {
+		position: relative;
+		z-index: 20;
+		padding: 26rem 0.5rem 17rem 0.5rem;
+		background: #000000;
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 60vh;
+	}
+
+	.hero-title-container {
+		text-align: center;
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 0 1rem;
+	}
+
+	.hero-title {
+		font-size: clamp(4.05rem, 6vw, 7.5rem);
+		font-weight: 800;
+		margin: 0 0 1.5rem 0;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
+		color: #f5f9ff;
+		text-shadow:
+			0 2px 12px rgba(0, 0, 0, 0.2),
+			0 1px 0 rgba(255, 255, 255, 0.01);
+	}
+
+	.hero-subtitle {
+		font-size: clamp(1.1rem, 3vw, 1.5rem);
+		color: rgba(245, 249, 255, 0.85);
+		margin-bottom: 1.5rem;
+		line-height: 1.6;
+		margin-top: 0;
+		font-weight: 400;
+		font-family: 'Geist', 'Inter', sans-serif;
+	}
+
+	.gradient-text {
+		background: linear-gradient(
+			135deg,
+			#3b82f6 0%,
+			#6366f1 25%,
+			#8b5cf6 50%,
+			#ec4899 75%,
+			#f59e0b 100%
+		);
+		background-size: 200% 200%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		animation: gradient-shift 8s ease infinite;
+		font-size: 1em;
+		font-family: 'Geist', 'Inter', sans-serif;
+		font-weight: 800;
+	}
+
+	@keyframes gradient-shift {
+		0%,
+		100% {
+			background-position: 0% 50%;
+		}
+		25% {
+			background-position: 100% 50%;
+		}
+		50% {
+			background-position: 100% 100%;
+		}
+		75% {
+			background-position: 0% 100%;
+		}
 	}
 
 	/* Subsections Section */
@@ -170,12 +287,40 @@
 		line-height: 1.2;
 	}
 
+	/* Specific styling for Transform ideas section (first subsection) */
+	.subsection:first-child .subsection-title {
+		color: white;
+	}
+
+	.subsection:first-child .subsection-description {
+		color: white;
+	}
+
 	.subsection-description {
 		font-size: 1.2rem;
 		color: var(--color-primary);
 		font-weight: 500;
 		margin-bottom: 1.5rem;
 		line-height: 1.5;
+	}
+
+	/* Specific styling for Frictionless Trading section */
+	.subsection.frictionless .subsection-title {
+		color: white;
+	}
+
+	.subsection.frictionless .subsection-description {
+		color: white;
+	}
+
+	/* Specific styling for Analysis at the speed of now section */
+	.subsection.speed-analysis .subsection-description {
+		color: white;
+	}
+
+	/* Specific styling for Never miss a trade section */
+	.subsection.never-miss .subsection-description {
+		color: white;
 	}
 
 	.subsection-content {
@@ -195,14 +340,36 @@
 
 	.subsection-image img {
 		width: 100%;
-		max-width: 600px;
+		max-width: 400px;
 		height: auto;
 		image-rendering: -webkit-optimize-contrast;
 		-ms-interpolation-mode: bicubic;
 	}
 
+	/* Make query_glass.png bigger */
+	.subsection:first-child .subsection-image {
+		max-width: 1000px;
+	}
+	
+	.subsection:first-child .subsection-image img {
+		max-width: 1000px;
+	}
+
+	/* Make the study.png image white (first subsection) */
+	.subsection:first-child .subsection-image img {
+		filter: brightness(0) invert(1);
+	}
+
 	/* Responsive Design */
 	@media (max-width: 768px) {
+		.hero-title-section {
+			padding: 2rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
 		.subsection {
 			flex-direction: column;
 			gap: 3rem;
@@ -229,17 +396,18 @@
 	}
 
 	@media (max-width: 480px) {
+		.hero-title-section {
+			padding: 1.5rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
 		.subsection {
 			gap: 1.5rem;
 			margin-bottom: 3rem;
 			padding: 1.5rem 0;
 		}
 	}
-
-	/* Global styles for proper layout */
-	:global(*) {
-		box-sizing: border-box;
-	}
-
-	/* Background applied directly to landing container above */
 </style>
