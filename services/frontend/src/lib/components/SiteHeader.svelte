@@ -4,13 +4,12 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 
-	import { timelineProgress } from '$lib/landing/timeline';
 
 	// Auth state prop
 	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
 	let isHeaderVisible = true;
-	let isHeaderTransparent = true;
+	let isHeaderTransparent = false;
 	let prevScrollY = 0;
 	// Mobile sidebar state
 	let isSidebarOpen = false;
@@ -21,18 +20,17 @@
 	import '$lib/styles/splash.css';
 
 	function handleScroll() {
+		if (!browser) return;
 		const currentY = window.scrollY;
 		const isOnSplashPage = window.location.pathname === '/';
-
+		
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
 			isHeaderVisible = true;
-		} else if (isOnSplashPage && $timelineProgress === 1) {
+		} else {
 			isHeaderVisible = false;
 		}
 
-		// Make header transparent near the top of the page
-		isHeaderTransparent = currentY < 30 || (isOnSplashPage && $timelineProgress !== 1);
 
 		prevScrollY = currentY;
 	}
@@ -64,9 +62,8 @@
 		const routes = ['/', '/pricing', '/login', '/signup'];
 		routes.forEach((p) => preloadCode(p));
 
+		// Initial scroll state setup
 		handleScroll();
-		window.addEventListener('scroll', handleScroll);
-		return () => window.removeEventListener('scroll', handleScroll);
 	});
 </script>
 
@@ -104,13 +101,13 @@
 		</button>
 	</div>
 	<nav class="sidebar-nav">
-		<button class="sidebar-nav-button" on:click={() => navigateTo('/pricing')}>Pricing</button>
+		<button class="sidebar-nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
 		{#if isAuthenticated}
 			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}
 				>Go to Terminal</button
 			>
 		{:else}
-			<button class="sidebar-nav-button" on:click={() => navigateTo('/login')}>Login</button>
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/login')}>Login</button>
 			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/signup')}
 				>Sign up</button
 			>
@@ -195,7 +192,7 @@
 	}
 
 	.logo-text {
-		color: #f5f9ff;
+		color: #000000;
 		font-size: 1.25rem;
 		font-weight: 700;
 		margin: 0;
@@ -238,14 +235,13 @@
 	}
 
 	.nav-button.secondary {
-		background: transparent;
-		color: #ffffff;
+		color: #000000;
 		border: 1px solid var(--color-primary);
 	}
 
 	.nav-button.primary {
 		background: rgb(0, 0, 0);
-		color: #f5f9ff;
+		color: #ffffff;
 	}
 
 	.nav-button.primary:hover,
@@ -254,11 +250,6 @@
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 	}
 
-	/* Pricing page specific styling - white text for pricing button */
-	.nav-button.secondary.pricing-page {
-		color: #f5f9ff;
-		border: 1px solid rgba(245, 249, 255, 0.3);
-	}
 
 	/* Hamburger Menu */
 	.hamburger-menu {
