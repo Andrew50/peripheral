@@ -61,6 +61,10 @@ var (
 	}
 )
 
+var TradeConditionsToSkipOhlc = tradeConditionsToSkipOhlc
+var TradeConditionsToSkipVolume = tradeConditionsToSkipVolume
+var TradeConditionsToExcludeCompletely = tradeConditionsToExcludeCompletely
+
 // Helper function to check if trade should be excluded completely
 func shouldExcludeTrade(conditions []int32) bool {
 	for _, condition := range conditions {
@@ -226,20 +230,18 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					tradeSize = 0
 				}
 
-				// If skipping price updates, set price to -1 to signal frontend to ignore price
-				price := msg.Price
-				if skipPriceUpdate {
-					price = -1
-				}
+				// Set shouldUpdatePrice flag based on condition codes
+				shouldUpdatePrice := !skipPriceUpdate
 
 				data := TradeData{
 					//					Ticker:     msg.Symbol,
-					Price:      price,
-					Size:       tradeSize,
-					Timestamp:  msg.Timestamp,
-					Conditions: msg.Conditions,
-					ExchangeID: int(msg.Exchange),
-					Channel:    fastChannelName,
+					Price:             msg.Price,
+					Size:              tradeSize,
+					Timestamp:         msg.Timestamp,
+					Conditions:        msg.Conditions,
+					ExchangeID:        int(msg.Exchange),
+					Channel:           fastChannelName,
+					ShouldUpdatePrice: shouldUpdatePrice,
 				}
 
 				// Only update latest price cache if we're not skipping price updates
@@ -260,6 +262,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 					}
 				*/
 				// Process alerts directly from tick data
+				//only do this when update price is true once reimplemented
 				/*if useAlerts {
 					// Update tick prices and process alerts
 					alerts.ProcessTickUpdate(conn, securityID, data.Price)
@@ -288,8 +291,8 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				//////fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
 				//}
-				// Only send to slow stream if price is not -1 (not volume-only trade)
-				if data.Price >= 0 && (!exists || now.After(nextDispatch)) {
+				// Only send to slow stream if shouldUpdatePrice is true (not volume-only trade)
+				if data.ShouldUpdatePrice && (!exists || now.After(nextDispatch)) {
 					data.Channel = slowChannelName
 					jsonData, _ = json.Marshal(data) // Handle potential error, though unlikely
 					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))

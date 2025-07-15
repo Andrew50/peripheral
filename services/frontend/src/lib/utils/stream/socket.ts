@@ -692,7 +692,8 @@ export function connect() {
 						const tickData: any = {
 							securityid: securityId,
 							price: data.price,
-							data: data
+							data: data,
+							shouldUpdatePrice: data.shouldUpdatePrice
 						};
 
 						// If this is extended hours data, mark it for extended calculation
@@ -700,8 +701,8 @@ export function connect() {
 							tickData.isExtended = true;
 						}
 
-						// Skip price updates if price is -1 (indicates skip OHLC condition)
-						if (data.price >= 0) {
+						// Skip price updates based on shouldUpdatePrice flag
+						if (data.shouldUpdatePrice) {
 							enqueueTick(tickData);
 						} else {
 							// Still enqueue for volume updates but without price

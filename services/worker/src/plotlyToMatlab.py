@@ -36,8 +36,9 @@ def extract_any_plottable_data(trace):
                 
                 if numeric_data:
                     plottable_data[attr] = numeric_data
-            except Exception:
-                continue
+            except Exception as e:
+                logger.debug(f"Error extracting plottable data for attribute '{attr}': {e}")
+                continue  # Stop further processing for this trace if unexpected error
     
     return plottable_data
 
@@ -139,8 +140,8 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                 else: 
                     title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
                 ax.set_title(title_text)
-        except Exception:
-            pass  # Title is optional
+        except Exception as e:
+            logger.debug(f"Optional: could not set plot title: {e}")
         
         # Extract axis labels if available
         try:
@@ -154,8 +155,8 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                     y_title = getattr(plotly_fig.layout.yaxis.title, 'text', None)
                     if y_title:
                         ax.set_ylabel(y_title)
-        except Exception:
-            pass  # Labels are optional
+        except Exception as e:
+            logger.debug(f"Optional: could not set axis labels: {e}")
         
         # Convert to PNG bytes
         buffer = BytesIO()
