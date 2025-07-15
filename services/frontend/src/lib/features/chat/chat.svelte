@@ -1360,14 +1360,14 @@
 					type: 'message'
 				}
 			];
-		} else if (statusUpdate.type === 'WebSearch' && statusUpdate.data?.query) {
+		} else if (statusUpdate.type === 'WebSearchQuery' && statusUpdate.data?.query) {
 			// Add web search event to timeline in chronological order
 			processingTimeline = [
 				...processingTimeline,
 				{
 					message: `Searching: ${statusUpdate.data.query}`,
 					timestamp: new Date(),
-					type: 'websearch',
+					type: 'webSearchQuery',
 					data: statusUpdate.data
 				}
 			];

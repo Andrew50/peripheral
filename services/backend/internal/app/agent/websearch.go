@@ -26,26 +26,36 @@ const grokModel = "grok-3-mini-latest"
 type WebSearchArgs struct {
 	Query string `json:"query"`
 }
-type WebSearchResult struct {
-	ResultText string   `json:"result"`
-	Citations  []string `json:"citations,omitempty"`
+type WebSearchCitation struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }
 
-// RunWebSearch performs a web search using the Gemini API
-func RunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+type WebSearchResult struct {
+	ResultText string              `json:"result"`
+	Citations  []WebSearchCitation `json:"citations,omitempty"`
+}
+
+// AgentRunWebSearch performs a web search using the Gemini API
+func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
-	socket.SendAgentStatusUpdate(userID, "WebSearch", args.Query)
+	socket.SendAgentStatusUpdate(userID, "WebSearchQuery", args.Query)
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
-	return _openaiWebSearch(conn, systemPrompt, args.Query)
+	websearchResult, err := _openaiWebSearch(conn, systemPrompt, args.Query)
+	if err != nil {
+		return nil, fmt.Errorf("error running web search: %w", err)
+	}
+	socket.SendAgentStatusUpdate(userID, "WebSearchCitations", websearchResult.Citations)
+	return websearchResult, nil
 }
 
-func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
+func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebSearchResult, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
@@ -64,12 +74,23 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error creating response: %w", err)
+		return WebSearchResult{}, fmt.Errorf("error creating response: %w", err)
 	}
-
+	var citations []WebSearchCitation
+	for _, item := range res.Output {
+		for _, content := range item.Content {
+			for _, annotation := range content.Annotations {
+				citations = append(citations, WebSearchCitation{
+					Title: annotation.Title,
+					URL:   annotation.URL,
+				})
+			}
+		}
+	}
+	fmt.Println("citations", citations)
 	return WebSearchResult{
 		ResultText: res.OutputText(),
-		Citations:  nil,
+		Citations:  citations,
 	}, nil
 }
 
