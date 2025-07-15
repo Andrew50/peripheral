@@ -5,7 +5,6 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
-	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -354,7 +353,7 @@ var (
 			Function:      wrapWithContext(filings.GetStockEdgarFilings),
 			StatusMessage: "Searching SEC filings...",
 		},
-		"getEarningsText": {
+		/*"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",
 				Description: "Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
@@ -379,8 +378,8 @@ var (
 			},
 			Function:      wrapWithContext(filings.GetEarningsText),
 			StatusMessage: "Getting earnings transcript...",
-		},
-		"getFilingText": {
+		},*/
+		/*"getFilingText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getFilingText",
 				Description: "Retrieves the text content of a SEC filing from a specified url.",
@@ -397,7 +396,7 @@ var (
 			},
 			Function:      wrapWithContext(filings.GetFilingText),
 			StatusMessage: "Reading filing...",
-		},
+		},*/
 		"getExhibitList": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitList",
@@ -812,7 +811,7 @@ var (
 		},
 		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
-		"runScreener": {
+		/*"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runScreener",
 				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments.",
@@ -866,7 +865,7 @@ var (
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
 			StatusMessage: "Screening stocks...",
-		},
+		},*/
 		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {
