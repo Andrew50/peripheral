@@ -62,6 +62,7 @@
 		defaultChartData: any;
 	};
 
+	
 	const { defaultKey, chartsByKey, defaultChartData } = data;
 </script>
 
