@@ -701,7 +701,7 @@ var (
 					Required: []string{"query"},
 				},
 			},
-			Function:      wrapWithContext(RunWebSearch),
+			Function:      wrapWithContext(AgentRunWebSearch),
 			StatusMessage: "Searching the web...",
 		},
 		/*"runTwitterSearch": {

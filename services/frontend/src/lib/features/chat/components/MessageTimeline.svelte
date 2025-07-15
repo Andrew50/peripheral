@@ -54,7 +54,7 @@
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
-							{#if event.type === 'websearch' && event.data?.query}
+							{#if event.type === 'webSearchQuery' && event.data?.query}
 								<div class="timeline-websearch">
 									<div class="web-search-chip glass glass--pill glass--responsive">
 										<svg viewBox="0 0 24 24" width="14" height="14" class="search-icon">
