@@ -9,7 +9,7 @@
 	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
 	let isHeaderVisible = true;
-	let isHeaderTransparent = false;
+	let isHeaderTransparent = true;
 	let prevScrollY = 0;
 	// Mobile sidebar state
 	let isSidebarOpen = false;
@@ -30,6 +30,7 @@
 		} else {
 			isHeaderVisible = false;
 		}
+		isHeaderTransparent = currentY < 30;
 
 
 		prevScrollY = currentY;
@@ -126,24 +127,24 @@
 			style="cursor: pointer; background: none; border: none; padding: 0;"
 		>
 			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
-			<p class="logo-text">Peripheral</p>
+			<p class="logo-text" class:transparent={isHeaderTransparent}>Peripheral</p>
 		</button>
 
 		<!-- Desktop navigation -->
 		<div class="navigation desktop-nav">
-			<button class="nav-button secondary" class:pricing-page={isOnPricingPage} on:click={() => navigateTo('/pricing')}>Pricing</button>
+			<button class="nav-button secondary" class:pricing-page={isOnPricingPage} class:transparent={isHeaderTransparent} on:click={() => navigateTo('/pricing')}>Pricing</button>
 			{#if isAuthenticated}
-				<button class="nav-button primary" on:click={() => navigateTo('/app')}
+				<button class="nav-button primary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/app')}
 					>Go to Terminal</button
 				>
 			{:else}
-				<button class="nav-button secondary" on:click={() => navigateTo('/login')}>Login</button>
-				<button class="nav-button primary" on:click={() => navigateTo('/signup')}>Sign up</button>
+				<button class="nav-button secondary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/login')}>Login</button>
+				<button class="nav-button primary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/signup')}>Sign up</button>
 			{/if}
 		</div>
 
 		<!-- Mobile hamburger menu -->
-		<button class="hamburger-menu mobile-only" on:click={toggleSidebar}>
+		<button class="hamburger-menu mobile-only" class:transparent={isHeaderTransparent} on:click={toggleSidebar}>
 			<div class="hamburger-line"></div>
 			<div class="hamburger-line"></div>
 			<div class="hamburger-line"></div>
@@ -205,6 +206,11 @@
 			Roboto,
 			sans-serif;
 		letter-spacing: -0.02em;
+		transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.logo-text.transparent {
+		color: #ffffff;
 	}
 
 	.navigation {
@@ -231,7 +237,7 @@
 			Roboto,
 			sans-serif;
 		white-space: nowrap;
-		transition: all 0.15s ease;
+		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.nav-button.secondary {
@@ -248,6 +254,23 @@
 	.nav-button.secondary:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	}
+
+	/* Transparent header styles */
+	.nav-button.secondary.transparent {
+		color: #ffffff;
+		border: 1px solid #ffffff;
+	}
+
+	.nav-button.primary.transparent {
+		background: #ffffff;
+		color: #000000;
+	}
+
+	.nav-button.primary.transparent:hover,
+	.nav-button.secondary.transparent:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 8px 24px rgba(255, 255, 255, 0.15);
 	}
 
 
@@ -267,9 +290,13 @@
 	.hamburger-line {
 		width: 100%;
 		height: 1.5px;
-		background-color: var(--color-dark);
+		background-color: #000000;
 		border-radius: 1px;
-		transition: all 0.3s ease;
+		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.hamburger-menu.transparent .hamburger-line {
+		background-color: #ffffff;
 	}
 
 	/* Sidebar */
@@ -291,7 +318,7 @@
 		height: 100vh;
 		background: #ffffff;
 		z-index: 2000;
-		transition: right 0.3s ease;
+		transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
 	}
 
@@ -345,7 +372,7 @@
 			Roboto,
 			sans-serif;
 		text-align: left;
-		transition: all 0.15s ease;
+		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 		color: #000;
 		line-height: 1.4;
 	}
