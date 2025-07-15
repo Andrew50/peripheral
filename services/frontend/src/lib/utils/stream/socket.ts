@@ -64,8 +64,8 @@ export type StrategyUpdate = {
 
 export type AgentStatusUpdate = {
 	messageType: 'AgentStatusUpdate';
-	type: string; // e.g., 'FunctionUpdate', 'WebSearch'
-	data: any; // The actual data - string for FunctionUpdate, object for WebSearch
+	type: string; // e.g., 'FunctionUpdate', 'WebSearchQuery'
+	data: any; // The actual data - string for FunctionUpdate, object for WebSearchQuery
 };
 
 export type TitleUpdate = {

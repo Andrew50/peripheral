@@ -168,15 +168,19 @@ type AgentStatusUpdate struct {
 }
 
 // SendAgentStatusUpdate sends a status update about a running function to a specific user.
-func SendAgentStatusUpdate(userID int, statusType string, value string) {
+func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	var data interface{}
 
 	// Handle different status types
 	switch statusType {
-	case "WebSearch":
+	case "WebSearchQuery":
 		// For web searches, create structured data with query
 		data = map[string]interface{}{
 			"query": value,
+		}
+	case "WebSearchCitations":
+		data = map[string]interface{}{
+			"citations": value,
 		}
 	default:
 		// For other types (like FunctionUpdate), use the value directly
