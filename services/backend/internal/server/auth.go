@@ -25,8 +25,17 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// Get JWT secret from environment variable or use a fallback for development
-var privateKey = []byte(getEnvOrDefault("JWT_SECRET", "2dde9fg9"))
+// JWT secret is mandatory – crash early if it is missing so that bad tokens are never issued.
+var privateKey = []byte(mustGetEnv("JWT_SECRET"))
+
+// mustGetEnv behaves like os.Getenv but terminates the process if the variable is empty.
+func mustGetEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		log.Fatalf("%s environment variable is required but not set", key)
+	}
+	return v
+}
 
 // Get OAuth configuration from environment variables
 var (
