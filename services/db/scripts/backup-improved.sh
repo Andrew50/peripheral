@@ -223,13 +223,14 @@ EOF
     
     # Cleanup old backups
     log "Cleaning up backups older than $RETENTION_DAYS days..."
-    local deleted_count=$(find "$BACKUP_DIR" -name "backup_*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete -print | wc -l)
+    # Delete compressed (.sql.gz) AND legacy uncompressed (.sql) dumps older than the retention window
+    local deleted_count=$(find "$BACKUP_DIR" -type f \( -name "backup_*.sql" -o -name "backup_*.sql.gz" \) -mtime +$RETENTION_DAYS -delete -print | wc -l)
     find "$BACKUP_DIR" -name "backup_*.manifest" -type f -mtime +$RETENTION_DAYS -delete
     log "Removed $deleted_count old backup files"
     
     # List recent backups
     log "Recent backups:"
-    ls -lah "$BACKUP_DIR"/backup_*.sql.gz | tail -5 | while read line; do
+    ls -lah "$BACKUP_DIR"/backup_*.sql* 2>/dev/null | tail -5 | while read line; do
         log "  $line"
     done
     
