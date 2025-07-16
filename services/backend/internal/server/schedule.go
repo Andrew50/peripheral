@@ -219,7 +219,6 @@ var (
 			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
 		},
-		/* TODO ENABLE THIS BEFORE PR !!!!!!!!!!!! */
 		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
@@ -230,7 +229,6 @@ var (
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
-		/**/
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
@@ -243,7 +241,7 @@ var (
 		*/
 		{
 			Name: "StartScreenerUpdater",
-			//Function: screener.StartScreenerUpdater,
+			//	Function: screener.StartScreenerUpdaterLoop,
 			Function:       startScreenerUpdater,               // TODO: ENABLE THIS BEFORE PR !!!!!!!!!!!!
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
@@ -620,6 +618,17 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	if job.IsRunning {
 		job.ExecutionMutex.Unlock()
 		log.Printf("📋 Job %s is already running, skipping this execution", job.Name)
+
+		// Clear pending retry if job is already running to prevent infinite retry loop
+		if job.RetryOnFailure {
+			currentRetryCount := s.loadJobRetryCount(job)
+			if currentRetryCount > 0 {
+				log.Printf("🔄 Clearing pending retry for already running job %s", job.Name)
+				if err := s.resetJobRetryCount(job); err != nil {
+					log.Printf("⚠️ Error clearing retry count for running job %s: %v", job.Name, err)
+				}
+			}
+		}
 		return
 	}
 	job.IsRunning = true
@@ -802,7 +811,7 @@ func startScreenerUpdater(conn *data.Conn) error {
 	}
 
 	// Data is fresh, start the screener updater
-	err = screener.StartScreenerUpdater(conn)
+	err = screener.StartScreenerUpdaterLoop(conn)
 	if err != nil {
 		return err
 	}
@@ -831,7 +840,7 @@ func startPolygonWebSocket(conn *data.Conn) error {
 			_ = alerts.LogCriticalAlert(fmt.Errorf("OHLCV data is stale (older than 7 days) - realtime streaming disabled"), "startPolygonWebSocket")
 		}
 
-		err = socket.StartPolygonWS(conn, useBS, dataFresh)
+		err = socket.StartPolygonWS(conn, useBS, true) // TODO: remove this before PR, revert to pass dataFresh
 		if err != nil {
 			//log.Printf("Failed to start Polygon WebSocket: %v", err)
 			return err

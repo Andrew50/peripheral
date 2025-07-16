@@ -12,7 +12,7 @@ const (
 	refreshInterval    = 60 * time.Second // full screener top-off frequency (fallback)
 	refreshTimeout     = 60 * time.Second // per-refresh SQL timeout
 	extendedCloseHour  = 20               // 8 PM Eastern – hard stop
-	maxTickersPerBatch = 0                // max tickers to process per batch (0 = no limit), used for testing
+	maxTickersPerBatch = 10               // max tickers to process per batch (0 = no limit), used for testing
 )
 
 var createStaleQueueQuery = `
@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS screener_stale (
 CREATE INDEX IF NOT EXISTS screener_stale_due_idx
   ON screener_stale (stale, last_update_started)
   INCLUDE (ticker);
+`
+
+// Add SQL to insert initial stale tickers for securities where maxDate is null
+var insertInitialStaleTickersQuery = `
+INSERT INTO screener_stale (ticker)
+SELECT ticker FROM securities
+WHERE maxDate IS NULL
+ON CONFLICT (ticker) DO NOTHING;
 `
 
 var createPreMarketStatsQuery = `
@@ -60,11 +68,16 @@ CREATE INDEX IF NOT EXISTS pre_market_stats_ticker_day_idx
          ON pre_market_stats (ticker, trade_day);
 
 -- 3️⃣  Keep it fresh automatically (run every 5 min, back-fills 7 days)
-SELECT add_continuous_aggregate_policy(
-        'pre_market_stats',
-        start_offset     => INTERVAL '7 days',
-        end_offset       => INTERVAL '0',
-        schedule_interval=> INTERVAL '5 minutes');
+DO $$
+BEGIN
+    PERFORM add_continuous_aggregate_policy('pre_market_stats',
+        start_offset => INTERVAL '7 days',
+        end_offset => INTERVAL '0',
+        schedule_interval => INTERVAL '5 minutes');
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Policy for pre_market_stats may already exist: %', SQLERRM;
+END $$;
 `
 
 var createOHLCVIndexesQuery = `
@@ -79,137 +92,516 @@ CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
 `
 
 var intradayPriceRefsQuery = `
-CREATE MATERIALIZED VIEW IF NOT EXISTS intraday_stats
-WITH (timescaledb.continuous)
-AS
-SELECT
-    ticker,
-    bucket_min                                       AS ts,
-    100.0 * (close_1m - LAG(close_1m,  60) OVER w)
-          / NULLIF(LAG(close_1m,  60) OVER w, 0)     AS change_1h_pct,
-    100.0 * (close_1m - LAG(close_1m, 240) OVER w)
-          / NULLIF(LAG(close_1m, 240) OVER w, 0)     AS change_4h_pct,
-    100.0 * (high_1m - low_1m) / NULLIF(low_1m, 0)   AS range_1m_pct,
-    100.0 * (MAX(high_1m) OVER w15
-            - MIN(low_1m)  OVER w15)
-          / NULLIF(MIN(low_1m) OVER w15, 0)          AS range_15m_pct,
-    100.0 * (MAX(high_1m) OVER w60
-            - MIN(low_1m)  OVER w60)
-          / NULLIF(MIN(low_1m) OVER w60, 0)          AS range_1h_pct,
-    AVG(dollar_volume_1m) OVER w14                   AS avg_dollar_volume_1m_14,
-    AVG(volume_1m)        OVER w14                   AS avg_volume_1m_14,
-    volume_1m /
-      NULLIF(AVG(volume_1m) OVER w14, 0)             AS relative_volume_14,
-    CASE
-        WHEN (bucket_min AT TIME ZONE 'America/New_York')::time
-                 BETWEEN TIME '16:00' AND TIME '20:00'
-        THEN close_1m
-             - FIRST_VALUE(close_1m) OVER w_rth
-    END                                              AS extended_hours_change,
-    CASE
-        WHEN (bucket_min AT TIME ZONE 'America/New_York')::time
-                 BETWEEN TIME '16:00' AND TIME '20:00'
-        THEN 100.0 * (close_1m
-             - FIRST_VALUE(close_1m) OVER w_rth)
-             / NULLIF(FIRST_VALUE(close_1m) OVER w_rth, 0)
-    END                                              AS extended_hours_change_pct
+-- Create a normal table to store only the most recent intraday stats per ticker
+-- This replaces the problematic materialized view that was causing database crashes
+CREATE TABLE IF NOT EXISTS intraday_stats (
+    ticker text PRIMARY KEY,
+    ts timestamptz NOT NULL,
+    change_1h_pct numeric,
+    change_4h_pct numeric,
+    range_1m_pct numeric,
+    range_15m_pct numeric,
+    range_1h_pct numeric,
+    avg_dollar_volume_1m_14 numeric,
+    avg_volume_1m_14 numeric,
+    relative_volume_14 numeric,
+    extended_hours_change numeric,
+    extended_hours_change_pct numeric,
+    updated_at timestamptz DEFAULT now()
+);
 
-FROM ohlcv_1m
+-- Index for efficient lookups
+CREATE INDEX IF NOT EXISTS intraday_stats_ticker_idx ON intraday_stats (ticker);
+CREATE INDEX IF NOT EXISTS intraday_stats_ts_idx ON intraday_stats (ts DESC);
 
-WINDOW
-    w   AS (PARTITION BY ticker ORDER BY bucket_min),                     -- all rows
-    w14 AS (PARTITION BY ticker ORDER BY bucket_min ROWS BETWEEN 13 PRECEDING AND CURRENT ROW),
-    w15 AS (PARTITION BY ticker ORDER BY bucket_min ROWS BETWEEN 14 PRECEDING AND CURRENT ROW),
-    w60 AS (PARTITION BY ticker ORDER BY bucket_min ROWS BETWEEN 59 PRECEDING AND CURRENT ROW),
-    w_rth AS (PARTITION BY ticker
-              ORDER BY bucket_min
-              RANGE BETWEEN INTERVAL '0' PRECEDING   -- start of current RTH session
-                        AND INTERVAL '0' PRECEDING)  -- (uses FIRST_VALUE trick)
+-- Function to update intraday stats for specific tickers
+-- This computes the metrics using simple lateral joins to avoid complex window functions
+CREATE OR REPLACE FUNCTION update_intraday_stats(p_tickers text[])
+RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_now_utc timestamptz := now();
+    ticker_name text;
+BEGIN
+    -- Safety exit
+    IF array_length(p_tickers, 1) IS NULL THEN
+        RETURN;
+    END IF;
 
-WITH NO DATA;
-
-CREATE INDEX IF NOT EXISTS intraday_stats_idx
-       ON intraday_stats (ticker, ts);
-
-SELECT add_continuous_aggregate_policy(
-        'intraday_stats',
-        start_offset     => INTERVAL '7 days',
-        end_offset       => INTERVAL '0',
-        schedule_interval=> INTERVAL '30 seconds');
-
+    -- Process each ticker individually to avoid complex window functions
+    FOREACH ticker_name IN ARRAY p_tickers
+    LOOP
+        INSERT INTO intraday_stats (
+            ticker, ts, change_1h_pct, change_4h_pct, range_1m_pct, range_15m_pct, range_1h_pct,
+            avg_dollar_volume_1m_14, avg_volume_1m_14, relative_volume_14,
+            extended_hours_change, extended_hours_change_pct, updated_at
+        )
+        SELECT 
+            ticker_name,
+            latest.ts,
+            -- 1-hour change
+            CASE 
+                WHEN hour_ago.close IS NOT NULL THEN 
+                    100.0 * (latest.close - hour_ago.close) / NULLIF(hour_ago.close, 0)
+                ELSE NULL
+            END AS change_1h_pct,
+            -- 4-hour change
+            CASE 
+                WHEN four_hour_ago.close IS NOT NULL THEN 
+                    100.0 * (latest.close - four_hour_ago.close) / NULLIF(four_hour_ago.close, 0)
+                ELSE NULL
+            END AS change_4h_pct,
+            -- 1-minute range
+            100.0 * (latest.high - latest.low) / NULLIF(latest.low, 0) AS range_1m_pct,
+            -- 15-minute range
+            CASE 
+                WHEN ranges_15m.high_15m IS NOT NULL AND ranges_15m.low_15m IS NOT NULL THEN
+                    100.0 * (ranges_15m.high_15m - ranges_15m.low_15m) / NULLIF(ranges_15m.low_15m, 0)
+                ELSE NULL
+            END AS range_15m_pct,
+            -- 1-hour range
+            CASE 
+                WHEN ranges_1h.high_1h IS NOT NULL AND ranges_1h.low_1h IS NOT NULL THEN
+                    100.0 * (ranges_1h.high_1h - ranges_1h.low_1h) / NULLIF(ranges_1h.low_1h, 0)
+                ELSE NULL
+            END AS range_1h_pct,
+            -- Average dollar volume (14-period)
+            vol_14.avg_dollar_volume_1m_14,
+            -- Average volume (14-period)
+            vol_14.avg_volume_1m_14,
+            -- Relative volume
+            CASE 
+                WHEN vol_14.avg_volume_1m_14 IS NOT NULL AND vol_14.avg_volume_1m_14 > 0 THEN
+                    latest.volume / vol_14.avg_volume_1m_14
+                ELSE NULL
+            END AS relative_volume_14,
+            -- Extended hours change (simplified - just vs. 4 PM close)
+            CASE 
+                WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
+                     AND market_close.close IS NOT NULL THEN
+                    latest.close - market_close.close
+                ELSE NULL
+            END AS extended_hours_change,
+            -- Extended hours change percentage
+            CASE 
+                WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
+                     AND market_close.close IS NOT NULL THEN
+                    100.0 * (latest.close - market_close.close) / NULLIF(market_close.close, 0)
+                ELSE NULL
+            END AS extended_hours_change_pct,
+            v_now_utc AS updated_at
+        FROM (
+            -- Get the most recent 1-minute data
+            SELECT 
+                time_bucket('1 minute', "timestamp") AS ts,
+                last(close, "timestamp") AS close,
+                last(high, "timestamp") AS high,
+                last(low, "timestamp") AS low,
+                last(volume, "timestamp") AS volume
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND "timestamp" >= v_now_utc - INTERVAL '5 minutes'
+            GROUP BY time_bucket('1 minute', "timestamp")
+            ORDER BY ts DESC
+            LIMIT 1
+        ) latest
+        LEFT JOIN LATERAL (
+            -- Get close price from 1 hour ago
+            SELECT close
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND "timestamp" <= latest.ts - INTERVAL '1 hour'
+              AND "timestamp" >= latest.ts - INTERVAL '1 hour 5 minutes'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) hour_ago ON TRUE
+        LEFT JOIN LATERAL (
+            -- Get close price from 4 hours ago
+            SELECT close
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND "timestamp" <= latest.ts - INTERVAL '4 hours'
+              AND "timestamp" >= latest.ts - INTERVAL '4 hours 5 minutes'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) four_hour_ago ON TRUE
+        LEFT JOIN LATERAL (
+            -- Get 15-minute high/low range
+            SELECT 
+                MAX(high) AS high_15m,
+                MIN(low) AS low_15m
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND "timestamp" >= latest.ts - INTERVAL '15 minutes'
+              AND "timestamp" <= latest.ts
+        ) ranges_15m ON TRUE
+        LEFT JOIN LATERAL (
+            -- Get 1-hour high/low range
+            SELECT 
+                MAX(high) AS high_1h,
+                MIN(low) AS low_1h
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND "timestamp" >= latest.ts - INTERVAL '1 hour'
+              AND "timestamp" <= latest.ts
+        ) ranges_1h ON TRUE
+        LEFT JOIN LATERAL (
+            -- Get 14-period volume averages
+            SELECT 
+                AVG(volume * close) AS avg_dollar_volume_1m_14,
+                AVG(volume) AS avg_volume_1m_14
+            FROM (
+                SELECT 
+                    last(volume, "timestamp") AS volume,
+                    last(close, "timestamp") AS close
+                FROM ohlcv_1m
+                WHERE ticker = ticker_name
+                  AND "timestamp" >= latest.ts - INTERVAL '14 minutes'
+                  AND "timestamp" <= latest.ts
+                GROUP BY time_bucket('1 minute', "timestamp")
+                ORDER BY time_bucket('1 minute', "timestamp") DESC
+                LIMIT 14
+            ) recent_volume
+        ) vol_14 ON TRUE
+        LEFT JOIN LATERAL (
+            -- Get market close price (4 PM ET) for extended hours calculation
+            SELECT close
+            FROM ohlcv_1m
+            WHERE ticker = ticker_name
+              AND ("timestamp" AT TIME ZONE 'America/New_York')::time = TIME '16:00'
+              AND "timestamp"::date = latest.ts::date
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) market_close ON TRUE
+        
+        ON CONFLICT (ticker) DO UPDATE SET
+            ts = EXCLUDED.ts,
+            change_1h_pct = EXCLUDED.change_1h_pct,
+            change_4h_pct = EXCLUDED.change_4h_pct,
+            range_1m_pct = EXCLUDED.range_1m_pct,
+            range_15m_pct = EXCLUDED.range_15m_pct,
+            range_1h_pct = EXCLUDED.range_1h_pct,
+            avg_dollar_volume_1m_14 = EXCLUDED.avg_dollar_volume_1m_14,
+            avg_volume_1m_14 = EXCLUDED.avg_volume_1m_14,
+            relative_volume_14 = EXCLUDED.relative_volume_14,
+            extended_hours_change = EXCLUDED.extended_hours_change,
+            extended_hours_change_pct = EXCLUDED.extended_hours_change_pct,
+            updated_at = EXCLUDED.updated_at;
+    END LOOP;
+END;
+$$;
 `
 
 var createHistoricalPriceRefsQuery = `
+-- Create a simplified continuous aggregate that complies with TimescaleDB restrictions
+-- This version removes correlated subqueries, window functions, and complex nested queries
 CREATE MATERIALIZED VIEW IF NOT EXISTS historical_price_refs
 WITH (timescaledb.continuous)
 AS
 SELECT 
-    o.ticker,
-    last(o.close, o."timestamp") AS current_close,
-    -- Time-based price references
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '7 days')  AS price_1w,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '1 month') AS price_1m,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '3 months') AS price_3m,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '6 months') AS price_6m,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '1 year')  AS price_1y,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '5 years') AS price_5y,
-    first(o.close, o."timestamp") FILTER (WHERE o."timestamp" >= now() - INTERVAL '10 years') AS price_10y,
-    first(o.close, o."timestamp") FILTER (WHERE EXTRACT(YEAR FROM o."timestamp") = EXTRACT(YEAR FROM now())) AS price_ytd,
-    min(o.close)  FILTER (WHERE o."timestamp" >= now() - INTERVAL '1 year') AS price_52w_low,
-    max(o.close)  FILTER (WHERE o."timestamp" >= now() - INTERVAL '1 year') AS price_52w_high,
-
-    -- Technical indicators
-    /*
-     * RSI-14 calculation: We take the last 15 daily closes, compute day-over-day
-     * deltas, separate gains and losses, average them, then apply the classic
-     * RSI formula.  The correlated sub-query runs per-ticker and is safe inside
-     * the materialised view.
-     */
-    (
-        SELECT CASE 
-                 WHEN avg_loss = 0 THEN 100
-                 ELSE 100 - 100 / (1 + avg_gain / avg_loss)
-               END
-        FROM (
-            SELECT 
-                AVG(CASE WHEN diff > 0 THEN diff ELSE 0 END) AS avg_gain,
-                AVG(CASE WHEN diff < 0 THEN -diff ELSE 0 END) AS avg_loss
-            FROM (
-                SELECT  o2.close - LAG(o2.close) OVER (ORDER BY o2."timestamp") AS diff
-                FROM    ohlcv_1d o2
-                WHERE   o2.ticker = o.ticker
-                  AND   o2."timestamp" >= now() - INTERVAL '15 days'
-                ORDER BY o2."timestamp" DESC
-                LIMIT   15
-            ) diff_sub
-        ) rsi_calc
-    ) AS rsi_14,
-
-    -- Moving averages
-    AVG(o.close) FILTER (WHERE o."timestamp" >= now() - INTERVAL '50 days')  AS sma_50,
-    AVG(o.close) FILTER (WHERE o."timestamp" >= now() - INTERVAL '200 days') AS sma_200,
-
-    -- Volatility (standard deviation of closes)
-    STDDEV_SAMP(o.close) FILTER (WHERE o."timestamp" >= now() - INTERVAL '7 days')  AS stddev_7,
-    STDDEV_SAMP(o.close) FILTER (WHERE o."timestamp" >= now() - INTERVAL '30 days') AS stddev_30
-FROM ohlcv_1d o
-GROUP BY o.ticker
+    time_bucket('1 day', "timestamp") AS bucket,
+    ticker,
+    -- Current price data (last values in the bucket)
+    last(close, "timestamp") AS current_close,
+    first(open, "timestamp") AS daily_open,
+    max(high) AS daily_high,
+    min(low) AS daily_low,
+    sum(volume) AS daily_volume,
+    
+    -- Basic price statistics for the day
+    avg(close) AS avg_close,
+    stddev_samp(close) AS daily_volatility,
+    
+    -- Count of trading periods
+    count(*) AS trading_periods
+FROM ohlcv_1d
+WHERE "timestamp" >= now() - INTERVAL '400 days'  -- Limit to recent data for performance
+GROUP BY time_bucket('1 day', "timestamp"), ticker
 WITH NO DATA;
 
-CREATE INDEX IF NOT EXISTS historical_price_refs_ticker_idx 
-    ON historical_price_refs (ticker);
+-- Create efficient indexes for the continuous aggregate
+CREATE INDEX IF NOT EXISTS historical_price_refs_ticker_bucket_idx 
+    ON historical_price_refs (ticker, bucket DESC);
+CREATE INDEX IF NOT EXISTS historical_price_refs_bucket_idx 
+    ON historical_price_refs (bucket DESC);
 
--- Add continuous aggregate policy for automatic background refresh
-SELECT add_continuous_aggregate_policy(
-    'historical_price_refs',
-    start_offset       => INTERVAL '2 days',
-    end_offset         => INTERVAL '1 hour',
-    schedule_interval  => INTERVAL '1 hour');
+-- Create a separate regular table for complex historical calculations
+-- This table will store pre-computed historical references updated periodically
+CREATE TABLE IF NOT EXISTS historical_price_calculations (
+    ticker text PRIMARY KEY,
+    current_close numeric,
+    
+    -- Time-based price references
+    price_1w numeric,
+    price_1m numeric,
+    price_3m numeric,
+    price_6m numeric,
+    price_1y numeric,
+    price_5y numeric,
+    price_10y numeric,
+    price_ytd numeric,
+    price_all numeric,
+    
+    -- 52-week extremes
+    price_52w_low numeric,
+    price_52w_high numeric,
+    
+    -- Moving averages
+    sma_50 numeric,
+    sma_200 numeric,
+    
+    -- RSI (computed separately)
+    rsi_14 numeric,
+    
+    -- Volatility measures
+    stddev_7 numeric,
+    stddev_30 numeric,
+    
+    -- Metadata
+    updated_at timestamptz DEFAULT now(),
+    calculation_date date DEFAULT CURRENT_DATE
+);
+
+-- Index for efficient lookups
+CREATE INDEX IF NOT EXISTS historical_price_calculations_ticker_idx 
+    ON historical_price_calculations (ticker);
+CREATE INDEX IF NOT EXISTS historical_price_calculations_updated_idx 
+    ON historical_price_calculations (updated_at DESC);
+
+-- Function to update historical price calculations for specific tickers
+-- This replaces the complex continuous aggregate with a more efficient approach
+CREATE OR REPLACE FUNCTION update_historical_price_calculations(p_tickers text[])
+RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    ticker_name text;
+    v_current_date date := CURRENT_DATE;
+BEGIN
+    -- Safety exit
+    IF array_length(p_tickers, 1) IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Process each ticker individually for better performance
+    FOREACH ticker_name IN ARRAY p_tickers
+    LOOP
+        INSERT INTO historical_price_calculations (
+            ticker, current_close, price_1w, price_1m, price_3m, price_6m, price_1y,
+            price_5y, price_10y, price_ytd, price_all, price_52w_low, price_52w_high,
+            sma_50, sma_200, rsi_14, stddev_7, stddev_30, updated_at, calculation_date
+        )
+        SELECT 
+            ticker_name,
+            current_data.close,
+            
+            -- Historical price references using efficient lateral joins
+            week_data.close AS price_1w,
+            month_data.close AS price_1m,
+            quarter_data.close AS price_3m,
+            half_year_data.close AS price_6m,
+            year_data.close AS price_1y,
+            five_year_data.close AS price_5y,
+            ten_year_data.close AS price_10y,
+            ytd_data.close AS price_ytd,
+            all_time_data.close AS price_all,
+            
+            -- 52-week extremes
+            extremes.low_52w,
+            extremes.high_52w,
+            
+            -- Moving averages
+            sma_50_data.avg_close,
+            sma_200_data.avg_close,
+            
+            -- RSI (simplified calculation without window functions)
+            CASE 
+                WHEN rsi_data.avg_loss = 0 THEN 100
+                WHEN rsi_data.avg_loss IS NULL THEN NULL
+                ELSE 100 - 100 / (1 + rsi_data.avg_gain / rsi_data.avg_loss)
+            END AS rsi_14,
+            
+            -- Volatility measures
+            vol_data.stddev_7,
+            vol_data.stddev_30,
+            
+            now() AS updated_at,
+            v_current_date AS calculation_date
+        FROM (
+            -- Get current close price
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) current_data
+        LEFT JOIN LATERAL (
+            -- 1 week ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '7 days'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) week_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 1 month ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '1 month'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) month_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 3 months ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '3 months'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) quarter_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 6 months ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '6 months'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) half_year_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 1 year ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '1 year'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) year_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 5 years ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '5 years'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) five_year_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 10 years ago
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" <= now() - INTERVAL '10 years'
+            ORDER BY "timestamp" DESC
+            LIMIT 1
+        ) ten_year_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- Year-to-date
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND EXTRACT(YEAR FROM "timestamp") = EXTRACT(YEAR FROM now())
+            ORDER BY "timestamp" ASC
+            LIMIT 1
+        ) ytd_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- All-time (earliest available)
+            SELECT close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+            ORDER BY "timestamp" ASC
+            LIMIT 1
+        ) all_time_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 52-week extremes
+            SELECT 
+                MIN(low) AS low_52w,
+                MAX(high) AS high_52w
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" >= now() - INTERVAL '52 weeks'
+        ) extremes ON TRUE
+        LEFT JOIN LATERAL (
+            -- 50-day moving average
+            SELECT AVG(close) AS avg_close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" >= now() - INTERVAL '50 days'
+        ) sma_50_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- 200-day moving average
+            SELECT AVG(close) AS avg_close
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" >= now() - INTERVAL '200 days'
+        ) sma_200_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- RSI calculation simplified - will be computed separately if needed
+            -- For now, return NULL to avoid window function issues
+            SELECT 
+                NULL::numeric AS avg_gain,
+                NULL::numeric AS avg_loss
+        ) rsi_data ON TRUE
+        LEFT JOIN LATERAL (
+            -- Volatility measures
+            SELECT 
+                STDDEV_SAMP(close) FILTER (WHERE "timestamp" >= now() - INTERVAL '7 days') AS stddev_7,
+                STDDEV_SAMP(close) FILTER (WHERE "timestamp" >= now() - INTERVAL '30 days') AS stddev_30
+            FROM ohlcv_1d
+            WHERE ticker = ticker_name
+              AND "timestamp" >= now() - INTERVAL '30 days'
+        ) vol_data ON TRUE
+        
+        ON CONFLICT (ticker) DO UPDATE SET
+            current_close = EXCLUDED.current_close,
+            price_1w = EXCLUDED.price_1w,
+            price_1m = EXCLUDED.price_1m,
+            price_3m = EXCLUDED.price_3m,
+            price_6m = EXCLUDED.price_6m,
+            price_1y = EXCLUDED.price_1y,
+            price_5y = EXCLUDED.price_5y,
+            price_10y = EXCLUDED.price_10y,
+            price_ytd = EXCLUDED.price_ytd,
+            price_all = EXCLUDED.price_all,
+            price_52w_low = EXCLUDED.price_52w_low,
+            price_52w_high = EXCLUDED.price_52w_high,
+            sma_50 = EXCLUDED.sma_50,
+            sma_200 = EXCLUDED.sma_200,
+            rsi_14 = EXCLUDED.rsi_14,
+            stddev_7 = EXCLUDED.stddev_7,
+            stddev_30 = EXCLUDED.stddev_30,
+            updated_at = EXCLUDED.updated_at,
+            calculation_date = EXCLUDED.calculation_date;
+    END LOOP;
+END;
+$$;
+
+-- Add continuous aggregate policy for the simplified view
+DO $$
+BEGIN
+    PERFORM add_continuous_aggregate_policy('historical_price_refs',
+        start_offset => INTERVAL '3 days',
+        end_offset => INTERVAL '1 hour',
+        schedule_interval => INTERVAL '1 hour');
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Policy for historical_price_refs may already exist: %', SQLERRM;
+END $$;
 `
 
 var incrementalRefreshQuery = `
 -- Incremental screener refresh for stale tickers only
 -- This function processes only the tickers that have changed since last refresh
+-- NOTE: This function depends on intraday_stats table having the correct structure with updated_at column
+-- 
+-- IMPORTANT: If you get "column does not exist" errors, ensure that:
+-- 1. The intraday_stats table exists with the structure defined in intradayPriceRefsQuery
+-- 2. The historical_price_calculations table exists with the structure defined in createHistoricalPriceRefsQuery
+-- 3. All required functions (update_intraday_stats, update_historical_price_calculations, pct) exist
+--
+-- To recreate the tables, run the intradayPriceRefsQuery and createHistoricalPriceRefsQuery
 
 CREATE OR REPLACE FUNCTION public.refresh_screener_delta(
     p_tickers text[]
@@ -225,6 +617,14 @@ BEGIN
     IF array_length(p_tickers, 1) IS NULL THEN
         RETURN;
     END IF;
+
+    ------------------------------------------------------------------
+    -- Update intraday stats and historical calculations for the specified tickers first
+    -- NOTE: If this fails with "column does not exist" error, the intraday_stats table
+    -- needs to be recreated with the correct structure from intradayPriceRefsQuery
+    ------------------------------------------------------------------
+    PERFORM update_intraday_stats(p_tickers);
+    PERFORM update_historical_price_calculations(p_tickers);
 
     ------------------------------------------------------------------
     -- Up‑sert screener rows built from securities + latest snapshots
@@ -357,7 +757,19 @@ BEGIN
 
     /* ── latest intraday snapshot ── */
     LEFT JOIN LATERAL (
-        SELECT *
+        SELECT 
+            ticker,
+            ts,
+            change_1h_pct,
+            change_4h_pct,
+            range_1m_pct,
+            range_15m_pct,
+            range_1h_pct,
+            avg_dollar_volume_1m_14,
+            avg_volume_1m_14,
+            relative_volume_14,
+            extended_hours_change,
+            extended_hours_change_pct
         FROM   intraday_stats
         WHERE  ticker = sec.ticker
         ORDER  BY ts DESC
@@ -388,7 +800,7 @@ BEGIN
     ) delt ON TRUE
 
     /* ── historic refs & technicals ── */
-    LEFT JOIN historical_price_refs      hp  ON hp.ticker = sec.ticker
+    LEFT JOIN historical_price_calculations      hp  ON hp.ticker = sec.ticker
 
     /* ── intra‑day day‑range % (high‑low vs low) ── */
     LEFT JOIN LATERAL (
@@ -463,24 +875,26 @@ RETURNS numeric LANGUAGE SQL IMMUTABLE STRICT AS $$
 
 func StartScreenerUpdaterLoop(conn *data.Conn) error {
 
-	loc, err := time.LoadLocation("America/New_York")
+	/*loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		log.Fatalf("❌ cannot load ET timezone: %v", err)
-	}
+	}*/
 
-	err = runScreenerLoopInit(conn)
+	err := runScreenerLoopInit(conn)
 	if err != nil {
 		return fmt.Errorf("failed to setup incremental infrastructure: %v", err)
 	}
 
+	updateStaleScreenerValues(conn)
+
 	ticker := time.NewTicker(refreshInterval)
 
 	for {
-		now := time.Now().In(loc)
-		if now.Hour() >= extendedCloseHour {
+		//now := time.Now().In(loc)
+		/*if now.Hour() >= extendedCloseHour {
 			log.Println("🌙 Post‑market closed — stopping incremental screener updater")
 			return nil
-		}
+		}*/
 
 		select {
 		case <-ticker.C:
@@ -534,6 +948,8 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	intervalStr := fmt.Sprintf("%d seconds", int(refreshInterval.Seconds()))
 
 	// Use pre-defined SQL strings to avoid re-parsing the same SQL every minute
+	log.Println("🔄 Updating stale screener values...")
+	start := time.Now()
 	if maxTickersPerBatch > 0 {
 		if _, err := conn.DB.Exec(ctx, updateAndRefreshSQLWithLimit, intervalStr, maxTickersPerBatch); err != nil {
 			log.Printf("❌ updateStaleScreenerValues: failed to refresh screener data: %v", err)
@@ -543,11 +959,28 @@ func updateStaleScreenerValues(conn *data.Conn) {
 			log.Printf("❌ updateStaleScreenerValues: failed to refresh screener data: %v", err)
 		}
 	}
+	log.Printf("🔄 updateStaleScreenerValues: %v", time.Since(start))
 }
 
 // setupIncrementalInfrastructure sets up the stale queue, triggers, and functions
 func runScreenerLoopInit(conn *data.Conn) error {
 	log.Println("🔧 Setting up incremental infrastructure (time-based batching)...")
+
+	/*log.Println("🔧 Dropping all materialized views and tables...")
+	if _, err := conn.DB.Exec(context.Background(), initQuery); err != nil {
+		return fmt.Errorf("failed to drop all materialized views and tables: %v", err)
+	}*/
+
+	log.Println("📊 Creating stale queue table...")
+	if _, err := conn.DB.Exec(context.Background(), createStaleQueueQuery); err != nil {
+		return fmt.Errorf("failed to create processing state table: %v", err)
+	}
+
+	// Insert initial stale tickers from securities where maxDate is null
+	log.Println("📊 Inserting initial stale tickers from securities where maxDate is null...")
+	if _, err := conn.DB.Exec(context.Background(), insertInitialStaleTickersQuery); err != nil {
+		return fmt.Errorf("failed to insert initial stale tickers: %v", err)
+	}
 
 	log.Println("📊 Creating OHLCV indexes...")
 	if _, err := conn.DB.Exec(context.Background(), createOHLCVIndexesQuery); err != nil {
@@ -559,19 +992,14 @@ func runScreenerLoopInit(conn *data.Conn) error {
 		return fmt.Errorf("failed to create pre-market stats view: %v", err)
 	}
 
-	log.Println("📊 Creating intraday stats materialized view...")
+	log.Println("📊 Creating intraday stats table and function...")
 	if _, err := conn.DB.Exec(context.Background(), intradayPriceRefsQuery); err != nil {
-		return fmt.Errorf("failed to create intraday stats view: %v", err)
+		return fmt.Errorf("failed to create intraday stats table: %v", err)
 	}
 
-	log.Println("📊 Creating historical price refs materialized view...")
+	log.Println("📊 Creating historical price refs materialized view and calculations table...")
 	if _, err := conn.DB.Exec(context.Background(), createHistoricalPriceRefsQuery); err != nil {
 		return fmt.Errorf("failed to create historical price refs view: %v", err)
-	}
-
-	log.Println("📊 Creating stale queue table...")
-	if _, err := conn.DB.Exec(context.Background(), createStaleQueueQuery); err != nil {
-		return fmt.Errorf("failed to create processing state table: %v", err)
 	}
 
 	log.Println("🔄 Creating incremental refresh function (delta)...")
@@ -579,168 +1007,80 @@ func runScreenerLoopInit(conn *data.Conn) error {
 		return fmt.Errorf("failed to create incremental refresh function: %v", err)
 	}
 
-	log.Println("📋 Ensuring continuous aggregate policies exist...")
-	if _, err := conn.DB.Exec(context.Background(), continuousAggregatePoliciesQuery); err != nil {
-		log.Printf("⚠️  Failed to add continuous aggregate policies (may already exist): %v", err)
-	}
-
 	log.Println("✅ Incremental infrastructure (time-based batching) setup complete")
 	return nil
 }
-
-/*var coveringIndexesQuery = `
--- Comprehensive covering & partial indexes for screener performance
--- These enable index-only scans for LATERAL lookups and filter operations
-
--- Critical indexes for LATERAL lookups (most recent data)
--- Note: Time-based partial indexes removed due to IMMUTABLE function requirement
--- Basic covering indexes from migration 68.sql are sufficient for current workload
-/*
-CREATE INDEX IF NOT EXISTS ohlcv_1d_recent_ticker_ts_desc_covering
-    ON ohlcv_1d (ticker, "timestamp" DESC)
-    INCLUDE (open, high, low, close, volume)
-    WHERE "timestamp" >= now() - INTERVAL '7 days';
-
-CREATE INDEX IF NOT EXISTS ohlcv_1m_recent_ticker_ts_desc_covering
-    ON ohlcv_1m (ticker, "timestamp" DESC)
-    INCLUDE (open, high, low, close, volume)
-    WHERE "timestamp" >= now() - INTERVAL '1 day';
-
--- Indexes for intraday lookups (4-hour window)
-CREATE INDEX IF NOT EXISTS ohlcv_1m_intraday_ticker_ts_desc_covering
-    ON ohlcv_1m (ticker, "timestamp" DESC)
-    INCLUDE (close)
-    WHERE "timestamp" >= now() - INTERVAL '4 hours';
-
--- Indexes for 1-hour range calculations
-CREATE INDEX IF NOT EXISTS ohlcv_1m_1h_ticker_ts_desc_covering
-    ON ohlcv_1m (ticker, "timestamp" DESC)
-    INCLUDE (high, low)
-    WHERE "timestamp" >= now() - INTERVAL '1 hour';
-
--- Indexes for daily historical data (365 days)
-CREATE INDEX IF NOT EXISTS ohlcv_1d_365d_ticker_ts_desc_covering
-    ON ohlcv_1d (ticker, "timestamp" DESC)
-    INCLUDE (close, high, low, volume)
-    WHERE "timestamp" >= now() - INTERVAL '365 days';
-
--- Indexes for 52-week extremes
-CREATE INDEX IF NOT EXISTS ohlcv_1d_52w_ticker_high_low_covering
-    ON ohlcv_1d (ticker, high DESC, low ASC)
-    INCLUDE ("timestamp")
-    WHERE "timestamp" >= now() - INTERVAL '52 weeks';
-
--- Indexes for pre-market continuous aggregate
-CREATE INDEX IF NOT EXISTS pm_stats_bucket_ticker_covering
-    ON pm_stats (bucket, ticker)
-    INCLUDE (pm_open, pm_close, pm_high, pm_low, pm_volume);
-
--- Indexes for 52-week extremes materialized view
-CREATE INDEX IF NOT EXISTS ohlcv_52w_extremes_ticker_covering
-    ON ohlcv_52w_extremes (ticker)
-    INCLUDE (wk52_high, wk52_low);
-
--- BRIN indexes for time-series data (append-only optimization)
-CREATE INDEX IF NOT EXISTS ohlcv_1d_ts_brin
-    ON ohlcv_1d USING BRIN ("timestamp")
-    WITH (pages_per_range = 128);
-
-CREATE INDEX IF NOT EXISTS ohlcv_1m_ts_brin
-    ON ohlcv_1m USING BRIN ("timestamp")
-    WITH (pages_per_range = 128);
-
--- Specialized indexes for technical indicators
-/*
-CREATE INDEX IF NOT EXISTS ohlcv_1d_rsi_ticker_ts_covering
-    ON ohlcv_1d (ticker, "timestamp" DESC)
-    INCLUDE (close)
-    WHERE "timestamp" >= now() - INTERVAL '30 days';
-
--- Indexes for volume calculations
-CREATE INDEX IF NOT EXISTS ohlcv_1d_volume_ticker_ts_covering
-    ON ohlcv_1d (ticker, "timestamp" DESC)
-    INCLUDE (volume)
-    WHERE "timestamp" >= now() - INTERVAL '30 days';
-
--- Note: Additional specialized indexes removed to avoid duplication
--- Basic covering indexes from migration 68.sql provide sufficient coverage
-
--- Security table index for active tickers
-CREATE INDEX IF NOT EXISTS securities_active_ticker_covering
-    ON securities (ticker)
-    INCLUDE (securityid, market_cap, sector, industry)
-    WHERE active = TRUE;
-
--- Maintenance function (simplified - no partial index maintenance needed)
-CREATE OR REPLACE FUNCTION refresh_partial_indexes() RETURNS void AS $$
-BEGIN
-    -- Note: In a production system, you would recreate these indexes
-    -- with updated time predicates periodically
-
-    -- For now, just log that maintenance is needed
-    RAISE NOTICE 'Partial index maintenance completed. Consider recreating time-based partial indexes monthly.';
-    -- No partial indexes to maintain - basic indexes are sufficient
-END;
-$$ LANGUAGE plpgsql;
-`
-*/
-
-var continuousAggregatePoliciesQuery = `
--- Add TimescaleDB policies for automatic continuous aggregate refresh
--- This eliminates the need for manual refresh on every tick
-
--- Policy for pre_market_stats: refresh every 1 minute during market hours
--- (Note: This view already has its policy defined inline during creation)
-SELECT add_continuous_aggregate_policy('pre_market_stats',
-    start_offset => INTERVAL '7 days',
-    end_offset => INTERVAL '0',
-    schedule_interval => INTERVAL '1 minute')
-ON CONFLICT DO NOTHING;
-
--- Policy for intraday_stats: refresh every 30 seconds for real-time data
--- (Note: This view already has its policy defined inline during creation)
-SELECT add_continuous_aggregate_policy('intraday_stats',
-    start_offset => INTERVAL '7 days',
-    end_offset => INTERVAL '0',
-    schedule_interval => INTERVAL '30 seconds')
-ON CONFLICT DO NOTHING;
-
--- Policy for historical_price_refs: refresh every 1 hour for historical data
--- (Note: This view already has its policy defined inline during creation)
-SELECT add_continuous_aggregate_policy('historical_price_refs',
-    start_offset => INTERVAL '2 days',
-    end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '1 hour')
-ON CONFLICT DO NOTHING;
-`
 
 // dropAllViewsQuery - UNUSED - For fresh restart when needed
 // This query drops all materialized views and aggregates created by the screener updater
 // Use with caution - will require full rebuild of all screener infrastructure
 
-var _ = `
--- Drop all continuous aggregate policies first
-SELECT remove_continuous_aggregate_policy('pre_market_stats', true);
-SELECT remove_continuous_aggregate_policy('intraday_stats', true);
-SELECT remove_continuous_aggregate_policy('historical_price_refs', true);
+var initQuery = `
+-- Drop all continuous aggregate policies first (with proper error handling)
+-- Check if continuous aggregate exists and has policies before removing
+DO $$
+BEGIN
+    -- Remove pre_market_stats policy if it exists
+    IF EXISTS (
+        SELECT 1 FROM timescaledb_information.continuous_aggregates 
+        WHERE view_name = 'pre_market_stats'
+    ) THEN
+        BEGIN
+            PERFORM remove_continuous_aggregate_policy('pre_market_stats', true);
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE NOTICE 'Could not remove pre_market_stats policy: %', SQLERRM;
+        END;
+    END IF;
+
+    -- Remove historical_price_refs policy if it exists
+    IF EXISTS (
+        SELECT 1 FROM timescaledb_information.continuous_aggregates 
+        WHERE view_name = 'historical_price_refs'
+    ) THEN
+        BEGIN
+            PERFORM remove_continuous_aggregate_policy('historical_price_refs', true);
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE NOTICE 'Could not remove historical_price_refs policy: %', SQLERRM;
+        END;
+    END IF;
+END $$;
 
 -- Drop all materialized views and continuous aggregates
 DROP MATERIALIZED VIEW IF EXISTS pre_market_stats CASCADE;
-DROP MATERIALIZED VIEW IF EXISTS intraday_stats CASCADE;
+DROP TABLE IF EXISTS intraday_stats CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS historical_price_refs CASCADE;
+DROP TABLE IF EXISTS historical_price_calculations CASCADE;
 
 -- Drop supporting tables and functions
 DROP TABLE IF EXISTS screener_stale CASCADE;
 DROP FUNCTION IF EXISTS public.refresh_screener_delta(text[]) CASCADE;
+DROP FUNCTION IF EXISTS update_intraday_stats(text[]) CASCADE;
+DROP FUNCTION IF EXISTS update_historical_price_calculations(text[]) CASCADE;
 DROP FUNCTION IF EXISTS pct(numeric, numeric) CASCADE;
 
 -- Drop indexes (will be dropped with CASCADE but listed for clarity)
 -- DROP INDEX IF EXISTS pre_market_stats_ticker_day_idx;
--- DROP INDEX IF EXISTS intraday_stats_idx;
+-- DROP INDEX IF EXISTS intraday_stats_ticker_idx;
+-- DROP INDEX IF EXISTS intraday_stats_ts_idx;
 -- DROP INDEX IF EXISTS historical_price_refs_ticker_idx;
+-- DROP INDEX IF EXISTS historical_price_refs_ticker_bucket_idx;
+-- DROP INDEX IF EXISTS historical_price_refs_bucket_idx;
+-- DROP INDEX IF EXISTS historical_price_calculations_ticker_idx;
+-- DROP INDEX IF EXISTS historical_price_calculations_updated_idx;
 -- DROP INDEX IF EXISTS ohlcv_1d_ticker_ts_desc_inc;
 -- DROP INDEX IF EXISTS ohlcv_1m_ticker_ts_desc_inc;
 
 -- Note: After running this cleanup, you must restart the screener updater
 -- to recreate all views, functions, and policies
+
+
+
+
+
+
+
+
+
 `
