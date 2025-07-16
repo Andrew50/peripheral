@@ -444,7 +444,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 	// Wait for plot to fully render
 	page.MustWaitIdle()
 
-	// Wait for Plotly animations to complete
+	// Wait for Plotly animations to complete idk if this is really necessary but just in case lmao
 	time.Sleep(100 * time.Millisecond)
 
 	// Capture screenshot of the plot element
