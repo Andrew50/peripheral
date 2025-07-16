@@ -4,11 +4,13 @@ import (
 	"backend/internal/data"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,6 +18,8 @@ import (
 	"time"
 
 	"backend/internal/app/agent"
+	"backend/internal/app/helpers"
+	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
 
 	"github.com/dghubble/oauth1"
@@ -155,24 +159,75 @@ func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 		return
 	}
 	fmt.Println("Peripheral tweet", peripheralContentToTweet)
-	SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+	//SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
 
 }
 
-type PeripheralTweet struct {
+type AgentPeripheralTweet struct {
 	Text string      `json:"text" jsonschema:"required"`
 	Plot interface{} `json:"plot" jsonschema:"required"`
 }
 
-func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (PeripheralTweet, error) { // to implement don't forget
+type FormattedPeripheralTweet struct {
+	Text  string `json:"text"`
+	Image string `json:"image"`
+}
+
+func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (FormattedPeripheralTweet, error) { // to implement don't forget
 
 	prompt := tweet.Text
 	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
-	agentResult, err := agent.RunGeneralAgent[PeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt)
+	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt)
 	if err != nil {
-		return PeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
+		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
-	return agentResult, nil
+	var base64PNG string
+	// Test Plotly rendering if plot data exists
+	if agentResult.Plot != nil {
+		if plotMap, ok := agentResult.Plot.(map[string]interface{}); ok {
+			if titleTicker, exists := plotMap["titleTicker"].(string); exists && titleTicker != "" {
+				titleIcon, _ := helpers.GetIcon(conn, titleTicker)
+				plotMap["titleIcon"] = titleIcon
+			}
+			if _, hasData := plotMap["data"]; hasData {
+
+				// Create renderer
+				renderer, err := plotly.New()
+				if err != nil {
+					log.Printf("Failed to create Plotly renderer: %v", err)
+				} else {
+					defer renderer.Close()
+
+					// Render the plot
+					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+					defer cancel()
+
+					base64PNG, err = renderer.RenderPlot(ctx, agentResult.Plot, nil)
+					if err != nil {
+						log.Printf("Failed to render plot: %v", err)
+					} else {
+
+						// Save PNG file for verification
+						pngData, err := base64.StdEncoding.DecodeString(base64PNG)
+						if err == nil {
+							// Use a fixed filename for easy copying
+							filename := "/tmp/latest_plot.png"
+							if err := os.WriteFile(filename, pngData, 0644); err == nil {
+								fmt.Printf("Plot saved to container: %s\n", filename)
+								fmt.Printf("To copy to your local machine, run:\n")
+								fmt.Printf("docker cp dev-backend-1:%s ./plot.png && open ./plot.png\n", filename)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	formattedPeripheralTweet := FormattedPeripheralTweet{
+		Text:  agentResult.Text,
+		Image: base64PNG,
+	}
+	return formattedPeripheralTweet, nil
 }
 
 type alreadySeenTweetGeminiResponseStruct struct {
@@ -296,7 +351,7 @@ func storeTweet(conn *data.Conn, tweet ExtractedTweetData) {
 	}*/
 }
 
-func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet PeripheralTweet) { // TODO: Implement plot rendering and image upload
+func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPeripheralTweet) { // TODO: Implement plot rendering and image upload
 	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
 	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
 	client := cfg.Client(oauth1.NoContext, token)

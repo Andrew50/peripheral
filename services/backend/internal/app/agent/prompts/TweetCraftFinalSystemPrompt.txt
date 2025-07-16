@@ -30,8 +30,6 @@ If the news warrants a visual representation, include a `plot` object with:
 - `layout`: Object with:
   - `xaxis`: Object with `title` (string) for x-axis label
   - `yaxis`: Object with `title` (string) for y-axis label
-  - `height`: Number (typically 400-600)
-  - `width`: Number (typically 600-800)
 
 
 **CONTENT GUIDELINES:**

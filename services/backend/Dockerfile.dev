@@ -1,6 +1,24 @@
 # Dockerfile.dev
 FROM golang:1.24-alpine
-RUN apk add --no-cache git bash
+RUN apk add --no-cache \
+    git \
+    bash \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+
+    font-noto-emoji \
+    && rm -rf /var/cache/apk/*
+
+# Configure Chromium
+ENV CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/ \
+    CHROMIUM_FLAGS="--disable-software-rasterizer --disable-dev-shm-usage"
+
 RUN go install github.com/air-verse/air@latest
 WORKDIR /app
 COPY go.mod go.sum ./
