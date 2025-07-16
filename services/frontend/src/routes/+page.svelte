@@ -48,7 +48,6 @@
 		}
 	];
 
-
 </script>
 
 <SiteHeader {isAuthenticated} />
