@@ -59,23 +59,24 @@
 
 <SiteHeader {isAuthenticated} />
 
-<!-- Title Section - Extracted from HeroAnimation -->
-<section class="hero-title-section">
-	<div class="hero-title-container">
-		<h1 class="hero-title">
-			The <span class="gradient-text">best</span> way to trade.
-		</h1>
-		<p class="hero-subtitle">
-			Peripheral enables you to envision and execute your trading ideas.<br />
-		</p>
-		<a href="/signup" class="hero-cta-button">
-			Get Started for Free
-		</a>
-	</div>
-</section>
-<section>
+<!-- Wrapper with unified gradient -->
+<div class="page-wrapper">
+	<!-- Title Section - Extracted from HeroAnimation -->
+	<section class="hero-title-section">
+		<div class="hero-title-container">
+			<h1 class="hero-title">
+				The <span class="gradient-text">best</span> way to trade.
+			</h1>
+			<p class="hero-subtitle">
+				Peripheral enables you to envision and execute your trading ideas.<br />
+			</p>
+			<a href="/signup" class="hero-cta-button">
+				Get Started for Free
+			</a>
+		</div>
+	</section>
 
-<main class="landing-container">
+	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
 		<div class="subsections-content">
@@ -103,16 +104,12 @@
 	<!-- Footer -->
 	<SiteFooter />
 </main>
-</section>
+</div>
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-	/* Critical global styles - applied immediately to prevent layout shift */
-	:root {
-		/* CSS variables for layout */
-	}
 
 	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
@@ -146,16 +143,22 @@
 		padding: 0 !important; /* remove side gutters */
 	}
 
+	.page-wrapper {
+		width: 100%;
+		min-height: 100vh;
+		background: linear-gradient(
+			180deg,
+			rgba(3, 1, 85, 0.75) 0%,
+			rgba(2, 1, 50, 0.8) 30%,
+			#010022 60%,
+			#000000 100%
+		);
+	}
+
 	.landing-container {
 		position: relative;
 		width: 100%;
-		background: linear-gradient(
-			180deg,
-			#000000 0%,
-			rgba(3, 1, 85, 0.75) 40%,
-			rgba(2, 1, 50, 0.8) 70%,
-			#010022 100%
-		);
+		background: transparent;
 		color: var(--color-dark);
 		font-family:
 			'Geist',
@@ -173,8 +176,8 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-	padding: 10rem 0.5rem 17rem 0.5rem;
-		background: #000000;
+		padding: 10rem 0.5rem 17rem 0.5rem;
+		background: transparent;
 		width: 100%;
 		display: flex;
 		align-items: center;
