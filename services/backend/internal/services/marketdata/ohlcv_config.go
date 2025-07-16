@@ -112,6 +112,24 @@ var copyBatchSize = func() int {
 	return 10
 }()
 
+// copyBatchSize1m determines how many CSV files are streamed into a single COPY for ohlcv_1m table.
+var copyBatchSize1m = func() int {
+	if v := os.Getenv("COPY_BATCH_SIZE_1M"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1
+}()
+
+// getBatchSize returns the appropriate batch size based on the table name.
+func getBatchSize(tableName string) int {
+	if tableName == "ohlcv_1m" {
+		return copyBatchSize1m
+	}
+	return copyBatchSize
+}
+
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
 	return 1 // TODO: remove this if we can get db stable

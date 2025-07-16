@@ -1,6 +1,7 @@
 # Dockerfile.dev
 FROM golang:1.24-alpine
-RUN apk add --no-cache \
+RUN apk update && \
+    apk add --no-cache --retry 3 \
     git \
     bash \
     chromium \
@@ -10,8 +11,18 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont \
-
-    font-noto-emoji \
+    font-noto-emoji || \
+    (apk update && apk add --no-cache \
+    git \
+    bash \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji) \
     && rm -rf /var/cache/apk/*
 
 # Configure Chromium

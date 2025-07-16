@@ -6,7 +6,7 @@ run:
   build-tags:
     - all
     - !test
-linter-settings:
+linters-settings:
   errcheck:
     check-type-assertions: false
     exclude-functions:
@@ -38,7 +38,7 @@ linters:
     - govet
     - ineffassign
 issues:
-  exclude:
+  exclude-rules:
     - linters: [errcheck]
       text: "Error return value is not checked"
     - linters: [govet]

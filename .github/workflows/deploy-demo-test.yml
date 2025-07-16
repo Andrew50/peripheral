@@ -1,4 +1,5 @@
 name: Demo Deployment Workflow
+# yamllint disable rule:line-length
 # this will be merged with deploy.yaml sometime
 on:
   workflow_call:
@@ -35,10 +36,10 @@ on:
       migration_needed:
         required: false
         type: string
-#      public_base_url:
-#        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
-#        required: true
-#        type: string
+        # public_base_url:
+        # description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
+        # required: true
+        # type: string
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN:
         required: true
@@ -87,12 +88,10 @@ on:
       STRIPE_PUBLISHABLE_KEY:
         required: true
 
-
 permissions:
   contents: read
   packages: write
   id-token: write
-
 
 jobs:
   deploy:
@@ -124,7 +123,7 @@ jobs:
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-      
+
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
       ENVIRONMENT: ${{ inputs.environment }}
@@ -160,7 +159,7 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 1
           lfs: false
-      
+
       - name: Show Git Information
         run: |
           echo "Current directory: $(pwd)"
@@ -203,24 +202,23 @@ jobs:
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
-
       - name: Setup For Deployment
         run: |
           chmod +x config/deploy/scripts-do/*.sh
-          
+
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          
+
           echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
-          echo "Services to deploy: ${{ inputs.services_changed }}"   
+          echo "Services to deploy: ${{ inputs.services_changed }}"
 
           echo "MIGRATION_NEEDED=${{ inputs.mig }}"
 
           CONFIG_DIR="config/deploy/k8s-doks"
           echo "CONFIG_DIR=${CONFIG_DIR}" >> $GITHUB_ENV
           echo "Using Config Directory: ${CONFIG_DIR}"
-          
+
           TMP_DIR="config/deploy/tmp"
           echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
           echo "Using Temp Directory: ${TMP_DIR}"
@@ -255,21 +253,21 @@ jobs:
         run: config/deploy/scripts-do/deploy-to-k8s.sh
 
       - name: Run DB Migrations Job
-        if: false #inputs.migration_needed == 'true'
+        if: false  # inputs.migration_needed == 'true'
         run: |
           # Substitute env vars into job manifest
           envsubst < config/deploy/k8s-doks/db-migrate-job.yaml > db-migrate-job.yaml
-          
+
           # Apply the Job manifest (creates the job)
           kubectl apply -f db-migrate-job.yaml -n $K8S_NAMESPACE
-          
+
           # Wait for job to complete (timeout after 5 mins)
           kubectl wait --for=condition=complete job/db-migrate-job -n $K8S_NAMESPACE --timeout=300s
-          
+
           POD=$(kubectl get pods -n $K8S_NAMESPACE -l job-name=db-migrate-job -o jsonpath='{.items[0].metadata.name}')
           echo "Logs from migration job pod:"
           kubectl logs "$POD" -n $K8S_NAMESPACE
-          
+
           # Cleanup the job resources (job + pods)
           kubectl delete job db-migrate-job -n $K8S_NAMESPACE
 
