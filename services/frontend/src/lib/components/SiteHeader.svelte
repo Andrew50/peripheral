@@ -14,15 +14,11 @@
 	// Mobile sidebar state
 	let isSidebarOpen = false;
 
-	// Detect if we're on the pricing page
-	$: isOnPricingPage = $page.url.pathname === '/pricing';
-
 	import '$lib/styles/splash.css';
 
 	function handleScroll() {
 		if (!browser) return;
 		const currentY = window.scrollY;
-		const isOnSplashPage = window.location.pathname === '/';
 		
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
@@ -132,7 +128,7 @@
 
 		<!-- Desktop navigation -->
 		<div class="navigation desktop-nav">
-			<button class="nav-button secondary" class:pricing-page={isOnPricingPage} class:transparent={isHeaderTransparent} on:click={() => navigateTo('/pricing')}>Pricing</button>
+			<button class="nav-button secondary"  class:transparent={isHeaderTransparent} on:click={() => navigateTo('/pricing')}>Pricing</button>
 			{#if isAuthenticated}
 				<button class="nav-button primary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/app')}
 					>Go to Terminal</button
@@ -242,7 +238,7 @@
 
 	.nav-button.secondary {
 		color: #000000;
-		border: 1px solid var(--color-primary);
+		border: 1px solid #000000;
 	}
 
 	.nav-button.primary {
@@ -253,7 +249,7 @@
 	.nav-button.primary:hover,
 	.nav-button.secondary:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		transition: none;
 	}
 
 	/* Transparent header styles */
@@ -270,7 +266,7 @@
 	.nav-button.primary.transparent:hover,
 	.nav-button.secondary.transparent:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 24px rgba(255, 255, 255, 0.15);
+		transition: none;
 	}
 
 
