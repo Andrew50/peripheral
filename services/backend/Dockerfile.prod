@@ -8,7 +8,24 @@ RUN GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/local/bin/jobctl ./cmd/jobctl
 
 FROM alpine:latest
-RUN apk add --no-cache bash tzdata
+RUN apk add --no-cache \
+    bash \
+    tzdata \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji \
+    && rm -rf /var/cache/apk/*
+
+# Configure Chromium
+ENV CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/ \
+    CHROMIUM_FLAGS="--disable-software-rasterizer --disable-dev-shm-usage"
+
 WORKDIR /app
 COPY --from=builder /app/main /app/main
 COPY --from=builder /usr/local/bin/jobctl /usr/local/bin/jobctl

@@ -15,12 +15,6 @@
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
 
-	onMount(() => {
-		if (browser) {
-			// Start preloading pricing configuration early
-			// Pricing preload removed - now handled directly in pricing page
-		}
-	});
 
 	// Subsections data
 	const subsections = [
@@ -59,20 +53,24 @@
 
 <SiteHeader {isAuthenticated} />
 
-<!-- Title Section - Extracted from HeroAnimation -->
-<section class="hero-title-section">
-	<div class="hero-title-container">
-		<h1 class="hero-title">
-			The <span class="gradient-text">best</span> way to trade.
-		</h1>
-		<p class="hero-subtitle">
-			Peripheral is the terminal to envision and execute your trading ideas.<br />
-		</p>
-	</div>
-</section>
-<section>
+<!-- Wrapper with unified gradient -->
+<div class="page-wrapper">
+	<!-- Title Section - Extracted from HeroAnimation -->
+	<section class="hero-title-section">
+		<div class="hero-title-container">
+			<h1 class="hero-title">
+				The <span class="gradient-text">best</span> way to trade.
+			</h1>
+			<p class="hero-subtitle">
+				Peripheral enables you to envision and execute your trading ideas.<br />
+			</p>
+			<a href="/signup" class="hero-cta-button">
+				Get Started for Free
+			</a>
+		</div>
+	</section>
 
-<main class="landing-container">
+	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
 		<div class="subsections-content">
@@ -100,40 +98,27 @@
 	<!-- Footer -->
 	<SiteFooter />
 </main>
-</section>
+</div>
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-	/* Critical global styles - applied immediately to prevent layout shift */
-	:root {
-		/* CSS variables for layout */
-	}
 
 	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
 		box-sizing: border-box;
 	}
 
-	/* Remove scrollbars globally */
 	:global(html) {
-		scrollbar-width: none; /* Firefox */
 		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-	:global(html::-webkit-scrollbar) {
-		display: none; /* Chrome, Safari, Opera */
-	}
 
 	:global(body) {
-		scrollbar-width: none; /* Firefox */
 		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-	:global(body::-webkit-scrollbar) {
-		display: none; /* Chrome, Safari, Opera */
-	}
 
 	/* Override width restrictions from global landing styles - moved to top for immediate application */
 	:global(.landing-container) {
@@ -143,15 +128,22 @@
 		padding: 0 !important; /* remove side gutters */
 	}
 
+	.page-wrapper {
+		width: 100%;
+		min-height: 100vh;
+		background: linear-gradient(
+			180deg,
+			rgba(3, 1, 85, 0.75) 0%,
+			rgba(2, 1, 50, 0.8) 30%,
+			#010022 60%,
+			#000000 100%
+		);
+	}
+
 	.landing-container {
 		position: relative;
 		width: 100%;
-		background: linear-gradient(
-			180deg,
-			#000000 0%,
-			rgba(3, 1, 85, 0.75) 50%,
-			#010022 100%
-		);
+		background: transparent;
 		color: var(--color-dark);
 		font-family:
 			'Geist',
@@ -163,13 +155,14 @@
 			sans-serif;
 		display: flex;
 		flex-direction: column;
+		min-height: 100vh;
 	}
 
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 26rem 0.5rem 17rem 0.5rem;
-		background: #000000;
+		padding: 10rem 0.5rem 17rem 0.5rem;
+		background: transparent;
 		width: 100%;
 		display: flex;
 		align-items: center;
@@ -204,6 +197,35 @@
 		margin-top: 0;
 		font-weight: 400;
 		font-family: 'Geist', 'Inter', sans-serif;
+	}
+
+	.hero-cta-button {
+		display: inline-block;
+		background: white;
+		color: black;
+		text-decoration: none;
+		padding: 1rem 2rem;
+		border-radius: 2rem;
+		font-size: 1.1rem;
+		font-weight: 600;
+		font-family: 'Geist', 'Inter', sans-serif;
+		transition: all 0.3s ease;
+		box-shadow: 
+			0 4px 14px 0 rgba(255, 255, 255, 0.1),
+			0 2px 4px 0 rgba(0, 0, 0, 0.1);
+		margin-top: 1rem;
+	}
+
+	.hero-cta-button:hover {
+		transform: translateY(-2px);
+		box-shadow: 
+			0 8px 25px 0 rgba(255, 255, 255, 0.2),
+			0 4px 8px 0 rgba(0, 0, 0, 0.15);
+		background: rgba(255, 255, 255, 0.95);
+	}
+
+	.hero-cta-button:active {
+		transform: translateY(0);
 	}
 
 	.gradient-text {
@@ -246,7 +268,6 @@
 		position: relative;
 		z-index: 10;
 		padding: 6rem 2rem;
-		background: rgba(255, 255, 255, 0.02);
 		width: 100%;
 		flex-shrink: 0;
 	}

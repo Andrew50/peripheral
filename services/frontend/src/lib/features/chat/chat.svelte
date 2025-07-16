@@ -1371,6 +1371,17 @@
 					data: statusUpdate.data
 				}
 			];
+		} else if (statusUpdate.type === 'WebSearchCitations' && statusUpdate.data?.citations) {
+			// Add web search citations to timeline
+			processingTimeline = [
+				...processingTimeline,
+				{
+					message: ``,
+					timestamp: new Date(),
+					type: 'webSearchCitations',
+					data: statusUpdate.data
+				}
+			];
 		}
 	}
 

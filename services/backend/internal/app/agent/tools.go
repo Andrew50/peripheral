@@ -692,11 +692,11 @@ var (
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis. Web searches are EXPENSIVE. If you need to do the same websearch on several tickers or multiple websearchs, figure out how to BEST group them into as few websearches as possible",
+				Description: "Run a web search. NEVER use web search to look up historical performance or stock analysis. Web searches are EXPENSIVE. If you need to do the same websearch on several tickers or multiple websearchs, figure out how to BEST group them into as few websearches as possible",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"query": {Type: genai.TypeString, Description: "The query to search. Be highly specific and detailed, asking for the specific information you need. "},
+						"query": {Type: genai.TypeString, Description: "The query to search. Be HIGHLY specific and detailed, asking for the specific information you need. Do not leave any room for ambiguity in the query."},
 					},
 					Required: []string{"query"},
 				},

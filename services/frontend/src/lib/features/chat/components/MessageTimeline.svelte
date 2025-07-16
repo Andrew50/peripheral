@@ -17,6 +17,7 @@
 	
 	// For web searches, we only show chips (no status text)
 	$: shouldShowStatusHeader = currentStatus && typeof currentStatus === 'string' && currentStatus.trim().length > 0;
+
 </script>
 
 {#if shouldShowStatusHeader || filteredTimeline.length > 0}
@@ -63,8 +64,31 @@
 										<span class="search-query">{event.data.query}</span>
 									</div>
 								</div>
-							{:else}
-								{event.message}
+							{:else if event.type === 'webSearchCitations' && event.data?.citations}
+								<div class="timeline-citations">
+									<div class="citations-header">
+
+										<span>Reading sources · {event.data.citations.length} </span>
+									</div>
+									<div class="citations-container">
+										{#each event.data.citations as citation, index}
+											<div class="citation-item" on:click={() => window.open(citation.url, '_blank')} on:keydown={(e) => e.key === 'Enter' && window.open(citation.url, '_blank')} role="button" tabindex="0">
+												{#if citation.urlIcon}
+													<img 
+														src={citation.urlIcon} 
+														alt="Site icon" 
+														class="citation-favicon"
+														on:error={() => {}}
+													/>
+												{:else}
+													<div class="citation-favicon-placeholder"></div>
+												{/if}
+												<span class="citation-title">{citation.title}</span>
+												<span class="citation-url">{citation.url.replace(/^https?:\/\//, '').split('/')[0].split('.').slice(0, -1).join('.')}</span>
+											</div>
+										{/each}
+									</div>
+								</div>							
 							{/if}
 						</div>
 					</div>
@@ -191,6 +215,8 @@
 		flex: 1;
 		font-size: 0.8rem;
 		color: var(--text-secondary, #ccc);
+		min-width: 0; /* Allows flex item to shrink */
+		max-width: 100%;
 	}
 
 	.timeline-websearch {
@@ -230,5 +256,100 @@
 			opacity: 1;
 			transform: translateY(0);
 		}
+	}
+
+	.timeline-citations {
+		margin-top: 0.25rem;
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.citations-header {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--text-secondary);
+		opacity: 0.8;
+	}
+
+	.citations-container {
+		max-height: 200px;
+		overflow-y: auto;
+		border: 1.5px solid #272929;
+		border-radius: 0.5rem;
+		background: #1f2121;
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+
+	.citation-item {
+		padding: 0.5rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+		animation: fadeInUp 0.3s ease-out;
+		width: 100%;
+		box-sizing: border-box;
+		min-width: 0; /* Allows text to shrink */
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.citation-item:last-child {
+		border-bottom: none;
+	}
+
+	.citation-item:hover {
+		background-color: rgba(255, 255, 255, 0.05);
+	}
+
+	.citation-item:focus {
+		outline: 1px solid var(--c-blue);
+		outline-offset: -1px;
+		background-color: rgba(255, 255, 255, 0.05);
+	}
+
+	.citation-title {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		line-height: 1.3;
+		white-space: nowrap;
+		overflow: hidden;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.citation-url {
+		font-size: 0.7rem;
+		color: var(--text-secondary);
+		opacity: 0.7;
+		font-family: monospace;
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
+	.citation-favicon {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
+		object-fit: cover;
+	}
+
+	.citation-favicon-placeholder {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
+		background-color: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
 	}
 </style>
