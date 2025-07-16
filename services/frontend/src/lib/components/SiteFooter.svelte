@@ -41,7 +41,7 @@
 				<h4 class="footer-title">Account</h4>
 				<ul class="footer-links">
 					<li><button on:click={navigateToSignup}>Sign Up</button></li>
-					<li><a href="mailto:info@peripheral.io" class="footer-sales-link">Contact Sales</a></li>
+					<li><button on:click={() => window.location.href = 'mailto:info@peripheral.io'}>Contact Sales</button></li>
 					<li><button on:click={navigateToLogin}>Login</button></li>
 				</ul>
 			</div>
@@ -96,8 +96,8 @@
 		margin-top: 3rem;
 		font-size: 1.2rem;
 		padding: 1.1rem 2.5rem;
-		background: rgb(0, 0, 0);
-		color: #f5f9ff;
+		background: #f5f9ff;
+		color: #000000;
 		border: 1px solid transparent;
 		border-radius: 999px;
 		font-weight: 600;

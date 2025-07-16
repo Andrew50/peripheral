@@ -26,7 +26,7 @@ type ExecutionPlan struct {
 	DiscardResults []int64 `json:"discard_results,omitempty"`
 }
 
-func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string) (T, error) {
+func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
 	systemPrompt, err := getSystemInstruction("generalAgentSystemPrompt")
 	if err != nil {
@@ -107,7 +107,7 @@ func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, 
 		case StageFinishedExecuting:
 			finalResultContext, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			finalModelResult, err := _generalAgentGenerateFinalResponse[T](finalResultContext, conn, prompt, finalSystemPromptFile, activeResults, accumulatedThoughts)
+			finalModelResult, err := _generalAgentGenerateFinalResponse[T](finalResultContext, conn, prompt, finalSystemPromptFile, activeResults, accumulatedThoughts, finalModel, finalModelThinkingEffort)
 			if err != nil {
 				return zeroResult, fmt.Errorf("error generating final response: %w", err)
 			}
@@ -147,7 +147,7 @@ func _buildGeneralAgentPlanningPromptWithResults(query string, activeResults []E
 	return sb.String(), nil
 }
 
-func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string) (T, error) {
+func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
@@ -163,7 +163,7 @@ func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.C
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	model := "o3"
+	model := finalModel
 
 	var zero T
 	rawSchema := ref.Reflect(zero)
@@ -188,6 +188,9 @@ func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.C
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String("user:0"),
 		Text:         textConfig,
+		Reasoning: responses.ReasoningParam{
+			Effort: responses.ReasoningEffort(finalModelThinkingEffort),
+		},
 	})
 	if err != nil {
 		return zeroResult, fmt.Errorf("error generating final response: %w", err)
