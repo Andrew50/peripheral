@@ -15,12 +15,6 @@
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
 
-	onMount(() => {
-		if (browser) {
-			// Start preloading pricing configuration early
-			// Pricing preload removed - now handled directly in pricing page
-		}
-	});
 
 	// Subsections data
 	const subsections = [
@@ -118,22 +112,14 @@
 
 	/* Remove scrollbars globally */
 	:global(html) {
-		scrollbar-width: none; /* Firefox */
 		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-	:global(html::-webkit-scrollbar) {
-		display: none; /* Chrome, Safari, Opera */
-	}
 
 	:global(body) {
-		scrollbar-width: none; /* Firefox */
 		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-	:global(body::-webkit-scrollbar) {
-		display: none; /* Chrome, Safari, Opera */
-	}
 
 	/* Override width restrictions from global landing styles - moved to top for immediate application */
 	:global(.landing-container) {
