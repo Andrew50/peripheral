@@ -22,38 +22,75 @@
 			// Import html2canvas dynamically
 			const html2canvas = await import('html2canvas');
 			
-			// Capture the entire chunk container as canvas with padding
-			const canvas = await html2canvas.default(chunkContainer, {
-				backgroundColor: '#121212', // Match chat background color
-				scale: 2, // Higher quality
-				logging: false,
-				useCORS: true,
-				y: -32, // Add top padding
-			});
-
-			// Convert canvas to blob
-			const blob = await new Promise<Blob>((resolve) => {
-				canvas.toBlob((blob) => {
-					resolve(blob!);
-				}, 'image/png');
-			});
-
-			// Copy to clipboard
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					'image/png': blob
-				})
-			]);
-
-			// Show success feedback
-			copyImageFeedback = true;
-			if (copyImageTimeout) {
-				clearTimeout(copyImageTimeout);
+			// Create a clone of the container for off-screen rendering
+			const clone = chunkContainer.cloneNode(true) as HTMLDivElement;
+			
+			// Position clone off-screen
+			clone.style.position = 'absolute';
+			clone.style.left = '-9999px';
+			clone.style.top = '0';
+			clone.style.width = chunkContainer.offsetWidth + 'px';
+			
+			// Ensure the clone container has position relative for absolute watermark positioning
+			const plotContainer = clone.querySelector('.chunk-plot-container') as HTMLDivElement;
+			if (plotContainer) {
+				plotContainer.style.position = 'relative';
 			}
-			copyImageTimeout = setTimeout(() => {
-				copyImageFeedback = false;
-				copyImageTimeout = null;
-			}, 2000);
+			
+			// Create and add watermark to the clone
+			const watermark = document.createElement('div');
+			watermark.className = 'watermark-offscreen';
+			watermark.innerHTML = 'Powered by <span class="watermark-brand">Peripheral.io</span>';
+			
+			// Remove plot-actions from clone to eliminate extra space
+			const plotActions = clone.querySelector('.plot-actions');
+			if (plotActions) {
+				plotActions.remove();
+			}
+			
+			// Append watermark to the clone
+			clone.appendChild(watermark);
+			
+			// Append clone to body temporarily
+			document.body.appendChild(clone);
+			
+			try {
+				// Capture the cloned container with watermark
+				const canvas = await html2canvas.default(clone, {
+					backgroundColor: '#121212', // Match chat background color
+					scale: 3, // Higher quality
+					logging: false,
+					useCORS: true,
+					// Remove the y offset to ensure we capture the full container including bottom
+				});
+
+				// Convert canvas to blob
+				const blob = await new Promise<Blob>((resolve) => {
+					canvas.toBlob((blob) => {
+						resolve(blob!);
+					}, 'image/png');
+				});
+
+				// Copy to clipboard
+				await navigator.clipboard.write([
+					new ClipboardItem({
+						'image/png': blob
+					})
+				]);
+
+				// Show success feedback
+				copyImageFeedback = true;
+				if (copyImageTimeout) {
+					clearTimeout(copyImageTimeout);
+				}
+				copyImageTimeout = setTimeout(() => {
+					copyImageFeedback = false;
+					copyImageTimeout = null;
+				}, 2000);
+			} finally {
+				// Always cleanup the clone
+				document.body.removeChild(clone);
+			}
 		} catch (error) {
 			console.error('Failed to copy plot image:', error);
 			// Could show an error message to user here
@@ -538,10 +575,6 @@
 		<Plot data={processedData} {layout} config={defaultConfig} fillParent={true} debounce={250} />
 	</div>
 	
-	<div class="watermark">
-		Powered by <span class="watermark-brand">Peripheral.io</span>
-	</div>
-	
 	<div class="plot-actions">
 		<button 
 			class="copy-image-btn glass glass--small glass--responsive {copyImageFeedback ? 'copied' : ''}"
@@ -564,6 +597,7 @@
 <style>
 	.chunk-plot-container {
 		margin-bottom: 1rem;
+		position: relative;
 	}
 
 	.plot-actions {
@@ -618,18 +652,22 @@
 		overflow: hidden;
 	}
 
-	.watermark {
+	/* Watermark styles - only used in cloned/copied version */
+	:global(.watermark-offscreen) {
 		text-align: right;
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
 		font-size: 13px;
-		color: rgba(255, 255, 255, 1);
-		margin-top: 4px;
-		margin-right: 8px;
+		color: rgba(255, 255, 255, 0.9);
+		padding-bottom: 4px;
+		padding-right: 8px;
+		margin-top: 8px;
+		border-radius: 4px;
 	}
 
-	.watermark-brand {
-		font-size: 20px;
+	:global(.watermark-offscreen .watermark-brand) {
+		font-size: 16px;
 		font-weight: 600;
+		color: #ffffff;
 	}
 
 	.copy-image-btn {
