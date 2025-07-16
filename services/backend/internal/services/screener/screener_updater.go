@@ -1,3 +1,16 @@
+/*
+GOAL: 10k ticker refreshed in 10s
+
+OPTIMIZATION TO TRY:
+
+-- parallelize the screener update with golang workers
+
+
+
+OPTIMIZATION LOG: -- baseline 3.6s for 1 ticker
+
+*/
+
 package screener
 
 import (
@@ -12,7 +25,7 @@ const (
 	refreshInterval    = 60 * time.Second // full screener top-off frequency (fallback)
 	refreshTimeout     = 60 * time.Second // per-refresh SQL timeout
 	extendedCloseHour  = 20               // 8 PM Eastern – hard stop
-	maxTickersPerBatch = 10               // max tickers to process per batch (0 = no limit), used for testing
+	maxTickersPerBatch = 1                // max tickers to process per batch (0 = no limit), used for testing
 )
 
 var createStaleQueueQuery = `
@@ -89,6 +102,7 @@ CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
 CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
         ON ohlcv_1m (ticker, "timestamp" DESC)
         INCLUDE (open, high, low, close, volume);
+
 `
 
 var intradayPriceRefsQuery = `
@@ -115,179 +129,183 @@ CREATE INDEX IF NOT EXISTS intraday_stats_ticker_idx ON intraday_stats (ticker);
 CREATE INDEX IF NOT EXISTS intraday_stats_ts_idx ON intraday_stats (ts DESC);
 
 -- Function to update intraday stats for specific tickers
--- This computes the metrics using simple lateral joins to avoid complex window functions
+-- This computes the metrics using batch processing over the entire p_tickers array
 CREATE OR REPLACE FUNCTION update_intraday_stats(p_tickers text[])
 RETURNS void
 LANGUAGE plpgsql AS $$
 DECLARE
     v_now_utc timestamptz := now();
-    ticker_name text;
 BEGIN
     -- Safety exit
     IF array_length(p_tickers, 1) IS NULL THEN
         RETURN;
     END IF;
 
-    -- Process each ticker individually to avoid complex window functions
-    FOREACH ticker_name IN ARRAY p_tickers
-    LOOP
-        INSERT INTO intraday_stats (
-            ticker, ts, change_1h_pct, change_4h_pct, range_1m_pct, range_15m_pct, range_1h_pct,
-            avg_dollar_volume_1m_14, avg_volume_1m_14, relative_volume_14,
-            extended_hours_change, extended_hours_change_pct, updated_at
-        )
+    -- Process all tickers in a single batch operation
+    INSERT INTO intraday_stats (
+        ticker, ts, change_1h_pct, change_4h_pct, range_1m_pct, range_15m_pct, range_1h_pct,
+        avg_dollar_volume_1m_14, avg_volume_1m_14, relative_volume_14,
+        extended_hours_change, extended_hours_change_pct, updated_at
+    )
+    SELECT 
+        latest.ticker,
+        latest.ts,
+        -- 1-hour change
+        CASE 
+            WHEN hour_ago.close IS NOT NULL THEN 
+                100.0 * (latest.close - hour_ago.close) / NULLIF(hour_ago.close, 0)
+            ELSE NULL
+        END AS change_1h_pct,
+        -- 4-hour change
+        CASE 
+            WHEN four_hour_ago.close IS NOT NULL THEN 
+                100.0 * (latest.close - four_hour_ago.close) / NULLIF(four_hour_ago.close, 0)
+            ELSE NULL
+        END AS change_4h_pct,
+        -- 1-minute range
+        100.0 * (latest.high - latest.low) / NULLIF(latest.low, 0) AS range_1m_pct,
+        -- 15-minute range
+        CASE 
+            WHEN ranges_15m.high_15m IS NOT NULL AND ranges_15m.low_15m IS NOT NULL THEN
+                100.0 * (ranges_15m.high_15m - ranges_15m.low_15m) / NULLIF(ranges_15m.low_15m, 0)
+            ELSE NULL
+        END AS range_15m_pct,
+        -- 1-hour range
+        CASE 
+            WHEN ranges_1h.high_1h IS NOT NULL AND ranges_1h.low_1h IS NOT NULL THEN
+                100.0 * (ranges_1h.high_1h - ranges_1h.low_1h) / NULLIF(ranges_1h.low_1h, 0)
+            ELSE NULL
+        END AS range_1h_pct,
+        -- Average dollar volume (14-period)
+        vol_14.avg_dollar_volume_1m_14,
+        -- Average volume (14-period)
+        vol_14.avg_volume_1m_14,
+        -- Relative volume
+        CASE 
+            WHEN vol_14.avg_volume_1m_14 IS NOT NULL AND vol_14.avg_volume_1m_14 > 0 THEN
+                latest.volume / vol_14.avg_volume_1m_14
+            ELSE NULL
+        END AS relative_volume_14,
+        -- Extended hours change (simplified - just vs. 4 PM close)
+        CASE 
+            WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
+                 AND market_close.close IS NOT NULL THEN
+                latest.close - market_close.close
+            ELSE NULL
+        END AS extended_hours_change,
+        -- Extended hours change percentage
+        CASE 
+            WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
+                 AND market_close.close IS NOT NULL THEN
+                100.0 * (latest.close - market_close.close) / NULLIF(market_close.close, 0)
+            ELSE NULL
+        END AS extended_hours_change_pct,
+        v_now_utc AS updated_at
+    FROM (
+        -- Get the most recent 1-minute data for all tickers
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            time_bucket('1 minute', "timestamp") AS ts,
+            last(close, "timestamp") AS close,
+            last(high, "timestamp") AS high,
+            last(low, "timestamp") AS low,
+            last(volume, "timestamp") AS volume
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND "timestamp" >= v_now_utc - INTERVAL '5 minutes'
+        GROUP BY ticker, time_bucket('1 minute', "timestamp")
+        ORDER BY ticker, time_bucket('1 minute', "timestamp") DESC
+    ) latest
+    LEFT JOIN (
+        -- Get close price from 1 hour ago for all tickers
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            close
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND "timestamp" <= v_now_utc - INTERVAL '1 hour'
+          AND "timestamp" >= v_now_utc - INTERVAL '1 hour 5 minutes'
+        ORDER BY ticker, "timestamp" DESC
+    ) hour_ago ON hour_ago.ticker = latest.ticker
+    LEFT JOIN (
+        -- Get close price from 4 hours ago for all tickers
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            close
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND "timestamp" <= v_now_utc - INTERVAL '4 hours'
+          AND "timestamp" >= v_now_utc - INTERVAL '4 hours 5 minutes'
+        ORDER BY ticker, "timestamp" DESC
+    ) four_hour_ago ON four_hour_ago.ticker = latest.ticker
+    LEFT JOIN (
+        -- Get 15-minute high/low range for all tickers
         SELECT 
-            ticker_name,
-            latest.ts,
-            -- 1-hour change
-            CASE 
-                WHEN hour_ago.close IS NOT NULL THEN 
-                    100.0 * (latest.close - hour_ago.close) / NULLIF(hour_ago.close, 0)
-                ELSE NULL
-            END AS change_1h_pct,
-            -- 4-hour change
-            CASE 
-                WHEN four_hour_ago.close IS NOT NULL THEN 
-                    100.0 * (latest.close - four_hour_ago.close) / NULLIF(four_hour_ago.close, 0)
-                ELSE NULL
-            END AS change_4h_pct,
-            -- 1-minute range
-            100.0 * (latest.high - latest.low) / NULLIF(latest.low, 0) AS range_1m_pct,
-            -- 15-minute range
-            CASE 
-                WHEN ranges_15m.high_15m IS NOT NULL AND ranges_15m.low_15m IS NOT NULL THEN
-                    100.0 * (ranges_15m.high_15m - ranges_15m.low_15m) / NULLIF(ranges_15m.low_15m, 0)
-                ELSE NULL
-            END AS range_15m_pct,
-            -- 1-hour range
-            CASE 
-                WHEN ranges_1h.high_1h IS NOT NULL AND ranges_1h.low_1h IS NOT NULL THEN
-                    100.0 * (ranges_1h.high_1h - ranges_1h.low_1h) / NULLIF(ranges_1h.low_1h, 0)
-                ELSE NULL
-            END AS range_1h_pct,
-            -- Average dollar volume (14-period)
-            vol_14.avg_dollar_volume_1m_14,
-            -- Average volume (14-period)
-            vol_14.avg_volume_1m_14,
-            -- Relative volume
-            CASE 
-                WHEN vol_14.avg_volume_1m_14 IS NOT NULL AND vol_14.avg_volume_1m_14 > 0 THEN
-                    latest.volume / vol_14.avg_volume_1m_14
-                ELSE NULL
-            END AS relative_volume_14,
-            -- Extended hours change (simplified - just vs. 4 PM close)
-            CASE 
-                WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
-                     AND market_close.close IS NOT NULL THEN
-                    latest.close - market_close.close
-                ELSE NULL
-            END AS extended_hours_change,
-            -- Extended hours change percentage
-            CASE 
-                WHEN (latest.ts AT TIME ZONE 'America/New_York')::time BETWEEN TIME '16:00' AND TIME '20:00'
-                     AND market_close.close IS NOT NULL THEN
-                    100.0 * (latest.close - market_close.close) / NULLIF(market_close.close, 0)
-                ELSE NULL
-            END AS extended_hours_change_pct,
-            v_now_utc AS updated_at
+            ticker,
+            MAX(high) AS high_15m,
+            MIN(low) AS low_15m
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND "timestamp" >= v_now_utc - INTERVAL '15 minutes'
+          AND "timestamp" <= v_now_utc
+        GROUP BY ticker
+    ) ranges_15m ON ranges_15m.ticker = latest.ticker
+    LEFT JOIN (
+        -- Get 1-hour high/low range for all tickers
+        SELECT 
+            ticker,
+            MAX(high) AS high_1h,
+            MIN(low) AS low_1h
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND "timestamp" >= v_now_utc - INTERVAL '1 hour'
+          AND "timestamp" <= v_now_utc
+        GROUP BY ticker
+    ) ranges_1h ON ranges_1h.ticker = latest.ticker
+    LEFT JOIN (
+        -- Get 14-period volume averages for all tickers
+        SELECT 
+            ticker,
+            AVG(volume * close) AS avg_dollar_volume_1m_14,
+            AVG(volume) AS avg_volume_1m_14
         FROM (
-            -- Get the most recent 1-minute data
             SELECT 
-                time_bucket('1 minute', "timestamp") AS ts,
-                last(close, "timestamp") AS close,
-                last(high, "timestamp") AS high,
-                last(low, "timestamp") AS low,
-                last(volume, "timestamp") AS volume
+                ticker,
+                last(volume, "timestamp") AS volume,
+                last(close, "timestamp") AS close
             FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND "timestamp" >= v_now_utc - INTERVAL '5 minutes'
-            GROUP BY time_bucket('1 minute', "timestamp")
-            ORDER BY ts DESC
-            LIMIT 1
-        ) latest
-        LEFT JOIN LATERAL (
-            -- Get close price from 1 hour ago
-            SELECT close
-            FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND "timestamp" <= latest.ts - INTERVAL '1 hour'
-              AND "timestamp" >= latest.ts - INTERVAL '1 hour 5 minutes'
-            ORDER BY "timestamp" DESC
-            LIMIT 1
-        ) hour_ago ON TRUE
-        LEFT JOIN LATERAL (
-            -- Get close price from 4 hours ago
-            SELECT close
-            FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND "timestamp" <= latest.ts - INTERVAL '4 hours'
-              AND "timestamp" >= latest.ts - INTERVAL '4 hours 5 minutes'
-            ORDER BY "timestamp" DESC
-            LIMIT 1
-        ) four_hour_ago ON TRUE
-        LEFT JOIN LATERAL (
-            -- Get 15-minute high/low range
-            SELECT 
-                MAX(high) AS high_15m,
-                MIN(low) AS low_15m
-            FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND "timestamp" >= latest.ts - INTERVAL '15 minutes'
-              AND "timestamp" <= latest.ts
-        ) ranges_15m ON TRUE
-        LEFT JOIN LATERAL (
-            -- Get 1-hour high/low range
-            SELECT 
-                MAX(high) AS high_1h,
-                MIN(low) AS low_1h
-            FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND "timestamp" >= latest.ts - INTERVAL '1 hour'
-              AND "timestamp" <= latest.ts
-        ) ranges_1h ON TRUE
-        LEFT JOIN LATERAL (
-            -- Get 14-period volume averages
-            SELECT 
-                AVG(volume * close) AS avg_dollar_volume_1m_14,
-                AVG(volume) AS avg_volume_1m_14
-            FROM (
-                SELECT 
-                    last(volume, "timestamp") AS volume,
-                    last(close, "timestamp") AS close
-                FROM ohlcv_1m
-                WHERE ticker = ticker_name
-                  AND "timestamp" >= latest.ts - INTERVAL '14 minutes'
-                  AND "timestamp" <= latest.ts
-                GROUP BY time_bucket('1 minute', "timestamp")
-                ORDER BY time_bucket('1 minute', "timestamp") DESC
-                LIMIT 14
-            ) recent_volume
-        ) vol_14 ON TRUE
-        LEFT JOIN LATERAL (
-            -- Get market close price (4 PM ET) for extended hours calculation
-            SELECT close
-            FROM ohlcv_1m
-            WHERE ticker = ticker_name
-              AND ("timestamp" AT TIME ZONE 'America/New_York')::time = TIME '16:00'
-              AND "timestamp"::date = latest.ts::date
-            ORDER BY "timestamp" DESC
-            LIMIT 1
-        ) market_close ON TRUE
-        
-        ON CONFLICT (ticker) DO UPDATE SET
-            ts = EXCLUDED.ts,
-            change_1h_pct = EXCLUDED.change_1h_pct,
-            change_4h_pct = EXCLUDED.change_4h_pct,
-            range_1m_pct = EXCLUDED.range_1m_pct,
-            range_15m_pct = EXCLUDED.range_15m_pct,
-            range_1h_pct = EXCLUDED.range_1h_pct,
-            avg_dollar_volume_1m_14 = EXCLUDED.avg_dollar_volume_1m_14,
-            avg_volume_1m_14 = EXCLUDED.avg_volume_1m_14,
-            relative_volume_14 = EXCLUDED.relative_volume_14,
-            extended_hours_change = EXCLUDED.extended_hours_change,
-            extended_hours_change_pct = EXCLUDED.extended_hours_change_pct,
-            updated_at = EXCLUDED.updated_at;
-    END LOOP;
+            WHERE ticker = ANY(p_tickers)
+              AND "timestamp" >= v_now_utc - INTERVAL '14 minutes'
+              AND "timestamp" <= v_now_utc
+            GROUP BY ticker, time_bucket('1 minute', "timestamp")
+        ) recent_volume
+        GROUP BY ticker
+    ) vol_14 ON vol_14.ticker = latest.ticker
+    LEFT JOIN (
+        -- Get market close price (4 PM ET) for extended hours calculation for all tickers
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            close
+        FROM ohlcv_1m
+        WHERE ticker = ANY(p_tickers)
+          AND ("timestamp" AT TIME ZONE 'America/New_York')::time = TIME '16:00'
+          AND "timestamp"::date = (v_now_utc AT TIME ZONE 'America/New_York')::date
+        ORDER BY ticker, "timestamp" DESC
+    ) market_close ON market_close.ticker = latest.ticker
+    
+    ON CONFLICT (ticker) DO UPDATE SET
+        ts = EXCLUDED.ts,
+        change_1h_pct = EXCLUDED.change_1h_pct,
+        change_4h_pct = EXCLUDED.change_4h_pct,
+        range_1m_pct = EXCLUDED.range_1m_pct,
+        range_15m_pct = EXCLUDED.range_15m_pct,
+        range_1h_pct = EXCLUDED.range_1h_pct,
+        avg_dollar_volume_1m_14 = EXCLUDED.avg_dollar_volume_1m_14,
+        avg_volume_1m_14 = EXCLUDED.avg_volume_1m_14,
+        relative_volume_14 = EXCLUDED.relative_volume_14,
+        extended_hours_change = EXCLUDED.extended_hours_change,
+        extended_hours_change_pct = EXCLUDED.extended_hours_change_pct,
+        updated_at = EXCLUDED.updated_at;
 END;
 $$;
 `
@@ -695,15 +713,15 @@ BEGIN
         NULLIF(d.close,0) / NULLIF(hp.sma_200,0) * 100   AS price_over_200dma,
 
         /* ——— Δ vs historic closes ——— */
-        pct(d.close, pc.prev_close),
-        pct(d.close, hp.price_1w ),
-        pct(d.close, hp.price_1m ),
-        pct(d.close, hp.price_3m ),
-        pct(d.close, hp.price_6m ),
-        pct(d.close, hp.price_ytd),
-        pct(d.close, hp.price_5y ),
-        pct(d.close, hp.price_10y),
-        pct(d.close, hp.price_all),
+        (d.close - pc.prev_close) / NULLIF(pc.prev_close, 0) * 100,
+        (d.close - hp.price_1w) / NULLIF(hp.price_1w, 0) * 100,
+        (d.close - hp.price_1m) / NULLIF(hp.price_1m, 0) * 100,
+        (d.close - hp.price_3m) / NULLIF(hp.price_3m, 0) * 100,
+        (d.close - hp.price_6m) / NULLIF(hp.price_6m, 0) * 100,
+        (d.close - hp.price_ytd) / NULLIF(hp.price_ytd, 0) * 100,
+        (d.close - hp.price_5y) / NULLIF(hp.price_5y, 0) * 100,
+        (d.close - hp.price_10y) / NULLIF(hp.price_10y, 0) * 100,
+        (d.close - hp.price_all) / NULLIF(hp.price_all, 0) * 100,
 
         /* ——— vols & extremes ——— */
         hp.stddev_7                                      AS volatility_1w,
@@ -721,7 +739,7 @@ BEGIN
         /* ——— intraday context ——— */
         rng.day_range_pct,
         d.close - d.open                                 AS change_from_open,
-        pct(d.close, d.open),
+        (d.close - d.open) / NULLIF(d.open, 0) * 100,
         delt.change_1_pct,
         delt.change_15_pct,
         ist.change_1h_pct,
@@ -776,27 +794,20 @@ BEGIN
         LIMIT 1
     ) ist ON TRUE
 
-    /* ── 1‑min & 15‑min Δ (not in intraday_stats) ── */
+    /* ── 1‑min & 15‑min Δ (merged single scan) ── */
     LEFT JOIN LATERAL (
         SELECT 
-            pct(d.close, p1.close_ago)  AS change_1_pct,
-            pct(d.close, p15.close_ago) AS change_15_pct
+            (d.close - close_1m_ago) / NULLIF(close_1m_ago, 0) * 100  AS change_1_pct,
+            (d.close - close_15m_ago) / NULLIF(close_15m_ago, 0) * 100 AS change_15_pct
         FROM   (
-            SELECT "close" AS close_ago
+            SELECT 
+                MAX(CASE WHEN "timestamp" <= v_now_utc - INTERVAL '1 minute' THEN "close" END) AS close_1m_ago,
+                MAX(CASE WHEN "timestamp" <= v_now_utc - INTERVAL '15 minutes' THEN "close" END) AS close_15m_ago
             FROM   ohlcv_1m
             WHERE  ticker = sec.ticker
               AND  "timestamp" <= v_now_utc - INTERVAL '1 minute'
-            ORDER  BY "timestamp" DESC
-            LIMIT 1
-        ) p1,
-        (
-            SELECT "close" AS close_ago
-            FROM   ohlcv_1m
-            WHERE  ticker = sec.ticker
-              AND  "timestamp" <= v_now_utc - INTERVAL '15 minutes'
-            ORDER  BY "timestamp" DESC
-            LIMIT 1
-        ) p15
+              AND  "timestamp" >= v_now_utc - INTERVAL '16 minutes'
+        ) delta_calc
     ) delt ON TRUE
 
     /* ── historic refs & technicals ── */
@@ -863,14 +874,7 @@ BEGIN
 END;
 $$;
 
------------------------------------------------------------------------
--- Helper: percent‑change utility (NULL‑safe division by zero handling)
------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION pct(curr numeric, ref numeric)
-RETURNS numeric LANGUAGE SQL IMMUTABLE STRICT AS $$
-    SELECT CASE WHEN ref = 0 THEN NULL
-                ELSE (curr - ref) / ref * 100
-           END $$;
+
 `
 
 func StartScreenerUpdaterLoop(conn *data.Conn) error {
@@ -966,10 +970,10 @@ func updateStaleScreenerValues(conn *data.Conn) {
 func runScreenerLoopInit(conn *data.Conn) error {
 	log.Println("🔧 Setting up incremental infrastructure (time-based batching)...")
 
-	/*log.Println("🔧 Dropping all materialized views and tables...")
+	log.Println("🔧 Dropping all materialized views and tables...")
 	if _, err := conn.DB.Exec(context.Background(), initQuery); err != nil {
 		return fmt.Errorf("failed to drop all materialized views and tables: %v", err)
-	}*/
+	} /**/
 
 	log.Println("📊 Creating stale queue table...")
 	if _, err := conn.DB.Exec(context.Background(), createStaleQueueQuery); err != nil {
@@ -1058,7 +1062,6 @@ DROP TABLE IF EXISTS screener_stale CASCADE;
 DROP FUNCTION IF EXISTS public.refresh_screener_delta(text[]) CASCADE;
 DROP FUNCTION IF EXISTS update_intraday_stats(text[]) CASCADE;
 DROP FUNCTION IF EXISTS update_historical_price_calculations(text[]) CASCADE;
-DROP FUNCTION IF EXISTS pct(numeric, numeric) CASCADE;
 
 -- Drop indexes (will be dropped with CASCADE but listed for clarity)
 -- DROP INDEX IF EXISTS pre_market_stats_ticker_day_idx;
