@@ -699,7 +699,7 @@ class StrategyGenerator:
                     input=f"{user_prompt}",
                     instructions=f"{system_instruction}",
                     user=f"user:0",
-                    timeout=120.0  # 2 minute timeout for other models
+                    timeout=150.0  # 150 second timeout for other models
                 )
                 
                 strategy_code = response.output_text

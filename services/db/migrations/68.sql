@@ -30,15 +30,18 @@ BEGIN
 END $$;
 CREATE TABLE screener (
     ticker                      TEXT        PRIMARY KEY,      -- one row per ticker
-    calc_time                   TIMESTAMPTZ NOT NULL,
+    calc_time                   TIMESTAMPTZ NOT NULL, -- last update time
 
-    security_id                 BIGINT,
+    security_id                 BIGINT, -- security id for ticker
 
-    /* ---- price + basics ---- */
+    /* ---- fetch from most recent bar of ohlcv_1d table -----
+     */
     open                        NUMERIC,
     high                        NUMERIC,
     low                         NUMERIC,
     close                       NUMERIC,
+
+    -- historical price references view
     wk52_low                    NUMERIC,
     wk52_high                   NUMERIC,
 
@@ -56,6 +59,9 @@ CREATE TABLE screener (
     extended_hours_change       NUMERIC,
     extended_hours_change_pct   NUMERIC,
 
+
+    -- historical price refrences view + the current ohlcv_1d price to determine
+
     change_1_pct                NUMERIC,
     change_15_pct               NUMERIC,
     change_1h_pct               NUMERIC,
@@ -72,6 +78,9 @@ CREATE TABLE screener (
 
     change_from_open            NUMERIC,
     change_from_open_pct        NUMERIC,
+
+
+    -- histroical price references view + the current ohlcv_1d price to determine
     price_over_52wk_high        NUMERIC,
     price_over_52wk_low         NUMERIC,
 
@@ -84,23 +93,33 @@ CREATE TABLE screener (
     beta_1y_vs_spy              NUMERIC,
     beta_1m_vs_spy              NUMERIC,
 
+    -- fetch from most recent bar of ohlcv_1m table
     volume                      BIGINT,
+
+    -- fetch from last 10 bars of ohlcv_1m table
     avg_volume_1m               NUMERIC,
+
+    -- fetch from most recent bar of ohlcv_1d table, close * volume
     dollar_volume               NUMERIC,
     avg_dollar_volume_1m        NUMERIC,
 
+    -- fetch from 
     pre_market_volume           BIGINT,
     pre_market_dollar_volume    NUMERIC,
     relative_volume_14          NUMERIC,
     pre_market_vol_over_14d_vol NUMERIC,
 
+    -- fetch from ohlcv_1m table
     range_1m_pct                NUMERIC,
     range_15m_pct               NUMERIC,
     range_1h_pct                NUMERIC,
+
+    -- fetch from most recent bar of ohlcv_1d table
     day_range_pct               NUMERIC,
 
     volatility_1w               NUMERIC,
     volatility_1m               NUMERIC,
+
     pre_market_range_pct        NUMERIC
 );
 

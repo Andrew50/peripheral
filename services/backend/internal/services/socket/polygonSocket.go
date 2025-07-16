@@ -42,6 +42,56 @@ var (
 	latestPricesMutex sync.RWMutex
 )
 
+// -- Stale ticker batching (1-second aggregates) --
+var (
+	staleTickers = struct {
+		sync.Mutex
+		m map[string]struct{}
+	}{m: make(map[string]struct{})}
+	staleFlusherOnce sync.Once
+)
+
+// flagTickerStale queues a ticker to be marked stale in the database
+func flagTickerStale(ticker string) {
+	staleTickers.Lock()
+	staleTickers.m[ticker] = struct{}{}
+	staleTickers.Unlock()
+}
+
+// startStaleFlusher launches a goroutine that periodically flushes the queued
+// stale tickers in a single batched UPDATE/UPSERT to Postgres. This keeps the
+// hot path entirely in-memory and avoids per-tick database writes.
+func startStaleFlusher(conn *data.Conn) {
+	go func() {
+		flushTicker := time.NewTicker(250 * time.Millisecond)
+		defer flushTicker.Stop()
+		for range flushTicker.C {
+			staleTickers.Lock()
+			if len(staleTickers.m) == 0 {
+				staleTickers.Unlock()
+				continue
+			}
+			symbols := make([]string, 0, len(staleTickers.m))
+			for s := range staleTickers.m {
+				symbols = append(symbols, s)
+			}
+			staleTickers.m = make(map[string]struct{})
+			staleTickers.Unlock()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_, err := conn.DB.Exec(ctx, `
+WITH symbols AS (SELECT unnest($1::text[]) AS ticker)
+INSERT INTO screener_stale (ticker, stale)
+SELECT ticker, TRUE FROM symbols
+ON CONFLICT (ticker) DO UPDATE SET stale = TRUE;`, symbols)
+			cancel()
+			if err != nil {
+				log.Printf("⚠️ failed to flush stale tickers: %v", err)
+			}
+		}
+	}()
+}
+
 // Condition code filtering constants
 var (
 	// Price-only skips - keep the shares (condition codes whose price should be ignored but volume may be kept)
@@ -139,6 +189,9 @@ func broadcastTimestamp() {
 
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
+	// Start the batched stale-ticker flusher (only once per process)
+	staleFlusherOnce.Do(func() { startStaleFlusher(conn) })
+
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
 		//log.Println("niv0: ", err)
@@ -203,8 +256,11 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			}
 			switch msg := out.(type) {
 			case models.EquityAgg:
+				// 1-second aggregate has duration 1 000 ms; skip others (e.g. 1-minute)
 				if msg.EndTimestamp-msg.StartTimestamp == 1000 {
 					ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
+					// Mark ticker as stale for screener refresh
+					flagTickerStale(symbol)
 				}
 
 				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
