@@ -10,7 +10,7 @@ You must return a JSON object with the following structure:
 **TWEET TEXT REQUIREMENTS:**
 - Maximum 500 characters including spaces
 - You should include the headline in the tweet
-- Use relevant ticker symbols with $ prefix (e.g., $AAPL, $TSLA)
+- Use ALL relevant ticker symbols with $ prefix (e.g., $AAPL, $TSLA)
 - Be concise but informative
 - Focus on the most important market impact or insight
 - Use active voice and present tense when appropriate

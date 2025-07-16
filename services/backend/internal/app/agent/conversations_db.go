@@ -13,14 +13,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// ConversationSummary represents a conversation in the list view
-type ConversationSummary struct {
+// ConversationInfo represents a conversation in the list view
+type ConversationInfo struct {
 	ConversationID   string    `json:"conversation_id"`
 	Title            string    `json:"title"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	MessageCount     int       `json:"message_count"`
 	LastMessageQuery string    `json:"last_message_query,omitempty"`
+	IsPublic         bool      `json:"is_public"`
 }
 
 // VerifyConversationOwnership verifies that a user owns a conversation
