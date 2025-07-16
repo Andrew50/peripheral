@@ -6,6 +6,7 @@
 	// Props from parent
 	export let currentConversationId: string;
 	export let sharedConversationId: string = '';
+	export let isCurrentConversationPublic: boolean = false;
 	export let isPublicViewing: boolean = false;
 
 	// Internal state
@@ -51,12 +52,16 @@
 				shareLink = `${window.location.origin}/share/${sharedConversationId}`;
 				console.log('Generated share link for public conversation:', shareLink);
 			} else {
-				// For authenticated users, we need to make the conversation public via backend
-				const link = await generateSharedConversationLink(conversationIdToShare);
-				if (link) {
-					shareLink = link;
+				if (!isCurrentConversationPublic) {
+					// For authenticated users, we need to make the conversation public via backend
+					const link = await generateSharedConversationLink(conversationIdToShare);
+					if (link) {
+						shareLink = link;
+					} else {
+						console.error('Failed to generate share link');
+					}
 				} else {
-					console.error('Failed to generate share link');
+					shareLink = `${window.location.origin}/share/${conversationIdToShare}`;
 				}
 			}
 		} catch (error) {

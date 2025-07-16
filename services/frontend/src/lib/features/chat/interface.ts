@@ -184,12 +184,13 @@ export type SuggestedQueriesResponse = {
 	suggestions: string[];
 };
 // Conversation management types
-export type ConversationSummary = {
+export type ConversationInfo = {
 	conversation_id: string;
 	title: string;
 	created_at: string;
 	updated_at: string;
 	last_message_query?: string;
+	is_public: boolean;
 };
 // State for table sorting
 export type SortState = {
