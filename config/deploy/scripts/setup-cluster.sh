@@ -53,17 +53,17 @@ enable_if_missing () {
 enable_if_missing ingress           # nginx‑ingress controller + admission webhook
 enable_if_missing metrics-server    # lets HPAs fetch CPU/memory metrics
 
-# Wait for the ingress-dns pods to be ready (up to 2 minutes)
-echo "Waiting for ingress-dns pods to become ready..."
-if ! kubectl wait --namespace kube-system --context="${MINIKUBE_PROFILE}" \
+# Wait for the ingress-nginx controller pods to be ready (up to 2 minutes)
+echo "Waiting for ingress-nginx controller pods to become ready..."
+if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
   --for=condition=ready pod \
-  --selector=k8s-app=ingress-dns \
+  --selector=app.kubernetes.io/component=controller \
   --timeout=120s; then
-  echo "ERROR: ingress-dns pods did not become ready in time."
-  kubectl get pods --namespace kube-system --context="${MINIKUBE_PROFILE}" --selector=k8s-app=ingress-dns -o wide
+  echo "ERROR: ingress-nginx controller pods did not become ready in time."
+  kubectl get pods --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=controller -o wide
   exit 1
 fi
-echo "Ingress-dns pods are ready."
+echo "Ingress-nginx controller pods are ready."
 
 echo "Waiting for ingress-nginx admission configuration jobs to complete..."
 # Wait up to 2 minutes for the admission create job
@@ -80,7 +80,6 @@ if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
 fi
 echo "Ingress Nginx admission jobs completed."
 
-
 echo "Waiting for ingress-nginx controller deployment to be ready..."
 # Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
 if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
@@ -95,9 +94,6 @@ if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
   exit 1
 fi
 echo "Ingress Nginx controller deployment is ready."
-
-
-#kubectl config use-context "${MINIKUBE_PROFILE}" #should --context arg be passed here? remove this becuase all kuectl commands statelessly use --context="{MINIKUBE_PROFILE}"
 
 # Set namespace if provided and create it if it doesn't exist
 if [[ -n "$K8S_NAMESPACE" ]]; then
