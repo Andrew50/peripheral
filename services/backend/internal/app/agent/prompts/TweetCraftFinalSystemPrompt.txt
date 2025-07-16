@@ -25,11 +25,15 @@ If the news warrants a visual representation, include a `plot` object with:
   - For line/scatter: Include `x` (array), `y` (array), `name` (string), `type` (string)
   - For bar: Include `x` (array), `y` (array), `name` (string), `type` (string)
   - For heatmap: Include `z` (2D array), `x` (array), `y` (array)
-- `title`: Brief, descriptive chart title
-- `titleTicker`: Stock ticker formatted like [TICKER] if chart focuses on specific stock
+- `title`: Brief, Descriptive chart title
+- `titleTicker`: Stock ticker like AAPL, MSFT, etc to indicate the ticker who's company icon should be displayed next to the title. 
 - `layout`: Object with:
   - `xaxis`: Object with `title` (string) for x-axis label
   - `yaxis`: Object with `title` (string) for y-axis label
+  - Ensure to name all traces in the plot.
+  - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
+  - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+  - If the plot refers to several tickers, either omit this or pick the ticker that best represents the plot. 
 
 
 **CONTENT GUIDELINES:**

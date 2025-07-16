@@ -181,36 +181,43 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			};
 			
 			// Title configuration with larger size
-			if (plotLayout.title) {
-				const titleIcon = plotSpec.titleIcon;
-				
-				if (typeof plotLayout.title === 'string') {
-					plotLayout.title = {
-						text: plotLayout.title,
-						font: {
-							family: 'Inter, system-ui, sans-serif',
-							size: 36,
-							color: '#f8fafc'
-						},
-						xref: 'paper',
-						x: 0.5,
-						xanchor: 'center'
-					};
-				} else {
-					// If title is already an object, update the font
-					plotLayout.title.font = {
-						family: 'Inter, system-ui, sans-serif',
-						size: 36,
-						color: '#f8fafc'
-					};
-				}
-				
-				// If we have a title icon, we'll handle title rendering manually later
+			const titleText = plotLayout.title || plotSpec.title;
+			const titleIcon = plotSpec.titleIcon;
+			
+			if (titleText || titleIcon) {
+				// If we have a title icon or need manual rendering, handle it later
 				if (titleIcon) {
 					// Store the title text and remove it from layout for manual rendering
-					window.titleText = plotLayout.title.text || plotLayout.title;
+					window.titleText = typeof titleText === 'string' ? titleText : (titleText.text || titleText);
 					window.titleIcon = titleIcon;
-					plotLayout.title = '';  // Remove title from plotly layout
+					plotLayout.title = '';  // Remove title from plotly layout to render manually
+				} else if (titleText) {
+					// No icon, use Plotly's native title rendering
+					if (typeof titleText === 'string') {
+						plotLayout.title = {
+							text: titleText,
+							font: {
+								family: 'Inter, system-ui, sans-serif',
+								size: 36,
+								color: '#f8fafc'
+							},
+							xref: 'paper',
+							x: 0.5,
+							xanchor: 'center'
+						};
+					} else {
+						// If title is already an object, ensure proper formatting
+						plotLayout.title = {
+							...titleText,
+							font: {
+								family: 'Inter, system-ui, sans-serif',
+								size: 36,
+								color: '#f8fafc'
+							},
+							x: 0.5,
+							xanchor: 'center'
+						};
+					}
 				}
 			}
 			
@@ -225,7 +232,6 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			}
 			
 			// Legend styling
-			if (!plotLayout.showlegend === undefined) plotLayout.showlegend = true;
 			plotLayout.legend = {
 				...plotLayout.legend,
 				font: { color: '#f8fafc', size: 16 },
@@ -349,8 +355,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			// Render the plot
 			Plotly.newPlot('plot', plotData, plotLayout, config);
 			
-			// Manually render title with icon if provided
-			if (window.titleIcon && window.titleText) {
+			// Manually render title if we stored it for icon display
+			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
 				titleContainer.style.top = '20px';
@@ -364,13 +370,37 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				titleContainer.style.minWidth = 'max-content';
 				titleContainer.style.maxWidth = '90%';
 				
-				// Add ticker icon
-				const iconImg = document.createElement('img');
-				iconImg.src = window.titleIcon.startsWith('data:') ? window.titleIcon : 'data:image/png;base64,' + window.titleIcon;
-				iconImg.style.width = '40px';
-				iconImg.style.height = '40px';
-				iconImg.style.borderRadius = '6px';
-				iconImg.style.objectFit = 'cover';
+				// Add ticker icon if available
+				if (window.titleIcon) {
+					const iconImg = document.createElement('img');
+					
+					// Support both PNG and JPEG formats
+					if (window.titleIcon.startsWith('data:')) {
+						// Already has data URI prefix
+						iconImg.src = window.titleIcon;
+					} else {
+						// Try to detect format from base64 data
+						// PNG starts with: iVBORw0KGgo
+						// JPEG starts with: /9j/
+						const isPNG = window.titleIcon.startsWith('iVBORw0KGgo');
+						const isJPEG = window.titleIcon.startsWith('/9j/');
+						
+						if (isPNG) {
+							iconImg.src = 'data:image/png;base64,' + window.titleIcon;
+						} else if (isJPEG) {
+							iconImg.src = 'data:image/jpeg;base64,' + window.titleIcon;
+						} else {
+							// Default to PNG if can't detect
+							iconImg.src = 'data:image/png;base64,' + window.titleIcon;
+						}
+					}
+					
+					iconImg.style.width = '40px';
+					iconImg.style.height = '40px';
+					iconImg.style.borderRadius = '6px';
+					iconImg.style.objectFit = 'cover';
+					titleContainer.appendChild(iconImg);
+				}
 				
 				// Add title text
 				const titleText = document.createElement('span');
@@ -380,7 +410,6 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				titleText.style.fontWeight = '600';
 				titleText.style.color = '#f8fafc';
 				
-				titleContainer.appendChild(iconImg);
 				titleContainer.appendChild(titleText);
 				document.getElementById('plot').appendChild(titleContainer);
 			}
@@ -414,6 +443,9 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 
 	// Wait for plot to fully render
 	page.MustWaitIdle()
+
+	// Wait for Plotly animations to complete
+	time.Sleep(100 * time.Millisecond)
 
 	// Capture screenshot of the plot element
 	plotElement, err := page.Element("#plot")

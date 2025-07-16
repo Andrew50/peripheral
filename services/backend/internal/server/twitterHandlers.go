@@ -4,13 +4,11 @@ import (
 	"backend/internal/data"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -210,19 +208,6 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (F
 					base64PNG, err = renderer.RenderPlot(ctx, agentResult.Plot, nil)
 					if err != nil {
 						log.Printf("Failed to render plot: %v", err)
-					} else {
-
-						// Save PNG file for verification
-						pngData, err := base64.StdEncoding.DecodeString(base64PNG)
-						if err == nil {
-							// Use a fixed filename for easy copying
-							filename := "/tmp/latest_plot.png"
-							if err := os.WriteFile(filename, pngData, 0644); err == nil {
-								fmt.Printf("Plot saved to container: %s\n", filename)
-								fmt.Printf("To copy to your local machine, run:\n")
-								fmt.Printf("docker cp dev-backend-1:%s ./plot.png && open ./plot.png\n", filename)
-							}
-						}
 					}
 				}
 			}
