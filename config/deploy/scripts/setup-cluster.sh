@@ -40,12 +40,12 @@ minikube update-context -p "$MINIKUBE_PROFILE"
 
 enable_if_missing () {
   local addon=$1
-  if ! minikube addons list -p "$profile" | grep -qE "${addon}[[:space:]]+enabled"; then
-    echo "Enabling $addon addon for profile '$profile'..."
-    minikube addons enable "$addon" -p "$profile"
+  if ! minikube addons list -p "$MINIKUBE_PROFILE" | grep -qE "${addon}[[:space:]]+enabled"; then
+    echo "Enabling $addon addon for profile '$MINIKUBE_PROFILE'..."
+    minikube addons enable "$addon" -p "$MINIKUBE_PROFILE"
     echo "$addon addon enabled."
   else
-    echo "$addon addon already enabled for '$profile'."
+    echo "$addon addon already enabled for '$MINIKUBE_PROFILE'."
   fi
 }
 
