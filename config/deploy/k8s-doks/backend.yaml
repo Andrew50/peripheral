@@ -19,16 +19,8 @@ spec:
         app: backend
     spec:
       restartPolicy: Always  # Update the restart policy to "Always"
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - db
-              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        kubernetes.io/hostname: big-pool-thu0i
       containers:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
