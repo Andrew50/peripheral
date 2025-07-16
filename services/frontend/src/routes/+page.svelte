@@ -66,7 +66,7 @@
 			The <span class="gradient-text">best</span> way to trade.
 		</h1>
 		<p class="hero-subtitle">
-			Peripheral is the terminal to envision and execute your trading ideas.<br />
+			Peripheral enables you to envision and execute your trading ideas.<br />
 		</p>
 		<a href="/signup" class="hero-cta-button">
 			Get Started for Free
