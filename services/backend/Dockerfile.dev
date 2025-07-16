@@ -1,6 +1,8 @@
 # Dockerfile.dev
 FROM golang:1.24-alpine
-RUN apk add --no-cache git bash
+RUN apk update && \
+    apk add --no-cache --retry 3 git bash || \
+    (apk update && apk add --no-cache git bash)
 RUN go install github.com/air-verse/air@latest
 WORKDIR /app
 COPY go.mod go.sum ./

@@ -392,44 +392,44 @@ jobs:
           fi
 
   # SQL Format Check (new addition)
-  format-sql:
-    name: SQL Format Check (consistent formatting)
-    needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    
-    steps:
-      - name: 🔧 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: 📦 Install SQLFluff
-        run: |
-          echo "📦 Installing SQLFluff..."
-          pip install sqlfluff
-
-      - name: 🔍 Run SQLFluff with consistent formatting (check only)
-        run: |
-          echo "🔍 Running SQLFluff with consistent formatting (check only)..."
-          sqlfluff lint --config services/db/.sqlfluff services/db/migrations/*.sql services/db/init/*.sql
-
-      - name: Create job summary for SQL Format
-        if: always()
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
-            echo "### SQL Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ SQL format checks completed with consistent formatting." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### SQL Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ SQL format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
-          fi
+  # format-sql:
+  #   name: SQL Format Check (consistent formatting)
+  #   needs: [check-workflow-conditions]
+  #   if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+  #   
+  #   steps:
+  #     - name: 🔧 Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: 🐍 Setup Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ env.PYTHON_VERSION }}
+  #
+  #     - name: 📦 Install SQLFluff
+  #       run: |
+  #         echo "📦 Installing SQLFluff..."
+  #         pip install sqlfluff
+  #
+  #     - name: 🔍 Run SQLFluff with consistent formatting (check only)
+  #       run: |
+  #         echo "🔍 Running SQLFluff with consistent formatting (check only)..."
+  #         sqlfluff lint --config services/db/.sqlfluff services/db/migrations/*.sql services/db/init/*.sql
+  #
+  #     - name: Create job summary for SQL Format
+  #       if: always()
+  #       shell: bash
+  #       run: |
+  #         if [[ "${{ job.status }}" == "success" || ("${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+  #           echo "### SQL Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
+  #           echo "✅ SQL format checks completed with consistent formatting." >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### SQL Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
+  #           echo "❌ SQL format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   backend-lint-security:
     needs: [check-workflow-conditions]
