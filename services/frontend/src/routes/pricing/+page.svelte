@@ -928,22 +928,17 @@
 	:global(body) {
 		-ms-overflow-style: none; /* IE and Edge */
 		background: transparent !important; /* Override any global backgrounds */
-		margin: 0;
-		padding: 0;
 	}
 
 	:global(html) {
 		background: transparent !important; /* Override any global backgrounds */
-		margin: 0;
-		padding: 0;
 	}
 
 	/* Override width restrictions from global landing styles */
 	:global(.landing-container) {
 		max-width: none !important;
 		width: 100% !important;
-		margin: 0 !important;
-		padding: 0 !important; /* remove side gutters */
+
 	}
 
 	/* Apply the same gradient background as landing page */
@@ -989,7 +984,7 @@
 	.pricing-hero {
 		text-align: center;
 		margin-bottom: 3rem;
-		padding-top: 8rem; /* Space for header */
+		padding-top: 1rem; /* Space for header */
 	}
 
 	.landing-subtitle {
@@ -1075,12 +1070,12 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		border: 2px solid rgba(255, 255, 255, 0.6);
+		border: 2px solid rgba(255, 255, 255, 0.8);
 		border-radius: 24px;
 	}
 
 	.plan-card.featured {
-		border-color: var(--landing-accent-blue);
+		border-color: 2px solid #f5f9ff;
 	}
 
 	/* Conservative current plan highlighting - subtle visual indicators */
@@ -1172,7 +1167,7 @@
 	.plan-header h3 {
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--landing-text-primary);
+		color: #f5f9ff;
 		margin-bottom: 1rem;
 	}
 
@@ -1186,12 +1181,12 @@
 	.price {
 		font-size: 3rem;
 		font-weight: 700;
-		color: var(--landing-text-primary);
+		color: #f5f9ff;
 	}
 
 	.period {
 		font-size: 1rem;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 	}
 
 	.plan-features {
@@ -1203,7 +1198,7 @@
 
 	.plan-features li {
 		padding: 0.5rem 0;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 		position: relative;
 		padding-left: 1.5rem;
 	}
@@ -1392,13 +1387,14 @@
 	.billing-subtitle p {
 		font-size: 0.9375rem;
 		font-weight: 500;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 		font-family: 'Geist', 'Inter', sans-serif;
 		line-height: 1.5;
 	}
 
 	/* Enlarge the hero title specifically for the pricing page */
 	.pricing-hero .landing-title {
+		margin: 6rem 0 0 0;
 		font-size: clamp(3rem, 7vw, 4.5rem);
 		font-family: 'Inter', sans-serif;
 		color: #f5f9ff;
