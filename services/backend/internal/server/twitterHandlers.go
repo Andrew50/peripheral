@@ -139,10 +139,10 @@ func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 
 	seen := determineIfAlreadySeenTweet(conn, tweet)
 	fmt.Println("seen", seen)
-	/*if seen {
+	if seen {
 		storeTweet(conn, tweet)
 		return
-	}*/
+	}
 	// Extract ticker symbols from the tweet text
 	tickers := extractTickersFromTweet(tweet.Text)
 
