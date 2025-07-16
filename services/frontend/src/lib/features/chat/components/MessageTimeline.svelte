@@ -88,7 +88,9 @@
 											</div>
 										{/each}
 									</div>
-								</div>							
+								</div>
+							{:else}
+							 <span> {event.message} </span>						
 							{/if}
 						</div>
 					</div>
