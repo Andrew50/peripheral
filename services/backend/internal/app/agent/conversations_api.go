@@ -38,9 +38,9 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 	}
 	defer rows.Close()
 
-	var conversations []ConversationSummary
+	var conversations []ConversationInfo
 	for rows.Next() {
-		var conv ConversationSummary
+		var conv ConversationInfo
 		var lastMessageQuery sql.NullString
 
 		err := rows.Scan(

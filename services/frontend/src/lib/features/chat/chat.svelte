@@ -43,18 +43,19 @@
 	} from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
 	import { showAuthModal } from '$lib/stores/authModal';
-	import type { ConversationSummary } from './interface';
+	import type { ConversationInfo } from './interface';
 
 	export let sharedConversationId: string = '';
 	export let isPublicViewing: boolean;
 
 	// Conversation management state
-	let conversations: ConversationSummary[] = [];
+	let conversations: ConversationInfo[] = [];
 	let currentConversationId = '';
 	let currentConversationTitle = 'Chat';
 	let showConversationDropdown = false;
 	let conversationDropdown: HTMLDivElement;
 	let loadingConversations = false;
+	let isCurrentConversationPublic = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
 
 	// Title typing effect state
@@ -159,7 +160,7 @@
 
 		try {
 			loadingConversations = true;
-			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
+			const response = await privateRequest<ConversationInfo[]>('getUserConversations', {});
 			conversations = response || [];
 		} catch (error) {
 			console.error('Error loading conversations:', error);
@@ -173,6 +174,7 @@
 		// Clear current conversation state - new conversation will be created when first message is sent
 		currentConversationId = '';
 		currentConversationTitle = 'New Chat';
+		isCurrentConversationPublic = false;
 
 		// Clear current chat and context items
 		messagesStore.set([]);
@@ -198,7 +200,7 @@
 		fetchInitialSuggestions();
 	}
 
-	async function switchToConversation(conversationId: string, title: string) {
+	async function switchToConversation(conversationId: string, title: string, isConversationPublic: boolean) {
 		if (conversationId === currentConversationId) {
 			showConversationDropdown = false;
 			return;
@@ -207,11 +209,13 @@
 		// Immediately update UI for snappy feel
 		const previousConversationId = currentConversationId;
 		const previousTitle = currentConversationTitle;
+		const previousIsPublic = isCurrentConversationPublic;
 		const previousMessages = [...$messagesStore];
 		const previousContext = [...$contextItems];
 
 		currentConversationId = conversationId;
 		currentConversationTitle = title;
+		isCurrentConversationPublic = isConversationPublic;
 		showConversationDropdown = false;
 
 		// Clear current messages and context items immediately
@@ -243,6 +247,7 @@
 			// Restore previous state on error
 			currentConversationId = previousConversationId;
 			currentConversationTitle = previousTitle;
+			isCurrentConversationPublic = previousIsPublic;
 			messagesStore.set(previousMessages);
 			contextItems.set(previousContext);
 		}
@@ -562,7 +567,7 @@
 			// Initialize processing timeline
 			processingTimeline = [
 				{
-					message: 'Message sent to server',
+					message: '',
 					timestamp: new Date()
 				}
 			];
@@ -587,7 +592,8 @@
 			agentStatusStore.set({
 				messageType: 'AgentStatusUpdate',
 				type: 'FunctionUpdate',
-				data: 'Thinking...'
+				headline: 'Thinking...',
+				data: null
 			});
 
 			// Scroll to show the user's message and loading state
@@ -1238,24 +1244,6 @@
 		}
 	}
 
-	// Share conversation functions
-	async function handleShareConversation(event?: Event) {
-		// Stop event propagation to prevent immediate closing
-		if (event) {
-			event.stopPropagation();
-			event.preventDefault();
-		}
-
-		// Close conversation dropdown if it's open
-		if (showConversationDropdown) {
-			showConversationDropdown = false;
-		}
-
-		// Toggle the share modal
-		if (shareModalRef) {
-			shareModalRef.toggleModal();
-		}
-	}
 
 	// Function to create typing effect for title
 	function startTitleTypingEffect(newTitle: string) {
@@ -1351,17 +1339,18 @@
 
 		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
 			// Add function update message to timeline
-			lastStatusMessage = statusUpdate.data;
+			lastStatusMessage = statusUpdate.headline;
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.data,
+					message: statusUpdate.headline,
 					timestamp: new Date(),
 					type: 'message'
 				}
 			];
 		} else if (statusUpdate.type === 'WebSearchQuery' && statusUpdate.data?.query) {
 			// Add web search event to timeline in chronological order
+			lastStatusMessage = statusUpdate.headline;
 			processingTimeline = [
 				...processingTimeline,
 				{
@@ -1422,7 +1411,7 @@
 		{deleteConversation}
 		{confirmDeleteConversation}
 		{cancelDeleteConversation}
-		{handleShareConversation}
+		{shareModalRef}
 	/>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
@@ -1460,7 +1449,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.type === 'FunctionUpdate' ? $agentStatusStore.data : 'Thinking...'}
+									currentStatus={$agentStatusStore?.headline || 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>
@@ -2017,6 +2006,7 @@
 		bind:this={shareModalRef}
 		{currentConversationId}
 		{sharedConversationId}
+		{isCurrentConversationPublic}
 		{isPublicViewing}
 	/>
 </div>

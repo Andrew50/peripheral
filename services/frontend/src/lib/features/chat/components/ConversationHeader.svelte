@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { ConversationSummary } from '../interface';
+	import type { ConversationInfo } from '../interface';
 	export let conversationDropdown: HTMLDivElement;
 	export let showConversationDropdown: boolean;
-	export let conversations: ConversationSummary[];
+	export let conversations: ConversationInfo[];
 	export let currentConversationId: string;
 	export let currentConversationTitle: string;
 	export let loadingConversations: boolean;
@@ -16,11 +16,30 @@
 	export let sharedConversationId: string = '';
 	export let toggleConversationDropdown: () => void;
 	export let createNewConversation: () => void;
-	export let switchToConversation: (id: string, title: string) => void;
+	export let switchToConversation: (id: string, title: string, isPublic: boolean) => void;
 	export let deleteConversation: (id: string, e: MouseEvent) => void;
 	export let confirmDeleteConversation: (id: string) => void;
 	export let cancelDeleteConversation: () => void;
-	export let handleShareConversation: (event?: Event) => void;
+	export let shareModalRef: any;
+
+	// Share conversation functions
+	async function openShareModal(event?: Event) {
+		// Stop event propagation to prevent immediate closing
+		if (event) {
+			event.stopPropagation();
+			event.preventDefault();
+		}
+
+		// Close conversation dropdown if it's open
+		if (showConversationDropdown) {
+			showConversationDropdown = false;
+		}
+
+		// Toggle the share modal
+		if (shareModalRef) {
+			shareModalRef.toggleModal();
+		}
+	}
 </script>
 
 {#if isPublicViewing}
@@ -30,7 +49,7 @@
 		<div class="header-buttons">
 			<button
 				class="header-btn share-btn"
-				on:click={handleShareConversation}
+				on:click={openShareModal}
 				disabled={!currentConversationId && !sharedConversationId}
 				title="Share This Conversation"
 			>
@@ -109,13 +128,13 @@
 											? 'active'
 											: ''}"
 										on:click={() =>
-											switchToConversation(conversation.conversation_id, conversation.title)}
+											switchToConversation(conversation.conversation_id, conversation.title, conversation.is_public)}
 										role="button"
 										tabindex="0"
 										on:keydown={(e) => {
 											if (e.key === 'Enter' || e.key === ' ') {
 												e.preventDefault();
-												switchToConversation(conversation.conversation_id, conversation.title);
+												switchToConversation(conversation.conversation_id, conversation.title, conversation.is_public);
 											}
 										}}
 									>
@@ -187,7 +206,7 @@
 				<div class="header-buttons">
 					<button
 						class="header-btn share-btn"
-						on:click={handleShareConversation}
+						on:click={openShareModal}
 						disabled={!currentConversationId}
 						title="Share Current Conversation"
 					>

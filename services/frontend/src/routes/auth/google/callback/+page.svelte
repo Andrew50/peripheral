@@ -95,7 +95,6 @@
 			// Extract specific error message from backend response
 			let displayError = 'Authentication failed. Please try again.';
 			if (typeof error === 'string') {
-				// Extract the core message sent from the backend
 				// It usually comes prefixed like "Server error: 400 - actual message"
 				const prefix = /^Server error: \d+ - /;
 				displayError = error.replace(prefix, '');
