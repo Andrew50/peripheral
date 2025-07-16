@@ -110,7 +110,6 @@
 		box-sizing: border-box;
 	}
 
-	/* Remove scrollbars globally */
 	:global(html) {
 		-ms-overflow-style: none; /* IE and Edge */
 	}
