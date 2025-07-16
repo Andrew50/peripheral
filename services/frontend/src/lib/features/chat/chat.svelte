@@ -567,7 +567,7 @@
 			// Initialize processing timeline
 			processingTimeline = [
 				{
-					message: 'Message sent to server',
+					message: '',
 					timestamp: new Date()
 				}
 			];
@@ -592,7 +592,8 @@
 			agentStatusStore.set({
 				messageType: 'AgentStatusUpdate',
 				type: 'FunctionUpdate',
-				data: 'Thinking...'
+				headline: 'Thinking...',
+				data: null
 			});
 
 			// Scroll to show the user's message and loading state
@@ -1338,17 +1339,18 @@
 
 		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
 			// Add function update message to timeline
-			lastStatusMessage = statusUpdate.data;
+			lastStatusMessage = statusUpdate.headline;
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.data,
+					message: statusUpdate.headline,
 					timestamp: new Date(),
 					type: 'message'
 				}
 			];
 		} else if (statusUpdate.type === 'WebSearchQuery' && statusUpdate.data?.query) {
 			// Add web search event to timeline in chronological order
+			lastStatusMessage = statusUpdate.headline;
 			processingTimeline = [
 				...processingTimeline,
 				{
@@ -1447,7 +1449,7 @@
 							{#if isProcessingMessage}
 								<MessageTimeline
 									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.type === 'FunctionUpdate' ? $agentStatusStore.data : 'Thinking...'}
+									currentStatus={$agentStatusStore?.headline || 'Thinking...'}
 									{showTimelineDropdown}
 									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
 								/>

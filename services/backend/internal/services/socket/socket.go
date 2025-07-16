@@ -224,18 +224,21 @@ func SendChatInitializationUpdate(userID int, messageID string, conversationID s
 // AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
 type AgentStatusUpdate struct {
-	MessageType string      `json:"messageType"`    // Always "AgentStatusUpdate"
-	Type        string      `json:"type"`           // Specific type like "FunctionUpdate", "WebSearch"
-	Data        interface{} `json:"data,omitempty"` // Additional structured data for specific types
+	MessageType string      `json:"messageType"`        // Always "AgentStatusUpdate"
+	Type        string      `json:"type"`               // Specific type like "FunctionUpdate", "WebSearch"
+	Headline    string      `json:"headline,omitempty"` // Headline for the update
+	Data        interface{} `json:"data,omitempty"`     // Additional structured data for specific types
 }
 
 // SendAgentStatusUpdate sends a status update about a running function to a specific user.
 func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	var data interface{}
-
+	var headline string
 	// Handle different status types
 	switch statusType {
 	case "WebSearchQuery":
+		headline = "Searching the web..."
+
 		// For web searches, create structured data with query
 		data = map[string]interface{}{
 			"query": value,
@@ -243,6 +246,7 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	case "WebSearchCitations":
 		// For WebSearchCitations, process citations with favicons
 		// Convert from JSON to process flexibly regardless of struct type
+		fmt.Println("WebSearchCitations", value)
 		jsonBytes, err := json.Marshal(value)
 		if err == nil {
 			var citations []interface{}
@@ -264,15 +268,12 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 		}
 	default:
 		// For other types (like FunctionUpdate), use the value directly
-		messageToSend := value
-		if messageToSend == "" {
-			messageToSend = "Processing..."
-		}
-		data = messageToSend
+		headline = value.(string)
 	}
 
 	statusUpdate := AgentStatusUpdate{
 		MessageType: "AgentStatusUpdate",
+		Headline:    headline,
 		Type:        statusType,
 		Data:        data,
 	}
