@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -12,7 +12,16 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
 	import { getAuthState } from '$lib/auth';
-	// ===== LOCAL TYPE DEFINITIONS =====
+
+	// ===== SERVER DATA =====
+	export let data: {
+		plans: any[];
+		creditProducts: any[];
+		environment: string;
+		pricingError?: string;
+	};
+
+	// ===== TYPE DEFINITIONS =====
 	interface DatabasePlan {
 		id: number;
 		product_key: string;
@@ -44,12 +53,6 @@
 		stripe_price_id_live: string | null;
 		created_at: string;
 		updated_at: string;
-	}
-
-	interface PublicPricingConfiguration {
-		plans: DatabasePlan[];
-		creditProducts: DatabaseCreditProduct[];
-		environment: string;
 	}
 
 	// ===== INLINED HELPER FUNCTIONS =====
@@ -224,12 +227,11 @@
 	// Component loading state
 	let isLoaded = false;
 
-	// Pricing data state
-	let plans: DatabasePlan[] = [];
-	let creditProducts: DatabaseCreditProduct[] = [];
-	let environment: string = 'test';
-	let pricingLoading = true;
-	let pricingError = '';
+	// Pricing data from server
+	$: plans = data.plans as DatabasePlan[];
+	$: creditProducts = data.creditProducts as DatabaseCreditProduct[];
+	$: environment = data.environment;
+	$: pricingError = data.pricingError || '';
 
 	// Selected billing period state
 	let billingPeriod: 'month' | 'year' = 'year';
@@ -337,43 +339,10 @@
 		}
 	};
 
-	// Load pricing configuration
-	async function loadPricingConfiguration() {
-		try {
-			pricingLoading = true;
-			pricingError = '';
 
-			// Fetch pricing configuration using the new format
-			const config = await publicRequest<PublicPricingConfiguration>(
-				'getPublicPricingConfiguration',
-				{}
-			);
-
-			// Use the data as-is since the API returns the correct format
-			plans = config.plans;
-			creditProducts = config.creditProducts;
-			environment = config.environment;
-
-			console.log('✅ [loadPricingConfiguration] Pricing configuration loaded:', {
-				plans,
-				creditProducts,
-				environment
-			});
-		} catch (error) {
-			console.error('❌ [loadPricingConfiguration] Failed to load pricing configuration:', error);
-			pricingError = 'Failed to load pricing information. Please refresh the page.';
-		} finally {
-			pricingLoading = false;
-		}
-	}
 
 	// Initialize component
 	async function initializeComponent() {
-		const isAuth = isAuthenticatedFn();
-
-		// Load pricing configuration first
-		await loadPricingConfiguration();
-
 		// Always fetch subscription status regardless of authentication
 		await fetchSubscriptionStatus();
 		console.log('📊 [initializeComponent] Subscription status fetch completed');
@@ -776,12 +745,7 @@
 				</div>
 			{/if}
 
-			{#if pricingLoading}
-				<div class="loading-message">
-					<div class="landing-loader"></div>
-					<span></span>
-				</div>
-			{:else if pricingError}
+			{#if pricingError}
 				<div class="error-message">{pricingError}</div>
 			{:else if $subscriptionStatus.loading}
 				<div class="loading-message">
@@ -1111,7 +1075,7 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		border: 2px solid rgba(255, 255, 255, 0.3);
+		border: 2px solid rgba(255, 255, 255, 0.6);
 		border-radius: 24px;
 	}
 
@@ -1128,7 +1092,7 @@
 
 	/* Free plan styling - visible border */
 	.plan-card.free-plan {
-		border: 2px solid rgba(255, 255, 255, 0.3);
+		border: 2px solid rgba(255, 255, 255, 0.6);
 	}
 
 	/* Canceling plan styling */
