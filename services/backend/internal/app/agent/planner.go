@@ -264,6 +264,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		},
 		ResponseMIMEType: "application/json",
 	}
+	prompt = appendCurrentTimeToPrompt(prompt)
 	fmt.Println("\n\nprompt", prompt)
 
 	maxRetries := 3
@@ -899,6 +900,13 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	}
 	return responseText, nil
 
+}
+func appendCurrentTimeToPrompt(prompt string) string {
+	sb := strings.Builder{}
+	sb.WriteString(prompt)
+	sb.WriteString("The current timestamp in seconds is: ")
+	sb.WriteString(fmt.Sprint(time.Now().Unix()))
+	return sb.String()
 }
 
 //deprecate gemini
