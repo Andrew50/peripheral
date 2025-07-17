@@ -1133,7 +1133,7 @@
 
 	// Update the site title to reflect the active chart's ticker (or fallback when none)
 	$: if (browser) {
-		const siteTitle = $activeChartInstance?.ticker || 'Peripheral';
+		const siteTitle = $activeChartInstance?.ticker + " | Peripheral";
 		if (document.title !== siteTitle) {
 			document.title = siteTitle;
 		}
@@ -1145,17 +1145,13 @@
 	let userEmail = '';
 
 	onMount(async () => {
-		// ... existing code ...
 
 		const authToken = sessionStorage.getItem('authToken');
 		if (authToken) {
-			// ... existing logic for other API calls ...
 		}
 
-		// ... existing code ...
 	});
 
-	// ... existing code ...
 
 	// Generate initial avatar SVG from email address
 	function generateInitialAvatar(email: string) {
@@ -1172,7 +1168,6 @@
 		`)}`;
 	}
 
-	// ... existing code ...
 
 	// Update avatar generation logic
 	$: if (profilePic || userEmail) {
@@ -1183,7 +1178,6 @@
 		profilePic = generateInitialAvatar('');
 	}
 
-	// ... existing code ...
 
 	// Update subscription check condition
 	$: if (
