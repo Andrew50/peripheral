@@ -282,6 +282,10 @@ class PythonAgentGenerator:
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
 
+        **CRITICAL**: 
+        - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool.
+        - If the data was given to you, do NOT look up for the data, as this is redundant. 
+        - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         RETURN FORMAT:
         - Returns are optional
         - Information that would be useful to the user should be returned in the prints, persistent data can be returned. 
@@ -289,11 +293,12 @@ class PythonAgentGenerator:
         - REGARDLESS OF THE QUERY: NEVER return pandas/numpy types (datetime64, int64, float64) OR dataframes - they cause JSON serialization errors.
         - DO NOT RUN YOUR FUNCTION AT ALL. DO NOT USE if __name__ == "__main__". THIS WILL CAUSE AN ERROR.
         - NEVER RETURN large amounts of OHLCV data. This will make the user unhappy.
+        - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         Generate clean, robust Python code. DO NOT return any text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
 
 
 
-    async def start_general_python_agent(self, user_id: int, prompt: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+    async def start_general_python_agent(self, user_id: int, prompt: str, data: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
         # Generate unique execution_id for this run - accessible throughout method
         execution_serial = int(time.time())  # Seconds timestamp
         execution_id = f"{user_id}_{execution_serial}"
@@ -302,7 +307,7 @@ class PythonAgentGenerator:
             logger.info(f"Starting Python agent execution {execution_id}")
             
             systemInstruction = self._getGeneralPythonSystemInstruction(prompt)
-            userPrompt = f"""{prompt}"""
+            userPrompt = f"""{prompt}""" + f"\nData: {data}"
             
             last_error = None
             pythonCode = None
