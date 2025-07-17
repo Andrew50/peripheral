@@ -746,7 +746,16 @@
 			{:else if $inputQuery.inputType === 'ticker'}
 				<div class="table-container">
 					<div class="search-header">
-						<span class="search-title">{$inputQuery.customTitle || 'Symbol Search'}</span>
+						<span class="search-title">
+							{#if $inputQuery.customTitle?.includes('- TopBar')}
+								Symbol Search
+							{:else}
+								{$inputQuery.customTitle || 'Symbol Search'}
+							{/if}
+						</span>
+						{#if $inputQuery.customTitle?.includes('- TopBar')}
+							<span class="search-hint">Type while on the chart to open this search box</span>
+						{/if}
 					</div>
 					<div class="search-divider"></div>
 					{#if $inputQuery.inputString === '' || !$inputQuery.inputString}
@@ -1256,6 +1265,13 @@
 		font-weight: 600;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		opacity: 0.9;
+	}
+
+	.search-hint {
+		color: rgba(255, 255, 255, 0.2);
+		font-size: 0.75rem;
+		font-weight: 400;
+		margin-left: 1rem;
 	}
 
 	.popular-section-header,

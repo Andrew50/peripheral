@@ -760,7 +760,6 @@ func requestIncompleteBar(
 	// ------------------------
 	tradeConditionsToSkipOhlc := socket.TradeConditionsToSkipOhlc
 	tradeConditionsToSkipVolume := socket.TradeConditionsToSkipVolume
-	tradeConditionsToExcludeCompletely := socket.TradeConditionsToExcludeCompletely
 
 	for _, cd := range combined {
 		// Only process data that's within the final time range
@@ -772,18 +771,6 @@ func requestIncompleteBar(
 		}
 
 		if cd.isTrade {
-			// First check if trade should be completely excluded (ignore both price and volume)
-			shouldExclude := false
-			for _, cond := range cd.conditions {
-				if _, found := tradeConditionsToExcludeCompletely[cond]; found {
-					shouldExclude = true
-					break
-				}
-			}
-			if shouldExclude {
-				continue
-			}
-
 			// Evaluate whether to skip O/H/L/C or volume based on conditions
 			skipOhlc := false
 			skipVol := false

@@ -36,6 +36,7 @@ Your goal is to provide accurate information and execute tasks efficiently, pote
             *   `chart_type` (string): One of "line", "bar", "scatter", "histogram", "heatmap"
             *   `data` (array): Array of trace objects with x/y/z data arrays, names, and types appropriate for the chart
             *   `title` (string): Chart title
+            *   `titleTicker` (string): Stock ticker formatted like AAPL, COIN, MSFT of which the company's icon should be used for styling
             *   `layout` (object): Plotly layout configuration (title, axis labels, dimensions)
         *   For `"backtest_table"`: A JSON object with `strategyID` (the ID of the strategy to display backtest results for), `caption` (table title), `columns` (either "all" to show all columns, or an array of specific column names to display)
         *   For `"backtest_plot"`: A JSON object with `strategyID` (the ID of the strategy) and `plotID` (the ID of the specific plot to display from the backtest).
@@ -100,7 +101,7 @@ Example Plot Chunk:
   "type": "plot", 
   "content": {
     "chart_type": "bar|line|scatter|histogram|heatmap",
-    "title": "Plot Title (optional)",
+    "title": "Plot Title",
     "data": [
       {
         "name": "Trace Name",

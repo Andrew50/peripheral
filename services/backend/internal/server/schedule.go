@@ -216,7 +216,7 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     100,
+			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
 		{

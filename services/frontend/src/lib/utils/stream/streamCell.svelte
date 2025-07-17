@@ -95,7 +95,7 @@
 		releaseClose = addStream<CloseData>(instance, closeStreamName, (v: CloseData) => {
 			changeStore.update((s: ChangeStore) => {
 				const prevClose = v.price;
-
+				const shouldUpdatePrice = v.shouldUpdatePrice;
 				// Update the instance object with the prevClose value
 				if (type === 'change %') {
 					(instance as any)['prevClose'] = prevClose;
@@ -108,6 +108,7 @@
 				return {
 					...s,
 					prevClose,
+					shouldUpdatePrice,
 					change: s.price && prevClose ? getChange(s.price, prevClose) : ''
 				};
 			});

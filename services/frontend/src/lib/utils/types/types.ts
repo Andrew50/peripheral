@@ -51,6 +51,7 @@ export interface Watchlist {
 }
 export interface CloseData {
 	price: number;
+	shouldUpdatePrice: boolean;
 	channel: string;
 }
 export interface TradeData {
