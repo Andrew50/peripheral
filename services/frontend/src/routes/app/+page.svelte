@@ -73,6 +73,7 @@
 		});
 	}
 
+
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
 
@@ -946,7 +947,7 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation();
-		queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker')
+		queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
 			.then((v: Instance) => {
 				if (v) queryChart(v, true);
 			})
@@ -961,7 +962,7 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation();
-			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker')
+			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
 				.then((v: Instance) => {
 					if (v) queryChart(v, true);
 				})
