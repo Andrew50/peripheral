@@ -1,8 +1,7 @@
 import type { ServerLoad } from '@sveltejs/kit';
 
-export const load: ServerLoad = async ({ request, getClientAddress, cookies, url }) => {
+export const load: ServerLoad = async ({ request, url }) => {
     // Collect visitor data
-    const ip = getClientAddress();
     const userAgent = request.headers.get('user-agent') || '';
     const referrer = request.headers.get('referer') || '';
     const path = url.pathname;
@@ -10,13 +9,9 @@ export const load: ServerLoad = async ({ request, getClientAddress, cookies, url
     try {
         // Construct backend URL - adjust port/host as needed for your setup
         const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
-        const cfIP = request.headers.get('cf-connecting-ip');
-        const forwarded = request.headers.get('x-forwarded-for');
-        console.log(request.headers)
-        console.log('CF-Connecting-IP:', cfIP);
-        console.log('X-Forwarded-For:', forwarded);
-        console.log('getClientAddress():', getClientAddress());
-        console.log('ip:', ip);
+        const cfIP = request.headers.get('cf-connecting-ip') || '127.0.0.1';
+        const forwarded = request.headers.get('x-forwarded-for') || '127.0.0.1';
+        
         const response = await fetch(`${backendUrl}/frontend/server`, {
             method: 'POST',
             headers: {
@@ -29,16 +24,18 @@ export const load: ServerLoad = async ({ request, getClientAddress, cookies, url
                     path: path,
                     referrer: referrer,
                     user_agent: userAgent,
-                    ip_address: ip,
+                    ip_address: forwarded,
+                    cloudflare_ipv6: cfIP,
                     timestamp: new Date().toISOString(),
                 }
             }),
             // Add timeout to prevent hanging
-            signal: AbortSignal.timeout(2000) // 2 second timeout
+            signal: AbortSignal.timeout(3000) // 3 second timeout
         });
         
         if (!response.ok) {
-            console.error(`Failed to log page view: ${response.status} ${response.statusText}`);
+            const errorBody = await response.text().catch(() => 'Unable to read error body');
+            console.error(`Failed to log page view: ${response.status} ${response.statusText} - ${errorBody}`);
         }
     } catch (error) {
         // Log error but don't fail page load
