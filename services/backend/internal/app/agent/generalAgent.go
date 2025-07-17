@@ -380,6 +380,7 @@ func _generalGeminiGenerateExecutionPlan(ctx context.Context, conn *data.Conn, s
 		},
 		ResponseMIMEType: "application/json",
 	}
+	prompt = appendCurrentTimeToPrompt(prompt)
 	geminiResult, err := geminiClient.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), geminiConfig)
 	if err != nil {
 		return ExecutionPlan{}, fmt.Errorf("gemini had an error generating execution plan: %w", err)

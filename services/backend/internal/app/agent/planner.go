@@ -265,7 +265,6 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		ResponseMIMEType: "application/json",
 	}
 	prompt = appendCurrentTimeToPrompt(prompt)
-	fmt.Println("\n\nprompt", prompt)
 
 	maxRetries := 3
 	for attempt := 0; attempt < maxRetries; attempt++ {
