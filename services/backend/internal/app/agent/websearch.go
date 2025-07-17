@@ -52,7 +52,7 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("error running web search: %w", err)
 	}
 	go socket.SendAgentStatusUpdate(userID, "WebSearchCitations", websearchResult.Citations)
-	return websearchResult, nil
+	return websearchResult.ResultText, nil
 }
 
 func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebSearchResult, error) {
@@ -65,6 +65,7 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebS
 			OfString: openai.String(prompt),
 		},
 		Model:        "gpt-4.1",
+		User:         openai.String("user:0"),
 		Instructions: openai.String(systemPrompt),
 		Tools: []responses.ToolUnionParam{
 			{
@@ -89,7 +90,6 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebS
 			}
 		}
 	}
-	fmt.Println("citations", citations)
 	return WebSearchResult{
 		ResultText: res.OutputText(),
 		Citations:  citations,
