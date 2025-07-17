@@ -214,9 +214,7 @@ jobs:
           echo "Logging into Docker Hub..."
           echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-          # Include commit hash to ensure unique tags per deployment
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          DOCKER_TAG="main-${COMMIT_SHA}"
+          DOCKER_TAG="main"
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
           
