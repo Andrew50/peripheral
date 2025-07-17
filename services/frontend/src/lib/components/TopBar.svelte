@@ -24,6 +24,7 @@
 	import type { Watchlist } from '$lib/utils/types/types';
 	import { get } from 'svelte/store';
 	import { tick } from 'svelte';
+	
 
 	export let instance: Instance;
 	export let menuWidth: number = 0;
@@ -33,7 +34,6 @@
 	let countdownInterval: ReturnType<typeof setInterval>;
 	// Helper computed value to check if current timeframe is custom
 	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
-
 	// Watchlist controls state
 	let newWatchlistName = '';
 	let currentWatchlistId: number;
@@ -53,7 +53,7 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation(); // Prevent legend collapse toggle
-		queryInstanceInput([], ['ticker'], instance, 'ticker')
+		queryInstanceInput([], ['ticker'], instance, 'ticker', 'Symbol Search - TopBar')
 			.then((v: Instance) => {
 				if (v) queryChart(v, true);
 			})
@@ -68,7 +68,7 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance, 'ticker')
+			queryInstanceInput('any', ['ticker'], instance, 'ticker', 'Symbol Search - TopBar')
 				.then((v: Instance) => {
 					if (v) queryChart(v, true);
 				})
@@ -118,10 +118,6 @@
 		document.dispatchEvent(event);
 	}
 
-	// Watchlist control functions
-	function addInstanceToWatchlist(securityId?: number) {
-		addToWatchlist(currentWatchlistId, securityId);
-	}
 
 	function addMultipleToWatchlist() {
 		addMultipleInstancesToWatchlist(currentWatchlistId);

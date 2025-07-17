@@ -73,6 +73,7 @@
 		});
 	}
 
+
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
 
@@ -946,7 +947,7 @@
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		event.stopPropagation();
-		queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker')
+		queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
 			.then((v: Instance) => {
 				if (v) queryChart(v, true);
 			})
@@ -961,7 +962,7 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation();
-			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker')
+			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
 				.then((v: Instance) => {
 					if (v) queryChart(v, true);
 				})
@@ -1133,7 +1134,7 @@
 
 	// Update the site title to reflect the active chart's ticker (or fallback when none)
 	$: if (browser) {
-		const siteTitle = $activeChartInstance?.ticker || 'Peripheral';
+		const siteTitle = $activeChartInstance?.ticker + " | Peripheral";
 		if (document.title !== siteTitle) {
 			document.title = siteTitle;
 		}
@@ -1145,17 +1146,13 @@
 	let userEmail = '';
 
 	onMount(async () => {
-		// ... existing code ...
 
 		const authToken = sessionStorage.getItem('authToken');
 		if (authToken) {
-			// ... existing logic for other API calls ...
 		}
 
-		// ... existing code ...
 	});
 
-	// ... existing code ...
 
 	// Generate initial avatar SVG from email address
 	function generateInitialAvatar(email: string) {
@@ -1172,7 +1169,6 @@
 		`)}`;
 	}
 
-	// ... existing code ...
 
 	// Update avatar generation logic
 	$: if (profilePic || userEmail) {
@@ -1183,7 +1179,6 @@
 		profilePic = generateInitialAvatar('');
 	}
 
-	// ... existing code ...
 
 	// Update subscription check condition
 	$: if (
@@ -1521,16 +1516,13 @@
 				<button
 					class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
 					on:click={toggleLeftPane}
-					title="Query"
+					title="Open AI Chat"
 				>
-					<svg class="chat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<path
-							d="M8 12H8.01M12 12H12.01M16 12H16.01M21 12C21 16.418 16.97 20 12 20C10.89 20 9.84 19.8 8.87 19.42L3 21L4.58 15.13C4.2 14.16 4 13.11 4 12C4 7.582 8.03 4 12 4C16.97 4 21 7.582 21 12Z"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
+					<svg xmlns="http://www.w3.org/2000/svg"
+						 width="16" height="16"
+						 fill="currentColor" class="chat-icon bi bi-square-half"
+						 viewBox="0 0 16 16">
+						<path d="M8 15V1h6a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1zm6 1a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/>
 					</svg>
 				</button>
 
