@@ -291,15 +291,26 @@
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
 						if (typeof value === 'number') {
-							// Format numbers with appropriate precision
-							if (Math.abs(value) >= 1000000) {
-								return (value / 1000000).toFixed(1) + 'M';
-							} else if (Math.abs(value) >= 1000) {
-								return (value / 1000).toFixed(1) + 'K';
-							} else if (Math.abs(value) < 1 && Math.abs(value) > 0) {
-								return value.toFixed(3);
+							// Only round values > 100,000 to 2 decimals
+							if (Math.abs(value) > 100000) {
+								if (Math.abs(value) >= 1000000) {
+									// For millions, show 2 decimals
+									return (value / 1000000).toFixed(2) + 'M';
+								} else {
+									// For values > 100K but < 1M, show 2 decimals in K format
+									return (value / 1000).toFixed(2) + 'K';
+								}
 							} else {
-								return value.toFixed(1);
+								// For values ≤ 100,000, show full precision
+								if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+									return value.toFixed(3);
+								} else if (value % 1 === 0) {
+									// Show whole numbers without decimals
+									return value.toString();
+								} else {
+									// Show decimal values with appropriate precision
+									return value.toFixed(2);
+								}
 							}
 						}
 						return String(value);
