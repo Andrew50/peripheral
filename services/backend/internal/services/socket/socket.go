@@ -246,7 +246,6 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	case "WebSearchCitations":
 		// For WebSearchCitations, process citations with favicons
 		// Convert from JSON to process flexibly regardless of struct type
-		fmt.Println("WebSearchCitations", value)
 		jsonBytes, err := json.Marshal(value)
 		if err == nil {
 			var citations []interface{}
