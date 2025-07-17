@@ -54,9 +54,7 @@
 	// Handle price formatting and pulse effects
 	$: if (type === 'price' && data?.price !== undefined) {
 		// Skip processing if shouldUpdatePrice is false
-		if (data.shouldUpdatePrice) {
 			handlePriceUpdate(data.price);
-		}
 	}
 
 	function handlePriceUpdate(newPrice: number) {

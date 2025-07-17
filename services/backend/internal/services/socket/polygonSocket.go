@@ -99,7 +99,7 @@ ON CONFLICT (ticker) DO UPDATE SET stale = TRUE;`, symbols)
 var (
 	// Price-only skips - keep the shares (condition codes whose price should be ignored but volume may be kept)
 	tradeConditionsToSkipOhlc = map[int32]struct{}{
-		2: {}, 7: {}, 12: {}, 13: {}, 20: {}, 21: {}, 37: {}, 52: {}, 53: {},
+		2: {}, 7: {}, 13: {}, 20: {}, 21: {}, 37: {}, 52: {}, 53: {},
 	}
 
 	// Volume-only skips (condition codes whose volume must be ignored)
