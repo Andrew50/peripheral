@@ -271,7 +271,8 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 
 		result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
 		if err != nil {
-			return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
+			fmt.Println("error generating plan gemini side: ", err)
+			continue
 		}
 		var sb strings.Builder
 		if len(result.Candidates) <= 0 {
