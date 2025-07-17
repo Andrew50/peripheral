@@ -219,7 +219,7 @@ var (
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
-		/*{
+		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
@@ -228,7 +228,7 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
-		},*/
+		},
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
