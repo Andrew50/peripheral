@@ -10,7 +10,12 @@ export const load: ServerLoad = async ({ request, getClientAddress, cookies, url
     try {
         // Construct backend URL - adjust port/host as needed for your setup
         const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
-        
+        const cfIP = request.headers.get('cf-connecting-ip');
+        const forwarded = request.headers.get('x-forwarded-for');
+        console.log(request.headers)
+        console.log('CF-Connecting-IP:', cfIP);
+        console.log('X-Forwarded-For:', forwarded);
+        console.log('getClientAddress():', getClientAddress());
         const response = await fetch(`${backendUrl}/frontend/server`, {
             method: 'POST',
             headers: {
