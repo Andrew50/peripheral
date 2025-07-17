@@ -458,12 +458,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		}
 		data := TradeData{
-			Price:      price,
-			Size:       size,
-			Timestamp:  tradeTimestamp,
-			Conditions: conditions,
-			ExchangeID: trade.Exchange,
-			Channel:    channelName,
+			Price:             price,
+			Size:              size,
+			Timestamp:         tradeTimestamp,
+			Conditions:        conditions,
+			ExchangeID:        trade.Exchange,
+			Channel:           channelName,
+			ShouldUpdatePrice: true,
 		}
 		return json.Marshal(data)
 
@@ -479,11 +480,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, err
 			}
 			out := struct {
-				Price   float64 `json:"price"`
-				Channel string  `json:"channel"`
+				Price             float64 `json:"price"`
+				ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
+				Channel           string  `json:"channel"`
 			}{
-				Price:   prevCloseSlice[0].GetPrice(),
-				Channel: channelName,
+				Price:             prevCloseSlice[0].GetPrice(),
+				ShouldUpdatePrice: true,
+				Channel:           channelName,
 			}
 			return json.Marshal(out)
 		}
@@ -532,11 +535,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 		}
 
 		out := struct {
-			Price   float64 `json:"price"`
-			Channel string  `json:"channel"`
+			Price             float64 `json:"price"`
+			ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
+			Channel           string  `json:"channel"`
 		}{
-			Price:   referencePrice,
-			Channel: channelName,
+			Price:             referencePrice,
+			ShouldUpdatePrice: true,
+			Channel:           channelName,
 		}
 		return json.Marshal(out)
 	case "all":

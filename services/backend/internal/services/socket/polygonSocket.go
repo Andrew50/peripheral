@@ -86,8 +86,11 @@ SELECT ticker, TRUE FROM symbols
 ON CONFLICT (ticker) DO UPDATE SET stale = TRUE;`, symbols)
 			cancel()
 			if err != nil {
-				log.Printf("⚠️ failed to flush stale tickers: %v", err)
+				_ = err // silently ignore error
 			}
+			/*if err != nil {
+				//log.Printf("⚠️ failed to flush stale tickers: %v", err)
+			}*/
 		}
 	}()
 }
@@ -96,34 +99,17 @@ ON CONFLICT (ticker) DO UPDATE SET stale = TRUE;`, symbols)
 var (
 	// Price-only skips - keep the shares (condition codes whose price should be ignored but volume may be kept)
 	tradeConditionsToSkipOhlc = map[int32]struct{}{
-		2: {}, 7: {}, 12: {}, 13: {}, 20: {}, 21: {}, 37: {}, 52: {}, 53: {},
+		2: {}, 7: {}, 13: {}, 20: {}, 21: {}, 37: {}, 52: {}, 53: {},
 	}
 
 	// Volume-only skips (condition codes whose volume must be ignored)
 	tradeConditionsToSkipVolume = map[int32]struct{}{
-		15: {}, 16: {}, 38: {},
-	}
-
-	// Hard rejects - ignore price AND volume (trades that are useless for both price and volume)
-	tradeConditionsToExcludeCompletely = map[int32]struct{}{
-		15: {}, 16: {}, // official open/close stub prints
-		//13: {}, // optional: very late ext-hours prints
+		38: {},
 	}
 )
 
 var TradeConditionsToSkipOhlc = tradeConditionsToSkipOhlc
 var TradeConditionsToSkipVolume = tradeConditionsToSkipVolume
-var TradeConditionsToExcludeCompletely = tradeConditionsToExcludeCompletely
-
-// Helper function to check if trade should be excluded completely
-func shouldExcludeTrade(conditions []int32) bool {
-	for _, condition := range conditions {
-		if _, found := tradeConditionsToExcludeCompletely[condition]; found {
-			return true
-		}
-	}
-	return false
-}
 
 // Helper function to check if trade should skip OHLC updates
 func shouldSkipOhlc(conditions []int32) bool {
@@ -266,10 +252,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
 			case models.EquityTrade:
 				// First check if trade should be completely excluded (ignore both price and volume)
-				if shouldExcludeTrade(msg.Conditions) {
-					continue
-				}
-
 				// Check if we should skip price updates but keep volume
 				skipPriceUpdate := shouldSkipOhlc(msg.Conditions)
 				skipVolumeUpdate := shouldSkipVolume(msg.Conditions)
