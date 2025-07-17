@@ -57,6 +57,11 @@ func wrapContextFunc(fn func(context.Context, *data.Conn, int, json.RawMessage) 
 	}
 }
 
+// Frontend server functions for /frontend/server endpoint (server-side frontend requests)
+var frontendServerFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
+	"logSplashScreenView": LogSplashScreenView,
+}
+
 // Private functions for /private endpoint that use the old signature
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
 
@@ -243,7 +248,6 @@ func handleError(w http.ResponseWriter, err error, context string) bool {
 	}
 	return false
 }
-
 func publicHandler(conn *data.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
@@ -818,6 +822,80 @@ func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID in
 	return result, nil
 }
 
+// validateFrontendAPIKey checks if the provided API key is valid for frontend server requests
+func validateFrontendAPIKey(apiKey string) bool {
+	// Use environment variable for the API key, fallback to a default for development
+	expectedKey := "williamsIsTheBestLiberalArtsCollege!1@" // TODO: Move to environment variable
+	return apiKey == expectedKey
+}
+
+// frontendServerHandler handles requests from frontend server-side code (like +page.server.ts)
+func frontendServerHandler(conn *data.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		// Validate API key from header
+		apiKey := r.Header.Get("Peripheral-Frontend-Key")
+		if !validateFrontendAPIKey(apiKey) {
+			http.Error(w, "Invalid or missing API key", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate content type
+		contentType := r.Header.Get("Content-Type")
+		if contentType != "application/json" {
+			http.Error(w, "Unsupported Media Type", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		// Set security headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		// Read request body with size limit
+		bodySize := r.ContentLength
+		if bodySize > 1024*1024 { // 1MB limit
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		var req Request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&req)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Validate function exists
+		if _, exists := frontendServerFunc[req.Function]; !exists {
+			http.Error(w, "Unknown function", http.StatusUnauthorized)
+			return
+		}
+
+		// Execute function
+		result, err := frontendServerFunc[req.Function](conn, req.Arguments)
+		if err != nil {
+			log.Printf("Frontend server handler error [%s]: %v", req.Function, err)
+			status, msg := resolveAppError(err)
+			http.Error(w, msg, status)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetEscapeHTML(true)
+		if err := encoder.Encode(result); err != nil {
+			http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		}
+	}
+}
+
 // StartServer performs operations related to StartServer functionality.
 func StartServer(conn *data.Conn) {
 	// Initialize chat handler for WebSocket
@@ -826,6 +904,7 @@ func StartServer(conn *data.Conn) {
 	// Replace direct registrations with panic-recovered handlers
 	http.Handle("/public", withPanicRecovery(publicHandler(conn)))
 	http.Handle("/private", withPanicRecovery(privateHandler(conn)))
+	http.Handle("/frontend/server", withPanicRecovery(frontendServerHandler(conn)))
 	http.Handle("/streaming-chat", withPanicRecovery(streamingChatHandler(conn)))
 	http.Handle("/ws", withPanicRecovery(WSHandler(conn)))
 	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
