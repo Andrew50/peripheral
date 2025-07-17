@@ -16,6 +16,7 @@ export const load: ServerLoad = async ({ request, getClientAddress, cookies, url
         console.log('CF-Connecting-IP:', cfIP);
         console.log('X-Forwarded-For:', forwarded);
         console.log('getClientAddress():', getClientAddress());
+        console.log('ip:', ip);
         const response = await fetch(`${backendUrl}/frontend/server`, {
             method: 'POST',
             headers: {
