@@ -292,7 +292,6 @@
 
 		{#if whyMovingContent}
 			<div class="why-moving">
-				<span class="label">Why it's moving:</span>
 				<p class="value why-moving-text">{whyMovingContent}</p>
 			</div>
 		{/if}
@@ -693,14 +692,6 @@
 		text-align: left;
 	}
 
-	.why-moving .label {
-		display: block;
-		color: var(--text-primary);
-		font-size: 0.8em;
-		margin-bottom: 6px;
-		font-weight: 600;
-		text-transform: uppercase;
-	}
 
 	.why-moving-text {
 		font-size: 0.8em;
