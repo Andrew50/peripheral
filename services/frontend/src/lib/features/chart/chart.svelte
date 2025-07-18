@@ -274,6 +274,8 @@
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
 	let pendingVolumeUpdate: any = null;
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 

@@ -420,7 +420,7 @@
 				}
 
 				// Add value labels above bars
-				if (trace.y && Array.isArray(trace.y) && !trace.text) {
+				if (trace.y && Array.isArray(trace.y) && !trace.text && trace.y.length < 12) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
 						if (typeof value === 'number') {
