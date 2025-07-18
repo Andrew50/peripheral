@@ -117,7 +117,7 @@
 		borderwidth: 1,
 		font: {
 			color: '#ffffff',
-			size: 13,
+			size: 11,
 			family: 'Geist, Inter, system-ui, sans-serif'
 		},
 		namelength: -1,
@@ -895,4 +895,41 @@
 		background: rgba(71, 85, 105, 0.3) !important;
 		color: #e2e8f0 !important;
 	}
+
+	/* Fix hover label trace name background */
+	:global(.plot-container .plotly .hoverlayer .hovertext) {
+		background: #1e293b !important;
+		border: 1px solid #475569 !important;
+		color: #ffffff !important;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+		font-size: 11px !important;
+		border-radius: 2px !important;
+		padding: 4px 6px !important;
+		line-height: 1.2 !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext rect) {
+		fill: #1e293b !important;
+		fill-opacity: 1 !important;
+		stroke: #475569 !important;
+		stroke-width: 1 !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext path) {
+		fill: #1e293b !important;
+		stroke: #475569 !important;
+		stroke-width: 1 !important;
+	}
+
+	/* Make hover labels more compact */
+	:global(.plot-container .plotly .hoverlayer .hovertext text) {
+		font-size: 11px !important;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext tspan) {
+		font-size: 11px !important;
+	}
+
+
 </style>
