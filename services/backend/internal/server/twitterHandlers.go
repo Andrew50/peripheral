@@ -54,6 +54,132 @@ type ExtractedTweetData struct {
 	Username  string `json:"username,omitempty"`
 }
 
+// TwitterAPIUpdateRuleRequest represents the request body for updating a Twitter API rule
+type TwitterAPIUpdateWebhookRequest struct {
+	RuleID          string `json:"rule_id"`
+	Tag             string `json:"tag"`
+	Value           string `json:"value"`
+	IntervalSeconds int    `json:"interval_seconds"`
+	IsEffect        int    `json:"is_effect"`
+}
+
+var twitterWebhookRuleset = "from:tradfi_noticias OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
+
+func turnOffTwitterNewsWebhook(conn *data.Conn) error {
+	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
+		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
+		Tag:             "Main Twitter",
+		Value:           twitterWebhookRuleset,
+		IntervalSeconds: 30,
+		IsEffect:        0,
+	})
+	if err != nil {
+		log.Printf("Error turning off Twitter webhook: %v", err)
+		return err
+	}
+	return nil
+}
+func turnOnTwitterNewsWebhook(conn *data.Conn) error {
+	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
+		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
+		Tag:             "Main Twitter",
+		Value:           twitterWebhookRuleset,
+		IntervalSeconds: 30,
+		IsEffect:        1,
+	})
+	if err != nil {
+		log.Printf("Error turning on Twitter webhook: %v", err)
+		return err
+	}
+	return nil
+}
+func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
+	isEffect := 0
+	if webhookStatus {
+		isEffect = 1
+	}
+	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
+		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
+		Tag:             "Main Twitter",
+		Value:           twitterWebhookRuleset,
+		IntervalSeconds: intervalSeconds,
+		IsEffect:        isEffect,
+	})
+	if err != nil {
+		log.Printf("Error updating Twitter webhook polling frequency: %v", err)
+		return err
+	}
+	return nil
+}
+func verifyTwitterWebhookConfiguration(conn *data.Conn) error {
+	// Load New York timezone
+	nyTimezone, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		log.Printf("Error loading New York timezone: %v", err)
+		return fmt.Errorf("failed to load timezone: %w", err)
+	}
+	dayOfTheWeek := time.Now().In(nyTimezone).Weekday()
+	if dayOfTheWeek == time.Saturday || dayOfTheWeek == time.Sunday {
+		return updateTwitterNewsWebhookPollingFrequency(conn, 300, true) // on weekends poll every 5 mins
+	}
+	// Get current time in New York
+	currentTime := time.Now().In(nyTimezone)
+	currentHour := currentTime.Hour()
+
+	// Check if it's between 6 AM (6) and 9 PM (21) - market hours
+	if currentHour >= 6 && currentHour < 21 {
+
+		return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+	} else {
+		return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+	}
+}
+func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookRequest) error {
+	// Marshal the request body
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		log.Printf("Error marshaling Twitter API request: %v", err)
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequest("POST", "https://api.twitterapi.io/oapi/tweet_filter/update_rule", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error creating Twitter API request: %v", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", conn.TwitterAPIioKey)
+
+	// Make the request
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error making Twitter API request: %v", err)
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading Twitter API response: %v", err)
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Twitter API returned non-200 status: %d, body: %s", resp.StatusCode, string(responseBody))
+		return fmt.Errorf("twitter api returned status %d: %s", resp.StatusCode, string(responseBody))
+	}
+	return nil
+}
+
 // twitterWebhookHandler is the HTTP handler wrapper
 func twitterWebhookHandler(conn *data.Conn) http.HandlerFunc {
 	return HandleTwitterWebhook(conn)
@@ -64,6 +190,20 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Verify the X-API-Key header for request authenticity
+		twitterAPIKey := r.Header.Get("X-API-Key")
+		if twitterAPIKey == "" {
+			log.Printf("Twitter webhook request missing X-API-Key header")
+			http.Error(w, "Missing API key", http.StatusUnauthorized)
+			return
+		}
+
+		if twitterAPIKey != conn.TwitterAPIioKey {
+			log.Printf("Twitter webhook request with invalid API key: %s", twitterAPIKey)
+			http.Error(w, "Invalid API key", http.StatusUnauthorized)
 			return
 		}
 
