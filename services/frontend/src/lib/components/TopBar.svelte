@@ -6,11 +6,13 @@
 	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
 	import { onMount, onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
+	import { browser } from '$app/environment';
 
-
+	import {subscriptionStatus} from '$lib/utils/stores/stores';
 	
 	export let instance: Instance;
 	export let handleCalendar: () => void;
+	
 	const commonTimeframes = ['1', '1h', '1d', '1w'];
 	let countdown = writable('--');
 	let countdownInterval: ReturnType<typeof setInterval>;
@@ -94,7 +96,9 @@
 		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
 		return `${secs < 10 ? '0' : ''}${secs}s`;
 	}
-
+	function openPricingSettings() {
+		window.location.href = '/pricing';
+	}
 	function calculateCountdown() {
 		if (!instance?.timeframe) {
 			countdown.set('--');
@@ -267,6 +271,33 @@
 			<span class="countdown-value">{$countdown}</span>
 		</div>
 	</div>
+
+	<!-- Right side content -->
+	<div class="top-bar-right">
+		{#if browser && typeof window !== 'undefined' && sessionStorage.getItem('authToken') && $subscriptionStatus && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+			<button
+				class="upgrade-button"
+				on:click={openPricingSettings}
+				title="Upgrade to Pro"
+				aria-label="Upgrade to Pro"
+			>
+				Try Plus
+				<svg
+					class="upgrade-icon"
+					viewBox="0 0 20 20"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path 
+						d="M4.78544 8.12311L12.8231 8.12311M12.8231 8.12311L12.8231 16.1608M12.8231 8.12311L3.1779 17.7683" 
+						stroke="#333333" 
+						stroke-width="1.3" 
+						stroke-linecap="square"
+					/>
+				</svg>
+			</button>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -289,6 +320,12 @@
 		align-items: center;
 		gap: 4px;
 		flex: 1;
+	}
+
+	.top-bar-right {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 	}
 
 	/* Base styles for metadata buttons */
@@ -452,5 +489,36 @@
 		background: rgba(255, 255, 255, 0.15);
 		margin: 0 6px;
 		flex-shrink: 0;
+	}
+
+	/* Upgrade button styles */
+	.upgrade-button {
+		background: #CCCCCC;
+		color: #333333 !important;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		transition: all 0.2s ease;
+		padding: 2px 6px;
+		border-radius: 6px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 13px;
+		font-weight: 600 !important;
+		line-height: 18px;
+	}
+
+	.upgrade-button:hover {
+		background: #ffffff;
+	}
+	.upgrade-icon {
+		width: 20px;
+		height: 20px;
+		stroke-width: 2.5;
+		transform: translate(3px, -3.5px);
 	}
 </style>

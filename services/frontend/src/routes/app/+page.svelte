@@ -929,9 +929,6 @@
 	}
 
 
-	function openPricingSettings() {
-		window.location.href = '/pricing';
-	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
 	async function verifyAndUpdateSubscriptionStatus(sessionId: string) {
@@ -1108,7 +1105,10 @@
 					<!-- Center section (chart + top bar) -->
 					<div class="center-section">
 						<!-- Top bar -->
-						<TopBar  handleCalendar={handleCalendar} />
+						<TopBar 
+							instance={$activeChartInstance || {}}
+							handleCalendar={handleCalendar} 
+						/>
 
 						<!-- Content below top bar -->
 						<div class="content-below-topbar">
@@ -1286,30 +1286,6 @@
 			</div>
 
 			<div class="bottom-bar-right">
-				<!-- Upgrade button - only show if user is authenticated but not subscribed -->
-				{#if browser && sessionStorage.getItem('authToken') && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
-					<button
-						class="toggle-button upgrade-button"
-						on:click={openPricingSettings}
-						title="Upgrade to Pro"
-					>
-						<svg
-							class="upgrade-icon"
-							viewBox="0 0 24 24"
-							fill="none"
-							xmlns="http://www.w3.org/2000/svg"
-						>
-							<path
-								d="M12 2L3.09 8.26L12 14L20.91 8.26L12 2ZM12 22L3.09 15.74L12 10L20.91 15.74L12 22Z"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						</svg>
-						Upgrade
-					</button>
-				{/if}
 
 				<!-- Replay buttons commented out -->
 				<!-- 
@@ -1447,28 +1423,7 @@
 
 <style>
 
-	/* Upgrade button styles */
-	.upgrade-button {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-		color: white !important;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-		box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-		transition: all 0.3s ease;
-	}
 
-	.upgrade-button:hover {
-		background: linear-gradient(135deg, #7c93f0 0%, #8a59b8 100%) !important;
-		box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-		transform: translateY(-1px);
-	}
-
-	.upgrade-button .upgrade-icon {
-		width: 16px;
-		height: 16px;
-		stroke-width: 2.5;
-	}
 
 	/* Profile bar container */
 	.profile-bar {
