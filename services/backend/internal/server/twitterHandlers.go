@@ -65,34 +65,37 @@ type TwitterAPIUpdateWebhookRequest struct {
 
 var twitterWebhookRuleset = "from:tradfi_noticias OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
 
-func turnOffTwitterNewsWebhook(conn *data.Conn) error {
-	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
-		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
-		Tag:             "Main Twitter",
-		Value:           twitterWebhookRuleset,
-		IntervalSeconds: 30,
-		IsEffect:        0,
-	})
-	if err != nil {
-		log.Printf("Error turning off Twitter webhook: %v", err)
-		return err
+/*
+	func turnOffTwitterNewsWebhook(conn *data.Conn) error {
+		err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
+			RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
+			Tag:             "Main Twitter",
+			Value:           twitterWebhookRuleset,
+			IntervalSeconds: 30,
+			IsEffect:        0,
+		})
+		if err != nil {
+			log.Printf("Error turning off Twitter webhook: %v", err)
+			return err
+		}
+		return nil
 	}
-	return nil
-}
-func turnOnTwitterNewsWebhook(conn *data.Conn) error {
-	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
-		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
-		Tag:             "Main Twitter",
-		Value:           twitterWebhookRuleset,
-		IntervalSeconds: 30,
-		IsEffect:        1,
-	})
-	if err != nil {
-		log.Printf("Error turning on Twitter webhook: %v", err)
-		return err
+
+	func turnOnTwitterNewsWebhook(conn *data.Conn) error {
+		err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
+			RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
+			Tag:             "Main Twitter",
+			Value:           twitterWebhookRuleset,
+			IntervalSeconds: 30,
+			IsEffect:        1,
+		})
+		if err != nil {
+			log.Printf("Error turning on Twitter webhook: %v", err)
+			return err
+		}
+		return nil
 	}
-	return nil
-}
+*/
 func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
 	isEffect := 0
 	if webhookStatus {
