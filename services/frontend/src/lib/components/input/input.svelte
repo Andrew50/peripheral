@@ -1268,8 +1268,8 @@
 	}
 
 	.search-hint {
-		color: rgba(255, 255, 255, 0.2);
-		font-size: 0.75rem;
+		color: rgba(255, 255, 255, 0.5);
+		font-size: 0.65rem;
 		font-weight: 400;
 		margin-left: 1rem;
 	}
