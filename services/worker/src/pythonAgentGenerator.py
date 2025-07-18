@@ -283,8 +283,8 @@ class PythonAgentGenerator:
         - If the plot refers to several tickers, do not include this.
 
         **CRITICAL**: 
-        - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool.
-        - If the data was given to you, do NOT look up for the data, as this is redundant. 
+        - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool. The only data you have access to is the functions described above!!
+        - If you do not have access to the data, include a print saying that you do not have access to whatever data the agent asked for and that it should websearch for the data.
         - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         RETURN FORMAT:
         - Returns are optional
@@ -293,7 +293,6 @@ class PythonAgentGenerator:
         - REGARDLESS OF THE QUERY: NEVER return pandas/numpy types (datetime64, int64, float64) OR dataframes - they cause JSON serialization errors.
         - DO NOT RUN YOUR FUNCTION AT ALL. DO NOT USE if __name__ == "__main__". THIS WILL CAUSE AN ERROR.
         - NEVER RETURN large amounts of OHLCV data. This will make the user unhappy.
-        - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         Generate clean, robust Python code. DO NOT return any text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
 
 
