@@ -757,14 +757,6 @@
 			return avatar;
 		}
 
-		// Fallback if nothing else is available - improved visibility with simpler SVG format
-		// Use a simpler SVG format to ensure browser compatibility
-		const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="%232a2e36"/><text x="14" y="19" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">?</text></svg>`;
-
-		// Store this fallback
-		profilePic = fallbackAvatar;
-
-		return fallbackAvatar;
 	}
 
 	// Keep the getProfileDisplay function for backward compatibility
