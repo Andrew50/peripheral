@@ -65,7 +65,7 @@ type TwitterAPIUpdateWebhookRequest struct {
 
 var twitterWebhookRuleset = "from:tradfi_noticias OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
 
-func turnOffTwitterNewsWebhook(conn *data.Conn) {
+func turnOffTwitterNewsWebhook(conn *data.Conn) error {
 	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
 		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
 		Tag:             "Main Twitter",
@@ -75,9 +75,11 @@ func turnOffTwitterNewsWebhook(conn *data.Conn) {
 	})
 	if err != nil {
 		log.Printf("Error turning off Twitter webhook: %v", err)
+		return err
 	}
+	return nil
 }
-func turnOnTwitterNewsWebhook(conn *data.Conn) {
+func turnOnTwitterNewsWebhook(conn *data.Conn) error {
 	err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
 		RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
 		Tag:             "Main Twitter",
@@ -87,9 +89,11 @@ func turnOnTwitterNewsWebhook(conn *data.Conn) {
 	})
 	if err != nil {
 		log.Printf("Error turning on Twitter webhook: %v", err)
+		return err
 	}
+	return nil
 }
-func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) {
+func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
 	isEffect := 0
 	if webhookStatus {
 		isEffect = 1
@@ -103,9 +107,33 @@ func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds i
 	})
 	if err != nil {
 		log.Printf("Error updating Twitter webhook polling frequency: %v", err)
+		return err
+	}
+	return nil
+}
+func verifyTwitterWebhookConfiguration(conn *data.Conn) error {
+	// Load New York timezone
+	nyTimezone, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		log.Printf("Error loading New York timezone: %v", err)
+		return fmt.Errorf("failed to load timezone: %w", err)
+	}
+	dayOfTheWeek := time.Now().In(nyTimezone).Weekday()
+	if dayOfTheWeek == time.Saturday || dayOfTheWeek == time.Sunday {
+		return updateTwitterNewsWebhookPollingFrequency(conn, 300, true) // on weekends poll every 5 mins
+	}
+	// Get current time in New York
+	currentTime := time.Now().In(nyTimezone)
+	currentHour := currentTime.Hour()
+
+	// Check if it's between 6 AM (6) and 9 PM (21) - market hours
+	if currentHour >= 6 && currentHour < 21 {
+
+		return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+	} else {
+		return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
 	}
 }
-
 func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookRequest) error {
 	// Marshal the request body
 	jsonData, err := json.Marshal(request)

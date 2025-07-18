@@ -196,6 +196,17 @@ func syncPricingFromStripeJob(conn *data.Conn) error {
 	return SyncPricingFromStripe(conn)
 }
 
+func turnOnTwitterWebhookInAMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+}
+
+func turnOffTwitterWebhookInPMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+}
+func verifyTwitterWebhookIsCorrectlyConfiguredJob(conn *data.Conn) error {
+	return verifyTwitterWebhookConfiguration(conn)
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
@@ -320,6 +331,36 @@ var (
 			Name:           "UpdateYearlySubscriptionCredits",
 			Function:       updateYearlySubscriptionCreditsJob,
 			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Daily at 4:05 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOnTwitterWebhookInAM",
+			Function:       turnOnTwitterWebhookInAMJob,
+			Schedule:       []TimeOfDay{{Hour: 6, Minute: 0}}, // Daily at 6:00 AM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOffTwitterWebhookInPM",
+			Function:       turnOffTwitterWebhookInPMJob,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Daily at 9:00 PM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "VerifyTwitterWebhookIsCorrectlyConfigured",
+			Function:       verifyTwitterWebhookIsCorrectlyConfiguredJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
 			RunOnInit:      true,
 			SkipOnWeekends: false,
 			RetryOnFailure: true,
