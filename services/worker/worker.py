@@ -354,7 +354,7 @@ class StrategyWorker:
                             logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
                             result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
                         elif task_type == 'general_python_agent':
-                            result = asyncio.run(self._execute_general_python_agent(task_id=task_id, user_id=args.get('user_id'), prompt=args.get('prompt')))
+                            result = asyncio.run(self._execute_general_python_agent(task_id=task_id, user_id=args.get('user_id'), prompt=args.get('prompt'), data=args.get('data')))
                         else: # unknown task type
                           
                             raise Exception(f"Unknown task type: {task_type}.")
@@ -726,7 +726,7 @@ class StrategyWorker:
             return error_result
     
     async def _execute_general_python_agent(self, task_id: str = None, user_id: int = None, 
-                                           prompt: str = None, **kwargs) -> Dict[str, Any]:
+                                           prompt: str = None, data: str = None, **kwargs) -> Dict[str, Any]:
         # Initialize defaults to avoid scope issues
         result, prints, plots, response_images = [], "", [], []
         execution_id = None  # Initialize to avoid UnboundLocalError
@@ -746,7 +746,8 @@ class StrategyWorker:
             result, prints, plots, response_images, execution_id, error = await asyncio.wait_for(
                 self.python_agent_generator.start_general_python_agent(
                     user_id=user_id,
-                    prompt=prompt
+                    prompt=prompt,
+                    data=data
                 ),
                 timeout=240.0  # 4 minute timeout
             )

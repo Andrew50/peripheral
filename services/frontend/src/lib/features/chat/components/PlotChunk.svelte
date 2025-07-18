@@ -150,7 +150,6 @@
 			tickfont: { color: '#f1f5f9', size: 11 },
 			titlefont: { color: '#f8fafc' },
 			automargin: true,
-			tickangle: -45,
 			title: {
 				standoff: 25
 			}
@@ -243,6 +242,72 @@
 					if (!trace.line) trace.line = {};
 					trace.line.color = color;
 				}
+				// Add value labels above points
+				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+					// Format values for display
+					trace.text = trace.y.map((value: any) => {
+						if (typeof value === 'number') {
+							// For scatter plots, typically show more precision for smaller values
+							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+								return value.toFixed(3);
+							} else if (value % 1 === 0) {
+								// Show whole numbers without decimals
+								return value.toString();
+							} else {
+								// Show decimal values with appropriate precision
+								return value.toFixed(2);
+							}
+						}
+						return String(value);
+					});
+					// Smart positioning: above for local maxima, below for local minima
+					trace.textposition = trace.y.map((value: number, index: number) => {
+						const prevValue = index > 0 ? trace.y[index - 1] : null;
+						const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+						
+						// Determine if this is a local min or max
+						let isLocalMax = false;
+						let isLocalMin = false;
+						
+						if (prevValue !== null && nextValue !== null) {
+							// Middle points: compare with both neighbors
+							isLocalMax = value >= prevValue && value >= nextValue;
+							isLocalMin = value <= prevValue && value <= nextValue;
+						} else if (prevValue !== null) {
+							// Last point: compare with previous
+							isLocalMax = value >= prevValue;
+							isLocalMin = value <= prevValue;
+						} else if (nextValue !== null) {
+							// First point: compare with next
+							isLocalMax = value >= nextValue;
+							isLocalMin = value <= nextValue;
+						}
+						
+						// Position text based on local extrema
+						if (isLocalMin && !isLocalMax) {
+							return 'bottom center'; // Text below for minima
+						} else {
+							return 'top center'; // Text above for maxima and neutral points
+						}
+					});
+					
+					trace.textfont = {
+						color: '#ffffff',
+						size: 12,
+						family: 'Inter, system-ui, sans-serif',
+					};
+					
+					// Update mode to include text display
+					if (trace.mode === 'markers') {
+						trace.mode = 'markers+text';
+					} else if (trace.mode === 'lines') {
+						trace.mode = 'lines+text';
+					} else if (trace.mode === 'lines+markers') {
+						trace.mode = 'lines+markers+text';
+					} else if (!trace.mode.includes('text')) {
+						trace.mode = trace.mode + '+text';
+					}
+				}
 				return trace;
 			},
 			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout)
@@ -261,6 +326,74 @@
 					if (!trace.marker) trace.marker = {};
 					trace.marker.color = color;
 				}
+
+				// Add value labels above points
+				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+					// Format values for display
+					trace.text = trace.y.map((value: any) => {
+						if (typeof value === 'number') {
+							// For scatter plots, typically show more precision for smaller values
+							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+								return value.toFixed(3);
+							} else if (value % 1 === 0) {
+								// Show whole numbers without decimals
+								return value.toString();
+							} else {
+								// Show decimal values with appropriate precision
+								return value.toFixed(2);
+							}
+						}
+						return String(value);
+					});
+					// Smart positioning: above for local maxima, below for local minima
+					trace.textposition = trace.y.map((value: number, index: number) => {
+						const prevValue = index > 0 ? trace.y[index - 1] : null;
+						const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+						
+						// Determine if this is a local min or max
+						let isLocalMax = false;
+						let isLocalMin = false;
+						
+						if (prevValue !== null && nextValue !== null) {
+							// Middle points: compare with both neighbors
+							isLocalMax = value >= prevValue && value >= nextValue;
+							isLocalMin = value <= prevValue && value <= nextValue;
+						} else if (prevValue !== null) {
+							// Last point: compare with previous
+							isLocalMax = value >= prevValue;
+							isLocalMin = value <= prevValue;
+						} else if (nextValue !== null) {
+							// First point: compare with next
+							isLocalMax = value >= nextValue;
+							isLocalMin = value <= nextValue;
+						}
+						
+						// Position text based on local extrema
+						if (isLocalMin && !isLocalMax) {
+							return 'bottom center'; // Text below for minima
+						} else {
+							return 'top center'; // Text above for maxima and neutral points
+						}
+					});
+					
+					trace.textfont = {
+						color: '#ffffff',
+						size: 12,
+						family: 'Inter, system-ui, sans-serif',
+					};
+					
+					// Update mode to include text display
+					if (trace.mode === 'markers') {
+						trace.mode = 'markers+text';
+					} else if (trace.mode === 'lines') {
+						trace.mode = 'lines+text';
+					} else if (trace.mode === 'lines+markers') {
+						trace.mode = 'lines+markers+text';
+					} else if (!trace.mode.includes('text')) {
+						trace.mode = trace.mode + '+text';
+					}
+				}
+
 				return trace;
 			},
 			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout, 'left', 0.1)
@@ -471,8 +604,10 @@
 			...processedTrace.hoverlabel // Allow override if specified
 		};
 
-		// Use chart type configuration if available
-		const chartConfig = chartTypeConfigs[plotData.chart_type];
+		// Determine which chart configuration to use - prioritize individual trace type over overall chart_type
+		const traceType = processedTrace.type || plotData.chart_type;
+		const chartConfig = chartTypeConfigs[traceType as keyof typeof chartTypeConfigs];
+		
 		if (chartConfig) {
 			// Pass all traces for bar chart positioning logic (only needed for bar charts)
 			const options = plotData.chart_type === 'bar' ? { allTraces: plotData.data } : undefined;

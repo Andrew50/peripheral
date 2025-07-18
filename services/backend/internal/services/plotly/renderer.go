@@ -34,8 +34,8 @@ type PlotConfig struct {
 // DefaultPlotConfig returns sensible defaults for Twitter images
 func DefaultPlotConfig() PlotConfig {
 	return PlotConfig{
-		Width:  1200, // Twitter recommendation: 1200x675 for best display
-		Height: 675,
+		Width:  1600, // Twitter recommendation: 1200x675 for best display
+		Height: 1133,
 	}
 }
 
@@ -97,7 +97,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 	defer page.MustClose()
 
 	// Set viewport for consistent rendering - add extra height for padding and watermark
-	page.MustSetViewport(config.Width, config.Height+60, 1, false) // +40 for horizontal padding, +60 for vertical padding
+	page.MustSetViewport(config.Width, config.Height+80, 1, false) // +80 for additional vertical padding with larger canvas
 
 	// Navigate to a blank page first
 	if err := page.Navigate("about:blank"); err != nil {
@@ -221,30 +221,30 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				}
 			}
 			
-			// Margin configuration - shift plot leftward while keeping legend position
+			// Margin configuration - better centered for larger canvas (1600x1133)
 			if (!plotLayout.margin) {
-				plotLayout.margin = { l: 80, r: 180, t: 90, b: 130, autoexpand: true };
+				plotLayout.margin = { l: 220, r: 220, t: 120, b: 180, autoexpand: true };
 			} else {
-				plotLayout.margin.t = 90; // Moderate increase for title
-				plotLayout.margin.b = 130; // Ensure enough space for watermark
-				plotLayout.margin.l = 80; // Reduced left margin to shift plot left
-				plotLayout.margin.r = 180; // Increased right margin to maintain legend position
+				plotLayout.margin.t = 120; // Increased for title and better vertical centering
+				plotLayout.margin.b = 180; // Increased for watermark and better vertical centering
+				plotLayout.margin.l = 220; // Increased left margin for better horizontal centering
+				plotLayout.margin.r = 220; // Increased right margin to accommodate legend
 			}
 			
-			// Legend styling
+			// Legend styling - positioned outside plot area to avoid shifting plot center
 			plotLayout.legend = {
 				...plotLayout.legend,
-				font: { color: '#f8fafc', size: 16 },
+				font: { color: '#f8fafc', size: 18 },
 				bgcolor: 'transparent',
 				borderwidth: 0,
 				orientation: 'v',
-				x: -0.2,
+				x: 0,
 				xanchor: 'left',
-				y: -0.3,
-				yanchor: 'bottom',
+				y: -0.1,
+				yanchor: 'middle',
 				xref: 'paper',
 				yref: 'paper',
-				itemwidth: 50
+				itemwidth: 60
 			};
 			
 			// X-axis styling
@@ -275,9 +275,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			
 			// Process traces to apply colors and styling
 			plotData.forEach((trace, index) => {
-				// Randomly select color from palette
-				const randomIndex = Math.floor(Math.random() * colorPalette.length);
-				const color = colorPalette[randomIndex];
+				// Use index to ensure different colors for each trace
+				const color = colorPalette[index % colorPalette.length];
 				
 				// Add default trace name if not provided
 				if (!trace.name) {
@@ -299,15 +298,26 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 					if (trace.y && Array.isArray(trace.y) && !trace.text) {
 						trace.text = trace.y.map((value) => {
 							if (typeof value === 'number') {
-								// Format numbers with appropriate precision
-								if (Math.abs(value) >= 1000000) {
-									return (value / 1000000).toFixed(1) + 'M';
-								} else if (Math.abs(value) >= 1000) {
-									return (value / 1000).toFixed(1) + 'K';
-								} else if (Math.abs(value) < 1 && Math.abs(value) > 0) {
-									return value.toFixed(3);
+								// Only round values > 100,000 to 2 decimals
+								if (Math.abs(value) > 100000) {
+									if (Math.abs(value) >= 1000000) {
+										// For millions, show 2 decimals
+										return (value / 1000000).toFixed(2) + 'M';
+									} else {
+										// For values > 100K but < 1M, show 2 decimals in K format
+										return (value / 1000).toFixed(2) + 'K';
+									}
 								} else {
-									return value.toFixed(1);
+									// For values ≤ 100,000, show full precision
+									if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+										return value.toFixed(3);
+									} else if (value % 1 === 0) {
+										// Show whole numbers without decimals
+										return value.toString();
+									} else {
+										// Show decimal values with appropriate precision
+										return value.toFixed(2);
+									}
 								}
 							}
 							return String(value);
@@ -315,14 +325,157 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						trace.textposition = 'outside';
 						trace.textfont = {
 							color: '#f1f5f9',
-							size: 14,
+							size: 18,
 							family: 'Inter, system-ui, sans-serif'
 						};
+					}
+				} else if (trace.type === 'line') {
+					// Handle line charts specifically
+					if (!trace.line) trace.line = {};
+					if (!trace.line.color) trace.line.color = color;
+					if (!trace.mode) trace.mode = 'lines';
+					
+					// Add value labels with smart positioning for line plots (if less than 12 points)
+					if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+						// Format values for display
+						trace.text = trace.y.map((value) => {
+							if (typeof value === 'number') {
+								// For line plots, typically show more precision for smaller values
+								if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+									return value.toFixed(3);
+								} else if (value % 1 === 0) {
+									// Show whole numbers without decimals
+									return value.toString();
+								} else {
+									// Show decimal values with appropriate precision
+									return value.toFixed(2);
+								}
+							}
+							return String(value);
+						});
+						
+						// Smart positioning: above for local maxima, below for local minima
+						trace.textposition = trace.y.map((value, index) => {
+							const prevValue = index > 0 ? trace.y[index - 1] : null;
+							const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+							
+							// Determine if this is a local min or max
+							let isLocalMax = false;
+							let isLocalMin = false;
+							
+							if (prevValue !== null && nextValue !== null) {
+								// Middle points: compare with both neighbors
+								isLocalMax = value >= prevValue && value >= nextValue;
+								isLocalMin = value <= prevValue && value <= nextValue;
+							} else if (prevValue !== null) {
+								// Last point: compare with previous
+								isLocalMax = value >= prevValue;
+								isLocalMin = value <= prevValue;
+							} else if (nextValue !== null) {
+								// First point: compare with next
+								isLocalMax = value >= nextValue;
+								isLocalMin = value <= nextValue;
+							}
+							
+							// Position text based on local extrema
+							if (isLocalMin && !isLocalMax) {
+								return 'bottom center'; // Text below for minima
+							} else {
+								return 'top center'; // Text above for maxima and neutral points
+							}
+						});
+						
+						trace.textfont = {
+							color: '#ffffff',
+							size: 18,
+							family: 'Inter, system-ui, sans-serif'
+						};
+						
+						// Update mode to include text display
+						if (trace.mode === 'lines') {
+							trace.mode = 'lines+text';
+						} else if (trace.mode === 'lines+markers') {
+							trace.mode = 'lines+markers+text';
+						} else if (trace.mode && !trace.mode.includes('text')) {
+							trace.mode = trace.mode + '+text';
+						} else {
+							trace.mode = 'lines+text';
+						}
 					}
 				} else if (trace.type === 'scatter' || !trace.type) {
 					if (!trace.line) trace.line = {};
 					if (!trace.line.color) trace.line.color = color;
 					if (trace.marker && !trace.marker.color) trace.marker.color = color;
+					
+					// Add value labels with smart positioning for scatter plots (if less than 12 points)
+					if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+						// Format values for display
+						trace.text = trace.y.map((value) => {
+							if (typeof value === 'number') {
+								// For scatter plots, typically show more precision for smaller values
+								if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+									return value.toFixed(3);
+								} else if (value % 1 === 0) {
+									// Show whole numbers without decimals
+									return value.toString();
+								} else {
+									// Show decimal values with appropriate precision
+									return value.toFixed(2);
+								}
+							}
+							return String(value);
+						});
+						
+						// Smart positioning: above for local maxima, below for local minima
+						trace.textposition = trace.y.map((value, index) => {
+							const prevValue = index > 0 ? trace.y[index - 1] : null;
+							const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+							
+							// Determine if this is a local min or max
+							let isLocalMax = false;
+							let isLocalMin = false;
+							
+							if (prevValue !== null && nextValue !== null) {
+								// Middle points: compare with both neighbors
+								isLocalMax = value >= prevValue && value >= nextValue;
+								isLocalMin = value <= prevValue && value <= nextValue;
+							} else if (prevValue !== null) {
+								// Last point: compare with previous
+								isLocalMax = value >= prevValue;
+								isLocalMin = value <= prevValue;
+							} else if (nextValue !== null) {
+								// First point: compare with next
+								isLocalMax = value >= nextValue;
+								isLocalMin = value <= nextValue;
+							}
+							
+							// Position text based on local extrema
+							if (isLocalMin && !isLocalMax) {
+								return 'bottom center'; // Text below for minima
+							} else {
+								return 'top center'; // Text above for maxima and neutral points
+							}
+						});
+						
+						trace.textfont = {
+							color: '#ffffff',
+							size: 18,
+							family: 'Inter, system-ui, sans-serif'
+						};
+						
+						// Update mode to include text display
+						if (trace.mode === 'markers') {
+							trace.mode = 'markers+text';
+						} else if (trace.mode === 'lines') {
+							trace.mode = 'lines+text';
+						} else if (trace.mode === 'lines+markers') {
+							trace.mode = 'lines+markers+text';
+						} else if (trace.mode && !trace.mode.includes('text')) {
+							trace.mode = trace.mode + '+text';
+						} else if (!trace.mode) {
+							trace.mode = 'markers+text';
+						}
+					}
 				}
 				
 				// Hover label styling
@@ -359,12 +512,12 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
-				titleContainer.style.top = '20px';
+				titleContainer.style.top = '30px';  // Adjusted for larger canvas
 				titleContainer.style.left = '50%';
 				titleContainer.style.transform = 'translateX(-50%)';
 				titleContainer.style.display = 'flex';
 				titleContainer.style.alignItems = 'center';
-				titleContainer.style.gap = '12px';
+				titleContainer.style.gap = '15px';  // Increased gap for larger canvas
 				titleContainer.style.zIndex = '1000';
 				titleContainer.style.whiteSpace = 'nowrap';
 				titleContainer.style.minWidth = 'max-content';
@@ -395,8 +548,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						}
 					}
 					
-					iconImg.style.width = '40px';
-					iconImg.style.height = '40px';
+					iconImg.style.width = '45px';  // Slightly larger for bigger canvas
+					iconImg.style.height = '45px';
 					iconImg.style.borderRadius = '6px';
 					iconImg.style.objectFit = 'cover';
 					titleContainer.appendChild(iconImg);
@@ -406,7 +559,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				const titleText = document.createElement('span');
 				titleText.textContent = window.titleText;
 				titleText.style.fontFamily = 'Inter, system-ui, sans-serif';
-				titleText.style.fontSize = '34px';
+				titleText.style.fontSize = '38px';  // Slightly larger for bigger canvas
 				titleText.style.fontWeight = '600';
 				titleText.style.color = '#f8fafc';
 				
@@ -416,13 +569,13 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 
 			const watermark = document.createElement('div');
 			watermark.style.position = 'absolute';
-			watermark.style.bottom = '25px';  // Increased from 10px
-			watermark.style.right = '25px';   // Increased from 10px
+			watermark.style.bottom = '35px';  // Adjusted for larger canvas
+			watermark.style.right = '35px';   // Adjusted for larger canvas
 			watermark.style.fontFamily = 'Inter, system-ui, sans-serif';
-			watermark.style.fontSize = '16px';
+			watermark.style.fontSize = '18px';
 			watermark.style.color = 'rgba(255, 255, 255, 1)';
 			watermark.style.zIndex = '1000';
-			watermark.innerHTML = 'Powered by <span style="font-size: 28px; font-weight: 600;">Peripheral.io</span>';
+			watermark.innerHTML = 'Powered by <span style="font-size: 32px; font-weight: 600;">Peripheral.io</span>';
 			document.getElementById('plot').appendChild(watermark);
 			
 			return true;
