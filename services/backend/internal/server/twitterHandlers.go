@@ -137,6 +137,7 @@ func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) er
 func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
 
 	seen := determineIfAlreadySeenTweet(conn, tweet)
+	//seen = false
 	fmt.Println("seen", seen)
 	if seen {
 		storeTweet(conn, tweet)
@@ -184,6 +185,35 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (F
 	if err != nil {
 		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
+	/*agentResult := AgentPeripheralTweet{
+		Text: prompt,
+		Plot: nil,
+	}
+
+	// Override with sample plot data for testing
+	samplePlot := map[string]interface{}{
+		"chart_type": "bar",
+		"data": []map[string]interface{}{
+			{
+				"x":    []string{"SPY", "QQQ", "DIA"},
+				"y":    []float64{-0.2, -0.24, -0.66},
+				"name": "% Change vs Prev Close",
+				"type": "bar",
+			},
+		},
+		"title":       "Intraday Performance",
+		"titleTicker": "COIN",
+		"layout": map[string]interface{}{
+			"xaxis": map[string]interface{}{
+				"title": "Ticker",
+			},
+			"yaxis": map[string]interface{}{
+				"title": "% Change vs Prev Close",
+			},
+		},
+	}
+	agentResult.Plot = samplePlot*/
+
 	var base64PNG string
 	// Test Plotly rendering if plot data exists
 	if agentResult.Plot != nil {

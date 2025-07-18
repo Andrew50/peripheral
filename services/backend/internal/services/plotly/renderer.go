@@ -176,7 +176,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			// Font configuration to match frontend
 			plotLayout.font = {
 				family: 'Inter, system-ui, sans-serif',
-				size: 12,
+				size: 16,
 				color: '#f8fafc' // text-slate-50
 			};
 			
@@ -198,7 +198,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 							text: titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 36,
+								size: 48,
 								color: '#f8fafc'
 							},
 							xref: 'paper',
@@ -211,7 +211,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 							...titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 36,
+								size: 48,
 								color: '#f8fafc'
 							},
 							x: 0.5,
@@ -251,10 +251,14 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			plotLayout.xaxis = {
 				...plotLayout.xaxis,
 				gridcolor: 'rgba(255, 255, 255, 0.05)',
-				linecolor: 'rgba(71, 85, 105, 0.8)',
-				tickfont: { color: '#f1f5f9', size: 16 },
-				titlefont: { color: '#f8fafc', size: 20 },
-				automargin: true
+				linecolor: 'rgba(248, 250, 252, 0.8)',
+				linewidth: 2,
+				tickfont: { color: '#f1f5f9', size: 20 },
+				titlefont: { color: '#f8fafc', size: 32 },
+				automargin: true,
+				ticklen: 20,
+				tickcolor: 'rgba(248, 250, 252, 0.8)',
+				tickwidth: 2
 			};
 			if (plotLayout.xaxis.title) {
 				plotLayout.xaxis.title = capitalizeAxisTitle(plotLayout.xaxis.title);
@@ -264,13 +268,29 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			plotLayout.yaxis = {
 				...plotLayout.yaxis,
 				gridcolor: 'rgba(255, 255, 255, 0.05)',
-				linecolor: 'rgba(71, 85, 105, 0.8)',
-				tickfont: { color: '#f1f5f9', size: 16 },
-				titlefont: { color: '#f8fafc', size: 20 },
+				linecolor: 'rgba(248, 250, 252, 0.8)',
+				linewidth: 2,
+				tickfont: { color: '#f1f5f9', size: 20 },
+				titlefont: { color: '#f8fafc', size: 32 },
 				automargin: true
 			};
 			if (plotLayout.yaxis.title) {
-				plotLayout.yaxis.title = capitalizeAxisTitle(plotLayout.yaxis.title);
+				// Handle both string and object title formats
+				if (typeof plotLayout.yaxis.title === 'string') {
+					plotLayout.yaxis.title = {
+						text: capitalizeAxisTitle(plotLayout.yaxis.title),
+						standoff: 30
+					};
+				} else if (typeof plotLayout.yaxis.title === 'object') {
+					// If it's already an object, ensure it has proper formatting
+					if (plotLayout.yaxis.title.text) {
+						plotLayout.yaxis.title.text = capitalizeAxisTitle(plotLayout.yaxis.title.text);
+					}
+					// Add standoff if not already specified
+					if (!plotLayout.yaxis.title.standoff) {
+						plotLayout.yaxis.title.standoff = 30;
+					}
+				}
 			}
 			
 			// Process traces to apply colors and styling
@@ -325,7 +345,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						trace.textposition = 'outside';
 						trace.textfont = {
 							color: '#f1f5f9',
-							size: 18,
+							size: 23,
 							family: 'Inter, system-ui, sans-serif'
 						};
 					}
@@ -548,8 +568,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						}
 					}
 					
-					iconImg.style.width = '45px';  // Slightly larger for bigger canvas
-					iconImg.style.height = '45px';
+					iconImg.style.width = '44px';  // Slightly larger for bigger canvas
+					iconImg.style.height = '44px';
 					iconImg.style.borderRadius = '6px';
 					iconImg.style.objectFit = 'cover';
 					titleContainer.appendChild(iconImg);
@@ -575,7 +595,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			watermark.style.fontSize = '18px';
 			watermark.style.color = 'rgba(255, 255, 255, 1)';
 			watermark.style.zIndex = '1000';
-			watermark.innerHTML = 'Powered by <span style="font-size: 32px; font-weight: 600;">Peripheral.io</span>';
+			watermark.innerHTML = 'Powered by <span style="font-size: 44px; font-weight: 600;">Peripheral.io</span>';
 			document.getElementById('plot').appendChild(watermark);
 			
 			return true;
