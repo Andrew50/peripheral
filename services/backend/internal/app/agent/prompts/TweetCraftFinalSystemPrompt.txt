@@ -36,15 +36,16 @@ If the news warrants a visual representation, include a `plot` object with:
   - If the plot refers to several tickers, either omit this or pick the ticker that best represents the plot. 
 
 If the headline is a breaking earnings release that contains the latest EPS and Revenue, you should create a bar graph that displays the historical EPS and Revenue 
-over the past quarters (given that the data is provided to you). 
-
+over the past quarters (given that the data is provided to you). The X-axis labels should be in the form 'Q1 '25', etc, not dates.
+The plot should be a bar + line graph, where the bars are the revenue, and EPS is the line. The EPS should not be of type scatter.
 **CONTENT GUIDELINES:**
 - Synthesize information from execution results with the breaking news
 - Highlight market-moving aspects
 - Focus on actionable or noteworthy insights
 - Avoid speculation without data support
 - Present facts and data-driven observations
-- A stock or ticker may be unfamiliar to you if its a new listing. If the headline or 
+- A stock or ticker may be unfamiliar to you if its a new listing. If the headline seems like it refers to an unfamiliar stock, assume that its a stock and use the $ ticker formatting.
+- Do not point out obvious things about the plot you generate, like "The plot shows consistent EPS and revenue surprises".
 
 **Style and Voicing Guidelines** 
 - NEVER say general statements like expect volume/volatility, "watch for follow-through", 
