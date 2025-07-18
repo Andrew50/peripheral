@@ -4,11 +4,13 @@ import (
 	"backend/internal/data"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -105,9 +107,6 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			}
 			extractedTweets = append(extractedTweets, extracted)
 
-			// Log the extracted data
-			log.Printf("Extracted Tweet Data: URL=%s, Text=%s, CreatedAt=%s, Username=%s",
-				extracted.URL, extracted.Text, extracted.CreatedAt, extracted.Username)
 		}
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
@@ -180,6 +179,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (F
 
 	prompt := tweet.Text
 	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
+
 	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
 	if err != nil {
 		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
@@ -209,6 +209,9 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (F
 					if err != nil {
 						log.Printf("Failed to render plot: %v", err)
 					}
+
+					//saveImageToContainer(base64PNG)
+
 				}
 			}
 		}
@@ -451,4 +454,31 @@ func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
 
 	fmt.Printf("Image uploaded successfully with ID: %s\n", uploadResponse.Data.ID)
 	return uploadResponse.Data.ID, nil
+}
+
+// saveImageToContainer saves base64 image data to container filesystem for debugging
+func saveImageToContainer(base64Data string) {
+	if base64Data == "" {
+		return
+	}
+
+	// Decode base64 data
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		log.Printf("Failed to decode base64 image: %v", err)
+		return
+	}
+
+	// Use fixed filename
+	filename := "/tmp/peripheral_plot.png"
+
+	// Write to file
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		log.Printf("Failed to save image to %s: %v", filename, err)
+		return
+	}
+
+	log.Printf("✅ Plot image saved to container at: %s", filename)
+	fmt.Printf("🚀 One-liner: docker cp $(docker ps --format 'table {{.Names}}' | grep backend | head -n1):/tmp/peripheral_plot.png ~/Desktop/ && open ~/Desktop/peripheral_plot.png\n")
 }
