@@ -71,7 +71,7 @@ func turnOffTwitterNewsWebhook(conn *data.Conn) error {
 		Tag:             "Main Twitter",
 		Value:           twitterWebhookRuleset,
 		IntervalSeconds: 30,
-		IsEffect:        0, // 0 to turn off
+		IsEffect:        0,
 	})
 	if err != nil {
 		log.Printf("Error turning off Twitter webhook: %v", err)
@@ -85,7 +85,7 @@ func turnOnTwitterNewsWebhook(conn *data.Conn) error {
 		Tag:             "Main Twitter",
 		Value:           twitterWebhookRuleset,
 		IntervalSeconds: 30,
-		IsEffect:        1, // 0 to turn off
+		IsEffect:        1,
 	})
 	if err != nil {
 		log.Printf("Error turning on Twitter webhook: %v", err)
@@ -103,7 +103,7 @@ func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds i
 		Tag:             "Main Twitter",
 		Value:           twitterWebhookRuleset,
 		IntervalSeconds: intervalSeconds,
-		IsEffect:        isEffect, // 0 to turn off
+		IsEffect:        isEffect,
 	})
 	if err != nil {
 		log.Printf("Error updating Twitter webhook polling frequency: %v", err)
