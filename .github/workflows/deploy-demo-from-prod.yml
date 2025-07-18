@@ -59,6 +59,8 @@ on:
         required: true
       GROK_API_KEY:
         required: true
+      TWITTER_API_IO_KEY:
+        required: true
       X_API_KEY:
         required: true
       X_API_SECRET:
@@ -119,6 +121,7 @@ jobs:
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}

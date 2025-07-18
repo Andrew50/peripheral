@@ -89,6 +89,11 @@ spec:
                 secretKeyRef:
                   name: grok-secret
                   key: GROK_API_KEY
+            - name: TWITTER_API_IO_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: twitter-secret
+                  key: TWITTER_API_IO_KEY
             - name: X_API_KEY
               valueFrom:
                 secretKeyRef:

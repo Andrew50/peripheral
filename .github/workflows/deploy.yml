@@ -66,6 +66,8 @@ on:
         required: true
       GROK_API_KEY:
         required: true
+      TWITTER_API_IO_KEY:
+        required: true
       X_API_KEY:
         required: true
       X_API_SECRET:
@@ -109,6 +111,7 @@ jobs:
       TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
@@ -180,6 +183,7 @@ jobs:
           echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_API_SECRET: [$(if [ -n "$X_API_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_ACCESS_TOKEN: [$(if [ -n "$X_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
