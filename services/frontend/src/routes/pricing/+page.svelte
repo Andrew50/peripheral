@@ -1079,7 +1079,7 @@
 
 	/* Conservative current plan highlighting - subtle visual indicators */
 	.plan-card.current-plan {
-		border-color: var(--landing-success);
+		border-color: #f5f9ff;
 		background: rgba(34, 197, 94, 0.02);
 		position: relative;
 	}
