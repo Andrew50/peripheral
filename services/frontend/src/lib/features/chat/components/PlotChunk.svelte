@@ -345,12 +345,41 @@
 						}
 						return String(value);
 					});
-					trace.textposition = 'outside';
+					// Smart positioning: above for local maxima, below for local minima
+					trace.textposition = trace.y.map((value: number, index: number) => {
+						const prevValue = index > 0 ? trace.y[index - 1] : null;
+						const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+						
+						// Determine if this is a local min or max
+						let isLocalMax = false;
+						let isLocalMin = false;
+						
+						if (prevValue !== null && nextValue !== null) {
+							// Middle points: compare with both neighbors
+							isLocalMax = value >= prevValue && value >= nextValue;
+							isLocalMin = value <= prevValue && value <= nextValue;
+						} else if (prevValue !== null) {
+							// Last point: compare with previous
+							isLocalMax = value >= prevValue;
+							isLocalMin = value <= prevValue;
+						} else if (nextValue !== null) {
+							// First point: compare with next
+							isLocalMax = value >= nextValue;
+							isLocalMin = value <= nextValue;
+						}
+						
+						// Position text based on local extrema
+						if (isLocalMin && !isLocalMax) {
+							return 'bottom center'; // Text below for minima
+						} else {
+							return 'top center'; // Text above for maxima and neutral points
+						}
+					});
+					
 					trace.textfont = {
 						color: '#ffffff',
 						size: 12,
 						family: 'Inter, system-ui, sans-serif',
-						weight: 'bold'
 					};
 					
 					// Update mode to include text display
