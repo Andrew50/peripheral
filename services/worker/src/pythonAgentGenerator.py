@@ -282,6 +282,10 @@ class PythonAgentGenerator:
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
 
+        **CRITICAL**: 
+        - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool. The only data you have access to is the functions described above!!
+        - If you do not have access to the data, include a print saying that you do not have access to whatever data the agent asked for and that it should websearch for the data.
+        - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         RETURN FORMAT:
         - Returns are optional
         - Information that would be useful to the user should be returned in the prints, persistent data can be returned. 
@@ -293,7 +297,7 @@ class PythonAgentGenerator:
 
 
 
-    async def start_general_python_agent(self, user_id: int, prompt: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+    async def start_general_python_agent(self, user_id: int, prompt: str, data: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
         # Generate unique execution_id for this run - accessible throughout method
         execution_serial = int(time.time())  # Seconds timestamp
         execution_id = f"{user_id}_{execution_serial}"
@@ -302,7 +306,7 @@ class PythonAgentGenerator:
             logger.info(f"Starting Python agent execution {execution_id}")
             
             systemInstruction = self._getGeneralPythonSystemInstruction(prompt)
-            userPrompt = f"""{prompt}"""
+            userPrompt = f"""{prompt}""" + f"\nData: {data}"
             
             last_error = None
             pythonCode = None
