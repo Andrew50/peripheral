@@ -8,7 +8,6 @@
 	import { writable } from 'svelte/store';
 
 
-	import { newPriceAlert } from '$lib/features/alerts/interface';
 	
 	export let instance: Instance;
 	export let handleCalendar: () => void;
