@@ -125,8 +125,7 @@
 	.landing-footer {
 		position: relative;
 		z-index: 10;
-		background: var(--color-dark);
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
+		background: #000000;
 		width: 100vw;
 		left: 50%;
 		transform: translateX(-50%);
@@ -199,7 +198,7 @@
 
 	.footer-bottom {
 		text-align: left;
-		color: var(--color-primary);
+		color: rgba(255, 255, 255, 0.3);
 		font-size: 0.9rem;
 		display: flex;
 		flex-direction: column;

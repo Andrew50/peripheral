@@ -813,9 +813,8 @@
 									>
 										{#if busyKey === 'reactivate'}
 											<div class="landing-loader"></div>
-										{:else}
-											Reactivate Subscription
 										{/if}
+										Reactivate Subscription
 									</button>
 									{#if $subscriptionStatus.currentPeriodEnd}
 										<p class="canceling-note">
@@ -828,9 +827,8 @@
 									<button class="subscribe-button active-subscription" on:click={handleCancelSubscription} disabled>
 										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
-										{:else}
-											Active Subscription
 										{/if}
+										Active Subscription
 									</button>
 								{:else if plan.product_key?.toLowerCase() === 'free'}
 									{#if !$subscriptionStatus.isActive && isAuthenticatedFn()}
@@ -850,7 +848,8 @@
 									>
 										{#if busyKey === (plan.product_key?.toLowerCase() || '')}
 											<div class="landing-loader"></div>
-										{:else if isUpgradeEligible(plan)}
+										{/if}
+										{#if isUpgradeEligible(plan)}
 											Upgrade
 										{:else}
 											Subscribe
@@ -898,7 +897,8 @@
 								>
 									{#if busyKey === product.product_key}
 										<div class="landing-loader"></div>
-									{:else if !$subscriptionStatus.isActive}
+									{/if}
+									{#if !$subscriptionStatus.isActive}
 										Subscription Required
 									{:else}
 										Purchase {product.credit_amount} Queries
@@ -1459,6 +1459,14 @@
 		justify-content: center;
 		text-align: center;
 		white-space: nowrap;
+		gap: 0.5rem;
+		transition: all 0.2s ease;
+	}
+
+	.subscribe-button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
+		transform: translateY(-1px);
 	}
 
 	.subscribe-button:disabled {
@@ -1483,8 +1491,9 @@
 
 	/* Greyed-out styling for disabled/current subscribe buttons (Free plan, downgrade) */
 	.subscribe-button.current {
-		background: rgba(255, 255, 255, 0.08);
-		color: rgba(255, 255, 255, 0.8);
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.7);
+		border-color: rgba(255, 255, 255, 0.15);
 		cursor: not-allowed;
 	}
 
