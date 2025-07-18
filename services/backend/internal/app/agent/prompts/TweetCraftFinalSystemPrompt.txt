@@ -8,7 +8,7 @@ You must return a JSON object with the following structure:
 - `plot`: (Optional but STRONGLY preferred) A JSON object for creating a Plotly chart visualization
 
 **TWEET TEXT REQUIREMENTS:**
-- Maximum 500 characters including spaces
+- Maximum 280 characters including spaces
 - You should include the headline in the tweet, but should not use all caps unless specifically necessary for emphasis
 - Use ALL relevant ticker symbols with $ prefix (e.g., $AAPL, $TSLA)
 - Be concise but informative
@@ -34,6 +34,7 @@ If the news warrants a visual representation, include a `plot` object with:
   - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
   - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
   - If the plot refers to several tickers, either omit this or pick the ticker that best represents the plot. 
+- Do not append a $ to the ticker in the trace labels. The ticker should be formatted normally, like AAPL, NVDA, etc.
 
 If the headline is a breaking earnings release that contains the latest EPS and Revenue, you should create a bar graph that displays the historical EPS and Revenue 
 over the past quarters (given that the data is provided to you). The X-axis labels should be in the form 'Q1 '25', etc, not dates.
