@@ -6,12 +6,6 @@
 	export let showTimelineDropdown: boolean = false;
 	export let onToggleDropdown: (() => void) | undefined = undefined;
 
-	// Only show non-empty messages
-	$: filteredTimeline = timeline.filter((event) => {
-		const message = event.message?.toLowerCase() || '';
-		return message.trim().length > 0;
-	});
-	
 	// Show dropdown toggle if there are timeline items to show
 	$: showDropdownToggle = timeline.length > 1 && onToggleDropdown;
 	
@@ -30,9 +24,13 @@
 		typeof currentStatus === 'string' && 
 		currentStatus.toLowerCase().includes('backtest');
 
+	// Always show recent timeline items (even when dropdown is collapsed)
+	$: lastTimelineItem = timeline.slice(-1); // Show last item
+	$: allTimelineItems = showTimelineDropdown ? timeline : lastTimelineItem;
+
 </script>
 
-{#if shouldShowStatusHeader || filteredTimeline.length > 0}
+{#if timeline.length > 1}
 	<div class="thinking-trace">
 		{#if shouldShowStatusHeader}
 			<div class="status-header">
@@ -73,17 +71,23 @@
 			</div>
 		{/if}
 		
-		{#if showTimelineDropdown && filteredTimeline.length > 0}
+		{#if allTimelineItems.length > 0}
 			<div class="timeline-items">
-				{#each filteredTimeline as event, index}
+				{#each allTimelineItems as event, index}
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
 							{#if event.type === 'webSearchQuery' && event.data?.query}
 								<div class="timeline-websearch">
 									<div class="web-search-chip glass glass--pill glass--responsive">
-										<svg viewBox="0 0 24 24" width="14" height="14" class="search-icon">
-											<path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/>
+										<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+											<path
+												d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											/>
 										</svg>
 										<span class="search-query">{event.data.query}</span>
 									</div>
@@ -96,25 +100,41 @@
 									</div>
 									<div class="citations-container">
 										{#each event.data.citations as citation, index}
-											<div class="citation-item" on:click={() => window.open(citation.url, '_blank')} on:keydown={(e) => e.key === 'Enter' && window.open(citation.url, '_blank')} role="button" tabindex="0">
+											<div class="citation-item" 
+												on:click={() => {
+													if (citation.url) {
+														window.open(citation.url, '_blank');
+													}
+												}} 
+												on:keydown={(e) => {
+													if (e.key === 'Enter' && citation.url) {
+														window.open(citation.url, '_blank');
+													}
+												}} 
+												role="button" 
+												tabindex="0">
 												{#if citation.urlIcon}
 													<img 
 														src={citation.urlIcon} 
 														alt="Site icon" 
 														class="citation-favicon"
-														on:error={() => {}}
+														on:error={(e) => {
+															if (e.target && 'style' in e.target) {
+																e.target.style.display = 'none';
+															}
+														}}
 													/>
 												{:else}
 													<div class="citation-favicon-placeholder"></div>
 												{/if}
-												<span class="citation-title">{citation.title}</span>
-												<span class="citation-url">{citation.url.replace(/^https?:\/\//, '').split('/')[0].split('.').slice(0, -1).join('.')}</span>
+												<span class="citation-title">{citation.title || 'Untitled'}</span>
+												<span class="citation-url">{citation.url ? citation.url.replace(/^https?:\/\//, '').split('/')[0].split('.').slice(0, -1).join('.') : 'Unknown URL'}</span>
 											</div>
 										{/each}
 									</div>
 								</div>
 							{:else}
-							 <span> {event.message} </span>						
+							 <span> {event.headline} </span>						
 							{/if}
 						</div>
 					</div>
