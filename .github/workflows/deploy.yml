@@ -200,7 +200,7 @@ jobs:
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          SERVICES="db cache backend worker frontend"
+          SERVICES="cache backend worker frontend"
           echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
           echo "Using services: ${SERVICES}"
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
@@ -224,6 +224,20 @@ jobs:
 
       - name: Update Kubernetes Secrets
         run: config/deploy/scripts/setup-configs.sh
+
+      - name: Copy Migrations to Database Pod
+        run: |
+          POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -c db
+          kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -c db
+
+      # - name: Run Migrations
+      #   run: |
+      #     POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
+      #     kubectl exec $POD_NAME -c db -- bash -c "
+      #       chmod +x /tmp/migrate.sh
+      #       MIGRATIONS_DIR=/tmp/migrations /tmp/migrate.sh
+      #     "
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh

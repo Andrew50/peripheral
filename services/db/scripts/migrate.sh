@@ -2,7 +2,7 @@
 set -eo pipefail
 
 DB_NAME="${1:-postgres}"
-MIGRATIONS_DIR="/migrations"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
 
 # ─────────────────────────  helpers  ──────────────────────────
 log()       { printf '[%(%F %T)T] MIGRATION: %s\n' -1 "$1"; }

@@ -541,7 +541,7 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
+			Function:      wrapWithContext(helpers.AgentGetTickerDailySnapshot),
 			StatusMessage: "Getting market data...",
 		},
 		"getLastPrice": {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"backend/internal/data"
@@ -82,11 +83,6 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 		return nil, fmt.Errorf("invalid splash screen view request: %w", err)
 	}
 
-	// Basic validation
-	if req.Path == "" {
-		return nil, fmt.Errorf("path is required")
-	}
-
 	// Get or fetch geolocation data for the cloudflare IPv6
 	geoData, err := getOrFetchGeoLocation(conn, req.CloudflareIPv6)
 	if err != nil {
@@ -101,6 +97,11 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 		region = &geoData.Region
 		country = &geoData.Country
 		org = &geoData.Org
+	}
+	if filterOutWebsiteBots(req, *org) {
+		return map[string]interface{}{
+			"success": true,
+		}, nil
 	}
 
 	// Insert and check for recent duplicates in one query
@@ -127,9 +128,6 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 	// Only send Telegram message if this wasn't a recent duplicate
 	go func() {
 		if !wasRecentDuplicate {
-			if req.UserAgent == "Twitterbot/1.0" {
-				return
-			}
 			var path string
 			if req.Path == "/" {
 				path = "splash"
@@ -147,4 +145,15 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 	return map[string]interface{}{
 		"success": true,
 	}, nil
+}
+func filterOutWebsiteBots(req LogSplashScreenViewArgs, org string) bool {
+	if strings.Contains(req.UserAgent, "Twitterbot") {
+		return true
+	}
+	if strings.Contains(org, "Google LLC") {
+		return true
+	} else if strings.Contains(org, "Microsoft Corporation") {
+		return true
+	}
+	return false
 }

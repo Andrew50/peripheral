@@ -154,8 +154,8 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 			prompt += ""
 		}
 		if time.Now().In(nyLoc).Hour() > 16 {
-			afterHoursChange := snapshotRes.LastTradePrice - snapshotRes.TodayClose
-			afterHoursChangePercent := math.Round((afterHoursChange/snapshotRes.TodayClose)*100*100) / 100
+			afterHoursChange := snapshotRes.LastTradePrice - snapshotRes.Close
+			afterHoursChangePercent := math.Round((afterHoursChange/snapshotRes.Close)*100*100) / 100
 			prompt += fmt.Sprintf("After hours: %s%.3f (%s%.3f%%)",
 				map[bool]string{true: "+", false: ""}[afterHoursChange > 0],
 				afterHoursChange,

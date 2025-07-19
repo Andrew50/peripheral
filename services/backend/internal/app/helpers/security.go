@@ -4,6 +4,7 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/data/postgres"
+	"backend/internal/services/socket"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/polygon-io/client-go/rest/models"
 )
 
 const contextWithTimeout = 5 * time.Second
@@ -996,6 +998,50 @@ func GetSecurityIDFromTickerTimestamp(conn *data.Conn, rawArgs json.RawMessage) 
 type GetTickerDailySnapshotArgs struct {
 	Ticker string `json:"ticker"`
 }
+
+type AgentThinkingTraceBarData struct {
+	Timestamp int64   `json:"timestamp"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+}
+
+func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := GetTickerDailySnapshot(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		results := res.(GetTickerDailySnapshotResults)
+		agg, err := polygon.GetAggsData(conn.Polygon, results.Ticker, 1, "day", models.Millis(time.Now()), models.Millis(time.Now()), 100, "asc", true)
+		if err != nil {
+			fmt.Printf("Error getting agg data: %v\n", err)
+			return
+		}
+		var barData []AgentThinkingTraceBarData
+		for agg.Next() {
+			bar := agg.Item()
+			barData = append(barData, AgentThinkingTraceBarData{
+				Timestamp: int64(time.Time(bar.Timestamp).Unix()),
+				Open:      bar.Open,
+				High:      bar.High,
+				Low:       bar.Low,
+				Close:     bar.Close,
+				Volume:    bar.Volume,
+			})
+		}
+		data := map[string]interface{}{
+			"ticker": results.Ticker,
+			"data":   barData,
+		}
+		socket.SendAgentStatusUpdate(userID, "getDailySnapshot", data)
+	}()
+
+	return res, nil
+}
+
 type GetTickerDailySnapshotResults struct {
 	Ticker             string  `json:"ticker,omitempty"`
 	LastBid            float64 `json:"lastBid,omitempty"`
@@ -1006,10 +1052,10 @@ type GetTickerDailySnapshotResults struct {
 	Timestamp          int64   `json:"timestamp"`
 	Volume             float64 `json:"volume"`
 	Vwap               float64 `json:"vwap"`
-	TodayOpen          float64 `json:"todayOpen"`
-	TodayHigh          float64 `json:"todayHigh"`
-	TodayLow           float64 `json:"todayLow"`
-	TodayClose         float64 `json:"todayClose"`
+	Open               float64 `json:"open"`
+	High               float64 `json:"high"`
+	Low                float64 `json:"low"`
+	Close              float64 `json:"close"`
 	PreviousClose      float64 `json:"previousClose"`
 }
 
@@ -1033,10 +1079,10 @@ func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (in
 	results.TodayChange = float64(int((currPrice-lastClose)*1000)) / 1000
 	results.TodayChangePercent = float64(int(((currPrice-lastClose)/lastClose)*100*1000)) / 1000
 	results.Volume = snapshot.Day.Volume
-	results.TodayOpen = snapshot.Day.Open
-	results.TodayHigh = snapshot.Day.High
-	results.TodayLow = snapshot.Day.Low
-	results.TodayClose = snapshot.Day.Close
+	results.Open = snapshot.Day.Open
+	results.High = snapshot.Day.High
+	results.Low = snapshot.Day.Low
+	results.Close = snapshot.Day.Close
 	results.PreviousClose = lastClose
 	return results, nil
 }
@@ -1060,10 +1106,10 @@ func GetAllTickerSnapshots(conn *data.Conn, _ int, _ json.RawMessage) (interface
 		ticker.Timestamp = int64(time.Time(snapshot.Updated).Unix())
 		ticker.Volume = snapshot.Day.Volume
 		ticker.Vwap = snapshot.Day.VolumeWeightedAverage
-		ticker.TodayOpen = snapshot.Day.Open
-		ticker.TodayHigh = snapshot.Day.High
-		ticker.TodayLow = snapshot.Day.Low
-		ticker.TodayClose = snapshot.Day.Close
+		ticker.Open = snapshot.Day.Open
+		ticker.High = snapshot.Day.High
+		ticker.Low = snapshot.Day.Low
+		ticker.Close = snapshot.Day.Close
 		results.Tickers = append(results.Tickers, ticker)
 	}
 	return results, nil
