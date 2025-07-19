@@ -125,21 +125,25 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 	}
 
 	// Only send Telegram message if this wasn't a recent duplicate
-	if !wasRecentDuplicate {
-		var path string
-		if req.Path == "/" {
-			path = "splash"
-		} else if req.Path == "/pricing" {
-			path = "pricing"
-		} else {
-			path = req.Path
+	go func() {
+		if !wasRecentDuplicate {
+			if req.UserAgent == "Twitterbot/1.0" {
+				return
+			}
+			var path string
+			if req.Path == "/" {
+				path = "splash"
+			} else if req.Path == "/pricing" {
+				path = "pricing"
+			} else {
+				path = req.Path
+			}
+			err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, path, *org))
+			if err != nil {
+				log.Printf("Failed to send Telegram message: %v", err)
+			}
 		}
-		err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, path, *org))
-		if err != nil {
-			log.Printf("Failed to send Telegram message: %v", err)
-		}
-	}
-
+	}()
 	return map[string]interface{}{
 		"success": true,
 	}, nil
