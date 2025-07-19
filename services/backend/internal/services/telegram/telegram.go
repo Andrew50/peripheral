@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -13,14 +12,15 @@ import (
 var (
 	telegramBot *telebot.Bot
 	chatID      int64
-	isDevEnv    bool
+	isProdEnv   bool
 )
 
 func InitTelegramUserNotificationBot() error {
 	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
-	if env == "" || env == "dev" || env == "development" {
-		isDevEnv = true
-		log.Println("InitTelegramBot: development environment detected, skipping Telegram bot initialisation")
+	if env == "demo" || env == "prod" || env == "production" {
+		isProdEnv = true
+	} else {
+		isProdEnv = false
 		return nil
 	}
 	botToken := "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
@@ -39,7 +39,7 @@ func InitTelegramUserNotificationBot() error {
 }
 
 func SendTelegramUserUsageMessage(msg string) error {
-	if isDevEnv {
+	if !isProdEnv {
 		return nil
 	}
 	if telegramBot == nil {
