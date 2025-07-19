@@ -40,5 +40,5 @@ spec:
               cpu: "500m"
           imagePullPolicy: IfNotPresent
       restartPolicy: Never
-  activeDeadlineSeconds: 7200 
+  activeDeadlineSeconds: 300 
   ttlSecondsAfterFinished: 300
