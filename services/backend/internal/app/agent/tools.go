@@ -133,7 +133,7 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.GetWatchlistItems),
+			Function:      wrapWithContext(watchlist.AgentGetWatchlistItems),
 			StatusMessage: "Getting watchlist items...",
 		},
 		"deleteWatchlistItem": {
@@ -154,28 +154,23 @@ var (
 			Function:      wrapWithContext(watchlist.DeleteWatchlistItem),
 			StatusMessage: "Removing item from watchlist...",
 		},
-		"newWatchlistItem": {
+		"addSecurityToWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newWatchlistItem",
+				Name:        "addSecurityToWatchlist",
 				Description: "Add a security to a watchlist.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to add the security to.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to add to the watchlist.",
-						},
+						"watchlistId": {Type: genai.TypeInteger, Description: "The ID of the watchlist to add the security to."},
+						"tickers":     {Type: genai.TypeArray, Description: "The tickers to add to the watchlist."},
 					},
-					Required: []string{"watchlistId", "securityId"},
+					Required: []string{"watchlistId", "tickers"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.NewWatchlistItem),
-			StatusMessage: "Adding item to watchlist...",
+			Function:      wrapWithContext(watchlist.AgentAddTickersToWatchlist),
+			StatusMessage: "Adding security to watchlist...",
 		},
+
 		"deleteWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlist",
