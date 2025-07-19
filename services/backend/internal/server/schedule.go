@@ -212,11 +212,11 @@ var (
 		{
 			Name:           "UpdateSecurityTables",
 			Function:       simpleSecuritiesUpdateJob,
-			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - update ecurities table with currently listed tickers
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     100,
+			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
 		{
@@ -226,9 +226,9 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     2,
+			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
-		},
+		}, // renable this before PR
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
@@ -258,7 +258,7 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 		},*/
-		{
+		/*{
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
@@ -267,7 +267,7 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     30 * time.Second,
-		},
+		},*/
 		{
 			Name:           "UpdateSecurityDetails",
 			Function:       securityDetailUpdateJob,

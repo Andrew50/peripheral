@@ -1,7 +1,24 @@
 /* =============================================================
    1.  LIVE SNAPSHOT TABLE  (no hypertable, no compression)
    ============================================================= */
-DROP TABLE IF EXISTS screener;
+-- Try to drop as materialized view first, then as table (wrapped in exception handling)
+DO $$
+BEGIN
+    DROP MATERIALIZED VIEW IF EXISTS screener;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore any errors from dropping materialized view
+        NULL;
+END $$;
+
+DO $$
+BEGIN
+    DROP TABLE IF EXISTS screener;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore any errors from dropping table
+        NULL;
+END $$;
 CREATE TABLE screener (
     ticker                      TEXT        PRIMARY KEY,      -- one row per ticker
     calc_time                   TIMESTAMPTZ NOT NULL, -- last update time

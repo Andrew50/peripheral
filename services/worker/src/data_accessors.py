@@ -623,6 +623,9 @@ class DataAccessorProvider:
                 elif col == "timestamp":
                     # Convert timestamptz to integer seconds since epoch for backward compatibility
                     select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
+                elif col in ["open", "high", "low", "close"]:
+                    # Divide price columns by 1000.0 to convert from integer storage to decimal
+                    select_columns.append(f"o.{col} / 1000.0 AS {col}")
                 else:
                     select_columns.append(f"o.{col}")
             

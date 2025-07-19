@@ -16,12 +16,25 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+// isFirstFullLoad returns true if this is the first time loading OHLCV data (determined via freshness check)
+func isFirstFullLoad(conn *data.Conn) bool {
+	_, err := CheckOHLCVDataFreshness(conn)
+	if err != nil {
+		// missing update state implies first load
+		return true
+	}
+	// data exists (fresh or stale), not first load
+	return false
+}
+
 // UpdateAllOHLCV streams Polygon flat files for each timeframe directly into
 // TimescaleDB without any in-memory transformation.
 func UpdateAllOHLCV(conn *data.Conn) error {
 	log.Println("🔄 Starting OHLCV update …")
 	start := time.Now()
 
+	// Determine if this is the first full load
+	isFirst := isFirstFullLoad(conn)
 	cfg := loadS3Config()
 	s3c, err := newS3Client(cfg)
 	if err != nil {
@@ -34,7 +47,7 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 		if err != nil {
 			return err
 		}
-		if err := runTimeframe(ctx, conn.DB, s3c, cfg.Bucket, fromDate, tf); err != nil {
+		if err := runTimeframe(ctx, conn.DB, s3c, cfg.Bucket, fromDate, tf, isFirst); err != nil {
 			return err
 		}
 	}
@@ -44,10 +57,10 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 }
 
 // runTimeframe orchestrates pre-load setup → pipeline → post-load cleanup for a single timeframe.
-func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket string, fromDate time.Time, tf timeframe) error {
+func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket string, fromDate time.Time, tf timeframe, isFirstRun bool) error {
 	log.Printf("🗂 Processing %s …", tf.name)
 
-	if err := PreLoadSetup(ctx, db, tf.tableName); err != nil {
+	if err := PreLoadSetup(ctx, db, tf.tableName, isFirstRun); err != nil {
 		return err
 	}
 	defer func() {
@@ -98,7 +111,7 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 // Maintenance helpers (unchanged from original, but local to orchestrator)
 // -----------------------------------------------------------------------------
 
-func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
+func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string, isFirstRun bool) error {
 	log.Printf("🔧 Pre-load setup for %s", tbl)
 
 	/*
@@ -107,7 +120,8 @@ func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 		}
 	*/
 
-	dropSQL := fmt.Sprintf(`DO $$
+	if isFirstRun {
+		dropSQL := fmt.Sprintf(`DO $$
 DECLARE idx record;
 BEGIN
   FOR idx IN
@@ -124,8 +138,9 @@ BEGIN
     EXECUTE format('DROP INDEX IF EXISTS %%I', idx.indexname);
   END LOOP;
 END$$;`, tbl)
-	if _, err := data.ExecWithRetry(ctx, db, dropSQL); err != nil {
-		return fmt.Errorf("drop indexes: %w", err)
+		if _, err := data.ExecWithRetry(ctx, db, dropSQL); err != nil {
+			return fmt.Errorf("drop indexes: %w", err)
+		}
 	}
 
 	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
@@ -173,13 +188,14 @@ END$$;`, tbl, tbl)
 	}
 
 	// Recreate helpful covering indexes on source tables
-	indexSQLs := []string{
-		`CREATE INDEX IF NOT EXISTS ohlcv_1m_ticker_ts_desc_inc
-        ON ohlcv_1m (ticker, "timestamp" DESC)
-        INCLUDE (open, high, low, close, volume)`,
-		`CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
-        ON ohlcv_1d (ticker, "timestamp" DESC)
-        INCLUDE (open, high, low, close, volume)`,
+	var indexSQLs []string
+	switch tbl {
+	case "ohlcv_1m":
+		indexSQLs = Ohlcv1mIndexSQLs()
+	case "ohlcv_1d":
+		indexSQLs = Ohlcv1dIndexSQLs()
+	default:
+		indexSQLs = nil
 	}
 	for _, q := range indexSQLs {
 		if _, err := data.ExecWithRetry(ctx, db, q); err != nil {
@@ -237,7 +253,7 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// First run – start from earliest date.
-			return time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC), nil
+			return time.Date(2003, 1, 1, 0, 0, 0, 0, time.UTC), nil
 		}
 		// Any other error should propagate so the updater fails fast.
 		return time.Time{}, err

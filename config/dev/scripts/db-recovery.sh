@@ -56,14 +56,14 @@ echo ""
 echo "Step 3: Clearing corrupted database files..."
 kubectl exec db-recovery-pod -- bash -c "
     echo 'Listing current contents of pgdata:'
-    ls -la /home/postgres/pgdata/ || true
+    ls -la \$PGDATA/ || true
     echo ''
     echo 'Removing corrupted data directory contents...'
-    rm -rf /home/postgres/pgdata/data || true
-    rm -rf /home/postgres/pgdata/* || true
+    rm -rf \$PGDATA/* || true
+    rm -rf \$PGDATA/.* 2>/dev/null || true
     echo 'Data directory cleared.'
     echo 'Contents after cleanup:'
-    ls -la /home/postgres/pgdata/ || true
+    ls -la \$PGDATA/ || true
 "
 
 echo ""

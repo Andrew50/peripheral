@@ -1,233 +1,69 @@
 BEGIN;
 
--- SQL script to create all required continuous aggregates and the static_refs table as per the goal
--- Note: For rsi_14 in cagg_14_day, RSI calculation is not directly possible in a simple continuous aggregate due to the need for window functions or series processing. It is set to NULL here; compute it in fn_refresh_static_refs if needed.
--- Similarly, betas are set to NULL in the function; implement computation if required.
--- All prices are divided by 1000.0 assuming the raw data is in mills or similar.
+-- Insert schema version
+INSERT INTO schema_versions (version, description)
+VALUES (
+    73,
+    'Fix duplicate ticker issue in refresh functions'
+) ON CONFLICT (version) DO NOTHING;
 
--- cagg_1440_minute for pre-market and extended-hours metrics
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_1440_minute -- might be able to be optimized, might not need 1440 minutes
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('1440 minutes', "timestamp", 'America/New_York') AS bucket,
-    ticker,
+-- Migration: 073_fix_duplicate_ticker_issue
+-- Description: Fix "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+-- by ensuring DISTINCT ticker selection in refresh functions
 
-    /* ─────── Pre‑market window ─────── */
-    first(open  / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_open,
-    last (close / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_close,
-    max  (high  / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_high,
-    min  (low   / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_low,
-    sum  (volume)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_volume,
-    sum  (volume * close / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_dollar_volume,
+-- Function to refresh static_refs_1m (fixed to handle duplicate tickers)
+CREATE OR REPLACE FUNCTION refresh_static_refs_1m()
+RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_now_utc timestamptz := now();
+BEGIN
+    INSERT INTO static_refs_1m (
+        ticker, price_1m, price_15m, price_1h, price_4h,
+        updated_at
+    )
+    SELECT
+        ticker_data.ticker,
+        p1.close,
+        p15.close,
+        p60.close,
+        p240.close,
+        v_now_utc
+    FROM (SELECT DISTINCT ticker FROM securities WHERE active = TRUE AND maxDate IS NULL) ticker_data
+    LEFT JOIN LATERAL (
+        SELECT close / 1000.0 AS close
+        FROM ohlcv_1m
+        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 minute'
+        ORDER BY "timestamp" DESC LIMIT 1
+    ) p1 ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT close / 1000.0 AS close
+        FROM ohlcv_1m
+        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '15 minutes'
+        ORDER BY "timestamp" DESC LIMIT 1
+    ) p15 ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT close / 1000.0 AS close
+        FROM ohlcv_1m
+        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 hour'
+        ORDER BY "timestamp" DESC LIMIT 1
+    ) p60 ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT close / 1000.0 AS close
+        FROM ohlcv_1m
+        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '4 hours'
+        ORDER BY "timestamp" DESC LIMIT 1
+    ) p240 ON TRUE
+    ON CONFLICT (ticker) DO UPDATE SET
+        price_1m = EXCLUDED.price_1m,
+        price_15m = EXCLUDED.price_15m,
+        price_1h = EXCLUDED.price_1h,
+        price_4h = EXCLUDED.price_4h,
+        updated_at = EXCLUDED.updated_at;
+END;
+$$;
 
-    /* ─────── Extended‑hours window ─────── */
-    first(open  / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_open,
-    last (close / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_close,
-    max  (high  / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_high,
-    min  (low   / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_low,
-    sum  (volume)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_volume,
-    sum  (volume * close / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_dollar_volume
-FROM ohlcv_1m
-GROUP BY bucket, ticker         -- bucket **must** stay in GROUP BY
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_1440_minute',
-    drop_after => INTERVAL '1440 minutes',
-    schedule_interval => INTERVAL '60 seconds');
-
--- cagg_15_minute for 15-minute metrics
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_15_minute
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('15 minutes', "timestamp") AS bucket,
-    ticker,
-    last(close / 1000.0, "timestamp") AS "close",
-    max(high / 1000.0)  / min(low / 1000.0) * 100 - 100 AS "range_15m_pct"
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_15_minute',
-    drop_after => INTERVAL '15 minutes',
-    schedule_interval => INTERVAL '5 seconds');
-
--- cagg_60_minute for 1-hour metrics
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_60_minute
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('60 minutes', "timestamp") AS bucket,
-    ticker,
-    last(close / 1000.0, "timestamp") AS "close",
-    max(high / 1000.0) / min(low / 1000.0) * 100 - 100 AS "range_1h_pct"
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_60_minute',
-    drop_after => INTERVAL '60 minutes',
-    schedule_interval => INTERVAL '15 minutes');
-
--- cagg_4_hour for 4-hour metrics
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_4_hour
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('4 hours', "timestamp") AS bucket,
-    ticker,
-    last(close / 1000.0, "timestamp") AS "close"
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_4_hour',
-    drop_after => INTERVAL '4 hours',
-    schedule_interval => INTERVAL '1 hour');
-
--- cagg_7_day for 1-week volatility
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_7_day
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('7 days', "timestamp") AS bucket,
-    ticker,
-    stddev_samp(close / 1000.0) AS volatility_1w
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_7_day',
-    drop_after => INTERVAL '7 days',
-    schedule_interval => INTERVAL '42 hours');
-
--- cagg_30_day for 1-month volatility
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_30_day
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('30 days', "timestamp") AS bucket,
-    ticker,
-    stddev_samp(close / 1000.0) AS volatility_1m
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_30_day',
-    drop_after => INTERVAL '30 days',
-    schedule_interval => INTERVAL '180 hours');
-
--- cagg_50_day for SMA-50
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_50_day
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('50 days', "timestamp") AS bucket,
-    ticker,
-    avg(close / 1000.0) AS dma_50
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_50_day',
-    drop_after => INTERVAL '50 days',
-    schedule_interval => INTERVAL '300 hours');
-
--- cagg_200_day for SMA-200
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_200_day
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('200 days', "timestamp") AS bucket,
-    ticker,
-    avg(close / 1000.0) AS dma_200
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_200_day',
-    drop_after => INTERVAL '200 days',
-    schedule_interval => INTERVAL '1200 hours');
-
--- cagg_14_day for RSI-14 (note: actual RSI computation requires series data; placeholder here)
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_day
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('14 days', "timestamp") AS bucket,
-    ticker,
-    avg(volume) AS avg_volume_14d,
-    avg(volume * close / 1000.0) AS avg_dollar_volume_14d,
-    NULL::numeric AS rsi_14  -- RSI requires windowed calculation; compute in function instead
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_14_day',
-    drop_after => INTERVAL '14 days',
-    schedule_interval => INTERVAL '84 hours');
-
--- cagg_14_minute for 14-period volume averages
-CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_minute
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-SELECT
-    time_bucket('14 minutes', "timestamp") AS bucket,
-    ticker,
-    avg(volume) AS avg_volume_1m_14,
-    avg(volume * close / 1000.0) AS avg_dollar_volume_1m_14
-FROM ohlcv_1m
-GROUP BY bucket, ticker
-WITH NO DATA;
-
-SELECT add_retention_policy('cagg_14_minute',
-    drop_after => INTERVAL '14 minutes',
-    schedule_interval => INTERVAL '210 seconds');
-
--- Static refs table
-CREATE TABLE IF NOT EXISTS static_refs_daily (
-    ticker text PRIMARY KEY,
-    price_prev_close numeric,
-    price_1d numeric,
-    price_1w numeric,
-    price_1m numeric,
-    price_3m numeric,
-    price_6m numeric,
-    price_1y numeric,
-    price_5y numeric,
-    price_10y numeric,
-    price_ytd numeric,
-    price_all numeric, -- open of first day of stock
-    price_52w_low numeric,
-    price_52w_high numeric,
-    updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS static_refs_1m (
-    ticker text PRIMARY KEY,
-    price_1m numeric,
-    price_15m numeric,
-    price_1h numeric,
-    price_4h numeric,
-    updated_at timestamptz DEFAULT now()
-);
-
--- Function to refresh static_refs
+-- Function to refresh static_refs (fixed to handle duplicate tickers)
 CREATE OR REPLACE FUNCTION refresh_static_refs()
 RETURNS void
 LANGUAGE plpgsql AS $$
@@ -346,114 +182,7 @@ BEGIN
 END;
 $$;
 
--- Function to refresh static_refs_1m
-CREATE OR REPLACE FUNCTION refresh_static_refs_1m()
-RETURNS void
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_now_utc timestamptz := now();
-BEGIN
-    INSERT INTO static_refs_1m (
-        ticker, price_1m, price_15m, price_1h, price_4h,
-        updated_at
-    )
-    SELECT
-        ticker_data.ticker,
-        p1.close,
-        p15.close,
-        p60.close,
-        p240.close,
-        v_now_utc
-    FROM (SELECT DISTINCT ticker FROM securities WHERE active = TRUE AND maxDate IS NULL) ticker_data
-    LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
-        FROM ohlcv_1m
-        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 minute'
-        ORDER BY "timestamp" DESC LIMIT 1
-    ) p1 ON TRUE
-    LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
-        FROM ohlcv_1m
-        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '15 minutes'
-        ORDER BY "timestamp" DESC LIMIT 1
-    ) p15 ON TRUE
-    LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
-        FROM ohlcv_1m
-        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 hour'
-        ORDER BY "timestamp" DESC LIMIT 1
-    ) p60 ON TRUE
-    LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
-        FROM ohlcv_1m
-        WHERE ticker = ticker_data.ticker AND "timestamp" <= v_now_utc - INTERVAL '4 hours'
-        ORDER BY "timestamp" DESC LIMIT 1
-    ) p240 ON TRUE
-    ON CONFLICT (ticker) DO UPDATE SET
-        price_1m = EXCLUDED.price_1m,
-        price_15m = EXCLUDED.price_15m,
-        price_1h = EXCLUDED.price_1h,
-        price_4h = EXCLUDED.price_4h,
-        updated_at = EXCLUDED.updated_at;
-END;
-$$;
-
--- Initial refresh of continuous aggregates (only most recent bucket)
--- CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_4_hour', now() - INTERVAL '4 hours', NULL);
--- CALL refresh_continuous_aggregate('cagg_7_day', now() - INTERVAL '7 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_30_day', now() - INTERVAL '30 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_50_day', now() - INTERVAL '50 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_200_day', now() - INTERVAL '200 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL);
-
--- Refresh static refs tables
--- SELECT refresh_static_refs();
--- SELECT refresh_static_refs_1m();
-
-CREATE UNLOGGED TABLE ohlcv_1m_stage (LIKE ohlcv_1m INCLUDING DEFAULTS) WITH (autovacuum_enabled = false);
-
-CREATE UNLOGGED TABLE ohlcv_1d_stage (LIKE ohlcv_1d INCLUDING DEFAULTS) WITH (autovacuum_enabled = false);
-
--- Initial refresh of screener stale tickers with limit param
--- SELECT refresh_screener((SELECT COUNT(*) FROM securities WHERE active = TRUE AND maxDate IS NULL));
-
--- On continuous aggregates
-CREATE INDEX IF NOT EXISTS idx_cagg_1440_minute_ticker_bucket ON cagg_1440_minute(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_15_minute_ticker_bucket ON cagg_15_minute(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_60_minute_ticker_bucket ON cagg_60_minute(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_4_hour_ticker_bucket ON cagg_4_hour(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_7_day_ticker_bucket ON cagg_7_day(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_30_day_ticker_bucket ON cagg_30_day(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_50_day_ticker_bucket ON cagg_50_day(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_200_day_ticker_bucket ON cagg_200_day(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_14_day_ticker_bucket ON cagg_14_day(ticker, bucket DESC);
-CREATE INDEX IF NOT EXISTS idx_cagg_14_minute_ticker_bucket ON cagg_14_minute(ticker, bucket DESC);
-
--- On screener table to speed up common queries
-CREATE INDEX IF NOT EXISTS idx_screener_ticker ON screener(ticker);
--- plus any filter or sort columns you query frequently
-CREATE INDEX IF NOT EXISTS idx_screener_market_cap ON screener(market_cap);
-CREATE INDEX IF NOT EXISTS idx_screener_volume ON screener(volume);
-CREATE INDEX IF NOT EXISTS idx_screener_rsi ON screener(rsi);
-CREATE INDEX IF NOT EXISTS idx_screener_change_1d_pct ON screener(change_1d_pct);
-
--- Create screener_stale table if not exists
-DROP TABLE IF EXISTS screener_stale;
-CREATE TABLE IF NOT EXISTS screener_stale (
-    ticker text PRIMARY KEY,
-    stale boolean NOT NULL DEFAULT TRUE,
-    last_update_time timestamptz DEFAULT now()
-);
-
--- Indexing Recommendations
--- On staleness lookup
-CREATE INDEX IF NOT EXISTS idx_screener_stale_stale ON screener_stale(stale);
-
--- Function to refresh screener for stale tickers
+-- Function to refresh screener for stale tickers (fixed to handle duplicate tickers)
 CREATE OR REPLACE FUNCTION refresh_screener(p_limit integer)
 RETURNS VOID
 LANGUAGE plpgsql AS $$
@@ -469,38 +198,28 @@ BEGIN
         LIMIT p_limit
     ),
     latest_daily AS (
-        SELECT
-            st.ticker,
-            o.open AS open,
-            o.high AS high,
-            o.low AS low,
-            o.close AS close,
-            o.volume
-        FROM stale_tickers st
-        LEFT JOIN LATERAL (
-            SELECT open, high, low, close, volume
-            FROM ohlcv_1d
-            WHERE ticker = st.ticker
-            ORDER BY timestamp DESC
-            LIMIT 1
-        ) o ON TRUE
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            open,
+            high,
+            low,
+            close,
+            volume
+        FROM ohlcv_1d
+        WHERE ticker IN (SELECT ticker FROM stale_tickers)
+        ORDER BY ticker, "timestamp" DESC
     ),
     latest_minute AS (
-        SELECT
-            st.ticker,
-            o.open AS m_open,
-            o.high AS m_high,
-            o.low AS m_low,
-            o.close AS m_close,
-            o.volume AS m_volume
-        FROM stale_tickers st
-        LEFT JOIN LATERAL (
-            SELECT open, high, low, close, volume
-            FROM ohlcv_1m
-            WHERE ticker = st.ticker
-            ORDER BY timestamp DESC
-            LIMIT 1
-        ) o ON TRUE
+        SELECT DISTINCT ON (ticker)
+            ticker,
+            open AS m_open,
+            high AS m_high,
+            low AS m_low,
+            close AS m_close,
+            volume AS m_volume
+        FROM ohlcv_1m
+        WHERE ticker IN (SELECT ticker FROM stale_tickers)
+        ORDER BY ticker, "timestamp" DESC
     ),
     security_info AS (
         SELECT DISTINCT ON (st.ticker)
@@ -964,37 +683,4 @@ BEGIN
 END;
 $$;
 
-/*-- Schedule the refresh using pg_cron (assuming pg_cron is installed)
--- For 1m refs: every minute from 4am to 8pm (hours 4-20) on weekdays
-SELECT cron.schedule('refresh_static_refs_1m', '* 4-20 * * 1-5', 'SELECT refresh_static_refs_1m()');
-
--- For daily refs: every 5 minutes from 9:30am to 4:00pm on weekdays
--- 9:30 to 9:55
-SELECT cron.schedule('refresh_static_refs_9', '30-59/5 9 * * 1-5', 'SELECT refresh_static_refs()');
--- 10:00 to 15:55 every 5 min
--- SELECT cron.schedule('refresh_static_refs_10_15', '5 10-15 * * 1-5', 'SELECT refresh_static_refs()');
--- 16:00
--- SELECT cron.schedule('refresh_static_refs_16', '0 16 * * 1-5', 'SELECT refresh_static_refs()');*/
-
-
--- Initial refresh of continuous aggregates (only most recent bucket)
--- CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL);
--- CALL refresh_continuous_aggregate('cagg_4_hour', now() - INTERVAL '4 hours', NULL);
--- CALL refresh_continuous_aggregate('cagg_7_day', now() - INTERVAL '7 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_30_day', now() - INTERVAL '30 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_50_day', now() - INTERVAL '50 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_200_day', now() - INTERVAL '200 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL);
--- CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL);
-
--- Refresh static refs tables
--- SELECT refresh_static_refs();
--- SELECT refresh_static_refs_1m();
--- REMOVED: pg_cron schedules moved to screener_updater.go
--- The following schedules are now handled by the Go screener updater:
--- - refresh_static_refs_1m: every minute from 4am to 8pm (hours 4-20) on weekdays
--- - refresh_static_refs: every 5 minutes from 9:30am to 4:00pm on weekdays
-
-COMMIT;
+COMMIT; 
