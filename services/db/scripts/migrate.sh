@@ -3,10 +3,6 @@ set -eo pipefail
 
 DB_NAME="${1:-postgres}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
-DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5433}"
-DB_USER="${DB_USER:-postgres}"
-
 
 # ─────────────────────────  helpers  ──────────────────────────
 log()       { printf '[%(%F %T)T] MIGRATION: %s\n' -1 "$1"; }
@@ -32,7 +28,7 @@ extract_description() {
   fi
 }
 
-PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U ${DB_USER} -h ${DB_HOST} -p ${DB_PORT} -d "$DB_NAME" "$@"; }
+PSQL() { PGPASSWORD=$POSTGRES_PASSWORD psql -qAt -U postgres -h localhost -p 5433 -d "$DB_NAME" "$@"; }
 
 # ───────────────────────  sanity checks  ──────────────────────
 TABLE_EXISTS=$(PSQL -c "SELECT to_regclass('public.schema_versions') IS NOT NULL;")
