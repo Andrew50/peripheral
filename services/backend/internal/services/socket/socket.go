@@ -271,6 +271,9 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	case "newWatchlist":
 		headline = "Creating watchlist..."
 		data = value
+	case "getDailySnapshot":
+		headline = "Analyzing data for " + value.(map[string]interface{})["ticker"].(string)
+		data = value
 	default:
 		// For other types (like FunctionUpdate), use the value directly
 		headline = value.(string)
