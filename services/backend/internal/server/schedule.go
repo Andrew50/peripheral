@@ -219,7 +219,7 @@ var (
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
-		{
+		/*{// enable this before PR
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
@@ -228,7 +228,7 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
-		}, // renable this before PR
+		}, */
 		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
@@ -240,9 +240,9 @@ var (
 			},
 		*/
 		{
-			Name: "StartScreenerUpdater",
-			//	Function: screener.StartScreenerUpdaterLoop,
-			Function:       startScreenerUpdater,               // TODO: ENABLE THIS BEFORE PR !!!!!!!!!!!!
+			Name:     "StartScreenerUpdater",
+			Function: screener.StartScreenerUpdaterLoop,
+			//	Function:       startScreenerUpdater,               // TODO: ENABLE THIS BEFORE PR !!!!!!!!!!!!
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -253,6 +253,7 @@ var (
 		//TODO: FIX THIS SHIT
 		/*{
 			Name:           "StartAlertLoop",
+
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,

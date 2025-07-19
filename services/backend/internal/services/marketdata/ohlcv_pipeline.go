@@ -513,6 +513,25 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 					return
 				}
 				persisted = cut
+
+				// Manually compress chunks in background
+				now := time.Now().UTC()
+				var minDuration time.Duration
+				if timeframe == "1-minute" {
+					minDuration = 7 * 24 * time.Hour
+				} else if timeframe == "1-day" {
+					minDuration = 60 * 24 * time.Hour
+				}
+				recentSafe := now.Add(-minDuration)
+				eff := cut
+				if cut.After(recentSafe) {
+					eff = recentSafe
+				}
+				go func(e time.Time) {
+					if err := compressOldChunks(context.Background(), db, table, e); err != nil {
+						log.Printf("periodic compression failed for %s: %v", table, err)
+					}
+				}(eff)
 			}
 		}
 
@@ -847,6 +866,48 @@ func (p *processedDateTracker) GetConservativeUpdateDate() time.Time {
 	return earliest.AddDate(0, 0, -1)
 }
 */
+
+// compressOldChunks compresses chunks older than the given effective timestamp in batches of 5.
+func compressOldChunks(ctx context.Context, db *pgxpool.Pool, table string, effective time.Time) error {
+	var lastChunk string
+	for {
+		var query string
+		params := []interface{}{table, effective}
+		if lastChunk == "" {
+			query = `SELECT c FROM show_chunks($1, older_than => $2) AS c ORDER BY c`
+		} else {
+			query = `SELECT c FROM show_chunks($1, older_than => $2) AS c WHERE c > $3 ORDER BY c`
+			params = append(params, lastChunk)
+		}
+
+		rows, err := db.Query(ctx, query, params...)
+		if err != nil {
+			return fmt.Errorf("query chunks: %w", err)
+		}
+		defer rows.Close()
+
+		count := 0
+		for rows.Next() {
+			var chunk string
+			if err := rows.Scan(&chunk); err != nil {
+				log.Printf("scan chunk: %v", err)
+				continue
+			}
+			if _, err := db.Exec(ctx, `SELECT compress_chunk($1, true)`, chunk); err != nil {
+				log.Printf("compress %s failed: %v", chunk, err)
+			}
+			lastChunk = chunk
+			count++
+		}
+		if rows.Err() != nil {
+			return fmt.Errorf("rows error: %w", rows.Err())
+		}
+		if count == 0 {
+			break
+		}
+	}
+	return nil
+}
 
 // parseDayFromKey extracts YYYY-MM-DD from an S3 key that ends with .csv.gz.
 func parseDayFromKey(key string) (time.Time, error) {

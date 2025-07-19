@@ -114,9 +114,13 @@ func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket 
 func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string, isFirstRun bool) error {
 	log.Printf("🔧 Pre-load setup for %s", tbl)
 
+	// Remove any existing compression policy
+	// no reason to drop as no compression poclies are used, it is just done manually.
 	/*
-		if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s SET (autovacuum_enabled = FALSE)`, tbl)); err != nil {
-			return fmt.Errorf("disable autovacuum: %w", err)
+		removeSQL := fmt.Sprintf(`SELECT remove_compression_policy('%s', TRUE);`, tbl)
+		if _, err := data.ExecWithRetry(ctx, db, removeSQL); err != nil {
+
+			log.Printf("warning: remove compression policy for %s: %v", tbl, err)
 		}
 	*/
 
@@ -162,30 +166,12 @@ END$$;`, tbl)
 func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	log.Printf("🔧 Post-load cleanup for %s", tbl)
 
-	// Re-enable autovacuum
+	//autovaccum is always on so not more multixfact overflows
 	/*
 		if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ALTER TABLE %s RESET (autovacuum_enabled)`, tbl)); err != nil {
 			return fmt.Errorf("re-enable autovacuum for %s: %w", tbl, err)
 		}
 	*/
-
-	// Re-add compression policy only if it does not already exist to avoid
-	// duplicate-object errors (SQLSTATE 42710). The TimescaleDB catalog view
-	// `timescaledb_information.jobs` lists compression policies, so we query
-	// it first inside a PL/pgSQL block.
-	policySQL := fmt.Sprintf(`DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM timescaledb_information.jobs
-        WHERE proc_name = 'policy_compression'
-          AND hypertable_name = '%s') THEN
-        PERFORM add_compression_policy('%s', 302400000000000);
-    END IF;
-END$$;`, tbl, tbl)
-
-	if _, err := data.ExecWithRetry(ctx, db, policySQL); err != nil {
-		return fmt.Errorf("re-add compression policy for %s: %w", tbl, err)
-	}
 
 	// Recreate helpful covering indexes on source tables
 	var indexSQLs []string
@@ -204,6 +190,36 @@ END$$;`, tbl, tbl)
 	}
 	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ANALYZE %s`, tbl)); err != nil {
 		log.Printf("analyze warning for %s: %v", tbl, err)
+	}
+
+	// Final compression
+	var timeframe string
+	switch tbl {
+	case "ohlcv_1m":
+		timeframe = "1-minute"
+	case "ohlcv_1d":
+		timeframe = "1-day"
+	}
+	lastLoaded, err := getLastLoadedAt(ctx, db, timeframe)
+	if err != nil {
+		log.Printf("warning: get last loaded for %s: %v", tbl, err)
+		return nil // Continue without compression
+	}
+	var minDuration time.Duration
+	switch timeframe {
+	case "1-minute":
+		minDuration = 7 * 24 * time.Hour
+	case "1-day":
+		minDuration = 60 * 24 * time.Hour
+	}
+	now := time.Now().UTC()
+	recentSafe := now.Add(-minDuration)
+	eff := lastLoaded
+	if lastLoaded.After(recentSafe) {
+		eff = recentSafe
+	}
+	if err := compressOldChunks(ctx, db, tbl, eff); err != nil {
+		log.Printf("final compression failed for %s: %v", tbl, err)
 	}
 
 	stageTbl := tbl + "_stage"

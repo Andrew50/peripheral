@@ -368,7 +368,7 @@ func analyzeTableStatistics(ctx context.Context, conn *data.Conn, logFile *os.Fi
 	tableStatsQuery := `
 		SELECT 
 			schemaname,
-			tablename,
+			relname,
 			n_tup_ins,
 			n_tup_upd,
 			n_tup_del,
@@ -383,7 +383,7 @@ func analyzeTableStatistics(ctx context.Context, conn *data.Conn, logFile *os.Fi
 			analyze_count,
 			autoanalyze_count
 		FROM pg_stat_user_tables
-		WHERE tablename = ANY($1)
+		WHERE relname = ANY($1)
 		ORDER BY n_live_tup DESC
 	`
 
@@ -444,14 +444,14 @@ func analyzeIndexUsage(ctx context.Context, conn *data.Conn, logFile *os.File, t
 	indexQuery := `
 		SELECT 
 			schemaname,
-			tablename,
+			relname,
 			indexname,
 			idx_scan,
 			idx_tup_read,
 			idx_tup_fetch,
 			pg_size_pretty(pg_relation_size(indexrelid)) as index_size
 		FROM pg_stat_user_indexes
-		WHERE tablename = ANY($1)
+		WHERE relname = ANY($1)
 		ORDER BY idx_scan DESC
 		LIMIT 20
 	`
@@ -595,7 +595,7 @@ func analyzeMaintenanceStatus(ctx context.Context, conn *data.Conn, logFile *os.
 	maintenanceQuery := `
 		SELECT 
 			schemaname,
-			tablename,
+			relname,
 			n_dead_tup,
 			n_live_tup,
 			CASE 
@@ -607,7 +607,7 @@ func analyzeMaintenanceStatus(ctx context.Context, conn *data.Conn, logFile *os.
 			last_analyze,
 			last_autoanalyze
 		FROM pg_stat_user_tables
-		WHERE tablename = ANY($1)
+		WHERE relname = ANY($1)
 		ORDER BY dead_tuple_pct DESC
 	`
 

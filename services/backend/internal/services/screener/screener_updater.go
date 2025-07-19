@@ -94,20 +94,7 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	// Optimize database connection settings for better performance
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
-	}
-
-	// Perform initial data refresh on startup
-	if err := initialRefresh(conn); err != nil {
-		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
-	} //might want to re-enable this before pr
-	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
-	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
-	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
-	if err != nil {
-		log.Printf("⚠️  Initial screener refresh failed: %v. Continuing...", err)
-	}
-
-	// Add tickers with null maxdate to screener_stale table
+	} // Add tickers with null maxdate to screener_stale table
 	log.Println("🔄 Adding tickers with null maxdate to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
@@ -122,6 +109,17 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 			last_update_time = EXCLUDED.last_update_time,
 			stale = EXCLUDED.stale;
 	`
+
+	// Perform initial data refresh on startup
+	if err := initialRefresh(conn); err != nil {
+		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
+	} //might want to re-enable this before pr
+	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
+	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
+	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
+	if err != nil {
+		log.Printf("⚠️  Initial screener refresh failed: %v. Continuing...", err)
+	}
 
 	_, err = conn.DB.Exec(context.Background(), insertStaleQuery)
 	if err != nil {
@@ -358,7 +356,7 @@ var screenerAnalysisConfig = AnalysisConfig{
 	Tables:           []string{"ohlcv_1m", "ohlcv_1d", "screener", "screener_stale", "securities", "static_refs_daily", "static_refs_1m"},
 	QueryPatterns:    []string{"screener", "ohlcv", "refresh_screener", "refresh_static_refs", "refresh_static_refs_1m"},
 	TestFunctions: []TestQuery{
-		{Name: "refresh_screener", Query: "SELECT refresh_screener()"},
+		{Name: "refresh_screener", Query: "SELECT refresh_screener(10)"},
 	},
 	ComponentTests: []TestQuery{
 		{Name: "OHLCV 1m latest", Query: "SELECT ticker, close/1000.0 FROM ohlcv_1m WHERE ticker = ANY($1) ORDER BY timestamp DESC LIMIT 10"},

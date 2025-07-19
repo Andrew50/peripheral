@@ -1365,10 +1365,10 @@
 								<div class="divider"></div>
 
 								<!-- Countdown -->
-								<div class="countdown-container">
+								<!-- <div class="countdown-container">
 									<span class="countdown-label">Next Bar Close:</span>
 									<span class="countdown-value">{$countdown}</span>
-								</div>
+								</div> -->
 							</div>
 						</div>
 
