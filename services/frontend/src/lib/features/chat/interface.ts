@@ -158,7 +158,7 @@ export type ConversationData = {
 
 // Timeline event that can handle different types of events
 export type TimelineEvent = {
-	message: string; // The actual status message from backend
+	headline: string;
 	timestamp: Date;
 	type?: 'message' | 'webSearchQuery' | 'webSearchCitations'; // Type of event
 	data?: any; // For web search queries or other structured data

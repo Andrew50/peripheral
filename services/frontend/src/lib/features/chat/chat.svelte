@@ -567,7 +567,7 @@
 			// Initialize processing timeline
 			processingTimeline = [
 				{
-					message: '',
+					headline: '',
 					timestamp: new Date()
 				}
 			];
@@ -1343,7 +1343,7 @@
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: statusUpdate.headline,
+					headline: statusUpdate.headline,
 					timestamp: new Date(),
 					type: 'message'
 				}
@@ -1354,7 +1354,7 @@
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: `Searching: ${statusUpdate.data.query}`,
+					headline: `Searching: ${statusUpdate.data.query}`,
 					timestamp: new Date(),
 					type: 'webSearchQuery',
 					data: statusUpdate.data
@@ -1365,7 +1365,7 @@
 			processingTimeline = [
 				...processingTimeline,
 				{
-					message: ``,
+					headline: ``,
 					timestamp: new Date(),
 					type: 'webSearchCitations',
 					data: statusUpdate.data

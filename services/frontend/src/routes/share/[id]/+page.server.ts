@@ -24,12 +24,42 @@ function isBotUserAgent(userAgent: string): boolean {
 	return botPatterns.some((pattern) => lowerUA.includes(pattern));
 }
 
-export const load: ServerLoad = async ({ params, request }) => {
+export const load: ServerLoad = async ({ params, request, url }) => {
 	// Detect if this is a bot/scraper request
 	const userAgent = request.headers.get('user-agent') || '';
 	const isBot = isBotUserAgent(userAgent);
+	const referrer = request.headers.get('referer') || '';
+	const path = url.pathname;
 
 	try {
+		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
+		const cfIP = request.headers.get('cf-connecting-ip') || '127.0.0.1';
+		const forwarded = request.headers.get('x-forwarded-for') || '127.0.0.1';
+
+		const response = await fetch(`${backendUrl}/frontend/server`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Peripheral-Frontend-Key': 'williamsIsTheBestLiberalArtsCollege!1@', // TODO: Move to environment variable
+			},
+			body: JSON.stringify({
+				func: 'logSplashScreenView',
+				args: {
+					path: path,
+					referrer: referrer,
+					user_agent: userAgent,
+					ip_address: forwarded,
+					cloudflare_ipv6: cfIP,
+					timestamp: new Date().toISOString()
+				}
+			}),
+			signal: AbortSignal.timeout(2000) // 2 second timeout
+		});
+		if (!response.ok) {
+			const errorBody = await response.text().catch(() => 'Unable to read error body');
+            console.error(`Failed to log page view: ${response.status} ${response.statusText} - ${errorBody}`);
+		}
+
 		interface ConversationSnippetResponse {
 			title: string;
 			first_response: string;
