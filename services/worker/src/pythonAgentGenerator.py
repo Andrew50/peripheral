@@ -25,8 +25,10 @@ class PythonAgentGenerator:
         self.validator = SecurityValidator()
         self.openai_client = None
         self.gemini_client = None
+        self.environment = None
         self._init_openai_client()
         self._init_gemini_client()
+        self._init_environment()
     
     def _init_openai_client(self):
         """Initialize OpenAI client"""
@@ -46,6 +48,15 @@ class PythonAgentGenerator:
         self.gemini_client = genai.Client(api_key=api_key)
         logger.info("Gemini client initialized successfully")
     
+    def _init_environment(self):
+        """Initialize environment variables"""
+        self.environment = os.getenv('ENVIRONMENT')
+        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+            self.environment = "dev"
+        else:
+            self.environment = "prod"
+        logger.info(f"Environment initialized to: {self.environment}")
+
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database"""
         try:
@@ -337,6 +348,7 @@ class PythonAgentGenerator:
                         input=f"{userPrompt}",
                         instructions=f"{systemInstruction}",
                         user=f"user:0",
+                        metadata={"userID": str(user_id), "env": self.environment},
                         timeout=120.0  # 2 minute timeout for other models
                     )
                     pythonCode = self._extract_python_code(openaiResponse.output_text)
