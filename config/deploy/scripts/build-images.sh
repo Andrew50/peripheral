@@ -59,6 +59,13 @@ for srv in "${SERVICES_ARRAY[@]}"; do
   pids+=($!)
 done
 
+docker build \
+  --progress=plain --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $DOCKER_USERNAME/db:${DOCKER_TAG}-migrations \
+  -t "$DOCKER_USERNAME/db:$DOCKER_TAG-migrations" \
+  -f "services/db/migrations/Dockerfile.prod" \
+  "services/db/migrations"
+
+
 # Wait for all remaining builds to complete
 wait
 
