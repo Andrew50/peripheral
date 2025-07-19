@@ -57,8 +57,10 @@ class StrategyGenerator:
         self.validator = SecurityValidator()
         self.openai_client = None
         self.gemini_client = None
+        self.environment = None
         self._init_openai_client()
         self._init_gemini_client()
+        self._init_environment()
         
     def _init_openai_client(self):
         """Initialize OpenAI client"""
@@ -77,7 +79,15 @@ class StrategyGenerator:
         self.gemini_client = genai.Client(api_key=api_key)
         logger.info("Gemini client initialized successfully")
 
-    
+    def _init_environment(self):
+        """Initialize environment variables"""
+        self.environment = os.getenv('ENVIRONMENT')
+        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+            self.environment = "dev"
+        else:
+            self.environment = "prod"
+        logger.info(f"Environment initialized to: {self.environment}")
+
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
         try:
@@ -699,6 +709,7 @@ class StrategyGenerator:
                     input=f"{user_prompt}",
                     instructions=f"{system_instruction}",
                     user=f"user:0",
+                    metadata={"userID": str(userID), "env": self.environment},
                     timeout=150.0  # 150 second timeout for other models
                 )
                 

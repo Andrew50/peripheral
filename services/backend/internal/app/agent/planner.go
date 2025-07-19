@@ -13,9 +13,12 @@ import (
 	"github.com/invopop/jsonschema"
 	"google.golang.org/genai"
 
+	"strconv"
+
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/shared"
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
@@ -544,6 +547,9 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 			},
 		},
 	}
+	if codeEnvironment == "" {
+		initCodeEnvironment()
+	}
 	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
@@ -552,6 +558,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
+		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error generating final response: %w", err)

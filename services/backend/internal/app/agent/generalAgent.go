@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/shared"
 	"go.uber.org/zap"
 	"google.golang.org/genai"
 )
@@ -26,8 +29,23 @@ type ExecutionPlan struct {
 	DiscardResults []int64 `json:"discard_results,omitempty"`
 }
 
-func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string, finalModel string, finalModelThinkingEffort string) (T, error) {
+var (
+	codeEnvironment string
+)
+
+func initCodeEnvironment() {
+	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
+	if env == "" || env == "dev" || env == "development" {
+		codeEnvironment = "dev"
+	} else {
+		codeEnvironment = "prod"
+	}
+}
+func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
+	if codeEnvironment == "" {
+		initCodeEnvironment()
+	}
 	systemPrompt, err := getSystemInstruction("generalAgentSystemPrompt")
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)
@@ -107,7 +125,7 @@ func RunGeneralAgent[T any](conn *data.Conn, additionalSystemPromptFile string, 
 		case StageFinishedExecuting:
 			finalResultContext, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			finalModelResult, err := _generalAgentGenerateFinalResponse[T](finalResultContext, conn, prompt, finalSystemPromptFile, activeResults, accumulatedThoughts, finalModel, finalModelThinkingEffort)
+			finalModelResult, err := _generalAgentGenerateFinalResponse[T](finalResultContext, conn, userID, prompt, finalSystemPromptFile, activeResults, accumulatedThoughts, finalModel, finalModelThinkingEffort)
 			if err != nil {
 				return zeroResult, fmt.Errorf("error generating final response: %w", err)
 			}
@@ -147,7 +165,7 @@ func _buildGeneralAgentPlanningPromptWithResults(query string, activeResults []E
 	return sb.String(), nil
 }
 
-func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string, finalModel string, finalModelThinkingEffort string) (T, error) {
+func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, userID int, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
@@ -191,6 +209,7 @@ func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.C
 		Reasoning: responses.ReasoningParam{
 			Effort: responses.ReasoningEffort(finalModelThinkingEffort),
 		},
+		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
 	})
 	if err != nil {
 		return zeroResult, fmt.Errorf("error generating final response: %w", err)

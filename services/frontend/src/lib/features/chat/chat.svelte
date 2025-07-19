@@ -20,8 +20,7 @@
 		QueryResponse,
 		TableData,
 		ContentChunk,
-		PlotData,
-		TimelineEvent
+		PlotData
 	} from './interface';
 	import {
 		parseMarkdown,
@@ -67,7 +66,7 @@
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
 	import ShareModal from './components/ShareModal.svelte';
-	import MessageTimeline from './components/MessageTimeline.svelte';
+	import ThinkingTrace from './components/ThinkingTrace.svelte';
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 
@@ -124,11 +123,8 @@
 	// Share modal reference
 	let shareModalRef: ShareModal;
 
-	// Processing timeline state
-	let processingTimeline: TimelineEvent[] = [];
+	// Processing state
 	let isProcessingMessage = false;
-	let lastStatusMessage = '';
-	let showTimelineDropdown = false; // State for timeline dropdown visibility
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -564,17 +560,7 @@
 		};
 
 		try {
-			// Initialize processing timeline
-			processingTimeline = [
-				{
-					headline: '',
-					timestamp: new Date()
-				}
-			];
-
 			isProcessingMessage = true;
-			lastStatusMessage = ''; // Reset last status message
-			showTimelineDropdown = false; // Reset dropdown state for new message
 
 			messagesStore.update((current) => [...current, userMessage]);
 
@@ -679,8 +665,6 @@
 
 							// Clear processing state
 			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
 
 
 
@@ -780,8 +764,6 @@
 
 			// Clear processing state immediately on error
 			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
 
 			isLoading = false;
 			currentAbortController = null;
@@ -834,8 +816,6 @@
 
 					// Clear processing state immediately on cancellation
 		isProcessingMessage = false;
-		processingTimeline = [];
-		lastStatusMessage = '';
 
 
 
@@ -1333,46 +1313,7 @@
 		titleUpdateStore.set(null);
 	}
 
-	// Reactive block to capture function status messages and build timeline
-	$: if ($agentStatusStore && browser && isProcessingMessage) {
-		const statusUpdate = $agentStatusStore;
 
-		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
-			// Add function update message to timeline
-			lastStatusMessage = statusUpdate.headline;
-			processingTimeline = [
-				...processingTimeline,
-				{
-					headline: statusUpdate.headline,
-					timestamp: new Date(),
-					type: 'message'
-				}
-			];
-		} else if (statusUpdate.type === 'WebSearchQuery' && statusUpdate.data?.query) {
-			// Add web search event to timeline in chronological order
-			lastStatusMessage = statusUpdate.headline;
-			processingTimeline = [
-				...processingTimeline,
-				{
-					headline: `Searching: ${statusUpdate.data.query}`,
-					timestamp: new Date(),
-					type: 'webSearchQuery',
-					data: statusUpdate.data
-				}
-			];
-		} else if (statusUpdate.type === 'WebSearchCitations' && statusUpdate.data?.citations) {
-			// Add web search citations to timeline
-			processingTimeline = [
-				...processingTimeline,
-				{
-					headline: ``,
-					timestamp: new Date(),
-					type: 'webSearchCitations',
-					data: statusUpdate.data
-				}
-			];
-		}
-	}
 
 	// Helper to translate technical error messages into user-friendly text
 	function getFriendlyErrorMessage(error: any): string {
@@ -1447,12 +1388,9 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-								<MessageTimeline
-									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.headline || 'Thinking...'}
-									{showTimelineDropdown}
-									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
-								/>
+															<ThinkingTrace
+								isProcessingMessage={isProcessingMessage}
+							/>
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->

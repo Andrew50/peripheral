@@ -324,7 +324,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (F
 	prompt := tweet.Text
 	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
 
-	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
+	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, 0, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
 	if err != nil {
 		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
