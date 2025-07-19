@@ -229,13 +229,14 @@ jobs:
         run: |
           POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
           kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -c db
+          kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -c db
 
       - name: Run Migrations
         run: |
           POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
           kubectl exec $POD_NAME -c db -- bash -c "
-            chmod +x /scripts/migrate.sh
-            MIGRATIONS_DIR=/tmp/migrations /scripts/migrate.sh
+            chmod +x /tmp/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations /tmp/migrate.sh
           "
 
       - name: Deploy to Kubernetes
