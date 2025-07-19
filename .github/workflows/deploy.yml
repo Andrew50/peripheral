@@ -227,11 +227,13 @@ jobs:
 
       - name: Copy Migrations to Database Pod
         run: |
-          kubectl cp services/db/migrations/ deployment/db:/tmp/migrations/
+          POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -c db
 
       - name: Run Migrations
         run: |
-          kubectl exec deployment/db -- bash -c "
+          POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec $POD_NAME -- bash -c "
             export MIGRATIONS_DIR=/tmp/migrations
             export POSTGRES_PASSWORD=\$POSTGRES_PASSWORD"
         #    /tmp/migrations/../scripts/migrate.sh
