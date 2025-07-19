@@ -1,6 +1,7 @@
 package watchlist
 
 import (
+	"backend/internal/app/helpers"
 	"backend/internal/data"
 	"backend/internal/services/socket"
 	"context"
@@ -228,18 +229,34 @@ func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage
 	if rows.Err() != nil {
 		return nil, fmt.Errorf("error iterating rows: %v", rows.Err())
 	}
-	var watchlistName string
-	err = conn.DB.QueryRow(context.Background(), `SELECT watchlistname from watchlists where watchlistId = $1 LIMIT 1`, args.WatchlistID).Scan(&watchlistName)
-	if err != nil {
-		return nil, fmt.Errorf("error querying watchlist name: %v", err)
-	}
-	value := map[string]interface{}{
-		"watchlistId":   args.WatchlistID,
-		"tickers":       tickers,
-		"watchlistName": watchlistName,
-	}
+	go func() {
+		var tickerWtihData []map[string]interface{}
+		var watchlistName string
+		err = conn.DB.QueryRow(context.Background(), `SELECT watchlistname from watchlists where watchlistId = $1 LIMIT 1`, args.WatchlistID).Scan(&watchlistName)
+		if err != nil {
+			return // Silently ignore notification errors
+		}
+		for _, ticker := range tickers {
+			res, err := helpers.GetTickerDailySnapshot(conn, userID, json.RawMessage(fmt.Sprintf(`{"ticker": "%s"}`, ticker)))
+			if err != nil {
+				return // Silently ignore notification errors
+			}
+			tickerWithData := map[string]interface{}{
+				"ticker":        ticker,
+				"price":         res.(helpers.GetTickerDailySnapshotResults).LastTradePrice,
+				"change":        res.(helpers.GetTickerDailySnapshotResults).TodayChange,
+				"changePercent": res.(helpers.GetTickerDailySnapshotResults).TodayChangePercent,
+			}
+			tickerWtihData = append(tickerWtihData, tickerWithData)
+		}
+		value := map[string]interface{}{
+			"watchlistId":   args.WatchlistID,
+			"tickers":       tickerWtihData,
+			"watchlistName": watchlistName,
+		}
 
-	go socket.SendAgentStatusUpdate(userID, "GetWatchlistItems", value)
+		socket.SendAgentStatusUpdate(userID, "GetWatchlistItems", value)
+	}()
 
 	return tickers, nil
 }
