@@ -58,7 +58,7 @@ func initialRefresh(conn *data.Conn) error {
 		"CALL refresh_continuous_aggregate('cagg_200_day', now() - INTERVAL '200 days', NULL);",
 		"CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL);",
 		"CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_rsi_14_day', now() - INTERVAL '3 weeks', NULL);", //3 weeks cause you need 14 bars to calculate rsi
+		//"CALL refresh_continuous_aggregate('cagg_rsi_14_day', now() - INTERVAL '3 weeks', NULL);", //3 weeks cause you need 14 bars to calculate rsi
 		"SELECT refresh_static_refs();",
 		"SELECT refresh_static_refs_1m();",
 	}
@@ -67,7 +67,7 @@ func initialRefresh(conn *data.Conn) error {
 		log.Printf("Executing: %s", cmd)
 		if _, err := conn.DB.Exec(ctx, cmd); err != nil {
 			// Log error but continue, some might fail if already running or not needed
-			log.Printf("⚠️  Initial refresh command failed: %v", err)
+			log.Printf("⚠️  Initial refresh command failed for '%s': %v", cmd, err)
 		}
 	}
 
@@ -97,12 +97,14 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	}
 
 	// Perform initial data refresh on startup
-	/*if err := initialRefresh(conn); err != nil {
+	if err := initialRefresh(conn); err != nil {
 		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
-	}*/ //might want to re-enable this before pr
-	_, err = conn.DB.Exec(context.Background(), fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch))
+	} //might want to re-enable this before pr
+	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
+	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
+	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
 	if err != nil {
-		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
+		log.Printf("⚠️  Initial screener refresh failed: %v. Continuing...", err)
 	}
 
 	// Add tickers with null maxdate to screener_stale table

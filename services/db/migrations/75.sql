@@ -126,25 +126,25 @@ BEGIN
         p240.close
     FROM static_refs_active_securities_stage s
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 minute'
         ORDER BY "timestamp" DESC LIMIT 1
     ) p1 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '15 minutes'
         ORDER BY "timestamp" DESC LIMIT 1
     ) p15 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 hour'
         ORDER BY "timestamp" DESC LIMIT 1
     ) p60 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '4 hours'
         ORDER BY "timestamp" DESC LIMIT 1
@@ -205,74 +205,74 @@ BEGIN
         extremes.high_52w
     FROM static_refs_active_securities_stage s
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
         ORDER BY "timestamp" DESC
         OFFSET 1 LIMIT 1
     ) prev_close ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 day'
         ORDER BY "timestamp" DESC LIMIT 1
     ) d1 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 week'
         ORDER BY "timestamp" DESC LIMIT 1
     ) w1 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 month'
         ORDER BY "timestamp" DESC LIMIT 1
     ) m1 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '3 months'
         ORDER BY "timestamp" DESC LIMIT 1
     ) m3 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '6 months'
         ORDER BY "timestamp" DESC LIMIT 1
     ) m6 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 year'
         ORDER BY "timestamp" DESC LIMIT 1
     ) y1 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '5 years'
         ORDER BY "timestamp" DESC LIMIT 1
     ) y5 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT close / 1000.0 AS close
+        SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '10 years'
         ORDER BY "timestamp" DESC LIMIT 1
     ) y10 ON TRUE
     LEFT JOIN LATERAL (
-        SELECT open / 1000.0 AS ytd_open
+        SELECT open / NULLIF(1000.0, 0) AS ytd_open
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND EXTRACT(YEAR FROM "timestamp") = EXTRACT(YEAR FROM v_now_utc)
+        WHERE ticker = s.ticker AND date_trunc('year', "timestamp" AT TIME ZONE 'America/New_York') = date_trunc('year', v_now_utc AT TIME ZONE 'America/New_York')
         ORDER BY "timestamp" ASC LIMIT 1
     ) ytd ON TRUE
     LEFT JOIN LATERAL (
-        SELECT open / 1000.0 AS all_open
+        SELECT open / NULLIF(1000.0, 0) AS all_open
         FROM ohlcv_1d
         WHERE ticker = s.ticker
         ORDER BY "timestamp" ASC LIMIT 1
     ) all_time ON TRUE
     LEFT JOIN LATERAL (
-        SELECT MAX(high / 1000.0) AS high_52w, MIN(low / 1000.0) AS low_52w
+        SELECT MAX(high / NULLIF(1000.0, 0)) AS high_52w, MIN(low / NULLIF(1000.0, 0)) AS low_52w
         FROM ohlcv_1d
         WHERE ticker = s.ticker AND "timestamp" >= v_now_utc - INTERVAL '52 weeks'
     ) extremes ON TRUE;

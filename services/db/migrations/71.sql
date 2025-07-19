@@ -52,8 +52,11 @@ BEGIN;
 SELECT * FROM ohlcv_1m LIMIT 0;*/
 
 -- Drop existing tables and recreate with new schema
+SELECT remove_compression_policy('ohlcv_1m');
+SELECT remove_compression_policy('ohlcv_1d');
 DROP TABLE IF EXISTS ohlcv_1m CASCADE;
 DROP TABLE IF EXISTS ohlcv_1d CASCADE;
+DROP TABLE IF EXISTS ohlcv_update_state CASCADE;
 
 -- Create new ohlcv_1m table with bigint prices and timestamptz
 CREATE TABLE ohlcv_1m (
@@ -149,6 +152,10 @@ CREATE INDEX IF NOT EXISTS ohlcv_1d_ticker_ts_desc_inc
     ON ohlcv_1d (ticker, "timestamp" DESC)
     INCLUDE (open, high, low, close, volume);
 
+
+
+
+
 -- Enable compression on both tables
 ALTER TABLE ohlcv_1m SET (
     timescaledb.compress,
@@ -161,6 +168,8 @@ ALTER TABLE ohlcv_1d SET (
     timescaledb.compress_orderby = '"timestamp" DESC',
     timescaledb.compress_segmentby = 'ticker'
 );
+/*
+-- DO NOT ENABLE COMPRESSION HERE AS IT WILL BE HANDLED BY OHLCV LOADER FOR MAXIMUM PERFORMANCE
 
 -- Add compression policies
 -- ohlcv_1m: compress data older than 2 weeks (14 days)
@@ -168,6 +177,7 @@ SELECT add_compression_policy('ohlcv_1m', INTERVAL '14 days');
 
 -- ohlcv_1d: compress data older than 4 months (120 days)
 SELECT add_compression_policy('ohlcv_1d', INTERVAL '120 days');
+*/
 
 -- Drop backup tables after successful migration
 /*DROP TABLE IF EXISTS ohlcv_1m_backup;*/
