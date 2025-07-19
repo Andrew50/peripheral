@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"backend/internal/data"
+	"backend/internal/services/telegram"
 )
 
 // LogSplashScreenViewArgs represents the data sent from frontend server for page view logging
@@ -102,17 +103,41 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 		org = &geoData.Org
 	}
 
-	// Insert into splash_screen_logs table with geolocation data
-	_, err = conn.DB.Exec(context.Background(), `
+	// Insert and check for recent duplicates in one query
+	var wasRecentDuplicate bool
+	err = conn.DB.QueryRow(context.Background(), `
 		INSERT INTO splash_screen_logs(ip_address, user_agent, referrer, path, timestamp, cloudflare_ipv6, city, region, country, org)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, req.IPAddress, req.UserAgent, req.Referrer, req.Path, req.Timestamp, req.CloudflareIPv6, city, region, country, org)
+		RETURNING (
+			SELECT COUNT(*) > 1 
+			FROM splash_screen_logs 
+			WHERE ip_address = $1 
+			AND path = $4 
+			AND timestamp > NOW() - INTERVAL '30 minutes'
+		) AS was_recent_duplicate
+	`, req.IPAddress, req.UserAgent, req.Referrer, req.Path, req.Timestamp, req.CloudflareIPv6, city, region, country, org).Scan(&wasRecentDuplicate)
 
 	if err != nil {
 		// log to console so this issue doesn't go unnoticed lmao
 		log.Printf("Failed to insert page view to DB: %v. Data: IP=%s, Path=%s",
 			err, req.IPAddress, req.Path)
 		return nil, fmt.Errorf("failed to log page view: %w", err)
+	}
+
+	// Only send Telegram message if this wasn't a recent duplicate
+	if !wasRecentDuplicate {
+		var path string
+		if req.Path == "/" {
+			path = "splash"
+		} else if req.Path == "/pricing" {
+			path = "pricing"
+		} else {
+			path = req.Path
+		}
+		err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s", *city, *region, *country, path))
+		if err != nil {
+			log.Printf("Failed to send Telegram message: %v", err)
+		}
 	}
 
 	return map[string]interface{}{

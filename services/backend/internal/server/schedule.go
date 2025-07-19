@@ -8,6 +8,7 @@ import (
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
+	"backend/internal/services/telegram"
 	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
@@ -207,6 +208,10 @@ func verifyTwitterWebhookIsCorrectlyConfiguredJob(conn *data.Conn) error {
 	return verifyTwitterWebhookConfiguration(conn)
 }
 
+func initUserTelegramBotJob(conn *data.Conn) error {
+	return telegram.InitTelegramUserNotificationBot()
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
@@ -366,6 +371,15 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "InitUserTelegramBotJob",
+			Function:       initUserTelegramBotJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
 		},
 	}
 )
