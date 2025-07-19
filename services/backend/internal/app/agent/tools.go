@@ -111,11 +111,15 @@ var (
 							Type:        genai.TypeString,
 							Description: "The name of the watchlist to create",
 						},
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "(Optional) The tickers to add to the watchlist.",
+						},
 					},
 					Required: []string{"watchlistName"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.NewWatchlist),
+			Function:      wrapWithContext(watchlist.AgentNewWatchlist),
 			StatusMessage: "Creating new watchlist...",
 		},
 		"getWatchlistItems": {

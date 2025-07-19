@@ -39,7 +39,33 @@ func GetWatchlists(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 
 // NewWatchlistArgs represents a structure for handling NewWatchlistArgs data.
 type NewWatchlistArgs struct {
-	WatchlistName string `json:"watchlistName"`
+	WatchlistName string   `json:"watchlistName"`
+	Tickers       []string `json:"tickers,omitempty"`
+}
+
+func AgentNewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := NewWatchlist(conn, userID, rawArgs)
+	if err != nil {
+		return nil, fmt.Errorf("error creating watchlist: %v", err)
+	}
+
+	// Handle notification asynchronously
+	go func() {
+		var args NewWatchlistArgs
+		err := json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return // Silently ignore notification errors
+		}
+
+		value := map[string]interface{}{
+			"watchlistName": args.WatchlistName,
+			"tickers":       args.Tickers,
+			"watchlistId":   res,
+		}
+		socket.SendAgentStatusUpdate(userID, "newWatchlist", value)
+	}()
+
+	return res, nil
 }
 
 // NewWatchlist performs operations related to NewWatchlist functionality.
@@ -54,11 +80,12 @@ func NewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("0n8912: %v", err)
 	}
-
-	// NEW: Send WebSocket update after successful creation
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		socket.SendWatchlistUpdate(userID, "create", &watchlistID, &args.WatchlistName, nil, nil)
+	if len(args.Tickers) > 0 {
+		rawArgs := json.RawMessage(fmt.Sprintf(`{"watchlistId": %d, "tickers": %v}`, watchlistID, args.Tickers))
+		_, err = AddTickersToWatchlist(conn, userID, rawArgs)
+		if err != nil {
+			return nil, fmt.Errorf("error adding tickers to watchlist: %v", err)
+		}
 	}
 
 	return watchlistID, err
