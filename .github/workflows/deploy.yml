@@ -226,8 +226,19 @@ jobs:
       - name: Update Kubernetes Secrets
         run: config/deploy/scripts/setup-configs.sh
 
+      - name: Copy Migrations to Database Pod
+        run: |
+          kubectl cp services/db/migrations/ deployment/db:/tmp/migrations/
+
       - name: Run Migrations
-        run: config/deploy/scripts/run-migrations.sh
+        run: |
+          kubectl exec deployment/db -- bash -c "
+            export MIGRATIONS_DIR=/tmp/migrations
+            export POSTGRES_PASSWORD=\$POSTGRES_PASSWORD"
+        #    /tmp/migrations/../scripts/migrate.sh
+      #    "
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh
