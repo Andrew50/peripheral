@@ -30,7 +30,7 @@
 
 </script>
 
-{#if timeline.length > 1}
+{#if timeline.length > 0}
 	<div class="thinking-trace">
 		{#if shouldShowStatusHeader}
 			<div class="status-header">
