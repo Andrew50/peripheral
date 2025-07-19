@@ -233,13 +233,10 @@ jobs:
       - name: Run Migrations
         run: |
           POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec $POD_NAME -- bash -c "
-            export MIGRATIONS_DIR=/tmp/migrations
-            export POSTGRES_PASSWORD=\$POSTGRES_PASSWORD"
-        #    /tmp/migrations/../scripts/migrate.sh
-      #    "
-        env:
-          POSTGRES_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
+          kubectl exec $POD_NAME -c db -- bash -c "
+            chmod +x /scripts/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations /scripts/migrate.sh
+          "
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh
