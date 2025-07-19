@@ -80,18 +80,11 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getEarningsText":       filings.GetEarningsText,
 	"getFilingText":         filings.GetFilingText,
 	"getChartData":          chart.GetChartData,
-	/*"getStudies":        chart.GetStudies,
-	"newStudy":          chart.NewStudy,
-	"saveStudy":         chart.SaveStudy,
-	"deleteStudy":       chart.DeleteStudy,
-	"getStudyEntry":     chart.GetStudyEntry,
-	"completeStudy":     chart.CompleteStudy,
-	"setStudyStrategy":  chart.SetStudyStrategy,*/
-	"getChartEvents":       chart.GetChartEvents,
-	"setHorizontalLine":    chart.SetHorizontalLine,
-	"getHorizontalLines":   chart.GetHorizontalLines,
-	"deleteHorizontalLine": chart.DeleteHorizontalLine,
-	"updateHorizontalLine": chart.UpdateHorizontalLine,
+	"getChartEvents":        chart.GetChartEvents,
+	"setHorizontalLine":     chart.SetHorizontalLine,
+	"getHorizontalLines":    chart.GetHorizontalLines,
+	"deleteHorizontalLine":  chart.DeleteHorizontalLine,
+	"updateHorizontalLine":  chart.UpdateHorizontalLine,
 
 	// --- screensavers ---------------------------------------------------------
 	"getScreensavers": screensaver.GetScreensavers,

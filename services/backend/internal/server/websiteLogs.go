@@ -111,7 +111,7 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 		RETURNING (
 			SELECT COUNT(*) > 1 
 			FROM splash_screen_logs 
-			WHERE ip_address = $1 
+			WHERE cloudflare_ipv6 = $6
 			AND path = $4 
 			AND timestamp > NOW() - INTERVAL '30 minutes'
 		) AS was_recent_duplicate
@@ -134,7 +134,7 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 		} else {
 			path = req.Path
 		}
-		err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s", *city, *region, *country, path))
+		err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, path, *org))
 		if err != nil {
 			log.Printf("Failed to send Telegram message: %v", err)
 		}

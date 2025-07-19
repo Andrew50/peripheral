@@ -229,7 +229,7 @@ var (
 			Name:           "UpdateSecurityTables",
 			Function:       simpleSecuritiesUpdateJob,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
-			RunOnInit:      true,
+			RunOnInit:      false,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
 			MaxRetries:     2,

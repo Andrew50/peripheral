@@ -1,11 +1,13 @@
 package watchlist
 
 import (
+	"backend/internal/app/helpers"
 	"backend/internal/data"
 	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // GetWatchlistsResult represents a structure for handling GetWatchlistsResult data.
@@ -38,7 +40,33 @@ func GetWatchlists(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 
 // NewWatchlistArgs represents a structure for handling NewWatchlistArgs data.
 type NewWatchlistArgs struct {
-	WatchlistName string `json:"watchlistName"`
+	WatchlistName string   `json:"watchlistName"`
+	Tickers       []string `json:"tickers,omitempty"`
+}
+
+func AgentNewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := NewWatchlist(conn, userID, rawArgs)
+	if err != nil {
+		return nil, fmt.Errorf("error creating watchlist: %v", err)
+	}
+
+	// Handle notification asynchronously
+	go func() {
+		var args NewWatchlistArgs
+		err := json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return // Silently ignore notification errors
+		}
+
+		value := map[string]interface{}{
+			"watchlistName": args.WatchlistName,
+			"tickers":       args.Tickers,
+			"watchlistId":   res,
+		}
+		socket.SendAgentStatusUpdate(userID, "newWatchlist", value)
+	}()
+
+	return res, nil
 }
 
 // NewWatchlist performs operations related to NewWatchlist functionality.
@@ -53,11 +81,12 @@ func NewWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if err != nil {
 		return nil, fmt.Errorf("0n8912: %v", err)
 	}
-
-	// NEW: Send WebSocket update after successful creation
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		socket.SendWatchlistUpdate(userID, "create", &watchlistID, &args.WatchlistName, nil, nil)
+	if len(args.Tickers) > 0 {
+		rawArgs := json.RawMessage(fmt.Sprintf(`{"watchlistId": %d, "tickers": %v}`, watchlistID, args.Tickers))
+		_, err = AddTickersToWatchlist(conn, userID, rawArgs)
+		if err != nil {
+			return nil, fmt.Errorf("error adding tickers to watchlist: %v", err)
+		}
 	}
 
 	return watchlistID, err
@@ -155,6 +184,83 @@ func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	return entries, nil
 }
 
+type AgentGetWatchlistItemsArgs struct {
+	WatchlistID int `json:"watchlistId"`
+}
+
+func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args AgentGetWatchlistItemsArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("m0ivn0d [agentGetWatchlistItems]: %v", err)
+	}
+	owns, err := VerifyUserOwnsWatchlist(conn, userID, args.WatchlistID)
+	if err != nil {
+		return nil, err
+	}
+	if !owns {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to access it")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := conn.DB.Query(ctx, `
+		SELECT s.ticker 
+		FROM watchlistItems wi
+		JOIN securities s ON wi.securityId = s.securityId
+		WHERE wi.watchlistId = $1 AND s.maxDate IS NULL
+		ORDER BY s.ticker`,
+		args.WatchlistID)
+	if err != nil {
+		return nil, fmt.Errorf("error querying watchlist items: %v", err)
+	}
+	defer rows.Close()
+
+	var tickers []string
+	for rows.Next() {
+		var ticker string
+		err = rows.Scan(&ticker)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning ticker: %v", err)
+		}
+		tickers = append(tickers, ticker)
+	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", rows.Err())
+	}
+	go func() {
+		var tickerWtihData []map[string]interface{}
+		var watchlistName string
+		err = conn.DB.QueryRow(context.Background(), `SELECT watchlistname from watchlists where watchlistId = $1 LIMIT 1`, args.WatchlistID).Scan(&watchlistName)
+		if err != nil {
+			return // Silently ignore notification errors
+		}
+		for _, ticker := range tickers {
+			res, err := helpers.GetTickerDailySnapshot(conn, userID, json.RawMessage(fmt.Sprintf(`{"ticker": "%s"}`, ticker)))
+			if err != nil {
+				return // Silently ignore notification errors
+			}
+			tickerWithData := map[string]interface{}{
+				"ticker":        ticker,
+				"price":         res.(helpers.GetTickerDailySnapshotResults).LastTradePrice,
+				"change":        res.(helpers.GetTickerDailySnapshotResults).TodayChange,
+				"changePercent": res.(helpers.GetTickerDailySnapshotResults).TodayChangePercent,
+			}
+			tickerWtihData = append(tickerWtihData, tickerWithData)
+		}
+		value := map[string]interface{}{
+			"watchlistId":   args.WatchlistID,
+			"tickers":       tickerWtihData,
+			"watchlistName": watchlistName,
+		}
+
+		socket.SendAgentStatusUpdate(userID, "GetWatchlistItems", value)
+	}()
+
+	return tickers, nil
+}
+
 // DeleteWatchlistItemArgs represents a structure for handling DeleteWatchlistItemArgs data.
 type DeleteWatchlistItemArgs struct {
 	WatchlistItemID int `json:"watchlistItemId"`
@@ -231,7 +337,7 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println("\n\n\nIS LLM EXECUTION", conn.IsLLMExecution)
 	// NEW: Send WebSocket update after successful insertion
 	// Only send WebSocket update if called by LLM (frontend handles its own updates)
 	if conn.IsLLMExecution {
@@ -252,4 +358,72 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 	}
 
 	return watchlistID, err
+}
+
+type AddTickersToWatchlistArgs struct {
+	WatchlistID int      `json:"watchlistId"`
+	Tickers     []string `json:"tickers"`
+}
+
+func AgentAddTickersToWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	watchlistItemIDs, err := AddTickersToWatchlist(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	// need to implement something for agent status update later
+	return fmt.Sprintf("successfully added %d tickers", len(watchlistItemIDs.([]int))), nil
+}
+
+func AddTickersToWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args AddTickersToWatchlistArgs
+	err := json.Unmarshal(rawArgs, &args)
+	if err != nil {
+		return nil, fmt.Errorf("m0ivn0d [addTickersToWatchlist]: %v", err)
+	}
+
+	owns, err := VerifyUserOwnsWatchlist(conn, userID, args.WatchlistID)
+	if err != nil {
+		return nil, err
+	}
+	if !owns {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to modify it")
+	}
+
+	rows, err := conn.DB.Query(context.Background(),
+		`INSERT INTO watchlistItems (securityId, watchlistId)
+		SELECT s.securityId, $1
+		FROM securities s
+		WHERE s.ticker = ANY($2::text[])
+		  AND s.maxDate IS NULL
+		ON CONFLICT (securityId, watchlistId) 
+		DO UPDATE SET securityId = EXCLUDED.securityId
+		RETURNING watchlistItemId`,
+		args.WatchlistID, args.Tickers)
+	if err != nil {
+		return nil, fmt.Errorf("error inserting watchlist items: %v", err)
+	}
+	defer rows.Close()
+
+	var watchlistItemIDs []int
+
+	for rows.Next() {
+		var rowWatchlistItemID int
+		err = rows.Scan(&rowWatchlistItemID)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning inserted items: %v", err)
+		}
+		watchlistItemIDs = append(watchlistItemIDs, rowWatchlistItemID)
+	}
+
+	return watchlistItemIDs, nil
+}
+func VerifyUserOwnsWatchlist(conn *data.Conn, userID int, watchlistID int) (bool, error) {
+	var watchlistExists bool
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM watchlists WHERE watchlistId = $1 AND userId = $2)`,
+		watchlistID, userID).Scan(&watchlistExists)
+	if err != nil {
+		return false, fmt.Errorf("error verifying watchlist ownership: %v", err)
+	}
+	return watchlistExists, nil
 }
