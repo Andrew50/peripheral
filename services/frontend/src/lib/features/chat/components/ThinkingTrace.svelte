@@ -1,16 +1,30 @@
 <script lang="ts">
 	import type { TimelineEvent } from '../interface';
+	import { agentStatusStore } from '$lib/utils/stream/socket';
+	import { browser } from '$app/environment';
 
-	export let timeline: TimelineEvent[] = [];
-	export let currentStatus: string = '';
-	export let showTimelineDropdown: boolean = false;
-	export let onToggleDropdown: (() => void) | undefined = undefined;
+	export let isProcessingMessage: boolean = false;
+
+	// Internal state
+	let showTimelineDropdown: boolean = false;
+	let timeline: TimelineEvent[] = [];
+	let lastStatusMessage = '';
+
+	// Debug reactive statements
+	$: {
+		console.log('🔄 ThinkingTrace DEBUG - isProcessingMessage:', isProcessingMessage);
+		console.log('🔄 ThinkingTrace DEBUG - timeline.length:', timeline.length);
+		console.log('🔄 ThinkingTrace DEBUG - timeline:', timeline);
+	}
+
+	// Derive current status from latest timeline message
+	$: currentHeadline = timeline.length > 0 ? timeline[timeline.length - 1].headline || 'Thinking...' : '';
 
 	// Show dropdown toggle if there are timeline items to show
-	$: showDropdownToggle = timeline.length > 1 && onToggleDropdown;
+	$: showDropdownToggle = timeline.length > 0;
 	
 	// For web searches, we only show chips (no status text)
-	$: shouldShowStatusHeader = currentStatus && typeof currentStatus === 'string' && currentStatus.trim().length > 0;
+	$: shouldShowStatusHeader = currentHeadline && typeof currentHeadline === 'string' && currentHeadline.trim().length > 0;
 
 	// Check if there's an active web search
 	$: hasActiveWebSearch = timeline.some(event => 
@@ -20,17 +34,81 @@
 			laterEvent.timestamp > event.timestamp
 		)
 	);
-	$: hasActiveBacktest = currentStatus && 
-		typeof currentStatus === 'string' && 
-		currentStatus.toLowerCase().includes('backtest');
+	$: hasActiveBacktest = currentHeadline && 
+		typeof currentHeadline === 'string' && 
+		currentHeadline.toLowerCase().includes('backtest');
 
-	// Always show recent timeline items (even when dropdown is collapsed)
-	$: lastTimelineItem = timeline.slice(-1); // Show last item
-	$: allTimelineItems = showTimelineDropdown ? timeline : lastTimelineItem;
+	// Timeline display logic: show all items when dropdown is expanded, otherwise show only the last item
+	$: displayedTimelineItems = showTimelineDropdown 
+		? timeline 
+		: timeline.slice(-1); // Show only the last timeline item when collapsed
 
+	// Reset timeline when processing starts/stops
+	$: if (!isProcessingMessage) {
+		timeline = [];
+		lastStatusMessage = '';
+		showTimelineDropdown = false;
+	}
+
+	// Listen to agent status store and build timeline
+	$: if ($agentStatusStore && browser && isProcessingMessage) {
+		const statusUpdate = $agentStatusStore;
+
+		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
+			// Add function update message to timeline
+			lastStatusMessage = statusUpdate.headline;
+			timeline = [
+				...timeline,
+				{
+					headline: statusUpdate.headline,
+					timestamp: new Date(),
+					type: 'message'
+				}
+			];
+		} else if (statusUpdate.type === 'WebSearchQuery' && statusUpdate.data?.query) {
+			// Add web search event to timeline in chronological order
+			lastStatusMessage = statusUpdate.headline;
+			timeline = [
+				...timeline,
+				{
+					headline: `Searching the web...`,
+					timestamp: new Date(),
+					type: 'webSearchQuery',
+					data: statusUpdate.data
+				}
+			];
+		} else if (statusUpdate.type === 'WebSearchCitations' && statusUpdate.data?.citations) {
+			// Add web search citations to timeline
+			timeline = [
+				...timeline,
+				{
+					headline: ``,
+					timestamp: new Date(),
+					type: 'webSearchCitations',
+					data: statusUpdate.data
+				}
+			];
+		}
+	}
+
+	// Internal toggle function
+	function toggleDropdown() {
+		showTimelineDropdown = !showTimelineDropdown;
+	}
 </script>
 
-{#if timeline.length > 0}
+{#if isProcessingMessage && timeline.length == 0}
+	<div class="status-header">
+		<div class="current-status">
+			<div class="status-icon">
+				<svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+					<path d="M15.1687 8.0855C15.1687 5.21138 12.8509 2.88726 9.99976 2.88726C7.14872 2.88744 4.83179 5.21149 4.83179 8.0855C4.8318 9.91374 5.7711 11.5187 7.19019 12.4459H12.8103C14.2293 11.5187 15.1687 9.91365 15.1687 8.0855ZM8.47046 16.1099C8.72749 16.6999 9.31515 17.1127 9.99976 17.1128C10.6844 17.1128 11.2719 16.6999 11.5291 16.1099H8.47046ZM7.65894 14.7798H12.3416V13.7759H7.65894V14.7798ZM16.4988 8.0855C16.4988 10.3216 15.3777 12.2942 13.6716 13.4703V15.4449C13.6714 15.8119 13.3736 16.1098 13.0066 16.1099H12.9216C12.6187 17.4453 11.4268 18.4429 9.99976 18.4429C8.57283 18.4428 7.3807 17.4453 7.07788 16.1099H6.9939C6.62677 16.1099 6.32909 15.8119 6.32886 15.4449V13.4703C4.62271 12.2942 3.50172 10.3217 3.50171 8.0855C3.50171 4.48337 6.40777 1.55736 9.99976 1.55718C13.5919 1.55718 16.4988 4.48326 16.4988 8.0855Z"></path>
+				</svg>	
+			</div>
+			Thinking...
+		</div>
+	</div>
+{:else if timeline.length > 0}
 	<div class="thinking-trace">
 		{#if shouldShowStatusHeader}
 			<div class="status-header">
@@ -47,33 +125,32 @@
 							{/if}
 						</svg>	
 					</div>
-					{currentStatus}
-				</div>
-				{#if showDropdownToggle}
-					<button
-						class="timeline-dropdown-toggle"
-						on:click={onToggleDropdown}
-						aria-label={showTimelineDropdown ? 'Hide timeline' : 'Show timeline'}
-					>
-						<svg
-							viewBox="0 0 24 24"
-							width="14"
-							height="14"
-							class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
+					{currentHeadline}
+					{#if showDropdownToggle}
+						<button
+							class="timeline-dropdown-toggle"
+							on:click={toggleDropdown}
+							aria-label={showTimelineDropdown ? 'Hide timeline' : 'Show timeline'}
 						>
-							<path
-								d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 20 20"
 								fill="currentColor"
-							/>
-						</svg>
-					</button>
-				{/if}
+								xmlns="http://www.w3.org/2000/svg"
+								class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
+							>
+								<path d="M7.52925 3.7793C7.75652 3.55203 8.10803 3.52383 8.36616 3.69434L8.47065 3.7793L14.2207 9.5293C14.4804 9.789 14.4804 10.211 14.2207 10.4707L8.47065 16.2207C8.21095 16.4804 7.78895 16.4804 7.52925 16.2207C7.26955 15.961 7.26955 15.539 7.52925 15.2793L12.8085 10L7.52925 4.7207L7.44429 4.61621C7.27378 4.35808 7.30198 4.00657 7.52925 3.7793Z"></path>
+							</svg>
+						</button>
+					{/if}
+				</div>
 			</div>
 		{/if}
 		
-		{#if allTimelineItems.length > 0}
+		{#if displayedTimelineItems.length > 0}
 			<div class="timeline-items">
-				{#each allTimelineItems as event, index}
+				{#each displayedTimelineItems as event, index}
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
@@ -119,8 +196,9 @@
 														alt="Site icon" 
 														class="citation-favicon"
 														on:error={(e) => {
-															if (e.target && 'style' in e.target) {
-																e.target.style.display = 'none';
+															const img = e.target;
+															if (img instanceof HTMLImageElement) {
+																img.style.display = 'none';
 															}
 														}}
 													/>
@@ -155,7 +233,6 @@
 	.status-header {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		margin-bottom: 0.5rem;
 	}
 
@@ -216,10 +293,11 @@
 
 	.chevron-icon {
 		transition: transform 0.2s ease;
+		transform: rotate(0deg); 
 	}
 
 	.chevron-icon.expanded {
-		transform: rotate(180deg);
+		transform: rotate(90deg);
 	}
 
 	.timeline-items {

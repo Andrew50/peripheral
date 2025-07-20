@@ -27,6 +27,12 @@ on:
         description: 'Site Domain'
         required: true
         type: string
+      strategy:
+        required: false
+        type: string
+      services_changed:
+        required: false
+        type: string
       # public_base_url:
       #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
       #   required: true
@@ -200,9 +206,10 @@ jobs:
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          SERVICES="cache backend worker frontend"
-          echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
-          echo "Using services: ${SERVICES}"
+
+          echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
+          echo "Services to deploy: ${{ inputs.services_changed }}"   
+
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
           echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
@@ -231,13 +238,13 @@ jobs:
           kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -c db
           kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -c db
 
-      # - name: Run Migrations
-      #   run: |
-      #     POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
-      #     kubectl exec $POD_NAME -c db -- bash -c "
-      #       chmod +x /tmp/migrate.sh
-      #       MIGRATIONS_DIR=/tmp/migrations /tmp/migrate.sh
-      #     "
+      - name: Run Migrations
+        run: |
+          POD_NAME=$(kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec $POD_NAME -c db -- bash -c "
+            chmod +x /tmp/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations DB_PORT_INT=5432 /tmp/migrate.sh
+          "
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh
