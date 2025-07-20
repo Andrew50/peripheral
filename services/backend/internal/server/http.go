@@ -121,7 +121,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"run_screening": strategy.RunScreening,
 
 	"getStrategies":            strategy.GetStrategies,
-	"createStrategyFromPrompt": strategy.CreateStrategyFromPrompt,
+	"createStrategyFromPrompt": wrapContextFunc(strategy.CreateStrategyFromPrompt),
 	"setAlert":                 strategy.SetAlert,
 	"deleteStrategy":           strategy.DeleteStrategy,
 

@@ -685,7 +685,7 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
+			Function:      strategy.CreateStrategyFromPrompt,
 			StatusMessage: "Building strategy...",
 		},
 		// [SEARCH TOOLS]
@@ -701,7 +701,7 @@ var (
 					Required: []string{"query"},
 				},
 			},
-			Function:      wrapWithContext(AgentRunWebSearch),
+			Function:      AgentRunWebSearch,
 			StatusMessage: "Searching the web...",
 		},
 		/*"runTwitterSearch": {

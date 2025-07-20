@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,23 +28,8 @@ type ExecutionPlan struct {
 	DiscardResults []int64 `json:"discard_results,omitempty"`
 }
 
-var (
-	codeEnvironment string
-)
-
-func initCodeEnvironment() {
-	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
-	if env == "" || env == "dev" || env == "development" {
-		codeEnvironment = "dev"
-	} else {
-		codeEnvironment = "prod"
-	}
-}
 func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
-	if codeEnvironment == "" {
-		initCodeEnvironment()
-	}
 	systemPrompt, err := getSystemInstruction("generalAgentSystemPrompt")
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)
@@ -109,7 +93,7 @@ func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptF
 		case StageExecute:
 			logger, _ := zap.NewProduction()
 			if executor == nil {
-				executor = NewExecutor(conn, 0, 5, logger)
+				executor = NewExecutor(conn, 0, 5, logger, "", "")
 			}
 			for _, round := range modelExecutionPlan.Rounds {
 				results, err := executor.Execute(context.Background(), round.Calls, round.Parallel)
@@ -209,7 +193,7 @@ func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.C
 		Reasoning: responses.ReasoningParam{
 			Effort: responses.ReasoningEffort(finalModelThinkingEffort),
 		},
-		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
+		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment},
 	})
 	if err != nil {
 		return zeroResult, fmt.Errorf("error generating final response: %w", err)

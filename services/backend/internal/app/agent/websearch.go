@@ -39,7 +39,7 @@ type WebSearchResult struct {
 }
 
 // AgentRunWebSearch performs a web search using the Gemini API
-func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func AgentRunWebSearch(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
@@ -49,7 +49,7 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
-	websearchResult, err := _openaiWebSearch(conn, userID, systemPrompt, args.Query)
+	websearchResult, err := _openaiWebSearch(ctx, conn, userID, systemPrompt, args.Query)
 	if err != nil {
 		return nil, fmt.Errorf("error running web search: %w", err)
 	}
@@ -57,9 +57,17 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	return websearchResult.ResultText, nil
 }
 
-func _openaiWebSearch(conn *data.Conn, userID int, systemPrompt string, prompt string) (WebSearchResult, error) {
+func _openaiWebSearch(ctx context.Context, conn *data.Conn, userID int, systemPrompt string, prompt string) (WebSearchResult, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
+	messageID, ok := ctx.Value("messageID").(string)
+	if !ok {
+		messageID = ""
+	}
+	conversationID, ok := ctx.Value("conversationID").(string)
+	if !ok {
+		conversationID = ""
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	res, err := client.Responses.New(ctx, responses.ResponseNewParams{
@@ -77,7 +85,7 @@ func _openaiWebSearch(conn *data.Conn, userID int, systemPrompt string, prompt s
 				},
 			},
 		},
-		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
+		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment, "convID": conversationID, "msgID": messageID},
 	})
 	if err != nil {
 		return WebSearchResult{}, fmt.Errorf("error creating response: %w", err)
