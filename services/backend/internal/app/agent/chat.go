@@ -315,7 +315,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				var finalResponse *FinalResponse
 
 				// Get the final response from the model
-				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
+				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, messageID, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Final response error: %v", err)); markErr != nil {

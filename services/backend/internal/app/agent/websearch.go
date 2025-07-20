@@ -10,13 +10,15 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
+	"time"
 
 	"backend/internal/services/socket"
-	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/shared"
 	"google.golang.org/genai"
 )
 
@@ -47,7 +49,7 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
-	websearchResult, err := _openaiWebSearch(conn, systemPrompt, args.Query)
+	websearchResult, err := _openaiWebSearch(conn, userID, systemPrompt, args.Query)
 	if err != nil {
 		return nil, fmt.Errorf("error running web search: %w", err)
 	}
@@ -55,7 +57,7 @@ func AgentRunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	return websearchResult.ResultText, nil
 }
 
-func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebSearchResult, error) {
+func _openaiWebSearch(conn *data.Conn, userID int, systemPrompt string, prompt string) (WebSearchResult, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -75,6 +77,7 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (WebS
 				},
 			},
 		},
+		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
 	})
 	if err != nil {
 		return WebSearchResult{}, fmt.Errorf("error creating response: %w", err)

@@ -508,7 +508,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }*/
 
-func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
+func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	apiKey := conn.OpenAIKey
 
 	client := openai.NewClient(option.WithAPIKey(apiKey))
@@ -558,7 +558,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
-		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment},
+		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": codeEnvironment, "convID": conversationID, "msgID": messageID},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error generating final response: %w", err)
