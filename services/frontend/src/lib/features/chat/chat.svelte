@@ -1933,7 +1933,7 @@
 			<p>
 				You are viewing a shared conversation. <button
 					class="auth-link"
-					on:click={() => (window.location.href = '/login')}>Sign in</button
+					on:click={() => (window.location.href = '/signup')}>Sign up</button
 				> to start your own chat.
 			</p>
 		</div>
