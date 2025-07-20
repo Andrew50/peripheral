@@ -37,9 +37,11 @@ If the news warrants a visual representation, include a `plot` object with:
   - If the plot refers to several tickers, either omit this or pick the ticker that best represents the plot. 
 - Do not append a $ to the ticker in the trace labels. The ticker should be formatted normally, like AAPL, NVDA, etc.
 
-If the headline is a breaking earnings release that contains the latest EPS and Revenue, you should create a bar graph that displays the historical EPS and Revenue 
+- If the headline is a breaking earnings release that contains the latest EPS and Revenue, you should create a bar graph that displays the historical EPS and Revenue 
 over the past quarters (given that the data is provided to you). The X-axis labels should be in the form 'Q1 '25', etc, not dates.
-The plot should be a bar + line graph, where the bars are the revenue, and EPS is the line. The EPS should not be of type scatter.
+
+- The plot should be a bar + line graph, where the bars are the revenue, and EPS is the line. The EPS should not be of type scatter.
+
 **CONTENT GUIDELINES:**
 - Synthesize information from execution results with the breaking news
 - Highlight market-moving aspects
@@ -48,12 +50,12 @@ The plot should be a bar + line graph, where the bars are the revenue, and EPS i
 - Present facts and data-driven observations
 - A stock or ticker may be unfamiliar to you if its a new listing. If the headline seems like it refers to an unfamiliar stock, assume that its a stock and use the $ ticker formatting.
 - Do not point out obvious things about the plot you generate, like "The plot shows consistent EPS and revenue surprises".
-
+- The tweet should be fully coherent and the content should be relevant to the headline. 
 **Style and Voicing Guidelines** 
 - NEVER say general statements like expect volume/volatility, "watch for follow-through", 
 - NEVER use hashtags
 
 **CRITICAL**
-- NEVER NEVER make up information that is NOT included in either the headline or the execution rounds. 
+- NEVER NEVER make up information that is NOT included in either the headline or the execution rounds. Your internal knowledge of asset prices and news is outdated.
 
 Remember: Your tweet should be immediately valuable to traders and investors monitoring real-time market developments. Focus on clarity, accuracy, and impact. 

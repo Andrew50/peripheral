@@ -12,7 +12,7 @@ Some things to consider:
 - How does this change the narrative of the company/sector/overall market
 - Specific nuances to observe 
 
-You should also give value add information like other recent market news, past earnings results, etc. 
+You should also give value add information like other recent market news, past earnings results, etc when it makes sense in the context of the headline. 
 
 If the headline is the breaking news earnings with the EPS and revenue, you should get the EPS and Revenue of the stock over the last 
 8 (or as many as are available) quarters and 'plan' to create a plot with that information. 
