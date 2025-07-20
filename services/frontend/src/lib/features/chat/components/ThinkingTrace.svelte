@@ -184,7 +184,7 @@
 		{/if}
 		
 		{#if displayedTimelineItems.length > 0}
-			<div class="timeline-items">
+			<div class="timeline-items" class:collapsed={!showTimelineDropdown}>
 				{#each displayedTimelineItems as event, index}
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
@@ -543,6 +543,15 @@
 		color: var(--text-secondary, #ccc);
 		min-width: 0; /* Allows flex item to shrink */
 		max-width: 100%;
+	}
+
+	/* Hide timeline dots and connecting lines when collapsed */
+	.timeline-items.collapsed .timeline-dot {
+		display: none;
+	}
+
+	.timeline-items.collapsed .timeline-dot::after {
+		display: none;
 	}
 
 	.timeline-websearch {
