@@ -150,6 +150,10 @@ func filterOutWebsiteBots(req LogSplashScreenViewArgs, org string) bool {
 		return true
 	} else if strings.Contains(org, "Microsoft Corporation") {
 		return true
+	} else if strings.Contains(org, "Facebook") {
+		return true
+	} else if strings.Contains(org, "Amazon.com") {
+		return true
 	}
 	return false
 }
