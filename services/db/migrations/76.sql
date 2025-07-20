@@ -82,6 +82,20 @@ SET timescaledb.enable_cagg_window_functions = true;
 -- CREATE INDEX IF NOT EXISTS cagg_rsi_14_day_latest_idx
 --     ON cagg_rsi_14_day (ticker, bucket DESC);
 
+-- ❺ Create safe division function to handle division by zero
+CREATE OR REPLACE FUNCTION safe_div(
+  num numeric,
+  den numeric
+) RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+STRICT
+AS $$
+  SELECT COALESCE(num / NULLIF(den, 0), 0);
+$$;
+
+
 -- ❻ Updated refresh_screener function to use the RSI continuous aggregate
 CREATE OR REPLACE FUNCTION refresh_screener(p_limit integer)
 RETURNS VOID
@@ -248,7 +262,7 @@ BEGIN
             extremes.max_high AS price_52w_high
         FROM stale_tickers st
         LEFT JOIN LATERAL (
-            SELECT close / NULLIF(1000.0, 0) AS close
+            SELECT safe_div(close, 1000.0) AS close
             FROM ohlcv_1d
             WHERE ticker = st.ticker
             ORDER BY "timestamp" DESC
@@ -322,9 +336,9 @@ BEGIN
             cd.pre_market_low,
             cd.pre_market_close,
             (cd.pre_market_close - hp.price_prev_close) AS pre_market_change,
-            (cd.pre_market_close - hp.price_prev_close) / NULLIF(hp.price_prev_close, 0) * 100 AS pre_market_change_pct,
+            safe_div(cd.pre_market_close - hp.price_prev_close, hp.price_prev_close) * 100 AS pre_market_change_pct,
             (ld.close - cd.pre_market_close) AS extended_hours_change,
-            (ld.close - cd.pre_market_close) / NULLIF(cd.pre_market_close, 0) * 100 AS extended_hours_change_pct
+            safe_div(ld.close - cd.pre_market_close, cd.pre_market_close) * 100 AS extended_hours_change_pct
         FROM stale_tickers st
         JOIN latest_daily ld ON ld.ticker = st.ticker
         JOIN cagg_data cd ON cd.ticker = st.ticker
@@ -370,45 +384,45 @@ BEGIN
             mcd.pre_market_change_pct,
             mcd.extended_hours_change,
             mcd.extended_hours_change_pct,
-            (ld.close - ip.price_1m) / NULLIF(ip.price_1m, 0) * 100 AS change_1_pct,
-            (ld.close - ip.price_15m) / NULLIF(ip.price_15m, 0) * 100 AS change_15_pct,
-            (ld.close - ip.price_1h) / NULLIF(ip.price_1h, 0) * 100 AS change_1h_pct,
-            (ld.close - cd.price_4h_ago) / NULLIF(cd.price_4h_ago, 0) * 100 AS change_4h_pct,
+            safe_div(ld.close - ip.price_1m, ip.price_1m) * 100 AS change_1_pct,
+            safe_div(ld.close - ip.price_15m, ip.price_15m) * 100 AS change_15_pct,
+            safe_div(ld.close - ip.price_1h, ip.price_1h) * 100 AS change_1h_pct,
+            safe_div(ld.close - cd.price_4h_ago, cd.price_4h_ago) * 100 AS change_4h_pct,
             mcd.change_1d_pct,
-            (ld.close - hp.price_1w) / NULLIF(hp.price_1w, 0) * 100 AS change_1w_pct,
-            (ld.close - hp.price_1m) / NULLIF(hp.price_1m, 0) * 100 AS change_1m_pct,
-            (ld.close - hp.price_3m) / NULLIF(hp.price_3m, 0) * 100 AS change_3m_pct,
-            (ld.close - hp.price_6m) / NULLIF(hp.price_6m, 0) * 100 AS change_6m_pct,
-            (ld.close - hp.price_1y) / NULLIF(hp.price_1y, 0) * 100 AS change_ytd_1y_pct,
-            (ld.close - hp.price_5y) / NULLIF(hp.price_5y, 0) * 100 AS change_5y_pct,
-            (ld.close - hp.price_10y) / NULLIF(hp.price_10y, 0) * 100 AS change_10y_pct,
-            (ld.close - hp.price_all) / NULLIF(hp.price_all, 0) * 100 AS change_all_time_pct,
+            safe_div(ld.close - hp.price_1w, hp.price_1w) * 100 AS change_1w_pct,
+            safe_div(ld.close - hp.price_1m, hp.price_1m) * 100 AS change_1m_pct,
+            safe_div(ld.close - hp.price_3m, hp.price_3m) * 100 AS change_3m_pct,
+            safe_div(ld.close - hp.price_6m, hp.price_6m) * 100 AS change_6m_pct,
+            safe_div(ld.close - hp.price_1y, hp.price_1y) * 100 AS change_ytd_1y_pct,
+            safe_div(ld.close - hp.price_5y, hp.price_5y) * 100 AS change_5y_pct,
+            safe_div(ld.close - hp.price_10y, hp.price_10y) * 100 AS change_10y_pct,
+            safe_div(ld.close - hp.price_all, hp.price_all) * 100 AS change_all_time_pct,
             (ld.close - ld.open) AS change_from_open,
-            ((ld.close - ld.open) / NULLIF(ld.open, 0)) * 100 AS change_from_open_pct,
-            ld.close / NULLIF(hp.price_52w_high, 0) * 100 AS price_over_52wk_high,
-            ld.close / NULLIF(hp.price_52w_low, 0) * 100 AS price_over_52wk_low,
+            safe_div(ld.close - ld.open, ld.open) * 100 AS change_from_open_pct,
+            safe_div(ld.close, hp.price_52w_high) * 100 AS price_over_52wk_high,
+            safe_div(ld.close, hp.price_52w_low) * 100 AS price_over_52wk_low,
             cd.rsi_14 AS rsi,  -- Use RSI from continuous aggregate
             cd.dma_200,
             cd.dma_50,
-            ld.close / NULLIF(cd.dma_50, 0) * 100 AS price_over_50dma,
-            ld.close / NULLIF(cd.dma_200, 0) * 100 AS price_over_200dma,
-            ((ld.close - hp.price_1y) / NULLIF(hp.price_1y, 0)) / NULLIF( ((spy.spy_ld_close - spy.spy_price_1y) / NULLIF(spy.spy_price_1y, 0)), 0) * 100 AS beta_1y_vs_spy,
-            ((ld.close - hp.price_1m) / NULLIF(hp.price_1m, 0)) / NULLIF( ((spy.spy_ld_close - spy.spy_price_1m) / NULLIF(spy.spy_price_1m, 0)), 0) * 100 AS beta_1m_vs_spy,
+            safe_div(ld.close, cd.dma_50) * 100 AS price_over_50dma,
+            safe_div(ld.close, cd.dma_200) * 100 AS price_over_200dma,
+            safe_div(safe_div(ld.close - hp.price_1y, hp.price_1y), safe_div(spy.spy_ld_close - spy.spy_price_1y, spy.spy_price_1y)) * 100 AS beta_1y_vs_spy,
+            safe_div(safe_div(ld.close - hp.price_1m, hp.price_1m), safe_div(spy.spy_ld_close - spy.spy_price_1m, spy.spy_price_1m)) * 100 AS beta_1m_vs_spy,
             ld.volume,
             av.avg_volume_1m,
             COALESCE(ld.close * ld.volume, 0) AS dollar_volume,
             av.avg_dollar_volume_1m,
             cd.pre_market_volume,
             cd.pre_market_dollar_volume,
-            lm.m_volume / NULLIF(cd.avg_volume_1m_14, 0) AS relative_volume_14,
-            cd.pre_market_volume / NULLIF(av.avg_daily_volume_14d, 0) AS pre_market_vol_over_14d_vol,
-            (lm.m_high - lm.m_low) / NULLIF(lm.m_low, 0) * 100 AS range_1m_pct,
+            safe_div(lm.m_volume, cd.avg_volume_1m_14) AS relative_volume_14,
+            safe_div(cd.pre_market_volume, av.avg_daily_volume_14d) AS pre_market_vol_over_14d_vol,
+            safe_div(lm.m_high - lm.m_low, lm.m_low) * 100 AS range_1m_pct,
             cd.range_15m_pct,
             cd.range_1h_pct,
-            (ld.high - ld.low) / NULLIF(ld.low, 0) * 100 AS day_range_pct,
+            safe_div(ld.high - ld.low, ld.low) * 100 AS day_range_pct,
             cd.volatility_1w,
             cd.volatility_1m,
-            (cd.pre_market_high - cd.pre_market_low) / NULLIF(cd.pre_market_low, 0) * 100 AS pre_market_range_pct
+            safe_div(cd.pre_market_high - cd.pre_market_low, cd.pre_market_low) * 100 AS pre_market_range_pct
         FROM security_info si
         JOIN latest_daily ld ON ld.ticker = si.ticker
         JOIN latest_minute lm ON lm.ticker = si.ticker
