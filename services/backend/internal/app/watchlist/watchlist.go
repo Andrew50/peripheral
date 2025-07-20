@@ -236,6 +236,28 @@ func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage
 		if err != nil {
 			return // Silently ignore notification errors
 		}
+
+		// Properly marshal tickers to JSON
+		tickersJSON, err := json.Marshal(tickers)
+		if err != nil {
+			fmt.Println("error marshaling tickers", err)
+			return // Silently ignore notification errors
+		}
+
+		icons, err := helpers.GetIcons(conn, userID, json.RawMessage(fmt.Sprintf(`{"tickers": %s}`, tickersJSON)))
+		if err != nil {
+			fmt.Println("error getting icons", err)
+			return // Silently ignore notification errors
+		}
+
+		// Convert icons slice to map for efficient lookup
+		iconMap := make(map[string]string)
+		if iconResults, ok := icons.([]helpers.GetIconsResults); ok {
+			for _, iconResult := range iconResults {
+				iconMap[iconResult.Ticker] = iconResult.Icon
+			}
+		}
+
 		for _, ticker := range tickers {
 			res, err := helpers.GetTickerDailySnapshot(conn, userID, json.RawMessage(fmt.Sprintf(`{"ticker": "%s"}`, ticker)))
 			if err != nil {
@@ -243,9 +265,10 @@ func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage
 			}
 			tickerWithData := map[string]interface{}{
 				"ticker":        ticker,
-				"price":         res.(helpers.GetTickerDailySnapshotResults).LastTradePrice,
+				"price":         res.(helpers.GetTickerDailySnapshotResults).Close,
 				"change":        res.(helpers.GetTickerDailySnapshotResults).TodayChange,
 				"changePercent": res.(helpers.GetTickerDailySnapshotResults).TodayChangePercent,
+				"icon":          iconMap[ticker], // Use map lookup instead of slice index
 			}
 			tickerWtihData = append(tickerWtihData, tickerWithData)
 		}
@@ -255,7 +278,7 @@ func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage
 			"watchlistName": watchlistName,
 		}
 
-		socket.SendAgentStatusUpdate(userID, "GetWatchlistItems", value)
+		socket.SendAgentStatusUpdate(userID, "getWatchlistItems", value)
 	}()
 
 	return tickers, nil
