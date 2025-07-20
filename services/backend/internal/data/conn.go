@@ -20,20 +20,21 @@ import (
 // Conn encapsulates database connections and API clients
 type Conn struct {
 	//Cache *redis.Client
-	DB              *pgxpool.Pool
-	Polygon         *polygon.Client
-	Cache           *redis.Client
-	PolygonKey      string
-	PerplexityKey   string
-	GrokAPIKey      string
-	TwitterAPIioKey string
-	OpenAIKey       string
-	XAPIKey         string
-	XAPISecretKey   string
-	XAccessToken    string
-	XAccessSecret   string
-	GeminiClient    *genai.Client
-	IsLLMExecution  bool // Track if function is called by LLM agent
+	DB                   *pgxpool.Pool
+	Polygon              *polygon.Client
+	Cache                *redis.Client
+	PolygonKey           string
+	PerplexityKey        string
+	GrokAPIKey           string
+	TwitterAPIioKey      string
+	OpenAIKey            string
+	XAPIKey              string
+	XAPISecretKey        string
+	XAccessToken         string
+	XAccessSecret        string
+	GeminiClient         *genai.Client
+	ExecutionEnvironment string
+	IsLLMExecution       bool // Track if function is called by LLM agent
 }
 
 // Result structs for thread-safe communication
@@ -73,6 +74,13 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	xAccessSecret := getEnv("X_ACCESS_SECRET", "")
 
 	geminiAPIKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
+
+	executionEnvironment := getEnv("ENVIRONMENT", "")
+	if executionEnvironment == "" || executionEnvironment == "dev" || executionEnvironment == "development" {
+		executionEnvironment = "dev"
+	} else {
+		executionEnvironment = "prod"
+	}
 
 	var dbURL string
 	var cacheURL string
@@ -237,20 +245,21 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	}
 	// Create local connection object (no global variable)
 	localConn := &Conn{
-		DB:              dbRes.conn,
-		Cache:           redisRes.client,
-		Polygon:         polygonClient,
-		PolygonKey:      polygonKey,
-		PerplexityKey:   perplexityKey,
-		GrokAPIKey:      grokAPIKey,
-		TwitterAPIioKey: twitterAPIioKey,
-		OpenAIKey:       openAIKey,
-		XAPIKey:         xAPIKey,
-		XAPISecretKey:   xAPISecretKey,
-		XAccessToken:    xAccessToken,
-		XAccessSecret:   xAccessSecret,
-		IsLLMExecution:  false, // Initialize the new field
-		GeminiClient:    geminiClient,
+		DB:                   dbRes.conn,
+		Cache:                redisRes.client,
+		Polygon:              polygonClient,
+		PolygonKey:           polygonKey,
+		PerplexityKey:        perplexityKey,
+		GrokAPIKey:           grokAPIKey,
+		TwitterAPIioKey:      twitterAPIioKey,
+		OpenAIKey:            openAIKey,
+		XAPIKey:              xAPIKey,
+		XAPISecretKey:        xAPISecretKey,
+		XAccessToken:         xAccessToken,
+		XAccessSecret:        xAccessSecret,
+		IsLLMExecution:       false, // Initialize the new field
+		GeminiClient:         geminiClient,
+		ExecutionEnvironment: executionEnvironment,
 	}
 
 	cleanup := func() {

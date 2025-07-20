@@ -308,7 +308,7 @@ class PythonAgentGenerator:
 
 
 
-    async def start_general_python_agent(self, user_id: int, prompt: str, data: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+    async def start_general_python_agent(self, user_id: int, prompt: str, data: str, conversationID: str, messageID: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
         # Generate unique execution_id for this run - accessible throughout method
         execution_serial = int(time.time())  # Seconds timestamp
         execution_id = f"{user_id}_{execution_serial}"
@@ -348,7 +348,7 @@ class PythonAgentGenerator:
                         input=f"{userPrompt}",
                         instructions=f"{systemInstruction}",
                         user=f"user:0",
-                        metadata={"userID": str(user_id), "env": self.environment},
+                        metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
                         timeout=120.0  # 2 minute timeout for other models
                     )
                     pythonCode = self._extract_python_code(openaiResponse.output_text)

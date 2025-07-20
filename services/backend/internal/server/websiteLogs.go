@@ -129,12 +129,8 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 	go func() {
 		if !wasRecentDuplicate {
 			var path string
-			if req.Path == "/" {
-				path = "splash"
-			} else if req.Path == "/pricing" {
-				path = "pricing"
-			} else {
-				path = req.Path
+			if req.Path == "/" { //removing logging for splash
+				return
 			}
 			err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, path, *org))
 			if err != nil {
