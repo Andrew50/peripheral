@@ -39,10 +39,12 @@ type Executor struct {
 	limiter         chan struct{}
 	functionCounter int64     // Thread-safe counter for result IDs
 	resultPool      sync.Pool // Pool for ExecuteResult slices
+	conversationID  string
+	messageID       string
 }
 
 // NewExecutor creates a new Executor
-func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *Executor {
+func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger, conversationID string, messageID string) *Executor {
 	if maxWorkers <= 0 {
 		maxWorkers = 5
 	}
@@ -56,6 +58,8 @@ func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *E
 		maxWorkers:      maxWorkers,
 		limiter:         make(chan struct{}, maxWorkers),
 		functionCounter: 0,
+		conversationID:  conversationID,
+		messageID:       messageID,
 	}
 
 	// Initialize result pool for memory optimization
@@ -255,7 +259,8 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
-
+	ctx = context.WithValue(ctx, "conversationID", e.conversationID)
+	ctx = context.WithValue(ctx, "messageID", e.messageID)
 	result, err := tool.Function(ctx, e.conn, e.userID, fc.Args)
 	if err != nil {
 		span.RecordError(err)

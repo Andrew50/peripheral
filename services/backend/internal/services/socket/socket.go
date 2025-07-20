@@ -265,7 +265,7 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 				"citations": value,
 			}
 		}
-	case "GetWatchlistItems":
+	case "getWatchlistItems":
 		headline = "Reading watchlist..."
 		data = value
 	case "newWatchlist":

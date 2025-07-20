@@ -274,7 +274,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Create an executor to handle function calls
 				logger, _ := zap.NewProduction()
 				if executor == nil {
-					executor = NewExecutor(conn, userID, 5, logger)
+					executor = NewExecutor(conn, userID, 5, logger, conversationID, messageID)
 				}
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
@@ -315,7 +315,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				var finalResponse *FinalResponse
 
 				// Get the final response from the model
-				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
+				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, messageID, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Final response error: %v", err)); markErr != nil {

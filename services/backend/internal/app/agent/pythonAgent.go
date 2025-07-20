@@ -113,13 +113,23 @@ type WorkerPythonAgentResult struct {
 
 func callWorkerPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunPythonAgentArgs, progressCallback ProgressCallback) (*WorkerPythonAgentResult, error) {
 	taskID := fmt.Sprintf("pythonAgent_%d_%d", userID, time.Now().UnixNano())
+	messageID, ok := ctx.Value("messageID").(string)
+	if !ok {
+		messageID = ""
+	}
+	conversationID, ok := ctx.Value("conversationID").(string)
+	if !ok {
+		conversationID = ""
+	}
 	task := map[string]interface{}{
 		"task_id":   taskID,
 		"task_type": "general_python_agent",
 		"args": map[string]interface{}{
-			"user_id": userID,
-			"prompt":  args.Prompt,
-			"data":    args.Data,
+			"user_id":        userID,
+			"prompt":         args.Prompt,
+			"data":           args.Data,
+			"conversationID": conversationID,
+			"messageID":      messageID,
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
 	}

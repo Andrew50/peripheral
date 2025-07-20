@@ -88,12 +88,47 @@
 					data: statusUpdate.data
 				}
 			];
+		} else if (statusUpdate.type === 'getWatchlistItems' && statusUpdate.data) {
+			// Add watchlist data to timeline
+			lastStatusMessage = statusUpdate.headline;
+			timeline = [
+				...timeline,
+				{
+					headline: statusUpdate.headline,
+					timestamp: new Date(),
+					type: 'getWatchlistItems',
+					data: statusUpdate.data
+				}
+			];
 		}
 	}
 
 	// Internal toggle function
 	function toggleDropdown() {
 		showTimelineDropdown = !showTimelineDropdown;
+	}
+
+	// Helper functions for watchlist formatting
+	function formatPrice(price: number): string {
+		if (typeof price !== 'number') return '--';
+		return price.toFixed(2);
+	}
+
+	function formatChange(change: number): string {
+		if (typeof change !== 'number') return '--';
+		const sign = change >= 0 ? '+' : '';
+		return `${sign}${change.toFixed(2)}`;
+	}
+
+	function formatChangePct(changePct: number): string {
+		if (typeof changePct !== 'number') return '--';
+		const sign = changePct >= 0 ? '+' : '';
+		return `${sign}${changePct.toFixed(2)}%`;
+	}
+
+	function getChangeClass(value: number): string {
+		if (typeof value !== 'number') return '';
+		return value >= 0 ? 'positive' : 'negative';
 	}
 </script>
 
@@ -105,7 +140,7 @@
 					<path d="M15.1687 8.0855C15.1687 5.21138 12.8509 2.88726 9.99976 2.88726C7.14872 2.88744 4.83179 5.21149 4.83179 8.0855C4.8318 9.91374 5.7711 11.5187 7.19019 12.4459H12.8103C14.2293 11.5187 15.1687 9.91365 15.1687 8.0855ZM8.47046 16.1099C8.72749 16.6999 9.31515 17.1127 9.99976 17.1128C10.6844 17.1128 11.2719 16.6999 11.5291 16.1099H8.47046ZM7.65894 14.7798H12.3416V13.7759H7.65894V14.7798ZM16.4988 8.0855C16.4988 10.3216 15.3777 12.2942 13.6716 13.4703V15.4449C13.6714 15.8119 13.3736 16.1098 13.0066 16.1099H12.9216C12.6187 17.4453 11.4268 18.4429 9.99976 18.4429C8.57283 18.4428 7.3807 17.4453 7.07788 16.1099H6.9939C6.62677 16.1099 6.32909 15.8119 6.32886 15.4449V13.4703C4.62271 12.2942 3.50172 10.3217 3.50171 8.0855C3.50171 4.48337 6.40777 1.55736 9.99976 1.55718C13.5919 1.55718 16.4988 4.48326 16.4988 8.0855Z"></path>
 				</svg>	
 			</div>
-			Thinking...
+			Thinking
 		</div>
 	</div>
 {:else if timeline.length > 0}
@@ -210,6 +245,163 @@
 											</div>
 										{/each}
 									</div>
+								</div>
+							{:else if event.type === 'getWatchlistItems' && event.data}
+								<div class="timeline-watchlist">
+									{#if event.data && Array.isArray(event.data.tickers)}
+										{@const watchlistData = event.data.tickers}
+										<div class="watchlist-header">
+											<svg class="watchlist-icon" viewBox="0 0 24 24" width="16" height="16" fill="none">
+												<path
+													d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												/>
+											</svg>
+											<span>Reading {event.data.watchlistName || 'Watchlist'}</span>
+										</div>
+										<div class="watchlist-container">
+											<div class="watchlist-table">
+												<div class="watchlist-table-header">
+													<div class="watchlist-header-cell ticker">Ticker</div>
+													<div class="watchlist-header-cell price">Price</div>
+													<div class="watchlist-header-cell change">Change</div>
+													<div class="watchlist-header-cell change-pct">Change %</div>
+												</div>
+												<div class="watchlist-table-body">
+													{#each watchlistData as item, index}
+														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+															<div class="watchlist-cell ticker">
+																{#if item.icon}
+																	<img
+																		src={item.icon}
+																		alt={`${item.ticker} icon`}
+																		class="watchlist-ticker-icon"
+																	/>
+																{:else if item.ticker}
+																	<span class="watchlist-default-icon">
+																		{item.ticker.charAt(0).toUpperCase()}
+																	</span>
+																{/if}
+																<span class="watchlist-ticker-name">{item.ticker || '--'}</span>
+															</div>
+															<div class="watchlist-cell price">${formatPrice(item.price)}</div>
+															<div class="watchlist-cell change {getChangeClass(item.change)}">
+																{formatChange(item.change)}
+															</div>
+															<div class="watchlist-cell change-pct {getChangeClass(item.changePercent)}">
+																{formatChangePct(item.changePercent)}
+															</div>
+														</div>
+													{/each}
+												</div>
+											</div>
+										</div>
+									{:else if Array.isArray(event.data)}
+										{@const watchlistData = event.data}
+										<div class="watchlist-header">
+											<svg class="watchlist-icon" viewBox="0 0 24 24" width="16" height="16" fill="none">
+												<path
+													d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												/>
+											</svg>
+											<span>Watchlist data · {watchlistData.length} items</span>
+										</div>
+										<div class="watchlist-container">
+											<div class="watchlist-table">
+												<div class="watchlist-table-header">
+													<div class="watchlist-header-cell ticker">Ticker</div>
+													<div class="watchlist-header-cell price">Price</div>
+													<div class="watchlist-header-cell change">Change</div>
+													<div class="watchlist-header-cell change-pct">Change %</div>
+												</div>
+												<div class="watchlist-table-body">
+													{#each watchlistData as item, index}
+														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+															<div class="watchlist-cell ticker">
+																{#if item.icon}
+																	<img
+																		src={item.icon}
+																		alt={`${item.ticker} icon`}
+																		class="watchlist-ticker-icon"
+																	/>
+																{:else if item.ticker}
+																	<span class="watchlist-default-icon">
+																		{item.ticker.charAt(0).toUpperCase()}
+																	</span>
+																{/if}
+																<span class="watchlist-ticker-name">{item.ticker || '--'}</span>
+															</div>
+															<div class="watchlist-cell price">${formatPrice(item.price)}</div>
+															<div class="watchlist-cell change {getChangeClass(item.change)}">
+																{formatChange(item.change)}
+															</div>
+															<div class="watchlist-cell change-pct {getChangeClass(item.changePct)}">
+																{formatChangePct(item.changePct)}
+															</div>
+														</div>
+													{/each}
+												</div>
+											</div>
+										</div>
+									{:else if event.data && Array.isArray(event.data.items)}
+										{@const watchlistData = event.data.items}
+										<div class="watchlist-header">
+											<svg class="watchlist-icon" viewBox="0 0 24 24" width="16" height="16" fill="none">
+												<path
+													d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												/>
+											</svg>
+											<span>{event.data.name || 'Watchlist'} · {watchlistData.length} items</span>
+										</div>
+										<div class="watchlist-container">
+											<div class="watchlist-table">
+												<div class="watchlist-table-header">
+													<div class="watchlist-header-cell ticker">Ticker</div>
+													<div class="watchlist-header-cell price">Price</div>
+													<div class="watchlist-header-cell change">Change</div>
+													<div class="watchlist-header-cell change-pct">Change %</div>
+												</div>
+												<div class="watchlist-table-body">
+													{#each watchlistData as item, index}
+														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+															<div class="watchlist-cell ticker">
+																{#if item.icon}
+																	<img
+																		src={item.icon}
+																		alt={`${item.ticker} icon`}
+																		class="watchlist-ticker-icon"
+																	/>
+																{:else if item.ticker}
+																	<span class="watchlist-default-icon">
+																		{item.ticker.charAt(0).toUpperCase()}
+																	</span>
+																{/if}
+																<span class="watchlist-ticker-name">{item.ticker || '--'}</span>
+															</div>
+															<div class="watchlist-cell price">${formatPrice(item.price)}</div>
+															<div class="watchlist-cell change {getChangeClass(item.change)}">
+																{formatChange(item.change)}
+															</div>
+															<div class="watchlist-cell change-pct {getChangeClass(item.changePct)}">
+																{formatChangePct(item.changePct)}
+															</div>
+														</div>
+													{/each}
+												</div>
+											</div>
+										</div>
+									{/if}
 								</div>
 							{:else}
 							 <span> {event.headline} </span>						
@@ -485,5 +677,203 @@
 		margin-right: 0.5rem;
 		background-color: rgba(255, 255, 255, 0.1);
 		border: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	/* Watchlist inline table styles */
+	.timeline-watchlist {
+		margin-top: 0.25rem;
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.watchlist-header {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--text-secondary);
+		opacity: 0.8;
+	}
+
+	.watchlist-header .watchlist-icon {
+		flex-shrink: 0;
+		opacity: 0.8;
+	}
+
+	.watchlist-container {
+		border: 1.5px solid #2e2e2e;
+		border-radius: 0.5rem;
+		background: #0f0f0f;
+		width: 100%;
+		max-width: 400px;
+		margin: 0 auto;
+		box-sizing: border-box;
+		animation: fadeInUp 0.2s ease-out, expandContainer 0.25s ease-in;
+		overflow: hidden;
+	}
+
+	.watchlist-table {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.watchlist-table-header {
+		display: flex;
+		background: rgba(255, 255, 255, 0.02);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		padding: 0.4rem;
+	}
+
+	.watchlist-header-cell {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: #ffffff;
+		opacity: 0.8;
+		text-transform: none;
+	}
+
+	.watchlist-header-cell.ticker {
+		flex: 1.2;
+		min-width: 0;
+		text-align: left;
+	}
+
+	.watchlist-header-cell.price,
+	.watchlist-header-cell.change,
+	.watchlist-header-cell.change-pct {
+		flex: 0.8;
+		min-width: 45px;
+		text-align: right;
+	}
+
+	.watchlist-table-body {
+		overflow-y: auto;
+	}
+
+	.watchlist-row {
+		display: flex;
+		padding: 0.4rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		transition: background-color 0.2s ease;
+	}
+
+	.watchlist-row:last-child {
+		border-bottom: none;
+	}
+
+	.watchlist-row:hover {
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.watchlist-row-reveal {
+		opacity: 0;
+		transform: translateX(-10px);
+		animation: watchlistRowReveal 0.2s ease-in forwards;
+	}
+
+	@keyframes watchlistRowReveal {
+		from {
+			opacity: 0;
+			transform: translateX(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+
+	@keyframes expandContainer {
+		from {
+			max-height: 40px;
+		}
+		to {
+			max-height: 400px;
+		}
+	}
+
+	.watchlist-cell {
+		font-size: 0.75rem;
+		display: flex;
+		align-items: center;
+	}
+
+	.watchlist-cell.ticker {
+		flex: 1.2;
+		min-width: 0;
+		gap: 0.25rem;
+		text-align: left;
+	}
+
+	.watchlist-cell.price,
+	.watchlist-cell.change,
+	.watchlist-cell.change-pct {
+		flex: 0.8;
+		min-width: 45px;
+		justify-content: flex-end;
+		text-align: right;
+	}
+
+	.watchlist-ticker-icon {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		object-fit: cover;
+		background-color: var(--ui-bg-element);
+		flex-shrink: 0;
+	}
+
+	.watchlist-default-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background-color: var(--ui-border);
+		color: var(--text-primary);
+		font-size: 0.6rem;
+		font-weight: 500;
+		user-select: none;
+		flex-shrink: 0;
+	}
+
+	.watchlist-ticker-name {
+		font-weight: 500;
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Change colors */
+	.watchlist-cell.positive {
+		color: var(--c-green, #4ade80);
+	}
+
+	.watchlist-cell.negative {
+		color: var(--c-red, #f87171);
+	}
+
+	/* Custom scrollbar for watchlist table body */
+	.watchlist-table-body::-webkit-scrollbar {
+		width: 4px;
+	}
+
+	.watchlist-table-body::-webkit-scrollbar-track {
+		background: transparent;
+		border-radius: 2px;
+	}
+
+	.watchlist-table-body::-webkit-scrollbar-thumb {
+		background-color: rgba(255, 255, 255, 0.1);
+		border-radius: 2px;
+	}
+
+	.watchlist-table-body::-webkit-scrollbar-thumb:hover {
+		background-color: rgba(255, 255, 255, 0.2);
 	}
 </style>

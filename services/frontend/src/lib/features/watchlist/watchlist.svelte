@@ -333,9 +333,6 @@
 	<div class="list-scroll-container">
 		<!-- Top row containing the Add Symbol button -->
 		<div class="add-symbol-row">
-			<!-- Full watchlist name, left-aligned -->
-			<div class="watchlist-name">{currentWatchlistName}</div>
-
 			<!-- Alert settings button -->
 			<button
 				class="alert-settings-button"
@@ -599,6 +596,7 @@
 	.add-symbol-row {
 		display: flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: 4px;
 		/* Provide a bit of breathing room above header */
 		padding: 0;
