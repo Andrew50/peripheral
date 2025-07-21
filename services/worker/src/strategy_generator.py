@@ -499,7 +499,7 @@ class StrategyGenerator:
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
             - Do not worry about the styling of the plot.
             - Plot equity curves of the P/L performance of strategies overtime.
-            - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
+            - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
 
