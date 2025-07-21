@@ -58,7 +58,7 @@
 				// Capture the cloned container with watermark
 				const canvas = await html2canvas.default(clone, {
 					backgroundColor: '#121212', // Match chat background color
-					scale: 3, // Higher quality
+					scale: 4, // Higher quality
 					logging: false,
 					useCORS: true,
 					// Remove the y offset to ensure we capture the full container including bottom
