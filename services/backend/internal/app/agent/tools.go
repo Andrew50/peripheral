@@ -428,9 +428,9 @@ var (
 		},
 		// <End SEC Filing Tools>
 		// <Backtest Tools>
-		"run_backtest": {
+		"runBacktest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "run_backtest",
+				Name:        "runBacktest",
 				Description: "Execute a comprehensive historical backtest of a Python trading strategy to find all instances where the strategy conditions were met in historical data. Use this after creating a strategy to discover all historical occurrences of patterns, conditions, or comparative analysis. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Returns all historical instances where the strategy criteria matched, along with timestamps, tickers, and relevant data. Execution typically takes 30-90 seconds for full market analysis. Use for finding historical patterns, identifying all occurrences of conditions, comparative analysis over time, and generating detailed historical results with optional forward return calculations.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -481,9 +481,9 @@ var (
 			Function:      GetBacktestInstances,
 			StatusMessage: "Scanning backtest instances...",
 		},
-		"run_screener": {
+		"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "run_screener",
+				Name:        "runScreener",
 				Description: "Screen current market opportunities using a Python trading strategy. Processes live market data to identify and rank securities matching strategy criteria. Strategies access real-time OHLCV data, technical indicators, fundamental metrics, and market conditions. Execution takes 15-45 seconds for full market screening. Use for finding current trading opportunities, generating ranked watchlists, and identifying securities matching specific criteria right now.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
