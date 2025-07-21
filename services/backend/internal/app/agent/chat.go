@@ -10,12 +10,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 type Stage string
@@ -279,6 +284,26 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				if executor == nil {
 					executor = NewExecutor(conn, userID, 5, logger, conversationID, messageID)
 				}
+				go func() {
+					var cleanedModelThoughts string
+					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
+						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+						if thoughtsStr, ok := thoughtsValue.(string); ok {
+							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
+						}
+					}
+					var argsMap map[string]interface{}
+					_ = json.Unmarshal(v.Rounds[0].Calls[0].Args, &argsMap)
+
+					// Safely check if the tool exists before accessing its properties
+					if tool, exists := Tools[v.Rounds[0].Calls[0].Name]; exists && tool.StatusMessage != "" {
+						data := map[string]interface{}{
+							"message":  cleanedModelThoughts,
+							"headline": formatStatusMessage(tool.StatusMessage, argsMap),
+						}
+						socket.SendAgentStatusUpdate(userID, "FunctionUpdate", data)
+					}
+				}()
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)
@@ -863,6 +888,46 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 		}
 	}
 	return processedChunks
+}
+
+// formatStatusMessage replaces placeholders like {key} with values from the args map.
+func formatStatusMessage(message string, argsMap map[string]interface{}) string {
+	re := regexp.MustCompile(`{([^}]+)}`)
+	formattedMessage := re.ReplaceAllStringFunc(message, func(match string) string {
+		key := match[1 : len(match)-1] // Extract key from {key}
+		if val, ok := argsMap[key]; ok {
+			return fmt.Sprintf("%v", val) // Convert value to string
+		}
+		return match // Return original placeholder if key not found
+	})
+	return formattedMessage
+}
+
+func cleanStatusMessage(conn *data.Conn, message string) string {
+	apiKey := conn.OpenAIKey
+
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	messages := []responses.ResponseInputItemUnionParam{}
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(message),
+			},
+		},
+	})
+	instructions := getCleanThinkingTracePrompt()
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Model:        "gpt-4.1-nano",
+		Instructions: openai.String(instructions),
+	})
+	if err != nil {
+		return ""
+	}
+	return res.OutputText()
 }
 
 // </chat.go>
