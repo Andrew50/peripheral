@@ -63,7 +63,7 @@ type TwitterAPIUpdateWebhookRequest struct {
 	IsEffect        int    `json:"is_effect"`
 }
 
-var twitterWebhookRuleset = "from:tradfi_noticias OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
+var twitterWebhookRuleset = "from:trad_fin OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
 
 /*
 	func turnOffTwitterNewsWebhook(conn *data.Conn) error {
