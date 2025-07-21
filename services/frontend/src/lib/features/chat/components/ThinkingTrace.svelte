@@ -2,6 +2,7 @@
 	import type { TimelineEvent } from '../interface';
 	import { agentStatusStore } from '$lib/utils/stream/socket';
 	import { browser } from '$app/environment';
+	import { onDestroy } from 'svelte';
 
 	export let isProcessingMessage: boolean = false;
 
@@ -9,6 +10,8 @@
 	let showTimelineDropdown: boolean = false;
 	let timeline: TimelineEvent[] = [];
 	let lastStatusMessage = '';
+	let streamedMessages: Map<number, string> = new Map();
+	let streamingTimeout: NodeJS.Timeout | null = null;
 
 	// Debug reactive statements
 	$: {
@@ -18,7 +21,63 @@
 	}
 
 	// Derive current status from latest timeline message
-	$: currentHeadline = timeline.length > 0 ? timeline[timeline.length - 1].headline || 'Thinking...' : '';
+	$: currentHeadline = timeline.length > 0 ? timeline[timeline.length - 1].headline || 'Thinking' : '';
+
+	// Stream out function update messages when timeline changes
+	$: if (timeline.length > 0 && browser) {
+		const lastEvent = timeline[timeline.length - 1];
+		if (lastEvent.type === 'FunctionUpdate' && lastEvent.data) {
+			streamOutMessage(timeline.length - 1, lastEvent.data);
+		}
+	}
+
+	function streamOutMessage(eventIndex: number, text: string) {
+		// If there's already a streaming message, quickly finish it first
+		if (streamingTimeout) {
+			clearTimeout(streamingTimeout);
+			// Find the currently streaming message and complete it instantly
+			for (let [index, partialText] of streamedMessages.entries()) {
+				const originalEvent = timeline[index];
+				if (originalEvent && originalEvent.type === 'FunctionUpdate' && originalEvent.data) {
+					if (partialText.length < originalEvent.data.length) {
+						// Complete the previous message instantly
+						streamedMessages.set(index, originalEvent.data);
+					}
+				}
+			}
+			streamedMessages = streamedMessages; // Trigger reactivity
+		}
+		
+		// Reset streamed message for this event
+		streamedMessages.delete(eventIndex);
+		streamedMessages = streamedMessages; // Trigger reactivity
+		
+		// If no text, just return
+		if (!text) return;
+		
+		// Split text into words for faster streaming
+		const words = text.split(' ');
+		let currentWordIndex = 0;
+		
+		function typeNextWordChunk() {
+			if (currentWordIndex < words.length) {
+				// Stream 1-2 words at a time for fast but visible effect
+				const wordsToAdd = Math.min(3, words.length - currentWordIndex);
+				const endIndex = currentWordIndex + wordsToAdd;
+				const partialText = words.slice(0, endIndex).join(' ');
+				
+				streamedMessages.set(eventIndex, partialText);
+				streamedMessages = streamedMessages; // Trigger reactivity
+				currentWordIndex = endIndex;
+				streamingTimeout = setTimeout(typeNextWordChunk, 15); // 15ms per word chunk
+			} else {
+				// Clear timeout when done
+				streamingTimeout = null;
+			}
+		}
+		
+		typeNextWordChunk();
+	}
 
 	// Show dropdown toggle if there are timeline items to show
 	$: showDropdownToggle = timeline.length > 0;
@@ -46,6 +105,12 @@
 		timeline = [];
 		lastStatusMessage = '';
 		showTimelineDropdown = false;
+		streamedMessages.clear();
+		streamedMessages = streamedMessages; // Trigger reactivity
+		if (streamingTimeout) {
+			clearTimeout(streamingTimeout);
+			streamingTimeout = null;
+		}
 	}
 	$: if (isProcessingMessage && timeline.length == 0) {
 		currentHeadline = 'Thinking';
@@ -80,15 +145,19 @@
 			];
 		} else if (statusUpdate.type === 'WebSearchCitations' && statusUpdate.data?.citations) {
 			// Add web search citations to timeline
-			timeline = [
-				...timeline,
-				{
-					headline: ``,
-					timestamp: new Date(),
-					type: 'webSearchCitations',
-					data: statusUpdate.data
-				}
-			];
+			if (timeline.length > 0 && timeline[timeline.length - 1].type === 'webSearchCitations') {
+				timeline[timeline.length - 1].data.citations = [...timeline[timeline.length - 1].data.citations, ...statusUpdate.data.citations];
+			} else {
+				timeline = [
+					...timeline,
+					{
+						headline: ``,
+						timestamp: new Date(),
+						type: 'webSearchCitations',
+						data: statusUpdate.data
+					}
+				];
+			}
 		} else if (statusUpdate.type === 'getWatchlistItems' && statusUpdate.data) {
 			// Add watchlist data to timeline
 			lastStatusMessage = statusUpdate.headline;
@@ -131,6 +200,13 @@
 		if (typeof value !== 'number') return '';
 		return value >= 0 ? 'positive' : 'negative';
 	}
+
+	// Cleanup timeout on component destroy
+	onDestroy(() => {
+		if (streamingTimeout) {
+			clearTimeout(streamingTimeout);
+		}
+	});
 </script>
 
 {#if isProcessingMessage}
@@ -174,12 +250,13 @@
 		{#if displayedTimelineItems.length > 0}
 			<div class="timeline-items" class:collapsed={!showTimelineDropdown}>
 				{#each displayedTimelineItems as event, index}
+					{@const actualTimelineIndex = showTimelineDropdown ? index : timeline.length - 1}
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
 							{#if event.type === 'FunctionUpdate' && event.data}
 								<div class="timeline-message">
-									{event.data}
+									{streamedMessages.get(actualTimelineIndex) || event.data}
 								</div>
 							{:else if event.type === 'webSearchQuery' && event.data?.query}
 								<div class="timeline-websearch">
@@ -570,12 +647,36 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.25rem 0.5rem;
-		background: var(--c-green);
-		border-radius: 0.75rem;
+		background: transparent;
+		border-radius: 1rem;
 		font-size: 0.75rem;
 		color: var(--text-primary);
-		border: 1px solid var(--c-green-dark);
+		border: 1px solid rgba(255, 255, 255, 0.2);
 		animation: fadeInUp 0.3s ease-out;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.web-search-chip::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 0;
+		background: #303030;
+		border-radius: 1rem;
+		animation: fillBackground 0.5s ease-out 0.1s forwards;
+		z-index: -1;
+	}
+
+	@keyframes fillBackground {
+		from {
+			width: 0;
+		}
+		to {
+			width: 100%;
+		}
 	}
 
 	.web-search-chip .search-icon {
