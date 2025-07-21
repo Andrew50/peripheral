@@ -116,6 +116,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
+	ctx = context.WithValue(ctx, "conversationID", conversationID)
+	ctx = context.WithValue(ctx, "messageID", messageID)
 	socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
@@ -245,6 +247,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
+				ctx = context.WithValue(ctx, "peripheralLatestModelThoughts", v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan

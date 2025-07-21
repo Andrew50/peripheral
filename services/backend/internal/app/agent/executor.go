@@ -17,6 +17,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 // ExecuteResult represents the result of executing a function
@@ -254,13 +258,23 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
-	if tool.StatusMessage != "" {
-		socket.SendAgentStatusUpdate(e.userID, "FunctionUpdate", formatStatusMessage(tool.StatusMessage, argsMap))
-	}
+	go func() {
+		var cleanedMessage string
+		if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil {
+			if thoughtsStr, ok := thoughtsValue.(string); ok {
+				cleanedMessage = cleanStatusMessage(e.conn, thoughtsStr)
+			}
+		}
+		data := map[string]interface{}{
+			"message":  cleanedMessage,
+			"headline": formatStatusMessage(tool.StatusMessage, argsMap),
+		}
+		if tool.StatusMessage != "" {
+			socket.SendAgentStatusUpdate(e.userID, "FunctionUpdate", data)
+		}
+	}()
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
-	ctx = context.WithValue(ctx, "conversationID", e.conversationID)
-	ctx = context.WithValue(ctx, "messageID", e.messageID)
 	result, err := tool.Function(ctx, e.conn, e.userID, fc.Args)
 	if err != nil {
 		span.RecordError(err)
@@ -292,6 +306,33 @@ func formatStatusMessage(message string, argsMap map[string]interface{}) string 
 		return match // Return original placeholder if key not found
 	})
 	return formattedMessage
+}
+
+func cleanStatusMessage(conn *data.Conn, message string) string {
+	apiKey := conn.OpenAIKey
+
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	messages := []responses.ResponseInputItemUnionParam{}
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(message),
+			},
+		},
+	})
+	instructions := getCleanThinkingTracePrompt()
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Model:        "gpt-4.1-nano",
+		Instructions: openai.String(instructions),
+	})
+	if err != nil {
+		return ""
+	}
+	return res.OutputText()
 }
 
 // </executor.go>

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//go:embed prompts/*
+//go:embed prompts/* chatUXPrompts/*
 var fs embed.FS // 2️⃣ compiled into the binary
 
 // Cache for enhanced system prompts to avoid recomputing on every request
@@ -56,6 +56,13 @@ func getSystemInstruction(name string) (string, error) {
 		s = strings.ReplaceAll(s, "{{EXECUTION_CONSTRAINTS}}", string(executionConstraints))
 	}
 	return s, nil
+}
+func getCleanThinkingTracePrompt() string {
+	raw, err := fs.ReadFile("chatUXPrompts/cleanThinkingTrace.txt")
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt

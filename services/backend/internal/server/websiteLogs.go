@@ -128,11 +128,10 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 	// Only send Telegram message if this wasn't a recent duplicate
 	go func() {
 		if !wasRecentDuplicate {
-			var path string
 			if req.Path == "/" { //removing logging for splash
 				return
 			}
-			err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, path, *org))
+			err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, req.Path, *org))
 			if err != nil {
 				log.Printf("Failed to send Telegram message: %v", err)
 			}
