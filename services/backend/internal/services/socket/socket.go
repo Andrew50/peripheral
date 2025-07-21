@@ -274,9 +274,13 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	case "getDailySnapshot":
 		headline = "Analyzing data for " + value.(map[string]interface{})["ticker"].(string)
 		data = value
+	case "FunctionUpdate":
+		headline = value.(map[string]interface{})["headline"].(string)
+		data = value.(map[string]interface{})["message"]
 	default:
 		// For other types (like FunctionUpdate), use the value directly
 		headline = value.(string)
+		data = value
 	}
 
 	statusUpdate := AgentStatusUpdate{
