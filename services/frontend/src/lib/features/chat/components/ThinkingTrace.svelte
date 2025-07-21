@@ -254,7 +254,7 @@
 											</svg>
 											<span>Reading {event.data.watchlistName || 'Watchlist'}</span>
 										</div>
-										<div class="watchlist-container">
+										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -264,7 +264,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -305,7 +305,7 @@
 											</svg>
 											<span>Watchlist data · {watchlistData.length} items</span>
 										</div>
-										<div class="watchlist-container">
+										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -315,7 +315,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -356,7 +356,7 @@
 											</svg>
 											<span>{event.data.name || 'Watchlist'} · {watchlistData.length} items</span>
 										</div>
-										<div class="watchlist-container">
+										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -366,7 +366,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row watchlist-row-reveal" style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -724,8 +724,11 @@
 		max-width: 400px;
 		margin: 0 auto;
 		box-sizing: border-box;
-		animation: fadeInUp 0.2s ease-out, expandContainer 0.25s ease-in;
 		overflow: hidden;
+	}
+
+	.watchlist-container-animate {
+		animation: fadeInUp 0.2s ease-out, expandContainer 0.25s ease-in;
 	}
 
 	.watchlist-table {
@@ -784,18 +787,18 @@
 
 	.watchlist-row-reveal {
 		opacity: 0;
-		transform: translateX(-10px);
+		transform: translateY(-10px);
 		animation: watchlistRowReveal 0.2s ease-in forwards;
 	}
 
 	@keyframes watchlistRowReveal {
 		from {
 			opacity: 0;
-			transform: translateX(-10px);
+			transform: translateY(-10px);
 		}
 		to {
 			opacity: 1;
-			transform: translateX(0);
+			transform: translateY(0);
 		}
 	}
 
