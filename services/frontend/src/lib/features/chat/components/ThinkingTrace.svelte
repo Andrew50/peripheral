@@ -12,6 +12,8 @@
 	let lastStatusMessage = '';
 	let streamedMessages: Map<number, string> = new Map();
 	let streamingTimeout: NodeJS.Timeout | null = null;
+	let lastAnimatedIndex: number = -1;
+	let animatedCitationCounts: Map<number, { current: number; target: number; isAnimating: boolean }> = new Map();
 
 	// Debug reactive statements
 	$: {
@@ -107,6 +109,8 @@
 		showTimelineDropdown = false;
 		streamedMessages.clear();
 		streamedMessages = streamedMessages; // Trigger reactivity
+		lastAnimatedIndex = -1;
+		animatedCitationCounts.clear();
 		if (streamingTimeout) {
 			clearTimeout(streamingTimeout);
 			streamingTimeout = null;
@@ -147,6 +151,7 @@
 			// Add web search citations to timeline
 			if (timeline.length > 0 && timeline[timeline.length - 1].type === 'webSearchCitations') {
 				timeline[timeline.length - 1].data.citations = [...timeline[timeline.length - 1].data.citations, ...statusUpdate.data.citations];
+				lastAnimatedIndex = timeline.length - 2; //reset last animated index to the previous item
 			} else {
 				timeline = [
 					...timeline,
@@ -176,6 +181,70 @@
 	// Internal toggle function
 	function toggleDropdown() {
 		showTimelineDropdown = !showTimelineDropdown;
+	}
+
+	// Function to check if timeline item should animate for the first time
+	function shouldAnimateTimelineItem(timelineIndex: number): boolean {
+		const actualIndex = showTimelineDropdown ? timelineIndex : timeline.length - 1;
+		if (actualIndex > lastAnimatedIndex) {
+			lastAnimatedIndex = actualIndex;
+			return true;
+		}
+		return false;
+	}
+
+	// Function to start citation count animation
+	function startCitationCountAnimation(timelineIndex: number, targetCount: number): void {
+		const actualIndex = showTimelineDropdown ? timelineIndex : timeline.length - 1;
+		
+		// Don't animate if already exists
+		if (animatedCitationCounts.has(actualIndex)) {
+			return;
+		}
+		
+		animatedCitationCounts.set(actualIndex, { current: 1, target: targetCount, isAnimating: true });
+		
+		// Start the counting animation
+		if (targetCount > 1) {
+			const startTime = Date.now();
+			const duration = 750; // Always 0.75 seconds
+			
+			// Ease-out function that slows down towards the end
+			function easeOut(t: number): number {
+				return 1 - Math.pow(1 - t, 2);
+			}
+			
+			function updateCount() {
+				const elapsed = Date.now() - startTime;
+				const linearProgress = Math.min(elapsed / duration, 1);
+				const easedProgress = easeOut(linearProgress);
+				const current = Math.floor(1 + (targetCount - 1) * easedProgress);
+				
+				const countData = animatedCitationCounts.get(actualIndex);
+				if (countData) {
+					countData.current = current;
+					countData.isAnimating = linearProgress < 1;
+					animatedCitationCounts = animatedCitationCounts; // Trigger reactivity
+					
+					if (linearProgress < 1) {
+						requestAnimationFrame(updateCount);
+					}
+				}
+			}
+			requestAnimationFrame(updateCount);
+		}
+	}
+
+	// Reactive statement to trigger citation animations
+	$: if (browser && displayedTimelineItems.length > 0) {
+		displayedTimelineItems.forEach((event, index) => {
+			if (event.type === 'webSearchCitations' && event.data?.citations) {
+				const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
+				if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
+					startCitationCountAnimation(index, event.data.citations.length);
+				}
+			}
+		});
 	}
 
 	// Helper functions for watchlist formatting
@@ -251,6 +320,7 @@
 			<div class="timeline-items" class:collapsed={!showTimelineDropdown}>
 				{#each displayedTimelineItems as event, index}
 					{@const actualTimelineIndex = showTimelineDropdown ? index : timeline.length - 1}
+					{@const shouldAnimate = shouldAnimateTimelineItem(index)}
 					<div class="timeline-item">
 						<div class="timeline-dot"></div>
 						<div class="timeline-content">
@@ -260,7 +330,7 @@
 								</div>
 							{:else if event.type === 'webSearchQuery' && event.data?.query}
 								<div class="timeline-websearch">
-									<div class="web-search-chip glass glass--pill glass--responsive">
+									<div class="web-search-chip" class:animate-fade-in={shouldAnimate}>
 										<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
 											<path
 												d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
@@ -274,14 +344,16 @@
 									</div>
 								</div>
 							{:else if event.type === 'webSearchCitations' && event.data?.citations}
+								{@const actualIndex = showTimelineDropdown ? index : timeline.length - 1}
+								{@const countData = animatedCitationCounts.get(actualIndex)}
 								<div class="timeline-citations">
 									<div class="citations-header">
 
-										<span>Reading sources · {event.data.citations.length} </span>
+										<span>Reading sources · {countData?.current || event.data.citations.length} </span>
 									</div>
 									<div class="citations-container">
 										{#each event.data.citations as citation, index}
-											<div class="citation-item" 
+											<div class="citation-item" class:animate-fade-in={shouldAnimate}
 												on:click={() => {
 													if (citation.url) {
 														window.open(citation.url, '_blank');
@@ -331,7 +403,7 @@
 											</svg>
 											<span>Reading {event.data.watchlistName || 'Watchlist'}</span>
 										</div>
-										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
+										<div class="watchlist-container" class:watchlist-container-animate={shouldAnimate}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -341,7 +413,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={shouldAnimate} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -382,7 +454,7 @@
 											</svg>
 											<span>Watchlist data · {watchlistData.length} items</span>
 										</div>
-										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
+										<div class="watchlist-container" class:watchlist-container-animate={shouldAnimate}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -392,7 +464,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={shouldAnimate} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -433,7 +505,7 @@
 											</svg>
 											<span>{event.data.name || 'Watchlist'} · {watchlistData.length} items</span>
 										</div>
-										<div class="watchlist-container" class:watchlist-container-animate={!showTimelineDropdown}>
+										<div class="watchlist-container" class:watchlist-container-animate={shouldAnimate}>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -443,7 +515,7 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row" class:watchlist-row-reveal={!showTimelineDropdown} style="animation-delay: {index * 10}ms;">
+														<div class="watchlist-row" class:watchlist-row-reveal={shouldAnimate} style="animation-delay: {index * 10}ms;">
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -652,9 +724,12 @@
 		font-size: 0.75rem;
 		color: var(--text-primary);
 		border: 1px solid rgba(255, 255, 255, 0.2);
-		animation: fadeInUp 0.3s ease-out;
 		position: relative;
 		overflow: hidden;
+	}
+
+	.web-search-chip.animate-fade-in {
+		animation: fadeInUp 0.3s ease-out;
 	}
 
 	.web-search-chip::before {
@@ -732,13 +807,16 @@
 		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 		cursor: pointer;
 		transition: background-color 0.2s ease;
-		animation: fadeInUp 0.3s ease-out;
 		width: 100%;
 		box-sizing: border-box;
 		min-width: 0; /* Allows text to shrink */
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
+	}
+
+	.citation-item.animate-fade-in {
+		animation: fadeInUp 0.3s ease-out;
 	}
 
 	.citation-item:last-child {
