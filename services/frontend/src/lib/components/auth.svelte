@@ -228,7 +228,7 @@
 							<path fill="none" d="M0 0h48v48H0z"></path>
 						</svg>
 					</div>
-					<span>Continue with Google</span>
+					<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
 				</button>
 			</div>
 
