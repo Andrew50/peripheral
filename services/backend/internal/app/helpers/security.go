@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -1125,7 +1124,12 @@ type GetFilteredTickerSnapshotResults struct {
 }
 
 type GetLastPriceArgs struct {
-	Ticker string `json:"ticker"`
+	Tickers []string `json:"tickers"`
+}
+
+type GetLastPriceResults struct {
+	Ticker string  `json:"ticker"`
+	Price  float64 `json:"price"`
 }
 
 func GetLastPrice(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
@@ -1133,10 +1137,17 @@ func GetLastPrice(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	trade, err := polygon.GetLastTrade(conn.Polygon, args.Ticker, true)
-	if err != nil {
-		return nil, fmt.Errorf("error getting last trade: %v", err)
+
+	trades := make([]GetLastPriceResults, len(args.Tickers))
+	for i, ticker := range args.Tickers {
+		trade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
+		if err != nil {
+			return nil, fmt.Errorf("error getting last trade: %v", err)
+		}
+		trades[i] = GetLastPriceResults{
+			Ticker: ticker,
+			Price:  trade.Price,
+		}
 	}
-	roundedPrice := math.Round(trade.Price*100) / 100
-	return roundedPrice, nil
+	return trades, nil
 }

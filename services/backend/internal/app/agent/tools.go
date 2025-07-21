@@ -551,12 +551,15 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for, e.g. 'AAPL'.",
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "The ticker symbols to get the last price for.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
 						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"tickers"},
 				},
 			},
 			Function:      wrapWithContext(helpers.GetLastPrice),
