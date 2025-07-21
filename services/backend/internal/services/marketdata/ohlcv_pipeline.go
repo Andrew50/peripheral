@@ -359,7 +359,7 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 
 		// Step 2: Upsert into main table.
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume, open, close, high, low,
+SELECT ticker, volume * 1000, open * 1000, close * 1000, high * 1000, low * 1000,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
 WHERE ticker IS NOT NULL AND ticker != ''
@@ -517,6 +517,7 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				// Manually compress chunks in background
 				now := time.Now().UTC()
 				var minDuration time.Duration
+				// deterine the final compression cutoff (if all chunks are loaded)
 				if timeframe == "1-minute" {
 					minDuration = 7 * 24 * time.Hour
 				} else if timeframe == "1-day" {
@@ -524,6 +525,14 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				}
 				recentSafe := now.Add(-minDuration)
 				eff := cut
+				// Apply chunk interval offset to ensure chunks are completely loaded before compression
+				var chunkOffset time.Duration
+				if timeframe == "1-minute" {
+					chunkOffset = 4 * 30 * 24 * time.Hour // 4 months
+				} else if timeframe == "1-day" {
+					chunkOffset = 8 * 365 * 24 * time.Hour // 8 years
+				}
+				eff = eff.Add(-chunkOffset)
 				if cut.After(recentSafe) {
 					eff = recentSafe
 				}
@@ -662,7 +671,7 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 				backoffDuration = 30 * time.Second
 			}
 
-			log.Printf("S3 GetObject rate limited for %s (attempt %d/%d), backing off for %v...", key, attempt, maxRetries, backoffDuration)
+			log.Printf("⚠️  S3 GetObject transient error for %s (attempt %d/%d), backing off for %v. Last error: %v", key, attempt, maxRetries, backoffDuration, lastErr)
 
 			select {
 			case <-ctx.Done():
@@ -680,12 +689,13 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 
 			lastErr = err
 
-			// Check if this is a rate limit error
-			if isS3RateLimitError(err) {
-				continue // Retry on rate limit
+			// Check if this is a transient error that should be retried
+			if isS3TransientError(err) {
+				log.Printf("⚠️  S3 GetObject transient error for %s (will retry): %v", key, err)
+				continue // Retry on transient errors
 			}
 
-			// For non-rate-limit errors, fail immediately
+			// For non-transient errors, fail immediately
 			return nil, nil, err
 		}
 
@@ -762,7 +772,7 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		}
 
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume, open, close, high, low,
+SELECT ticker, volume * 1000, open * 1000, close * 1000, high * 1000, low * 1000,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
 WHERE ticker IS NOT NULL AND ticker != ''
@@ -874,9 +884,20 @@ func compressOldChunks(ctx context.Context, db *pgxpool.Pool, table string, effe
 		var query string
 		params := []interface{}{table, effective}
 		if lastChunk == "" {
-			query = `SELECT c FROM show_chunks($1, older_than => $2) AS c ORDER BY c`
+			query = `SELECT c.chunk_name 
+					FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
+					LEFT JOIN chunk_compression_stats($1) ccs 
+						ON c.chunk_name::text = ccs.chunk_name::text
+					WHERE ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed'
+					ORDER BY c.chunk_name`
 		} else {
-			query = `SELECT c FROM show_chunks($1, older_than => $2) AS c WHERE c > $3 ORDER BY c`
+			query = `SELECT c.chunk_name 
+					FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
+					LEFT JOIN chunk_compression_stats($1) ccs 
+						ON c.chunk_name::text = ccs.chunk_name::text
+					WHERE (ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed')
+						AND c.chunk_name::text > $3::text
+					ORDER BY c.chunk_name`
 			params = append(params, lastChunk)
 		}
 

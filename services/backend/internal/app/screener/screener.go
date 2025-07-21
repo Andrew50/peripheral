@@ -812,10 +812,12 @@ func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
 
 				// The actual implementation would need to execute the count query first
 				// For now, we'll use a simplified approach
-				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s LIMIT (SELECT CEIL(COUNT(*) * %d / 100.0) FROM screener s)) ranked_results",
+				// Always sort NULLs last regardless of direction
+				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s NULLS LAST LIMIT (SELECT CEIL(COUNT(*) * %d / 100.0) FROM screener s)) ranked_results",
 					baseQuery, filter.Column, orderDirection, limitValue)
 			} else {
-				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s LIMIT %d) ranked_results",
+				// Always sort NULLs last regardless of direction
+				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s NULLS LAST LIMIT %d) ranked_results",
 					baseQuery, filter.Column, orderDirection, limitValue)
 			}
 		}
@@ -829,6 +831,8 @@ func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
 		if args.SortDirection != "" {
 			orderClause += " " + strings.ToUpper(args.SortDirection)
 		}
+		// Add NULLS LAST to handle NULL values - always sort NULLs last regardless of direction
+		orderClause += " NULLS LAST"
 		queryParts = append(queryParts, orderClause)
 	}
 
@@ -938,5 +942,12 @@ func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	return results, nil
+	// Wrap results in a map structure for consistent handling in planner
+	response := map[string]interface{}{
+		"results": results,
+		"count":   len(results),
+		"columns": columnNames,
+	}
+
+	return response, nil
 }

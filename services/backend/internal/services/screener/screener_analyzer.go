@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v4"
 )
 
 type TestQuery struct {
@@ -775,9 +777,25 @@ func analyzeQueryPerformance(ctx context.Context, conn *data.Conn, logFile *os.F
 
 	// Test components (using Query with sample items)
 	sampleItems := items[:min(len(items), 3)]
+	batchSize := len(items)
+	if batchSize > 10 {
+		batchSize = 10 // Limit batch size for testing
+	}
+
 	for _, test := range componentTests {
 		start := time.Now()
-		rows, err := conn.DB.Query(ctx, test.Query, sampleItems)
+
+		// Handle queries that need additional parameters
+		var rows pgx.Rows
+		var err error
+		if test.Name == "batch_stale_processing" {
+			// This query needs both ticker array and batch size limit
+			rows, err = conn.DB.Query(ctx, test.Query, sampleItems, batchSize)
+		} else {
+			// Standard queries with just ticker array
+			rows, err = conn.DB.Query(ctx, test.Query, sampleItems)
+		}
+
 		if err != nil {
 			fmt.Fprintf(logFile, "📊 %s: ❌ %v\n", test.Name, err)
 			continue

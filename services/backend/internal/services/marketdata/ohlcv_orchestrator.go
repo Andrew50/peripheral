@@ -212,6 +212,7 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	case "1-day":
 		minDuration = 60 * 24 * time.Hour
 	}
+	// here we do not need to use the chunk interval offset as we are finished loading the data so normal compression policy should be applied
 	now := time.Now().UTC()
 	recentSafe := now.Add(-minDuration)
 	eff := lastLoaded

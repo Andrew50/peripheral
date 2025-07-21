@@ -23,8 +23,8 @@ package screener
 import (
 	"backend/internal/data"
 	"backend/internal/services/marketdata" // Add this import
-	"context"
-	"fmt" // Added fmt import
+	"context"                              // Added fmt import
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -34,7 +34,7 @@ const (
 	refreshInterval         = 60 * time.Second  // full screener top-off frequency (fallback)
 	refreshTimeout          = 300 * time.Second // per-refresh SQL timeout (increased from 60s)
 	extendedCloseHour       = 20                // 8 PM Eastern – hard stop
-	maxTickersPerBatch      = 100               // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
+	maxTickersPerBatch      = 10                // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
 	staticRefs1mInterval    = 1 * time.Minute   // refresh static_refs_1m every minute
 	staticRefsDailyInterval = 5 * time.Minute   // refresh static_refs every 5 minutes
 	IgnoreMarketHours       = true              // ignore market hours
@@ -45,6 +45,7 @@ func initialRefresh(conn *data.Conn) error {
 	ctx := context.Background() // No timeout - let index updaters run as long as needed
 
 	log.Println("🚀 Starting initial data refresh...")
+
 	start := time.Now()
 
 	refreshCommands := []string{
@@ -95,25 +96,24 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
 	} // Add tickers with null maxdate to screener_stale table
-	log.Println("🔄 Adding tickers with null maxdate to screener_stale table...")
+	log.Println("🔄 Adding active tickers to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
 		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
-		FROM securities 
-		WHERE ticker NOT IN (
-			SELECT DISTINCT ticker 
-			FROM ohlcv_1d 
-			WHERE ticker IS NOT NULL
-		)
+		FROM securities
+		WHERE active = TRUE
 		ON CONFLICT (ticker) DO UPDATE SET
 			last_update_time = EXCLUDED.last_update_time,
 			stale = EXCLUDED.stale;
 	`
 
 	// Perform initial data refresh on startup
-	if err := initialRefresh(conn); err != nil {
+	// enable before pr
+	/*if err := initialRefresh(conn); err != nil {
 		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
 	} //might want to re-enable this before pr
+	*/
+
 	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
 	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
 	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
@@ -252,6 +252,7 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	if err != nil {
 		log.Printf("❌ updateStaleScreenerValues: failed to refresh screener data: %v", err)
 		log.Printf("🔄 updateStaleScreenerValues: %v (failed)", duration)
+
 		return
 	}
 

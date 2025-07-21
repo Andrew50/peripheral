@@ -175,7 +175,7 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 				backoffDuration = 30 * time.Second // Cap at 30 seconds
 			}
 
-			log.Printf("S3 rate limited (attempt %d/%d), backing off for %v...", attempt, maxRetries, backoffDuration)
+			log.Printf("⚠️  S3 transient error (attempt %d/%d), backing off for %v. Last error: %v", attempt, maxRetries, backoffDuration, lastErr)
 
 			select {
 			case <-ctx.Done():
@@ -194,13 +194,13 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 				lastErr = err
 				success = false
 
-				// Check if this is a rate limit error (429)
-				if isS3RateLimitError(err) {
-					log.Printf("S3 rate limit hit during pagination for prefix %s: %v", prefix, err)
+				// Check if this is a transient error that should be retried
+				if isS3TransientError(err) {
+					log.Printf("⚠️  S3 transient error during pagination for prefix %s (will retry): %v", prefix, err)
 					break // Break from pagination, will retry entire operation
 				}
 
-				// For non-rate-limit errors, fail immediately
+				// For non-transient errors, fail immediately
 				return nil, err
 			}
 
@@ -215,8 +215,8 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 			return out, nil
 		}
 
-		// If we hit a rate limit error but haven't exhausted retries, continue to next attempt
-		if !isS3RateLimitError(lastErr) {
+		// If we hit a transient error but haven't exhausted retries, continue to next attempt
+		if !isS3TransientError(lastErr) {
 			return nil, lastErr
 		}
 	}
@@ -225,6 +225,7 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 }
 
 // isS3RateLimitError checks if the error is an S3 rate limiting error (429 Too Many Requests)
+// Deprecated: Use isS3TransientError instead for broader error coverage
 func isS3RateLimitError(err error) bool {
 	if err == nil {
 		return false
@@ -234,4 +235,44 @@ func isS3RateLimitError(err error) bool {
 	return strings.Contains(errStr, "TooManyRequests") ||
 		strings.Contains(errStr, "429") ||
 		strings.Contains(errStr, "Too Many Requests")
+}
+
+// isS3TransientError checks if the error is a transient S3 error that should be retried
+func isS3TransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	// Rate limiting errors
+	if strings.Contains(errStr, "TooManyRequests") ||
+		strings.Contains(errStr, "429") ||
+		strings.Contains(errStr, "Too Many Requests") {
+		return true
+	}
+
+	// Deserialization and response body errors
+	if strings.Contains(errStr, "unexpected EOF") ||
+		strings.Contains(errStr, "deserialization failed") ||
+		strings.Contains(errStr, "failed to decode response body") {
+		return true
+	}
+
+	// Network and connection errors
+	if strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "dial error") {
+		return true
+	}
+
+	// DNS and other network errors
+	if strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "network unreachable") ||
+		strings.Contains(errStr, "temporary failure") {
+		return true
+	}
+
+	return false
 }
