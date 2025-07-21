@@ -10,7 +10,7 @@
 
 	if (browser) {
 		document.title = 'Peripheral';
-	} 
+	}
 
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
