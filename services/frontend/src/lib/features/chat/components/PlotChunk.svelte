@@ -58,7 +58,7 @@
 				// Capture the cloned container with watermark
 				const canvas = await html2canvas.default(clone, {
 					backgroundColor: '#121212', // Match chat background color
-					scale: 3, // Higher quality
+					scale: 4, // Higher quality
 					logging: false,
 					useCORS: true,
 					// Remove the y offset to ensure we capture the full container including bottom
@@ -177,56 +177,64 @@
 	];
 
 	// Helper function to create standard layout configurations
-	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => ({
-		...baseLayout,
-		xaxis: {
-			...baseLayout.xaxis,
-			...userLayout.xaxis,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			linecolor: 'rgba(255, 255, 255, 0.8)',
-			title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
+	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => {
+		// Calculate padded ranges if not explicitly set by user
+		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+		const yRange = userLayout.yaxis?.range || calculatePaddedRange(plotData.data, 'y', 0.10);
+
+		return {
+			...baseLayout,
+			xaxis: {
+				...baseLayout.xaxis,
+				...userLayout.xaxis,
+				gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+				linecolor: 'rgba(255, 255, 255, 0.8)',
+				...(xRange && { range: xRange }),
+				title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
 			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
+			hoverlabel: defaultHoverLabel,
+			yaxis: {
+				...baseLayout.yaxis,
+				...userLayout.yaxis,
+				side: yAxisSide,
+				gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+				linecolor: 'rgba(255, 255, 255, 0.8)',
+				...(yRange && { range: yRange }),
+				title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
 			},
-		},
-		hoverlabel: defaultHoverLabel,
-		yaxis: {
-			...baseLayout.yaxis,
-			...userLayout.yaxis,
-			side: yAxisSide,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			linecolor: 'rgba(255, 255, 255, 0.8)',
-			title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-		},
-		legend: {
-			...(baseLayout.legend ?? {}),
-			...(userLayout.legend ?? {}),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-		}
-	});
+			legend: {
+				...(baseLayout.legend ?? {}),
+				...(userLayout.legend ?? {}),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+			}
+		};
+	};
 
 	// Chart type configurations - consolidates all chart-specific logic
 	const chartTypeConfigs = {
@@ -590,6 +598,33 @@
 			.join(' '); // Join back together
 	}
 
+	// Helper function to calculate padded range for axes
+	function calculatePaddedRange(data: any[], axis: 'x' | 'y', paddingPercent: number = 0.15): [number, number] | null {
+		if (!data || data.length === 0) return null;
+
+		let allValues: number[] = [];
+		
+		// Collect all values from all traces
+		data.forEach(trace => {
+			const values = axis === 'x' ? trace.x : trace.y;
+			if (values && Array.isArray(values)) {
+				const numericValues = values.filter(v => typeof v === 'number' && !isNaN(v));
+				allValues.push(...numericValues);
+			}
+		});
+
+		if (allValues.length === 0) return null;
+
+		const min = Math.min(...allValues);
+		const max = Math.max(...allValues);
+		const range = max - min;
+		
+		// If range is 0 (all values are the same), add some default padding
+		const padding = range === 0 ? Math.abs(min) * 0.1 || 1 : range * paddingPercent;
+		
+		return [min - padding, max + padding];
+	}
+
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
 
@@ -655,6 +690,13 @@
 				(trace: any) => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')
 			);
 
+			// Calculate padded ranges for dual y-axis
+			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+			const primaryYTraces = plotData.data.filter((trace: any) => !trace.yaxis || trace.yaxis === 'y');
+			const secondaryYTraces = plotData.data.filter((trace: any) => trace.yaxis === 'y2');
+			const primaryYRange = userLayoutWithoutDimensions.yaxis?.range || calculatePaddedRange(primaryYTraces, 'y', 0.10);
+			const secondaryYRange = userLayoutWithoutDimensions.yaxis2?.range || calculatePaddedRange(secondaryYTraces, 'y', 0.10);
+
 			// Configure dual y-axis layout
 			layout = {
 				...baseLayout,
@@ -668,13 +710,15 @@
 					...userLayoutWithoutDimensions.xaxis,
 					gridcolor: 'rgba(255, 255, 255, 0.08)',
 					linecolor: 'rgba(255, 255, 255, 0.3)',
+					...(xRange && { range: xRange }),
 				},
 				// Primary y-axis (left side)
 				yaxis: {
 					...defaultLayout.yaxis,
 					...userLayoutWithoutDimensions.yaxis,
 					side: 'left' as const,
-					gridcolor: 'rgba(255, 255, 255, 0.08)'
+					gridcolor: 'rgba(255, 255, 255, 0.08)',
+					...(primaryYRange && { range: primaryYRange }),
 				},
 				// Secondary y-axis (right side)
 				yaxis2: {
@@ -682,6 +726,7 @@
 					...userLayoutWithoutDimensions.yaxis2,
 					side: 'right' as const,
 					overlaying: 'y' as const,
+					...(secondaryYRange && { range: secondaryYRange }),
 					// Ensure grid lines don't overlap by disabling on secondary axis
 					showgrid: false
 				}
@@ -792,8 +837,8 @@
 	}
 
 	.plot-container {
-		min-height: 350px;
-		height: 350px;
+		min-height: 450px;
+		height: 450px;
 		width: 100%;
 		overflow: hidden;
 	}
@@ -868,7 +913,7 @@
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
 		.plot-container {
-			min-height: 300px;
+			min-height: 380px;
 		}
 
 		.plot-title {

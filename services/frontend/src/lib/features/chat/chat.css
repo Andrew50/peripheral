@@ -399,7 +399,6 @@
 .message-wrapper.assistant {
 	align-items: flex-start;
 	width: 100%;
-	border-bottom: 1px solid var(--ui-border, #333);
 	padding-bottom: 0.25rem;
 }
 
