@@ -317,7 +317,7 @@ func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, 
 	var userID int
 	var title string
 
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, userid, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
 	if err != nil {
 		return false, 0, "", err
 	}
@@ -343,7 +343,7 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		)
 		SELECT 
 			c.is_public,
-			c.user_id,
+			c.userid,
 			c.title,
 			fm1.query as first_query,
 			COALESCE(fm2.content_chunks, '[]'::jsonb) as first_content_chunks

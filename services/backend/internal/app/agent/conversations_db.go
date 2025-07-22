@@ -301,7 +301,7 @@ func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) 
 	}
 
 	// Delete the conversation (messages will be deleted via CASCADE)
-	query := `DELETE FROM conversations WHERE conversation_id = $1 AND user_id = $2`
+	query := `DELETE FROM conversations WHERE conversation_id = $1 AND userid = $2`
 
 	result, err := conn.DB.Exec(context.Background(), query, conversationID, userID)
 	if err != nil {
@@ -536,7 +536,7 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 			WHERE conversation_id = $1 AND archived = FALSE
 		),
 		updated_at = $2
-		WHERE conversation_id = $1 AND user_id = $3`
+		WHERE conversation_id = $1 AND userId = $3`
 
 	_, err = conn.DB.Exec(ctx, updateQuery, conversationID, time.Now(), userID)
 	if err != nil {
