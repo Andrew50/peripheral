@@ -313,7 +313,6 @@ var (
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
 			MaxRetries:     2,
-			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
 		{ // enable this before PR

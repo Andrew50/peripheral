@@ -44,6 +44,7 @@ Timescale
 
 */
 
+ALTER EXTENSION timescaledb UPDATE;
 
 BEGIN;
 
