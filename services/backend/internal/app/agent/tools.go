@@ -19,6 +19,7 @@ type Tool struct {
 	FunctionDeclaration *genai.FunctionDeclaration
 	Function            func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error)
 	StatusMessage       string
+	UserSpecificTool    bool
 }
 
 // Wrapper function to adapt existing functions to context-aware signatures
@@ -65,8 +66,9 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
-			StatusMessage: "Looking up {ticker}",
+			Function:         wrapWithContext(helpers.GetCurrentSecurityID),
+			StatusMessage:    "Looking up {ticker}",
+			UserSpecificTool: false,
 		},
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -83,8 +85,9 @@ var (
 					Required: []string{"securityID"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetAgentTickerMenuDetails),
-			StatusMessage: "Getting {ticker} details",
+			Function:         wrapWithContext(helpers.GetAgentTickerMenuDetails),
+			StatusMessage:    "Getting {ticker} details",
+			UserSpecificTool: false,
 		},
 		//watchlist
 		"getWatchlists": {
@@ -97,8 +100,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(watchlist.GetWatchlists),
-			StatusMessage: "Fetching watchlists",
+			Function:         wrapWithContext(watchlist.GetWatchlists),
+			StatusMessage:    "Fetching watchlists",
+			UserSpecificTool: true,
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -119,8 +123,9 @@ var (
 					Required: []string{"watchlistName"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.AgentNewWatchlist),
-			StatusMessage: "Creating new watchlist",
+			Function:         wrapWithContext(watchlist.AgentNewWatchlist),
+			StatusMessage:    "Creating new watchlist",
+			UserSpecificTool: true,
 		},
 		"getWatchlistTickers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -137,8 +142,9 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.AgentGetWatchlistItems),
-			StatusMessage: "Getting watchlist tickers",
+			Function:         wrapWithContext(watchlist.AgentGetWatchlistItems),
+			StatusMessage:    "Getting watchlist tickers",
+			UserSpecificTool: true,
 		},
 		"deleteWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -155,8 +161,9 @@ var (
 					Required: []string{"watchlistItemId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlistItem),
-			StatusMessage: "Removing item from watchlist",
+			Function:         wrapWithContext(watchlist.DeleteWatchlistItem),
+			StatusMessage:    "Removing item from watchlist",
+			UserSpecificTool: true,
 		},
 		"addTickersToWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -171,8 +178,9 @@ var (
 					Required: []string{"watchlistId", "tickers"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.AgentAddTickersToWatchlist),
-			StatusMessage: "Adding tickers to watchlist",
+			Function:         wrapWithContext(watchlist.AgentAddTickersToWatchlist),
+			StatusMessage:    "Adding tickers to watchlist",
+			UserSpecificTool: true,
 		},
 
 		"deleteWatchlist": {
@@ -190,8 +198,9 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlist),
-			StatusMessage: "Deleting watchlist",
+			Function:         wrapWithContext(watchlist.DeleteWatchlist),
+			StatusMessage:    "Deleting watchlist",
+			UserSpecificTool: true,
 		},
 		//singles
 
@@ -222,8 +231,9 @@ var (
 					Required: []string{"securityId", "price"},
 				},
 			},
-			Function:      wrapWithContext(chart.SetHorizontalLine),
-			StatusMessage: "Adding horizontal line",
+			Function:         wrapWithContext(chart.SetHorizontalLine),
+			StatusMessage:    "Adding horizontal line",
+			UserSpecificTool: true,
 		},
 		"getHorizontalLines": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -240,8 +250,9 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      wrapWithContext(chart.GetHorizontalLines),
-			StatusMessage: "Fetching horizontal lines",
+			Function:         wrapWithContext(chart.GetHorizontalLines),
+			StatusMessage:    "Fetching horizontal lines",
+			UserSpecificTool: true,
 		},
 		"deleteHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -258,8 +269,9 @@ var (
 					Required: []string{"id"},
 				},
 			},
-			Function:      wrapWithContext(chart.DeleteHorizontalLine),
-			StatusMessage: "Deleting horizontal line",
+			Function:         wrapWithContext(chart.DeleteHorizontalLine),
+			StatusMessage:    "Deleting horizontal line",
+			UserSpecificTool: true,
 		},
 		"updateHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -292,8 +304,9 @@ var (
 					Required: []string{"id", "securityId", "price"},
 				},
 			},
-			Function:      wrapWithContext(chart.UpdateHorizontalLine),
-			StatusMessage: "Updating horizontal line",
+			Function:         wrapWithContext(chart.UpdateHorizontalLine),
+			StatusMessage:    "Updating horizontal line",
+			UserSpecificTool: true,
 		},
 		"getStockEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -322,8 +335,9 @@ var (
 					Required: []string{"securityId", "from", "to"},
 				},
 			},
-			Function:      wrapWithContext(chart.GetChartEvents),
-			StatusMessage: "Fetching chart events",
+			Function:         wrapWithContext(chart.GetChartEvents),
+			StatusMessage:    "Fetching chart events",
+			UserSpecificTool: false,
 		},
 		// SEC Filing Tools
 		"getStockEdgarFilings": {
@@ -349,8 +363,9 @@ var (
 					Required: []string{"start", "end", "securityId"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetStockEdgarFilings),
-			StatusMessage: "Searching SEC filings",
+			Function:         wrapWithContext(filings.GetStockEdgarFilings),
+			StatusMessage:    "Searching SEC filings",
+			UserSpecificTool: false,
 		},
 		/*"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -408,8 +423,9 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetExhibitList),
-			StatusMessage: "Reading Exhibits in SEC Filing",
+			Function:         wrapWithContext(filings.GetExhibitList),
+			StatusMessage:    "Reading Exhibits in SEC Filing",
+			UserSpecificTool: false,
 		},
 		"getExhibitContent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -423,8 +439,9 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetExhibitContent),
-			StatusMessage: "Reading Exhibit Content",
+			Function:         wrapWithContext(filings.GetExhibitContent),
+			StatusMessage:    "Reading Exhibit Content",
+			UserSpecificTool: false,
 		},
 		// <End SEC Filing Tools>
 		// <Backtest Tools>
@@ -451,8 +468,9 @@ var (
 					Required: []string{"strategyId", "startDate", "endDate"},
 				},
 			},
-			Function:      strategy.RunBacktest,
-			StatusMessage: "Running backtest",
+			Function:         strategy.RunBacktest,
+			StatusMessage:    "Running backtest",
+			UserSpecificTool: false,
 		},
 		"getBacktestInstances": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -478,8 +496,9 @@ var (
 					Required: []string{"strategyID", "filters"},
 				},
 			},
-			Function:      GetBacktestInstances,
-			StatusMessage: "Scanning backtest instances",
+			Function:         GetBacktestInstances,
+			StatusMessage:    "Scanning backtest instances",
+			UserSpecificTool: false,
 		},
 		"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -507,8 +526,9 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.RunScreening),
-			StatusMessage: "Running screener",
+			Function:         wrapWithContext(strategy.RunScreening),
+			StatusMessage:    "Running screener",
+			UserSpecificTool: false,
 		},
 		"runPythonAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -518,13 +538,14 @@ var (
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
-						"data":   {Type: genai.TypeString, Description: "[DO NOT PASS JSON] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
+						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
 					},
 					Required: []string{"prompt"},
 				},
 			},
-			Function:      RunPythonAgent,
-			StatusMessage: "Running Python agent",
+			Function:         RunPythonAgent,
+			StatusMessage:    "Running Python agent",
+			UserSpecificTool: false,
 		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -541,8 +562,9 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      wrapWithContext(helpers.AgentGetTickerDailySnapshot),
-			StatusMessage: "Getting market data",
+			Function:         wrapWithContext(helpers.AgentGetTickerDailySnapshot),
+			StatusMessage:    "Getting market data",
+			UserSpecificTool: false,
 		},
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -562,8 +584,9 @@ var (
 					Required: []string{"tickers"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetLastPrice),
-			StatusMessage: "Getting current price of {ticker}",
+			Function:         wrapWithContext(helpers.GetLastPrice),
+			StatusMessage:    "Getting current price of {ticker}",
+			UserSpecificTool: false,
 		},
 		/*"getPriceAtTime": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -657,8 +680,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(strategy.GetStrategies),
-			StatusMessage: "Fetching strategies",
+			Function:         wrapWithContext(strategy.GetStrategies),
+			StatusMessage:    "Fetching strategies",
+			UserSpecificTool: true,
 		},
 		"deleteStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -672,8 +696,9 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.DeleteStrategy),
-			StatusMessage: "Deleting strategy",
+			Function:         wrapWithContext(strategy.DeleteStrategy),
+			StatusMessage:    "Deleting strategy",
+			UserSpecificTool: true,
 		},
 		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -688,8 +713,9 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      strategy.CreateStrategyFromPrompt,
-			StatusMessage: "Building strategy",
+			Function:         strategy.CreateStrategyFromPrompt,
+			StatusMessage:    "Building strategy",
+			UserSpecificTool: false,
 		},
 		// [SEARCH TOOLS]
 		"runWebSearch": {
@@ -704,8 +730,9 @@ var (
 					Required: []string{"query"},
 				},
 			},
-			Function:      AgentRunWebSearch,
-			StatusMessage: "Searching the web",
+			Function:         AgentRunWebSearch,
+			StatusMessage:    "Searching the web",
+			UserSpecificTool: false,
 		},
 		/*"runTwitterSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -765,8 +792,9 @@ var (
 					Required: []string{"price", "securityId", "ticker"},
 				},
 			},
-			Function:      wrapWithContext(alerts.NewAlert),
-			StatusMessage: "Creating price alert",
+			Function:         wrapWithContext(alerts.NewAlert),
+			StatusMessage:    "Creating price alert",
+			UserSpecificTool: true,
 		},
 		"getAlerts": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -778,8 +806,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(alerts.GetAlerts),
-			StatusMessage: "Fetching alerts",
+			Function:         wrapWithContext(alerts.GetAlerts),
+			StatusMessage:    "Fetching alerts",
+			UserSpecificTool: true,
 		},
 		"getAlertLogs": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -791,8 +820,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(alerts.GetAlertLogs),
-			StatusMessage: "Fetching alert history",
+			Function:         wrapWithContext(alerts.GetAlertLogs),
+			StatusMessage:    "Fetching alert history",
+			UserSpecificTool: true,
 		},
 		"deleteAlert": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -809,8 +839,9 @@ var (
 					Required: []string{"alertId"},
 				},
 			},
-			Function:      wrapWithContext(alerts.DeleteAlert),
-			StatusMessage: "Deleting alert",
+			Function:         wrapWithContext(alerts.DeleteAlert),
+			StatusMessage:    "Deleting alert",
+			UserSpecificTool: true,
 		},
 		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
@@ -896,8 +927,9 @@ var (
 					Required: []string{"dates"},
 				},
 			},
-			Function:      wrapWithContext(DateToSeconds),
-			StatusMessage: "Converting dates to timestamps",
+			Function:         wrapWithContext(DateToSeconds),
+			StatusMessage:    "Converting dates to timestamps",
+			UserSpecificTool: false,
 		},
 	}
 )

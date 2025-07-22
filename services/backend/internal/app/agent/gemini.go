@@ -43,7 +43,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 	thinkingBudget := int32(1000)
 
 	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction, true)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{

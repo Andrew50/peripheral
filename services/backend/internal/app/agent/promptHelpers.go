@@ -66,7 +66,7 @@ func getCleanThinkingTracePrompt() string {
 }
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
-func enhanceSystemPromptWithTools(basePrompt string) string {
+func enhanceSystemPromptWithTools(basePrompt string, userSpecificTools bool) string {
 	// Check cache first
 	systemPromptCacheMutex.RLock()
 	if cached, exists := cachedEnhancedSystemPrompts[basePrompt]; exists {
@@ -92,7 +92,9 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
 		tool := Tools[name]
-
+		if !userSpecificTools && tool.UserSpecificTool {
+			continue // skip user specific tools if not user specific
+		}
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
 
