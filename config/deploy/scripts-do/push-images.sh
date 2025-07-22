@@ -77,9 +77,6 @@ elif [[ "$TARGET_BRANCH" == "dev" ]]; then
   done
 fi
 
-echo "Pushing db-migrations image..."
-push_image "db" "migrations"
-
 wait
 
 echo "All images pushed successfully!"
