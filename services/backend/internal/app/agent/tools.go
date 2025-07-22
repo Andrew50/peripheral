@@ -39,12 +39,6 @@ func wrapWithContext(fn func(*data.Conn, int, json.RawMessage) (interface{}, err
 			return nil, ctx.Err()
 		}
 
-		// Set LLM execution flag for this function call
-		conn.IsLLMExecution = true
-		defer func() {
-			conn.IsLLMExecution = false
-		}()
-
 		return fn(conn, userID, args)
 	}
 }
@@ -161,7 +155,7 @@ var (
 					Required: []string{"watchlistItemId"},
 				},
 			},
-			Function:         wrapWithContext(watchlist.DeleteWatchlistItem),
+			Function:         wrapWithContext(watchlist.AgentDeleteWatchlistItem),
 			StatusMessage:    "Removing item from watchlist",
 			UserSpecificTool: true,
 		},
@@ -198,7 +192,7 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:         wrapWithContext(watchlist.DeleteWatchlist),
+			Function:         wrapWithContext(watchlist.AgentDeleteWatchlist),
 			StatusMessage:    "Deleting watchlist",
 			UserSpecificTool: true,
 		},
@@ -231,7 +225,7 @@ var (
 					Required: []string{"securityId", "price"},
 				},
 			},
-			Function:         wrapWithContext(chart.SetHorizontalLine),
+			Function:         wrapWithContext(chart.AgentSetHorizontalLine),
 			StatusMessage:    "Adding horizontal line",
 			UserSpecificTool: true,
 		},
@@ -269,7 +263,7 @@ var (
 					Required: []string{"id"},
 				},
 			},
-			Function:         wrapWithContext(chart.DeleteHorizontalLine),
+			Function:         wrapWithContext(chart.AgentDeleteHorizontalLine),
 			StatusMessage:    "Deleting horizontal line",
 			UserSpecificTool: true,
 		},
@@ -304,7 +298,7 @@ var (
 					Required: []string{"id", "securityId", "price"},
 				},
 			},
-			Function:         wrapWithContext(chart.UpdateHorizontalLine),
+			Function:         wrapWithContext(chart.AgentUpdateHorizontalLine),
 			StatusMessage:    "Updating horizontal line",
 			UserSpecificTool: true,
 		},
@@ -713,7 +707,7 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:         strategy.CreateStrategyFromPrompt,
+			Function:         strategy.AgentCreateStrategyFromPrompt,
 			StatusMessage:    "Building strategy",
 			UserSpecificTool: false,
 		},
@@ -792,7 +786,7 @@ var (
 					Required: []string{"price", "securityId", "ticker"},
 				},
 			},
-			Function:         wrapWithContext(alerts.NewAlert),
+			Function:         wrapWithContext(alerts.AgentNewAlert),
 			StatusMessage:    "Creating price alert",
 			UserSpecificTool: true,
 		},
@@ -839,7 +833,7 @@ var (
 					Required: []string{"alertId"},
 				},
 			},
-			Function:         wrapWithContext(alerts.DeleteAlert),
+			Function:         wrapWithContext(alerts.AgentDeleteAlert),
 			StatusMessage:    "Deleting alert",
 			UserSpecificTool: true,
 		},

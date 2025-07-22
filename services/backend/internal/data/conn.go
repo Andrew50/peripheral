@@ -38,7 +38,6 @@ type Conn struct {
 	GeminiClient         *genai.Client
 	OpenAIClient         openai.Client
 	ExecutionEnvironment string
-	IsLLMExecution       bool // Track if function is called by LLM agent
 }
 
 // Result structs for thread-safe communication
@@ -263,7 +262,6 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		XAPISecretKey:        xAPISecretKey,
 		XAccessToken:         xAccessToken,
 		XAccessSecret:        xAccessSecret,
-		IsLLMExecution:       false, // Initialize the new field
 		GeminiClient:         geminiClient,
 		ExecutionEnvironment: executionEnvironment,
 		OpenAIClient:         openAIClient,

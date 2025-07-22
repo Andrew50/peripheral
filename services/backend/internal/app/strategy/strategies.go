@@ -3,7 +3,6 @@ package strategy
 import (
 	"backend/internal/app/limits"
 	"backend/internal/data"
-	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -243,6 +242,21 @@ type CreateStrategyFromPromptResult struct {
 	Version    string `json:"version"`
 }
 
+func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := CreateStrategyFromPrompt(ctx, conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		strategyData := map[string]interface{}{
+			"strategyId": res.StrategyID,
+			"name":       res.Name,
+			"version":    res.Version,
+		}
+		socket.SendStrategyUpdate(userID, "add", strategyData)
+	}()*/
+	return res, nil
+}
 func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START (WORKER QUEUE) ===")
 	log.Printf("UserID: %d", userID)
@@ -281,17 +295,6 @@ func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, 
 	if result.Strategy == nil {
 		log.Printf("ERROR: Strategy creation succeeded but strategy object is nil")
 		return nil, fmt.Errorf("strategy creation succeeded but strategy object is nil")
-	}
-
-	// NEW: Send WebSocket update after successful creation
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		strategyData := map[string]interface{}{
-			"strategyId": result.Strategy.StrategyID,
-			"name":       result.Strategy.Name,
-			"version":    result.Strategy.Version,
-		}
-		socket.SendStrategyUpdate(userID, "add", strategyData)
 	}
 
 	return CreateStrategyFromPromptResult{
@@ -577,28 +580,6 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 
 	log.Printf("Strategy %d alert status updated to: %v", args.StrategyID, args.Active)
 
-	// NEW: Send WebSocket update after successful alert status change
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		// Get strategy name for the WebSocket update
-		var strategyName string
-		err = conn.DB.QueryRow(context.Background(), `
-			SELECT name FROM strategies WHERE strategyid = $1 AND userid = $2`,
-			args.StrategyID, userID).Scan(&strategyName)
-		if err != nil {
-			// Log the error but don't fail the operation since the alert status was already updated
-			log.Printf("Warning: failed to get strategy name for WebSocket update: %v", err)
-			strategyName = "Unknown Strategy"
-		}
-
-		strategyData := map[string]interface{}{
-			"strategyId":    args.StrategyID,
-			"name":          strategyName,
-			"isAlertActive": args.Active,
-		}
-		socket.SendStrategyUpdate(userID, "update", strategyData)
-	}
-
 	return map[string]interface{}{
 		"success":     true,
 		"strategyId":  args.StrategyID,
@@ -646,15 +627,6 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 			// Log the error but don't fail the deletion since the strategy is already removed
 			log.Printf("Warning: failed to decrement active strategy alerts counter for user %d: %v", userID, err)
 		}
-	}
-
-	// NEW: Send WebSocket update after successful deletion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		strategyData := map[string]interface{}{
-			"strategyId": args.StrategyID,
-		}
-		socket.SendStrategyUpdate(userID, "remove", strategyData)
 	}
 
 	return map[string]interface{}{"success": true}, nil
