@@ -8,6 +8,8 @@
 	import { writable } from 'svelte/store';
 	import { createEventDispatcher, onMount } from 'svelte';
 	import '$lib/styles/splash.css';
+	import ChipSection from '$lib/landing/ChipSection.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -170,10 +172,9 @@
 	}
 </script>
 
-<!-- Use consistent light theme design -->
 <div class="auth-page">
 	<!-- Main Auth Content -->
-	<div class="auth-container" style="padding-top: 200px;">
+	<div class="auth-container">
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
@@ -227,7 +228,7 @@
 							<path fill="none" d="M0 0h48v48H0z"></path>
 						</svg>
 					</div>
-					<span>Continue with Google</span>
+					<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
 				</button>
 			</div>
 
@@ -296,23 +297,45 @@
 			{/if}
 		</div>
 	</div>
+	
+	<!-- Ideas Chips Section -->
+	<ChipSection />
+	
+	<!-- Footer -->
+	<SiteFooter />
 </div>
 
 <style>
-	/* Global styles */
+	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
 		box-sizing: border-box;
 	}
-	/* Use splash.css color system for consistency */
+
+	:global(html) {
+		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
+		margin: 0;
+		padding: 0;
+	}
+
+	:global(body) {
+		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
+		margin: 0;
+		padding: 0;
+	}
+
+	/* Apply the same gradient background as landing page */
 	.auth-page {
 		width: 100%;
-		min-height: 70vh;
+		min-height: 100vh;
 		background: linear-gradient(
-			135deg,
-			var(--color-light, #b8e3e9) 0%,
-			var(--color-accent, #93b1b5) 100%
+			180deg,
+			#010022 0%,
+			#02175F 100%
+
 		);
-		color: var(--color-dark, #0b2e33);
+		color: #f5f9ff;
 		font-family:
 			'Geist',
 			'Inter',
@@ -324,6 +347,7 @@
 		display: flex;
 		flex-direction: column;
 		position: relative;
+		overflow-x: hidden; /* Prevent horizontal scroll */
 	}
 
 	/* Auth-specific styles that build on splash system */
@@ -331,10 +355,8 @@
 		width: 100%;
 		max-width: 550px;
 		margin: 0 auto;
-		padding-left: 2rem;
-		padding-right: 2rem;
-		padding-bottom: 0;
-		padding-top: 200px;
+		padding: 16rem 2rem 2rem 2rem; /* Space for header */
+		background: transparent;
 	}
 
 	.auth-header {
@@ -350,7 +372,7 @@
 		font-size: 2rem;
 		font-weight: 700;
 		margin: 0 0 0.5rem 0;
-		color: var(--color-dark, #0b2e33);
+		color: #f5f9ff;
 		line-height: 1.2;
 	}
 
@@ -367,9 +389,8 @@
 		width: 100%;
 		height: 52px;
 		background: rgba(255, 255, 255, 1);
-		border: 1.5px solid #000000;
 		border-radius: 12px;
-		color: var(--color-dark, #0b2e33);
+		color: #000000;
 		font-family: 'Inter', sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
@@ -381,8 +402,9 @@
 	}
 
 	.google-login-button:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.8);
-		box-shadow: 0 4px 12px rgba(79, 124, 130, 0.15);
+		background: rgba(255, 255, 255, 0.9);
+		transform: translateY(-1px);
+
 	}
 
 	.google-login-button:disabled {
@@ -403,6 +425,9 @@
 		position: relative;
 		text-align: center;
 		margin: 1.5rem 0;
+		color: rgba(255, 255, 255, 0.6);
+		font-size: 0.875rem;
+		font-weight: 500;
 	}
 
 	.form-group {
@@ -414,25 +439,25 @@
 		width: 100%;
 		height: 52px;
 		padding: 0 1rem;
-		border: 1.5px solid #000000;
+		border: 1px solid rgba(255, 255, 255, 1);
 		border-radius: 12px;
-		background: rgba(255, 255, 255, 1);
-		color: #0b2e33;
+		background: rgba(255, 255, 255, 0.1);
+		backdrop-filter: blur(10px);
+		color: #ffffff;
 		font-size: 0.95rem;
 		font-family: 'Inter', sans-serif;
 		transition: all 0.3s ease;
 	}
 
 	.auth-input::placeholder {
-		color: #4f7c82;
-		opacity: 0.6;
+		color: #ffffff;
 	}
 
 	.auth-input:focus {
 		outline: none;
-		border-color: var(--color-primary, #4f7c82);
-		background: rgba(255, 255, 255, 0.9);
-		box-shadow: 0 0 0 3px rgba(79, 124, 130, 0.1);
+		border-color: rgba(255, 255, 255, 0.6);
+		background: rgba(255, 255, 255, 0.15);
+		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 	}
 
 	.auth-input:disabled {
@@ -444,8 +469,8 @@
 	.submit-button {
 		width: 100%;
 		height: 52px;
-		background: var(--color-dark, #0b2e33);
-		color: white;
+		background: #f5f9ff;
+		color: #000000;
 		border: none;
 		border-radius: 12px;
 		font-size: 0.95rem;
@@ -460,7 +485,7 @@
 	}
 
 	.submit-button:hover:not(:disabled) {
-		background: #08262a;
+		background: #e0e0e0;
 		transform: translateY(-1px);
 		box-shadow: 0 4px 12px rgba(11, 46, 51, 0.3);
 	}
@@ -472,14 +497,15 @@
 
 	/* Error message */
 	.error-message {
-		color: #dc2626;
+		color: #ff6b6b;
 		font-size: 0.875rem;
 		margin: 0.5rem 0;
 		text-align: center;
-		background: rgba(220, 38, 38, 0.1);
+		background: rgba(255, 107, 107, 0.1);
 		padding: 0.75rem;
 		border-radius: 8px;
-		border: 1px solid rgba(220, 38, 38, 0.2);
+		border: 1px solid rgba(255, 107, 107, 0.3);
+		backdrop-filter: blur(10px);
 	}
 
 	/* Auth Toggle */
@@ -487,20 +513,20 @@
 		text-align: center;
 		margin-top: 1rem;
 		padding-top: 1rem;
-		border-top: 1px solid rgba(79, 124, 130, 0.2);
-		color: var(--color-primary);
+		border-top: 1px solid rgba(255, 255, 255, 0.2);
+		color: rgba(255, 255, 255, 0.8);
 		font-size: 0.875rem;
 	}
 
 	.auth-link {
-		color: var(--color-dark);
+		color: #f5f9ff;
 		text-decoration: none;
 		font-weight: 600;
 		transition: all 0.3s ease;
 	}
 
 	.auth-link:hover {
-		color: #08262a;
+		color: #ffffff;
 		text-decoration: underline;
 	}
 
@@ -508,8 +534,8 @@
 	.loader {
 		width: 20px;
 		height: 20px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top: 2px solid white;
+		border: 2px solid rgba(0, 0, 0, 0.3);
+		border-top: 2px solid #000000;
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
@@ -535,5 +561,39 @@
 			height: 48px;
 			font-size: 0.9rem;
 		}
+	}
+
+	/* Ensure ChipSection is visible */
+	:global(.auth-page .chip-section) {
+		margin-top: 4rem;
+		width: 100%;
+		overflow: visible;
+		position: relative;
+		z-index: 10;
+	}
+
+	/* Override chip styles for dark background */
+	:global(.auth-page .chip) {
+		background: rgba(255, 255, 255, 0.95) !important;
+		color: #000000 !important;
+		border: 1px solid rgba(255, 255, 255, 0.3) !important;
+	}
+
+	:global(.auth-page .chip:hover) {
+		background: rgba(255, 255, 255, 1) !important;
+		box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2) !important;
+	}
+
+	/* Ensure chip rows are visible */
+	:global(.auth-page .chip-rows) {
+		width: 100%;
+		position: relative;
+	}
+
+	/* Ensure SiteFooter is at the bottom */
+	:global(.auth-page .landing-footer) {
+		margin-top: auto;
+		position: relative;
+		z-index: 10;
 	}
 </style>

@@ -22,38 +22,75 @@
 			// Import html2canvas dynamically
 			const html2canvas = await import('html2canvas');
 			
-			// Capture the entire chunk container as canvas with padding
-			const canvas = await html2canvas.default(chunkContainer, {
-				backgroundColor: '#121212', // Match chat background color
-				scale: 2, // Higher quality
-				logging: false,
-				useCORS: true,
-				y: -32, // Add top padding
-			});
-
-			// Convert canvas to blob
-			const blob = await new Promise<Blob>((resolve) => {
-				canvas.toBlob((blob) => {
-					resolve(blob!);
-				}, 'image/png');
-			});
-
-			// Copy to clipboard
-			await navigator.clipboard.write([
-				new ClipboardItem({
-					'image/png': blob
-				})
-			]);
-
-			// Show success feedback
-			copyImageFeedback = true;
-			if (copyImageTimeout) {
-				clearTimeout(copyImageTimeout);
+			// Create a clone of the container for off-screen rendering
+			const clone = chunkContainer.cloneNode(true) as HTMLDivElement;
+			
+			// Position clone off-screen
+			clone.style.position = 'absolute';
+			clone.style.left = '-9999px';
+			clone.style.top = '0';
+			clone.style.width = chunkContainer.offsetWidth + 'px';
+			
+			// Ensure the clone container has position relative for absolute watermark positioning
+			const plotContainer = clone.querySelector('.chunk-plot-container') as HTMLDivElement;
+			if (plotContainer) {
+				plotContainer.style.position = 'relative';
 			}
-			copyImageTimeout = setTimeout(() => {
-				copyImageFeedback = false;
-				copyImageTimeout = null;
-			}, 2000);
+			
+			// Create and add watermark to the clone
+			const watermark = document.createElement('div');
+			watermark.className = 'watermark-offscreen';
+			watermark.innerHTML = 'Powered by <span class="watermark-brand">Peripheral.io</span>';
+			
+			// Remove plot-actions from clone to eliminate extra space
+			const plotActions = clone.querySelector('.plot-actions');
+			if (plotActions) {
+				plotActions.remove();
+			}
+			
+			// Append watermark to the clone
+			clone.appendChild(watermark);
+			
+			// Append clone to body temporarily
+			document.body.appendChild(clone);
+			
+			try {
+				// Capture the cloned container with watermark
+				const canvas = await html2canvas.default(clone, {
+					backgroundColor: '#121212', // Match chat background color
+					scale: 4, // Higher quality
+					logging: false,
+					useCORS: true,
+					// Remove the y offset to ensure we capture the full container including bottom
+				});
+
+				// Convert canvas to blob
+				const blob = await new Promise<Blob>((resolve) => {
+					canvas.toBlob((blob) => {
+						resolve(blob!);
+					}, 'image/png');
+				});
+
+				// Copy to clipboard
+				await navigator.clipboard.write([
+					new ClipboardItem({
+						'image/png': blob
+					})
+				]);
+
+				// Show success feedback
+				copyImageFeedback = true;
+				if (copyImageTimeout) {
+					clearTimeout(copyImageTimeout);
+				}
+				copyImageTimeout = setTimeout(() => {
+					copyImageFeedback = false;
+					copyImageTimeout = null;
+				}, 2000);
+			} finally {
+				// Always cleanup the clone
+				document.body.removeChild(clone);
+			}
 		} catch (error) {
 			console.error('Failed to copy plot image:', error);
 			// Could show an error message to user here
@@ -80,7 +117,7 @@
 		borderwidth: 1,
 		font: {
 			color: '#ffffff',
-			size: 13,
+			size: 11,
 			family: 'Geist, Inter, system-ui, sans-serif'
 		},
 		namelength: -1,
@@ -113,7 +150,6 @@
 			tickfont: { color: '#f1f5f9', size: 11 },
 			titlefont: { color: '#f8fafc' },
 			automargin: true,
-			tickangle: -45,
 			title: {
 				standoff: 25
 			}
@@ -141,56 +177,64 @@
 	];
 
 	// Helper function to create standard layout configurations
-	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => ({
-		...baseLayout,
-		xaxis: {
-			...baseLayout.xaxis,
-			...userLayout.xaxis,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			linecolor: 'rgba(255, 255, 255, 0.8)',
-			title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
+	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => {
+		// Calculate padded ranges if not explicitly set by user
+		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+		const yRange = userLayout.yaxis?.range || calculatePaddedRange(plotData.data, 'y', 0.10);
+
+		return {
+			...baseLayout,
+			xaxis: {
+				...baseLayout.xaxis,
+				...userLayout.xaxis,
+				gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+				linecolor: 'rgba(255, 255, 255, 0.8)',
+				...(xRange && { range: xRange }),
+				title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
 			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
+			hoverlabel: defaultHoverLabel,
+			yaxis: {
+				...baseLayout.yaxis,
+				...userLayout.yaxis,
+				side: yAxisSide,
+				gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
+				linecolor: 'rgba(255, 255, 255, 0.8)',
+				...(yRange && { range: yRange }),
+				title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
 			},
-		},
-		hoverlabel: defaultHoverLabel,
-		yaxis: {
-			...baseLayout.yaxis,
-			...userLayout.yaxis,
-			side: yAxisSide,
-			gridcolor: `rgba(255, 255, 255, ${gridAlpha})`,
-			linecolor: 'rgba(255, 255, 255, 0.8)',
-			title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-		},
-		legend: {
-			...(baseLayout.legend ?? {}),
-			...(userLayout.legend ?? {}),
-			tickfont: { 
-				color: '#f1f5f9', 
-				size: 11,
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-			titlefont: { 
-				color: '#f8fafc',
-				family: 'Geist, Inter, system-ui, sans-serif'
-			},
-		}
-	});
+			legend: {
+				...(baseLayout.legend ?? {}),
+				...(userLayout.legend ?? {}),
+				tickfont: { 
+					color: '#f1f5f9', 
+					size: 11,
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+				titlefont: { 
+					color: '#f8fafc',
+					family: 'Geist, Inter, system-ui, sans-serif'
+				},
+			}
+		};
+	};
 
 	// Chart type configurations - consolidates all chart-specific logic
 	const chartTypeConfigs = {
@@ -205,6 +249,72 @@
 				if (!trace.line?.color) {
 					if (!trace.line) trace.line = {};
 					trace.line.color = color;
+				}
+				// Add value labels above points
+				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+					// Format values for display
+					trace.text = trace.y.map((value: any) => {
+						if (typeof value === 'number') {
+							// For scatter plots, typically show more precision for smaller values
+							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+								return value.toFixed(3);
+							} else if (value % 1 === 0) {
+								// Show whole numbers without decimals
+								return value.toString();
+							} else {
+								// Show decimal values with appropriate precision
+								return value.toFixed(2);
+							}
+						}
+						return String(value);
+					});
+					// Smart positioning: above for local maxima, below for local minima
+					trace.textposition = trace.y.map((value: number, index: number) => {
+						const prevValue = index > 0 ? trace.y[index - 1] : null;
+						const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+						
+						// Determine if this is a local min or max
+						let isLocalMax = false;
+						let isLocalMin = false;
+						
+						if (prevValue !== null && nextValue !== null) {
+							// Middle points: compare with both neighbors
+							isLocalMax = value >= prevValue && value >= nextValue;
+							isLocalMin = value <= prevValue && value <= nextValue;
+						} else if (prevValue !== null) {
+							// Last point: compare with previous
+							isLocalMax = value >= prevValue;
+							isLocalMin = value <= prevValue;
+						} else if (nextValue !== null) {
+							// First point: compare with next
+							isLocalMax = value >= nextValue;
+							isLocalMin = value <= nextValue;
+						}
+						
+						// Position text based on local extrema
+						if (isLocalMin && !isLocalMax) {
+							return 'bottom center'; // Text below for minima
+						} else {
+							return 'top center'; // Text above for maxima and neutral points
+						}
+					});
+					
+					trace.textfont = {
+						color: '#ffffff',
+						size: 12,
+						family: 'Inter, system-ui, sans-serif',
+					};
+					
+					// Update mode to include text display
+					if (trace.mode === 'markers') {
+						trace.mode = 'markers+text';
+					} else if (trace.mode === 'lines') {
+						trace.mode = 'lines+text';
+					} else if (trace.mode === 'lines+markers') {
+						trace.mode = 'lines+markers+text';
+					} else if (!trace.mode.includes('text')) {
+						trace.mode = trace.mode + '+text';
+					}
 				}
 				return trace;
 			},
@@ -224,6 +334,74 @@
 					if (!trace.marker) trace.marker = {};
 					trace.marker.color = color;
 				}
+
+				// Add value labels above points
+				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
+					// Format values for display
+					trace.text = trace.y.map((value: any) => {
+						if (typeof value === 'number') {
+							// For scatter plots, typically show more precision for smaller values
+							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+								return value.toFixed(3);
+							} else if (value % 1 === 0) {
+								// Show whole numbers without decimals
+								return value.toString();
+							} else {
+								// Show decimal values with appropriate precision
+								return value.toFixed(2);
+							}
+						}
+						return String(value);
+					});
+					// Smart positioning: above for local maxima, below for local minima
+					trace.textposition = trace.y.map((value: number, index: number) => {
+						const prevValue = index > 0 ? trace.y[index - 1] : null;
+						const nextValue = index < trace.y.length - 1 ? trace.y[index + 1] : null;
+						
+						// Determine if this is a local min or max
+						let isLocalMax = false;
+						let isLocalMin = false;
+						
+						if (prevValue !== null && nextValue !== null) {
+							// Middle points: compare with both neighbors
+							isLocalMax = value >= prevValue && value >= nextValue;
+							isLocalMin = value <= prevValue && value <= nextValue;
+						} else if (prevValue !== null) {
+							// Last point: compare with previous
+							isLocalMax = value >= prevValue;
+							isLocalMin = value <= prevValue;
+						} else if (nextValue !== null) {
+							// First point: compare with next
+							isLocalMax = value >= nextValue;
+							isLocalMin = value <= nextValue;
+						}
+						
+						// Position text based on local extrema
+						if (isLocalMin && !isLocalMax) {
+							return 'bottom center'; // Text below for minima
+						} else {
+							return 'top center'; // Text above for maxima and neutral points
+						}
+					});
+					
+					trace.textfont = {
+						color: '#ffffff',
+						size: 12,
+						family: 'Inter, system-ui, sans-serif',
+					};
+					
+					// Update mode to include text display
+					if (trace.mode === 'markers') {
+						trace.mode = 'markers+text';
+					} else if (trace.mode === 'lines') {
+						trace.mode = 'lines+text';
+					} else if (trace.mode === 'lines+markers') {
+						trace.mode = 'lines+markers+text';
+					} else if (!trace.mode.includes('text')) {
+						trace.mode = trace.mode + '+text';
+					}
+				}
+
 				return trace;
 			},
 			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout, 'left', 0.1)
@@ -250,19 +428,30 @@
 				}
 
 				// Add value labels above bars
-				if (trace.y && Array.isArray(trace.y) && !trace.text) {
+				if (trace.y && Array.isArray(trace.y) && !trace.text && trace.y.length < 12) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
 						if (typeof value === 'number') {
-							// Format numbers with appropriate precision
-							if (Math.abs(value) >= 1000000) {
-								return (value / 1000000).toFixed(1) + 'M';
-							} else if (Math.abs(value) >= 1000) {
-								return (value / 1000).toFixed(1) + 'K';
-							} else if (Math.abs(value) < 1 && Math.abs(value) > 0) {
-								return value.toFixed(3);
+							// Only round values > 100,000 to 2 decimals
+							if (Math.abs(value) > 100000) {
+								if (Math.abs(value) >= 1000000) {
+									// For millions, show 2 decimals
+									return (value / 1000000).toFixed(2) + 'M';
+								} else {
+									// For values > 100K but < 1M, show 2 decimals in K format
+									return (value / 1000).toFixed(2) + 'K';
+								}
 							} else {
-								return value.toFixed(1);
+								// For values ≤ 100,000, show full precision
+								if (Math.abs(value) < 1 && Math.abs(value) > 0) {
+									return value.toFixed(3);
+								} else if (value % 1 === 0) {
+									// Show whole numbers without decimals
+									return value.toString();
+								} else {
+									// Show decimal values with appropriate precision
+									return value.toFixed(2);
+								}
 							}
 						}
 						return String(value);
@@ -409,6 +598,33 @@
 			.join(' '); // Join back together
 	}
 
+	// Helper function to calculate padded range for axes
+	function calculatePaddedRange(data: any[], axis: 'x' | 'y', paddingPercent: number = 0.15): [number, number] | null {
+		if (!data || data.length === 0) return null;
+
+		let allValues: number[] = [];
+		
+		// Collect all values from all traces
+		data.forEach(trace => {
+			const values = axis === 'x' ? trace.x : trace.y;
+			if (values && Array.isArray(values)) {
+				const numericValues = values.filter(v => typeof v === 'number' && !isNaN(v));
+				allValues.push(...numericValues);
+			}
+		});
+
+		if (allValues.length === 0) return null;
+
+		const min = Math.min(...allValues);
+		const max = Math.max(...allValues);
+		const range = max - min;
+		
+		// If range is 0 (all values are the same), add some default padding
+		const padding = range === 0 ? Math.abs(min) * 0.1 || 1 : range * paddingPercent;
+		
+		return [min - padding, max + padding];
+	}
+
 	function processTraceData(trace: any, index: number): any {
 		const processedTrace = { ...trace };
 
@@ -423,8 +639,10 @@
 			...processedTrace.hoverlabel // Allow override if specified
 		};
 
-		// Use chart type configuration if available
-		const chartConfig = chartTypeConfigs[plotData.chart_type];
+		// Determine which chart configuration to use - prioritize individual trace type over overall chart_type
+		const traceType = processedTrace.type || plotData.chart_type;
+		const chartConfig = chartTypeConfigs[traceType as keyof typeof chartTypeConfigs];
+		
 		if (chartConfig) {
 			// Pass all traces for bar chart positioning logic (only needed for bar charts)
 			const options = plotData.chart_type === 'bar' ? { allTraces: plotData.data } : undefined;
@@ -472,6 +690,13 @@
 				(trace: any) => trace.type === 'bar' || (!trace.type && plotData.chart_type === 'bar')
 			);
 
+			// Calculate padded ranges for dual y-axis
+			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+			const primaryYTraces = plotData.data.filter((trace: any) => !trace.yaxis || trace.yaxis === 'y');
+			const secondaryYTraces = plotData.data.filter((trace: any) => trace.yaxis === 'y2');
+			const primaryYRange = userLayoutWithoutDimensions.yaxis?.range || calculatePaddedRange(primaryYTraces, 'y', 0.10);
+			const secondaryYRange = userLayoutWithoutDimensions.yaxis2?.range || calculatePaddedRange(secondaryYTraces, 'y', 0.10);
+
 			// Configure dual y-axis layout
 			layout = {
 				...baseLayout,
@@ -485,13 +710,15 @@
 					...userLayoutWithoutDimensions.xaxis,
 					gridcolor: 'rgba(255, 255, 255, 0.08)',
 					linecolor: 'rgba(255, 255, 255, 0.3)',
+					...(xRange && { range: xRange }),
 				},
 				// Primary y-axis (left side)
 				yaxis: {
 					...defaultLayout.yaxis,
 					...userLayoutWithoutDimensions.yaxis,
 					side: 'left' as const,
-					gridcolor: 'rgba(255, 255, 255, 0.08)'
+					gridcolor: 'rgba(255, 255, 255, 0.08)',
+					...(primaryYRange && { range: primaryYRange }),
 				},
 				// Secondary y-axis (right side)
 				yaxis2: {
@@ -499,6 +726,7 @@
 					...userLayoutWithoutDimensions.yaxis2,
 					side: 'right' as const,
 					overlaying: 'y' as const,
+					...(secondaryYRange && { range: secondaryYRange }),
 					// Ensure grid lines don't overlap by disabling on secondary axis
 					showgrid: false
 				}
@@ -538,10 +766,6 @@
 		<Plot data={processedData} {layout} config={defaultConfig} fillParent={true} debounce={250} />
 	</div>
 	
-	<div class="watermark">
-		Powered by <span class="watermark-brand">Peripheral.io</span>
-	</div>
-	
 	<div class="plot-actions">
 		<button 
 			class="copy-image-btn glass glass--small glass--responsive {copyImageFeedback ? 'copied' : ''}"
@@ -564,6 +788,7 @@
 <style>
 	.chunk-plot-container {
 		margin-bottom: 1rem;
+		position: relative;
 	}
 
 	.plot-actions {
@@ -612,24 +837,28 @@
 	}
 
 	.plot-container {
-		min-height: 350px;
-		height: 350px;
+		min-height: 450px;
+		height: 450px;
 		width: 100%;
 		overflow: hidden;
 	}
 
-	.watermark {
+	/* Watermark styles - only used in cloned/copied version */
+	:global(.watermark-offscreen) {
 		text-align: right;
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
 		font-size: 13px;
-		color: rgba(255, 255, 255, 1);
-		margin-top: 4px;
-		margin-right: 8px;
+		color: rgba(255, 255, 255, 0.9);
+		padding-bottom: 4px;
+		padding-right: 8px;
+		margin-top: 8px;
+		border-radius: 4px;
 	}
 
-	.watermark-brand {
-		font-size: 20px;
+	:global(.watermark-offscreen .watermark-brand) {
+		font-size: 16px;
 		font-weight: 600;
+		color: #ffffff;
 	}
 
 	.copy-image-btn {
@@ -684,7 +913,7 @@
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
 		.plot-container {
-			min-height: 300px;
+			min-height: 380px;
 		}
 
 		.plot-title {
@@ -711,4 +940,41 @@
 		background: rgba(71, 85, 105, 0.3) !important;
 		color: #e2e8f0 !important;
 	}
+
+	/* Fix hover label trace name background */
+	:global(.plot-container .plotly .hoverlayer .hovertext) {
+		background: #1e293b !important;
+		border: 1px solid #475569 !important;
+		color: #ffffff !important;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+		font-size: 11px !important;
+		border-radius: 2px !important;
+		padding: 4px 6px !important;
+		line-height: 1.2 !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext rect) {
+		fill: #1e293b !important;
+		fill-opacity: 1 !important;
+		stroke: #475569 !important;
+		stroke-width: 1 !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext path) {
+		fill: #1e293b !important;
+		stroke: #475569 !important;
+		stroke-width: 1 !important;
+	}
+
+	/* Make hover labels more compact */
+	:global(.plot-container .plotly .hoverlayer .hovertext text) {
+		font-size: 11px !important;
+		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+	}
+
+	:global(.plot-container .plotly .hoverlayer .hovertext tspan) {
+		font-size: 11px !important;
+	}
+
+
 </style>

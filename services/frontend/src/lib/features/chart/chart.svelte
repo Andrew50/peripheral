@@ -231,9 +231,6 @@
 	// Track previous security ID to avoid unnecessary stream changes
 	let previousSecurityId: number | null = null;
 
-	// Why Moving popup state (declare early to avoid TDZ)
-	let whyMovingTicker: string = '';
-	let whyMovingTrigger: number = 0;
 
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
@@ -277,6 +274,8 @@
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
 	let pendingVolumeUpdate: any = null;
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 

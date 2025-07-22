@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"google.golang.org/genai"
 )
@@ -307,7 +306,7 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	if err != nil {
 		return
 	}
-	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt, true)
 
 	CountTokensResponse, err := client.Models.CountTokens(context.Background(), planningModel, genai.Text(enhancedSystemPrompt), &genai.CountTokensConfig{})
 	if err != nil {
@@ -374,10 +373,6 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 	sb.WriteString("<UserQuery>\n")
 	sb.WriteString(query)
 	sb.WriteString("\n</UserQuery>\n")
-
-	sb.WriteString("The current timestamp in seconds is: ")
-	sb.WriteString(fmt.Sprint(time.Now().Unix()))
-	sb.WriteString("\n")
 	return sb.String(), nil
 }
 

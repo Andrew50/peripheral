@@ -158,9 +158,9 @@ export type ConversationData = {
 
 // Timeline event that can handle different types of events
 export type TimelineEvent = {
-	message: string; // The actual status message from backend
+	headline: string;
 	timestamp: Date;
-	type?: 'message' | 'websearch'; // Type of event
+	type?: 'FunctionUpdate' | 'webSearchQuery' | 'webSearchCitations' | 'getWatchlistItems'; // Type of event
 	data?: any; // For web search queries or other structured data
 };
 
@@ -184,12 +184,13 @@ export type SuggestedQueriesResponse = {
 	suggestions: string[];
 };
 // Conversation management types
-export type ConversationSummary = {
+export type ConversationInfo = {
 	conversation_id: string;
 	title: string;
 	created_at: string;
 	updated_at: string;
 	last_message_query?: string;
+	is_public: boolean;
 };
 // State for table sorting
 export type SortState = {

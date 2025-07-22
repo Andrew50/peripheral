@@ -64,8 +64,9 @@ export type StrategyUpdate = {
 
 export type AgentStatusUpdate = {
 	messageType: 'AgentStatusUpdate';
-	type: string; // e.g., 'FunctionUpdate', 'WebSearch'
-	data: any; // The actual data - string for FunctionUpdate, object for WebSearch
+	headline: string;
+	type: string; // e.g., 'FunctionUpdate', 'WebSearchQuery'
+	data: any; // The actual data - string for FunctionUpdate, object for WebSearchQuery
 };
 
 export type TitleUpdate = {
@@ -684,9 +685,11 @@ export function connect() {
 			} else {
 				// Also feed data to the new streamHub system
 				if (
-					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) &&
-					data.price !== undefined
+					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) 
 				) {
+					if (data.price === undefined) {
+						return;
+					}
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
 						const tickData: any = {
@@ -700,7 +703,6 @@ export function connect() {
 						if (channelName.includes('-slow-extended')) {
 							tickData.isExtended = true;
 						}
-
 						// Skip price updates based on shouldUpdatePrice flag
 						if (data.shouldUpdatePrice) {
 							enqueueTick(tickData);

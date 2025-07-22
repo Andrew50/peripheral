@@ -99,17 +99,13 @@ function flush() {
 
 function processRegularHoursData(t: any) {
 	const securityid = t.securityid;
-
 	// Update regular price cache and store
 	if (t.price !== undefined) {
-		// Skip price updates if shouldUpdatePrice is false
-		if (t.shouldUpdatePrice !== false) {
-			priceCache.set(securityid, t.price);
-			getColumnStore(securityid, 'price').set({
-				price: t.price,
-				formatted: t.price.toFixed(2)
-			});
-		}
+		priceCache.set(securityid, t.price);
+		getColumnStore(securityid, 'price').set({
+			price: t.price,
+			formatted: t.price.toFixed(2),
+		});
 	}
 
 	// Update prevClose cache and store
@@ -117,7 +113,6 @@ function processRegularHoursData(t: any) {
 		prevCloseCache.set(securityid, t.prevClose);
 		getColumnStore(securityid, 'prevClose').set({ prevClose: t.prevClose });
 	}
-
 	// Calculate and update regular change and change percentage
 	const currentPrice = priceCache.get(securityid);
 	const prevClose = prevCloseCache.get(securityid);
@@ -147,10 +142,7 @@ function processExtendedHoursData(t: any) {
 
 	// Update extended price cache
 	if (t.price !== undefined) {
-		// Skip price updates if shouldUpdatePrice is false
-		if (t.shouldUpdatePrice !== false) {
-			extendedPriceCache.set(securityid, t.price);
-		}
+		extendedPriceCache.set(securityid, t.price);
 	}
 
 	// Update extendedClose cache

@@ -33,6 +33,7 @@ type PythonAgentPlotData struct {
 
 type RunPythonAgentArgs struct {
 	Prompt string `json:"prompt"`
+	Data   string `json:"data"`
 }
 type RunPythonAgentResponse struct {
 	Result         any             `json:"result,omitempty"`
@@ -59,7 +60,6 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 	if !workerResult.Success {
 		return nil, fmt.Errorf("python agent execution failed: %s", workerResult.ErrorMessage)
 	}
-	fmt.Println("workerResult", workerResult)
 	if workerResult.Result != nil {
 		response.Result = workerResult.Result
 	}
@@ -113,12 +113,23 @@ type WorkerPythonAgentResult struct {
 
 func callWorkerPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunPythonAgentArgs, progressCallback ProgressCallback) (*WorkerPythonAgentResult, error) {
 	taskID := fmt.Sprintf("pythonAgent_%d_%d", userID, time.Now().UnixNano())
+	messageID, ok := ctx.Value("messageID").(string)
+	if !ok {
+		messageID = ""
+	}
+	conversationID, ok := ctx.Value("conversationID").(string)
+	if !ok {
+		conversationID = ""
+	}
 	task := map[string]interface{}{
 		"task_id":   taskID,
 		"task_type": "general_python_agent",
 		"args": map[string]interface{}{
-			"user_id": userID,
-			"prompt":  args.Prompt,
+			"user_id":        userID,
+			"prompt":         args.Prompt,
+			"data":           args.Data,
+			"conversationID": conversationID,
+			"messageID":      messageID,
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
 	}
@@ -178,7 +189,6 @@ func waitForPythonAgentResultWithProgress(ctx context.Context, conn *data.Conn, 
 						if err != nil {
 							return nil, fmt.Errorf("error marshaling task result: %v", err)
 						}
-						fmt.Println("resultJSON", string(resultJSON))
 						err = json.Unmarshal(resultJSON, &result)
 						if err != nil {
 							return nil, fmt.Errorf("error unmarshaling python agent result: %v", err)

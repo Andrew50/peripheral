@@ -5,7 +5,6 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
-	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -20,6 +19,7 @@ type Tool struct {
 	FunctionDeclaration *genai.FunctionDeclaration
 	Function            func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error)
 	StatusMessage       string
+	UserSpecificTool    bool
 }
 
 // Wrapper function to adapt existing functions to context-aware signatures
@@ -66,8 +66,9 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetCurrentSecurityID),
-			StatusMessage: "Looking up {ticker}...",
+			Function:         wrapWithContext(helpers.GetCurrentSecurityID),
+			StatusMessage:    "Looking up {ticker}",
+			UserSpecificTool: false,
 		},
 		"getStockDetails": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -84,8 +85,9 @@ var (
 					Required: []string{"securityID"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetAgentTickerMenuDetails),
-			StatusMessage: "Getting {ticker} details...",
+			Function:         wrapWithContext(helpers.GetAgentTickerMenuDetails),
+			StatusMessage:    "Getting {ticker} details",
+			UserSpecificTool: false,
 		},
 		//watchlist
 		"getWatchlists": {
@@ -98,8 +100,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(watchlist.GetWatchlists),
-			StatusMessage: "Fetching watchlists...",
+			Function:         wrapWithContext(watchlist.GetWatchlists),
+			StatusMessage:    "Fetching watchlists",
+			UserSpecificTool: true,
 		},
 		"newWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -112,30 +115,36 @@ var (
 							Type:        genai.TypeString,
 							Description: "The name of the watchlist to create",
 						},
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "(Optional) The tickers to add to the watchlist.",
+						},
 					},
 					Required: []string{"watchlistName"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.NewWatchlist),
-			StatusMessage: "Creating new watchlist...",
+			Function:         wrapWithContext(watchlist.AgentNewWatchlist),
+			StatusMessage:    "Creating new watchlist",
+			UserSpecificTool: true,
 		},
-		"getWatchlistItems": {
+		"getWatchlistTickers": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getWatchlistItems",
-				Description: "Retrieves the security ID's of the securities in a specified watchlist.",
+				Name:        "getWatchlistTickers",
+				Description: "Retrieves the tickers in a specified watchlist.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"watchlistId": {
 							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to get the list of security IDs for.",
+							Description: "The ID of the watchlist.",
 						},
 					},
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.GetWatchlistItems),
-			StatusMessage: "Getting watchlist items...",
+			Function:         wrapWithContext(watchlist.AgentGetWatchlistItems),
+			StatusMessage:    "Getting watchlist tickers",
+			UserSpecificTool: true,
 		},
 		"deleteWatchlistItem": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -152,31 +161,28 @@ var (
 					Required: []string{"watchlistItemId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlistItem),
-			StatusMessage: "Removing item from watchlist...",
+			Function:         wrapWithContext(watchlist.DeleteWatchlistItem),
+			StatusMessage:    "Removing item from watchlist",
+			UserSpecificTool: true,
 		},
-		"newWatchlistItem": {
+		"addTickersToWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "newWatchlistItem",
-				Description: "Add a security to a watchlist.",
+				Name:        "addTickersToWatchlist",
+				Description: "Add tickers to a watchlist.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"watchlistId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the watchlist to add the security to.",
-						},
-						"securityId": {
-							Type:        genai.TypeInteger,
-							Description: "The ID of the security to add to the watchlist.",
-						},
+						"watchlistId": {Type: genai.TypeInteger, Description: "The ID of the watchlist to add the security to."},
+						"tickers":     {Type: genai.TypeArray, Description: "The tickers to add to the watchlist."},
 					},
-					Required: []string{"watchlistId", "securityId"},
+					Required: []string{"watchlistId", "tickers"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.NewWatchlistItem),
-			StatusMessage: "Adding item to watchlist...",
+			Function:         wrapWithContext(watchlist.AgentAddTickersToWatchlist),
+			StatusMessage:    "Adding tickers to watchlist",
+			UserSpecificTool: true,
 		},
+
 		"deleteWatchlist": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "deleteWatchlist",
@@ -192,8 +198,9 @@ var (
 					Required: []string{"watchlistId"},
 				},
 			},
-			Function:      wrapWithContext(watchlist.DeleteWatchlist),
-			StatusMessage: "Deleting watchlist...",
+			Function:         wrapWithContext(watchlist.DeleteWatchlist),
+			StatusMessage:    "Deleting watchlist",
+			UserSpecificTool: true,
 		},
 		//singles
 
@@ -224,8 +231,9 @@ var (
 					Required: []string{"securityId", "price"},
 				},
 			},
-			Function:      wrapWithContext(chart.SetHorizontalLine),
-			StatusMessage: "Adding horizontal line...",
+			Function:         wrapWithContext(chart.SetHorizontalLine),
+			StatusMessage:    "Adding horizontal line",
+			UserSpecificTool: true,
 		},
 		"getHorizontalLines": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -242,8 +250,9 @@ var (
 					Required: []string{"securityId"},
 				},
 			},
-			Function:      wrapWithContext(chart.GetHorizontalLines),
-			StatusMessage: "Fetching horizontal lines...",
+			Function:         wrapWithContext(chart.GetHorizontalLines),
+			StatusMessage:    "Fetching horizontal lines",
+			UserSpecificTool: true,
 		},
 		"deleteHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -260,8 +269,9 @@ var (
 					Required: []string{"id"},
 				},
 			},
-			Function:      wrapWithContext(chart.DeleteHorizontalLine),
-			StatusMessage: "Deleting horizontal line...",
+			Function:         wrapWithContext(chart.DeleteHorizontalLine),
+			StatusMessage:    "Deleting horizontal line",
+			UserSpecificTool: true,
 		},
 		"updateHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -294,8 +304,9 @@ var (
 					Required: []string{"id", "securityId", "price"},
 				},
 			},
-			Function:      wrapWithContext(chart.UpdateHorizontalLine),
-			StatusMessage: "Updating horizontal line...",
+			Function:         wrapWithContext(chart.UpdateHorizontalLine),
+			StatusMessage:    "Updating horizontal line",
+			UserSpecificTool: true,
 		},
 		"getStockEvents": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -324,8 +335,9 @@ var (
 					Required: []string{"securityId", "from", "to"},
 				},
 			},
-			Function:      wrapWithContext(chart.GetChartEvents),
-			StatusMessage: "Fetching chart events...",
+			Function:         wrapWithContext(chart.GetChartEvents),
+			StatusMessage:    "Fetching chart events",
+			UserSpecificTool: false,
 		},
 		// SEC Filing Tools
 		"getStockEdgarFilings": {
@@ -351,10 +363,11 @@ var (
 					Required: []string{"start", "end", "securityId"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetStockEdgarFilings),
-			StatusMessage: "Searching SEC filings...",
+			Function:         wrapWithContext(filings.GetStockEdgarFilings),
+			StatusMessage:    "Searching SEC filings",
+			UserSpecificTool: false,
 		},
-		"getEarningsText": {
+		/*"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",
 				Description: "Get the plain text content of the earnings SEC filing for a specified quarter, year, and security.",
@@ -378,9 +391,9 @@ var (
 				},
 			},
 			Function:      wrapWithContext(filings.GetEarningsText),
-			StatusMessage: "Getting earnings transcript...",
-		},
-		"getFilingText": {
+			StatusMessage: "Getting earnings transcript",
+		},*/
+		/*"getFilingText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getFilingText",
 				Description: "Retrieves the text content of a SEC filing from a specified url.",
@@ -396,8 +409,8 @@ var (
 				},
 			},
 			Function:      wrapWithContext(filings.GetFilingText),
-			StatusMessage: "Reading filing...",
-		},
+			StatusMessage: "Reading filing",
+		},*/
 		"getExhibitList": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitList",
@@ -410,8 +423,9 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetExhibitList),
-			StatusMessage: "Reading Exhibits in SEC Filing...",
+			Function:         wrapWithContext(filings.GetExhibitList),
+			StatusMessage:    "Reading Exhibits in SEC Filing",
+			UserSpecificTool: false,
 		},
 		"getExhibitContent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -425,14 +439,15 @@ var (
 					Required: []string{"url"},
 				},
 			},
-			Function:      wrapWithContext(filings.GetExhibitContent),
-			StatusMessage: "Reading Exhibit Content...",
+			Function:         wrapWithContext(filings.GetExhibitContent),
+			StatusMessage:    "Reading Exhibit Content",
+			UserSpecificTool: false,
 		},
 		// <End SEC Filing Tools>
 		// <Backtest Tools>
-		"run_backtest": {
+		"runBacktest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "run_backtest",
+				Name:        "runBacktest",
 				Description: "Execute a comprehensive historical backtest of a Python trading strategy to find all instances where the strategy conditions were met in historical data. Use this after creating a strategy to discover all historical occurrences of patterns, conditions, or comparative analysis. Strategies have access to rich market data including OHLCV data, 20+ technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), fundamental data (P/E, market cap, sector), and derived metrics. Returns all historical instances where the strategy criteria matched, along with timestamps, tickers, and relevant data. Execution typically takes 30-90 seconds for full market analysis. Use for finding historical patterns, identifying all occurrences of conditions, comparative analysis over time, and generating detailed historical results with optional forward return calculations.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -453,8 +468,9 @@ var (
 					Required: []string{"strategyId", "startDate", "endDate"},
 				},
 			},
-			Function:      strategy.RunBacktest,
-			StatusMessage: "Running backtest...",
+			Function:         strategy.RunBacktest,
+			StatusMessage:    "Running backtest",
+			UserSpecificTool: false,
 		},
 		"getBacktestInstances": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -480,12 +496,13 @@ var (
 					Required: []string{"strategyID", "filters"},
 				},
 			},
-			Function:      GetBacktestInstances,
-			StatusMessage: "Scanning backtest instances...",
+			Function:         GetBacktestInstances,
+			StatusMessage:    "Scanning backtest instances",
+			UserSpecificTool: false,
 		},
-		"run_screener": {
+		"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "run_screener",
+				Name:        "runScreener",
 				Description: "Screen current market opportunities using a Python trading strategy. Processes live market data to identify and rank securities matching strategy criteria. Strategies access real-time OHLCV data, technical indicators, fundamental metrics, and market conditions. Execution takes 15-45 seconds for full market screening. Use for finding current trading opportunities, generating ranked watchlists, and identifying securities matching specific criteria right now.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -509,23 +526,26 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.RunScreening),
-			StatusMessage: "Running screener...",
+			Function:         wrapWithContext(strategy.RunScreening),
+			StatusMessage:    "Running screener",
+			UserSpecificTool: false,
 		},
 		"runPythonAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runPythonAgent",
-				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
+						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
 					},
 					Required: []string{"prompt"},
 				},
 			},
-			Function:      RunPythonAgent,
-			StatusMessage: "Running Python agent...",
+			Function:         RunPythonAgent,
+			StatusMessage:    "Running Python agent",
+			UserSpecificTool: false,
 		},
 		"getDailySnapshot": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -542,8 +562,9 @@ var (
 					Required: []string{"ticker"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetTickerDailySnapshot),
-			StatusMessage: "Getting market data...",
+			Function:         wrapWithContext(helpers.AgentGetTickerDailySnapshot),
+			StatusMessage:    "Getting market data",
+			UserSpecificTool: false,
 		},
 		"getLastPrice": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -552,16 +573,20 @@ var (
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol to get the last price for, e.g. 'AAPL'.",
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "The ticker symbols to get the last price for.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
 						},
 					},
-					Required: []string{"ticker"},
+					Required: []string{"tickers"},
 				},
 			},
-			Function:      wrapWithContext(helpers.GetLastPrice),
-			StatusMessage: "Getting current price of {ticker}...",
+			Function:         wrapWithContext(helpers.GetLastPrice),
+			StatusMessage:    "Getting current price of {ticker}",
+			UserSpecificTool: false,
 		},
 		/*"getPriceAtTime": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -655,8 +680,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(strategy.GetStrategies),
-			StatusMessage: "Fetching strategies...",
+			Function:         wrapWithContext(strategy.GetStrategies),
+			StatusMessage:    "Fetching strategies",
+			UserSpecificTool: true,
 		},
 		"deleteStrategy": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -670,13 +696,14 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.DeleteStrategy),
-			StatusMessage: "Deleting strategy...",
+			Function:         wrapWithContext(strategy.DeleteStrategy),
+			StatusMessage:    "Deleting strategy",
+			UserSpecificTool: true,
 		},
 		"runStrategyAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runStrategyAgent",
-				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. Creation process includes security validation and takes 15-30 seconds with priority queue processing. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. This agent does not have access to websearch. First websearch any required information and then pass it in with the query.Pass strategyId = -1 to create a new strategy.",
+				Description: "Create or edit a Python strategy from natural language description for pattern detection, historical analysis, and comparative studies. Use this tool for requests that involve finding patterns in historical data, comparing stocks over time, or identifying specific market conditions. Examples: 'find all times X happened', 'get instances when Y condition was met', 'compare A vs B performance', 'identify patterns in historical data'. Strategies are automatically generated as secure Python functions with access to comprehensive market data (OHLCV, technical indicators, fundamentals). Generated strategies can be used for backtesting historical patterns, screening current opportunities, and real-time monitoring. IF YOU USE THIS FUNCTION TO CREATE A NEW STRATEGY, USE THE USER'S ORIGINAL QUERY AS IS. This agent does not have access to websearch. If the query requires finding dates, first websearch any required information and then pass it in with the query. Pass strategyId = -1 to create a new strategy.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
@@ -686,24 +713,26 @@ var (
 					Required: []string{"query", "strategyId"},
 				},
 			},
-			Function:      wrapWithContext(strategy.CreateStrategyFromPrompt),
-			StatusMessage: "Building strategy...",
+			Function:         strategy.CreateStrategyFromPrompt,
+			StatusMessage:    "Building strategy",
+			UserSpecificTool: false,
 		},
 		// [SEARCH TOOLS]
 		"runWebSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runWebSearch",
-				Description: "Run a web search using Google Search. Never use web search to look up historical performance or stock analysis.",
+				Description: "Run a web search. NEVER use web search to look up historical performance or stock analysis. Web searches are EXPENSIVE. If you need to do the same websearch on several tickers or multiple websearchs, figure out how to BEST group them into as few websearches as possible",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"query": {Type: genai.TypeString, Description: "The query to search. Be highly specific and detailed, asking for the specific information you need. "},
+						"query": {Type: genai.TypeString, Description: "The query to search. Be HIGHLY specific and detailed, asking for the specific information you need. Do not leave any room for ambiguity in the query."},
 					},
 					Required: []string{"query"},
 				},
 			},
-			Function:      wrapWithContext(RunWebSearch),
-			StatusMessage: "Searching the web...",
+			Function:         AgentRunWebSearch,
+			StatusMessage:    "Searching the web",
+			UserSpecificTool: false,
 		},
 		/*"runTwitterSearch": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -763,8 +792,9 @@ var (
 					Required: []string{"price", "securityId", "ticker"},
 				},
 			},
-			Function:      wrapWithContext(alerts.NewAlert),
-			StatusMessage: "Creating price alert...",
+			Function:         wrapWithContext(alerts.NewAlert),
+			StatusMessage:    "Creating price alert",
+			UserSpecificTool: true,
 		},
 		"getAlerts": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -776,8 +806,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(alerts.GetAlerts),
-			StatusMessage: "Fetching alerts...",
+			Function:         wrapWithContext(alerts.GetAlerts),
+			StatusMessage:    "Fetching alerts",
+			UserSpecificTool: true,
 		},
 		"getAlertLogs": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -789,8 +820,9 @@ var (
 					Required:   []string{},
 				},
 			},
-			Function:      wrapWithContext(alerts.GetAlertLogs),
-			StatusMessage: "Fetching alert history...",
+			Function:         wrapWithContext(alerts.GetAlertLogs),
+			StatusMessage:    "Fetching alert history",
+			UserSpecificTool: true,
 		},
 		"deleteAlert": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -807,12 +839,13 @@ var (
 					Required: []string{"alertId"},
 				},
 			},
-			Function:      wrapWithContext(alerts.DeleteAlert),
-			StatusMessage: "Deleting alert...",
+			Function:         wrapWithContext(alerts.DeleteAlert),
+			StatusMessage:    "Deleting alert",
+			UserSpecificTool: true,
 		},
 		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
-		"runScreener": {
+		/*"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runScreener",
 				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments. When sorting is applied, NULL values are automatically sorted last regardless of sort direction to ensure meaningful results are prioritized.",
@@ -866,7 +899,7 @@ var (
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
 			StatusMessage: "Screening stocks...",
-		},
+		},*/
 		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {
@@ -894,8 +927,9 @@ var (
 					Required: []string{"dates"},
 				},
 			},
-			Function:      wrapWithContext(DateToSeconds),
-			StatusMessage: "Converting dates to timestamps...",
+			Function:         wrapWithContext(DateToSeconds),
+			StatusMessage:    "Converting dates to timestamps",
+			UserSpecificTool: false,
 		},
 	}
 )

@@ -27,6 +27,12 @@ on:
         description: 'Site Domain'
         required: true
         type: string
+      strategy:
+        required: false
+        type: string
+      services_changed:
+        required: false
+        type: string
       # public_base_url:
       #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
       #   required: true
@@ -65,6 +71,8 @@ on:
       OPENAI_API_KEY:
         required: true
       GROK_API_KEY:
+        required: true
+      TWITTER_API_IO_KEY:
         required: true
       X_API_KEY:
         required: true
@@ -109,6 +117,7 @@ jobs:
       TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
@@ -180,6 +189,7 @@ jobs:
           echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_API_SECRET: [$(if [ -n "$X_API_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_ACCESS_TOKEN: [$(if [ -n "$X_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
@@ -196,9 +206,10 @@ jobs:
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          SERVICES="db cache backend worker frontend"
-          echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
-          echo "Using services: ${SERVICES}"
+
+          echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
+          echo "Services to deploy: ${{ inputs.services_changed }}"   
+
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
           echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
@@ -220,6 +231,24 @@ jobs:
 
       - name: Update Kubernetes Secrets
         run: config/deploy/scripts/setup-configs.sh
+
+      - name: Copy Migrations to Database Pod
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -n "$K8S_NAMESPACE" -c db
+          kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -n "$K8S_NAMESPACE" -c db
+
+      - name: Run Migrations
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n "$K8S_NAMESPACE" $POD_NAME -c db -- bash -c "
+            chmod +x /tmp/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations DB_PORT_INT=5432 /tmp/migrate.sh
+          "
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh

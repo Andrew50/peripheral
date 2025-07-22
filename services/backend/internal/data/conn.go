@@ -9,31 +9,32 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
+	"google.golang.org/genai"
 )
 
 // Conn encapsulates database connections and API clients
 type Conn struct {
 	//Cache *redis.Client
-	DB              *pgxpool.Pool
-	Polygon         *polygon.Client
-	Cache           *redis.Client
-	PolygonKey      string
-	GeminiPool      *GeminiKeyPool
-	PerplexityKey   string
-	GrokAPIKey      string
-	TwitterAPIioKey string
-	OpenAIKey       string
-	XAPIKey         string
-	XAPISecretKey   string
-	XAccessToken    string
-	XAccessSecret   string
-	IsLLMExecution  bool // Track if function is called by LLM agent
+	DB                   *pgxpool.Pool
+	Polygon              *polygon.Client
+	Cache                *redis.Client
+	PolygonKey           string
+	PerplexityKey        string
+	GrokAPIKey           string
+	TwitterAPIioKey      string
+	OpenAIKey            string
+	XAPIKey              string
+	XAPISecretKey        string
+	XAccessToken         string
+	XAccessSecret        string
+	GeminiClient         *genai.Client
+	ExecutionEnvironment string
+	IsLLMExecution       bool // Track if function is called by LLM agent
 }
 
 // Result structs for thread-safe communication
@@ -71,6 +72,15 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	xAPISecretKey := getEnv("X_API_SECRET", "")
 	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
 	xAccessSecret := getEnv("X_ACCESS_SECRET", "")
+
+	geminiAPIKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
+
+	executionEnvironment := getEnv("ENVIRONMENT", "")
+	if executionEnvironment == "" || executionEnvironment == "dev" || executionEnvironment == "development" {
+		executionEnvironment = "dev"
+	} else {
+		executionEnvironment = "prod"
+	}
 
 	var dbURL string
 	var cacheURL string
@@ -224,25 +234,32 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	polygonClient.HTTP.SetDisableWarn(true)
 	polygonClient.HTTP.SetLogger(NoOp{})
 
-	// Initialize Gemini API key pool
-	geminiPool := initGeminiKeyPool()
+	// Create gemini client
+	geminiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  geminiAPIKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create Gemini client: %v", err))
+	}
 	// Create local connection object (no global variable)
 	localConn := &Conn{
-		DB:              dbRes.conn,
-		Cache:           redisRes.client,
-		Polygon:         polygonClient,
-		PolygonKey:      polygonKey,
-		GeminiPool:      geminiPool,
-		PerplexityKey:   perplexityKey,
-		GrokAPIKey:      grokAPIKey,
-		TwitterAPIioKey: twitterAPIioKey,
-		OpenAIKey:       openAIKey,
-		XAPIKey:         xAPIKey,
-		XAPISecretKey:   xAPISecretKey,
-		XAccessToken:    xAccessToken,
-		XAccessSecret:   xAccessSecret,
-		IsLLMExecution:  false, // Initialize the new field
+		DB:                   dbRes.conn,
+		Cache:                redisRes.client,
+		Polygon:              polygonClient,
+		PolygonKey:           polygonKey,
+		PerplexityKey:        perplexityKey,
+		GrokAPIKey:           grokAPIKey,
+		TwitterAPIioKey:      twitterAPIioKey,
+		OpenAIKey:            openAIKey,
+		XAPIKey:              xAPIKey,
+		XAPISecretKey:        xAPISecretKey,
+		XAccessToken:         xAccessToken,
+		XAccessSecret:        xAccessSecret,
+		IsLLMExecution:       false, // Initialize the new field
+		GeminiClient:         geminiClient,
+		ExecutionEnvironment: executionEnvironment,
 	}
 
 	cleanup := func() {
@@ -269,112 +286,13 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// GeminiKeyInfo represents information about a Gemini API key
-type GeminiKeyInfo struct {
-	Key            string
-	IsPaid         bool
-	RequestCount   int
-	LastReset      time.Time
-	RateLimitTotal int // Total requests allowed per minute
-	Mutex          sync.Mutex
-}
-
-// GeminiKeyPool manages a pool of Gemini API keys
-type GeminiKeyPool struct {
-	Keys        []*GeminiKeyInfo
-	Mutex       sync.RWMutex
-	LastUsedIdx int
-}
-
-// initGeminiKeyPool initializes the Gemini API key pool
-func initGeminiKeyPool() *GeminiKeyPool {
-	pool := &GeminiKeyPool{
-		Keys:        make([]*GeminiKeyInfo, 0),
-		LastUsedIdx: -1,
-	}
-
-	// Get paid key from environment variable
-	paidKey := getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74")
-
-	// Paid key has a higher limit, though it varies by plan
-	paidRateLimit := 1000
-
-	// Add paid key if provided
-	if paidKey != "" {
-		pool.Keys = append(pool.Keys, &GeminiKeyInfo{
-			Key:            paidKey,
-			IsPaid:         true,
-			RequestCount:   0,
-			LastReset:      time.Now(),
-			RateLimitTotal: paidRateLimit,
-		})
-	}
-
-	// Start a goroutine to reset request counts every minute
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			pool.resetCounts()
-		}
-	}()
-
-	return pool
-}
-
-// resetCounts resets the request counts for all keys in the pool
-func (p *GeminiKeyPool) resetCounts() {
-	p.Mutex.Lock()
-	defer p.Mutex.Unlock()
-
-	now := time.Now()
-	for _, keyInfo := range p.Keys {
-		keyInfo.Mutex.Lock()
-		// Only reset if a minute has passed since the last reset
-		if now.Sub(keyInfo.LastReset) >= time.Minute {
-			keyInfo.RequestCount = 0
-			keyInfo.LastReset = now
-		}
-		keyInfo.Mutex.Unlock()
-	}
-}
-
-// GetNextKey returns the paid API key if available and under rate limit
-func (p *GeminiKeyPool) GetNextKey() (string, error) {
-	p.Mutex.Lock()
-	defer p.Mutex.Unlock()
-
-	if len(p.Keys) == 0 {
-		return "", fmt.Errorf("no API keys available in the pool")
-	}
-
-	// Since we only have the paid key, just use it
-	keyInfo := p.Keys[0]
-
-	keyInfo.Mutex.Lock()
-	defer keyInfo.Mutex.Unlock()
-
-	// Check if this key is under its rate limit
-	if keyInfo.RequestCount < keyInfo.RateLimitTotal {
-		keyInfo.RequestCount++
-		return keyInfo.Key, nil
-	}
-
-	// If we get here, the paid key has reached its rate limit
-	return "", fmt.Errorf("API key has reached its rate limit")
-}
-
-// GetGeminiKey is a convenience method on Conn to get the next available Gemini API key
+// GetGeminiKey gets the GEMINI api key
 func (c *Conn) GetGeminiKey() (string, error) {
 	// Add nil pointer checks
 	if c == nil {
 		return "", fmt.Errorf("connection object is nil")
 	}
-	if c.GeminiPool == nil {
-		return "", fmt.Errorf("gemini pool is not initialized")
-	}
-	return c.GeminiPool.GetNextKey()
+	return getEnv("GEMINI_API_KEY", "AIzaSyAcmVT51iORY1nFD3RLqYIP7Q4-4e5oS74"), nil
 }
 
 // TestRedisConnectivity tests the Redis connection and returns success status and error message

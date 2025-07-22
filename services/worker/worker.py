@@ -354,7 +354,7 @@ class StrategyWorker:
                             logger.info(f"🧠 Starting strategy creation for user {args.get('user_id')} with prompt: {args.get('prompt', '')[:100]}...")
                             result = asyncio.run(self._execute_create_strategy(task_id=task_id, **args))
                         elif task_type == 'general_python_agent':
-                            result = asyncio.run(self._execute_general_python_agent(task_id=task_id, user_id=args.get('user_id'), prompt=args.get('prompt')))
+                            result = asyncio.run(self._execute_general_python_agent(task_id=task_id, user_id=args.get('user_id'), prompt=args.get('prompt'), data=args.get('data'), conversationID=args.get('conversationID'), messageID=args.get('messageID')))
                         else: # unknown task type
                           
                             raise Exception(f"Unknown task type: {task_type}.")
@@ -591,7 +591,7 @@ class StrategyWorker:
         return result
     
     async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 
-                                     prompt: str = None, strategy_id: int = -1, **kwargs) -> Dict[str, Any]:
+                                     prompt: str = None, strategy_id: int = -1, conversationID: str = None, messageID: str = None, **kwargs) -> Dict[str, Any]:
         """Execute strategy creation task with detailed logging and comprehensive error handling"""
         logger.info(f"🧠 STRATEGY CREATION START - Task: {task_id}")
         logger.info(f"   👤 User ID: {user_id}")
@@ -600,7 +600,7 @@ class StrategyWorker:
         
         try:
             # Validate input parameters
-            if not user_id:
+            if user_id is None:
                 raise ValueError("user_id is required for strategy creation")
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for strategy creation")
@@ -619,7 +619,9 @@ class StrategyWorker:
                     self.strategy_generator.create_strategy_from_prompt(
                         user_id=user_id,
                         prompt=prompt,
-                        strategy_id=strategy_id
+                        strategy_id=strategy_id,
+                        conversationID=conversationID,
+                        messageID=messageID
                     ),
                     timeout=300.0  # 5 minute timeout
                 )
@@ -726,13 +728,14 @@ class StrategyWorker:
             return error_result
     
     async def _execute_general_python_agent(self, task_id: str = None, user_id: int = None, 
-                                           prompt: str = None, **kwargs) -> Dict[str, Any]:
+                                           prompt: str = None, data: str = None, conversationID: str = None, messageID: str = None, **kwargs) -> Dict[str, Any]:
         # Initialize defaults to avoid scope issues
         result, prints, plots, response_images = [], "", [], []
+        execution_id = None  # Initialize to avoid UnboundLocalError
         
         try:
             # Validate input parameters
-            if not user_id:
+            if user_id is None:
                 raise ValueError("user_id is required for general Python agent")
             if not prompt or not prompt.strip():
                 raise ValueError("prompt is required for general Python agent")
@@ -745,7 +748,10 @@ class StrategyWorker:
             result, prints, plots, response_images, execution_id, error = await asyncio.wait_for(
                 self.python_agent_generator.start_general_python_agent(
                     user_id=user_id,
-                    prompt=prompt
+                    prompt=prompt,
+                    data=data,
+                    conversationID=conversationID,
+                    messageID=messageID
                 ),
                 timeout=240.0  # 4 minute timeout
             )

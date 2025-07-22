@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//go:embed prompts/*
+//go:embed prompts/* chatUXPrompts/*
 var fs embed.FS // 2️⃣ compiled into the binary
 
 // Cache for enhanced system prompts to avoid recomputing on every request
@@ -57,9 +57,16 @@ func getSystemInstruction(name string) (string, error) {
 	}
 	return s, nil
 }
+func getCleanThinkingTracePrompt() string {
+	raw, err := fs.ReadFile("chatUXPrompts/cleanThinkingTrace.txt")
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
 
 // enhanceSystemPromptWithTools adds a formatted list of available tools to the system prompt
-func enhanceSystemPromptWithTools(basePrompt string) string {
+func enhanceSystemPromptWithTools(basePrompt string, userSpecificTools bool) string {
 	// Check cache first
 	systemPromptCacheMutex.RLock()
 	if cached, exists := cachedEnhancedSystemPrompts[basePrompt]; exists {
@@ -85,7 +92,9 @@ func enhanceSystemPromptWithTools(basePrompt string) string {
 	// Add each tool's description and parameters
 	for _, name := range toolNames {
 		tool := Tools[name]
-
+		if !userSpecificTools && tool.UserSpecificTool {
+			continue // skip user specific tools if not user specific
+		}
 		// Add function name and description
 		toolsDescription.WriteString(fmt.Sprintf("- %s: %s\n", name, tool.FunctionDeclaration.Description))
 

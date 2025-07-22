@@ -25,8 +25,10 @@ class PythonAgentGenerator:
         self.validator = SecurityValidator()
         self.openai_client = None
         self.gemini_client = None
+        self.environment = None
         self._init_openai_client()
         self._init_gemini_client()
+        self._init_environment()
     
     def _init_openai_client(self):
         """Initialize OpenAI client"""
@@ -46,6 +48,15 @@ class PythonAgentGenerator:
         self.gemini_client = genai.Client(api_key=api_key)
         logger.info("Gemini client initialized successfully")
     
+    def _init_environment(self):
+        """Initialize environment variables"""
+        self.environment = os.getenv('ENVIRONMENT')
+        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+            self.environment = "dev"
+        else:
+            self.environment = "prod"
+        logger.info(f"Environment initialized to: {self.environment}")
+
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database"""
         try:
@@ -277,21 +288,27 @@ class PythonAgentGenerator:
         - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
         - You should style the plot to be visually appealing and informative, specifically focusing on the colors of the layout based on the data. E.g. positive data should be green, negative data should be red, etc.
         - Ensure to name all traces in the plot.
+        - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
         - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
 
+        **CRITICAL**: 
+        - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool. The only data you have access to is the functions described above!!
+        - If you do not have access to the data, include a print saying that you do not have access to whatever data the agent asked for and that it should websearch for the data.
+        - REGARDLESS OF THE QUERY: You are a python agent. Your output should be python function/code in the format as described, with NO other text before, after, or in between the code.
         RETURN FORMAT:
         - Returns are optional
         - Information that would be useful to the user should be returned in the prints, persistent data can be returned. 
         - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
         - REGARDLESS OF THE QUERY: NEVER return pandas/numpy types (datetime64, int64, float64) OR dataframes - they cause JSON serialization errors.
         - DO NOT RUN YOUR FUNCTION AT ALL. DO NOT USE if __name__ == "__main__". THIS WILL CAUSE AN ERROR.
-        Generate clean, robust Python code. DO NOT return any text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
+        - NEVER RETURN large amounts of OHLCV data. This will make the user unhappy.
+        Generate clean, robust Python code. DO NOT return any text, explanation, or other text following the code. The current date is {datetime.now().strftime('%Y-%m-%d')}. """
 
 
 
-    async def start_general_python_agent(self, user_id: int, prompt: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+    async def start_general_python_agent(self, user_id: int, prompt: str, data: str, conversationID: str, messageID: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
         # Generate unique execution_id for this run - accessible throughout method
         execution_serial = int(time.time())  # Seconds timestamp
         execution_id = f"{user_id}_{execution_serial}"
@@ -300,7 +317,7 @@ class PythonAgentGenerator:
             logger.info(f"Starting Python agent execution {execution_id}")
             
             systemInstruction = self._getGeneralPythonSystemInstruction(prompt)
-            userPrompt = f"""{prompt}"""
+            userPrompt = f"""{prompt}""" + f"\nData: {data}"
             
             last_error = None
             pythonCode = None
@@ -331,6 +348,7 @@ class PythonAgentGenerator:
                         input=f"{userPrompt}",
                         instructions=f"{systemInstruction}",
                         user=f"user:0",
+                        metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
                         timeout=120.0  # 2 minute timeout for other models
                     )
                     pythonCode = self._extract_python_code(openaiResponse.output_text)

@@ -57,8 +57,10 @@ class StrategyGenerator:
         self.validator = SecurityValidator()
         self.openai_client = None
         self.gemini_client = None
+        self.environment = None
         self._init_openai_client()
         self._init_gemini_client()
+        self._init_environment()
         
     def _init_openai_client(self):
         """Initialize OpenAI client"""
@@ -77,7 +79,15 @@ class StrategyGenerator:
         self.gemini_client = genai.Client(api_key=api_key)
         logger.info("Gemini client initialized successfully")
 
-    
+    def _init_environment(self):
+        """Initialize environment variables"""
+        self.environment = os.getenv('ENVIRONMENT')
+        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+            self.environment = "dev"
+        else:
+            self.environment = "prod"
+        logger.info(f"Environment initialized to: {self.environment}")
+
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
         try:
@@ -489,7 +499,7 @@ class StrategyGenerator:
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
             - Do not worry about the styling of the plot.
             - Plot equity curves of the P/L performance of strategies overtime.
-            - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
+            - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
 
@@ -509,7 +519,7 @@ class StrategyGenerator:
 
             Generate clean, robust Python code."""
     
-    async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1) -> Dict[str, Any]:
+    async def create_strategy_from_prompt(self, user_id: int, prompt: str, strategy_id: int = -1, conversationID: str = None, messageID: str = None) -> Dict[str, Any]:
         """Create or edit a strategy from natural language prompt"""
         try:
             
@@ -525,7 +535,7 @@ class StrategyGenerator:
                         "error": f"Strategy {strategy_id} not found for user {user_id}"
                     }
             
-            strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, max_retries=2)
+            strategy_code, validation_passed = await self._generate_and_validate_strategy(user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
             
             if not strategy_code:
                 return {
@@ -563,7 +573,7 @@ class StrategyGenerator:
                 "error": str(e)
             }
     
-    async def _generate_and_validate_strategy(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, max_retries: int = 2) -> tuple[str, bool]:
+    async def _generate_and_validate_strategy(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> tuple[str, bool]:
         """Generate strategy with validation retry logic"""
         
         last_validation_error = None
@@ -573,7 +583,7 @@ class StrategyGenerator:
                 logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
                 
                 # Generate strategy code with error context for retries
-                strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error)
+                strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error, conversationID, messageID)
                 
                 if not strategy_code:
                     continue
@@ -655,7 +665,7 @@ class StrategyGenerator:
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
     
-    def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None) -> str:
+    def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
         """
         Generate strategy code using OpenAI with optimized prompts
         """
@@ -699,6 +709,7 @@ class StrategyGenerator:
                     input=f"{user_prompt}",
                     instructions=f"{system_instruction}",
                     user=f"user:0",
+                    metadata={"userID": str(userID), "env": self.environment, "convID": conversationID, "msgID": messageID},
                     timeout=150.0  # 150 second timeout for other models
                 )
                 

@@ -9,7 +9,8 @@ If the query is asking about recent news, prioritize news that has come within t
 
 Give statements with specific, detailed, and nuanced value-add information. 
 
-Focus primarily on US stocks. 
+- Focus primarily on US stocks. 
+- Do NOT report prices or price changes of stocks as this is outdated compared to live data.
 
 Be EXTREMELY comprehensive to make sure you have ALL the dates when asked to return events/dates of occurences.
 

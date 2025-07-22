@@ -10,12 +10,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 type Stage string
@@ -116,6 +121,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
+	ctx = context.WithValue(ctx, "conversationID", conversationID)
+	ctx = context.WithValue(ctx, "messageID", messageID)
 	socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
@@ -159,11 +166,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		var firstRound bool
 		var result interface{}
 		var err error
 		if planningPrompt == "" {
-			firstRound = true
 			planningPrompt, err = BuildPlanningPromptWithConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext)
 			if err != nil {
 				// Mark as error instead of deleting for debugging
@@ -178,9 +183,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error building planning prompt: %w", err)
 			}
-			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "defaultSystemPrompt", activeResults, accumulatedThoughts)
 		} else {
-			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, firstRound, activeResults, accumulatedThoughts)
+			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "IntermediateSystemPrompt", activeResults, accumulatedThoughts)
 		}
 		if err != nil {
 			// Mark as error instead of deleting for debugging
@@ -247,6 +252,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
+				ctx = context.WithValue(ctx, "peripheralLatestModelThoughts", v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan
@@ -276,7 +282,34 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Create an executor to handle function calls
 				logger, _ := zap.NewProduction()
 				if executor == nil {
-					executor = NewExecutor(conn, userID, 5, logger)
+					executor = NewExecutor(conn, userID, 5, logger, conversationID, messageID)
+				}
+				// Safely extract data before goroutine to prevent race conditions and panics
+				if len(v.Rounds) > 0 && len(v.Rounds[0].Calls) > 0 {
+					firstCall := v.Rounds[0].Calls[0]
+					callName := firstCall.Name
+					callArgs := firstCall.Args
+
+					go func() {
+						var cleanedModelThoughts string
+						if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
+							if thoughtsStr, ok := thoughtsValue.(string); ok {
+								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
+							}
+						}
+
+						var argsMap map[string]interface{}
+						_ = json.Unmarshal(callArgs, &argsMap)
+
+						// Safely check if the tool exists before accessing its properties
+						if tool, exists := Tools[callName]; exists && tool.StatusMessage != "" {
+							data := map[string]interface{}{
+								"message":  cleanedModelThoughts,
+								"headline": formatStatusMessage(tool.StatusMessage, argsMap),
+							}
+							socket.SendAgentStatusUpdate(userID, "FunctionUpdate", data)
+						}
+					}()
 				}
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
@@ -317,7 +350,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				var finalResponse *FinalResponse
 
 				// Get the final response from the model
-				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, activeResults, accumulatedThoughts)
+				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, messageID, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
@@ -379,7 +412,6 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 		}
 		maxTurns--
-		firstRound = false
 		if maxTurns <= 0 {
 			// Mark as error instead of deleting for debugging
 			if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, "Model took too many turns to run"); markErr != nil {
@@ -863,6 +895,46 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 		}
 	}
 	return processedChunks
+}
+
+// formatStatusMessage replaces placeholders like {key} with values from the args map.
+func formatStatusMessage(message string, argsMap map[string]interface{}) string {
+	re := regexp.MustCompile(`{([^}]+)}`)
+	formattedMessage := re.ReplaceAllStringFunc(message, func(match string) string {
+		key := match[1 : len(match)-1] // Extract key from {key}
+		if val, ok := argsMap[key]; ok {
+			return fmt.Sprintf("%v", val) // Convert value to string
+		}
+		return match // Return original placeholder if key not found
+	})
+	return formattedMessage
+}
+
+func cleanStatusMessage(conn *data.Conn, message string) string {
+	apiKey := conn.OpenAIKey
+
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	messages := []responses.ResponseInputItemUnionParam{}
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(message),
+			},
+		},
+	})
+	instructions := getCleanThinkingTracePrompt()
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Model:        "gpt-4.1-nano",
+		Instructions: openai.String(instructions),
+	})
+	if err != nil {
+		return ""
+	}
+	return res.OutputText()
 }
 
 // </chat.go>

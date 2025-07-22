@@ -20,7 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect_changes:
+    uses: ./.github/workflows/detect-changes.yml
   deploy-stage:
+    needs: [detect_changes]
+    if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
     uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
@@ -30,6 +34,8 @@ jobs:
       google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
       ingress_host: 'stage.peripheral.io'
       # public_base_url: '/'
+      strategy: ${{ needs.detect_changes.outputs.strategy }}
+      services_changed: ${{ needs.detect_changes.outputs.services_changed }}
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -48,6 +54,7 @@ jobs:
       TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}

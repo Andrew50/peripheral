@@ -20,8 +20,7 @@
 		QueryResponse,
 		TableData,
 		ContentChunk,
-		PlotData,
-		TimelineEvent
+		PlotData
 	} from './interface';
 	import {
 		parseMarkdown,
@@ -43,18 +42,19 @@
 	} from '$lib/utils/stream/socket'; // Import both stores and types
 	import './chat.css'; // Import the CSS file
 	import { showAuthModal } from '$lib/stores/authModal';
-	import type { ConversationSummary } from './interface';
+	import type { ConversationInfo } from './interface';
 
 	export let sharedConversationId: string = '';
 	export let isPublicViewing: boolean;
 
 	// Conversation management state
-	let conversations: ConversationSummary[] = [];
+	let conversations: ConversationInfo[] = [];
 	let currentConversationId = '';
 	let currentConversationTitle = 'Chat';
 	let showConversationDropdown = false;
 	let conversationDropdown: HTMLDivElement;
 	let loadingConversations = false;
+	let isCurrentConversationPublic = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
 
 	// Title typing effect state
@@ -66,7 +66,7 @@
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
 	import ShareModal from './components/ShareModal.svelte';
-	import MessageTimeline from './components/MessageTimeline.svelte';
+	import ThinkingTrace from './components/ThinkingTrace.svelte';
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 
@@ -123,11 +123,8 @@
 	// Share modal reference
 	let shareModalRef: ShareModal;
 
-	// Processing timeline state
-	let processingTimeline: TimelineEvent[] = [];
+	// Processing state
 	let isProcessingMessage = false;
-	let lastStatusMessage = '';
-	let showTimelineDropdown = false; // State for timeline dropdown visibility
 
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
@@ -159,7 +156,7 @@
 
 		try {
 			loadingConversations = true;
-			const response = await privateRequest<ConversationSummary[]>('getUserConversations', {});
+			const response = await privateRequest<ConversationInfo[]>('getUserConversations', {});
 			conversations = response || [];
 		} catch (error) {
 			console.error('Error loading conversations:', error);
@@ -173,6 +170,7 @@
 		// Clear current conversation state - new conversation will be created when first message is sent
 		currentConversationId = '';
 		currentConversationTitle = 'New Chat';
+		isCurrentConversationPublic = false;
 
 		// Clear current chat and context items
 		messagesStore.set([]);
@@ -198,7 +196,7 @@
 		fetchInitialSuggestions();
 	}
 
-	async function switchToConversation(conversationId: string, title: string) {
+	async function switchToConversation(conversationId: string, title: string, isConversationPublic: boolean) {
 		if (conversationId === currentConversationId) {
 			showConversationDropdown = false;
 			return;
@@ -207,11 +205,13 @@
 		// Immediately update UI for snappy feel
 		const previousConversationId = currentConversationId;
 		const previousTitle = currentConversationTitle;
+		const previousIsPublic = isCurrentConversationPublic;
 		const previousMessages = [...$messagesStore];
 		const previousContext = [...$contextItems];
 
 		currentConversationId = conversationId;
 		currentConversationTitle = title;
+		isCurrentConversationPublic = isConversationPublic;
 		showConversationDropdown = false;
 
 		// Clear current messages and context items immediately
@@ -243,6 +243,7 @@
 			// Restore previous state on error
 			currentConversationId = previousConversationId;
 			currentConversationTitle = previousTitle;
+			isCurrentConversationPublic = previousIsPublic;
 			messagesStore.set(previousMessages);
 			contextItems.set(previousContext);
 		}
@@ -559,17 +560,7 @@
 		};
 
 		try {
-			// Initialize processing timeline
-			processingTimeline = [
-				{
-					message: 'Message sent to server',
-					timestamp: new Date()
-				}
-			];
-
 			isProcessingMessage = true;
-			lastStatusMessage = ''; // Reset last status message
-			showTimelineDropdown = false; // Reset dropdown state for new message
 
 			messagesStore.update((current) => [...current, userMessage]);
 
@@ -587,7 +578,8 @@
 			agentStatusStore.set({
 				messageType: 'AgentStatusUpdate',
 				type: 'FunctionUpdate',
-				data: 'Thinking...'
+				headline: 'Thinking...',
+				data: null
 			});
 
 			// Scroll to show the user's message and loading state
@@ -673,8 +665,6 @@
 
 							// Clear processing state
 			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
 
 
 
@@ -774,8 +764,6 @@
 
 			// Clear processing state immediately on error
 			isProcessingMessage = false;
-			processingTimeline = [];
-			lastStatusMessage = '';
 
 			isLoading = false;
 			currentAbortController = null;
@@ -828,8 +816,6 @@
 
 					// Clear processing state immediately on cancellation
 		isProcessingMessage = false;
-		processingTimeline = [];
-		lastStatusMessage = '';
 
 
 
@@ -1238,24 +1224,6 @@
 		}
 	}
 
-	// Share conversation functions
-	async function handleShareConversation(event?: Event) {
-		// Stop event propagation to prevent immediate closing
-		if (event) {
-			event.stopPropagation();
-			event.preventDefault();
-		}
-
-		// Close conversation dropdown if it's open
-		if (showConversationDropdown) {
-			showConversationDropdown = false;
-		}
-
-		// Toggle the share modal
-		if (shareModalRef) {
-			shareModalRef.toggleModal();
-		}
-	}
 
 	// Function to create typing effect for title
 	function startTitleTypingEffect(newTitle: string) {
@@ -1345,34 +1313,7 @@
 		titleUpdateStore.set(null);
 	}
 
-	// Reactive block to capture function status messages and build timeline
-	$: if ($agentStatusStore && browser && isProcessingMessage) {
-		const statusUpdate = $agentStatusStore;
 
-		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
-			// Add function update message to timeline
-			lastStatusMessage = statusUpdate.data;
-			processingTimeline = [
-				...processingTimeline,
-				{
-					message: statusUpdate.data,
-					timestamp: new Date(),
-					type: 'message'
-				}
-			];
-		} else if (statusUpdate.type === 'WebSearch' && statusUpdate.data?.query) {
-			// Add web search event to timeline in chronological order
-			processingTimeline = [
-				...processingTimeline,
-				{
-					message: `Searching: ${statusUpdate.data.query}`,
-					timestamp: new Date(),
-					type: 'websearch',
-					data: statusUpdate.data
-				}
-			];
-		}
-	}
 
 	// Helper to translate technical error messages into user-friendly text
 	function getFriendlyErrorMessage(error: any): string {
@@ -1411,7 +1352,7 @@
 		{deleteConversation}
 		{confirmDeleteConversation}
 		{cancelDeleteConversation}
-		{handleShareConversation}
+		{shareModalRef}
 	/>
 
 	<div class="chat-messages" bind:this={messagesContainer}>
@@ -1447,12 +1388,9 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-								<MessageTimeline
-									timeline={processingTimeline}
-									currentStatus={$agentStatusStore?.type === 'FunctionUpdate' ? $agentStatusStore.data : 'Thinking...'}
-									{showTimelineDropdown}
-									onToggleDropdown={() => (showTimelineDropdown = !showTimelineDropdown)}
-								/>
+															<ThinkingTrace
+								isProcessingMessage={isProcessingMessage}
+							/>
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
@@ -1995,7 +1933,7 @@
 			<p>
 				You are viewing a shared conversation. <button
 					class="auth-link"
-					on:click={() => (window.location.href = '/login')}>Sign in</button
+					on:click={() => (window.location.href = '/signup')}>Sign up</button
 				> to start your own chat.
 			</p>
 		</div>
@@ -2006,6 +1944,7 @@
 		bind:this={shareModalRef}
 		{currentConversationId}
 		{sharedConversationId}
+		{isCurrentConversationPublic}
 		{isPublicViewing}
 	/>
 </div>

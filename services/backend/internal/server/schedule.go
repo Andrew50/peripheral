@@ -8,6 +8,7 @@ import (
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
+	"backend/internal/services/telegram"
 	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
@@ -203,6 +204,21 @@ func syncPricingFromStripeJob(conn *data.Conn) error {
 	return SyncPricingFromStripe(conn)
 }
 
+func turnOnTwitterWebhookInAMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+}
+
+func turnOffTwitterWebhookInPMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+}
+func verifyTwitterWebhookIsCorrectlyConfiguredJob(conn *data.Conn) error {
+	return verifyTwitterWebhookConfiguration(conn)
+}
+
+func initUserTelegramBotJob(conn *data.Conn) error {
+	return telegram.InitTelegramUserNotificationBot()
+}
+
 // checkPartialCoverageAndStartServices checks if OHLCV partial coverage is sufficient
 // and starts screener and polygon websocket if they haven't been started yet
 func checkPartialCoverageAndStartServices(conn *data.Conn) error {
@@ -296,6 +312,7 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
+			MaxRetries:     2,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
@@ -405,6 +422,45 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOnTwitterWebhookInAM",
+			Function:       turnOnTwitterWebhookInAMJob,
+			Schedule:       []TimeOfDay{{Hour: 6, Minute: 0}}, // Daily at 6:00 AM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOffTwitterWebhookInPM",
+			Function:       turnOffTwitterWebhookInPMJob,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Daily at 9:00 PM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "VerifyTwitterWebhookIsCorrectlyConfigured",
+			Function:       verifyTwitterWebhookIsCorrectlyConfiguredJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "InitUserTelegramBotJob",
+			Function:       initUserTelegramBotJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
 		},
 		{
 			Name:     "CheckPartialCoverageAndStartServices",

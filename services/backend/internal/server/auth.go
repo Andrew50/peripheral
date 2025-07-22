@@ -17,6 +17,7 @@ import (
 
 	"backend/internal/app/limits"
 	"backend/internal/app/pricing"
+	"backend/internal/services/telegram"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgconn"
@@ -322,7 +323,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		resp.ProfilePic = ""
 	}
 
-	log.Printf("Login successful for user ID: %d", userID)
+	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website", a.Email))
 	return resp, nil
 }
 
@@ -497,7 +498,7 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		return nil, fmt.Errorf("failed to create token: %v", err)
 	}
 
-	log.Printf("Google login successful for user ID: %d", userID)
+	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website [google auth]", googleUser.Email))
 	return GoogleLoginResponse{
 		Token:      jwtToken,
 		ProfilePic: googleUser.Picture,

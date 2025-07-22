@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+	import { privateRequest } from '$lib/utils/helpers/backend';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -12,7 +12,16 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
 	import { getAuthState } from '$lib/auth';
-	// ===== LOCAL TYPE DEFINITIONS =====
+
+	// ===== SERVER DATA =====
+	export let data: {
+		plans: any[];
+		creditProducts: any[];
+		environment: string;
+		pricingError?: string;
+	};
+
+	// ===== TYPE DEFINITIONS =====
 	interface DatabasePlan {
 		id: number;
 		product_key: string;
@@ -44,12 +53,6 @@
 		stripe_price_id_live: string | null;
 		created_at: string;
 		updated_at: string;
-	}
-
-	interface PublicPricingConfiguration {
-		plans: DatabasePlan[];
-		creditProducts: DatabaseCreditProduct[];
-		environment: string;
 	}
 
 	// ===== INLINED HELPER FUNCTIONS =====
@@ -224,12 +227,11 @@
 	// Component loading state
 	let isLoaded = false;
 
-	// Pricing data state
-	let plans: DatabasePlan[] = [];
-	let creditProducts: DatabaseCreditProduct[] = [];
-	let environment: string = 'test';
-	let pricingLoading = true;
-	let pricingError = '';
+	// Pricing data from server
+	$: plans = data.plans as DatabasePlan[];
+	$: creditProducts = data.creditProducts as DatabaseCreditProduct[];
+	$: environment = data.environment;
+	$: pricingError = data.pricingError || '';
 
 	// Selected billing period state
 	let billingPeriod: 'month' | 'year' = 'year';
@@ -337,43 +339,10 @@
 		}
 	};
 
-	// Load pricing configuration
-	async function loadPricingConfiguration() {
-		try {
-			pricingLoading = true;
-			pricingError = '';
 
-			// Fetch pricing configuration using the new format
-			const config = await publicRequest<PublicPricingConfiguration>(
-				'getPublicPricingConfiguration',
-				{}
-			);
-
-			// Use the data as-is since the API returns the correct format
-			plans = config.plans;
-			creditProducts = config.creditProducts;
-			environment = config.environment;
-
-			console.log('✅ [loadPricingConfiguration] Pricing configuration loaded:', {
-				plans,
-				creditProducts,
-				environment
-			});
-		} catch (error) {
-			console.error('❌ [loadPricingConfiguration] Failed to load pricing configuration:', error);
-			pricingError = 'Failed to load pricing information. Please refresh the page.';
-		} finally {
-			pricingLoading = false;
-		}
-	}
 
 	// Initialize component
 	async function initializeComponent() {
-		const isAuth = isAuthenticatedFn();
-
-		// Load pricing configuration first
-		await loadPricingConfiguration();
-
 		// Always fetch subscription status regardless of authentication
 		await fetchSubscriptionStatus();
 		console.log('📊 [initializeComponent] Subscription status fetch completed');
@@ -757,9 +726,9 @@
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="landing-background landing-reset">
+<div class="page-wrapper">
 	<!-- Main Pricing Content -->
-	<div class="landing-container" style="padding-top: 280px;">
+	<div class="landing-container">
 		<div class="pricing-content landing-fade-in" class:loaded={isLoaded}>
 			<!-- Hero Section -->
 			<div class="pricing-hero">
@@ -776,12 +745,7 @@
 				</div>
 			{/if}
 
-			{#if pricingLoading}
-				<div class="loading-message">
-					<div class="landing-loader"></div>
-					<span></span>
-				</div>
-			{:else if pricingError}
+			{#if pricingError}
 				<div class="error-message">{pricingError}</div>
 			{:else if $subscriptionStatus.loading}
 				<div class="loading-message">
@@ -849,9 +813,8 @@
 									>
 										{#if busyKey === 'reactivate'}
 											<div class="landing-loader"></div>
-										{:else}
-											Reactivate Subscription
 										{/if}
+										Reactivate Subscription
 									</button>
 									{#if $subscriptionStatus.currentPeriodEnd}
 										<p class="canceling-note">
@@ -864,9 +827,8 @@
 									<button class="subscribe-button active-subscription" on:click={handleCancelSubscription} disabled>
 										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
-										{:else}
-											Active Subscription
 										{/if}
+										Active Subscription
 									</button>
 								{:else if plan.product_key?.toLowerCase() === 'free'}
 									{#if !$subscriptionStatus.isActive && isAuthenticatedFn()}
@@ -886,7 +848,8 @@
 									>
 										{#if busyKey === (plan.product_key?.toLowerCase() || '')}
 											<div class="landing-loader"></div>
-										{:else if isUpgradeEligible(plan)}
+										{/if}
+										{#if isUpgradeEligible(plan)}
 											Upgrade
 										{:else}
 											Subscribe
@@ -934,7 +897,8 @@
 								>
 									{#if busyKey === product.product_key}
 										<div class="landing-loader"></div>
-									{:else if !$subscriptionStatus.isActive}
+									{/if}
+									{#if !$subscriptionStatus.isActive}
 										Subscription Required
 									{:else}
 										Purchase {product.credit_amount} Queries
@@ -947,22 +911,83 @@
 			{/if}
 		</div>
 	</div>
+	<SiteFooter />
 </div>
 
-<SiteFooter />
 
 <style>
+	/* Critical global styles - applied immediately to prevent layout shift */
+	:global(*) {
+		box-sizing: border-box;
+	}
+
+	:global(html) {
+		-ms-overflow-style: none; /* IE and Edge */
+	}
+
+	:global(body) {
+		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
+	}
+
+	:global(html) {
+		background: transparent !important; /* Override any global backgrounds */
+	}
+
+	/* Override width restrictions from global landing styles */
+	:global(.landing-container) {
+		max-width: none !important;
+		width: 100% !important;
+
+	}
+
+	/* Apply the same gradient background as landing page */
+	.page-wrapper {
+		width: 100%;
+		min-height: 100vh;
+		background: linear-gradient(
+			180deg,
+			#010022 0%,
+			#02175F 100%
+
+		);
+	}
+
+	/* Landing container should have transparent background like landing page */
+	.landing-container {
+		position: relative;
+		width: 100%;
+		background: transparent;
+		color: var(--color-dark);
+		font-family:
+			'Geist',
+			'Inter',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+	}
+
 	/* Pricing-specific styles that build on landing system */
 	.pricing-content {
 		max-width: 1200px;
 		margin: 0 auto;
 		padding: 0 2rem;
+		background: transparent;
 	}
 
 	.pricing-hero {
 		text-align: center;
 		margin-bottom: 3rem;
-		margin-top: 6rem;
+		padding-top: 1rem; /* Space for header */
+	}
+
+	.landing-subtitle {
+		color: #f5f9ff;
 	}
 
 	.loading-message {
@@ -1044,24 +1069,24 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		border: 2px solid rgba(255, 255, 255, 0.3);
+		border: 2px solid rgba(255, 255, 255, 0.8);
 		border-radius: 24px;
 	}
 
 	.plan-card.featured {
-		border-color: var(--landing-accent-blue);
+		border-color: 2px solid #f5f9ff;
 	}
 
 	/* Conservative current plan highlighting - subtle visual indicators */
 	.plan-card.current-plan {
-		border-color: var(--landing-success);
+		border-color: #f5f9ff;
 		background: rgba(34, 197, 94, 0.02);
 		position: relative;
 	}
 
 	/* Free plan styling - visible border */
 	.plan-card.free-plan {
-		border: 2px solid rgba(255, 255, 255, 0.3);
+		border: 2px solid rgba(255, 255, 255, 0.6);
 	}
 
 	/* Canceling plan styling */
@@ -1141,7 +1166,7 @@
 	.plan-header h3 {
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--landing-text-primary);
+		color: #f5f9ff;
 		margin-bottom: 1rem;
 	}
 
@@ -1155,12 +1180,12 @@
 	.price {
 		font-size: 3rem;
 		font-weight: 700;
-		color: var(--landing-text-primary);
+		color: #f5f9ff;
 	}
 
 	.period {
 		font-size: 1rem;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 	}
 
 	.plan-features {
@@ -1172,7 +1197,7 @@
 
 	.plan-features li {
 		padding: 0.5rem 0;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 		position: relative;
 		padding-left: 1.5rem;
 	}
@@ -1361,15 +1386,17 @@
 	.billing-subtitle p {
 		font-size: 0.9375rem;
 		font-weight: 500;
-		color: var(--landing-text-secondary);
+		color: #f5f9ff;
 		font-family: 'Geist', 'Inter', sans-serif;
 		line-height: 1.5;
 	}
 
 	/* Enlarge the hero title specifically for the pricing page */
 	.pricing-hero .landing-title {
+		margin: 6rem 0 0 0;
 		font-size: clamp(3rem, 7vw, 4.5rem);
 		font-family: 'Inter', sans-serif;
+		color: #f5f9ff;
 	}
 
 	.slider-background {
@@ -1432,6 +1459,14 @@
 		justify-content: center;
 		text-align: center;
 		white-space: nowrap;
+		gap: 0.5rem;
+		transition: all 0.2s ease;
+	}
+
+	.subscribe-button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.4);
+		transform: translateY(-1px);
 	}
 
 	.subscribe-button:disabled {
@@ -1456,8 +1491,9 @@
 
 	/* Greyed-out styling for disabled/current subscribe buttons (Free plan, downgrade) */
 	.subscribe-button.current {
-		background: rgba(255, 255, 255, 0.08);
-		color: rgba(255, 255, 255, 0.8);
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.7);
+		border-color: rgba(255, 255, 255, 0.15);
 		cursor: not-allowed;
 	}
 

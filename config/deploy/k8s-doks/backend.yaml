@@ -19,16 +19,8 @@ spec:
         app: backend
     spec:
       restartPolicy: Always  # Update the restart policy to "Always"
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - db
-              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        kubernetes.io/hostname: big-pool-thu0i
       containers:
         - name: backend
           image: ${DOCKER_USERNAME}/backend:${DOCKER_TAG}
@@ -150,6 +142,11 @@ spec:
                 secretKeyRef:
                   name: grok-secret
                   key: GROK_API_KEY
+            - name: TWITTER_API_IO_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: twitter-secret
+                  key: TWITTER_API_IO_KEY
             - name: X_API_KEY
               valueFrom:
                 secretKeyRef:

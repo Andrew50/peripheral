@@ -6,6 +6,8 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +24,66 @@ var (
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
 )
+
+// extractDomain extracts the domain from a URL
+func extractDomain(rawURL string) string {
+	// Handle URLs that might not have protocol
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		rawURL = "https://" + rawURL
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// Fallback: simple string manipulation
+		cleaned := strings.TrimPrefix(rawURL, "https://")
+		cleaned = strings.TrimPrefix(cleaned, "http://")
+		parts := strings.Split(cleaned, "/")
+		if len(parts) > 0 {
+			return parts[0]
+		}
+		return ""
+	}
+
+	return parsedURL.Hostname()
+}
+
+// generateFaviconURL creates a Google favicon URL for the given domain
+func generateFaviconURL(domain string) string {
+	if domain == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://www.google.com/s2/favicons?sz=16&domain=%s", domain)
+}
+
+// processCitationsWithFavicons processes citations to add favicon URLs
+func processCitationsWithFavicons(citations []interface{}) []interface{} {
+	processedCitations := make([]interface{}, len(citations))
+
+	for i, citation := range citations {
+		// Convert to map for processing
+		if citationMap, ok := citation.(map[string]interface{}); ok {
+			// Create a copy to avoid modifying original
+			processed := make(map[string]interface{})
+			for k, v := range citationMap {
+				processed[k] = v
+			}
+
+			// Add favicon URL if URL exists
+			if urlStr, hasURL := processed["url"].(string); hasURL {
+				domain := extractDomain(urlStr)
+				if domain != "" {
+					processed["urlIcon"] = generateFaviconURL(domain)
+				}
+			}
+			processedCitations[i] = processed
+		} else {
+			// Keep original if not a map
+			processedCitations[i] = citation
+		}
+	}
+
+	return processedCitations
+}
 
 // ReplayData represents a structure for handling ReplayData data.
 type ReplayData struct {
@@ -162,33 +224,68 @@ func SendChatInitializationUpdate(userID int, messageID string, conversationID s
 // AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
 type AgentStatusUpdate struct {
-	MessageType string      `json:"messageType"`    // Always "AgentStatusUpdate"
-	Type        string      `json:"type"`           // Specific type like "FunctionUpdate", "WebSearch"
-	Data        interface{} `json:"data,omitempty"` // Additional structured data for specific types
+	MessageType string      `json:"messageType"`        // Always "AgentStatusUpdate"
+	Type        string      `json:"type"`               // Specific type like "FunctionUpdate", "WebSearch"
+	Headline    string      `json:"headline,omitempty"` // Headline for the update
+	Data        interface{} `json:"data,omitempty"`     // Additional structured data for specific types
 }
 
 // SendAgentStatusUpdate sends a status update about a running function to a specific user.
-func SendAgentStatusUpdate(userID int, statusType string, value string) {
+func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	var data interface{}
-
+	var headline string
 	// Handle different status types
 	switch statusType {
-	case "WebSearch":
+	case "WebSearchQuery":
+		headline = "Searching the web..."
+
 		// For web searches, create structured data with query
 		data = map[string]interface{}{
 			"query": value,
 		}
+	case "WebSearchCitations":
+		// For WebSearchCitations, process citations with favicons
+		// Convert from JSON to process flexibly regardless of struct type
+		jsonBytes, err := json.Marshal(value)
+		if err == nil {
+			var citations []interface{}
+			if err := json.Unmarshal(jsonBytes, &citations); err == nil {
+				data = map[string]interface{}{
+					"citations": processCitationsWithFavicons(citations),
+				}
+			} else {
+				// Fallback if unmarshaling fails
+				data = map[string]interface{}{
+					"citations": value,
+				}
+			}
+		} else {
+			// Fallback if marshaling fails
+			data = map[string]interface{}{
+				"citations": value,
+			}
+		}
+	case "getWatchlistItems":
+		headline = "Reading watchlist..."
+		data = value
+	case "newWatchlist":
+		headline = "Creating watchlist..."
+		data = value
+	case "getDailySnapshot":
+		headline = "Analyzing data for " + value.(map[string]interface{})["ticker"].(string)
+		data = value
+	case "FunctionUpdate":
+		headline = value.(map[string]interface{})["headline"].(string)
+		data = value.(map[string]interface{})["message"]
 	default:
 		// For other types (like FunctionUpdate), use the value directly
-		messageToSend := value
-		if messageToSend == "" {
-			messageToSend = "Processing..."
-		}
-		data = messageToSend
+		headline = value.(string)
+		data = value
 	}
 
 	statusUpdate := AgentStatusUpdate{
 		MessageType: "AgentStatusUpdate",
+		Headline:    headline,
 		Type:        statusType,
 		Data:        data,
 	}

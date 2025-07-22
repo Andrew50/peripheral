@@ -10,13 +10,15 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
+	"time"
 
 	"backend/internal/services/socket"
-	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/shared"
 	"google.golang.org/genai"
 )
 
@@ -26,33 +28,54 @@ const grokModel = "grok-3-mini-latest"
 type WebSearchArgs struct {
 	Query string `json:"query"`
 }
-type WebSearchResult struct {
-	ResultText string   `json:"result"`
-	Citations  []string `json:"citations,omitempty"`
+type WebSearchCitation struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }
 
-// RunWebSearch performs a web search using the Gemini API
-func RunWebSearch(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+type WebSearchResult struct {
+	ResultText string              `json:"result"`
+	Citations  []WebSearchCitation `json:"citations,omitempty"`
+}
+
+// AgentRunWebSearch performs a web search using the Gemini API
+func AgentRunWebSearch(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args WebSearchArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
-	socket.SendAgentStatusUpdate(userID, "WebSearch", args.Query)
+	go socket.SendAgentStatusUpdate(userID, "WebSearchQuery", args.Query)
 	systemPrompt, err := getSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
-	return _openaiWebSearch(conn, systemPrompt, args.Query)
+	websearchResult, err := _openaiWebSearch(ctx, conn, userID, systemPrompt, args.Query)
+	if err != nil {
+		return nil, fmt.Errorf("error running web search: %w", err)
+	}
+	go socket.SendAgentStatusUpdate(userID, "WebSearchCitations", websearchResult.Citations)
+	return websearchResult.ResultText, nil
 }
 
-func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
+func _openaiWebSearch(ctx context.Context, conn *data.Conn, userID int, systemPrompt string, prompt string) (WebSearchResult, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+	messageID, ok := ctx.Value("messageID").(string)
+	if !ok {
+		messageID = ""
+	}
+	conversationID, ok := ctx.Value("conversationID").(string)
+	if !ok {
+		conversationID = ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	res, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Input: responses.ResponseNewParamsInputUnion{
 			OfString: openai.String(prompt),
 		},
 		Model:        "gpt-4.1",
+		User:         openai.String("user:0"),
 		Instructions: openai.String(systemPrompt),
 		Tools: []responses.ToolUnionParam{
 			{
@@ -62,14 +85,25 @@ func _openaiWebSearch(conn *data.Conn, systemPrompt string, prompt string) (inte
 				},
 			},
 		},
+		Metadata: shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment, "convID": conversationID, "msgID": messageID},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error creating response: %w", err)
+		return WebSearchResult{}, fmt.Errorf("error creating response: %w", err)
 	}
-
+	var citations []WebSearchCitation
+	for _, item := range res.Output {
+		for _, content := range item.Content {
+			for _, annotation := range content.Annotations {
+				citations = append(citations, WebSearchCitation{
+					Title: annotation.Title,
+					URL:   annotation.URL,
+				})
+			}
+		}
+	}
 	return WebSearchResult{
 		ResultText: res.OutputText(),
-		Citations:  nil,
+		Citations:  citations,
 	}, nil
 }
 

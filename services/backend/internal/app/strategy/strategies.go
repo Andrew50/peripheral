@@ -243,7 +243,7 @@ type CreateStrategyFromPromptResult struct {
 	Version    string `json:"version"`
 }
 
-func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START (WORKER QUEUE) ===")
 	log.Printf("UserID: %d", userID)
 	log.Printf("Raw args: %s", string(rawArgs))
@@ -258,7 +258,7 @@ func CreateStrategyFromPrompt(conn *data.Conn, userID int, rawArgs json.RawMessa
 	log.Printf("Delegating strategy creation to Python worker...")
 
 	// Call the worker to create the strategy
-	result, err := callWorkerCreateStrategy(context.Background(), conn, userID, args.Query, args.StrategyID)
+	result, err := callWorkerCreateStrategy(ctx, conn, userID, args.Query, args.StrategyID)
 	if err != nil {
 		log.Printf("ERROR: Worker strategy creation failed: %v", err)
 		return nil, fmt.Errorf("strategy creation failed: %v", err)
@@ -313,15 +313,24 @@ type WorkerCreateStrategyResult struct {
 func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, prompt string, strategyID int) (*WorkerCreateStrategyResult, error) {
 	// Generate unique task ID
 	taskID := fmt.Sprintf("create_strategy_%d_%d", userID, time.Now().UnixNano())
-
+	messageID, ok := ctx.Value("messageID").(string)
+	if !ok {
+		messageID = ""
+	}
+	conversationID, ok := ctx.Value("conversationID").(string)
+	if !ok {
+		conversationID = ""
+	}
 	// Prepare strategy creation task payload
 	task := map[string]interface{}{
 		"task_id":   taskID,
 		"task_type": "create_strategy",
 		"args": map[string]interface{}{
-			"user_id":     userID,
-			"prompt":      prompt,
-			"strategy_id": strategyID,
+			"user_id":        userID,
+			"prompt":         prompt,
+			"strategy_id":    strategyID,
+			"conversationID": conversationID,
+			"messageID":      messageID,
 		},
 		"created_at": time.Now().UTC().Format(time.RFC3339),
 		"priority":   "high", // Mark strategy creation as high priority
