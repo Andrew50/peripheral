@@ -244,10 +244,10 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		v := record.Volume
 		t := record.Ticker
 
-		m1Rows = append(m1Rows, []interface{}{t, v, o, c, h, l, ts})
+		m1Rows = append(m1Rows, []interface{}{t, v, o, c, h, l, ts, 0})
 
 		if utils.IsTimestampRegularHours(ts) {
-			d1Rows = append(d1Rows, []interface{}{t, v, o, c, h, l, ts})
+			d1Rows = append(d1Rows, []interface{}{t, v, o, c, h, l, ts, 0})
 		}
 	}
 
@@ -286,7 +286,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		return
 	}
 
-	columns := []string{"ticker", "volume", "open", "close", "high", "low", "timestamp"}
+	columns := []string{"ticker", "volume", "open", "close", "high", "low", "timestamp", "transactions"}
 
 	if len(m1Rows) > 0 {
 		_, err = tx.CopyFrom(ctx, pgx.Identifier{"ohlcv_1m_stage"}, columns, pgx.CopyFromRows(m1Rows))
