@@ -499,7 +499,7 @@ class StrategyGenerator:
             - Always show the plot using .show()
             - Almost always include plots in the strategy to help the user understand the data
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-            - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on SEPERATE plots.
+            - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on separate line plots.
             - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
             - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
             - Do NOT use timestamp as x-axis values. Use dates instead.
