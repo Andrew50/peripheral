@@ -1,8 +1,10 @@
 package telegram
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
-	"os"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,13 +19,14 @@ var (
 )
 
 func InitTelegramUserNotificationBot() error {
-	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
+	/*env := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if env == "demo" || env == "prod" || env == "production" {
 		isProdEnv = true
 	} else {
 		isProdEnv = false
 		return nil
-	}
+	}*/
+	isProdEnv = true
 	userNotificationBotToken := "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
 	fmt.Println("Initializing Telegram bot with token:", userNotificationBotToken)
 	chatID = -1002517629348
@@ -64,10 +67,10 @@ func SendTelegramUserUsageMessage(msg string) error {
 	return err
 }
 
-func SendTelegramBenTweetsMessage(msg string) error {
-	if !isProdEnv {
+func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image string) error {
+	/*if !isProdEnv {
 		return nil
-	}
+	}*/
 	if telegramBenTweetsBot == nil {
 		err := InitTelegramUserNotificationBot()
 		if err != nil {
@@ -75,6 +78,20 @@ func SendTelegramBenTweetsMessage(msg string) error {
 		}
 	}
 	recipient := telebot.ChatID(chatID)
-	_, err := telegramBenTweetsBot.Send(recipient, msg)
+	if i := strings.IndexByte(image, ','); i >= 0 {
+		image = image[i+1:]
+	}
+	data, err := base64.StdEncoding.DecodeString(image)
+	if err != nil {
+		return fmt.Errorf("failed to decode image: %w", err)
+	}
+	_, err = telegramBenTweetsBot.Send(recipient, tweetURL)
+	if err != nil {
+		return fmt.Errorf("failed to send url: %w", err)
+	}
+	photo := &telebot.Photo{File: telebot.FromReader(bytes.NewReader(data)), Caption: msg}
+	_, err = telegramBenTweetsBot.Send(recipient, photo)
+	deepLink := fmt.Sprintf("https://x.com/intent/post?in_reply_to=%s&text=%s", id, url.QueryEscape(msg))
+	_, err = telegramBenTweetsBot.Send(recipient, deepLink)
 	return err
 }
