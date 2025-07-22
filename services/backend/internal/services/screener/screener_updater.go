@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -40,6 +41,11 @@ const (
 	latestBarViewsInterval  = 30 * time.Second  // refresh latest bar materialized views every 30 seconds (CRITICAL)
 	IgnoreMarketHours       = false             // ignore market hours ==== REMOVE THIS BEFORE PR
 	useAnalysis             = false             // enable performance analysis
+)
+
+var (
+	dailyStaticRefsMu  sync.Mutex // guards refresh_static_refs()
+	oneMinStaticRefsMu sync.Mutex // guards refresh_static_refs_1m()
 )
 
 // initialRefresh performs a one-time refresh of all aggregates and static data at startup
@@ -283,6 +289,12 @@ func updateStaleScreenerValues(conn *data.Conn) {
 
 // refreshStaticRefs1m refreshes the static_refs_1m table
 func refreshStaticRefs1m(conn *data.Conn) {
+	if !oneMinStaticRefsMu.TryLock() {
+		log.Printf("⏭️ static_refs_1M refresh skipped – already running")
+		return
+	}
+	defer oneMinStaticRefsMu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
 
@@ -303,6 +315,12 @@ func refreshStaticRefs1m(conn *data.Conn) {
 
 // refreshStaticRefsDaily refreshes the static_refs_daily table
 func refreshStaticRefsDaily(conn *data.Conn) {
+	if !dailyStaticRefsMu.TryLock() {
+		log.Printf("⏭️ static_refs DAILY refresh skipped – already running")
+		return
+	}
+	defer dailyStaticRefsMu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
 

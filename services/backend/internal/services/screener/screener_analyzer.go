@@ -1453,13 +1453,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-func matchesAnyPattern(q string, patterns []string) bool {
-	ql := strings.ToLower(q)
-	for _, p := range patterns {
-		if strings.Contains(ql, strings.ToLower(p)) {
-			return true
-		}
-	}
-	return false
-}

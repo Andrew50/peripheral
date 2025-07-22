@@ -85,7 +85,7 @@ func (d *dayStatusTracker) CurrentCutoff() time.Time {
 // advanceCutoff moves the cutoff forward or backward while the next contiguous day
 // is no longer pending, based on the tracker's direction.
 func (d *dayStatusTracker) advanceCutoff() {
-	oldCutoff := d.cutoff
+	//oldCutoff := d.cutoff
 	if d.direction {
 		// Forward direction
 		for {
@@ -126,11 +126,11 @@ func (d *dayStatusTracker) advanceCutoff() {
 		}
 	}
 
-	if !d.cutoff.Equal(oldCutoff) {
-		// log.Printf("🔍 Progress tracker: cutoff moved from %s to %s (direction=%s)",
-		//	oldCutoff.Format("2006-01-02"), d.cutoff.Format("2006-01-02"),
-		//	map[bool]string{true: "forward", false: "backward"}[d.direction])
-	}
+	/*if !d.cutoff.Equal(oldCutoff) {
+		 log.Printf("🔍 Progress tracker: cutoff moved from %s to %s (direction=%s)",
+			oldCutoff.Format("2006-01-02"), d.cutoff.Format("2006-01-02"),
+			map[bool]string{true: "forward", false: "backward"}[d.direction])
+	}*/
 }
 
 // truncateDate strips the time component, returning the date at 00:00:00 UTC.

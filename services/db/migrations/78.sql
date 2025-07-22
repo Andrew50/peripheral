@@ -32,6 +32,8 @@ DROP FUNCTION IF EXISTS safe_div(numeric, numeric);
 DROP INDEX IF EXISTS idx_static_refs_daily_prices_stage_ticker;
 DROP INDEX IF EXISTS idx_static_refs_1m_prices_stage_ticker;
 DROP INDEX IF EXISTS idx_static_refs_active_securities_stage_ticker;
+DROP INDEX IF EXISTS idx_static_refs_daily_actives_stage_ticker;
+DROP INDEX IF EXISTS idx_static_refs_1m_actives_stage_ticker;
 DROP INDEX IF EXISTS idx_screener_stale_stale;
 DROP INDEX IF EXISTS idx_screener_change_1d_pct;
 DROP INDEX IF EXISTS idx_screener_rsi;
@@ -55,6 +57,8 @@ DROP INDEX IF EXISTS idx_cagg_1440_minute_ticker_bucket;
 DROP TABLE IF EXISTS static_refs_daily_prices_stage;
 DROP TABLE IF EXISTS static_refs_1m_prices_stage;
 DROP TABLE IF EXISTS static_refs_active_securities_stage;
+DROP TABLE IF EXISTS static_refs_daily_actives_stage;
+DROP TABLE IF EXISTS static_refs_1m_actives_stage;
 DROP TABLE IF EXISTS ohlcv_1d_stage;
 DROP TABLE IF EXISTS ohlcv_1m_stage;
 
@@ -155,8 +159,14 @@ GROUP BY bucket, ticker
 WITH NO DATA;
 
 SELECT add_retention_policy('cagg_1440_minute',
-    drop_after => INTERVAL '1440 minutes',
+    drop_after => INTERVAL '4320 minutes',
     schedule_interval => INTERVAL '60 seconds');
+
+-- Add continuous aggregate policy for cagg_1440_minute (pre-market/extended hours - needs frequent updates)
+SELECT add_continuous_aggregate_policy('cagg_1440_minute',
+    start_offset => INTERVAL '2 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '5 minutes');
 
 -- cagg_15_minute for 15-minute metrics
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_15_minute
@@ -174,6 +184,12 @@ SELECT add_retention_policy('cagg_15_minute',
     drop_after => INTERVAL '15 minutes',
     schedule_interval => INTERVAL '5 seconds');
 
+-- Add continuous aggregate policy for cagg_15_minute (intraday - very frequent updates)
+SELECT add_continuous_aggregate_policy('cagg_15_minute',
+    start_offset => INTERVAL '30 minutes',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '1 minute');
+
 -- cagg_60_minute for 1-hour metrics
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_60_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -190,6 +206,12 @@ SELECT add_retention_policy('cagg_60_minute',
     drop_after => INTERVAL '60 minutes',
     schedule_interval => INTERVAL '15 minutes');
 
+-- Add continuous aggregate policy for cagg_60_minute (hourly - moderate updates)
+SELECT add_continuous_aggregate_policy('cagg_60_minute',
+    start_offset => INTERVAL '2 hours',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '5 minutes');
+
 -- cagg_4_hour for 4-hour metrics
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_4_hour
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -205,13 +227,19 @@ SELECT add_retention_policy('cagg_4_hour',
     drop_after => INTERVAL '4 hours',
     schedule_interval => INTERVAL '1 hour');
 
--- cagg_7_day for 1-week volatility
+-- Add continuous aggregate policy for cagg_4_hour (4-hourly - less frequent updates)
+SELECT add_continuous_aggregate_policy('cagg_4_hour',
+    start_offset => INTERVAL '8 hours',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '15 minutes');
+
+-- cagg_7_day for 1-week volatility (price-adjusted percentage)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_7_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
     time_bucket('7 days', "timestamp") AS bucket,
     ticker,
-    stddev_samp(close / 1000.0) AS volatility_1w
+    (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1w_pct
 FROM ohlcv_1m
 GROUP BY bucket, ticker
 WITH NO DATA;
@@ -220,13 +248,19 @@ SELECT add_retention_policy('cagg_7_day',
     drop_after => INTERVAL '7 days',
     schedule_interval => INTERVAL '42 hours');
 
--- cagg_30_day for 1-month volatility
+-- Add continuous aggregate policy for cagg_7_day (weekly volatility - daily updates sufficient)
+SELECT add_continuous_aggregate_policy('cagg_7_day',
+    start_offset => INTERVAL '14 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '1 hour');
+
+-- cagg_30_day for 1-month volatility (price-adjusted percentage)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_30_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
     time_bucket('30 days', "timestamp") AS bucket,
     ticker,
-    stddev_samp(close / 1000.0) AS volatility_1m
+    (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1m_pct
 FROM ohlcv_1m
 GROUP BY bucket, ticker
 WITH NO DATA;
@@ -234,6 +268,12 @@ WITH NO DATA;
 SELECT add_retention_policy('cagg_30_day',
     drop_after => INTERVAL '30 days',
     schedule_interval => INTERVAL '180 hours');
+
+-- Add continuous aggregate policy for cagg_30_day (monthly volatility - less frequent updates)
+SELECT add_continuous_aggregate_policy('cagg_30_day',
+    start_offset => INTERVAL '60 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '6 hours');
 
 -- cagg_50_day for SMA-50
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_50_day
@@ -250,6 +290,12 @@ SELECT add_retention_policy('cagg_50_day',
     drop_after => INTERVAL '50 days',
     schedule_interval => INTERVAL '300 hours');
 
+-- Add continuous aggregate policy for cagg_50_day (50-day moving average - moderate updates)
+SELECT add_continuous_aggregate_policy('cagg_50_day',
+    start_offset => INTERVAL '100 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '2 hours');
+
 -- cagg_200_day for SMA-200
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_200_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -264,6 +310,12 @@ WITH NO DATA;
 SELECT add_retention_policy('cagg_200_day',
     drop_after => INTERVAL '200 days',
     schedule_interval => INTERVAL '1200 hours');
+
+-- Add continuous aggregate policy for cagg_200_day (200-day moving average - infrequent updates)
+SELECT add_continuous_aggregate_policy('cagg_200_day',
+    start_offset => INTERVAL '400 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '30 minutes');
 
 -- cagg_14_day for RSI-14 (note: actual RSI computation requires series data; placeholder here)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_day
@@ -282,6 +334,12 @@ SELECT add_retention_policy('cagg_14_day',
     drop_after => INTERVAL '14 days',
     schedule_interval => INTERVAL '84 hours');
 
+-- Add continuous aggregate policy for cagg_14_day (14-day averages - daily updates)
+SELECT add_continuous_aggregate_policy('cagg_14_day',
+    start_offset => INTERVAL '28 days',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '1 hour');
+
 -- cagg_14_minute for 14-period volume averages
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -297,6 +355,12 @@ WITH NO DATA;
 SELECT add_retention_policy('cagg_14_minute',
     drop_after => INTERVAL '14 minutes',
     schedule_interval => INTERVAL '210 seconds');
+
+-- Add continuous aggregate policy for cagg_14_minute (14-minute volume averages - frequent updates)
+SELECT add_continuous_aggregate_policy('cagg_14_minute',
+    start_offset => INTERVAL '28 minutes',
+    end_offset => INTERVAL '0 minutes',
+    schedule_interval => INTERVAL '2 minutes');
 
 -- =========================================================
 -- LATEST BAR MATERIALIZED VIEWS (PERFORMANCE CRITICAL)
@@ -387,13 +451,13 @@ CREATE TABLE IF NOT EXISTS screener_stale (
 CREATE UNLOGGED TABLE IF NOT EXISTS ohlcv_1m_stage (LIKE ohlcv_1m INCLUDING DEFAULTS) WITH (autovacuum_enabled = false);
 CREATE UNLOGGED TABLE IF NOT EXISTS ohlcv_1d_stage (LIKE ohlcv_1d INCLUDING DEFAULTS) WITH (autovacuum_enabled = false);
 
--- Persistent UNLOGGED stage tables for static refs operations
-CREATE UNLOGGED TABLE IF NOT EXISTS static_refs_active_securities_stage (
-    ticker text NOT NULL,
-    securityid bigint,
-    market_cap numeric,
-    sector text,
-    industry text
+-- Persistent UNLOGGED stage tables for static refs operations - separate for each function
+CREATE UNLOGGED TABLE IF NOT EXISTS static_refs_daily_actives_stage (
+    ticker text NOT NULL
+) WITH (autovacuum_enabled = false);
+
+CREATE UNLOGGED TABLE IF NOT EXISTS static_refs_1m_actives_stage (
+    ticker text NOT NULL
 ) WITH (autovacuum_enabled = false);
 
 CREATE UNLOGGED TABLE IF NOT EXISTS static_refs_1m_prices_stage (
@@ -458,8 +522,10 @@ CREATE INDEX IF NOT EXISTS idx_screener_stale_stale_update_time ON screener_stal
 CREATE INDEX IF NOT EXISTS idx_screener_stale_partial_update_time ON screener_stale(last_update_time) WHERE stale = TRUE;
 
 -- Create indexes on stage tables for better performance
-CREATE INDEX IF NOT EXISTS idx_static_refs_active_securities_stage_ticker 
-    ON static_refs_active_securities_stage(ticker);
+CREATE INDEX IF NOT EXISTS idx_static_refs_daily_actives_stage_ticker 
+    ON static_refs_daily_actives_stage(ticker);
+CREATE INDEX IF NOT EXISTS idx_static_refs_1m_actives_stage_ticker 
+    ON static_refs_1m_actives_stage(ticker);
 CREATE INDEX IF NOT EXISTS idx_static_refs_1m_prices_stage_ticker 
     ON static_refs_1m_prices_stage(ticker);
 CREATE INDEX IF NOT EXISTS idx_static_refs_daily_prices_stage_ticker 
@@ -498,7 +564,8 @@ CREATE OR REPLACE FUNCTION cleanup_static_refs_stage_tables()
 RETURNS void
 LANGUAGE plpgsql AS $$
 BEGIN
-    TRUNCATE static_refs_active_securities_stage;
+    TRUNCATE static_refs_daily_actives_stage;
+    TRUNCATE static_refs_1m_actives_stage;
     TRUNCATE static_refs_1m_prices_stage;
     TRUNCATE static_refs_daily_prices_stage;
 END;
@@ -527,11 +594,11 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_now_utc timestamptz := now();
 BEGIN
-    -- Step 1: Truncate and populate active securities stage table
-    TRUNCATE static_refs_active_securities_stage;
+    -- Step 1: Truncate and populate 1m-specific active securities stage table
+    TRUNCATE static_refs_1m_actives_stage;
     
-    INSERT INTO static_refs_active_securities_stage (ticker, securityid, market_cap, sector, industry)
-    SELECT DISTINCT s.ticker, s.securityid, s.market_cap, s.sector, s.industry 
+    INSERT INTO static_refs_1m_actives_stage (ticker)
+    SELECT DISTINCT s.ticker
     FROM securities s
     WHERE s.active = TRUE;
 
@@ -545,11 +612,12 @@ BEGIN
         p15.close,
         p60.close,
         p240.close
-    FROM static_refs_active_securities_stage s
+    FROM static_refs_1m_actives_stage s
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '5 days')  -- Broad filter first
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 minute')))) ASC
         LIMIT 1
     ) p1 ON TRUE
@@ -557,6 +625,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '5 days')  -- Broad filter first
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '15 minutes')))) ASC
         LIMIT 1
     ) p15 ON TRUE
@@ -564,6 +633,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '5 days')  -- Broad filter first
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 hour')))) ASC
         LIMIT 1
     ) p60 ON TRUE
@@ -571,6 +641,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '5 days')  -- Broad filter first
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '4 hours')))) ASC
         LIMIT 1
     ) p240 ON TRUE;
@@ -588,6 +659,9 @@ BEGIN
         price_1h = EXCLUDED.price_1h,
         price_4h = EXCLUDED.price_4h,
         updated_at = EXCLUDED.updated_at;
+        
+    -- Step 4: Cleanup
+    TRUNCATE static_refs_1m_actives_stage;
 END;
 $$;
 
@@ -598,11 +672,11 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_now_utc timestamptz := now();
 BEGIN
-    -- Step 1: Truncate and populate active securities stage table (reuse if already populated)
-    TRUNCATE static_refs_active_securities_stage;
+    -- Step 1: Truncate and populate daily-specific active securities stage table
+    TRUNCATE static_refs_daily_actives_stage;
     
-    INSERT INTO static_refs_active_securities_stage (ticker, securityid, market_cap, sector, industry)
-    SELECT DISTINCT s.ticker, s.securityid, s.market_cap, s.sector, s.industry 
+    INSERT INTO static_refs_daily_actives_stage (ticker)
+    SELECT DISTINCT s.ticker
     FROM securities s
     WHERE s.active = TRUE;
 
@@ -628,7 +702,7 @@ BEGIN
         all_time.all_open,
         extremes.low_52w,
         extremes.high_52w
-    FROM static_refs_active_securities_stage s
+    FROM static_refs_daily_actives_stage s
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
@@ -640,6 +714,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '2 years')  -- Broad filter for daily data
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 day')))) ASC
         LIMIT 1
     ) d1 ON TRUE
@@ -647,6 +722,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '2 years')  -- Broad filter for daily data
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 week')))) ASC
         LIMIT 1
     ) w1 ON TRUE
@@ -654,6 +730,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '2 years')  -- Broad filter for daily data
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 month')))) ASC
         LIMIT 1
     ) m1 ON TRUE
@@ -661,6 +738,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '2 years')  -- Broad filter for daily data
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '3 months')))) ASC
         LIMIT 1
     ) m3 ON TRUE
@@ -668,6 +746,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '2 years')  -- Broad filter for daily data
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '6 months')))) ASC
         LIMIT 1
     ) m6 ON TRUE
@@ -675,6 +754,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '12 years')  -- Broader filter for longer periods
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 year')))) ASC
         LIMIT 1
     ) y1 ON TRUE
@@ -682,6 +762,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '12 years')  -- Broader filter for longer periods
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '5 years')))) ASC
         LIMIT 1
     ) y5 ON TRUE
@@ -689,6 +770,7 @@ BEGIN
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+          AND "timestamp" >= (v_now_utc - INTERVAL '12 years')  -- Broader filter for longer periods
         ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '10 years')))) ASC
         LIMIT 1
     ) y10 ON TRUE
@@ -702,12 +784,14 @@ BEGIN
         SELECT open / NULLIF(1000.0, 0) AS all_open
         FROM ohlcv_1d
         WHERE ticker = s.ticker
+        -- No time filter - need the very first candle ever
         ORDER BY "timestamp" ASC LIMIT 1
     ) all_time ON TRUE
     LEFT JOIN LATERAL (
         SELECT MAX(high / NULLIF(1000.0, 0)) AS high_52w, MIN(low / NULLIF(1000.0, 0)) AS low_52w
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" >= v_now_utc - INTERVAL '52 weeks'
+        WHERE ticker = s.ticker 
+        AND "timestamp" >= v_now_utc - INTERVAL '52 weeks'  -- Exactly 52 weeks for highs/lows
     ) extremes ON TRUE;
 
     -- Step 3: Bulk upsert from stage table to final table
@@ -734,6 +818,9 @@ BEGIN
         price_52w_low = EXCLUDED.price_52w_low,
         price_52w_high = EXCLUDED.price_52w_high,
         updated_at = EXCLUDED.updated_at;
+        
+    -- Step 4: Cleanup
+    TRUNCATE static_refs_daily_actives_stage;
 END;
 $$;
 
@@ -818,8 +905,8 @@ BEGIN
             c15.range_15m_pct,
             c60.range_1h_pct,
             c4h."close" AS c4h_close,
-            c7.volatility_1w,
-            c30.volatility_1m,
+            c7.volatility_1w_pct,
+            c30.volatility_1m_pct,
             c50.dma_50,
             c200.dma_200,
             c14d.avg_volume_14d,
@@ -913,7 +1000,7 @@ BEGIN
                 SELECT close/1000.0 AS c, timestamp
                 FROM ohlcv_1d
                 WHERE ticker = st.ticker 
-                  AND "timestamp" >= (now() - INTERVAL '30 days')            -- Hypertable optimization: limit to recent chunk
+                  AND "timestamp" >= (now() - INTERVAL '60 days')            -- Broader filter for RSI calculation
                 ORDER BY timestamp DESC      -- grab most recent 15 daily bars
                 LIMIT 15
             ),
@@ -972,6 +1059,7 @@ BEGIN
             SELECT close / 1000.0 AS close
             FROM ohlcv_1m
             WHERE ticker = st.ticker
+            AND "timestamp" >= (v_now - INTERVAL '2 days')  -- Limit to recent data first
             AND (timestamp AT TIME ZONE 'America/New_York')::time = '16:00'
             AND timestamp::date = v_now::date
             ORDER BY timestamp DESC LIMIT 1
@@ -988,6 +1076,7 @@ BEGIN
             SELECT volume, close / 1000.0 AS close
             FROM ohlcv_1d
             WHERE ticker = st.ticker
+            AND "timestamp" >= (v_now - INTERVAL '60 days')  -- Broad filter for volume calculations
             ORDER BY timestamp DESC
             LIMIT 30
         ) o ON TRUE
@@ -995,6 +1084,7 @@ BEGIN
             SELECT volume
             FROM ohlcv_1d
             WHERE ticker = st.ticker
+            AND "timestamp" >= (v_now - INTERVAL '30 days')  -- Broad filter for volume calculations
             ORDER BY timestamp DESC
             LIMIT 14
         ) d ON TRUE
@@ -1003,10 +1093,11 @@ BEGIN
     spy_metrics AS (
         SELECT
             o.close / 1000.0 AS spy_ld_close,
-            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 month')))) ASC LIMIT 1) AS spy_price_1m,
-            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 year')))) ASC LIMIT 1) AS spy_price_1y
+            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' AND "timestamp" >= (v_now - INTERVAL '2 years') ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 month')))) ASC LIMIT 1) AS spy_price_1m,
+            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' AND "timestamp" >= (v_now - INTERVAL '2 years') ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 year')))) ASC LIMIT 1) AS spy_price_1y
         FROM ohlcv_1d o
         WHERE o.ticker = 'SPY'
+          AND o."timestamp" >= (v_now - INTERVAL '7 days')  -- Only need recent SPY close
         ORDER BY o.timestamp DESC
         LIMIT 1
     ),
@@ -1076,8 +1167,8 @@ BEGIN
             cd.range_15m_pct,
             cd.range_1h_pct,
             CASE WHEN ld.low = 0 OR ld.low IS NULL THEN NULL ELSE (ld.high - ld.low) / ld.low * 100 END AS day_range_pct,
-            cd.volatility_1w,
-            cd.volatility_1m,
+            cd.volatility_1w_pct,
+            cd.volatility_1m_pct,
             CASE WHEN cd.pre_market_low = 0 OR cd.pre_market_low IS NULL THEN NULL ELSE (cd.pre_market_high - cd.pre_market_low) / cd.pre_market_low * 100 END AS pre_market_range_pct
         FROM security_info si
         JOIN latest_daily ld ON ld.ticker = si.ticker
@@ -1106,7 +1197,7 @@ BEGIN
             volume, avg_volume_1m, dollar_volume, avg_dollar_volume_1m,
             pre_market_volume, pre_market_dollar_volume, relative_volume_14, pre_market_vol_over_14d_vol,
             range_1m_pct, range_15m_pct, range_1h_pct, day_range_pct,
-            volatility_1w, volatility_1m, pre_market_range_pct
+            volatility_1w_pct, volatility_1m_pct, pre_market_range_pct
         )
         SELECT *
         FROM computed_metrics
@@ -1166,8 +1257,8 @@ BEGIN
             range_15m_pct = EXCLUDED.range_15m_pct,
             range_1h_pct = EXCLUDED.range_1h_pct,
             day_range_pct = EXCLUDED.day_range_pct,
-            volatility_1w = EXCLUDED.volatility_1w,
-            volatility_1m = EXCLUDED.volatility_1m,
+            volatility_1w_pct = EXCLUDED.volatility_1w_pct,
+            volatility_1m_pct = EXCLUDED.volatility_1m_pct,
             pre_market_range_pct = EXCLUDED.pre_market_range_pct
         RETURNING 1
     ),

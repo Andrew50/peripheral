@@ -525,17 +525,6 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 	return state.Latest, nil
 }
 
-// Deprecated: Use setLoadState instead
-func setLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string, t time.Time) error {
-	// This is a compatibility wrapper for backward compatibility
-	state, err := getLoadState(ctx, db, timeframe)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	state.Latest = t
-	return setLoadState(ctx, db, timeframe, state)
-}
-
 func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile) error {
 	if len(files) == 0 {
 		return nil

@@ -381,7 +381,9 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool, enableRealtime bool) error
 	}
 
 	// Initialize OHLCV buffer with realtime flag
-	InitOHLCVBuffer(conn, enableRealtime)
+	if err := InitOHLCVBuffer(conn, enableRealtime); err != nil {
+		return fmt.Errorf("init OHLCV buffer: %w", err)
+	}
 
 	var err error
 	polygonWSConn, err = polygonws.New(polygonws.Config{

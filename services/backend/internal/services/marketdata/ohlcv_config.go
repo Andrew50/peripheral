@@ -221,19 +221,6 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 	return nil, fmt.Errorf("S3 listing failed after %d retries, last error: %w", maxRetries, lastErr)
 }
 
-// isS3RateLimitError checks if the error is an S3 rate limiting error (429 Too Many Requests)
-// Deprecated: Use isS3TransientError instead for broader error coverage
-func isS3RateLimitError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	return strings.Contains(errStr, "TooManyRequests") ||
-		strings.Contains(errStr, "429") ||
-		strings.Contains(errStr, "Too Many Requests")
-}
-
 // isS3TransientError checks if the error is a transient S3 error that should be retried
 func isS3TransientError(err error) bool {
 	if err == nil {

@@ -120,7 +120,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			break
 		}
 		if i == maxRetries-1 {
-			return "", fmt.Errorf("Plotly.js failed to load after %d attempts", maxRetries)
+			return "", fmt.Errorf("plotly.js failed to load after %d attempts", maxRetries)
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

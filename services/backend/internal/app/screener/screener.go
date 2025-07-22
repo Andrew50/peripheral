@@ -383,17 +383,17 @@ var screenerColumns = map[string]ColumnInfo{
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "Day range percentage",
 	},
-	"volatility_1w": {
-		Name:        "volatility_1w",
+	"volatility_1w_pct": {
+		Name:        "volatility_1w_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
-		Description: "1-week volatility",
+		Description: "1-week volatility percentage",
 	},
-	"volatility_1m": {
-		Name:        "volatility_1m",
+	"volatility_1m_pct": {
+		Name:        "volatility_1m_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
-		Description: "1-month volatility",
+		Description: "1-month volatility percentage",
 	},
 	"pre_market_range_pct": {
 		Name:        "pre_market_range_pct",

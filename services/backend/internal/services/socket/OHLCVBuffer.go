@@ -4,6 +4,7 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/utils"
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -79,7 +80,7 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 var ohlcvBuffer *OHLCVBuffer
 
 // Initialize the OHLCV buffer
-func InitOHLCVBuffer(conn *data.Conn, enableRealtime bool) {
+func InitOHLCVBuffer(conn *data.Conn, enableRealtime bool) error {
 	ohlcvBuffer = &OHLCVBuffer{
 		buffer:         make([]OHLCVRecord, 0, flushThreshold),
 		dbConn:         conn,
@@ -89,9 +90,16 @@ func InitOHLCVBuffer(conn *data.Conn, enableRealtime bool) {
 		flushCh:        make(chan []OHLCVRecord, 50),
 		stopped:        false,
 	}
+
+	// Create staging tables immediately on initialization
+	if err := ohlcvBuffer.createStagingTables(); err != nil {
+		return err
+	}
+
 	ohlcvBuffer.wg.Add(1)
 	go ohlcvBuffer.writer()
 	ohlcvBuffer.startTimeoutFlusher()
+	return nil
 }
 
 func (b *OHLCVBuffer) startTimeoutFlusher() {
@@ -169,14 +177,14 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 	}
 }
 
-func (b *OHLCVBuffer) createStagingTables() {
+func (b *OHLCVBuffer) createStagingTables() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	conn, err := b.dbConn.DB.Acquire(ctx)
 	if err != nil {
 		log.Printf("Create staging tables - acquire conn error: %v", err)
-		return
+		return fmt.Errorf("acquire conn for staging tables: %w", err)
 	}
 	defer conn.Release()
 
@@ -204,19 +212,19 @@ func (b *OHLCVBuffer) createStagingTables() {
 
 	_, err = conn.Exec(ctx, createStage1m)
 	if err != nil {
-		log.Printf("Create ohlcv_1m_stage error: %v", err)
+		return fmt.Errorf("create ohlcv_1m_stage: %w", err)
 	}
 
 	_, err = conn.Exec(ctx, createStage1d)
 	if err != nil {
-		log.Printf("Create ohlcv_1d_stage error: %v", err)
+		return fmt.Errorf("create ohlcv_1d_stage: %w", err)
 	}
+
+	return nil
 }
 
 func (b *OHLCVBuffer) writer() {
 	defer b.wg.Done()
-	// Create staging tables once when writer starts
-	b.createStagingTables()
 
 	for batch := range b.flushCh {
 		sort.Slice(batch, func(i, j int) bool {

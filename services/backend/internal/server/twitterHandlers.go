@@ -4,13 +4,11 @@ import (
 	"backend/internal/data"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -59,7 +57,8 @@ type TwitterAPIUpdateWebhookRequest struct {
 }
 
 var twitterWebhookRuleset = "from:trad_fin OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
-var replyWebhookRuleset = "within_time:20m -filter:replies -from:TheShortBear from:amitisinvesting OR from:StockMKTNewz OR from:EliteOptions2 OR from:fundstrat OR from:TrendSpider OR from:GURGAVIN OR from:unusual_whales"
+
+//var replyWebhookRuleset = "within_time:20m -filter:replies -from:TheShortBear from:amitisinvesting OR from:StockMKTNewz OR from:EliteOptions2 OR from:fundstrat OR from:TrendSpider OR from:GURGAVIN OR from:unusual_whales"
 
 func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
 	isEffect := 0
@@ -600,6 +599,7 @@ func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
 }
 
 // saveImageToContainer saves base64 image data to container filesystem for debugging
+/*
 func saveImageToContainer(base64Data string) {
 	if base64Data == "" {
 		return
@@ -624,4 +624,4 @@ func saveImageToContainer(base64Data string) {
 
 	log.Printf("✅ Plot image saved to container at: %s", filename)
 	fmt.Printf("🚀 One-liner: docker cp $(docker ps --format 'table {{.Names}}' | grep backend | head -n1):/tmp/peripheral_plot.png ~/Desktop/ && open ~/Desktop/peripheral_plot.png\n")
-}
+}*/

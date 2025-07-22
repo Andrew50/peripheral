@@ -23,6 +23,16 @@ import (
 	"github.com/openai/openai-go/responses"
 )
 
+// Custom types for context keys to avoid collisions
+type contextKey string
+
+const (
+	CONVERSATION_ID_KEY                        contextKey = "conversationID"
+	MESSAGE_ID_KEY                             contextKey = "messageID"
+	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
+	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
+)
+
 type Stage string
 
 const (
@@ -121,8 +131,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
-	ctx = context.WithValue(ctx, "conversationID", conversationID)
-	ctx = context.WithValue(ctx, "messageID", messageID)
+	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
+	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
 	socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
@@ -252,7 +262,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
-				ctx = context.WithValue(ctx, "peripheralLatestModelThoughts", v.Thoughts)
+				ctx = context.WithValue(ctx, PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY, v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan
@@ -292,7 +302,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 					go func() {
 						var cleanedModelThoughts string
-						if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
+						if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
 							if thoughtsStr, ok := thoughtsValue.(string); ok {
 								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 							}
