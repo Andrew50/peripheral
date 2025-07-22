@@ -17,6 +17,9 @@
 		defaultChartData: any;
 	}
 
+	// Constants
+	const SIDEBAR_BUTTONS_WIDTH = 45; // Width of the sidebar buttons panel in pixels
+
 	// Replay logic
 	import {
 		startReplay,
@@ -227,13 +230,13 @@
 			} else if (window.innerWidth <= 1400) {
 				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
 			}
-			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
+			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
 
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
+			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
 
 			// Only reduce chart width if sidebar widths are within bounds
 			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
+				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - SIDEBAR_BUTTONS_WIDTH;
 			}
 		}
 	}
@@ -348,6 +351,10 @@
 
 	onMount(() => {
 		if (!browser) return;
+		
+		// Set CSS variable for sidebar buttons width
+		document.documentElement.style.setProperty('--sidebar-buttons-width', `${SIDEBAR_BUTTONS_WIDTH}px`);
+		
 		initStores();
 		// Async initialization function
 		async function init() {
@@ -489,8 +496,8 @@
 		}
 
 		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
+		let newWidth = window.innerWidth - clientX - SIDEBAR_BUTTONS_WIDTH; // Using constant
+		const maxSidebarWidth = Math.min(600, window.innerWidth - SIDEBAR_BUTTONS_WIDTH); // Using constant
 
 		// Store state before closing
 		if (newWidth < minWidth && lastSidebarMenu !== null) {
@@ -855,7 +862,7 @@
 		let newWidth = clientX;
 		// Limit chat to minimum 15% and maximum 40% of screen width
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - 45);
+		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
 
 		// Enforce minimum and maximum width without auto-closing
 		leftMenuWidth = Math.max(minLeftSidebarWidth, Math.min(newWidth, maxLeftSidebarWidth));
@@ -1421,7 +1428,7 @@
 		position: fixed;
 		top: 0;
 		right: 0;
-		width: 45px; /* same width as sidebar-buttons */
+		width: var(--sidebar-buttons-width, 45px); /* use CSS variable with fallback */
 		height: 40px; /* same height as top bar */
 		background-color: #121212;
 		display: flex;
