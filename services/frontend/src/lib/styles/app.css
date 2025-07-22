@@ -23,7 +23,7 @@
 	height: 100%;
 	min-height: 0;
 	position: relative;
-	margin-right: 45px;
+	margin-right: var(--sidebar-buttons-width, 45px);
 }
 
 .main-and-sidebar-wrapper {
@@ -84,8 +84,8 @@
 	position: relative;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px));
-	/* 600px max sidebar with 45px button bar */
+	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
+	/* 600px max sidebar with button bar */
 	/* Add responsive font scaling */
 	font-size: clamp(0.75rem, 0.5rem + 0.8vw, 0.9rem);
 }
@@ -97,15 +97,15 @@
 	right: 0;
 	height: calc(100vh - 80px);
 	/* Subtract both top bar and bottom bar heights */
-	width: 45px;
+	width: var(--sidebar-buttons-width, 45px);
 	display: flex;
 	flex-direction: column;
 	background-color: #121212;
 	z-index: 2;
 	flex-shrink: 0;
 	border-left: 4px solid var(--c1);
-	max-width: min(600px, calc(100vw - 45px));
-	/* 600px max with 45px button bar */
+	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
+	/* 600px max with button bar */
 }
 
 .resize-handle {
@@ -132,7 +132,7 @@
 }
 
 .side-btn {
-	flex: 0 0 45px;
+	flex: 0 0 var(--sidebar-buttons-width, 45px);
 }
 
 .menu-icon {
@@ -303,7 +303,7 @@
 /* Responsive Sidebar Scaling */
 @media (max-width: 1400px) {
 	.sidebar {
-		max-width: min(400px, calc(100vw - 45px));
+		max-width: min(400px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 		font-size: clamp(0.7rem, 0.5rem + 0.6vw, 0.85rem);
 	}
 
@@ -319,7 +319,7 @@
 
 @media (max-width: 1200px) {
 	.sidebar {
-		max-width: min(350px, calc(100vw - 45px));
+		max-width: min(350px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 		font-size: clamp(0.65rem, 0.4rem + 0.5vw, 0.8rem);
 	}
 
@@ -335,7 +335,7 @@
 
 @media (max-width: 1000px) {
 	.sidebar {
-		max-width: min(300px, calc(100vw - 45px));
+		max-width: min(300px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 		font-size: clamp(0.6rem, 0.3rem + 0.4vw, 0.75rem);
 	}
 
@@ -351,7 +351,7 @@
 
 @media (max-width: 800px) {
 	.sidebar {
-		max-width: min(250px, calc(100vw - 45px));
+		max-width: min(250px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 		font-size: clamp(0.55rem, 0.2rem + 0.3vw, 0.7rem);
 	}
 
