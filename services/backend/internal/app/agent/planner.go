@@ -16,7 +16,6 @@ import (
 	"strconv"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 )
@@ -509,9 +508,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 }*/
 
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
-	apiKey := conn.OpenAIKey
-
-	client := openai.NewClient(option.WithAPIKey(apiKey))
+	client := conn.OpenAIClient
 
 	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {

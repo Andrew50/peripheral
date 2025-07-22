@@ -15,6 +15,9 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	polygon "github.com/polygon-io/client-go/rest"
 	"google.golang.org/genai"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 // Conn encapsulates database connections and API clients
@@ -33,6 +36,7 @@ type Conn struct {
 	XAccessToken         string
 	XAccessSecret        string
 	GeminiClient         *genai.Client
+	OpenAIClient         openai.Client
 	ExecutionEnvironment string
 	IsLLMExecution       bool // Track if function is called by LLM agent
 }
@@ -243,6 +247,8 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create Gemini client: %v", err))
 	}
+	openAIClient := openai.NewClient(option.WithAPIKey(openAIKey))
+
 	// Create local connection object (no global variable)
 	localConn := &Conn{
 		DB:                   dbRes.conn,
@@ -260,6 +266,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		IsLLMExecution:       false, // Initialize the new field
 		GeminiClient:         geminiClient,
 		ExecutionEnvironment: executionEnvironment,
+		OpenAIClient:         openAIClient,
 	}
 
 	cleanup := func() {
