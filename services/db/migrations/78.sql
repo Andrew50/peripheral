@@ -112,49 +112,124 @@ $$;
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_1440_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('1440 minutes', "timestamp", 'America/New_York') AS bucket,
+    time_bucket('1 minute', "timestamp", 'America/New_York') AS bucket,
     ticker,
 
     /* ─────── Pre‑market window ─────── */
-    first(open  / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_open,
-    last (close / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_close,
-    max  (high  / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_high,
-    min  (low   / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_low,
-    sum  (volume)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_volume,
-    sum  (volume * close / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '04:00' AND '09:29:59')              AS pre_market_dollar_volume,
+    first(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN open / 1000.0 ELSE NULL END, 
+        "timestamp"
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_open,
+    
+    last(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN close / 1000.0 ELSE NULL END, 
+        "timestamp"
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_close,
+    
+    max(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN high / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_high,
+    
+    min(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN low / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_low,
+    
+    sum(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN volume ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_volume,
+    
+    sum(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '04:00' AND '09:29:59' 
+             THEN volume * close / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS pre_market_dollar_volume,
 
     /* ─────── Extended‑hours window ─────── */
-    first(open  / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_open,
-    last (close / 1000.0, "timestamp")
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_close,
-    max  (high  / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_high,
-    min  (low   / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_low,
-    sum  (volume)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_volume,
-    sum  (volume * close / 1000.0)
-        FILTER (WHERE ("timestamp" AT TIME ZONE 'America/New_York')::time
-                    BETWEEN '16:00' AND '20:00')                 AS extended_dollar_volume
+    first(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN open / 1000.0 ELSE NULL END, 
+        "timestamp"
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_open,
+    
+    last(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN close / 1000.0 ELSE NULL END, 
+        "timestamp"
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_close,
+    
+    max(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN high / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_high,
+    
+    min(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN low / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_low,
+    
+    sum(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN volume ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_volume,
+    
+    sum(
+        CASE WHEN ("timestamp" AT TIME ZONE 'America/New_York')::time BETWEEN '16:00' AND '20:00' 
+             THEN volume * close / 1000.0 ELSE NULL END
+    ) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp", 'America/New_York')
+        ROWS BETWEEN 1439 PRECEDING AND CURRENT ROW
+    ) AS extended_dollar_volume
 FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '10 days')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -172,11 +247,27 @@ SELECT add_continuous_aggregate_policy('cagg_1440_minute',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_15_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('15 minutes', "timestamp") AS bucket,
+    time_bucket('1 minute', "timestamp") AS bucket,
     ticker,
-    last(close / 1000.0, "timestamp") AS "close",
-    safe_div(max(high / 1000.0), min(low / 1000.0)) * 100 - 100 AS "range_15m_pct"
+    last(close / 1000.0, "timestamp") OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp")
+        ROWS BETWEEN 14 PRECEDING AND CURRENT ROW
+    ) AS "close",
+    safe_div(
+        max(high / 1000.0) OVER (
+            PARTITION BY ticker
+            ORDER BY time_bucket('1 minute', "timestamp")
+            ROWS BETWEEN 14 PRECEDING AND CURRENT ROW
+        ),
+        min(low / 1000.0) OVER (
+            PARTITION BY ticker
+            ORDER BY time_bucket('1 minute', "timestamp")
+            ROWS BETWEEN 14 PRECEDING AND CURRENT ROW
+        )
+    ) * 100 - 100 AS "range_15m_pct"
 FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '2 hours')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -194,11 +285,27 @@ SELECT add_continuous_aggregate_policy('cagg_15_minute',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_60_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('60 minutes', "timestamp") AS bucket,
+    time_bucket('1 minute', "timestamp") AS bucket,
     ticker,
-    last(close / 1000.0, "timestamp") AS "close",
-    safe_div(max(high / 1000.0), min(low / 1000.0)) * 100 - 100 AS "range_1h_pct"
+    last(close / 1000.0, "timestamp") OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp")
+        ROWS BETWEEN 59 PRECEDING AND CURRENT ROW
+    ) AS "close",
+    safe_div(
+        max(high / 1000.0) OVER (
+            PARTITION BY ticker
+            ORDER BY time_bucket('1 minute', "timestamp")
+            ROWS BETWEEN 59 PRECEDING AND CURRENT ROW
+        ),
+        min(low / 1000.0) OVER (
+            PARTITION BY ticker
+            ORDER BY time_bucket('1 minute', "timestamp")
+            ROWS BETWEEN 59 PRECEDING AND CURRENT ROW
+        )
+    ) * 100 - 100 AS "range_1h_pct"
 FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '6 hours')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -216,10 +323,15 @@ SELECT add_continuous_aggregate_policy('cagg_60_minute',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_4_hour
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('4 hours', "timestamp") AS bucket,
+    time_bucket('1 minute', "timestamp") AS bucket,
     ticker,
-    last(close / 1000.0, "timestamp") AS "close"
+    last(close / 1000.0, "timestamp") OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp")
+        ROWS BETWEEN 239 PRECEDING AND CURRENT ROW
+    ) AS "close"
 FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '2 days')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -237,10 +349,19 @@ SELECT add_continuous_aggregate_policy('cagg_4_hour',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_7_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('7 days', "timestamp") AS bucket,
+    time_bucket('1 day', "timestamp") AS bucket,
     ticker,
-    (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1w_pct
+    (stddev_samp(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    )) / (avg(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    )) * 100 AS volatility_1w_pct
 FROM ohlcv_1d
+WHERE "timestamp" >= (now() - INTERVAL '90 days')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -258,10 +379,19 @@ SELECT add_continuous_aggregate_policy('cagg_7_day',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_30_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('30 days', "timestamp") AS bucket,
+    time_bucket('1 day', "timestamp") AS bucket,
     ticker,
-    (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1m_pct
+    (stddev_samp(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+    )) / (avg(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+    )) * 100 AS volatility_1m_pct
 FROM ohlcv_1d
+WHERE "timestamp" >= (now() - INTERVAL '400 days')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -275,37 +405,45 @@ SELECT add_continuous_aggregate_policy('cagg_30_day',
     end_offset => INTERVAL '0 minutes',
     schedule_interval => INTERVAL '6 hours');
 
--- cagg_50_day for 70-day moving average (using daily bars)
+-- cagg_50_day for 50-day moving average (using daily bars)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_50_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('70 days', "timestamp", 'America/New_York') AS bucket,
+    time_bucket('1 day', "timestamp", 'America/New_York') AS bucket,
     ticker,
-    avg(close / 1000.0) AS dma_50
+    avg(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp", 'America/New_York')
+        ROWS BETWEEN 49 PRECEDING AND CURRENT ROW
+    ) AS dma_50
 FROM ohlcv_1d
 WHERE "timestamp" >= now() - INTERVAL '3 years'  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
 SELECT add_retention_policy('cagg_50_day',
-    drop_after => INTERVAL '70 days',
+    drop_after => INTERVAL '50 days',
     schedule_interval => INTERVAL '300 hours');
 
--- Add continuous aggregate policy for cagg_50_day (70-day moving average - moderate updates)
+-- Add continuous aggregate policy for cagg_50_day (50-day moving average - moderate updates)
 SELECT add_continuous_aggregate_policy('cagg_50_day',
     start_offset => INTERVAL '140 days',
     end_offset => INTERVAL '0 minutes',
     schedule_interval => INTERVAL '2 hours');
 
--- cagg_200_day for 280-day moving average (using daily bars)
+-- cagg_200_day for 200-day moving average (using daily bars)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_200_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('280 days', "timestamp", 'America/New_York') AS bucket,
+    time_bucket('1 day', "timestamp", 'America/New_York') AS bucket,
     ticker,
-    avg(close / 1000.0) AS dma_200
+    avg(close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp", 'America/New_York')
+        ROWS BETWEEN 199 PRECEDING AND CURRENT ROW
+    ) AS dma_200
 FROM ohlcv_1d
-WHERE "timestamp" >= now() - INTERVAL '3 years'  -- chunk exclusion optimization
+WHERE "timestamp" >= now() - INTERVAL '6 years'  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -313,7 +451,7 @@ SELECT add_retention_policy('cagg_200_day',
     drop_after => INTERVAL '280 days',
     schedule_interval => INTERVAL '1200 hours');
 
--- Add continuous aggregate policy for cagg_200_day (280-day moving average - infrequent updates)
+-- Add continuous aggregate policy for cagg_200_day (200-day moving average - infrequent updates)
 SELECT add_continuous_aggregate_policy('cagg_200_day',
     start_offset => INTERVAL '560 days',
     end_offset => INTERVAL '0 minutes',
@@ -323,12 +461,21 @@ SELECT add_continuous_aggregate_policy('cagg_200_day',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('14 days', "timestamp") AS bucket,
+    time_bucket('1 day', "timestamp") AS bucket,
     ticker,
-    avg(volume) AS avg_volume_14d,
-    avg(volume * close / 1000.0) AS avg_dollar_volume_14d,
+    avg(volume) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+    ) AS avg_volume_14d,
+    avg(volume * close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 day', "timestamp")
+        ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+    ) AS avg_dollar_volume_14d,
     NULL::numeric AS rsi_14  -- RSI requires windowed calculation; compute in function instead
 FROM ohlcv_1d
+WHERE "timestamp" >= (now() - INTERVAL '180 days')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -346,11 +493,20 @@ SELECT add_continuous_aggregate_policy('cagg_14_day',
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_minute
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('14 minutes', "timestamp") AS bucket,
+    time_bucket('1 minute', "timestamp") AS bucket,
     ticker,
-    avg(volume) AS avg_volume_1m_14,
-    avg(volume * close / 1000.0) AS avg_dollar_volume_1m_14
+    avg(volume) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp")
+        ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+    ) AS avg_volume_1m_14,
+    avg(volume * close / 1000.0) OVER (
+        PARTITION BY ticker
+        ORDER BY time_bucket('1 minute', "timestamp")
+        ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+    ) AS avg_dollar_volume_1m_14
 FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '60 minutes')  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
