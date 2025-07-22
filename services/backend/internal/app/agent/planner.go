@@ -254,7 +254,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	////fmt.Println("prompt", prompt)
 	thinkingBudget := int32(10000)
 	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt, true)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
