@@ -246,16 +246,15 @@ class PythonAgentGenerator:
 
         PATTERN RECOGNITION:
         - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
-        min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
+        min_bars=2 (need current + previous)
         - Volume patterns: Compare current vs historical average - return ALL volume spikes  
         min_bars=1 for simple threshold, min_bars=20+ for rolling average
-        Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
         - Price patterns: Use moving averages, RSI - return ALL qualifying instances
-        min_bars=20+ for indicators, Score: Based on instance strength (RSI distance from 50, etc.)
+        min_bars=20+ for indicators
         - Breakout patterns: Identify price breakouts - return ALL breakouts
-        min_bars=2+ for comparison, Score: min(1.0, breakout_strength / max_expected)
+        min_bars=2+ for comparison
         - Fundamental patterns: Use market cap, sector data - return ALL qualifying companies
-        min_bars=1 (current data only), Score: Based on fundamental strength
+        min_bars=1 (current data only)
 
         SECURITY RULES:
         - Only use whitelisted imports
@@ -281,17 +280,16 @@ class PythonAgentGenerator:
         - Do not print any time data in timestamp. Always print in the human readable format DD/MM/YYYY HH:MM:SS.
 
         PLOTLY PLOT GENERATION (REQUIRED):
-        - Use plotly to generate plots of useful visualizations of the data
+        - Use plotly to generate plots of useful, value add visualizations of the data
         - Histograms of performance metrics, returns, etc 
         - Always show the plot using .show()
-        - Almost always include plots in the strategy to help the user understand the data
         - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
         - You should style the plot to be visually appealing and informative, specifically focusing on the colors of the layout based on the data. E.g. positive data should be green, negative data should be red, etc.
         - Ensure to name all traces in the plot.
         - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
-        - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
-        - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
-        - If the plot refers to several tickers, do not include this.
+        - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+        - If the plot refers to several tickers, do not include a title icon.
+        - When the dataset has fewer than five distinct points, avoid oversized bar/line charts. Instead, reason about and produce a visualization that scales gracefully with small‑N data
 
         **CRITICAL**: 
         - NEVER MAKE UP DATA. If you do not have the data, do not include it. Fake data will make the user stop using the tool. The only data you have access to is the functions described above!!
