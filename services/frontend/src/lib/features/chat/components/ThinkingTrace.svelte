@@ -204,34 +204,36 @@
 		
 		animatedCitationCounts.set(actualIndex, { current: 1, target: targetCount, isAnimating: true });
 		
-		// Start the counting animation
+		// Start the counting animation with a 200ms delay
 		if (targetCount > 1) {
-			const startTime = Date.now();
-			const duration = 750; // Always 0.75 seconds
-			
-			// Ease-out function that slows down towards the end
-			function easeOut(t: number): number {
-				return 1 - Math.pow(1 - t, 2);
-			}
-			
-			function updateCount() {
-				const elapsed = Date.now() - startTime;
-				const linearProgress = Math.min(elapsed / duration, 1);
-				const easedProgress = easeOut(linearProgress);
-				const current = Math.floor(1 + (targetCount - 1) * easedProgress);
+			setTimeout(() => {
+				const startTime = Date.now();
+				const duration = 750; // Always 0.75 seconds
 				
-				const countData = animatedCitationCounts.get(actualIndex);
-				if (countData) {
-					countData.current = current;
-					countData.isAnimating = linearProgress < 1;
-					animatedCitationCounts = animatedCitationCounts; // Trigger reactivity
+				// Ease-out function that slows down towards the end
+				function easeOut(t: number): number {
+					return 1 - Math.pow(1 - t, 2);
+				}
+				
+				function updateCount() {
+					const elapsed = Date.now() - startTime;
+					const linearProgress = Math.min(elapsed / duration, 1);
+					const easedProgress = easeOut(linearProgress);
+					const current = Math.floor(1 + (targetCount - 1) * easedProgress);
 					
-					if (linearProgress < 1) {
-						requestAnimationFrame(updateCount);
+					const countData = animatedCitationCounts.get(actualIndex);
+					if (countData) {
+						countData.current = current;
+						countData.isAnimating = linearProgress < 1;
+						animatedCitationCounts = animatedCitationCounts; // Trigger reactivity
+						
+						if (linearProgress < 1) {
+							requestAnimationFrame(updateCount);
+						}
 					}
 				}
-			}
-			requestAnimationFrame(updateCount);
+				requestAnimationFrame(updateCount);
+			}, 200);
 		}
 	}
 

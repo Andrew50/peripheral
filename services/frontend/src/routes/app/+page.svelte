@@ -94,8 +94,6 @@
 
 	let lastSidebarMenu: Menu | null = null;
 	let sidebarWidth = 0;
-	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'study', 'news'];
-	//const sidebarMenus: Menu[] = ['watchlist', 'alerts', 'news'];
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// ─── Alert tabs ────────────────────────────────────────────────────────────
@@ -466,23 +464,6 @@
 		}
 	});
 
-	function toggleMenu(menuName: Menu) {
-		if (menuName === $activeMenu) {
-			// If clicking the same menu, close it
-			lastSidebarMenu = null;
-			menuWidth.set(0);
-			changeMenu('none');
-		} else {
-			// Open new menu
-			lastSidebarMenu = null;
-			// Only set width if sidebar is currently closed, otherwise preserve current width
-			if ($menuWidth === 0) {
-				menuWidth.set(180); // Reduced from 225 to 180 (smaller sidebar)
-			}
-			changeMenu(menuName);
-		}
-	}
-
 	// Sidebar resizing
 	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
@@ -582,11 +563,6 @@
 	let offsetX = 0;
 	let offsetY = 0;
 
-	function startDrag(event: MouseEvent, windowId: number) {
-		draggingWindowId = windowId;
-		offsetX = event.offsetX;
-		offsetY = event.offsetY;
-	}
 
 	function onDrag(event: MouseEvent) {
 		if (draggingWindowId === null) return;
@@ -897,7 +873,7 @@
 	}
 
 	// Toggle left pane for Query
-	function toggleLeftPane() {
+	function toggleLeftSidebar() {
 		if (leftMenuWidth > 0) {
 			leftMenuWidth = 0;
 		} else {
@@ -906,11 +882,26 @@
 		}
 		updateChartWidth();
 	}
-
+	function toggleMainSidebar(menuName: Menu) {
+		if (menuName === $activeMenu) {
+			// If clicking the same menu, close it
+			lastSidebarMenu = null;
+			menuWidth.set(0);
+			changeMenu('none');
+		} else {
+			// Open new menu
+			lastSidebarMenu = null;
+			// Only set width if sidebar is currently closed, otherwise preserve current width
+			if ($menuWidth === 0) {
+				menuWidth.set(180); 
+			}
+			changeMenu(menuName);
+		}
+	}
 	// Subscribe to the requestChatOpen store
 	$: if ($requestChatOpen && browser) {
 		if (leftMenuWidth === 0) {
-			toggleLeftPane(); // Open the left pane if closed
+			toggleLeftSidebar(); // Open the left pane if closed
 		}
 		// Reset the trigger after handling
 		// Use setTimeout to ensure the pane opens before resetting,
@@ -1244,7 +1235,7 @@
 				{#each sidebarMenus as menu}
 					<button
 						class="toggle-button side-btn {$activeMenu === menu ? 'active' : ''}"
-						on:click={() => toggleMenu(menu)}
+						on:click={() => toggleMainSidebar(menu)}
 						title={menu.charAt(0).toUpperCase() + menu.slice(1)}
 					>
 						<img src="{menu}.png" alt={menu} class="menu-icon" />
@@ -1258,7 +1249,7 @@
 			<div class="bottom-bar-left">
 				<button
 					class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
-					on:click={toggleLeftPane}
+					on:click={toggleLeftSidebar}
 					title="Open AI Chat"
 				>
 					<svg xmlns="http://www.w3.org/2000/svg"
