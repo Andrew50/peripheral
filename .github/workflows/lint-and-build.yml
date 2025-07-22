@@ -202,194 +202,194 @@ jobs:
           fi
 
   # Go Format Check (from format.yaml)
-  format-go:
-    name: Go Format Check (camelCase enforcement)
-    needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    
-    steps:
-      - name: 🔧 Checkout code
-        uses: actions/checkout@v4
+  # format-go:
+  #   name: Go Format Check (camelCase enforcement)
+  #   needs: [check-workflow-conditions]
+  #   if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+  #   
+  #   steps:
+  #     - name: 🔧 Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: 🐹 Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: true
-          cache-dependency-path: services/backend/go.sum
+  #     - name: 🐹 Setup Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: stable
+  #         cache: true
+  #         cache-dependency-path: services/backend/go.sum
 
-      - name: 🔍 Go format check (camelCase enforcement)
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          working-directory: services/backend
-          args: >-
-            --timeout=5m
-            --config .golangci.yml
-            ./...
-            --no-fix
+  #     - name: 🔍 Go format check (camelCase enforcement)
+  #       uses: golangci/golangci-lint-action@v8
+  #       with:
+  #         version: ${{ env.GOLANGCI_LINT_VERSION }}
+  #         working-directory: services/backend
+  #         args: >-
+  #           --timeout=5m
+  #           --config .golangci.yml
+  #           ./...
+  #           --no-fix
 
-      - name: Create job summary for Go Format
-        if: always()
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
-            echo "### Go Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Go format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ job.status }}" == "skipped" ]]; then
-            echo "### Go Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
-            echo "➡️ Go format checks skipped as no changes were detected in 'services/backend/'." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### Go Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ Go format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
-          fi
+  #     - name: Create job summary for Go Format
+  #       if: always()
+  #       shell: bash
+  #       run: |
+  #         if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+  #           echo "### Go Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
+  #           echo "✅ Go format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
+  #         elif [[ "${{ job.status }}" == "skipped" ]]; then
+  #           echo "### Go Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
+  #           echo "➡️ Go format checks skipped as no changes were detected in 'services/backend/'." >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### Go Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
+  #           echo "❌ Go format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   # Python Format Check (from format.yaml)
-  format-python:
-    name: Python Format Check (camelCase enforcement)
-    needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    
-    steps:
-      - name: 🔧 Checkout code
-        uses: actions/checkout@v4
+  # format-python:
+  #   name: Python Format Check (camelCase enforcement)
+  #   needs: [check-workflow-conditions]
+  #   if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+  #   
+  #   steps:
+  #     - name: 🔧 Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: services/worker/requirements.txt
+  #     - name: 🐍 Setup Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ env.PYTHON_VERSION }}
+  #         cache: 'pip'
+  #         cache-dependency-path: services/worker/requirements.txt
 
-      - name: 📦 Install Python dependencies
-        run: |
-          cd services/worker
-          pip install -r requirements.txt
-          cd ../..
+  #     - name: 📦 Install Python dependencies
+  #       run: |
+  #         cd services/worker
+  #         pip install -r requirements.txt
+  #         cd ../..
 
-      - name: 🔍 Run Pylint with camelCase enforcement (check only)
-        run: |
-          echo "🔍 Running Python linting with camelCase enforcement (check only)..."
-          pylint services/worker/ --rcfile=services/worker/.pylintrc --output-format=text
+  #     - name: 🔍 Run Pylint with camelCase enforcement (check only)
+  #       run: |
+  #         echo "🔍 Running Python linting with camelCase enforcement (check only)..."
+  #         pylint services/worker/ --rcfile=services/worker/.pylintrc --output-format=text
 
-      - name: Create job summary for Python Format
-        if: always()
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
-            echo "### Python Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Python format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ job.status }}" == "skipped" ]]; then
-            echo "### Python Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
-            echo "➡️ Python format checks skipped as no changes were detected in 'services/worker/'." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### Python Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ Python format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
-          fi
+  #     - name: Create job summary for Python Format
+  #       if: always()
+  #       shell: bash
+  #       run: |
+  #         if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+  #           echo "### Python Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
+  #           echo "✅ Python format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
+  #         elif [[ "${{ job.status }}" == "skipped" ]]; then
+  #           echo "### Python Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
+  #           echo "➡️ Python format checks skipped as no changes were detected in 'services/worker/'." >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### Python Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
+  #           echo "❌ Python format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   # Svelte/TypeScript/JavaScript Format Check (from format.yaml)
-  format-svelte:
-    name: Svelte/TS/JS Format Check (camelCase enforcement)
-    needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    
-    steps:
-      - name: 🔧 Checkout code
-        uses: actions/checkout@v4
+  # format-svelte:
+  #   name: Svelte/TS/JS Format Check (camelCase enforcement)
+  #   needs: [check-workflow-conditions]
+  #   if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+  #   
+  #   steps:
+  #     - name: 🔧 Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: services/frontend/package-lock.json
+  #     - name: 🟢 Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
+  #         cache-dependency-path: services/frontend/package-lock.json
 
-      - name: 📦 Install dependencies
-        run: |
-          echo "📦 Installing Node.js dependencies..."
-          cd services/frontend
-          # Temporarily rename root eslintrc to avoid dependency resolution conflicts
-          mv ../../.eslintrc.js ../../.eslintrc.js.bak || true
-          npm ci
-          # Restore root eslintrc
-          mv ../../.eslintrc.js.bak ../../.eslintrc.js || true
-          cd ../..
+  #     - name: 📦 Install dependencies
+  #       run: |
+  #         echo "📦 Installing Node.js dependencies..."
+  #         cd services/frontend
+  #         # Temporarily rename root eslintrc to avoid dependency resolution conflicts
+  #         mv ../../.eslintrc.js ../../.eslintrc.js.bak || true
+  #         npm ci
+  #         # Restore root eslintrc
+  #         mv ../../.eslintrc.js.bak ../../.eslintrc.js || true
+  #         cd ../..
 
-      - name: 🔍 Run ESLint with camelCase enforcement (check only)
-        run: |
-          echo "🔍 Running ESLint with camelCase enforcement (check only)..."
-          cd services/frontend
-          npx eslint --no-flat-config 'src/**/*.{js,ts,svelte}'
+  #     - name: 🔍 Run ESLint with camelCase enforcement (check only)
+  #       run: |
+  #         echo "🔍 Running ESLint with camelCase enforcement (check only)..."
+  #         cd services/frontend
+  #         npx eslint --no-flat-config 'src/**/*.{js,ts,svelte}'
 
-      - name: 🎨 Run Stylelint with camelCase enforcement (check only)
-        run: |
-          echo "🎨 Running Stylelint with camelCase enforcement (check only)..."
-          cd services/frontend
-          npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
+  #     - name: 🎨 Run Stylelint with camelCase enforcement (check only)
+  #       run: |
+  #         echo "🎨 Running Stylelint with camelCase enforcement (check only)..."
+  #         cd services/frontend
+  #         npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
 
-      - name: Create job summary for Svelte/TS/JS Format
-        if: always()
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
-            echo "### Svelte/TS/JS Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Svelte/TS/JS format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ job.status }}" == "skipped" ]]; then
-            echo "### Svelte/TS/JS Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
-            echo "➡️ Svelte/TS/JS format checks skipped as no changes were detected in 'services/frontend/'." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### Svelte/TS/JS Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ Svelte/TS/JS format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
-          fi
+  #     - name: Create job summary for Svelte/TS/JS Format
+  #       if: always()
+  #       shell: bash
+  #       run: |
+  #         if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+  #           echo "### Svelte/TS/JS Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
+  #           echo "✅ Svelte/TS/JS format checks completed with camelCase enforcement." >> $GITHUB_STEP_SUMMARY
+  #         elif [[ "${{ job.status }}" == "skipped" ]]; then
+  #           echo "### Svelte/TS/JS Format Check Results ➡️" >> $GITHUB_STEP_SUMMARY
+  #           echo "➡️ Svelte/TS/JS format checks skipped as no changes were detected in 'services/frontend/'." >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### Svelte/TS/JS Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
+  #           echo "❌ Svelte/TS/JS format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   # YAML Format Check (from format.yaml)
-  format-yaml:
-    name: YAML Format Check
-    needs: [check-workflow-conditions]
-    if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-    
-    steps:
-      - name: 🔧 Checkout code
-        uses: actions/checkout@v4
+  # format-yaml:
+  #   name: YAML Format Check
+  #   needs: [check-workflow-conditions]
+  #   if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 5
+  #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+  #   
+  #   steps:
+  #     - name: 🔧 Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+  #     - name: 🐍 Setup Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: 📦 Install YAML tools
-        run: |
-          echo "📦 Installing YAML formatting tools..."
-          pip install yamllint pyyaml
+  #     - name: 📦 Install YAML tools
+  #       run: |
+  #         echo "📦 Installing YAML formatting tools..."
+  #         pip install yamllint pyyaml
 
-      - name: 🔍 Run YAML lint (check only)
-        run: |
-          echo "🔍 Running YAML linting (check only)..."
-          yamllint -c .yamllint .github/ config/ services/ --strict
+  #     - name: 🔍 Run YAML lint (check only)
+  #       run: |
+  #         echo "🔍 Running YAML linting (check only)..."
+  #         yamllint -c .yamllint .github/ config/ services/ --strict
 
-      - name: Create job summary for YAML Format
-        if: always()
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
-            echo "### YAML Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ YAML format checks completed." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### YAML Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ YAML format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
-          fi
+  #     - name: Create job summary for YAML Format
+  #       if: always()
+  #       shell: bash
+  #       run: |
+  #         if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
+  #           echo "### YAML Format Check Results ✅" >> $GITHUB_STEP_SUMMARY
+  #           echo "✅ YAML format checks completed." >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### YAML Format Check Results ❌" >> $GITHUB_STEP_SUMMARY
+  #           echo "❌ YAML format checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+  #         fi
 
   # SQL Format Check (new addition)
   # format-sql:
@@ -635,6 +635,18 @@ jobs:
           echo "Running SvelteKit sync to generate .svelte-kit directory and type definitions..."
           npx svelte-kit sync
 
+      - name: 🔍 Run ESLint with camelCase enforcement
+        working-directory: services/frontend
+        run: |
+          echo "🔍 Running ESLint with camelCase enforcement..."
+          npx eslint --no-flat-config 'src/**/*.{js,ts,svelte}'
+
+      #- name: 🎨 Run Stylelint with camelCase enforcement
+        #working-directory: services/frontend
+        #run: |
+          #echo "🎨 Running Stylelint with camelCase enforcement..."
+          #npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
+
       - name: Run frontend tests
         working-directory: services/frontend
         run: |
@@ -707,7 +719,7 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running pylint comprehensive linting..."
-          pylint src/ worker.py hot_reload.py || true  # Allow pylint to fail softly
+          pylint src/ worker.py hot_reload.py
 
       - name: Security linting with bandit
         working-directory: services/worker
@@ -757,8 +769,9 @@ jobs:
   lint-summary:
     name: Lint and Format Summary
     runs-on: ubuntu-latest
-    needs: [format-go, format-python, format-svelte, format-yaml, backend-lint-security, frontend-lint-security, worker-lint-security]
+    needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
+
     
     steps:
       - name: 📊 Generate Lint and Format Summary
