@@ -7,6 +7,8 @@ BEGIN;
 
 -- Drop continuous aggregates first (they depend on functions)
 -- Use CASCADE to handle any dependencies
+DROP MATERIALIZED VIEW IF EXISTS mv_ohlcv_1m_latest CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS mv_ohlcv_1d_latest CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS cagg_14_minute CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS cagg_14_day CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS cagg_200_day CASCADE;
@@ -35,6 +37,8 @@ DROP INDEX IF EXISTS idx_screener_rsi;
 DROP INDEX IF EXISTS idx_screener_volume;
 DROP INDEX IF EXISTS idx_screener_market_cap;
 DROP INDEX IF EXISTS idx_screener_ticker;
+DROP INDEX IF EXISTS idx_mv_ohlcv_1m_latest_ticker;
+DROP INDEX IF EXISTS idx_mv_ohlcv_1d_latest_ticker;
 DROP INDEX IF EXISTS idx_cagg_14_minute_ticker_bucket;
 DROP INDEX IF EXISTS idx_cagg_14_day_ticker_bucket;
 DROP INDEX IF EXISTS idx_cagg_200_day_ticker_bucket;
@@ -294,6 +298,42 @@ SELECT add_retention_policy('cagg_14_minute',
     schedule_interval => INTERVAL '210 seconds');
 
 -- =========================================================
+-- LATEST BAR MATERIALIZED VIEWS (PERFORMANCE CRITICAL)
+-- =========================================================
+
+-- Latest daily OHLCV bar per ticker (eliminates chunk scanning in refresh_screener)  
+-- Note: Using recent data window to avoid full table scans - looks back 2 days to ensure latest bar coverage
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_ohlcv_1d_latest AS
+SELECT DISTINCT ON (ticker)
+    ticker,
+    open / 1000.0 AS open,
+    high / 1000.0 AS high,
+    low / 1000.0 AS low,
+    close / 1000.0 AS close,
+    volume,
+    "timestamp" AS latest_timestamp
+FROM ohlcv_1d
+WHERE "timestamp" >= (now() - INTERVAL '7 days')
+ORDER BY ticker, "timestamp" DESC
+WITH NO DATA;
+
+-- Latest minute OHLCV bar per ticker (eliminates chunk scanning in refresh_screener)
+-- Note: Using recent data window to avoid full table scans - looks back 2 days to ensure latest bar coverage
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_ohlcv_1m_latest AS  
+SELECT DISTINCT ON (ticker)
+    ticker,
+    open / 1000.0 AS open,
+    high / 1000.0 AS high,
+    low / 1000.0 AS low,
+    close / 1000.0 AS close,
+    volume,
+    "timestamp" AS latest_timestamp
+FROM ohlcv_1m
+WHERE "timestamp" >= (now() - INTERVAL '7 days')
+ORDER BY ticker, "timestamp" DESC
+WITH NO DATA;
+
+-- =========================================================
 -- STATIC REFS TABLES
 -- =========================================================
 
@@ -398,6 +438,10 @@ CREATE INDEX IF NOT EXISTS idx_cagg_200_day_ticker_bucket ON cagg_200_day(ticker
 CREATE INDEX IF NOT EXISTS idx_cagg_14_day_ticker_bucket ON cagg_14_day(ticker, bucket DESC);
 CREATE INDEX IF NOT EXISTS idx_cagg_14_minute_ticker_bucket ON cagg_14_minute(ticker, bucket DESC);
 
+-- On latest bar materialized views (primary key is ticker)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_ohlcv_1d_latest_ticker ON mv_ohlcv_1d_latest(ticker);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_ohlcv_1m_latest_ticker ON mv_ohlcv_1m_latest(ticker);
+
 -- On screener table to speed up common queries
 CREATE INDEX IF NOT EXISTS idx_screener_ticker ON screener(ticker);
 CREATE INDEX IF NOT EXISTS idx_screener_market_cap ON screener(market_cap);
@@ -405,8 +449,12 @@ CREATE INDEX IF NOT EXISTS idx_screener_volume ON screener(volume);
 CREATE INDEX IF NOT EXISTS idx_screener_rsi ON screener(rsi);
 CREATE INDEX IF NOT EXISTS idx_screener_change_1d_pct ON screener(change_1d_pct);
 
--- On staleness lookup
+-- On staleness lookup - optimized for stale ticker selection with ordering
 CREATE INDEX IF NOT EXISTS idx_screener_stale_stale ON screener_stale(stale);
+-- Covering index to optimize "SELECT ticker FROM screener_stale WHERE stale = TRUE ORDER BY last_update_time ASC LIMIT n"
+CREATE INDEX IF NOT EXISTS idx_screener_stale_stale_update_time ON screener_stale(stale, last_update_time);
+-- Alternative: partial index (smaller, more efficient for the specific query pattern)
+CREATE INDEX IF NOT EXISTS idx_screener_stale_partial_update_time ON screener_stale(last_update_time) WHERE stale = TRUE;
 
 -- Create indexes on stage tables for better performance
 CREATE INDEX IF NOT EXISTS idx_static_refs_active_securities_stage_ticker 
@@ -455,6 +503,18 @@ BEGIN
 END;
 $$;
 
+-- Function to refresh latest bar materialized views (performance critical)
+CREATE OR REPLACE FUNCTION refresh_latest_bar_views()
+RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+    -- Refresh both latest bar views (non-concurrent to avoid index issues)
+    -- These views are small (1 row per ticker) so blocking time is minimal
+    REFRESH MATERIALIZED VIEW mv_ohlcv_1d_latest;
+    REFRESH MATERIALIZED VIEW mv_ohlcv_1m_latest;
+END;
+$$;
+
 -- =========================================================
 -- OPTIMIZED REFRESH FUNCTIONS
 -- =========================================================
@@ -488,26 +548,30 @@ BEGIN
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 minute'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 minute')))) ASC
+        LIMIT 1
     ) p1 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '15 minutes'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '15 minutes')))) ASC
+        LIMIT 1
     ) p15 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 hour'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 hour')))) ASC
+        LIMIT 1
     ) p60 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1m
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '4 hours'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '4 hours')))) ASC
+        LIMIT 1
     ) p240 ON TRUE;
 
     -- Step 3: Bulk upsert from stage table to final table
@@ -574,50 +638,58 @@ BEGIN
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 day'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 day')))) ASC
+        LIMIT 1
     ) d1 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 week'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 week')))) ASC
+        LIMIT 1
     ) w1 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 month'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 month')))) ASC
+        LIMIT 1
     ) m1 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '3 months'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '3 months')))) ASC
+        LIMIT 1
     ) m3 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '6 months'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '6 months')))) ASC
+        LIMIT 1
     ) m6 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '1 year'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '1 year')))) ASC
+        LIMIT 1
     ) y1 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '5 years'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '5 years')))) ASC
+        LIMIT 1
     ) y5 ON TRUE
     LEFT JOIN LATERAL (
         SELECT close / NULLIF(1000.0, 0) AS close
         FROM ohlcv_1d
-        WHERE ticker = s.ticker AND "timestamp" <= v_now_utc - INTERVAL '10 years'
-        ORDER BY "timestamp" DESC LIMIT 1
+        WHERE ticker = s.ticker
+        ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now_utc - INTERVAL '10 years')))) ASC
+        LIMIT 1
     ) y10 ON TRUE
     LEFT JOIN LATERAL (
         SELECT open / NULLIF(1000.0, 0) AS ytd_open
@@ -683,6 +755,7 @@ BEGIN
         WHERE stale = TRUE
         ORDER BY last_update_time ASC
         LIMIT p_limit
+        FOR UPDATE SKIP LOCKED
     ),
     -- Store the tickers for later UPDATE
     processed_tickers AS (
@@ -696,36 +769,24 @@ BEGIN
     latest_daily AS (
         SELECT
             st.ticker,
-            o.open AS open,
-            o.high AS high,
-            o.low AS low,
-            o.close AS close,
-            o.volume
+            cd.open,
+            cd.high,
+            cd.low,
+            cd.close,
+            cd.volume
         FROM logged_stale_tickers st
-        LEFT JOIN LATERAL (
-            SELECT open, high, low, close, volume
-            FROM ohlcv_1d
-            WHERE ticker = st.ticker
-            ORDER BY timestamp DESC
-            LIMIT 1
-        ) o ON TRUE
+        LEFT JOIN mv_ohlcv_1d_latest cd ON cd.ticker = st.ticker
     ),
     latest_minute AS (
         SELECT
             st.ticker,
-            o.open AS m_open,
-            o.high AS m_high,
-            o.low AS m_low,
-            o.close AS m_close,
-            o.volume AS m_volume
+            cm.open AS m_open,
+            cm.high AS m_high,
+            cm.low AS m_low,
+            cm.close AS m_close,
+            cm.volume AS m_volume
         FROM logged_stale_tickers st
-        LEFT JOIN LATERAL (
-            SELECT open, high, low, close, volume
-            FROM ohlcv_1m
-            WHERE ticker = st.ticker
-            ORDER BY timestamp DESC
-            LIMIT 1
-        ) o ON TRUE
+        LEFT JOIN mv_ohlcv_1m_latest cm ON cm.ticker = st.ticker
     ),
     security_info AS (
         SELECT DISTINCT ON (st.ticker)
@@ -839,22 +900,36 @@ BEGIN
     rsi_calc AS (
         SELECT
             st.ticker,
-            CASE 
-                WHEN avg_loss IS NULL OR avg_loss = 0 THEN 100 
-                WHEN avg_gain IS NULL THEN 0
-                ELSE 100 - (100 / (1 + safe_div(avg_gain, avg_loss))) 
+            CASE
+                WHEN avg_gain IS NULL AND avg_loss IS NULL THEN NULL          -- not enough data
+                WHEN avg_loss = 0 THEN 100                                    -- all gains / flat up
+                WHEN avg_gain IS NULL THEN 0                                  -- all losses / flat down
+                ELSE 100 - (100 / (1 + safe_div(avg_gain, avg_loss)))        -- RSI formula (SMA seed)
             END AS rsi_14
         FROM logged_stale_tickers st
         LEFT JOIN LATERAL (
-            SELECT avg(gain) AS avg_gain, avg(loss) AS avg_loss
+            WITH last15 AS (
+                SELECT close/1000.0 AS c, timestamp
+                FROM ohlcv_1d
+                WHERE ticker = st.ticker 
+                  AND "timestamp" >= (now() - INTERVAL '30 days')            -- Hypertable optimization: limit to recent chunk
+                ORDER BY timestamp DESC      -- grab most recent 15 daily bars
+                LIMIT 15
+            ),
+            chron AS (
+                SELECT c, timestamp
+                FROM last15
+                ORDER BY timestamp            -- oldest→newest so LAG works chronologically
+            )
+            SELECT
+                avg(gain) AS avg_gain,
+                avg(loss) AS avg_loss
             FROM (
                 SELECT
-                    GREATEST(close - LAG(close) OVER (ORDER BY timestamp), 0) AS gain,
-                    GREATEST(LAG(close) OVER (ORDER BY timestamp) - close, 0) AS loss
-                FROM ohlcv_1d
-                WHERE ticker = st.ticker
-                ORDER BY timestamp DESC
-                LIMIT 15
+                    COALESCE(GREATEST(c - LAG(c) OVER w, 0), 0) AS gain,
+                    COALESCE(GREATEST(LAG(c) OVER w - c, 0), 0) AS loss
+                FROM chron
+                WINDOW w AS (ORDER BY timestamp)
             ) diffs
         ) r ON TRUE
     ),
@@ -893,7 +968,7 @@ BEGIN
             mc.close AS market_close
         FROM logged_stale_tickers st
         LEFT JOIN LATERAL (
-            SELECT close
+            SELECT close / 1000.0 AS close
             FROM ohlcv_1m
             WHERE ticker = st.ticker
             AND (timestamp AT TIME ZONE 'America/New_York')::time = '16:00'
@@ -909,7 +984,7 @@ BEGIN
             avg(d.volume) AS avg_daily_volume_14d
         FROM logged_stale_tickers st
         LEFT JOIN LATERAL (
-            SELECT volume, close
+            SELECT volume, close / 1000.0 AS close
             FROM ohlcv_1d
             WHERE ticker = st.ticker
             ORDER BY timestamp DESC
@@ -926,9 +1001,9 @@ BEGIN
     ),
     spy_metrics AS (
         SELECT
-            o.close AS spy_ld_close,
-            (SELECT close FROM ohlcv_1d WHERE ticker = 'SPY' AND timestamp <= v_now - INTERVAL '1 month' ORDER BY timestamp DESC LIMIT 1) AS spy_price_1m,
-            (SELECT close FROM ohlcv_1d WHERE ticker = 'SPY' AND timestamp <= v_now - INTERVAL '1 year' ORDER BY timestamp DESC LIMIT 1) AS spy_price_1y
+            o.close / 1000.0 AS spy_ld_close,
+            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 month')))) ASC LIMIT 1) AS spy_price_1m,
+            (SELECT close / 1000.0 FROM ohlcv_1d WHERE ticker = 'SPY' ORDER BY ABS(EXTRACT(EPOCH FROM ("timestamp" - (v_now - INTERVAL '1 year')))) ASC LIMIT 1) AS spy_price_1y
         FROM ohlcv_1d o
         WHERE o.ticker = 'SPY'
         ORDER BY o.timestamp DESC
@@ -981,12 +1056,12 @@ BEGIN
             CASE 
                 WHEN spy.spy_price_1y = 0 OR spy.spy_price_1y IS NULL OR hp.price_1y = 0 OR hp.price_1y IS NULL THEN NULL 
                 WHEN spy.spy_ld_close = 0 OR spy.spy_ld_close IS NULL THEN NULL
-                ELSE safe_div(safe_div(ld.close - hp.price_1y, hp.price_1y), safe_div(spy.spy_ld_close - spy.spy_price_1y, spy.spy_price_1y)) * 100 
+                ELSE safe_div(safe_div(ld.close - hp.price_1y, hp.price_1y), safe_div(spy.spy_ld_close - spy.spy_price_1y, spy.spy_price_1y))
             END AS beta_1y_vs_spy,
             CASE 
                 WHEN spy.spy_price_1m = 0 OR spy.spy_price_1m IS NULL OR hp.price_1m = 0 OR hp.price_1m IS NULL THEN NULL 
                 WHEN spy.spy_ld_close = 0 OR spy.spy_ld_close IS NULL THEN NULL
-                ELSE safe_div(safe_div(ld.close - hp.price_1m, hp.price_1m), safe_div(spy.spy_ld_close - spy.spy_price_1m, spy.spy_price_1m)) * 100 
+                ELSE safe_div(safe_div(ld.close - hp.price_1m, hp.price_1m), safe_div(spy.spy_ld_close - spy.spy_price_1m, spy.spy_price_1m))
             END AS beta_1m_vs_spy,
             ld.volume,
             av.avg_volume_1m,
@@ -1117,6 +1192,10 @@ BEGIN
 
 END;
 $$;
+
+INSERT INTO schema_versions (version, description)
+VALUES (72, 'screener refresh')
+ON CONFLICT (version) DO UPDATE SET description = EXCLUDED.description;
 
 
 

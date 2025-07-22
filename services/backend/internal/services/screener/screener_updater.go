@@ -32,12 +32,14 @@ import (
 
 const (
 	refreshInterval         = 60 * time.Second  // full screener top-off frequency (fallback)
-	refreshTimeout          = 300 * time.Second // per-refresh SQL timeout (increased from 60s)
+	refreshTimeout          = 600 * time.Second // per-refresh SQL timeout (increased from 60s)
 	extendedCloseHour       = 20                // 8 PM Eastern – hard stop
-	maxTickersPerBatch      = 10                // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
-	staticRefs1mInterval    = 1 * time.Minute   // refresh static_refs_1m every minute
-	staticRefsDailyInterval = 5 * time.Minute   // refresh static_refs every 5 minutes
-	IgnoreMarketHours       = true              // ignore market hours
+	maxTickersPerBatch      = 0                 // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
+	staticRefs1mInterval    = 5 * time.Minute   // refresh static_refs_1m every minute
+	staticRefsDailyInterval = 20 * time.Minute  // refresh static_refs every 5 minutes
+	latestBarViewsInterval  = 30 * time.Second  // refresh latest bar materialized views every 30 seconds (CRITICAL)
+	IgnoreMarketHours       = false             // ignore market hours ==== REMOVE THIS BEFORE PR
+	useAnalysis             = false             // enable performance analysis
 )
 
 // initialRefresh performs a one-time refresh of all aggregates and static data at startup
@@ -49,6 +51,9 @@ func initialRefresh(conn *data.Conn) error {
 	start := time.Now()
 
 	refreshCommands := []string{
+		// Latest bar materialized views (CRITICAL for screener performance)
+		"SELECT refresh_latest_bar_views();",
+		// Time-bucketed aggregates
 		"CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL);",
 		"CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL);",
 		"CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL);",
@@ -109,17 +114,9 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 
 	// Perform initial data refresh on startup
 	// enable before pr
-	/*if err := initialRefresh(conn); err != nil {
+	if err := initialRefresh(conn); err != nil {
 		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
 	} //might want to re-enable this before pr
-	*/
-
-	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
-	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
-	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
-	if err != nil {
-		log.Printf("⚠️  Initial screener refresh failed: %v. Continuing...", err)
-	}
 
 	_, err = conn.DB.Exec(context.Background(), insertStaleQuery)
 	if err != nil {
@@ -127,15 +124,23 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	} else {
 		log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
 	}
+	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
+	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
+	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
+	if err != nil {
+		log.Printf("⚠️  Initial screener refresh failed: %v. Continuing...", err)
+	}
 
 	// Create tickers for different refresh intervals
 	screenerTicker := time.NewTicker(refreshInterval)
 	staticRefs1mTicker := time.NewTicker(staticRefs1mInterval)
 	staticRefsDailyTicker := time.NewTicker(staticRefsDailyInterval)
+	latestBarViewsTicker := time.NewTicker(latestBarViewsInterval)
 
 	defer screenerTicker.Stop()
 	defer staticRefs1mTicker.Stop()
 	defer staticRefsDailyTicker.Stop()
+	defer latestBarViewsTicker.Stop()
 
 	// Add counters for monitoring
 	var updateCount int
@@ -178,6 +183,12 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 			// Refresh static_refs every 5 minutes during regular market hours (9:30am-4pm ET, weekdays)
 			if isRegularMarketHours(time.Now(), loc) {
 				go refreshStaticRefsDaily(conn)
+			}
+
+		case <-latestBarViewsTicker.C:
+			// Refresh latest bar materialized views every 30 seconds (CRITICAL for screener performance)
+			if isMarketHours(time.Now(), loc) {
+				go refreshLatestBarViews(conn)
 			}
 		}
 	}
@@ -259,11 +270,13 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	log.Printf("✅ Screener refresh completed successfully in %v", duration)
 
 	// Only run detailed analysis if the operation took too long
-	go func() {
-		if err := RunPerformanceAnalysis(conn, screenerAnalysisConfig); err != nil {
-			log.Printf("⚠️  Background performance analysis failed: %v", err)
-		}
-	}()
+	if useAnalysis {
+		go func() {
+			if err := RunPerformanceAnalysis(conn, screenerAnalysisConfig); err != nil {
+				log.Printf("⚠️  Background performance analysis failed: %v", err)
+			}
+		}()
+	}
 
 	log.Printf("🔄 updateStaleScreenerValues: %v", duration)
 }
@@ -306,6 +319,26 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 	}
 
 	log.Printf("✅ static_refs_daily refresh completed in %v", duration)
+}
+
+// refreshLatestBarViews refreshes the latest bar materialized views (CRITICAL for screener performance)
+func refreshLatestBarViews(conn *data.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+
+	log.Printf("🔄 Refreshing latest bar materialized views...")
+	start := time.Now()
+
+	_, err := conn.DB.Exec(ctx, "SELECT refresh_latest_bar_views()")
+
+	duration := time.Since(start)
+
+	if err != nil {
+		log.Printf("❌ refreshLatestBarViews: failed to refresh latest bar views: %v", err)
+		return
+	}
+
+	log.Printf("✅ Latest bar views refresh completed in %v", duration)
 }
 
 // isMarketHours checks if current time is within market hours (4am-8pm ET on weekdays)
@@ -355,15 +388,66 @@ var screenerAnalysisConfig = AnalysisConfig{
 	StaleQuery:       `SELECT ticker, last_update_time, stale FROM screener_stale WHERE stale = TRUE ORDER BY last_update_time ASC LIMIT $1`,
 	StaleQueryParams: []interface{}{maxTickersPerBatch},
 	Tables:           []string{"ohlcv_1m", "ohlcv_1d", "screener", "screener_stale", "securities", "static_refs_daily", "static_refs_1m"},
-	QueryPatterns:    []string{"screener", "ohlcv", "refresh_screener", "refresh_static_refs", "refresh_static_refs_1m"},
+	QueryPatterns:    []string{"screener", "ohlcv", "refresh_screener", "refresh_static_refs", "refresh_static_refs_1m", "refresh_continuous_aggregate"},
 	TestFunctions: []TestQuery{
-		{Name: "refresh_screener", Query: "SELECT refresh_screener(10)"},
+		// Core screener operations with actual batch size
+		{Name: "refresh_screener_actual_batch", Query: fmt.Sprintf("SELECT refresh_screener(%d)", maxTickersPerBatch)},
+		{Name: "refresh_screener_single", Query: "SELECT refresh_screener(1)"},
+		{Name: "refresh_screener_large_batch", Query: "SELECT refresh_screener(50)"},
+
+		// Static reference refreshes
+		{Name: "refresh_static_refs_daily", Query: "SELECT refresh_static_refs()"},
+		{Name: "refresh_static_refs_1m", Query: "SELECT refresh_static_refs_1m()"},
+
+		// Individual refresh operations (matching initialRefresh operations)
+		{Name: "refresh_latest_bar_views", Query: "SELECT refresh_latest_bar_views()"},
+		{Name: "refresh_cagg_1440_minute", Query: "CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL)"},
+		{Name: "refresh_cagg_15_minute", Query: "CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL)"},
+		{Name: "refresh_cagg_60_minute", Query: "CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL)"},
+		{Name: "refresh_cagg_4_hour", Query: "CALL refresh_continuous_aggregate('cagg_4_hour', now() - INTERVAL '4 hours', NULL)"},
+		{Name: "refresh_cagg_7_day", Query: "CALL refresh_continuous_aggregate('cagg_7_day', now() - INTERVAL '7 days', NULL)"},
+		{Name: "refresh_cagg_14_day", Query: "CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL)"},
+		{Name: "refresh_cagg_14_minute", Query: "CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL)"},
 	},
 	ComponentTests: []TestQuery{
-		{Name: "OHLCV 1m latest", Query: "SELECT ticker, close/1000.0 FROM ohlcv_1m WHERE ticker = ANY($1) ORDER BY timestamp DESC LIMIT 10"},
-		{Name: "OHLCV 1d latest", Query: "SELECT ticker, close/1000.0 FROM ohlcv_1d WHERE ticker = ANY($1) ORDER BY timestamp DESC LIMIT 10"},
-		{Name: "Securities lookup", Query: "SELECT ticker, market_cap, sector FROM securities WHERE ticker = ANY($1)"},
-		{Name: "Static refs daily", Query: "SELECT ticker, price_1d, price_1w FROM static_refs_daily WHERE ticker = ANY($1)"},
-		{Name: "Static refs 1m", Query: "SELECT ticker, price_1m, price_15m FROM static_refs_1m WHERE ticker = ANY($1)"},
+		// Core data lookups using real stale tickers
+		{Name: "screener_stale_lookup", Query: "SELECT ticker, last_update_time, stale FROM screener_stale WHERE ticker = ANY($1)"},
+		{Name: "screener_final_view", Query: "SELECT ticker, price, volume, market_cap FROM screener WHERE ticker = ANY($1)"},
+
+		// OHLCV data access patterns (what refresh_screener actually queries)
+		{Name: "ohlcv_1m_latest_batch", Query: "SELECT ticker, timestamp, close/1000.0 as close FROM ohlcv_1m WHERE ticker = ANY($1) AND timestamp >= now() - INTERVAL '1 hour' ORDER BY timestamp DESC"},
+		{Name: "ohlcv_1d_latest_batch", Query: "SELECT ticker, timestamp, close/1000.0 as close FROM ohlcv_1d WHERE ticker = ANY($1) AND timestamp >= now() - INTERVAL '30 days' ORDER BY timestamp DESC"},
+
+		// Static reference lookups (what the screener depends on)
+		{Name: "static_refs_daily_batch", Query: "SELECT ticker, price_1d, price_1w, price_1m, volume_avg_30d FROM static_refs_daily WHERE ticker = ANY($1)"},
+		{Name: "static_refs_1m_batch", Query: "SELECT ticker, price_1m, price_15m, price_1h FROM static_refs_1m WHERE ticker = ANY($1)"},
+
+		// Securities metadata (active ticker filtering)
+		{Name: "securities_active_batch", Query: "SELECT ticker, market_cap, sector, active FROM securities WHERE ticker = ANY($1) AND active = TRUE"},
+
+		// Performance-critical joins (simulating screener calculation logic)
+		{Name: "screener_join_simulation", Query: `
+			SELECT s.ticker, s.market_cap, sr.price_1d, sr1m.price_1m, o1d.close/1000.0 as current_price
+			FROM securities s
+			LEFT JOIN static_refs_daily sr ON s.ticker = sr.ticker
+			LEFT JOIN static_refs_1m sr1m ON s.ticker = sr1m.ticker
+			LEFT JOIN LATERAL (
+				SELECT close FROM ohlcv_1d WHERE ticker = s.ticker ORDER BY timestamp DESC LIMIT 1
+			) o1d ON true
+			WHERE s.ticker = ANY($1) AND s.active = TRUE
+		`},
+
+		// Batch processing efficiency test
+		{Name: "batch_stale_processing", Query: `
+			WITH stale_batch AS (
+				SELECT ticker FROM screener_stale WHERE stale = TRUE LIMIT $2
+			)
+			SELECT COUNT(*) as stale_count, 
+				   COUNT(DISTINCT s.ticker) as active_count,
+				   AVG(EXTRACT(EPOCH FROM now() - ss.last_update_time)) as avg_staleness_seconds
+			FROM stale_batch sb
+			JOIN screener_stale ss ON sb.ticker = ss.ticker
+			JOIN securities s ON sb.ticker = s.ticker AND s.active = TRUE
+		`},
 	},
 }

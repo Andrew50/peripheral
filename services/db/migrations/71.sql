@@ -181,6 +181,13 @@ SELECT add_compression_policy('ohlcv_1d', INTERVAL '120 days');
 
 -- Drop backup tables after successful migration
 /*DROP TABLE IF EXISTS ohlcv_1m_backup;*/
+DROP TABLE IF EXISTS ohlcv_update_state;
+
+CREATE TABLE ohlcv_update_state (
+    timeframe text PRIMARY KEY,
+    earliest_loaded_at date,
+    latest_loaded_at date
+);
 
 -- Record schema version
 INSERT INTO schema_versions (version, description)

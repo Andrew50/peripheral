@@ -170,12 +170,9 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff: 2^attempt seconds, with jitter
-			backoffDuration := time.Duration(1<<attempt) * time.Second
-			if backoffDuration > 30*time.Second {
-				backoffDuration = 30 * time.Second // Cap at 30 seconds
-			}
+			backoffDuration := 30 * time.Second // Cap at 30 seconds
 
-			log.Printf("⚠️  S3 transient error (attempt %d/%d), backing off for %v. Last error: %v", attempt, maxRetries, backoffDuration, lastErr)
+			// log.Printf("⚠️  S3 transient error (attempt %d/%d), backing off for %v. Last error: %v", attempt, maxRetries, backoffDuration, lastErr)
 
 			select {
 			case <-ctx.Done():
@@ -196,7 +193,7 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 
 				// Check if this is a transient error that should be retried
 				if isS3TransientError(err) {
-					log.Printf("⚠️  S3 transient error during pagination for prefix %s (will retry): %v", prefix, err)
+					// log.Printf("⚠️  S3 transient error during pagination for prefix %s (will retry): %v", prefix, err)
 					break // Break from pagination, will retry entire operation
 				}
 
