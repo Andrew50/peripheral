@@ -757,7 +757,7 @@ jobs:
   lint-summary:
     name: Lint and Format Summary
     runs-on: ubuntu-latest
-    needs: [format-go, format-python, format-svelte, format-yaml, format-sql, backend-lint-security, frontend-lint-security, worker-lint-security]
+    needs: [format-go, format-python, format-svelte, format-yaml, backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
     
     steps:
