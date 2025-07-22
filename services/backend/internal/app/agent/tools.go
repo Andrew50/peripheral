@@ -518,7 +518,7 @@ var (
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
-						"data":   {Type: genai.TypeString, Description: "[DO NOT PASS JSON] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
+						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
 					},
 					Required: []string{"prompt"},
 				},
