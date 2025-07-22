@@ -57,8 +57,6 @@ func loadS3Config() s3Config {
 }
 
 // newS3Client returns a tuned AWS S3 client for high-throughput, low-latency transfers.
-//
-//lint:ignore SA1019 using deprecated global endpoint resolver until AWS SDK upgrade completes
 func newS3Client(cfg s3Config) (*s3.Client, error) {
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(cfg.Region),

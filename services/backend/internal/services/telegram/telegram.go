@@ -92,6 +92,9 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 	}
 	photo := &telebot.Photo{File: telebot.FromReader(bytes.NewReader(data)), Caption: msg}
 	_, err = telegramBenTweetsBot.Send(recipient, photo)
+	if err != nil {
+		return fmt.Errorf("failed to send photo: %w", err)
+	}
 	deepLink := fmt.Sprintf("https://x.com/intent/post?in_reply_to=%s&text=%s", id, url.QueryEscape(msg))
 	_, err = telegramBenTweetsBot.Send(recipient, deepLink)
 	return err

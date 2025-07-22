@@ -240,7 +240,7 @@ SELECT
     time_bucket('7 days', "timestamp") AS bucket,
     ticker,
     (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1w_pct
-FROM ohlcv_1m
+FROM ohlcv_1d
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -261,7 +261,7 @@ SELECT
     time_bucket('30 days', "timestamp") AS bucket,
     ticker,
     (stddev_samp(close / 1000.0)) / avg(close / 1000.0) * 100 AS volatility_1m_pct
-FROM ohlcv_1m
+FROM ohlcv_1d
 GROUP BY bucket, ticker
 WITH NO DATA;
 
@@ -275,49 +275,51 @@ SELECT add_continuous_aggregate_policy('cagg_30_day',
     end_offset => INTERVAL '0 minutes',
     schedule_interval => INTERVAL '6 hours');
 
--- cagg_50_day for SMA-50
+-- cagg_50_day for 70-day moving average (using daily bars)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_50_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('50 days', "timestamp") AS bucket,
+    time_bucket('70 days', "timestamp", 'America/New_York') AS bucket,
     ticker,
     avg(close / 1000.0) AS dma_50
-FROM ohlcv_1m
+FROM ohlcv_1d
+WHERE "timestamp" >= now() - INTERVAL '3 years'  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
 SELECT add_retention_policy('cagg_50_day',
-    drop_after => INTERVAL '50 days',
+    drop_after => INTERVAL '70 days',
     schedule_interval => INTERVAL '300 hours');
 
--- Add continuous aggregate policy for cagg_50_day (50-day moving average - moderate updates)
+-- Add continuous aggregate policy for cagg_50_day (70-day moving average - moderate updates)
 SELECT add_continuous_aggregate_policy('cagg_50_day',
-    start_offset => INTERVAL '100 days',
+    start_offset => INTERVAL '140 days',
     end_offset => INTERVAL '0 minutes',
     schedule_interval => INTERVAL '2 hours');
 
--- cagg_200_day for SMA-200
+-- cagg_200_day for 280-day moving average (using daily bars)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_200_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
-    time_bucket('200 days', "timestamp") AS bucket,
+    time_bucket('280 days', "timestamp", 'America/New_York') AS bucket,
     ticker,
     avg(close / 1000.0) AS dma_200
-FROM ohlcv_1m
+FROM ohlcv_1d
+WHERE "timestamp" >= now() - INTERVAL '3 years'  -- chunk exclusion optimization
 GROUP BY bucket, ticker
 WITH NO DATA;
 
 SELECT add_retention_policy('cagg_200_day',
-    drop_after => INTERVAL '200 days',
+    drop_after => INTERVAL '280 days',
     schedule_interval => INTERVAL '1200 hours');
 
--- Add continuous aggregate policy for cagg_200_day (200-day moving average - infrequent updates)
+-- Add continuous aggregate policy for cagg_200_day (280-day moving average - infrequent updates)
 SELECT add_continuous_aggregate_policy('cagg_200_day',
-    start_offset => INTERVAL '400 days',
+    start_offset => INTERVAL '560 days',
     end_offset => INTERVAL '0 minutes',
     schedule_interval => INTERVAL '30 minutes');
 
--- cagg_14_day for RSI-14 (note: actual RSI computation requires series data; placeholder here)
+-- cagg_14_day for 14-day volume averages (using daily bars)
 CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_14_day
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT
@@ -326,7 +328,7 @@ SELECT
     avg(volume) AS avg_volume_14d,
     avg(volume * close / 1000.0) AS avg_dollar_volume_14d,
     NULL::numeric AS rsi_14  -- RSI requires windowed calculation; compute in function instead
-FROM ohlcv_1m
+FROM ohlcv_1d
 GROUP BY bucket, ticker
 WITH NO DATA;
 
