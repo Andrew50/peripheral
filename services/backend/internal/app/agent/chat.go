@@ -284,26 +284,33 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				if executor == nil {
 					executor = NewExecutor(conn, userID, 5, logger, conversationID, messageID)
 				}
-				go func() {
-					var cleanedModelThoughts string
-					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
-						if thoughtsStr, ok := thoughtsValue.(string); ok {
-							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
-						}
-					}
-					var argsMap map[string]interface{}
-					_ = json.Unmarshal(v.Rounds[0].Calls[0].Args, &argsMap)
+				// Safely extract data before goroutine to prevent race conditions and panics
+				if len(v.Rounds) > 0 && len(v.Rounds[0].Calls) > 0 {
+					firstCall := v.Rounds[0].Calls[0]
+					callName := firstCall.Name
+					callArgs := firstCall.Args
 
-					// Safely check if the tool exists before accessing its properties
-					if tool, exists := Tools[v.Rounds[0].Calls[0].Name]; exists && tool.StatusMessage != "" {
-						data := map[string]interface{}{
-							"message":  cleanedModelThoughts,
-							"headline": formatStatusMessage(tool.StatusMessage, argsMap),
+					go func() {
+						var cleanedModelThoughts string
+						if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
+							if thoughtsStr, ok := thoughtsValue.(string); ok {
+								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
+							}
 						}
-						socket.SendAgentStatusUpdate(userID, "FunctionUpdate", data)
-					}
-				}()
+
+						var argsMap map[string]interface{}
+						_ = json.Unmarshal(callArgs, &argsMap)
+
+						// Safely check if the tool exists before accessing its properties
+						if tool, exists := Tools[callName]; exists && tool.StatusMessage != "" {
+							data := map[string]interface{}{
+								"message":  cleanedModelThoughts,
+								"headline": formatStatusMessage(tool.StatusMessage, argsMap),
+							}
+							socket.SendAgentStatusUpdate(userID, "FunctionUpdate", data)
+						}
+					}()
+				}
 				for _, round := range v.Rounds {
 					// Execute all function calls in this round with context
 					results, err := executor.Execute(ctx, round.Calls, round.Parallel)

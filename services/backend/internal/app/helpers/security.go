@@ -1012,13 +1012,24 @@ func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMe
 	if err != nil {
 		return nil, err
 	}
+
+	// Safely extract needed data before goroutine to prevent race conditions
+	results, ok := res.(GetTickerDailySnapshotResults)
+	if !ok {
+		return res, fmt.Errorf("unexpected return type from GetTickerDailySnapshot")
+	}
+
+	// Copy needed data to avoid race conditions
+	ticker := results.Ticker
+
 	go func() {
-		results := res.(GetTickerDailySnapshotResults)
-		agg, err := polygon.GetAggsData(conn.Polygon, results.Ticker, 1, "day", models.Millis(time.Now()), models.Millis(time.Now()), 100, "asc", true)
+		// Use polygon connection safely
+		agg, err := polygon.GetAggsData(conn.Polygon, ticker, 1, "day", models.Millis(time.Now()), models.Millis(time.Now()), 100, "asc", true)
 		if err != nil {
-			fmt.Printf("Error getting agg data: %v\n", err)
+			fmt.Printf("Error getting agg data for ticker %s: %v\n", ticker, err)
 			return
 		}
+
 		var barData []AgentThinkingTraceBarData
 		for agg.Next() {
 			bar := agg.Item()
@@ -1031,8 +1042,9 @@ func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMe
 				Volume:    bar.Volume,
 			})
 		}
+
 		data := map[string]interface{}{
-			"ticker": results.Ticker,
+			"ticker": ticker,
 			"data":   barData,
 		}
 		socket.SendAgentStatusUpdate(userID, "getDailySnapshot", data)
