@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -134,11 +133,12 @@ func getBatchSize(tableName string) int {
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
 	return 4 // TODO: remove this if we can get db stable
-	cpus := runtime.NumCPU()
+	/*cpus := runtime.NumCPU()
 	if cpus > 8 {
-		return 8
+		cpus = 8
 	}
-	return cpus
+	fmt.Println("cpus for ohlcv loader", cpus)
+	return cpus*/
 }()
 
 // -----------------------------------------------------------------------------
