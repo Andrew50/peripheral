@@ -186,6 +186,8 @@ class StrategyGenerator:
             FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
             - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
             - get_general_data(columns, filters) → pandas.DataFrame
+            - apply_drawdown_styling(fig) → returns styled fig
+            - apply_equity_curve_styling(fig) → returns styled fig
 
             CRITICAL REQUIREMENTS:
             - Function named 'strategy()' with NO parameters
@@ -497,8 +499,10 @@ class StrategyGenerator:
             - Always show the plot using .show()
             - Almost always include plots in the strategy to help the user understand the data
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-            - Do not worry about the styling of the plot.
             - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on SEPERATE plots.
+            - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
+            - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
+            - Do NOT use timestamp as x-axis values. Use dates instead.
             - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
