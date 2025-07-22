@@ -63,6 +63,7 @@ func newS3Client(cfg s3Config) (*s3.Client, error) {
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
 		//lint:ignore SA1019 using deprecated global endpoint resolver until AWS SDK upgrade completes
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			//lint:ignore SA1019 using deprecated aws.Endpoint until AWS SDK upgrade completes
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
 				//lint:ignore SA1019 using deprecated aws.Endpoint struct until AWS SDK upgrade completes
 				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil

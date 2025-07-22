@@ -59,6 +59,9 @@ disable = [
     "R0913", # too-many-arguments
     "C0111", # missing-docstring (from old .pylintrc)
     "C0103", # invalid-name (from old .pylintrc)
+    "C0302", # too-many-lines in module
+    "R0914", # too-many-local-variables
+    "R0917", # too-many-boolean-expressions
 ]
 
 [tool.pylint.format]
