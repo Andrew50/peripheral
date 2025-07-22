@@ -232,23 +232,23 @@ jobs:
       - name: Update Kubernetes Secrets
         run: config/deploy/scripts/setup-configs.sh
 
-      # - name: Copy Migrations to Database Pod
-      #   env:
-      #     K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
-      #   run: |
-      #     POD_NAME=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
-      #     kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -n "$K8S_NAMESPACE" -c db
-      #     kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -n "$K8S_NAMESPACE" -c db
+      - name: Copy Migrations to Database Pod
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -n "$K8S_NAMESPACE" -c db
+          kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -n "$K8S_NAMESPACE" -c db
 
-      # - name: Run Migrations
-      #   env:
-      #     K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
-      #   run: |
-      #     POD_NAME=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=db -o jsonpath='{.items[0].metadata.name}')
-      #     kubectl exec -n "$K8S_NAMESPACE" $POD_NAME -c db -- bash -c "
-      #       chmod +x /tmp/migrate.sh
-      #       MIGRATIONS_DIR=/tmp/migrations DB_PORT_INT=5432 /tmp/migrate.sh
-      #     "
+      - name: Run Migrations
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n "$K8S_NAMESPACE" $POD_NAME -c db -- bash -c "
+            chmod +x /tmp/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations DB_PORT_INT=5432 /tmp/migrate.sh
+          "
 
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh
