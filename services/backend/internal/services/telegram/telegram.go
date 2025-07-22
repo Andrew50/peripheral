@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -19,13 +20,13 @@ var (
 )
 
 func InitTelegramUserNotificationBot() error {
-	/*env := strings.ToLower(os.Getenv("ENVIRONMENT"))
+	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if env == "demo" || env == "prod" || env == "production" {
 		isProdEnv = true
 	} else {
 		isProdEnv = false
 		return nil
-	}*/
+	}
 	isProdEnv = true
 	userNotificationBotToken := "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
 	fmt.Println("Initializing Telegram bot with token:", userNotificationBotToken)
@@ -68,9 +69,9 @@ func SendTelegramUserUsageMessage(msg string) error {
 }
 
 func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image string) error {
-	/*if !isProdEnv {
+	if !isProdEnv {
 		return nil
-	}*/
+	}
 	if telegramBenTweetsBot == nil {
 		err := InitTelegramUserNotificationBot()
 		if err != nil {
