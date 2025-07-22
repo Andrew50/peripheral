@@ -625,7 +625,7 @@
 		border: none;
 		padding: 0.25rem;
 		cursor: pointer;
-		color: var(--text-secondary, #ccc);
+		color: #ffffff;
 		display: flex;
 		align-items: center;
 		justify-content: center;

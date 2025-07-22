@@ -867,7 +867,7 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0.3rem;
-		color: var(--text-secondary, #aaa);
+		color: #ffffff;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		font-size: 0.75rem;
