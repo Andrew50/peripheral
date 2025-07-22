@@ -229,51 +229,69 @@ func AgentGetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage
 	if rows.Err() != nil {
 		return nil, fmt.Errorf("error iterating rows: %v", rows.Err())
 	}
+
+	// Safely copy needed data before goroutine to prevent race conditions
+	watchlistID := args.WatchlistID
+	tickersCopy := make([]string, len(tickers))
+	copy(tickersCopy, tickers)
+
 	go func() {
 		var tickerWtihData []map[string]interface{}
 		var watchlistName string
-		err = conn.DB.QueryRow(context.Background(), `SELECT watchlistname from watchlists where watchlistId = $1 LIMIT 1`, args.WatchlistID).Scan(&watchlistName)
+		err := conn.DB.QueryRow(context.Background(), `SELECT watchlistname from watchlists where watchlistId = $1 LIMIT 1`, watchlistID).Scan(&watchlistName)
 		if err != nil {
+			fmt.Printf("Error getting watchlist name for ID %d: %v\n", watchlistID, err)
 			return // Silently ignore notification errors
 		}
 
 		// Properly marshal tickers to JSON
-		tickersJSON, err := json.Marshal(tickers)
+		tickersJSON, err := json.Marshal(tickersCopy)
 		if err != nil {
-			fmt.Println("error marshaling tickers", err)
+			fmt.Printf("Error marshaling tickers for watchlist %d: %v\n", watchlistID, err)
 			return // Silently ignore notification errors
 		}
 
 		icons, err := helpers.GetIcons(conn, userID, json.RawMessage(fmt.Sprintf(`{"tickers": %s}`, tickersJSON)))
 		if err != nil {
-			fmt.Println("error getting icons", err)
+			fmt.Printf("Error getting icons for watchlist %d: %v\n", watchlistID, err)
 			return // Silently ignore notification errors
 		}
 
-		// Convert icons slice to map for efficient lookup
+		// Convert icons slice to map for efficient lookup with safe type assertion
 		iconMap := make(map[string]string)
 		if iconResults, ok := icons.([]helpers.GetIconsResults); ok {
 			for _, iconResult := range iconResults {
 				iconMap[iconResult.Ticker] = iconResult.Icon
 			}
+		} else {
+			fmt.Printf("Warning: Unexpected type for icons result in watchlist %d\n", watchlistID)
 		}
 
-		for _, ticker := range tickers {
+		for _, ticker := range tickersCopy {
 			res, err := helpers.GetTickerDailySnapshot(conn, userID, json.RawMessage(fmt.Sprintf(`{"ticker": "%s"}`, ticker)))
 			if err != nil {
-				return // Silently ignore notification errors
+				fmt.Printf("Error getting snapshot for ticker %s in watchlist %d: %v\n", ticker, watchlistID, err)
+				continue // Skip this ticker but continue with others
 			}
-			tickerWithData := map[string]interface{}{
-				"ticker":        ticker,
-				"price":         res.(helpers.GetTickerDailySnapshotResults).Close,
-				"change":        res.(helpers.GetTickerDailySnapshotResults).TodayChange,
-				"changePercent": res.(helpers.GetTickerDailySnapshotResults).TodayChangePercent,
-				"icon":          iconMap[ticker], // Use map lookup instead of slice index
+
+			// Safe type assertion with error checking
+			if snapshotResult, ok := res.(helpers.GetTickerDailySnapshotResults); ok {
+				tickerWithData := map[string]interface{}{
+					"ticker":        ticker,
+					"price":         snapshotResult.Close,
+					"change":        snapshotResult.TodayChange,
+					"changePercent": snapshotResult.TodayChangePercent,
+					"icon":          iconMap[ticker], // Use map lookup instead of slice index
+				}
+				tickerWtihData = append(tickerWtihData, tickerWithData)
+			} else {
+				fmt.Printf("Warning: Unexpected type for snapshot result for ticker %s in watchlist %d\n", ticker, watchlistID)
+				continue // Skip this ticker but continue with others
 			}
-			tickerWtihData = append(tickerWtihData, tickerWithData)
 		}
+
 		value := map[string]interface{}{
-			"watchlistId":   args.WatchlistID,
+			"watchlistId":   watchlistID,
 			"tickers":       tickerWtihData,
 			"watchlistName": watchlistName,
 		}
