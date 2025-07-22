@@ -16,7 +16,6 @@ import (
 	"backend/internal/services/socket"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"google.golang.org/genai"
@@ -58,8 +57,7 @@ func AgentRunWebSearch(ctx context.Context, conn *data.Conn, userID int, rawArgs
 }
 
 func _openaiWebSearch(ctx context.Context, conn *data.Conn, userID int, systemPrompt string, prompt string) (WebSearchResult, error) {
-	apiKey := conn.OpenAIKey
-	client := openai.NewClient(option.WithAPIKey(apiKey))
+	client := conn.OpenAIClient
 	messageID, ok := ctx.Value("messageID").(string)
 	if !ok {
 		messageID = ""

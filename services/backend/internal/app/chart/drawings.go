@@ -2,7 +2,6 @@ package chart
 
 import (
 	"backend/internal/data"
-	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -55,6 +54,26 @@ type DeleteHorizontalLineArgs struct {
 	ID int `json:"id"`
 }
 
+func AgentDeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := DeleteHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		var args DeleteHorizontalLineArgs
+		err = json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		lineData := map[string]interface{}{
+			"id": args.ID,
+		}
+		socket.SendHorizontalLineUpdate(userID, "remove", securityID, lineData)
+	}()
+	*/
+	return res, nil
+}
+
 // DeleteHorizontalLine performs operations related to DeleteHorizontalLine functionality.
 func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteHorizontalLineArgs
@@ -79,16 +98,30 @@ func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
 	}
 
-	// NEW: Send WebSocket update after successful deletion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		lineData := map[string]interface{}{
-			"id": args.ID,
-		}
-		socket.SendHorizontalLineUpdate(userID, "remove", securityID, lineData)
-	}
-
 	return nil, nil
+}
+
+func AgentSetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := SetHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		var args HorizontalLine
+		err = json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		lineData := map[string]interface{}{
+			"id":         id,
+			"securityId": line.SecurityID,
+			"price":      line.Price,
+			"color":      line.Color,
+			"lineWidth":  line.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "add", line.SecurityID, lineData)
+	}()*/
+	return res, nil
 }
 
 // SetHorizontalLine performs operations related to SetHorizontalLine functionality.
@@ -115,19 +148,6 @@ func SetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 		return nil, fmt.Errorf("error inserting horizontal line: %v", err)
 	}
 
-	// NEW: Send WebSocket update after successful insertion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		lineData := map[string]interface{}{
-			"id":         id,
-			"securityId": line.SecurityID,
-			"price":      line.Price,
-			"color":      line.Color,
-			"lineWidth":  line.LineWidth,
-		}
-		socket.SendHorizontalLineUpdate(userID, "add", line.SecurityID, lineData)
-	}
-
 	return id, nil
 }
 
@@ -138,6 +158,24 @@ type UpdateHorizontalLineArgs struct {
 	Price      float64 `json:"price"`
 	Color      string  `json:"color"`
 	LineWidth  int     `json:"lineWidth"`
+}
+
+func AgentUpdateHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := UpdateHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		lineData := map[string]interface{}{
+			"id":         args.ID,
+			"securityId": args.SecurityID,
+			"price":      args.Price,
+			"color":      args.Color,
+			"lineWidth":  args.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "update", args.SecurityID, lineData)
+	}()*/
+	return res, nil
 }
 
 // UpdateHorizontalLine performs operations related to UpdateHorizontalLine functionality.
@@ -159,19 +197,6 @@ func UpdateHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("no horizontal line found with id %d", args.ID)
-	}
-
-	// NEW: Send WebSocket update after successful update
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		lineData := map[string]interface{}{
-			"id":         args.ID,
-			"securityId": args.SecurityID,
-			"price":      args.Price,
-			"color":      args.Color,
-			"lineWidth":  args.LineWidth,
-		}
-		socket.SendHorizontalLineUpdate(userID, "update", args.SecurityID, lineData)
 	}
 
 	return nil, nil

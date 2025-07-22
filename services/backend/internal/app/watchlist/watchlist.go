@@ -97,6 +97,24 @@ type DeleteWatchlistArgs struct {
 	ID int `json:"watchlistId"`
 }
 
+func AgentDeleteWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := DeleteWatchlist(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		var args DeleteWatchlistArgs
+		err := json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		socket.SendWatchlistUpdate(userID, "delete", &args.ID, nil, nil, nil)
+	}()
+
+	return res, nil
+}
+
 // DeleteWatchlist performs operations related to DeleteWatchlist functionality.
 func DeleteWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteWatchlistArgs
@@ -111,14 +129,7 @@ func DeleteWatchlist(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("watchlist not found or you don't have permission to delete it")
 	}
-
-	// NEW: Send WebSocket update after successful deletion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		socket.SendWatchlistUpdate(userID, "delete", &args.ID, nil, nil, nil)
-	}
-
-	return nil, err
+	return args.ID, err
 }
 
 // GetWatchlistEntriesArgs represents a structure for handling GetWatchlistEntriesArgs data.
@@ -307,6 +318,22 @@ type DeleteWatchlistItemArgs struct {
 	WatchlistItemID int `json:"watchlistItemId"`
 }
 
+func AgentDeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := DeleteWatchlistItem(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		var args DeleteWatchlistItemArgs
+		err := json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		socket.SendWatchlistUpdate(userID, "remove", &args.WatchlistItemID, nil, nil, nil)
+	}()
+	return res, nil
+}
+
 // DeleteWatchlistItem performs operations related to DeleteWatchlistItem functionality.
 func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteWatchlistItemArgs
@@ -335,13 +362,6 @@ func DeleteWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("watchlist item not found or you don't have permission to delete it")
 	}
-
-	// NEW: Send WebSocket update after successful deletion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		socket.SendWatchlistUpdate(userID, "remove", &watchlistID, nil, nil, &args.WatchlistItemID)
-	}
-
 	return nil, nil
 }
 
@@ -378,25 +398,6 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("\n\n\nIS LLM EXECUTION", conn.IsLLMExecution)
-	// NEW: Send WebSocket update after successful insertion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		// Get ticker for the security
-		var ticker string
-		err = conn.DB.QueryRow(context.Background(),
-			`SELECT ticker FROM securities WHERE securityId = $1 AND maxDate IS NULL LIMIT 1`,
-			args.SecurityID).Scan(&ticker)
-		if err == nil {
-			// Create item data for WebSocket update
-			item := map[string]interface{}{
-				"watchlistItemId": watchlistID,
-				"securityId":      args.SecurityID,
-				"ticker":          ticker,
-			}
-			socket.SendWatchlistUpdate(userID, "add", &args.WatchlistID, nil, item, nil)
-		}
-	}
 
 	return watchlistID, err
 }
@@ -412,6 +413,22 @@ func AgentAddTickersToWatchlist(conn *data.Conn, userID int, rawArgs json.RawMes
 		return nil, err
 	}
 	// need to implement something for agent status update later
+
+	/*go func() {
+		var args AddTickersToWatchlistArgs
+		err = json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		for _, ticker := range args.Tickers {
+			item := map[string]interface{}{
+				"watchlistItemId": res,
+				"securityId":      args.SecurityID,
+				"ticker":          ticker,
+			}
+			socket.SendWatchlistUpdate(userID, "add", &args.WatchlistID, nil, item, nil)
+		}
+	}()*/
 	return fmt.Sprintf("successfully added %d tickers", len(watchlistItemIDs.([]int))), nil
 }
 
