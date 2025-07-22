@@ -179,7 +179,7 @@
 	// Helper function to create standard layout configurations
 	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => {
 		// Calculate padded ranges if not explicitly set by user
-		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.02);
 		const yRange = userLayout.yaxis?.range || calculatePaddedRange(plotData.data, 'y', 0.10);
 
 		return {
@@ -691,7 +691,7 @@
 			);
 
 			// Calculate padded ranges for dual y-axis
-			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.02);
 			const primaryYTraces = plotData.data.filter((trace: any) => !trace.yaxis || trace.yaxis === 'y');
 			const secondaryYTraces = plotData.data.filter((trace: any) => trace.yaxis === 'y2');
 			const primaryYRange = userLayoutWithoutDimensions.yaxis?.range || calculatePaddedRange(primaryYTraces, 'y', 0.10);
