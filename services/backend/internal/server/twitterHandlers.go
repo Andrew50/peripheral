@@ -21,6 +21,7 @@ import (
 	"backend/internal/app/helpers"
 	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
+	"backend/internal/services/twitter"
 
 	"github.com/dghubble/oauth1"
 	"github.com/go-redis/redis/v8"
@@ -31,6 +32,7 @@ import (
 type TwitterWebhookPayload struct {
 	Tweets    []Tweet `json:"tweets,omitempty"`
 	EventType string  `json:"event_type,omitempty"`
+	RuleTag   string  `json:"rule_tag,omitempty"`
 }
 
 // Tweet represents only the fields we need from each tweet
@@ -39,19 +41,12 @@ type Tweet struct {
 	Text      string `json:"text,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
 	Author    Author `json:"author,omitempty"`
+	ID        string `json:"id,omitempty"`
 }
 
 // Author represents only the username field we need
 type Author struct {
 	Username string `json:"userName,omitempty"`
-}
-
-// ExtractedTweetData represents the clean data we extract for processing
-type ExtractedTweetData struct {
-	URL       string `json:"url,omitempty"`
-	Text      string `json:"text,omitempty"`
-	CreatedAt string `json:"createdAt,omitempty"`
-	Username  string `json:"username,omitempty"`
 }
 
 // TwitterAPIUpdateRuleRequest represents the request body for updating a Twitter API rule
@@ -63,39 +58,9 @@ type TwitterAPIUpdateWebhookRequest struct {
 	IsEffect        int    `json:"is_effect"`
 }
 
-var twitterWebhookRuleset = "from:tradfi_noticias OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
+var twitterWebhookRuleset = "from:trad_fin OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
+var replyWebhookRuleset = "within_time:20m -filter:replies -from:TheShortBear from:amitisinvesting OR from:StockMKTNewz OR from:EliteOptions2 OR from:fundstrat OR from:TrendSpider OR from:GURGAVIN OR from:unusual_whales"
 
-/*
-	func turnOffTwitterNewsWebhook(conn *data.Conn) error {
-		err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
-			RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
-			Tag:             "Main Twitter",
-			Value:           twitterWebhookRuleset,
-			IntervalSeconds: 30,
-			IsEffect:        0,
-		})
-		if err != nil {
-			log.Printf("Error turning off Twitter webhook: %v", err)
-			return err
-		}
-		return nil
-	}
-
-	func turnOnTwitterNewsWebhook(conn *data.Conn) error {
-		err := updateTwitterAPIRule(conn, TwitterAPIUpdateWebhookRequest{
-			RuleID:          "6d13a825822c4fe1990857f154b1cd6b",
-			Tag:             "Main Twitter",
-			Value:           twitterWebhookRuleset,
-			IntervalSeconds: 30,
-			IsEffect:        1,
-		})
-		if err != nil {
-			log.Printf("Error turning on Twitter webhook: %v", err)
-			return err
-		}
-		return nil
-	}
-*/
 func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
 	isEffect := 0
 	if webhookStatus {
@@ -240,13 +205,14 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Process each tweet
-		var extractedTweets []ExtractedTweetData
+		var extractedTweets []twitter.ExtractedTweetData
 		for _, tweet := range payload.Tweets {
-			extracted := ExtractedTweetData{
+			extracted := twitter.ExtractedTweetData{
 				URL:       tweet.URL,
 				Text:      tweet.Text,
 				CreatedAt: tweet.CreatedAt,
 				Username:  tweet.Author.Username,
+				ID:        tweet.ID,
 			}
 			extractedTweets = append(extractedTweets, extracted)
 
@@ -259,7 +225,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			"message": "success",
 		})
 		// Queue the extracted data for background processing
-		err = processTwitterWebhookEvent(conn, extractedTweets)
+		err = processTwitterWebhookEvent(conn, payload.RuleTag, extractedTweets)
 		if err != nil {
 			log.Printf("Error queueing Twitter webhook event: %v", err)
 			http.Error(w, "Error processing webhook", http.StatusInternalServerError)
@@ -269,15 +235,19 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 }
 
 // processTwitterWebhookEvent processes the extracted tweet data
-func processTwitterWebhookEvent(conn *data.Conn, tweets []ExtractedTweetData) error {
+func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitter.ExtractedTweetData) error {
 	fmt.Println("queueTwitterWebhookEvent extractedTweets", tweets)
 	for _, tweet := range tweets {
-		processTweet(conn, tweet)
+		if ruleTag == "Main Twitter" {
+			processTweet(conn, tweet)
+		} else if ruleTag == "Reply Webhook" {
+			twitter.HandleTweetForReply(conn, tweet)
+		}
 	}
 	return nil
 }
 
-func processTweet(conn *data.Conn, tweet ExtractedTweetData) {
+func processTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) {
 
 	seen := determineIfAlreadySeenTweet(conn, tweet)
 	//seen = false
@@ -319,12 +289,12 @@ type FormattedPeripheralTweet struct {
 	Image string `json:"image"`
 }
 
-func CreatePeripheralTweetFromNews(conn *data.Conn, tweet ExtractedTweetData) (FormattedPeripheralTweet, error) { // to implement don't forget
+func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweetData) (FormattedPeripheralTweet, error) { // to implement don't forget
 
 	prompt := tweet.Text
 	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
 
-	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, 0, "TweetCraftAdditionalSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
+	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, 0, "TweetBreakingHeadlineSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
 	if err != nil {
 		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
@@ -414,7 +384,7 @@ func duplicateDetectionSchema() *genai.Schema {
 		Description: "Response indicating if a tweet is a duplicate",
 	}
 }
-func determineIfAlreadySeenTweet(conn *data.Conn, tweet ExtractedTweetData) bool {
+func determineIfAlreadySeenTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) bool {
 	// TODO: Implement LLM-based duplicate detection
 	// For now, return false to allow all tweets through
 	recentTweets := getStoredTweets(conn)
@@ -498,7 +468,7 @@ func getStoredTweets(conn *data.Conn) []string {
 
 	return results
 }
-func storeTweet(conn *data.Conn, tweet ExtractedTweetData) {
+func storeTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) {
 	timestamp := time.Now().Unix()
 	conn.Cache.ZAdd(context.Background(), "twitterTweets", &redis.Z{
 		Score:  float64(timestamp),

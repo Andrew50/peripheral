@@ -370,7 +370,7 @@ func _generalGeminiGenerateExecutionPlan(ctx context.Context, conn *data.Conn, s
 
 	geminiClient := conn.GeminiClient
 	thinkingBudget := int32(5000)
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt, false)
 	geminiConfig := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{

@@ -306,7 +306,7 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	if err != nil {
 		return
 	}
-	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt, true)
 
 	CountTokensResponse, err := client.Models.CountTokens(context.Background(), planningModel, genai.Text(enhancedSystemPrompt), &genai.CountTokensConfig{})
 	if err != nil {
