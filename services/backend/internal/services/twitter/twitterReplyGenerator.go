@@ -32,7 +32,7 @@ type ExtractedTweetData struct {
 }
 
 func HandleTweetForReply(conn *data.Conn, tweet ExtractedTweetData) error {
-	prompt := tweet.Text
+	prompt := "TWEET: " + tweet.Text
 
 	agentResult, err := agent.RunGeneralAgent[AgentReplyTweet](conn, 0, "TweetBreakingHeadlineSystemPrompt", "TweetReplyFinalResponse", prompt, "o4-mini", "medium")
 	if err != nil {
