@@ -245,7 +245,7 @@ WHERE email IS NOT NULL;
 -- Create query_logs table
 CREATE TABLE IF NOT EXISTS query_logs (
     log_id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(userId),
+    userId INTEGER REFERENCES users(userId),
     query_text TEXT NOT NULL,
     context JSONB,
     -- Store the provided context items
@@ -263,13 +263,13 @@ CREATE TABLE IF NOT EXISTS query_logs (
     -- Store JSON array of function names called, if any
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_query_logs_user_id ON query_logs(user_id);
+CREATE INDEX idx_query_logs_userId ON query_logs(userId);
 CREATE INDEX idx_query_logs_timestamp ON query_logs(timestamp);
 -- Multiple Conversations Support (Migration 19)
 -- Main conversations table
 CREATE TABLE IF NOT EXISTS conversations (
     conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id INTEGER NOT NULL REFERENCES users(userid) ON DELETE CASCADE,
+    userId INTEGER NOT NULL REFERENCES users(userId) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -308,7 +308,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     UNIQUE(conversation_id, message_order)
 );
 -- Indexes for efficient querying
-CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_userId ON conversations(userId);
 CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id ON conversation_messages(conversation_id);
@@ -405,13 +405,13 @@ CREATE TABLE IF NOT EXISTS chart_queries (
     extended_hours BOOLEAN NOT NULL DEFAULT FALSE,
     is_replay BOOLEAN NOT NULL DEFAULT FALSE,
     include_sec_filings BOOLEAN NOT NULL DEFAULT FALSE,
-    user_id INTEGER REFERENCES users(userId) ON DELETE SET NULL,
+    userId INTEGER REFERENCES users(userId) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- Create indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid ON chart_queries(securityid);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_created_at ON chart_queries(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_chart_queries_user_id ON chart_queries(user_id);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_userId ON chart_queries(userId);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_timeframe ON chart_queries(timeframe);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid_timeframe ON chart_queries(securityid, timeframe);
 COPY securities(securityid, ticker, figi, minDate, maxDate)
