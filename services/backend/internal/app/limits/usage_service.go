@@ -166,7 +166,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		// Log the usage with credit consumption details
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata, credits_consumed, credits_source)
+			INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata, credits_consumed, credits_source)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON, resourceConsumed, sourceUsed)
 
@@ -180,7 +180,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		// Log the usage
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+			INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
 
@@ -194,7 +194,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		// Log the usage
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+			INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
 
@@ -202,7 +202,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		// For backtests, just log usage without consuming credits
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+			INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
 
@@ -210,7 +210,7 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 		// For other usage types, just log
 		metadataJSON, _ := json.Marshal(metadata)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+			INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 			VALUES ($1, $2, $3, $4, $5)`,
 			userID, string(usageType), resourceConsumed, currentPlan, metadataJSON)
 	}
@@ -417,7 +417,7 @@ func AddPurchasedCredits(conn *data.Conn, userID int, creditsToAdd int) error {
 	metadataJSON, _ := json.Marshal(metadata)
 
 	_, err = conn.DB.Exec(ctx, `
-		INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+		INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 		VALUES ($1, 'credits_purchase', $2, 'N/A', $3)`,
 		userID, creditsToAdd, metadataJSON)
 

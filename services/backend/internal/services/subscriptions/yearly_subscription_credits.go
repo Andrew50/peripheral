@@ -82,7 +82,7 @@ func UpdateYearlySubscriptionCredits(conn *data.Conn) error {
 			}
 			if metaJSON, err := json.Marshal(metadata); err == nil {
 				_, _ = data.ExecWithRetry(ctx, conn.DB, `
-					INSERT INTO usage_logs (user_id, usage_type, resource_consumed, plan_name, metadata)
+					INSERT INTO usage_logs (userId, usage_type, resource_consumed, plan_name, metadata)
 					VALUES ($1, 'credits_reset', 0, $2, $3)`,
 					userID, productKey, metaJSON)
 			}

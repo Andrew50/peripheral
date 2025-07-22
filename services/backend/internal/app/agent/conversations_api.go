@@ -29,7 +29,7 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 				LIMIT 1
 			) as last_message_query
 		FROM conversations c
-		WHERE c.user_id = $1
+		WHERE c.userId = $1
 		ORDER BY c.updated_at DESC`
 
 	rows, err := conn.DB.Query(context.Background(), query, userID)
