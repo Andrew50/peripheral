@@ -1,5 +1,6 @@
 # golangci-lint configuration file for temporarily disabling some linters
 # The goal is to get the CI pipeline to pass while addressing issues gradually
+version: "2"
 run:
   timeout: 5m
   build-tags:

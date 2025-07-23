@@ -31,13 +31,6 @@ var (
 	workerMonitorMutex sync.Mutex
 )
 
-// Global flags to track services started by partial coverage check
-var (
-	screenerStartedByPartialCoverage bool
-	polygonStartedByPartialCoverage  bool
-	partialCoverageCheckMutex        sync.Mutex
-)
-
 // JobFunc represents a function that can be executed as a job
 type JobFunc func(conn *data.Conn) error
 
@@ -219,63 +212,6 @@ func initUserTelegramBotJob(conn *data.Conn) error {
 	return telegram.InitTelegramUserNotificationBot()
 }
 
-// checkPartialCoverageAndStartServices checks if OHLCV partial coverage is sufficient
-// and starts screener and polygon websocket if they haven't been started yet
-func checkPartialCoverageAndStartServices(conn *data.Conn) error {
-	log.Printf("🔍 checkPartialCoverageAndStartServices called")
-	partialCoverageCheckMutex.Lock()
-	defer partialCoverageCheckMutex.Unlock()
-
-	// If both services are already started, no need to check
-	if screenerStartedByPartialCoverage && polygonStartedByPartialCoverage {
-		log.Printf("⚠️ Both services already started, skipping check")
-		return nil
-	}
-
-	log.Printf("🔍 Checking OHLCV partial coverage (need 2 months back) - screener started: %v, polygon started: %v",
-		screenerStartedByPartialCoverage, polygonStartedByPartialCoverage)
-
-	// Check if partial coverage is sufficient
-	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
-	if err != nil {
-		log.Printf("❌ Failed to check OHLCV partial coverage: %v", err)
-		return err
-	}
-
-	if !hasCoverage {
-		log.Printf("⏳ OHLCV partial coverage not yet sufficient - services remain blocked")
-		return nil
-	}
-
-	log.Printf("✅ OHLCV partial coverage is sufficient - starting blocked services")
-
-	// Start screener if not already started by partial coverage check
-	if !screenerStartedByPartialCoverage {
-		log.Printf("🚀 Starting screener updater due to sufficient partial coverage")
-		err := screener.StartScreenerUpdaterLoop(conn)
-		if err != nil {
-			log.Printf("❌ Failed to start screener updater: %v", err)
-		} else {
-			screenerStartedByPartialCoverage = true
-			log.Printf("✅ Screener updater started successfully")
-		}
-	}
-
-	// Start polygon websocket if not already started by partial coverage check
-	if !polygonStartedByPartialCoverage {
-		log.Printf("🚀 Starting Polygon WebSocket due to sufficient partial coverage")
-		err := startPolygonWebSocketInternal(conn)
-		if err != nil {
-			log.Printf("❌ Failed to start Polygon WebSocket: %v", err)
-		} else {
-			polygonStartedByPartialCoverage = true
-			log.Printf("✅ Polygon WebSocket started successfully")
-		}
-	}
-
-	return nil
-}
-
 // startPolygonWebSocketInternal is the internal implementation for starting polygon websocket
 func startPolygonWebSocketInternal(conn *data.Conn) error {
 	polygonInitMutex.Lock()
@@ -344,8 +280,8 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     20,
-			RetryDelay:     30 * time.Second,
+			MaxRetries:     100,             // Retry until partial coverage is achieved
+			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		//TODO: FIX THIS SHIT
 		/*{
@@ -363,8 +299,8 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     2,
-			RetryDelay:     30 * time.Second,
+			MaxRetries:     100,             // Retry until partial coverage is achieved
+			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		{
 			Name:           "UpdateSecurityDetails",
@@ -462,39 +398,6 @@ var (
 			SkipOnWeekends: false,
 			RetryOnFailure: true,
 			MaxRetries:     2,
-		},
-		{
-			Name:     "CheckPartialCoverageAndStartServices",
-			Function: checkPartialCoverageAndStartServices,
-			Schedule: []TimeOfDay{
-				{Hour: 0, Minute: 5},  // 12:05 AM
-				{Hour: 1, Minute: 5},  // 1:05 AM
-				{Hour: 2, Minute: 5},  // 2:05 AM
-				{Hour: 3, Minute: 5},  // 3:05 AM
-				{Hour: 4, Minute: 5},  // 4:05 AM
-				{Hour: 5, Minute: 5},  // 5:05 AM
-				{Hour: 6, Minute: 5},  // 6:05 AM
-				{Hour: 7, Minute: 5},  // 7:05 AM
-				{Hour: 8, Minute: 5},  // 8:05 AM
-				{Hour: 9, Minute: 5},  // 9:05 AM
-				{Hour: 10, Minute: 5}, // 10:05 AM
-				{Hour: 11, Minute: 5}, // 11:05 AM
-				{Hour: 12, Minute: 5}, // 12:05 PM
-				{Hour: 13, Minute: 5}, // 1:05 PM
-				{Hour: 14, Minute: 5}, // 2:05 PM
-				{Hour: 15, Minute: 5}, // 3:05 PM
-				{Hour: 16, Minute: 5}, // 4:05 PM
-				{Hour: 17, Minute: 5}, // 5:05 PM
-				{Hour: 18, Minute: 5}, // 6:05 PM
-				{Hour: 19, Minute: 5}, // 7:05 PM
-				{Hour: 20, Minute: 5}, // 8:05 PM
-				{Hour: 21, Minute: 5}, // 9:05 PM
-				{Hour: 22, Minute: 5}, // 10:05 PM
-				{Hour: 23, Minute: 5}, // 11:05 PM
-			}, // Run every hour at 5 minutes past to check coverage
-			RunOnInit:      true,
-			SkipOnWeekends: false, // Run every day to catch when coverage becomes sufficient
-			RetryOnFailure: false, // Don't retry - will run again next hour
 		},
 	}
 )
@@ -962,15 +865,8 @@ func startAlertLoop(conn *data.Conn) error {
 */
 
 // startScreenerUpdater starts the screener updater if partial coverage is sufficient
+// Returns an error if coverage is insufficient, triggering job retry
 func startScreenerUpdater(conn *data.Conn) error {
-	partialCoverageCheckMutex.Lock()
-	defer partialCoverageCheckMutex.Unlock()
-
-	// If already started by partial coverage check, skip
-	if screenerStartedByPartialCoverage {
-		log.Printf("⚠️ Screener updater already started by partial coverage check")
-		return nil
-	}
 
 	// Check if OHLCV partial coverage is sufficient (2 months back)
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
@@ -980,8 +876,8 @@ func startScreenerUpdater(conn *data.Conn) error {
 	}
 
 	if !hasCoverage {
-		log.Printf("⚠️ Screener updater blocked - OHLCV partial coverage not yet sufficient (need 2 months back)")
-		return nil
+		log.Printf("⏳ Screener updater blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
+		return fmt.Errorf("OHLCV partial coverage not yet sufficient for screener updater")
 	}
 
 	// Partial coverage is sufficient, start the screener updater
@@ -991,24 +887,15 @@ func startScreenerUpdater(conn *data.Conn) error {
 		return err
 	}
 
-	screenerStartedByPartialCoverage = true
+	log.Printf("✅ Screener updater started successfully")
 	return nil
 }
 
 // startPolygonWebSocket starts the Polygon WebSocket if partial coverage is sufficient
+// Returns an error if coverage is insufficient, triggering job retry
 func startPolygonWebSocket(conn *data.Conn) error {
-	log.Printf("🔍 startPolygonWebSocket called")
-	partialCoverageCheckMutex.Lock()
-	defer partialCoverageCheckMutex.Unlock()
-
-	// If already started by partial coverage check, skip
-	if polygonStartedByPartialCoverage {
-		log.Printf("⚠️ Polygon WebSocket already started by partial coverage check")
-		return nil
-	}
 
 	// Check if OHLCV partial coverage is sufficient (2 months back)
-	log.Printf("🔍 Checking OHLCV partial coverage for Polygon WebSocket...")
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
 	if err != nil {
 		log.Printf("❌ Failed to check OHLCV partial coverage for Polygon WebSocket: %v", err)
@@ -1016,18 +903,17 @@ func startPolygonWebSocket(conn *data.Conn) error {
 	}
 
 	if !hasCoverage {
-		log.Printf("⚠️ Polygon WebSocket blocked - OHLCV partial coverage not yet sufficient (need 2 months back)")
-		return nil
+		log.Printf("⏳ Polygon WebSocket blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
+		return fmt.Errorf("OHLCV partial coverage not yet sufficient for Polygon WebSocket")
 	}
 
 	// Partial coverage is sufficient, start the Polygon WebSocket
-	log.Printf("🚀 Starting Polygon WebSocket - OHLCV partial coverage is sufficient")
 	err = startPolygonWebSocketInternal(conn)
 	if err != nil {
 		return err
 	}
 
-	polygonStartedByPartialCoverage = true
+	log.Printf("✅ Polygon WebSocket started successfully")
 	return nil
 }
 
