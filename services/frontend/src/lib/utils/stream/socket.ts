@@ -1,7 +1,8 @@
 // socket.ts
 import { get, writable } from 'svelte/store';
 import { handleTimestampUpdate } from '$lib/utils/stores/stores';
-import type { TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
+import type { TradeData, QuoteData, CloseData, Alert, Watchlist } from '$lib/utils/types/types';
+import type { HorizontalLine } from '$lib/utils/stores/stores';
 import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
@@ -91,35 +92,13 @@ interface WatchlistItem {
 	[key: string]: unknown;
 }
 
-interface Watchlist {
-	watchlistId: number;
-	watchlistName: string;
-}
-
-interface Strategy {
+// Local interface for strategy objects used in socket updates
+// This is different from the database Strategy interface in types.ts
+interface SocketStrategy {
 	strategyId: number;
 	name: string;
 	activeScreen?: boolean;
 	[key: string]: unknown;
-}
-
-interface Alert {
-	alertId: number;
-	alertType: string;
-	alertPrice?: number;
-	securityId?: number;
-	ticker?: string;
-	active: boolean;
-	direction?: boolean;
-	triggeredTimestamp?: number;
-}
-
-interface HorizontalLine {
-	id: number;
-	securityId: number;
-	price: number;
-	color: string;
-	lineWidth: number;
 }
 
 interface StoreModule {
@@ -251,12 +230,12 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Check if watchlist already exists to prevent duplicates
 					const currentWatchlists = get(storeModule.watchlists);
 					const exists = Array.isArray(currentWatchlists) &&
-						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
+						currentWatchlists.find((list: Watchlist) => list.watchlistId === update.watchlistId);
 
 					if (!exists) {
 						storeModule.watchlists.update((lists: Watchlist[]) => {
 							const currentLists = Array.isArray(lists) ? lists : [];
-							const newWatchlist = {
+							const newWatchlist: Watchlist = {
 								watchlistId: update.watchlistId!,
 								watchlistName: update.watchlistName!
 							};
@@ -282,7 +261,7 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Check if watchlist exists before trying to delete
 					const currentWatchlists = get(storeModule.watchlists);
 					const exists = Array.isArray(currentWatchlists) &&
-						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
+						currentWatchlists.find((list: Watchlist) => list.watchlistId === update.watchlistId);
 
 					if (exists) {
 						storeModule.watchlists.update((lists: Watchlist[]) =>
@@ -430,7 +409,7 @@ async function handleAlertUpdate(update: AlertUpdate) {
 			case 'add':
 				storeModule.activeAlerts.update((alerts: Alert[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
-					return [...currentAlerts, update.alert];
+					return [...currentAlerts, update.alert as Alert];
 				});
 				break;
 
@@ -458,7 +437,7 @@ async function handleAlertUpdate(update: AlertUpdate) {
 				);
 				storeModule.inactiveAlerts.update((alerts: Alert[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
-					return [...currentAlerts, { ...update.alert, active: false }];
+					return [...currentAlerts, { ...update.alert, active: false } as Alert];
 				});
 				break;
 		}
@@ -487,22 +466,22 @@ async function handleStrategyUpdate(update: StrategyUpdate) {
 		console.log('📊 Processing strategy update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.strategies.update((strategies: Strategy[]) => {
+				storeModule.strategies.update((strategies: SocketStrategy[]) => {
 					const currentStrategies = Array.isArray(strategies) ? strategies : [];
-					return [...currentStrategies, { ...update.strategy, activeScreen: true }];
+					return [...currentStrategies, { ...update.strategy, activeScreen: true } as SocketStrategy];
 				});
 				break;
 
 			case 'remove':
-				storeModule.strategies.update((strategies: Strategy[]) =>
-					Array.isArray(strategies) ? strategies.filter((strat: Strategy) => strat.strategyId !== update.strategy.strategyId) : []
+				storeModule.strategies.update((strategies: SocketStrategy[]) =>
+					Array.isArray(strategies) ? strategies.filter((strat: SocketStrategy) => strat.strategyId !== update.strategy.strategyId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.strategies.update((strategies: Strategy[]) =>
-					Array.isArray(strategies) ? strategies.map((strat: Strategy) =>
-						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } : strat
+				storeModule.strategies.update((strategies: SocketStrategy[]) =>
+					Array.isArray(strategies) ? strategies.map((strat: SocketStrategy) =>
+						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } as SocketStrategy : strat
 					) : []
 				);
 				break;
@@ -611,7 +590,7 @@ export function connect() {
 		isConnecting = false;
 
 		// Reject all pending chat requests
-		pendingChatRequests.forEach((request, requestId) => {
+		pendingChatRequests.forEach((request) => {
 			request.reject(new Error('WebSocket connection closed'));
 		});
 		pendingChatRequests.clear();
@@ -943,9 +922,7 @@ export function sendChatQuery(
 	});
 
 	const cancel = () => {
-		if (requestId) {
-			cancelChatQuery(requestId);
-		}
+		cancelChatQuery(requestId);
 	};
 
 	return { promise, cancel };

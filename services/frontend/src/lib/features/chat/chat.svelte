@@ -196,7 +196,11 @@
 		fetchInitialSuggestions();
 	}
 
-	async function switchToConversation(conversationId: string, title: string, isConversationPublic: boolean) {
+	async function switchToConversation(
+		conversationId: string,
+		title: string,
+		isConversationPublic: boolean
+	) {
 		if (conversationId === currentConversationId) {
 			showConversationDropdown = false;
 			return;
@@ -663,17 +667,15 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
-							// Clear processing state
-			isProcessingMessage = false;
+				// Clear processing state
+				isProcessingMessage = false;
 
-
-
-			// If we didn't have a conversation ID before, we should have one now
-			// Load conversation history to get the new conversation ID
-			if (!currentConversationId) {
-				await loadConversationHistory(false); // Don't scroll since we just added the message
-				await loadConversations(); // Refresh conversation list
-			}
+				// If we didn't have a conversation ID before, we should have one now
+				// Load conversation history to get the new conversation ID
+				if (!currentConversationId) {
+					await loadConversationHistory(false); // Don't scroll since we just added the message
+					await loadConversations(); // Refresh conversation list
+				}
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
@@ -814,13 +816,11 @@
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
 
-					// Clear processing state immediately on cancellation
-		isProcessingMessage = false;
+			// Clear processing state immediately on cancellation
+			isProcessingMessage = false;
 
-
-
-		isLoading = false;
-		currentAbortController = null;
+			isLoading = false;
+			currentAbortController = null;
 		}
 	}
 
@@ -1224,7 +1224,6 @@
 		}
 	}
 
-
 	// Function to create typing effect for title
 	function startTitleTypingEffect(newTitle: string) {
 		// Don't start typing if already typing or if the title is the same
@@ -1265,7 +1264,11 @@
 		messagesStore.update((current) =>
 			current.map((msg) => {
 				// Find the most recent temporary user message and update it
-				if (msg.sender === 'user' && msg.message_id.startsWith('temp_') && msg.status === 'pending') {
+				if (
+					msg.sender === 'user' &&
+					msg.message_id.startsWith('temp_') &&
+					msg.status === 'pending'
+				) {
 					return {
 						...msg,
 						message_id: messageId,
@@ -1312,8 +1315,6 @@
 		// Clear the store after processing
 		titleUpdateStore.set(null);
 	}
-
-
 
 	// Helper to translate technical error messages into user-friendly text
 	function getFriendlyErrorMessage(error: any): string {
@@ -1388,9 +1389,7 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-															<ThinkingTrace
-								isProcessingMessage={isProcessingMessage}
-							/>
+								<ThinkingTrace {isProcessingMessage} />
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->

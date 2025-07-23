@@ -246,7 +246,9 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 		if !b.hasRead {
 			headerLine, err := reader.ReadString('\n')
 			if err != nil {
-				gz.Close()
+				if closeErr := gz.Close(); closeErr != nil {
+					log.Printf("Warning: failed to close gzip reader: %v", closeErr)
+				}
 				if closeErr := resp.Body.Close(); closeErr != nil {
 					log.Printf("Warning: failed to close response body: %v", closeErr)
 				}
@@ -261,7 +263,9 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 			b.current = io.MultiReader(bytes.NewReader(b.header), reader)
 		} else {
 			if _, err = reader.ReadString('\n'); err != nil {
-				gz.Close()
+				if closeErr := gz.Close(); closeErr != nil {
+					log.Printf("Warning: failed to close gzip reader: %v", closeErr)
+				}
 				if closeErr := resp.Body.Close(); closeErr != nil {
 					log.Printf("Warning: failed to close response body: %v", closeErr)
 				}

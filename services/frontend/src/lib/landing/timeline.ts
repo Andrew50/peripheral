@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 
 // Import the ContentChunk type from the chat interface
-export type ContentChunk = { type: 'text' | 'table' | 'plot'; content: string | any };
+export type ContentChunk = { type: 'text' | 'table' | 'plot'; content: string | unknown };
 
 export type TimelineEvent = {
   trigger: number; // 0→1
@@ -24,7 +24,7 @@ export const totalScroll = 5000; // px of wheel delta required for full timeline
 export const timelineProgress = writable(0);
 // Helper to build a unique key for each chart slice (ticker + timestamp + timeframe)
 function ChartKey(ticker: string, timestampMs: number, timeframe: string): string {
-	return `${ticker}_${timestampMs}_${timeframe}`;
+  return `${ticker}_${timestampMs}_${timeframe}`;
 }
 export function createTimelineEvents({
   addUserMessage,
@@ -33,7 +33,7 @@ export function createTimelineEvents({
   highlightEventForward,
   setChart
 }: TimelineActions): TimelineEvent[] {
-  return [      
+  return [
     {
       trigger: 0,
       forward: () => addUserMessage(sampleQuery),
@@ -53,36 +53,41 @@ export function createTimelineEvents({
       trigger: 0.10,
       forward: () => addAssistantMessage([
         {
-            "type": "table",
-            "content": {
-              "rows": [
-                ["2018-03-01", "U.S. announces 25 % steel / 10 % aluminum tariffs (Section 232)", "-5.45%", "-3.96%", "-3.32%"],
-                ["2019-05-10", "US hikes tariffs to 25 % on $200 B Chinese goods", "-1.00%", "5.51%", "3.98%"],
-                ["2019-08-01", "US to levy 10 % on additional $300 B Chinese imports", "-2.37%", "4.81%", "6.37%"],
-                ["2020-02-14", "US cuts tariffs on $120 B Chinese goods", "-22.38%", "1.16%", "-3.56%"],
-                ["2025-01-16", "Trump signals 10 % universal / 60 % China tariffs", "5.12%", "13.67%", "14.82%"]
-              ],
-              "caption": "Price impact of each tariff event",
-              "headers": [
-                "Date",
-                "Tariff Description",
-                "1M % QQQ",
-                "1M % WMT",
-                "1M % COST"
-              ]
-            }
+          "type": "table",
+          "content": {
+            "rows": [
+              ["2018-03-01", "U.S. announces 25 % steel / 10 % aluminum tariffs (Section 232)", "-5.45%", "-3.96%", "-3.32%"],
+              ["2019-05-10", "US hikes tariffs to 25 % on $200 B Chinese goods", "-1.00%", "5.51%", "3.98%"],
+              ["2019-08-01", "US to levy 10 % on additional $300 B Chinese imports", "-2.37%", "4.81%", "6.37%"],
+              ["2020-02-14", "US cuts tariffs on $120 B Chinese goods", "-22.38%", "1.16%", "-3.56%"],
+              ["2025-01-16", "Trump signals 10 % universal / 60 % China tariffs", "5.12%", "13.67%", "14.82%"]
+            ],
+            "caption": "Price impact of each tariff event",
+            "headers": [
+              "Date",
+              "Tariff Description",
+              "1M % QQQ",
+              "1M % WMT",
+              "1M % COST"
+            ]
+          }
         }]),
-        backward: () => removeLastMessage()
-      },
+      backward: () => removeLastMessage()
+    },
     // Immediately after the table is injected, scroll it into view & focus first row
     {
       trigger: 0.105,
       forward: () => highlightEventForward(-1),   // scroll table only
-      backward: () => setChart([ChartKey("QQQ", 0, "1d")], "candle")
+      backward: () => {
+        setChart([ChartKey("QQQ", 0, "1d")], "candle");
+      }
     },
     {
       trigger: 0.20,
-      forward: () => {highlightEventForward(2), setChart([ChartKey("QQQ", Date.UTC(2019, 8, 1), "1d"), ChartKey("WMT", Date.UTC(2019, 8, 1), "1d"), ChartKey("COST", Date.UTC(2019, 8, 1), "1d")], "line")}    // now highlight third row
+      forward: () => {
+        highlightEventForward(2);
+        setChart([ChartKey("QQQ", Date.UTC(2019, 8, 1), "1d"), ChartKey("WMT", Date.UTC(2019, 8, 1), "1d"), ChartKey("COST", Date.UTC(2019, 8, 1), "1d")], "line");
+      }    // now highlight third row
     },
     {
       trigger: 0.30,
@@ -108,8 +113,8 @@ export function createTimelineEvents({
                 }
               ],
               "layout": {
-                "xaxis": {"title": "X"},
-                "yaxis": {"title": "Y"}
+                "xaxis": { "title": "X" },
+                "yaxis": { "title": "Y" }
               }
             }
           }
@@ -120,10 +125,10 @@ export function createTimelineEvents({
     {
       trigger: 0.405,
       forward: () => highlightEventForward(-2), // -2 will scroll plot into view
-      backward: () => {}
+      backward: () => { }
     },
     {
-      trigger: 0.75, 
+      trigger: 0.75,
       forward: () => addAssistantMessage([
         {
           type: "text",

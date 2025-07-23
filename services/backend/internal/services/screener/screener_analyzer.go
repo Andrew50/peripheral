@@ -97,10 +97,18 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	}
 
 	// Run general analyses
-	analyzeDatabaseConfiguration(ctx, conn, logFile)
-	analyzeDatabaseActivity(ctx, conn, logFile, config.QueryPatterns)
-	analyzeLockActivity(ctx, conn, logFile, config.QueryPatterns)
-	analyzeWaitEvents(ctx, conn, logFile, config.QueryPatterns)
+	if err := analyzeDatabaseConfiguration(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze database configuration: %v\n", err)
+	}
+	if err := analyzeDatabaseActivity(ctx, conn, logFile, config.QueryPatterns); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze database activity: %v\n", err)
+	}
+	if err := analyzeLockActivity(ctx, conn, logFile, config.QueryPatterns); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze lock activity: %v\n", err)
+	}
+	if err := analyzeWaitEvents(ctx, conn, logFile, config.QueryPatterns); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze wait events: %v\n", err)
+	}
 	analyzePgStatStatements(ctx, conn, logFile, config.QueryPatterns)
 	analyzeQueryPlans(ctx, conn, logFile, config.TestFunctions)
 	analyzeTableStatistics(ctx, conn, logFile, config.Tables)
