@@ -69,13 +69,15 @@ class PythonSandbox:
         self.response_images = []
         self.plot_counter = 0
         
-    async def execute_code(self, code: str, additional_globals: Dict[str, Any] = None) -> SandboxResult:
+    async def execute_code(self, code: str, additional_globals: Dict[str, Any] = None, 
+                          execution_id: str = None) -> SandboxResult:
         """
         Execute Python code in a secure sandbox environment
         
         Args:
             code: Python code to execute
             additional_globals: Additional global variables to provide
+            execution_id: Optional ID for tracking (used for plot generation)
             
         Returns:
             SandboxResult with execution results
@@ -207,12 +209,12 @@ class PythonSandbox:
             data_accessor = get_data_accessor()
 
             # Set execution context for full historical data access (like strategy engine backtest mode)
-            from datetime import datetime as dt_import
+            from datetime import datetime
             data_accessor.set_execution_context(
                 mode='backtest',
                 symbols=None,  # All symbols
-                start_date=dt_import(2003, 1, 1),
-                end_date=dt_import.now()
+                start_date=datetime(2003, 1, 1),
+                end_date=datetime.now()
             )
 
             def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
@@ -267,6 +269,7 @@ class PythonSandbox:
         
         try:
             import plotly.graph_objects as go
+            import plotly.express as px
             from plotly.subplots import make_subplots
         except ImportError:
             return contextlib.nullcontext()
@@ -275,7 +278,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
         
-        def capture_plot(fig, *_args, **_kwargs):
+        def capture_plot(fig, *args, **kwargs):
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -411,7 +414,7 @@ class PythonSandbox:
         """Extract detailed error information including line numbers and code context"""
         try:
             tb = traceback.format_exc()
-            _, _, exc_traceback = sys.exc_info()
+            exc_type, exc_value, exc_traceback = sys.exc_info()
             
             error_info = {
                 'error_type': type(error).__name__,

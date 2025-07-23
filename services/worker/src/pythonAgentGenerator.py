@@ -183,17 +183,17 @@ class PythonAgentGenerator:
         * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
             Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
-        AVAILABLE FILTERS (use in filters parameter):{'''
-        - sector: "{}"'''.format(sectors_str) if sectors_str else ""}{'''
-        - industry: "{}"'''.format(industries_str) if industries_str else ""}{'''
-        - primary_exchange: "{}"'''.format(exchanges_str) if exchanges_str else ""}
+        AVAILABLE FILTERS (use in filters parameter):{f'''
+        - sector: "{sectors_str}"''' if sectors_str else ""}{f'''
+        - industry: "{industries_str}"''' if industries_str else ""}{f'''
+        - primary_exchange: "{exchanges_str}"''' if exchanges_str else ""}
         - market_cap_min: float (e.g., 1000000000 for $1B minimum)
         - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-        FILTER EXAMPLES:{'''
-        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{'''
-        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{'''
-        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{'''
+        FILTER EXAMPLES:{f'''
+        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
+        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
+        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{f'''
         - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
