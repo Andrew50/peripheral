@@ -58,12 +58,12 @@ type OHLCVBuffer struct {
 	lastLogTime           time.Time
 }
 
-const flushThreshold = 10000                 // flush when more than this many records in buffer (increased from 5000)
-const flushTimeout = 1 * time.Second         // flush if buffer is older than this (increased from 1s)
+const flushThreshold = 7500                  // flush when more than this many records in buffer (balanced for throughput)
+const flushTimeout = 2 * time.Second         // flush if buffer is older than this (increased to reduce timeout flushes)
 const checkInterval = 1 * time.Second        // check for stale buffer every this many seconds (increased from 1s)
 const healthCheckInterval = 30 * time.Second // check for staging table health every this many seconds
 const channelBufferSize = 50                 // increased buffer to handle more peak buffering (increased from 20)
-const criticalChannelThreshold = 10          // send critical alert when channel backlog exceeds this (increased from 5)
+const criticalChannelThreshold = 20          // send critical alert when channel backlog exceeds this (reduced false alerts)
 
 const mergeQuery1m = `
 INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp")
@@ -188,7 +188,7 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 
 	log.Printf("🔄 Starting OHLCV buffer writer goroutines...")
 	// Start multiple writer goroutines to process batches in parallel
-	numWorkers := 2 // Increased from 1 to 2 workers
+	numWorkers := 4 // Increased to handle more concurrent batches
 	for i := 0; i < numWorkers; i++ {
 		ohlcvBuffer.wg.Add(1)
 		go ohlcvBuffer.writer(i)
@@ -364,6 +364,7 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 
 	b.buffer = append(b.buffer, record)
 	b.totalRecordsAdded++
+	b.lastFlush = time.Now() // Update lastFlush on every add to prevent unnecessary timeout flushes
 	//log.Printf("📈 Added %s to buffer (buffer size: %d/%d)", ticker, len(b.buffer), flushThreshold)
 
 	if len(b.buffer) >= flushThreshold {

@@ -10,8 +10,12 @@ export default [
     {
         files: ['**/*.svelte'],
         languageOptions: {
-            parser: typescriptParser,
-            parserOptions: { extraFileExtensions: ['.svelte'] }
+            // Keep the default svelte-eslint-parser and let TypeScript linting
+            // be handled via parserOptions.parser as recommended by the docs.
+            parserOptions: {
+                parser: typescriptParser,
+                extraFileExtensions: ['.svelte']
+            }
         },
         // optional: additional project‑specific rules
         rules: {

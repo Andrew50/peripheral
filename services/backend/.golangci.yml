@@ -5,29 +5,7 @@ run:
   timeout: 5m
   build-tags:
     - all
-    - !test
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    exclude-functions:
-      - (*github.com/polygon-io/client-go/websocket.Client).Subscribe
-      - (*github.com/polygon-io/client-go/websocket.Client).Close
-      - (*sql.Rows).Scan
-      - (io.Reader).Read
-  unused:
-    check-exported: false
-  # ⬇️  NEW: keep staticcheck but drop SA9003 (empty branch)
-  staticcheck:
-    checks:
-      - all # keep every other check …
-      - "-SA9003" # … except the empty-branch rule
-  forbidigo:
-    # Block debug prints & accidental panics in library code
-    forbid:
-      - name: "fmt\\.Print.*" # disallow fmt.Print, Printf, Println, …
-        message: "use a structured logger, not fmt.Print*"
-      - name: "log\\.Printf" # same for std log
-      - name: "^panic\\(" # panic only in main() or tests
+    - "!test"
 linters:
   enable:
     - revive
@@ -37,19 +15,46 @@ linters:
     # - staticcheck # Ensure staticcheck runs with its specific config above
     - govet
     - ineffassign
+  settings:
+    errcheck:
+      check-type-assertions: false
+      exclude-functions:
+        - (*github.com/polygon-io/client-go/websocket.Client).Subscribe
+        - (*github.com/polygon-io/client-go/websocket.Client).Close
+        - (*sql.Rows).Scan
+        - (io.Reader).Read
+    # Configuration for 'unused' was using deprecated keys; relying on defaults instead.
+    # ⬇️  NEW: keep staticcheck but drop SA9003 (empty branch)
+    staticcheck:
+      checks:
+        - all # keep every other check …
+        - "-SA9003" # … except the empty-branch rule
+    forbidigo:
+      # Block debug prints & accidental panics in library code
+      forbid:
+        - pattern: "fmt\\.Print.*" # disallow fmt.Print, Printf, Println, …
+          msg: "use a structured logger, not fmt.Print*"
+        - pattern: "log\\.Printf" # same for std log
+        - pattern: "^panic\\(" # panic only in main() or tests
+  exclusions:
+    rules:
+      - linters:
+          - errcheck
+        text: "Error return value is not checked"
+      - linters:
+          - govet
+        text: "copylocks"
+      - linters:
+          - govet
+        text: "printf"
+      - linters:
+          - unused
+        text: "func .* is unused"
+        source: "^//go:build !test"
+      # ⬇️  NEW: belt-and-suspenders rule—filters any stray SA9003 hits
+      - linters:
+          - staticcheck
+        text: "empty branch (SA9003)"
 issues:
-  exclude-rules:
-    - linters: [errcheck]
-      text: "Error return value is not checked"
-    - linters: [govet]
-      text: "copylocks"
-    - linters: [govet]
-      text: "printf"
-    - linters: [unused]
-      text: "func .* is unused"
-      source: "^//go:build !test"
-    # ⬇️  NEW: belt-and-suspenders rule—filters any stray SA9003 hits
-    - linters: [staticcheck]
-      text: "empty branch (SA9003)"
   max-issues-per-linter: 0
   max-same-issues: 0

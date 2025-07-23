@@ -21,6 +21,7 @@ from google import genai
 from google.genai import types
 from .validator import SecurityValidator, SecurityError, StrategyComplianceError
 from .strategy_engine import AccessorStrategyEngine
+from .data_accessors import DataAccessorProvider
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,6 @@ class StrategyGenerator:
             # Apply rate limiting to prevent connection storms
             db_rate_limiter.wait_if_needed()
             
-            from data_accessors import DataAccessorProvider
             accessor = DataAccessorProvider()
             db_values = accessor.get_available_filter_values()
             
@@ -228,8 +228,8 @@ class StrategyGenerator:
             - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
             - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
             - NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
-            - Small cap stocks: filters={{"market_cap_max": 2000000000}}
-            - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
+            - Small cap stocks: filters={"market_cap_max": 2000000000}
+            - Specific tickers: filters={"tickers": ["AAPL", "MRNA", "TSLA"]}
 
             TICKER USAGE:
             - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
@@ -679,9 +679,7 @@ class StrategyGenerator:
                 EDIT REQUEST: {prompt} \n
                 Generate the updated strategy function."""
             else:
-
-                user_prompt = f"""CREATE STRATEGY: {prompt}"""
-
+                user_prompt = f"CREATE STRATEGY: {prompt}"
             
             # Add retry-specific guidance with error context
             if attempt > 0:
@@ -698,7 +696,6 @@ class StrategyGenerator:
             last_error = None
             
             try:
-                
                 logger.info("🕐 Starting OpenAI API call with model %s (timeout: 120s)", model_name)
                 
                 response = self.openai_client.responses.create(
@@ -721,8 +718,7 @@ class StrategyGenerator:
             except (ValueError, RuntimeError, ConnectionError) as e:
                 last_error = e
                 logger.warning("Model %s failed: %s", model_name, e)
-            
-            
+                return ""
             
         except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("OpenAI code generation failed: %s", e)
@@ -797,12 +793,12 @@ class StrategyGenerator:
                         "valid": True,
                         "error": None
                     }
-                else:
-                    logger.warning("❌ Execution test failed: %s", test_result.get('error', 'Unknown error'))
-                    return {
-                        "valid": False,
-                        "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
-                    }
+                
+                logger.warning("❌ Execution test failed: %s", test_result.get('error', 'Unknown error'))
+                return {
+                    "valid": False,
+                    "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
+                }
                     
             except asyncio.TimeoutError:
                 logger.warning("⏰ Fast validation timed out after 15 seconds")
@@ -971,20 +967,20 @@ class StrategyGenerator:
             
             logger.info("✅ Strategy saved successfully with ID: %s", result['strategyid'] if result else 'None')
             
-            if result:
-                return {
-                    'strategyId': result['strategyid'],
-                    'userId': user_id,
-                    'name': result['name'],
-                    'description': result['description'],
-                    'prompt': result['prompt'],
-                    'pythonCode': result['pythoncode'],
-                    'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
-                    'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
-                    'isAlertActive': result['isalertactive']
-                }
-            else:
+            if not result:
                 raise RuntimeError("Failed to save strategy - no result returned")
+                
+            return {
+                'strategyId': result['strategyid'],
+                'userId': user_id,
+                'name': result['name'],
+                'description': result['description'],
+                'prompt': result['prompt'],
+                'pythonCode': result['pythoncode'],
+                'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
+                'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
+                'isAlertActive': result['isalertactive']
+            }
                 
         except (psycopg2.Error, ConnectionError) as e:
             logger.error("❌ Failed to save strategy: %s", e)
