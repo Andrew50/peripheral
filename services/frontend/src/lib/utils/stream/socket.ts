@@ -1,7 +1,7 @@
 // socket.ts
 import { get, writable } from 'svelte/store';
-import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
-import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
+import { handleTimestampUpdate } from '$lib/utils/stores/stores';
+import type { TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
 import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
@@ -18,7 +18,7 @@ export type WatchlistUpdate = {
 		watchlistItemId: number;
 		securityId: number;
 		ticker: string;
-		[key: string]: any;
+		[key: string]: unknown;
 	};
 	itemId?: number;
 };
@@ -58,7 +58,7 @@ export type StrategyUpdate = {
 		strategyId: number;
 		name: string;
 		activeScreen?: boolean;
-		[key: string]: any;
+		[key: string]: unknown;
 	};
 };
 
@@ -66,7 +66,7 @@ export type AgentStatusUpdate = {
 	messageType: 'AgentStatusUpdate';
 	headline: string;
 	type: string; // e.g., 'FunctionUpdate', 'WebSearchQuery'
-	data: any; // The actual data - string for FunctionUpdate, object for WebSearchQuery
+	data: unknown; // The actual data - string for FunctionUpdate, object for WebSearchQuery
 };
 
 export type TitleUpdate = {
@@ -79,13 +79,63 @@ export type ChatResponse = {
 	type: 'chat_response';
 	request_id: string;
 	success: boolean;
-	data?: any;
+	data?: unknown;
 	error?: string;
 };
 
 // NEW: Import stores for dynamic updates
+interface WatchlistItem {
+	watchlistItemId: number;
+	securityId: number;
+	ticker: string;
+	[key: string]: unknown;
+}
+
+interface Watchlist {
+	watchlistId: number;
+	watchlistName: string;
+}
+
+interface Strategy {
+	strategyId: number;
+	name: string;
+	activeScreen?: boolean;
+	[key: string]: unknown;
+}
+
+interface Alert {
+	alertId: number;
+	alertType: string;
+	alertPrice?: number;
+	securityId?: number;
+	ticker?: string;
+	active: boolean;
+	direction?: boolean;
+	triggeredTimestamp?: number;
+}
+
+interface HorizontalLine {
+	id: number;
+	securityId: number;
+	price: number;
+	color: string;
+	lineWidth: number;
+}
+
+interface StoreModule {
+	watchlists: any;
+	currentWatchlistId: any;
+	currentWatchlistItems: any;
+	flagWatchlist: any;
+	flagWatchlistId: number | undefined;
+	horizontalLines: any;
+	activeAlerts: any;
+	inactiveAlerts: any;
+	strategies: any;
+}
+
 let storesInitialized = false;
-let storeModule: any = null;
+let storeModule: StoreModule | null = null;
 let initializationPromise: Promise<void> | null = null;
 
 // Initialize store references when needed - improved with retry logic
@@ -107,7 +157,7 @@ async function initializeStoreReferences(): Promise<void> {
 			storeModule = await import('$lib/utils/stores/stores');
 
 			// Verify that essential stores are available
-			if (!storeModule.watchlists || !storeModule.currentWatchlistId) {
+			if (!storeModule?.watchlists || !storeModule?.currentWatchlistId) {
 				throw new Error('Essential watchlist stores not available');
 			}
 
@@ -152,10 +202,10 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to current watchlist items if it's the active watchlist
 					const currentWatchlistId = get(storeModule.currentWatchlistId);
 					if (update.watchlistId === currentWatchlistId) {
-						storeModule.currentWatchlistItems.update((items: any[]) => {
+						storeModule.currentWatchlistItems.update((items: WatchlistItem[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
 							// Check if item already exists to avoid duplicates
-							if (!currentItems.find((item: any) =>
+							if (!currentItems.find((item: WatchlistItem) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
@@ -168,9 +218,9 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to flag watchlist if applicable
 					const flagWatchlistId = storeModule.flagWatchlistId;
 					if (update.watchlistId === flagWatchlistId) {
-						storeModule.flagWatchlist.update((items: any[]) => {
+						storeModule.flagWatchlist.update((items: WatchlistItem[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
-							if (!currentItems.find((item: any) =>
+							if (!currentItems.find((item: WatchlistItem) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
@@ -185,13 +235,13 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 			case 'remove':
 				if (update.itemId) {
 					// Remove from current watchlist items
-					storeModule.currentWatchlistItems.update((items: any[]) =>
-						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
+					storeModule.currentWatchlistItems.update((items: WatchlistItem[]) =>
+						Array.isArray(items) ? items.filter((item: WatchlistItem) => item.watchlistItemId !== update.itemId) : []
 					);
 
 					// Remove from flag watchlist
-					storeModule.flagWatchlist.update((items: any[]) =>
-						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
+					storeModule.flagWatchlist.update((items: WatchlistItem[]) =>
+						Array.isArray(items) ? items.filter((item: WatchlistItem) => item.watchlistItemId !== update.itemId) : []
 					);
 				}
 				break;
@@ -204,11 +254,11 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
 
 					if (!exists) {
-						storeModule.watchlists.update((lists: any[]) => {
+						storeModule.watchlists.update((lists: Watchlist[]) => {
 							const currentLists = Array.isArray(lists) ? lists : [];
 							const newWatchlist = {
-								watchlistId: update.watchlistId,
-								watchlistName: update.watchlistName
+								watchlistId: update.watchlistId!,
+								watchlistName: update.watchlistName!
 							};
 							return [...currentLists, newWatchlist];
 						});
@@ -235,8 +285,8 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
 
 					if (exists) {
-						storeModule.watchlists.update((lists: any[]) =>
-							Array.isArray(lists) ? lists.filter((list: any) => list.watchlistId !== update.watchlistId) : []
+						storeModule.watchlists.update((lists: Watchlist[]) =>
+							Array.isArray(lists) ? lists.filter((list: Watchlist) => list.watchlistId !== update.watchlistId) : []
 						);
 
 						// NEW: Also remove from visibleWatchlistIds
@@ -273,8 +323,8 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 			case 'update':
 				// Handle watchlist name updates
 				if (update.watchlistName && update.watchlistId) {
-					storeModule.watchlists.update((lists: any[]) =>
-						Array.isArray(lists) ? lists.map((list: any) =>
+					storeModule.watchlists.update((lists: Watchlist[]) =>
+						Array.isArray(lists) ? lists.map((list: Watchlist) =>
 							list.watchlistId === update.watchlistId
 								? { ...list, watchlistName: update.watchlistName! }
 								: list
@@ -302,13 +352,13 @@ function handleHorizontalLineUpdate(update: HorizontalLineUpdate) {
 
 		// Import horizontalLines store dynamically to avoid circular dependencies
 		import('$lib/utils/stores/stores').then(({ horizontalLines }) => {
-			horizontalLines.update((lines) => {
+			horizontalLines.update((lines: HorizontalLine[]) => {
 				const currentLines = Array.isArray(lines) ? lines : [];
 
 				switch (update.action) {
 					case 'add':
 						// Add new line if it doesn't already exist
-						if (!currentLines.find(line => line.id === update.line.id)) {
+						if (!currentLines.find((line: HorizontalLine) => line.id === update.line.id)) {
 							return [...currentLines, {
 								id: update.line.id,
 								securityId: update.line.securityId,
@@ -321,11 +371,11 @@ function handleHorizontalLineUpdate(update: HorizontalLineUpdate) {
 
 					case 'remove':
 						// Remove line by ID
-						return currentLines.filter(line => line.id !== update.line.id);
+						return currentLines.filter((line: HorizontalLine) => line.id !== update.line.id);
 
 					case 'update':
 						// Update existing line
-						return currentLines.map(line =>
+						return currentLines.map((line: HorizontalLine) =>
 							line.id === update.line.id
 								? {
 									...line,
@@ -378,24 +428,24 @@ async function handleAlertUpdate(update: AlertUpdate) {
 		console.log('🔔 Processing alert update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.activeAlerts.update((alerts: any[]) => {
+				storeModule.activeAlerts.update((alerts: Alert[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
 					return [...currentAlerts, update.alert];
 				});
 				break;
 
 			case 'remove':
-				storeModule.activeAlerts.update((alerts: any[]) =>
-					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				storeModule.activeAlerts.update((alerts: Alert[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: any[]) =>
-					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				storeModule.inactiveAlerts.update((alerts: Alert[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.activeAlerts.update((alerts: any[]) =>
-					Array.isArray(alerts) ? alerts.map((alert: any) =>
+				storeModule.activeAlerts.update((alerts: Alert[]) =>
+					Array.isArray(alerts) ? alerts.map((alert: Alert) =>
 						alert.alertId === update.alert.alertId ? { ...alert, ...update.alert } : alert
 					) : []
 				);
@@ -403,10 +453,10 @@ async function handleAlertUpdate(update: AlertUpdate) {
 
 			case 'trigger':
 				// Move from active to inactive alerts
-				storeModule.activeAlerts.update((alerts: any[]) =>
-					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
+				storeModule.activeAlerts.update((alerts: Alert[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: any[]) => {
+				storeModule.inactiveAlerts.update((alerts: Alert[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
 					return [...currentAlerts, { ...update.alert, active: false }];
 				});
@@ -437,21 +487,21 @@ async function handleStrategyUpdate(update: StrategyUpdate) {
 		console.log('📊 Processing strategy update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.strategies.update((strategies: any[]) => {
+				storeModule.strategies.update((strategies: Strategy[]) => {
 					const currentStrategies = Array.isArray(strategies) ? strategies : [];
 					return [...currentStrategies, { ...update.strategy, activeScreen: true }];
 				});
 				break;
 
 			case 'remove':
-				storeModule.strategies.update((strategies: any[]) =>
-					Array.isArray(strategies) ? strategies.filter((strat: any) => strat.strategyId !== update.strategy.strategyId) : []
+				storeModule.strategies.update((strategies: Strategy[]) =>
+					Array.isArray(strategies) ? strategies.filter((strat: Strategy) => strat.strategyId !== update.strategy.strategyId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.strategies.update((strategies: any[]) =>
-					Array.isArray(strategies) ? strategies.map((strat: any) =>
+				storeModule.strategies.update((strategies: Strategy[]) =>
+					Array.isArray(strategies) ? strategies.map((strat: Strategy) =>
 						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } : strat
 					) : []
 				);
@@ -479,7 +529,7 @@ export function setMessageIdUpdateCallback(callback: ((messageId: string, conver
 const pendingChatRequests = new Map<
 	string,
 	{
-		resolve: (value: any) => void;
+		resolve: (value: unknown) => void;
 		reject: (error: Error) => void;
 	}
 >();
@@ -487,13 +537,13 @@ const pendingChatRequests = new Map<
 // Store for single pending chat request while disconnected
 let pendingChatRequest: {
 	requestId: string;
-	resolve: (value: any) => void;
+	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
 	query: string;
-	context: any[];
-	activeChartContext: any;
+	context: unknown[];
+	activeChartContext: unknown;
 	conversationId: string;
-	timeoutId: any;
+	timeoutId: NodeJS.Timeout;
 } | null = null;
 
 // Chat request timeout duration (30 seconds)
@@ -685,14 +735,20 @@ export function connect() {
 			} else {
 				// Also feed data to the new streamHub system
 				if (
-					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) 
+					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended'))
 				) {
 					if (data.price === undefined) {
 						return;
 					}
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						const tickData: any = {
+						const tickData: {
+							securityid: number;
+							price: number;
+							data: unknown;
+							shouldUpdatePrice: boolean;
+							isExtended?: boolean;
+						} = {
 							securityid: securityId,
 							price: data.price,
 							data: data,
@@ -725,7 +781,12 @@ export function connect() {
 				) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						const tickData: any = {
+						const tickData: {
+							securityid: number;
+							data: unknown;
+							prevClose?: number;
+							extendedClose?: number;
+						} = {
 							securityid: securityId,
 							data: data
 						};
@@ -753,7 +814,7 @@ export function connect() {
 	});
 }
 
-function disconnect() {
+export function disconnect() {
 	shouldReconnect = false;
 	connectionStatus.set('disconnected');
 
@@ -826,15 +887,14 @@ export function unsubscribeSECFilings() {
 // Send chat query via WebSocket
 export function sendChatQuery(
 	query: string,
-	context: any[] = [],
-	activeChartContext: any = null,
+	context: unknown[] = [],
+	activeChartContext: unknown = null,
 	conversationId: string = ''
-): { promise: Promise<any>; cancel: () => void } {
-	let requestId: string;
+): { promise: Promise<unknown>; cancel: () => void } {
+	// Generate unique request ID
+	const requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 	const promise = new Promise((resolve, reject) => {
-		// Generate unique request ID
-		requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 		if (socket?.readyState === WebSocket.OPEN) {
 			// Connection is open, send immediately
@@ -895,10 +955,10 @@ export function sendChatQuery(
 function sendChatQueryNow(
 	requestId: string,
 	query: string,
-	context: any[],
-	activeChartContext: any,
+	context: unknown[],
+	activeChartContext: unknown,
 	conversationId: string,
-	resolve: (value: any) => void,
+	resolve: (value: unknown) => void,
 	reject: (error: Error) => void
 ) {
 	// Store the promise resolvers

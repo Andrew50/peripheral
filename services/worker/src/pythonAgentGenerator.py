@@ -190,10 +190,10 @@ class PythonAgentGenerator:
         - market_cap_min: float (e.g., 1000000000 for $1B minimum)
         - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-        FILTER EXAMPLES:{f'''
-        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
-        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{f'''
+        FILTER EXAMPLES:{'''
+        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{'''
+        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{'''
+        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{'''
         - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}

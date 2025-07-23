@@ -8,14 +8,14 @@ import json
 import logging
 import asyncio
 import traceback
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from datetime import datetime, time
-from typing import Dict, Any, Optional, List
 import re
 import time
 import threading
 from contextlib import contextmanager
+from datetime import datetime, time
+from typing import Dict, Any, Optional, List
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 from openai import OpenAI
 from google import genai 
@@ -920,7 +920,7 @@ class StrategyGenerator:
         conn = None
         cursor = None
         try:
-            logger.info(f"💾 Saving strategy to database (user_id: {user_id}, strategy_id: {strategy_id})")
+            logger.info("💾 Saving strategy to database (user_id: %s, strategy_id: %s)", user_id, strategy_id)
             
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
@@ -958,7 +958,7 @@ class StrategyGenerator:
                     # Name exists, add timestamp suffix
                     timestamp_suffix = datetime.now().strftime("%m%d_%H%M%S")
                     name = f"{original_name} ({timestamp_suffix})"
-                    logger.info(f"Strategy name conflict detected, using: {name}")
+                    logger.info("Strategy name conflict detected, using: %s", name)
                 
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
@@ -971,7 +971,7 @@ class StrategyGenerator:
             result = cursor.fetchone()
             conn.commit()
             
-            logger.info(f"✅ Strategy saved successfully with ID: {result['strategyid'] if result else 'None'}")
+            logger.info("✅ Strategy saved successfully with ID: %s", result['strategyid'] if result else 'None')
             
             if result:
                 return {

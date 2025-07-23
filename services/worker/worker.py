@@ -923,7 +923,7 @@ class StrategyWorker:
             logger.debug("   📄 Data: %s...", result_json[:200])
             
             self.redis_client.setex(result_key, 86400, result_json)
-            logger.debug(f"✅ Task result stored successfully")
+            logger.debug("✅ Task result stored successfully")
             
             # Track task assignment for failure recovery
             if status == "running":
