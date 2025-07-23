@@ -27,7 +27,7 @@ type ConversationInfo struct {
 // VerifyConversationOwnership verifies that a user owns a conversation
 func VerifyConversationOwnership(conn *data.Conn, conversationID string, userID int) error {
 	var ownerID int
-	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	err := conn.DB.QueryRow(context.Background(), "SELECT userId FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("conversation not found")
@@ -71,7 +71,7 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	conversationID := uuid.New().String()
 
 	query := `
-		INSERT INTO conversations (conversation_id, user_id, title, created_at, updated_at, metadata, total_token_count, message_count)
+		INSERT INTO conversations (conversation_id, userId, title, created_at, updated_at, metadata, total_token_count, message_count)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING conversation_id`
 
@@ -301,7 +301,7 @@ func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) 
 	}
 
 	// Delete the conversation (messages will be deleted via CASCADE)
-	query := `DELETE FROM conversations WHERE conversation_id = $1 AND user_id = $2`
+	query := `DELETE FROM conversations WHERE conversation_id = $1 AND userid = $2`
 
 	result, err := conn.DB.Exec(context.Background(), query, conversationID, userID)
 	if err != nil {
@@ -536,7 +536,7 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 			WHERE conversation_id = $1 AND archived = FALSE
 		),
 		updated_at = $2
-		WHERE conversation_id = $1 AND user_id = $3`
+		WHERE conversation_id = $1 AND userId = $3`
 
 	_, err = conn.DB.Exec(ctx, updateQuery, conversationID, time.Now(), userID)
 	if err != nil {

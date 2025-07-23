@@ -248,7 +248,7 @@ func GetUserLastTickers(conn *data.Conn, userID int, _ json.RawMessage) (interfa
 			securityid,
 			MAX(created_at) as last_queried
 		FROM chart_queries 
-		WHERE user_id = $1
+		WHERE userid = $1
 		GROUP BY securityid
 		ORDER BY last_queried DESC
 		LIMIT 3

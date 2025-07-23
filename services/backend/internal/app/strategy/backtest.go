@@ -417,8 +417,10 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 						progressCallback(message)
 					}
 					continue
-				}
-				if status == "completed" || status == "failed" {
+				} else if status == "messageUpdate" {
+					message, _ := taskUpdate["message"].(string)
+					log.Printf("Backtest message update: %s", message)
+				} else if status == "completed" || status == "failed" {
 					// Convert task result to WorkerBacktestResult
 					var result WorkerBacktestResult
 					if resultData, exists := taskUpdate["result"]; exists {

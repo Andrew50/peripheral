@@ -1159,7 +1159,7 @@ func logChartQuery(conn *data.Conn, userID int, args GetChartDataArgs) {
 	query := `
 		INSERT INTO chart_queries (
 			securityid, timeframe, timestamp, direction, bars, 
-			extended_hours, is_replay, include_sec_filings, user_id
+			extended_hours, is_replay, include_sec_filings, userid
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
