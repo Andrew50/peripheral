@@ -15,8 +15,12 @@ spec:
         app: db
     spec:
       nodeSelector:
-        kubernetes.io/hostname: big-pool-lg63q
-
+        dedicated: db
+      tolerations:
+        - key: "db-only"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
       initContainers:
         - name: init-db-dir
           image: busybox
