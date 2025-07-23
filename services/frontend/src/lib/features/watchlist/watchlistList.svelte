@@ -618,6 +618,7 @@
 		padding: clamp(3px, 0.35vw, 5px) clamp(2px, 0.35vw, 3px);
 		text-align: left;
 		background: transparent;
+		overflow: hidden;
 		font-size: clamp(0.73rem, 0.82rem, 0.95rem);
 		vertical-align: middle;
 	}
