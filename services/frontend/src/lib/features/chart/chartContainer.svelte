@@ -4,12 +4,12 @@
 	import { onMount, tick } from 'svelte';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryChart } from './interface';
-	export let width: number;
 	export let defaultChartData: any;
 
 	// Add focus management
 	let containerRef: HTMLDivElement;
-
+	let containerWidth = 0;
+	let chartWidth = 0;
 	onMount(() => {
 		// Wait for DOM to be ready
 		tick().then(() => {
@@ -17,6 +17,13 @@
 				containerRef.focus();
 			}
 		});
+		const ro = new ResizeObserver((entries) => {
+			containerWidth = entries[0].contentRect.width;
+			chartWidth = Math.floor(containerWidth / $settings.chartColumns);
+		});
+
+		ro.observe(containerRef);
+		return () => ro.disconnect();
 	});
 </script>
 
@@ -30,7 +37,7 @@
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
 				<Chart
-					width={width / $settings.chartColumns}
+					width={chartWidth}
 					chartId={i + j * $settings.chartColumns}
 					defaultChartData={i + j * $settings.chartColumns === 0 ? defaultChartData : null}
 				/>
@@ -53,7 +60,7 @@
 		display: flex;
 		width: 100%;
 		justify-content: space-between;
-		flex: 1;
+		min-width: 0;
 		min-height: 0;
 	}
 

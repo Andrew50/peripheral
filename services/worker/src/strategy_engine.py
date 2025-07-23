@@ -604,6 +604,40 @@ class AccessorStrategyEngine:
                 logger.error(f"Data accessor error in generate_equity_curve(instances={instances}, group_column={group_column}): {e}")
                 logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
                 raise  # Re-raise to maintain error propagation
+        def apply_drawdown_styling(fig):
+            """Apply custom styling for drawdown plots with red line and shaded fill"""
+            # Update all traces to use red line with shaded fill
+            fig.update_traces(
+                line=dict(color='rgb(255, 77, 77)', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(255, 77, 77, 0.4)'
+            )
+            
+            return fig
+        
+        def apply_equity_curve_styling(fig):
+            """Apply custom styling for equity curve plots - blue above 0, red below 0, no fill"""
+            # Update all traces to remove fill and set basic styling
+            fig.update_traces(
+                fill=None,  # Remove any fill
+                fillcolor=None,
+                line=dict(width=2)
+            )
+            
+            # For each trace, determine the predominant color based on final value
+            # or split into positive/negative segments if needed
+            for i, trace in enumerate(fig.data):
+                if hasattr(trace, 'y') and trace.y is not None:
+                    y_values = list(trace.y)
+                    if y_values:
+                        # Use the final value to determine color
+                        final_value = y_values[-1]
+                        color = 'rgb(0, 150, 255)' if final_value >= 0 else 'rgb(255, 77, 77)'
+                        
+                        # Update the trace color
+                        fig.data[i].update(line=dict(color=color, width=2))
+            
+            return fig
         
         safe_globals = {
             # Built-ins for safe execution (including __import__ for import statements)
@@ -643,6 +677,10 @@ class AccessorStrategyEngine:
             'get_bar_data': bound_get_bar_data,
             'get_general_data': bound_get_general_data,
             'generate_equity_curve': bound_generate_equity_curve,
+            
+            # Plot styling functions
+            'apply_drawdown_styling': apply_drawdown_styling,
+            'apply_equity_curve_styling': apply_equity_curve_styling,
             
             # Math and datetime - make datetime module fully available
             'datetime': datetime,

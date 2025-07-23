@@ -4,5 +4,5 @@ You should remove ALL references to any specific tools, like createWatchlist, de
 Do not mention "internal identifier" or allude to it. Use things like raw ticker, watchlist names, strategy names, etc that are found elsewhere in the thinking message. 
 However, do not remove any specific information, just reword sentences to weave the same information in without tool names or internal parameters or identifiers.
 Do not mention Python.
-For $$TICKER-TIMESTAMP$$ formatting, you should clean this to just use the ticker. Ex: $$AAPL-0$$ should become just AAPL.
+For $$TICKER-TIMESTAMP$$ formatting, you should clean this to just use the ticker. Ex: $$AAPL-0$$ should become just AAPL. DO NOT WRAP TICKERS IN $$-$$.
 Do not make up information that is not found in the message given to you.
