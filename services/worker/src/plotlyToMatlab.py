@@ -2,11 +2,12 @@
 Generic Plotly-to-matplotlib fallback for chart image generation
 """
 
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from io import BytesIO
 import base64
 import logging
-from io import BytesIO
-
-import matplotlib.pyplot as plt
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ def extract_any_plottable_data(trace):
                 
                 if numeric_data:
                     plottable_data[attr] = numeric_data
-            except (ValueError, TypeError, AttributeError) as e:
-                logger.debug("Error extracting plottable data for attribute '%s': %s", attr, e)
+            except Exception as e:
+                logger.debug(f"Error extracting plottable data for attribute '{attr}': {e}")
                 continue  # Stop further processing for this trace if unexpected error
     
     return plottable_data
@@ -117,8 +118,8 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                     if create_matlab_plot(plottable_data, trace_name, ax):
                         traces_plotted += 1
                     
-            except (ValueError, TypeError, AttributeError) as trace_error:
-                logger.debug("Skipping trace %s due to error: %s", i, trace_error)
+            except Exception as trace_error:
+                logger.debug(f"Skipping trace {i} due to error: {trace_error}")
                 continue
         
         # Apply basic styling for readability
@@ -139,8 +140,8 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                 else: 
                     title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
                 ax.set_title(title_text)
-        except (AttributeError, TypeError) as e:
-            logger.debug("Optional: could not set plot title: %s", e)
+        except Exception as e:
+            logger.debug(f"Optional: could not set plot title: {e}")
         
         # Extract axis labels if available
         try:
@@ -154,8 +155,8 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                     y_title = getattr(plotly_fig.layout.yaxis.title, 'text', None)
                     if y_title:
                         ax.set_ylabel(y_title)
-        except (AttributeError, TypeError) as e:
-            logger.debug("Optional: could not set axis labels: %s", e)
+        except Exception as e:
+            logger.debug(f"Optional: could not set axis labels: {e}")
         
         # Convert to PNG bytes
         buffer = BytesIO()
@@ -168,10 +169,10 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
         png_bytes = buffer.read()
         png_base64 = base64.b64encode(png_bytes).decode('utf-8')
         
-        logger.debug("Successfully generated matplotlib fallback chart with %s traces", traces_plotted)
+        logger.debug(f"Successfully generated matplotlib fallback chart with {traces_plotted} traces")
         return png_base64
         
-    except (ValueError, TypeError, AttributeError, OSError) as e:
-        logger.error("Failed to generate matplotlib fallback chart: %s", e)
+    except Exception as e:
+        logger.error(f"Failed to generate matplotlib fallback chart: {e}")
         # Return empty string on complete failure
         return "" 
