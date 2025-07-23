@@ -170,14 +170,14 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			};
 			
 			// Apply frontend theme styling
-			plotLayout.paper_bgcolor = '#121212';  // Match chat background
-			plotLayout.plot_bgcolor = '#121212';   // Match chat background
+			plotLayout.paper_bgcolor = '#ffffff';  // Changed to white background
+			plotLayout.plot_bgcolor = '#ffffff';   // Changed to white background
 			
 			// Font configuration to match frontend
 			plotLayout.font = {
 				family: 'Inter, system-ui, sans-serif',
 				size: 16,
-				color: '#f8fafc' // text-slate-50
+				color: '#000000' // Changed to dark text
 			};
 			
 			// Title configuration with larger size
@@ -198,8 +198,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 							text: titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 48,
-								color: '#f8fafc'
+								size: 54,
+								color: '#000000'
 							},
 							xref: 'paper',
 							x: 0.5,
@@ -211,8 +211,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 							...titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 48,
-								color: '#f8fafc'
+								size: 54,
+								color: '#000000'
 							},
 							x: 0.5,
 							xanchor: 'center'
@@ -234,7 +234,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			// Legend styling - positioned outside plot area to avoid shifting plot center
 			plotLayout.legend = {
 				...plotLayout.legend,
-				font: { color: '#f8fafc', size: 18 },
+				font: { color: '#000000', size: 18 },
 				bgcolor: 'transparent',
 				borderwidth: 0,
 				orientation: 'v',
@@ -250,14 +250,14 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			// X-axis styling
 			plotLayout.xaxis = {
 				...plotLayout.xaxis,
-				gridcolor: 'rgba(255, 255, 255, 0.05)',
-				linecolor: 'rgba(248, 250, 252, 0.8)',
+				gridcolor: 'rgba(0, 0, 0, 0.1)',
+				linecolor: 'rgba(30, 41, 59, 0.8)',
 				linewidth: 2,
-				tickfont: { color: '#f1f5f9', size: 20 },
-				titlefont: { color: '#f8fafc', size: 32 },
+				tickfont: { color: '#000000', size: 20 },
+				titlefont: { color: '#000000', size: 32 },
 				automargin: true,
 				ticklen: 20,
-				tickcolor: 'rgba(248, 250, 252, 0.8)',
+				tickcolor: 'rgba(0, 0, 0, 0.8)',
 				tickwidth: 2
 			};
 			if (plotLayout.xaxis.title) {
@@ -267,11 +267,11 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			// Y-axis styling
 			plotLayout.yaxis = {
 				...plotLayout.yaxis,
-				gridcolor: 'rgba(255, 255, 255, 0.05)',
-				linecolor: 'rgba(248, 250, 252, 0.8)',
+				gridcolor: 'rgba(0, 0, 0, 0.1)',
+				linecolor: 'rgba(30, 41, 59, 0.8)',
 				linewidth: 2,
-				tickfont: { color: '#f1f5f9', size: 20 },
-				titlefont: { color: '#f8fafc', size: 32 },
+				tickfont: { color: '#000000', size: 20 },
+				titlefont: { color: '#000000', size: 32 },
 				automargin: true
 			};
 			if (plotLayout.yaxis.title) {
@@ -344,7 +344,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						});
 						trace.textposition = 'outside';
 						trace.textfont = {
-							color: '#f1f5f9',
+							color: '#000000',
 							size: 23,
 							family: 'Inter, system-ui, sans-serif'
 						};
@@ -406,7 +406,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						});
 						
 						trace.textfont = {
-							color: '#ffffff',
+							color: '#000000',
 							size: 18,
 							family: 'Inter, system-ui, sans-serif'
 						};
@@ -478,7 +478,7 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						});
 						
 						trace.textfont = {
-							color: '#ffffff',
+							color: '#000000',
 							size: 18,
 							family: 'Inter, system-ui, sans-serif'
 						};
@@ -500,11 +500,11 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				
 				// Hover label styling
 				trace.hoverlabel = {
-					bgcolor: '#1e293b',
-					bordercolor: '#475569',
+					bgcolor: '#f8fafc',
+					bordercolor: '#d1d5db',
 					borderwidth: 1,
 					font: {
-						color: '#ffffff',
+						color: '#1e293b',
 						size: 13,
 						family: 'Inter, system-ui, sans-serif'
 					},
@@ -532,12 +532,12 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
-				titleContainer.style.top = '30px';  // Adjusted for larger canvas
+				titleContainer.style.top = '50px';  // Adjusted for larger canvas
 				titleContainer.style.left = '50%';
 				titleContainer.style.transform = 'translateX(-50%)';
 				titleContainer.style.display = 'flex';
 				titleContainer.style.alignItems = 'center';
-				titleContainer.style.gap = '15px';  // Increased gap for larger canvas
+				titleContainer.style.gap = '20px';  // Increased gap for larger canvas
 				titleContainer.style.zIndex = '1000';
 				titleContainer.style.whiteSpace = 'nowrap';
 				titleContainer.style.minWidth = 'max-content';
@@ -568,8 +568,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 						}
 					}
 					
-					iconImg.style.width = '44px';  // Slightly larger for bigger canvas
-					iconImg.style.height = '44px';
+					iconImg.style.width = '48px';  // Slightly larger for bigger canvas
+					iconImg.style.height = '48px';
 					iconImg.style.borderRadius = '6px';
 					iconImg.style.objectFit = 'cover';
 					titleContainer.appendChild(iconImg);
@@ -579,9 +579,9 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 				const titleText = document.createElement('span');
 				titleText.textContent = window.titleText;
 				titleText.style.fontFamily = 'Inter, system-ui, sans-serif';
-				titleText.style.fontSize = '38px';  // Slightly larger for bigger canvas
+				titleText.style.fontSize = '44px';  // Slightly larger for bigger canvas
 				titleText.style.fontWeight = '600';
-				titleText.style.color = '#f8fafc';
+				titleText.style.color = '#000000';
 				
 				titleContainer.appendChild(titleText);
 				document.getElementById('plot').appendChild(titleContainer);
@@ -592,8 +592,8 @@ func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config 
 			watermark.style.bottom = '35px';  // Adjusted for larger canvas
 			watermark.style.right = '35px';   // Adjusted for larger canvas
 			watermark.style.fontFamily = 'Inter, system-ui, sans-serif';
-			watermark.style.fontSize = '18px';
-			watermark.style.color = 'rgba(255, 255, 255, 1)';
+			watermark.style.fontSize = '24px';
+			watermark.style.color = 'rgba(0, 0, 0, 1)';
 			watermark.style.zIndex = '1000';
 			watermark.innerHTML = 'Powered by <span style="font-size: 44px; font-weight: 600;">Peripheral.io</span>';
 			document.getElementById('plot').appendChild(watermark);
