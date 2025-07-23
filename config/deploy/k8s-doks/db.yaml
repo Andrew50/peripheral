@@ -66,7 +66,7 @@ spec:
               memory: 4000Mi
             limits:
               cpu: 3500m
-              memory: 7000Mi
+              memory: 6250Mi
           volumeMounts:
             - name: db-pvc
               mountPath: /home/postgres/pgdata
