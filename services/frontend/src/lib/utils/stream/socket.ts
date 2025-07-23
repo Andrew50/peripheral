@@ -1,7 +1,7 @@
 // socket.ts
-import { get, writable } from 'svelte/store';
+import { get, writable, type Writable } from 'svelte/store';
 import { handleTimestampUpdate } from '$lib/utils/stores/stores';
-import type { TradeData, QuoteData, CloseData, Alert, Watchlist } from '$lib/utils/types/types';
+import type { TradeData, QuoteData, CloseData, Alert, Watchlist, Instance, Strategy } from '$lib/utils/types/types';
 import type { HorizontalLine } from '$lib/utils/stores/stores';
 import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
@@ -102,15 +102,15 @@ interface SocketStrategy {
 }
 
 interface StoreModule {
-	watchlists: any;
-	currentWatchlistId: any;
-	currentWatchlistItems: any;
-	flagWatchlist: any;
+	watchlists: Writable<Watchlist[]>;
+	currentWatchlistId: Writable<number | undefined>;
+	currentWatchlistItems: Writable<Instance[]>;
+	flagWatchlist: Writable<Instance[]>;
 	flagWatchlistId: number | undefined;
-	horizontalLines: any;
-	activeAlerts: any;
-	inactiveAlerts: any;
-	strategies: any;
+	horizontalLines: Writable<HorizontalLine[]>;
+	activeAlerts: Writable<Alert[] | undefined>;
+	inactiveAlerts: Writable<Alert[] | undefined>;
+	strategies: Writable<Strategy[]>;
 }
 
 let storesInitialized = false;
@@ -181,14 +181,22 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to current watchlist items if it's the active watchlist
 					const currentWatchlistId = get(storeModule.currentWatchlistId);
 					if (update.watchlistId === currentWatchlistId) {
-						storeModule.currentWatchlistItems.update((items: WatchlistItem[]) => {
+						storeModule.currentWatchlistItems.update((items: Instance[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
 							// Check if item already exists to avoid duplicates
-							if (!currentItems.find((item: WatchlistItem) =>
+							if (!currentItems.find((item: Instance) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
-								return [...currentItems, update.item!];
+								// Convert WatchlistItem to Instance format
+								const instanceItem: Instance = {
+									securityId: update.item!.securityId,
+									ticker: update.item!.ticker,
+									timestamp: 0,
+									timeframe: '',
+									extendedHours: false
+								};
+								return [...currentItems, instanceItem];
 							}
 							return currentItems;
 						});
@@ -197,13 +205,21 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to flag watchlist if applicable
 					const flagWatchlistId = storeModule.flagWatchlistId;
 					if (update.watchlistId === flagWatchlistId) {
-						storeModule.flagWatchlist.update((items: WatchlistItem[]) => {
+						storeModule.flagWatchlist.update((items: Instance[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
-							if (!currentItems.find((item: WatchlistItem) =>
+							if (!currentItems.find((item: Instance) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
-								return [...currentItems, update.item!];
+								// Convert WatchlistItem to Instance format
+								const instanceItem: Instance = {
+									securityId: update.item!.securityId,
+									ticker: update.item!.ticker,
+									timestamp: 0,
+									timeframe: '',
+									extendedHours: false
+								};
+								return [...currentItems, instanceItem];
 							}
 							return currentItems;
 						});
@@ -214,13 +230,19 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 			case 'remove':
 				if (update.itemId) {
 					// Remove from current watchlist items
-					storeModule.currentWatchlistItems.update((items: WatchlistItem[]) =>
-						Array.isArray(items) ? items.filter((item: WatchlistItem) => item.watchlistItemId !== update.itemId) : []
+					storeModule.currentWatchlistItems.update((items: Instance[]) =>
+						Array.isArray(items) ? items.filter((item: Instance) =>
+							// Find by securityId since Instance doesn't have watchlistItemId
+							item.securityId !== update.itemId
+						) : []
 					);
 
 					// Remove from flag watchlist
-					storeModule.flagWatchlist.update((items: WatchlistItem[]) =>
-						Array.isArray(items) ? items.filter((item: WatchlistItem) => item.watchlistItemId !== update.itemId) : []
+					storeModule.flagWatchlist.update((items: Instance[]) =>
+						Array.isArray(items) ? items.filter((item: Instance) =>
+							// Find by securityId since Instance doesn't have watchlistItemId
+							item.securityId !== update.itemId
+						) : []
 					);
 				}
 				break;
@@ -407,23 +429,23 @@ async function handleAlertUpdate(update: AlertUpdate) {
 		console.log('🔔 Processing alert update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.activeAlerts.update((alerts: Alert[]) => {
+				storeModule.activeAlerts.update((alerts: Alert[] | undefined) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
 					return [...currentAlerts, update.alert as Alert];
 				});
 				break;
 
 			case 'remove':
-				storeModule.activeAlerts.update((alerts: Alert[]) =>
+				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
 					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: Alert[]) =>
+				storeModule.inactiveAlerts.update((alerts: Alert[] | undefined) =>
 					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.activeAlerts.update((alerts: Alert[]) =>
+				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
 					Array.isArray(alerts) ? alerts.map((alert: Alert) =>
 						alert.alertId === update.alert.alertId ? { ...alert, ...update.alert } : alert
 					) : []
@@ -432,10 +454,10 @@ async function handleAlertUpdate(update: AlertUpdate) {
 
 			case 'trigger':
 				// Move from active to inactive alerts
-				storeModule.activeAlerts.update((alerts: Alert[]) =>
+				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
 					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: Alert[]) => {
+				storeModule.inactiveAlerts.update((alerts: Alert[] | undefined) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
 					return [...currentAlerts, { ...update.alert, active: false } as Alert];
 				});
@@ -466,22 +488,38 @@ async function handleStrategyUpdate(update: StrategyUpdate) {
 		console.log('📊 Processing strategy update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.strategies.update((strategies: SocketStrategy[]) => {
+				storeModule.strategies.update((strategies: Strategy[]) => {
 					const currentStrategies = Array.isArray(strategies) ? strategies : [];
-					return [...currentStrategies, { ...update.strategy, activeScreen: true } as SocketStrategy];
+					// Convert SocketStrategy to Strategy format
+					const newStrategy: Strategy = {
+						strategyId: update.strategy.strategyId,
+						userId: 0, // Will be set by backend
+						name: update.strategy.name,
+						criteria: {
+							timeframe: '',
+							bars: 0,
+							threshold: 0,
+							dolvol: 0,
+							adr: 0,
+							mcap: 0
+						}
+					};
+					return [...currentStrategies, newStrategy];
 				});
 				break;
 
 			case 'remove':
-				storeModule.strategies.update((strategies: SocketStrategy[]) =>
-					Array.isArray(strategies) ? strategies.filter((strat: SocketStrategy) => strat.strategyId !== update.strategy.strategyId) : []
+				storeModule.strategies.update((strategies: Strategy[]) =>
+					Array.isArray(strategies) ? strategies.filter((strat: Strategy) => strat.strategyId !== update.strategy.strategyId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.strategies.update((strategies: SocketStrategy[]) =>
-					Array.isArray(strategies) ? strategies.map((strat: SocketStrategy) =>
-						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } as SocketStrategy : strat
+				storeModule.strategies.update((strategies: Strategy[]) =>
+					Array.isArray(strategies) ? strategies.map((strat: Strategy) =>
+						strat.strategyId === update.strategy.strategyId
+							? { ...strat, name: update.strategy.name }
+							: strat
 					) : []
 				);
 				break;

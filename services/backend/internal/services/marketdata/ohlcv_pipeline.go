@@ -48,8 +48,10 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 		log.Printf("workerCount is negative, setting to 1")
 		workerCount = 1
 	}
-	cfg.MinConns = int32(workerCount)
-	cfg.MaxConns = int32(workerCount)
+	// Safe conversion after bounds checking
+	workerCountInt32 := int32(workerCount) // #nosec G115 -- bounds checked above
+	cfg.MinConns = workerCountInt32
+	cfg.MaxConns = workerCountInt32
 
 	// Apply tuning parameters to every connection via AfterConnect hook.
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {

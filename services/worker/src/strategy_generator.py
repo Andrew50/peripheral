@@ -86,7 +86,7 @@ class StrategyGenerator:
             self.environment = "dev"
         else:
             self.environment = "prod"
-        logger.info(f"Environment initialized to: {self.environment}")
+        logger.info("Environment initialized to: %s", self.environment)
 
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database - REQUIRED"""
@@ -107,7 +107,7 @@ class StrategyGenerator:
             return db_values
             
         except Exception as e:
-            logger.error(f"❌ CRITICAL: Could not fetch current filter values from database: {e}")
+            logger.error("❌ CRITICAL: Could not fetch current filter values from database: %s", e)
             raise RuntimeError(f"Strategy generation requires database connection to get current filter values: {e}") from e
     
     def _parse_filter_needs_response(self, response) -> Dict[str, bool]:
@@ -125,10 +125,10 @@ class StrategyGenerator:
                     response_text = json_match.group(1)
             
             filter_needs = json.loads(response_text)
-            logger.info(f"Filter needs determined: {filter_needs}")
+            logger.info("Filter needs determined: %s", filter_needs)
             return filter_needs
         except (json.JSONDecodeError, AttributeError) as e:
-            logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
+            logger.warning("Failed to parse filter needs JSON: %s, response: %s", e, response.text)
             # Default to needing all filters if parsing fails
             return {"sectors": True, "industries": True, "primary_exchanges": True}
     
@@ -562,7 +562,7 @@ class StrategyGenerator:
                 strategy_id=strategy_id if is_edit else None
             )
             
-            logger.info(f"Strategy {'updated' if is_edit else 'created'} successfully: ID {saved_strategy['strategyId']}")
+            logger.info("Strategy %s successfully: ID %s", 'updated' if is_edit else 'created', saved_strategy['strategyId'])
             
             return {
                 "success": True,
@@ -571,7 +571,7 @@ class StrategyGenerator:
             }
             
         except Exception as e:
-            logger.error(f"Strategy creation failed: {e}")
+            logger.error("Strategy creation failed: %s", e)
             return {
                 "success": False,
                 "error": str(e)
@@ -584,7 +584,7 @@ class StrategyGenerator:
         
         for attempt in range(max_retries + 1):
             try:
-                logger.info(f"Generation attempt {attempt + 1}/{max_retries + 1}")
+                logger.info("Generation attempt %d/%d", attempt + 1, max_retries + 1)
                 
                 # Generate strategy code with error context for retries
                 strategy_code = self._generate_strategy_code(userID, prompt, existing_strategy, attempt, last_validation_error, conversationID, messageID)
@@ -598,16 +598,16 @@ class StrategyGenerator:
                 if validation_result["valid"]:
                     logger.info("Strategy validation passed")
                     return strategy_code, True
-                else:
-                    last_validation_error = validation_result['error']
-                    logger.warning(f"Validation failed on attempt {attempt + 1}: {validation_result['error']}")
-                    if attempt == max_retries:
-                        # Return the last generated code even if validation failed
-                        logger.warning("Max retries reached, returning last generated code")
-                        return strategy_code, False
+                
+                last_validation_error = validation_result['error']
+                logger.warning("Validation failed on attempt %d: %s", attempt + 1, validation_result['error'])
+                if attempt == max_retries:
+                    # Return the last generated code even if validation failed
+                    logger.warning("Max retries reached, returning last generated code")
+                    return strategy_code, False
                     
             except Exception as e:
-                logger.error(f"Generation attempt {attempt + 1} failed: {e}")
+                logger.error("Generation attempt %d failed: %s", attempt + 1, e)
                 if attempt == max_retries:
                     break
         
@@ -618,7 +618,7 @@ class StrategyGenerator:
         conn = None
         cursor = None
         try:
-            logger.info(f"📖 Fetching existing strategy (user_id: {user_id}, strategy_id: {strategy_id})")
+            logger.info("📖 Fetching existing strategy (user_id: %s, strategy_id: %s)", user_id, strategy_id)
             
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
@@ -641,7 +641,7 @@ class StrategyGenerator:
             result = cursor.fetchone()
             
             if result:
-                logger.info(f"✅ Found existing strategy: {result['name']}")
+                logger.info("✅ Found existing strategy: %s", result['name'])
                 return {
                     'strategyId': result['strategyid'],
                     'name': result['name'],
@@ -649,13 +649,13 @@ class StrategyGenerator:
                     'prompt': result['prompt'] or '',
                     'pythonCode': result['pythoncode'] or ''
                 }
-            else:
-                logger.warning(f"⚠️ No strategy found for user_id {user_id}, strategy_id {strategy_id}")
-                return None
+            
+            logger.warning("⚠️ No strategy found for user_id %s, strategy_id %s", user_id, strategy_id)
+            return None
             
         except Exception as e:
-            logger.error(f"❌ Failed to fetch existing strategy: {e}")
-            logger.error(f"📄 Fetch strategy traceback: {traceback.format_exc()}")
+            logger.error("❌ Failed to fetch existing strategy: %s", e)
+            logger.error("📄 Fetch strategy traceback: %s", traceback.format_exc())
             return None
         finally:
             # Ensure connections are always closed
@@ -667,7 +667,7 @@ class StrategyGenerator:
                     conn.close()
                     logger.debug("🔌 Database connection closed")
             except Exception as cleanup_error:
-                logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
+                logger.warning("⚠️ Error during database cleanup: %s", cleanup_error)
     
     def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
         """
@@ -692,20 +692,20 @@ class StrategyGenerator:
             # Add retry-specific guidance with error context
             if attempt > 0:
                 user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attempt + 1}:"
-                user_prompt += f"\n- Previous attempt failed validation"
+                user_prompt += "\n- Previous attempt failed validation"
                 if last_error:
                     user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
-                user_prompt += f"\n- Focus on data type safety for pandas operations"
-                user_prompt += f"\n- Use pd.to_numeric() before .quantile() operations"
-                user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
-                user_prompt += f"\n- Ensure proper error handling for edge cases"
+                user_prompt += "\n- Focus on data type safety for pandas operations"
+                user_prompt += "\n- Use pd.to_numeric() before .quantile() operations"
+                user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
+                user_prompt += "\n- Ensure proper error handling for edge cases"
             
             model_name = "o3"
             last_error = None
             
             try:
                 
-                logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
+                logger.info("🕐 Starting OpenAI API call with model %s (timeout: 120s)", model_name)
                 
                 response = self.openai_client.responses.create(
                     model=model_name,
@@ -721,17 +721,17 @@ class StrategyGenerator:
                 # Extract Python code from response
                 strategy_code = self._extract_python_code(strategy_code)
                 
-                logger.info(f"Generated strategy code with {model_name} ({len(strategy_code)} characters)")
+                logger.info("Generated strategy code with %s (%d characters)", model_name, len(strategy_code))
                 return strategy_code
                 
             except Exception as e:
                 last_error = e
-                logger.warning(f"Model {model_name} failed: {e}")
+                logger.warning("Model %s failed: %s", model_name, e)
             
             
             
         except Exception as e:
-            logger.error(f"OpenAI code generation failed: {e}")
+            logger.error("OpenAI code generation failed: %s", e)
             return ""
 
     
@@ -750,7 +750,7 @@ class StrategyGenerator:
     async def _validate_strategy_code(self, strategy_code: str) -> Dict[str, Any]:
         """Validate strategy code using the security validator and test execution with comprehensive error handling"""
         try:
-            logger.info(f"🔍 Starting validation of strategy code ({len(strategy_code)} characters)")
+            logger.info("🔍 Starting validation of strategy code (%d characters)", len(strategy_code))
             
             # Print the entire Python strategy returned by o3 before validation
             print("\n" + "="*80)
@@ -765,10 +765,10 @@ class StrategyGenerator:
             logger.info("🛡️ Running security validation...")
             try:
                 is_valid = self.validator.validate_strategy_code(strategy_code)
-                logger.info(f"🛡️ Security validation result: {is_valid}")
+                logger.info("🛡️ Security validation result: %s", is_valid)
             except Exception as security_error:
-                logger.error(f"🚨 Security validation crashed: {security_error}")
-                logger.error(f"📄 Security validation traceback: {traceback.format_exc()}")
+                logger.error("🚨 Security validation crashed: %s", security_error)
+                logger.error("📄 Security validation traceback: %s", traceback.format_exc())
                 return {
                     "valid": False,
                     "error": f"Security validation crashed: {str(security_error)}"
@@ -795,7 +795,7 @@ class StrategyGenerator:
                     timeout=15.0  # 15 second timeout for fast validation
                 )
                 
-                logger.info(f"🧪 Execution test completed: success={test_result.get('success', False)}")
+                logger.info("🧪 Execution test completed: success=%s", test_result.get('success', False))
                 
                 if test_result.get('success', False):
                     logger.info("✅ Execution test passed")
@@ -804,7 +804,7 @@ class StrategyGenerator:
                         "error": None
                     }
                 else:
-                    logger.warning(f"❌ Execution test failed: {test_result.get('error', 'Unknown error')}")
+                    logger.warning("❌ Execution test failed: %s", test_result.get('error', 'Unknown error'))
                     return {
                         "valid": False,
                         "error": f"Execution test failed: {test_result.get('error', 'Unknown error')}"
@@ -820,8 +820,8 @@ class StrategyGenerator:
                 
             except Exception as exec_error:
                 error_msg = str(exec_error)
-                logger.warning(f"⚠️ Execution test failed with exception: {exec_error}")
-                logger.warning(f"📄 Execution test traceback: {traceback.format_exc()}")
+                logger.warning("⚠️ Execution test failed with exception: %s", exec_error)
+                logger.warning("📄 Execution test traceback: %s", traceback.format_exc())
                 
                 # Classify error types - only allow data-related issues as warnings
                 data_related_errors = [
@@ -838,7 +838,7 @@ class StrategyGenerator:
                 
                 # If it's a clear programming error, mark as invalid for retry
                 if any(prog_err in error_lower for prog_err in programming_errors):
-                    logger.error(f"🚨 Programming error detected: {error_msg}")
+                    logger.error("🚨 Programming error detected: %s", error_msg)
                     return {
                         "valid": False,
                         "error": f"Programming error: {error_msg}"
@@ -846,28 +846,28 @@ class StrategyGenerator:
                 
                 # Only allow data-related errors as warnings
                 if any(data_err in error_lower for data_err in data_related_errors):
-                    logger.info(f"💡 Data-related error (allowing as warning): {error_msg}")
+                    logger.info("💡 Data-related error (allowing as warning): %s", error_msg)
                     return {
                         "valid": True,
                         "error": f"Warning: Data-related issue: {error_msg}"
                     }
                 
                 # Default: treat unknown errors as programming errors
-                logger.error(f"🚨 Unknown error type, treating as programming error: {error_msg}")
+                logger.error("🚨 Unknown error type, treating as programming error: %s", error_msg)
                 return {
                     "valid": False,
                     "error": f"Programming error: {error_msg}"
                 }
             
         except (SecurityError, StrategyComplianceError) as e:
-            logger.error(f"🚨 Strategy compliance error: {e}")
+            logger.error("🚨 Strategy compliance error: %s", e)
             return {
                 "valid": False,
                 "error": str(e)
             }
         except Exception as e:
-            logger.error(f"💥 Unexpected validation error: {e}")
-            logger.error(f"📄 Validation error traceback: {traceback.format_exc()}")
+            logger.error("💥 Unexpected validation error: %s", e)
+            logger.error("📄 Validation error traceback: %s", traceback.format_exc())
             return {
                 "valid": False,
                 "error": f"Validation failed: {str(e)}"
@@ -993,8 +993,8 @@ class StrategyGenerator:
                 raise Exception("Failed to save strategy - no result returned")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to save strategy: {e}")
-            logger.error(f"📄 Save strategy traceback: {traceback.format_exc()}")
+            logger.error("❌ Failed to save strategy: %s", e)
+            logger.error("📄 Save strategy traceback: %s", traceback.format_exc())
             raise
         finally:
             # Ensure connections are always closed
@@ -1006,4 +1006,4 @@ class StrategyGenerator:
                     conn.close()
                     logger.debug("🔌 Database connection closed")
             except Exception as cleanup_error:
-                logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}") 
+                logger.warning("⚠️ Error during database cleanup: %s", cleanup_error) 
