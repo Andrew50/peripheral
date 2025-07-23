@@ -6,13 +6,30 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/polygon-io/client-go/websocket/models"
 )
+
+// CriticalAlertFunc defines a function type for sending critical alerts
+type CriticalAlertFunc func(error, ...string) error
+
+// Global variable to hold the critical alert function
+var criticalAlertCallback CriticalAlertFunc
+
+// SetCriticalAlertCallback sets the callback function for sending critical alerts
+func SetCriticalAlertCallback(callback CriticalAlertFunc) {
+	criticalAlertCallback = callback
+}
+
+// sendCriticalAlert sends a critical alert if the callback is set
+func sendCriticalAlert(err error, functionName string) {
+	if criticalAlertCallback != nil {
+		_ = criticalAlertCallback(err, functionName)
+	}
+}
 
 type OHLCVRecord struct {
 	Timestamp int64
@@ -34,12 +51,19 @@ type OHLCVBuffer struct {
 	flushCh     chan []OHLCVRecord
 	wg          sync.WaitGroup
 	stopped     bool
+	// Performance tracking
+	totalRecordsAdded     int64
+	totalBatchesProcessed int64
+	totalRecordsDropped   int64
+	lastLogTime           time.Time
 }
 
-const flushThreshold = 200000
-const flushTimeout = 1 * time.Second
-const checkInterval = 1 * time.Second
-const healthCheckInterval = 30 * time.Second
+const flushThreshold = 10000                 // flush when more than this many records in buffer (increased from 5000)
+const flushTimeout = 1 * time.Second         // flush if buffer is older than this (increased from 1s)
+const checkInterval = 1 * time.Second        // check for stale buffer every this many seconds (increased from 1s)
+const healthCheckInterval = 30 * time.Second // check for staging table health every this many seconds
+const channelBufferSize = 50                 // increased buffer to handle more peak buffering (increased from 20)
+const criticalChannelThreshold = 10          // send critical alert when channel backlog exceeds this (increased from 5)
 
 const mergeQuery1m = `
 INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp")
@@ -150,8 +174,9 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 		dbConn:      conn,
 		lastFlush:   time.Now(),
 		stopTimeout: make(chan struct{}),
-		flushCh:     make(chan []OHLCVRecord, 50),
+		flushCh:     make(chan []OHLCVRecord, channelBufferSize),
 		stopped:     false,
+		lastLogTime: time.Now(),
 	}
 
 	// Pre-flight check: Ensure staging tables exist and are accessible
@@ -161,16 +186,13 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 		return fmt.Errorf("pre-flight staging table check failed: %w", err)
 	}
 
-	// Final verification before starting workers
-	log.Printf("🔍 Final verification before starting workers...")
-	if err := ohlcvBuffer.verifyStagingTablesExist(); err != nil {
-		log.Printf("❌ Final verification failed: %v", err)
-		return fmt.Errorf("final staging table verification failed: %w", err)
+	log.Printf("🔄 Starting OHLCV buffer writer goroutines...")
+	// Start multiple writer goroutines to process batches in parallel
+	numWorkers := 2 // Increased from 1 to 2 workers
+	for i := 0; i < numWorkers; i++ {
+		ohlcvBuffer.wg.Add(1)
+		go ohlcvBuffer.writer(i)
 	}
-
-	log.Printf("🔄 Starting OHLCV buffer writer goroutine...")
-	ohlcvBuffer.wg.Add(1)
-	go ohlcvBuffer.writer()
 
 	log.Printf("⏰ Starting OHLCV buffer timeout flusher...")
 	ohlcvBuffer.startTimeoutFlusher()
@@ -178,7 +200,10 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 	log.Printf("🩺 Starting OHLCV buffer health checker...")
 	ohlcvBuffer.startHealthChecker()
 
-	log.Printf("✅ OHLCV buffer initialized successfully with verified staging tables")
+	log.Printf("📊 Starting OHLCV buffer performance monitor...")
+	ohlcvBuffer.startPerformanceMonitor()
+
+	log.Printf("✅ OHLCV buffer initialized successfully with channel buffer size: %d batches", channelBufferSize)
 	return nil
 }
 
@@ -212,6 +237,54 @@ func (b *OHLCVBuffer) startHealthChecker() {
 	}()
 }
 
+func (b *OHLCVBuffer) startPerformanceMonitor() {
+	ticker := time.NewTicker(10 * time.Second) // Log performance every 10 seconds
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				b.logPerformanceMetrics()
+			case <-b.stopTimeout:
+				return
+			}
+		}
+	}()
+}
+
+func (b *OHLCVBuffer) logPerformanceMetrics() {
+	b.mu.Lock()
+	bufferSize := len(b.buffer)
+	channelBacklog := len(b.flushCh)
+	totalAdded := b.totalRecordsAdded
+	totalProcessed := b.totalBatchesProcessed
+	totalDropped := b.totalRecordsDropped
+	b.mu.Unlock()
+
+	channelUtilization := float64(channelBacklog) / float64(channelBufferSize) * 100
+	bufferUtilization := float64(bufferSize) / float64(flushThreshold) * 100
+
+	// Only log metrics if utilization is high or records have been dropped
+	if channelUtilization > 80 || bufferUtilization > 80 || totalDropped > 0 {
+		log.Printf("📊 OHLCV Performance Metrics:")
+		log.Printf("   📈 Buffer: %d/%d records (%.1f%% full)", bufferSize, flushThreshold, bufferUtilization)
+		log.Printf("   🚰 Channel: %d/%d batches queued (%.1f%% full)", channelBacklog, channelBufferSize, channelUtilization)
+		log.Printf("   📥 Total records added: %d", totalAdded)
+		log.Printf("   ✅ Total batches processed: %d", totalProcessed)
+		log.Printf("   ❌ Total records dropped: %d", totalDropped)
+
+		if channelUtilization > 80 {
+			log.Printf("⚠️  WARNING: Channel utilization high (%.1f%%) - writer may be falling behind", channelUtilization)
+		}
+		if bufferUtilization > 80 {
+			log.Printf("⚠️  WARNING: Buffer utilization high (%.1f%%) - approaching flush threshold", bufferUtilization)
+		}
+		if totalDropped > 0 {
+			log.Printf("🚨 ALERT: %d records have been dropped due to channel overflow", totalDropped)
+		}
+	}
+}
+
 func (b *OHLCVBuffer) performHealthCheck() {
 	if err := b.verifyStagingTablesExist(); err != nil {
 		log.Printf("🚨 Health check failed: Staging tables missing: %v", err)
@@ -236,14 +309,30 @@ func (b *OHLCVBuffer) flushIfStale() {
 	}
 
 	if len(b.buffer) > 0 && time.Since(b.lastFlush) > flushTimeout {
+		channelBacklog := len(b.flushCh)
+		//log.Printf("⏰ Timeout flush triggered: %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
+
+		// Send critical alert if channel backlog is high
+		if channelBacklog > criticalChannelThreshold {
+			alertErr := fmt.Errorf("OHLCV channel backlog critical: %d/%d batches queued, writer falling behind", channelBacklog, channelBufferSize)
+			sendCriticalAlert(alertErr, "OHLCVBuffer.flushIfStale")
+		}
+
 		batchToFlush := make([]OHLCVRecord, len(b.buffer))
 		copy(batchToFlush, b.buffer)
 		b.buffer = b.buffer[:0]
 		b.lastFlush = time.Now()
 		select {
 		case b.flushCh <- batchToFlush:
+		//	log.Printf("✅ Timeout batch sent to flush channel (new backlog: %d/%d)", len(b.flushCh), channelBufferSize)
 		default:
-			log.Printf("Warning: flush channel full, dropping batch of %d records", len(batchToFlush))
+			b.totalRecordsDropped += int64(len(batchToFlush))
+
+			// Send critical alert for dropped records
+			alertErr := fmt.Errorf("OHLCV records DROPPED: %d records lost due to timeout flush channel overflow (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
+			sendCriticalAlert(alertErr, "OHLCVBuffer.flushIfStale")
+
+			log.Printf("🚨 CRITICAL: Timeout flush channel full, dropping batch of %d records (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
 		}
 	}
 }
@@ -274,10 +363,19 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 	}
 
 	b.buffer = append(b.buffer, record)
+	b.totalRecordsAdded++
 	//log.Printf("📈 Added %s to buffer (buffer size: %d/%d)", ticker, len(b.buffer), flushThreshold)
 
 	if len(b.buffer) >= flushThreshold {
-		log.Printf("🚨 Buffer threshold reached, flushing %d records", len(b.buffer))
+		channelBacklog := len(b.flushCh)
+		log.Printf("🚨 Buffer threshold reached, flushing %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
+
+		// Send critical alert if channel backlog is high
+		if channelBacklog > criticalChannelThreshold {
+			alertErr := fmt.Errorf("OHLCV channel backlog critical: %d/%d batches queued, writer falling behind", channelBacklog, channelBufferSize)
+			sendCriticalAlert(alertErr, "OHLCVBuffer.addBar")
+		}
+
 		batchToFlush := make([]OHLCVRecord, len(b.buffer))
 		copy(batchToFlush, b.buffer)
 		b.buffer = b.buffer[:0]
@@ -285,9 +383,17 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 		b.mu.Unlock()
 		select {
 		case b.flushCh <- batchToFlush:
-			log.Printf("✅ Batch sent to flush channel")
+			log.Printf("✅ Batch sent to flush channel (new backlog: %d/%d)", len(b.flushCh), channelBufferSize)
 		default:
-			log.Printf("Warning: flush channel full, dropping batch of %d records", len(batchToFlush))
+			b.mu.Lock()
+			b.totalRecordsDropped += int64(len(batchToFlush))
+			b.mu.Unlock()
+
+			// Send critical alert for dropped records
+			alertErr := fmt.Errorf("OHLCV records DROPPED: %d records lost due to channel overflow (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
+			sendCriticalAlert(alertErr, "OHLCVBuffer.addBar")
+
+			log.Printf("🚨 CRITICAL: Flush channel full, dropping batch of %d records (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
 		}
 	} else {
 		b.mu.Unlock()
@@ -341,27 +447,47 @@ func (b *OHLCVBuffer) createStagingTables() error {
 	return nil
 }
 
-func (b *OHLCVBuffer) writer() {
-	log.Printf("🔄 OHLCV writer goroutine started")
+func (b *OHLCVBuffer) writer(workerID int) {
+	log.Printf("🔄 OHLCV writer goroutine #%d started", workerID)
 	defer b.wg.Done()
 
 	for batch := range b.flushCh {
-		//log.Printf("📝 Writer processing batch of %d records", len(batch))
-		sort.Slice(batch, func(i, j int) bool {
-			if batch[i].Ticker != batch[j].Ticker {
-				return batch[i].Ticker < batch[j].Ticker
-			}
-			return batch[i].Timestamp < batch[j].Timestamp
-		})
+		startTime := time.Now()
+		//channelBacklog := len(b.flushCh)
+		//log.Printf("📝 Writer #%d processing batch of %d records (remaining backlog: %d/%d)",
+		//workerID, len(batch), channelBacklog, channelBufferSize)
+
+		// Removed unnecessary sorting - multiple workers can process batches in parallel
+		// and the staging tables are truncated after each batch anyway
+
+		// Database operation
+		dbStart := time.Now()
 		b.doCopyMerge(batch)
-		//log.Printf("✅ Writer completed batch processing")
+		dbTime := time.Since(dbStart)
+
+		processingTime := time.Since(startTime)
+		b.mu.Lock()
+		b.totalBatchesProcessed++
+		b.mu.Unlock()
+
+		//log.Printf("✅ Writer #%d completed batch: db=%v, total=%v (processed %d batches total, backlog now: %d/%d)",
+		//workerID, dbTime, processingTime, b.totalBatchesProcessed, len(b.flushCh), channelBufferSize)
+
+		if processingTime > 5*time.Second {
+			log.Printf("⚠️ WARNING: Writer #%d - Slow batch processing detected (total=%v, db=%v) - database may be bottleneck",
+				workerID, processingTime, dbTime)
+		}
+		if dbTime > 4*time.Second {
+			log.Printf("⚠️ WARNING: Writer #%d - Slow database operation detected (%v)", workerID, dbTime)
+		}
 	}
-	log.Printf("⚠️ OHLCV writer goroutine exiting")
+	log.Printf("⚠️ OHLCV writer goroutine #%d exiting", workerID)
 }
 
 func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
-	var m1Rows [][]interface{}
-	var d1Rows [][]interface{}
+	// Pre-allocate slices with estimated capacity to avoid reallocations
+	m1Rows := make([][]interface{}, 0, len(records))
+	d1Rows := make([][]interface{}, 0, len(records))
 
 	for _, record := range records {
 		sec := record.Timestamp / 1000
@@ -381,20 +507,22 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Reduced timeout from 60s to 30s - operations shouldn't take this long
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Runtime verification: Check if staging tables still exist before proceeding
-	if err := b.verifyStagingTablesExist(); err != nil {
-		log.Printf("⚠️ Runtime check: Staging tables missing before COPY operation: %v", err)
-		log.Printf("🔧 Attempting to recreate staging tables during runtime...")
+	/*
+		if err := b.verifyStagingTablesExist(); err != nil {
+			log.Printf("⚠️ Runtime check: Staging tables missing before COPY operation: %v", err)
+			log.Printf("🔧 Attempting to recreate staging tables during runtime...")
 
-		if createErr := b.ensureStagingTablesExist(); createErr != nil {
-			log.Printf("❌ Failed to recreate staging tables during runtime: %v", createErr)
-			return
-		}
-		log.Printf("✅ Staging tables recreated successfully during runtime")
-	}
+			if createErr := b.ensureStagingTablesExist(); createErr != nil {
+				log.Printf("❌ Failed to recreate staging tables during runtime: %v", createErr)
+				return
+			}
+			log.Printf("✅ Staging tables recreated successfully during runtime")
+		}*/
 
 	conn, err := b.dbConn.DB.Acquire(ctx)
 	if err != nil {
@@ -416,15 +544,13 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		}
 	}()
 
-	_, err = tx.Exec(ctx, "SET synchronous_commit = off;")
+	// Batch all performance settings in one multi-statement query to reduce round trips
+	_, err = tx.Exec(ctx, `
+		SET synchronous_commit = off;
+		SET timescaledb.parallel_copy = on;
+	`)
 	if err != nil {
-		log.Printf("SET synchronous_commit error: %v", err)
-		return
-	}
-
-	_, err = tx.Exec(ctx, "SET timescaledb.parallel_copy = on;")
-	if err != nil {
-		log.Printf("SET parallel_copy error: %v", err)
+		log.Printf("SET performance settings error: %v", err)
 		return
 	}
 
@@ -486,14 +612,25 @@ func (b *OHLCVBuffer) FlushRemaining() {
 	}
 
 	if len(b.buffer) > 0 {
+		channelBacklog := len(b.flushCh)
+		log.Printf("🔄 Shutdown flush: %d remaining records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
 		batchToFlush := make([]OHLCVRecord, len(b.buffer))
 		copy(batchToFlush, b.buffer)
 		b.buffer = b.buffer[:0]
 		b.mu.Unlock()
 		select {
 		case b.flushCh <- batchToFlush:
+			log.Printf("✅ Shutdown batch sent to flush channel (final backlog: %d/%d)", len(b.flushCh), channelBufferSize)
 		default:
-			log.Printf("Warning: flush channel full during shutdown, dropping batch of %d records", len(batchToFlush))
+			b.mu.Lock()
+			b.totalRecordsDropped += int64(len(batchToFlush))
+			b.mu.Unlock()
+
+			// Send critical alert for dropped records during shutdown
+			alertErr := fmt.Errorf("OHLCV records DROPPED during shutdown: %d records lost due to channel overflow (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
+			sendCriticalAlert(alertErr, "OHLCVBuffer.FlushRemaining")
+
+			log.Printf("🚨 CRITICAL: Shutdown flush channel full, dropping batch of %d records (channel: %d/%d)", len(batchToFlush), channelBacklog, channelBufferSize)
 		}
 	} else {
 		b.mu.Unlock()

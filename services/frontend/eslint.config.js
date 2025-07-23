@@ -3,8 +3,8 @@ import sveltePlugin from 'eslint-plugin-svelte';
 import typescriptParser from '@typescript-eslint/parser';
 
 export default [
-    // ❶ Pull in the full recommended Svelte config (rules *and* processor)
-    ...sveltePlugin.configs.recommended,
+    // ❶ Pull in the full recommended Svelte flat config (rules *and* processor)
+    ...sveltePlugin.configs['flat/recommended'],
 
     // ❷ Your own tweaks can follow
     {

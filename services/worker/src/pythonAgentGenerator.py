@@ -13,8 +13,9 @@ import psycopg2
 from google import genai 
 from google.genai import types
 
-from validator import SecurityValidator
-from python_sandbox import PythonSandbox, create_default_config
+# Fix import errors
+from .validator import SecurityValidator
+from .python_sandbox import PythonSandbox, create_default_config
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,8 @@ class PythonAgentGenerator:
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database"""
         try:
-            from data_accessors import DataAccessorProvider
+            # Fix import error
+            from .data_accessors import DataAccessorProvider
             accessor = DataAccessorProvider()
             db_values = accessor.get_available_filter_values()
             
@@ -108,12 +110,7 @@ class PythonAgentGenerator:
             thinking_config = types.ThinkingConfig(
                 thinking_budget=0
             ),
-            system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then 
-                you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. 
-                - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
-                - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
-                - primary_exchanges: NYSE, NASDAQ, ARCA
-                ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
+            system_instruction =[types.Part.from_text(text="You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\" - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\" - primary_exchanges: NYSE, NASDAQ, ARCA ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.")],
         )
         response = self.gemini_client.models.generate_content(
             model="gemini-2.5-flash-lite-preview-06-17",

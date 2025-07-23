@@ -31,8 +31,9 @@ try:
 except ImportError:
     PLOTLY_AVAILABLE = False
 
-from plotlyToMatlab import plotly_to_matplotlib_png
-from validator import SecurityValidator
+# Fix import errors
+from .plotlyToMatlab import plotly_to_matplotlib_png
+from .validator import SecurityValidator
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +59,20 @@ class TrackedList(list):
     
     def _check_and_update_limit(self, additional_count=1):
         """Check if adding items would exceed limit and update counter if not"""
-        new_count = TrackedList._global_instance_count + additional_count
+        new_count = self.__class__._global_instance_count + additional_count
         
-        if new_count > TrackedList._max_instances:
+        if new_count > self.__class__._max_instances:
             # Set flag that limit was reached but don't raise exception
-            if not TrackedList._limit_reached:
-                TrackedList._limit_reached = True
-                logger.warning("Instance limit reached: %d/%d. Stopping instance collection.", TrackedList._global_instance_count, TrackedList._max_instances)
+            if not self.__class__._limit_reached:
+                self.__class__._limit_reached = True
+                logger.warning("Instance limit reached: %d/%d. Stopping instance collection.", self.__class__._global_instance_count, self.__class__._max_instances)
             return False  # Don't add more instances
         
         # Log warning when approaching limit (90% threshold)
-        if new_count > TrackedList._max_instances * 0.9 and not TrackedList._limit_reached:
-            logger.warning("Approaching instance limit: %d/%d", new_count, TrackedList._max_instances)
+        if new_count > self.__class__._max_instances * 0.9 and not self.__class__._limit_reached:
+            logger.warning("Approaching instance limit: %d/%d", new_count, self.__class__._max_instances)
         
-        TrackedList._global_instance_count = new_count
+        self.__class__._global_instance_count = new_count
         return True  # OK to add instances
     
     def append(self, item):
@@ -502,8 +503,8 @@ class AccessorStrategyEngine:
         safe_locals = {}
         
         try:
-            # Execute strategy code in restricted environment
-            exec(strategy_code, safe_globals, safe_locals)  # nosec B102 - exec necessary for strategy execution with proper sandboxing
+            # nosec B102 - exec necessary for strategy execution with proper sandboxing
+            exec(strategy_code, safe_globals, safe_locals)
             
             # Find strategy function (should be named 'strategy')
             strategy_func = safe_locals.get('strategy')
@@ -835,7 +836,7 @@ class AccessorStrategyEngine:
             }
             
             return type_mapping.get(trace_type, 'line')
-        except Exception:
+        except (ValueError, TypeError, ImportError, AttributeError):
             return 'line'
 
     def _make_json_serializable(self, value):

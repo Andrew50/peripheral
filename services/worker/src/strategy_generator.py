@@ -11,7 +11,6 @@ import traceback
 import re
 import time
 import threading
-from contextlib import contextmanager
 from datetime import datetime, time
 from typing import Dict, Any, Optional, List
 import psycopg2
@@ -20,8 +19,8 @@ from psycopg2.extras import RealDictCursor
 from openai import OpenAI
 from google import genai 
 from google.genai import types
-from validator import SecurityValidator, SecurityError, StrategyComplianceError
-from strategy_engine import AccessorStrategyEngine
+from .validator import SecurityValidator, SecurityError, StrategyComplianceError
+from .strategy_engine import AccessorStrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -143,12 +142,7 @@ class StrategyGenerator:
             thinking_config = types.ThinkingConfig(
                 thinking_budget=0
             ),
-            system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then 
-                you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. 
-                - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
-                - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
-                - primary_exchanges: NYSE, NASDAQ, ARCA
-                ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
+            system_instruction =[types.Part.from_text(text="You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\" - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\" - primary_exchanges: NYSE, NASDAQ, ARCA ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.")],
         )
         response = self.gemini_client.models.generate_content(
             model="gemini-2.5-flash-lite-preview-06-17",

@@ -222,6 +222,9 @@ func startPolygonWebSocketInternal(conn *data.Conn) error {
 		return nil
 	}
 
+	// Set up critical alert callback for socket package before starting WebSocket
+	socket.SetCriticalAlertCallback(alerts.LogCriticalAlert)
+
 	err := socket.StartPolygonWS(conn, useBS)
 	if err != nil {
 		return err

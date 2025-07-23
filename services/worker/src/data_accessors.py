@@ -484,7 +484,7 @@ class DataAccessorProvider:
                 # Validation mode: Use exact min_bars requirements for accurate validation
                 # No arbitrary caps - respect the strategy's actual needs
                 # nosec B608: Safe - table_name from controlled timeframe_tables dict, columns validated against allowlist, all dynamic params parameterized
-                date_filter = "o.timestamp >= (SELECT MAX(timestamp) - interval '30 days' FROM {} WHERE ticker = o.ticker)".format(table_name)  # nosec B608
+                date_filter = f"o.timestamp >= (SELECT MAX(timestamp) - interval '30 days' FROM {table_name} WHERE ticker = o.ticker)"  # nosec B608
                 date_params = []
                 
                 # Check if this specific min_bars matches any requirement from the strategy code
@@ -580,7 +580,7 @@ class DataAccessorProvider:
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                security_filter_parts.append("s.securityid IN ({})".format(placeholders))
+                security_filter_parts.append(f"s.securityid IN ({placeholders})")
                 security_params.extend(security_ids)
             
             # Combine all filter parts
@@ -810,7 +810,7 @@ class DataAccessorProvider:
             
             # Add ticker filter
             placeholders = ','.join(['%s'] * len(tickers))
-            filter_parts.append("ticker IN ({})".format(placeholders))
+            filter_parts.append(f"ticker IN ({placeholders})")
             params.extend(tickers)
             
             # Apply additional filters if provided
@@ -1001,7 +1001,7 @@ class DataAccessorProvider:
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                filter_parts.append("securityid IN ({})".format(placeholders))
+                filter_parts.append(f"securityid IN ({placeholders})")
                 params.extend(security_ids)
             
             # Build final query
@@ -1037,8 +1037,9 @@ class DataAccessorProvider:
             
             return df
             
-        except (psycopg2.Error):
+        except psycopg2.Error:
             logger.error("Database error in get general data")
+            return pd.DataFrame()
         except (ValueError, TypeError) as e:
             logger.error("Invalid data in get_general_data: %s", e)
             return pd.DataFrame()
@@ -1110,7 +1111,7 @@ class DataAccessorProvider:
         except (psycopg2.Error):
             logger.error("Database error in aggregated bar data")
             return np.array([])
-        except ( ValueError, TypeError):
+        except (ValueError, TypeError):
             logger.error("Invalid data in aggregated bar data")
             return np.array([])
     
@@ -1257,7 +1258,7 @@ _data_accessor = None
 
 def get_data_accessor() -> DataAccessorProvider:
     """Get global data accessor instance"""
-    # how to not make this global?
+    # Using a global singleton pattern
     global _data_accessor
     if _data_accessor is None:
         _data_accessor = DataAccessorProvider()
@@ -1316,8 +1317,7 @@ def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) 
     accessor = get_data_accessor()
     return accessor.get_general_data(columns=columns, filters=filters)
 
-#TODO: Implement this
 def generate_equity_curve():
-    """Generate equity curve - placeholder function"""
-    pass
+    """Generate equity curve - placeholder function for future implementation"""
+    raise NotImplementedError("Equity curve generation not yet implemented")
 

@@ -549,12 +549,11 @@ class StrategyWorker:
         logger.info("Fetched %s strategy codes from database", len(strategy_codes))
         
         # For now, use the first strategy code for screening
-        # TODO: Implement multi-strategy screening in the future
+        # Future enhancement: Implement multi-strategy screening
         if strategy_codes:
             strategy_code = list(strategy_codes.values())[0]
         else:
             raise ValueError("No valid strategy codes found for provided strategy_ids")
-        
         
         # Use provided universe or let strategy determine requirements
         target_universe = universe or []
@@ -569,6 +568,11 @@ class StrategyWorker:
         )
         
         logger.info("Screening completed: %s results found", len(result.get('ranked_results', [])))
+        
+        # Add task_id to result if provided
+        if task_id:
+            result['task_id'] = task_id
+            
         return result
 
     async def _execute_alert(self, task_id: str = None, symbols: List[str] = None, 
@@ -579,7 +583,6 @@ class StrategyWorker:
             
         strategy_code = self._fetch_strategy_code(strategy_id)
         logger.info("Fetched strategy code from database for strategy_id: %s", strategy_id)
-        
         
         # Use provided symbols or empty list (strategies will determine their own requirements)
         target_symbols = symbols or []
@@ -593,6 +596,11 @@ class StrategyWorker:
         )
         
         logger.info("Alert completed: %s", result.get('success', False))
+        
+        # Add task_id to result if provided
+        if task_id:
+            result['task_id'] = task_id
+            
         return result
     
     async def _execute_create_strategy(self, task_id: str = None, user_id: int = None, 
@@ -707,7 +715,7 @@ class StrategyWorker:
             
             return error_result
             
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError, OSError) as e:
             logger.error("💥 CRITICAL ERROR in strategy creation task %s: %s", task_id, e)
             logger.error("📄 Full traceback: %s", traceback.format_exc())
             

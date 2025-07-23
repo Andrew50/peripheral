@@ -155,6 +155,7 @@ class PythonSandbox:
         return_value = None
         
         try:
+            # Fix exec usage
             # nosec B102 - exec necessary with proper sandboxing
             exec(code, safe_globals, safe_locals)
             # Execute with stdout/stderr capture
@@ -198,8 +199,6 @@ class PythonSandbox:
         # Add additional globals provided by caller
         safe_globals.update(additional_globals)
 
-
-
         # -----------------------------
         # Match StrategyEngine access
         # -----------------------------
@@ -214,12 +213,15 @@ class PythonSandbox:
             data_accessor = get_data_accessor()
 
             # Set execution context for full historical data access (like strategy engine backtest mode)
-            from datetime import datetime
+            # Use imported datetime instead of redefining
+            start_date = datetime.datetime(2003, 1, 1)
+            end_date = datetime.datetime.now()
+            
             data_accessor.set_execution_context(
                 mode='backtest',
                 symbols=None,  # All symbols
-                start_date=datetime(2003, 1, 1),
-                end_date=datetime.now()
+                start_date=start_date,
+                end_date=end_date
             )
 
             def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
@@ -366,7 +368,7 @@ class PythonSandbox:
         """Recursively decode binary arrays in plot data"""
         # Import here to avoid circular imports
         import base64
-        import numpy as np # this needs to be here becuase it is a local context and might now havce context of the full script when used?
+        # Use the already imported np from the top of the file
         
         if isinstance(data, dict):
             if 'bdata' in data and 'dtype' in data:
