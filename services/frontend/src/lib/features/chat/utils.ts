@@ -1,4 +1,4 @@
-import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+import { publicRequest } from '$lib/utils/helpers/backend';
 import type { Instance } from '$lib/utils/types/types';
 import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
@@ -12,14 +12,14 @@ export function parseMarkdown(content: string): string {
 	try {
 		// Format ISO 8601 timestamps like 2025-04-08T21:36:28Z to a more readable format
 		const isoTimestampRegex = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/g;
-		let processedContent = content.replace(isoTimestampRegex, (match) => {
+		const processedContent = content.replace(isoTimestampRegex, (match) => {
 			try {
 				const date = new Date(match);
 				if (!isNaN(date.getTime())) {
 					return date.toLocaleString();
 				}
 				return match;
-			} catch (e) {
+			} catch {
 				return match;
 			}
 		});
@@ -115,7 +115,7 @@ export function cleanHtmlContent(htmlContent: string): string {
 
 	// First, handle the original $$ ticker patterns before they're converted to buttons
 	// Pattern: $$TICKER-TIMESTAMPINMS$$
-	let processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
+	const processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
 
 	// Create a temporary DOM element to parse HTML
 	const tempDiv = document.createElement('div');
@@ -141,7 +141,7 @@ export function cleanTickerFormatting(text: string): string {
 	return text.replace(TICKER_FORMAT_REGEX, '$1');
 }
 // Generic function to recursively clean ticker formatting from any data structure
-function cleanDataRecursively(data: any): any {
+function cleanDataRecursively(data: unknown): unknown {
 	if (!data) return data;
 
 	if (typeof data === 'string') {
@@ -153,7 +153,7 @@ function cleanDataRecursively(data: any): any {
 	}
 
 	if (typeof data === 'object' && data !== null) {
-		const cleaned: any = {};
+		const cleaned: Record<string, unknown> = {};
 		for (const [key, value] of Object.entries(data)) {
 			cleaned[key] = cleanDataRecursively(value);
 		}
@@ -164,17 +164,17 @@ function cleanDataRecursively(data: any): any {
 }
 
 // Function to clean ticker formatting from plot data
-export function cleanPlotData(plotData: any): any {
+export function cleanPlotData(plotData: unknown): unknown {
 	return cleanDataRecursively(plotData);
 }
 
 // Function to clean ticker formatting from content chunks (only plots)
-export function cleanContentChunk(chunk: any): any {
-	if (!chunk || chunk.type !== 'plot') {
+export function cleanContentChunk(chunk: unknown): unknown {
+	if (!chunk || (chunk as { type: string }).type !== 'plot') {
 		return chunk;
 	}
 
-	const cleanedContent = cleanPlotData(chunk.content);
+	const cleanedContent = cleanPlotData((chunk as { content: unknown }).content);
 
 	const result = {
 		...chunk,
@@ -186,16 +186,16 @@ export function cleanContentChunk(chunk: any): any {
 
 // Helper function to create text content for copying from a content chunk
 export function getContentChunkTextForCopy(
-	chunk: any,
-	isTableData: (content: any) => boolean,
-	plotDataToText: (data: any) => string
+	chunk: { type: string; content: unknown },
+	isTableData: (content: unknown) => boolean,
+	plotDataToText: (data: unknown) => string
 ): string {
 	if (chunk.type === 'text') {
 		const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
 		return cleanHtmlContent(content);
 	} else if (chunk.type === 'table' && isTableData(chunk.content)) {
 		// For tables, create a simple text representation
-		const tableData = chunk.content;
+		const tableData = chunk.content as { caption?: string; headers: unknown[]; rows: unknown[] };
 		let tableText = '';
 		if (tableData.caption) {
 			const cleanCaption = cleanHtmlContent(tableData.caption);
@@ -203,12 +203,12 @@ export function getContentChunkTextForCopy(
 		}
 		// Add headers (clean ticker formatting from headers too)
 		tableText +=
-			tableData.headers.map((header: any) => cleanHtmlContent(String(header))).join('\t') + '\n';
+			tableData.headers.map((header: unknown) => cleanHtmlContent(String(header))).join('\t') + '\n';
 		// Add rows
 		tableText += tableData.rows
-			.map((row: any) => {
+			.map((row: unknown) => {
 				if (Array.isArray(row)) {
-					return row.map((cell: any) => cleanHtmlContent(String(cell))).join('\t');
+					return row.map((cell: unknown) => cleanHtmlContent(String(cell))).join('\t');
 				} else {
 					return cleanHtmlContent(String(row));
 				}
@@ -218,7 +218,7 @@ export function getContentChunkTextForCopy(
 	} else if (chunk.type === 'plot') {
 		// For plots, clean ticker formatting and create a text representation
 		const cleanedChunk = cleanContentChunk(chunk);
-		return plotDataToText(cleanedChunk.content);
+		return plotDataToText((cleanedChunk as { content: unknown }).content);
 	}
 	return '';
 }

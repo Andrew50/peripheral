@@ -30,7 +30,7 @@ export async function handleScreenshot(chartId: string) {
 			})
 		]);
 
-		('Chart copied to clipboard!');
+		console.log('Chart copied to clipboard!');
 	} catch (error) {
 		console.error('Failed to copy chart:', error);
 	}

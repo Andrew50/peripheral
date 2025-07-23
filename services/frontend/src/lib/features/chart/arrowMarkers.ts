@@ -5,12 +5,9 @@ import type {
 	CustomSeriesOptions,
 	PaneRendererCustomData,
 	CustomSeriesWhitespaceData,
-	DeepPartial,
-	SeriesOptionsCommon,
 	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
-import { ColorType } from 'lightweight-charts';
 
 // Define your custom data type for arrow markers.
 export interface ArrowMarker extends CustomData<Time> {
@@ -69,17 +66,15 @@ function drawArrowDown(ctx: CanvasRenderingContext2D, x: number, y: number, size
 
 // Custom series view for arrow markers.
 export class ArrowMarkersPaneView
-	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions>
-{
+	implements ICustomSeriesPaneView<Time, ArrowMarker, CustomSeriesOptions> {
 	private markers: ArrowMarker[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
 	private visibleRange: { from: number; to: number } = { from: 0, to: 0 };
 
 	renderer(): ICustomSeriesPaneRenderer {
 		return {
-			draw: (target, priceToCoordinate, visibleRange) => {
-				target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-					const { width, height } = mediaSize;
+			draw: (target, priceToCoordinate) => {
+				target.useMediaCoordinateSpace(({ context }) => {
 
 					if (this.markers.length === 0) {
 						return;
@@ -201,5 +196,5 @@ export class ArrowMarkersPaneView
 	}
 
 	// Cleanup, if necessary.
-	destroy(): void {}
+	destroy(): void { }
 }

@@ -4,23 +4,30 @@ A domain-agnostic Python code execution environment with security, plotting, and
 """
 
 import asyncio
-import logging
-import pandas as pd
-import numpy as np
-from datetime import datetime as dt, timedelta
-import datetime
-from typing import Any, Dict, List, Optional, Union, Tuple
-import json
-import time
-import io
 import contextlib
-import plotly
-import traceback
-import linecache
-import sys 
+import datetime
+import io
+import json
+import logging
 import math
+import sys
+import time
+import traceback
 from dataclasses import dataclass
-from plotlyToMatlab import plotly_to_matplotlib_png
+from datetime import datetime as dt, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import plotly
+
+try:
+    from plotlyToMatlab import plotly_to_matplotlib_png
+except ImportError:
+    logger.warning("plotlyToMatlab module not available")
+    # Handle missing plotlyToMatlab gracefully
+    def plotly_to_matplotlib_png(*args, **kwargs):
+        return None
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +69,13 @@ class PythonSandbox:
         self.response_images = []
         self.plot_counter = 0
         
-    async def execute_code(self, code: str, additional_globals: Dict[str, Any] = None, 
-                          execution_id: str = None) -> SandboxResult:
+    async def execute_code(self, code: str, additional_globals: Dict[str, Any] = None) -> SandboxResult:
         """
         Execute Python code in a secure sandbox environment
         
         Args:
             code: Python code to execute
             additional_globals: Additional global variables to provide
-            execution_id: Optional ID for tracking (used for plot generation)
             
         Returns:
             SandboxResult with execution results
@@ -169,7 +174,7 @@ class PythonSandbox:
             # Capture any stderr that was generated before the error
             stderr_content = stderr_buffer.getvalue()
             if stderr_content:
-                logger.error(f"Stderr before error: {stderr_content}")
+                logger.error("Stderr before error: %s", stderr_content)
             raise
     
     def _create_safe_globals(self, additional_globals: Dict[str, Any]) -> Dict[str, Any]:
@@ -193,16 +198,21 @@ class PythonSandbox:
         # -----------------------------
         try:
             # Import data accessor and create bound helper functions
-            from data_accessors import get_data_accessor
+            try:
+                from data_accessors import get_data_accessor
+            except ImportError:
+                logger.warning("data_accessors module not available")
+                return safe_globals
+                
             data_accessor = get_data_accessor()
 
             # Set execution context for full historical data access (like strategy engine backtest mode)
-            from datetime import datetime
+            from datetime import datetime as dt_import
             data_accessor.set_execution_context(
                 mode='backtest',
                 symbols=None,  # All symbols
-                start_date=datetime(2003, 1, 1),
-                end_date=datetime.now()
+                start_date=dt_import(2003, 1, 1),
+                end_date=dt_import.now()
             )
 
             def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
@@ -211,24 +221,27 @@ class PythonSandbox:
                     return data_accessor.get_bar_data(timeframe, columns, min_bars, filters,
                                                       aggregate_mode, extended_hours, start_date, end_date)
                 except Exception as e:
-                    logger.error(f"Data accessor error in get_bar_data(timeframe={timeframe}, min_bars={min_bars}): {e}")
-                    logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                    logger.error("Data accessor error in get_bar_data(timeframe=%s, min_bars=%s): %s", 
+                               timeframe, min_bars, e)
+                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                     raise  # Re-raise to maintain error propagation
 
             def bound_get_general_data(columns=None, filters=None):
                 try:
                     return data_accessor.get_general_data(columns=columns, filters=filters)
                 except Exception as e:
-                    logger.error(f"Data accessor error in get_general_data(columns={columns}, filters={filters}): {e}")
-                    logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                    logger.error("Data accessor error in get_general_data(columns=%s, filters=%s): %s", 
+                               columns, filters, e)
+                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                     raise  # Re-raise to maintain error propagation
 
             def bound_generate_equity_curve(instances: list, group_column=None):
                 try:
                     return data_accessor.generate_equity_curve(instances, group_column)
                 except Exception as e:
-                    logger.error(f"Data accessor error in generate_equity_curve(instances={instances}, group_column={group_column}): {e}")
-                    logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+                    logger.error("Data accessor error in generate_equity_curve(instances=%s, group_column=%s): %s", 
+                               instances, group_column, e)
+                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                     raise  # Re-raise to maintain error propagation
 
             safe_globals.update({
@@ -238,8 +251,8 @@ class PythonSandbox:
             })
             
         except Exception as e:
-            logger.error(f"❌ CRITICAL: Failed to bind data accessor functions: {e}")
-            logger.error(f"📄 Data accessor binding traceback: {traceback.format_exc()}")
+            logger.error("❌ CRITICAL: Failed to bind data accessor functions: %s", e)
+            logger.error("📄 Data accessor binding traceback: %s", traceback.format_exc())
             # Don't silently ignore - this is critical for Python agent functionality
             raise RuntimeError(f"Python agent requires data accessor functions: {e}") from e
 
@@ -254,7 +267,6 @@ class PythonSandbox:
         
         try:
             import plotly.graph_objects as go
-            import plotly.express as px
             from plotly.subplots import make_subplots
         except ImportError:
             return contextlib.nullcontext()
@@ -263,7 +275,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
         
-        def capture_plot(fig, *args, **kwargs):
+        def capture_plot(fig, *_args, **_kwargs):
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -285,12 +297,12 @@ class PythonSandbox:
                     png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Execution ID", self.execution_id)
                     if png_base64:
                         self.response_images.append(png_base64)
-                        logger.debug(f"Generated PNG for plot {plot_id}")
+                        logger.debug("Generated PNG for plot %s", plot_id)
                     else:
-                        logger.warning(f"Failed to generate PNG for plot {plot_id}")
+                        logger.warning("Failed to generate PNG for plot %s", plot_id)
                         self.response_images.append(None)
                 except Exception as e:
-                    logger.warning(f"Failed to generate PNG for plot {plot_id}: {e}")
+                    logger.warning("Failed to generate PNG for plot %s: %s", plot_id, e)
                     self.response_images.append(None)
                 
                 plot_data = {
@@ -301,7 +313,7 @@ class PythonSandbox:
                 self.plots_collection.append(plot_data)
                 
             except Exception as e:
-                logger.warning(f"Failed to capture plot: {e}")
+                logger.warning("Failed to capture plot: %s", e)
                 plot_id = self.plot_counter
                 self.plot_counter += 1
                 fallback_plot = {
@@ -337,7 +349,7 @@ class PythonSandbox:
             plot_data = json.loads(fig.to_json())
             return self._decode_binary_arrays(plot_data)
         except Exception as e:
-            logger.warning(f"Failed to extract plot data: {e}")
+            logger.warning("Failed to extract plot data: %s", e)
             return {}
     
     def _decode_binary_arrays(self, data):
@@ -359,12 +371,12 @@ class PythonSandbox:
                     elif data['dtype'] == 'i4':
                         arr = np.frombuffer(binary_data, dtype=np.int32)
                     else:
-                        logger.warning(f"Unknown dtype: {data['dtype']}")
+                        logger.warning("Unknown dtype: %s", data['dtype'])
                         return []
                     
                     return arr.tolist()
                 except Exception as e:
-                    logger.warning(f"Error decoding binary data: {e}")
+                    logger.warning("Error decoding binary data: %s", e)
                     return []
             else:
                 return {k: self._decode_binary_arrays(v) for k, v in data.items()}
@@ -399,7 +411,7 @@ class PythonSandbox:
         """Extract detailed error information including line numbers and code context"""
         try:
             tb = traceback.format_exc()
-            exc_type, exc_value, exc_traceback = sys.exc_info()
+            _, _, exc_traceback = sys.exc_info()
             
             error_info = {
                 'error_type': type(error).__name__,

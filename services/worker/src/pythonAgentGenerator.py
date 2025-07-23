@@ -1,20 +1,20 @@
 import os
-from openai import OpenAI
 import logging
 import re
 import time
-import random
 import traceback
-import psycopg2
 import asyncio
-from typing import Dict, Any
-from validator import SecurityValidator
-from python_sandbox import PythonSandbox, create_default_config
 import json
+from typing import Dict, Any, List, Tuple
+from datetime import datetime
+
+from openai import OpenAI
+import psycopg2
 from google import genai 
 from google.genai import types
-from typing import List, Tuple
-from datetime import datetime
+
+from validator import SecurityValidator
+from python_sandbox import PythonSandbox, create_default_config
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +51,11 @@ class PythonAgentGenerator:
     def _init_environment(self):
         """Initialize environment variables"""
         self.environment = os.getenv('ENVIRONMENT')
-        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+        if self.environment in ('dev', 'development', ''):
             self.environment = "dev"
         else:
             self.environment = "prod"
-        logger.info(f"Environment initialized to: {self.environment}")
+        logger.info("Environment initialized to: %s", self.environment)
 
     def _get_current_filter_values_from_db(self) -> Dict[str, List[str]]:
         """Get current available filter values from database"""
@@ -73,7 +73,7 @@ class PythonAgentGenerator:
             return db_values
             
         except Exception as e:
-            logger.error(f"❌ CRITICAL: Could not fetch current filter values from database: {e}")
+            logger.error("❌ CRITICAL: Could not fetch current filter values from database: %s", e)
             raise RuntimeError(f"Python agent requires database connection to get current filter values: {e}") from e
         
     def _parse_filter_needs_response(self, response) -> Dict[str, bool]:
@@ -91,10 +91,10 @@ class PythonAgentGenerator:
                     response_text = json_match.group(1)
             
             filter_needs = json.loads(response_text)
-            logger.info(f"Filter needs determined: {filter_needs}")
+            logger.info("Filter needs determined: %s", filter_needs)
             return filter_needs
         except (json.JSONDecodeError, AttributeError) as e:
-            logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
+            logger.warning("Failed to parse filter needs JSON: %s, response: %s", e, response.text)
             # Default to needing all filters if parsing fails
             return {"sectors": True, "industries": True, "primary_exchanges": True}
 
@@ -183,17 +183,17 @@ class PythonAgentGenerator:
         * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
             Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
-        AVAILABLE FILTERS (use in filters parameter):{f'''
-        - sector: "{sectors_str}"''' if sectors_str else ""}{f'''
-        - industry: "{industries_str}"''' if industries_str else ""}{f'''
-        - primary_exchange: "{exchanges_str}"''' if exchanges_str else ""}
+        AVAILABLE FILTERS (use in filters parameter):{'''
+        - sector: "{}"'''.format(sectors_str) if sectors_str else ""}{'''
+        - industry: "{}"'''.format(industries_str) if industries_str else ""}{'''
+        - primary_exchange: "{}"'''.format(exchanges_str) if exchanges_str else ""}
         - market_cap_min: float (e.g., 1000000000 for $1B minimum)
         - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-        FILTER EXAMPLES:{f'''
-        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
-        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{f'''
+        FILTER EXAMPLES:{'''
+        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{'''
+        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{'''
+        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{'''
         - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
@@ -312,7 +312,7 @@ class PythonAgentGenerator:
         execution_id = f"{user_id}_{execution_serial}"
         
         try: 
-            logger.info(f"Starting Python agent execution {execution_id}")
+            logger.info("Starting Python agent execution %s", execution_id)
             
             systemInstruction = self._getGeneralPythonSystemInstruction(prompt)
             userPrompt = f"""{prompt}""" + f"\nData: {data}"
@@ -323,29 +323,29 @@ class PythonAgentGenerator:
             # Retry loop for both validation and execution errors
             for attemptCount in range(3):
                 if attemptCount > 0:
-                    userPrompt = f"{prompt}"  # Reset to original prompt
-                    userPrompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attemptCount + 1}:"
-                    userPrompt += f"\n- Previous attempt failed"
+                    userPrompt = "{}".format(prompt)  # Reset to original prompt
+                    userPrompt += "\n\nIMPORTANT - RETRY ATTEMPT {}:".format(attemptCount + 1)
+                    userPrompt += "\n- Previous attempt failed"
                     if last_error:
-                        userPrompt += f"\n- SPECIFIC ERROR: {last_error}"
-                    userPrompt += f"\n- Focus on data type safety for pandas operations"
-                    userPrompt += f"\n- Use pd.to_numeric() before .quantile() operations"
-                    userPrompt += f"\n- Handle NaN values with .dropna() before statistical operations"
-                    userPrompt += f"\n- Ensure proper error handling for edge cases"
-                    userPrompt += f"\n- Verify all imports are properly used"
-                    userPrompt += f"\n- Make sure all variables are defined before use"
+                        userPrompt += "\n- SPECIFIC ERROR: {}".format(last_error)
+                    userPrompt += "\n- Focus on data type safety for pandas operations"
+                    userPrompt += "\n- Use pd.to_numeric() before .quantile() operations"
+                    userPrompt += "\n- Handle NaN values with .dropna() before statistical operations"
+                    userPrompt += "\n- Ensure proper error handling for edge cases"
+                    userPrompt += "\n- Verify all imports are properly used"
+                    userPrompt += "\n- Make sure all variables are defined before use"
                     
-                    logger.info(f"Retrying Python agent execution {execution_id} (attempt {attemptCount + 1}/3)")
-                    logger.info(f"Previous error: {last_error}")
+                    logger.info("Retrying Python agent execution %s (attempt %d/3)", execution_id, attemptCount + 1)
+                    logger.info("Previous error: %s", last_error)
                 
                 try:
                     # Generate code
                     openaiResponse = self.openai_client.responses.create(
                         model="o4-mini",
                         reasoning={"effort": "low"},
-                        input=f"{userPrompt}",
-                        instructions=f"{systemInstruction}",
-                        user=f"user:0",
+                        input="{}".format(userPrompt),
+                        instructions="{}".format(systemInstruction),
+                        user="user:0",
                         metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
                         timeout=120.0  # 2 minute timeout for other models
                     )
@@ -355,7 +355,7 @@ class PythonAgentGenerator:
                     is_valid = self.validator.validate_code(pythonCode)
                     if not is_valid:
                         last_error = "Code failed security validation"
-                        logger.info(f"Python code failed validation, attempt {attemptCount + 1}/3")
+                        logger.info("Python code failed validation, attempt %d/3", attemptCount + 1)
                         continue
                     
                     # Execute code
@@ -365,7 +365,7 @@ class PythonAgentGenerator:
                     # Check if execution was successful
                     if not result.success:
                         last_error = result.error
-                        logger.info(f"Python execution failed, attempt {attemptCount + 1}/3: {result.error}")
+                        logger.info("Python execution failed, attempt %d/3: %s", attemptCount + 1, result.error)
                         
                         # Add more specific error context if available
                         if result.error_details:
@@ -383,7 +383,7 @@ class PythonAgentGenerator:
                         continue
                     
                     # Success! Return results
-                    logger.info(f"Python agent execution {execution_id} completed successfully on attempt {attemptCount + 1}")
+                    logger.info("Python agent execution %s completed successfully on attempt %d", execution_id, attemptCount + 1)
                     
                     # Save successful execution to database in background (non-blocking)
                     asyncio.create_task(self._save_agent_python_code(
@@ -402,13 +402,13 @@ class PythonAgentGenerator:
                     
                 except Exception as e:
                     last_error = str(e)
-                    logger.error(f"Error during Python agent generation/execution (attempt {attemptCount + 1}/3): {e}")
-                    logger.error(f"Error details: {traceback.format_exc()}")
+                    logger.error("Error during Python agent generation/execution (attempt %d/3): %s", attemptCount + 1, e)
+                    logger.error("Error details: %s", traceback.format_exc())
                     continue
             
             # If we get here, all attempts failed
             final_error = Exception(f"Failed to generate and execute valid Python code after 3 attempts. Last error: {last_error}")
-            logger.error(f"Python agent execution {execution_id} failed after all retry attempts")
+            logger.error("Python agent execution %s failed after all retry attempts", execution_id)
             
             # Save failed execution to database with error info in background (non-blocking)
             asyncio.create_task(self._save_agent_python_code(
@@ -426,8 +426,8 @@ class PythonAgentGenerator:
             return [], "", [], [], execution_id, final_error
             
         except Exception as e: 
-            logger.error(f"Critical error in Python agent execution {execution_id}: {e}")
-            logger.error(f"Critical error traceback: {traceback.format_exc()}")
+            logger.error("Critical error in Python agent execution %s: %s", execution_id, e)
+            logger.error("Critical error traceback: %s", traceback.format_exc())
             
             # Save failed execution to database with error info in background (non-blocking)
             asyncio.create_task(self._save_agent_python_code(
@@ -497,8 +497,8 @@ class PythonAgentGenerator:
             
         except Exception as e:
             # Since this runs in background, we log errors but don't raise them
-            logger.error(f"❌ Failed to save Python agent execution {execution_id}: {e}")
-            logger.error(f"📄 Save execution traceback: {traceback.format_exc()}")
+            logger.error("❌ Failed to save Python agent execution %s: %s", execution_id, e)
+            logger.error("📄 Save execution traceback: %s", traceback.format_exc())
             # Don't raise - this is a background task and shouldn't affect user experience
             return False
         finally:
@@ -509,6 +509,6 @@ class PythonAgentGenerator:
                 if conn:
                     conn.close()
             except Exception as cleanup_error:
-                logger.warning(f"⚠️ Error during database cleanup for execution {execution_id}: {cleanup_error}")
+                logger.warning("⚠️ Error during database cleanup for execution %s: %s", execution_id, cleanup_error)
         
         return False        
