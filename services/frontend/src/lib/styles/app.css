@@ -21,6 +21,7 @@
 	flex: 1;
 	display: flex;
 	height: 100%;
+	width: 100%;
 	min-height: 0;
 	position: relative;
 	margin-right: var(--sidebar-buttons-width, 45px);
@@ -82,8 +83,7 @@
 	display: flex;
 	flex-direction: column;
 	position: relative;
-	flex-shrink: 0;
-	border-left: 4px solid var(--c1);
+	flex-shrink: 0; 
 	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 	/* 600px max sidebar with button bar */
 	/* Add responsive font scaling */
@@ -499,7 +499,6 @@
 	flex-direction: column;
 	position: relative;
 	flex-shrink: 0;
-	border-right: 4px solid var(--c1);
 	max-width: min(800px, calc(100vw - 60px));
 }
 
@@ -572,3 +571,4 @@
 	background-color: var(--ui-bg-active);
 	transform: translateY(1px);
 }
+

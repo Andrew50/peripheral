@@ -182,6 +182,14 @@
 	export let chartId: number;
 	export let width: number;
 	export let defaultChartData: any = null;
+
+	// Reactive statement to handle width changes
+	$: if (chart && width) {
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (chartContainer) {
+			chart.resize(width, chartContainer.clientHeight);
+		}
+	}
 	let chartSecurityId: number;
 	let chartTimeframe: string;
 	let chartTimeframeInSeconds: number;
@@ -730,7 +738,7 @@
 
 			// Only set up new streams if the securityId actually changed
 			const currentSecurityId =
-				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId;
+				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId || null;
 
 			if (inst.requestType == 'loadNewTicker' && previousSecurityId !== currentSecurityId) {
 				releaseFast();
@@ -1641,7 +1649,7 @@
 	onMount(() => {
 		// Keep onMount synchronous
 		const chartOptions = {
-			autoSize: true,
+			autoSize: false,
 			crosshair: {
 				mode: CrosshairMode.Normal
 			},
@@ -2448,7 +2456,7 @@
 <div
 	class="chart"
 	id="chart_container-{chartId}"
-	style="width: {width}px; position: relative;"
+	style="position: relative;"
 	tabindex="-1"
 >
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
@@ -2734,7 +2742,6 @@
 			opacity: 1;
 		}
 	}
-
 	/* Chart logo styles positioned at bottom right where axes meet */
 	.chart-logo-container {
 		position: absolute;
