@@ -103,7 +103,6 @@
 	background-color: #121212;
 	z-index: 2;
 	flex-shrink: 0;
-	border-left: 4px solid var(--c1);
 	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
 	/* 600px max with button bar */
 }

@@ -160,7 +160,7 @@ export type ConversationData = {
 export type TimelineEvent = {
 	headline: string;
 	timestamp: Date;
-	type?: 'FunctionUpdate' | 'webSearchQuery' | 'webSearchCitations' | 'getWatchlistItems'; // Type of event
+	type?: 'FunctionUpdate' | 'webSearchQuery' | 'webSearchCitations' | 'getWatchlistItems' | 'getDailySnapshot'; // Type of event
 	data?: any; // For web search queries or other structured data
 };
 

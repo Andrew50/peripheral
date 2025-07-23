@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { ConversationInfo } from '../interface';
+	import {titleUpdateStore} from '$lib/utils/stream/socket';
+	import { browser } from '$app/environment';
+	import { onDestroy } from 'svelte';
 	export let conversationDropdown: HTMLDivElement;
 	export let showConversationDropdown: boolean;
 	export let conversations: ConversationInfo[];
@@ -9,9 +12,7 @@
 	export let conversationToDelete: string;
 	export let messagesStore: any;
 	export let isLoading: boolean;
-	export let isTypingTitle: boolean;
-	export let typingTitleText: string;
-
+	
 	export let isPublicViewing: boolean = false;
 	export let sharedConversationId: string = '';
 	export let toggleConversationDropdown: () => void;
@@ -21,6 +22,11 @@
 	export let confirmDeleteConversation: (id: string) => void;
 	export let cancelDeleteConversation: () => void;
 	export let shareModalRef: any;
+
+	let typingTitleText: string;
+	let isTypingTitle: boolean;
+	let typingTitleTarget: string;
+	let typingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Share conversation functions
 	async function openShareModal(event?: Event) {
@@ -40,6 +46,74 @@
 			shareModalRef.toggleModal();
 		}
 	}
+	// Function to create typing effect for title
+	function startTitleTypingEffect(newTitle: string) {
+		// Don't start typing if already typing or if the title is the same
+		if (isTypingTitle || currentConversationTitle === newTitle) {
+			return;
+		}
+
+		isTypingTitle = true;
+		typingTitleTarget = newTitle;
+		typingTitleText = '';
+
+		let currentIndex = 0;
+		const typingSpeed = 50; // milliseconds per character
+
+		// Clear any existing interval
+		if (typingInterval) {
+			clearInterval(typingInterval);
+		}
+
+		typingInterval = setInterval(() => {
+			if (currentIndex < typingTitleTarget.length) {
+				typingTitleText = typingTitleTarget.substring(0, currentIndex + 1);
+				currentIndex++;
+			} else {
+				// Typing complete
+				clearInterval(typingInterval!);
+				typingInterval = null;
+				isTypingTitle = false;
+				currentConversationTitle = typingTitleTarget;
+				typingTitleText = '';
+			}
+		}, typingSpeed);
+	}
+	// Reactive block to handle title updates from websocket
+	$: if ($titleUpdateStore && browser) {
+	const titleUpdate = $titleUpdateStore;
+
+	// Handle title updates for current conversation OR new conversations (when currentConversationId is empty)
+	if (
+		titleUpdate.conversation_id === currentConversationId ||
+		(!currentConversationId && titleUpdate.conversation_id)
+	) {
+		// If this is a new conversation, set the conversation ID
+		if (!currentConversationId) {
+			currentConversationId = titleUpdate.conversation_id;
+		}
+
+		// Start typing effect for the new title
+		startTitleTypingEffect(titleUpdate.title);
+
+		// Also update the conversations list if it's loaded
+		if (conversations.length > 0) {
+			conversations = conversations.map((conv) =>
+				conv.conversation_id === titleUpdate.conversation_id
+					? { ...conv, title: titleUpdate.title }
+					: conv
+			);
+		}
+	}
+
+	// Clear the store after processing
+	titleUpdateStore.set(null);
+	}
+	onDestroy(() => {
+		if (typingInterval) {
+			clearInterval(typingInterval);
+		}
+	});
 </script>
 
 {#if isPublicViewing}
