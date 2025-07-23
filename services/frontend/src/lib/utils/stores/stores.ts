@@ -29,6 +29,7 @@ export const inactiveAlerts: Writable<Alert[] | undefined> = writable(undefined)
 export const alertLogs: Writable<AlertLog[] | undefined> = writable(undefined);
 export const alertPopup: Writable<AlertData | null> = writable(null);
 export const menuWidth = writable(0);
+export const leftMenuWidth = writable(0);
 export let flagWatchlistId: number | undefined;
 export const entryOpen = writable(false);
 export let flagWatchlist: Writable<Instance[]> = writable([]);

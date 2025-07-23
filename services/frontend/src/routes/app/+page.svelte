@@ -17,6 +17,9 @@
 		defaultChartData: any;
 	}
 
+	// Constants
+	const SIDEBAR_BUTTONS_WIDTH = 45; // Width of the sidebar buttons panel in pixels
+
 	// Replay logic
 	import {
 		startReplay,
@@ -39,6 +42,7 @@
 		formatTimestamp,
 		dispatchMenuChange,
 		menuWidth,
+		leftMenuWidth,
 		settings,
 		isPublicViewing as isPublicViewingStore
 	} from '$lib/utils/stores/stores';
@@ -100,8 +104,7 @@
 	const alertTabs = ['active', 'inactive', 'history'] as const;
 	type AlertView = (typeof alertTabs)[number];
 	let alertView: AlertView = 'active';
-	// Initialize chartWidth with a default value
-	let chartWidth = 0;
+
 
 	// Bottom windows
 	type BottomWindowType =
@@ -151,8 +154,6 @@
 	const MAX_TICKER_HEIGHT = 600;
 
 	// Add left sidebar state variables next to the other state variables
-	let leftMenuWidth = 600; // <-- Set initial width to 300
-	let leftResizing = false;
 
 	// Calendar state
 	let calendarVisible = false;
@@ -198,6 +199,15 @@
 		}
 	}
 
+	// Sync store values with CSS custom properties
+	$: if (browser && $leftMenuWidth !== undefined) {
+		document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+	}
+	
+	$: if (browser && $menuWidth !== undefined) {
+		document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+	}
+
 	// Add a reactive statement to handle window events
 	$: if (draggingWindowId !== null) {
 		if (browser) {
@@ -209,36 +219,6 @@
 			window.removeEventListener('mousemove', onDrag);
 			window.removeEventListener('mouseup', stopDrag);
 		}
-	}
-
-	// Add reactive statement to update chart width when menuWidth changes
-
-	function updateChartWidth() {
-		if (browser) {
-			const rightSidebarWidth = $menuWidth;
-			// Responsive max sidebar widths
-			let maxRightSidebarWidth = 600;
-			if (window.innerWidth <= 800) {
-				maxRightSidebarWidth = Math.min(250, window.innerWidth * 0.4);
-			} else if (window.innerWidth <= 1000) {
-				maxRightSidebarWidth = Math.min(300, window.innerWidth * 0.35);
-			} else if (window.innerWidth <= 1200) {
-				maxRightSidebarWidth = Math.min(350, window.innerWidth * 0.3);
-			} else if (window.innerWidth <= 1400) {
-				maxRightSidebarWidth = Math.min(400, window.innerWidth * 0.3);
-			}
-			maxRightSidebarWidth = Math.min(maxRightSidebarWidth, window.innerWidth - 45);
-
-			const maxLeftSidebarWidth = Math.min(800, window.innerWidth - 45);
-
-			// Only reduce chart width if sidebar widths are within bounds
-			if (rightSidebarWidth <= maxRightSidebarWidth && leftMenuWidth <= maxLeftSidebarWidth) {
-				chartWidth = window.innerWidth - rightSidebarWidth - leftMenuWidth - 45;
-			}
-		}
-	}
-	$: if ($menuWidth !== undefined) {
-		updateChartWidth();
 	}
 
 	// Track the last auto-input trigger to prevent rapid successive calls
@@ -348,6 +328,18 @@
 
 	onMount(() => {
 		if (!browser) return;
+		
+		// Set CSS variable for sidebar buttons width
+		document.documentElement.style.setProperty('--sidebar-buttons-width', `${SIDEBAR_BUTTONS_WIDTH}px`);
+		
+		// Initialize CSS custom properties for sidebar widths if not already set
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--left')) {
+			document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+		}
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--right')) {
+			document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+		}
+		
 		initStores();
 		// Async initialization function
 		async function init() {
@@ -393,22 +385,7 @@
 			console.log('🛠️ [debug] URL override: add ?mobile=1 or ?mobile=0 to the URL');
 		});
 
-		updateChartWidth();
 
-		// Set up chart width recalculation
-		const resizeObserver = new ResizeObserver(() => {
-			updateChartWidth();
-		});
-
-		const container = document.querySelector('.main-content');
-		if (container) {
-			resizeObserver.observe(container);
-		}
-
-		// Cleanup function
-		return () => {
-			resizeObserver.disconnect();
-		};
 	});
 
 	// Defer socket connection until after initial render
@@ -453,75 +430,57 @@
 	onDestroy(() => {
 		// Clean up all activity listeners
 		if (browser && document) {
-			window.removeEventListener('resize', updateChartWidth);
 			// Remove global keyboard event listener using the stable function reference
 			document.removeEventListener('keydown', keydownHandler);
 			// Remove overscroll prevention listeners
 			document.removeEventListener('touchstart', preventOverscroll);
 			document.removeEventListener('touchmove', preventOverscroll);
-			stopSidebarResize();
-			stopLeftResize();
 		}
 	});
 
 	// Sidebar resizing
-	let resizing = false;
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 
-	function startResize(event: MouseEvent | TouchEvent) {
+	function startResize(event: PointerEvent) {
 		event.preventDefault();
-		resizing = true;
-		document.addEventListener('mousemove', resize);
-		document.addEventListener('mouseup', stopResize);
-		document.addEventListener('touchmove', resize);
-		document.addEventListener('touchend', stopResize);
+		const startX = event.clientX;
+		const start = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--right'), 10);
+
+		const maxSidebarWidth = Math.min(600, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
+
+		const onMove = (ev: PointerEvent) => {
+			const delta = startX - ev.clientX; // inverse for right sidebar!
+			let newWidth = Math.max(start + delta, 0);
+
+			// Handle collapsing logic
+			if (newWidth < minWidth && lastSidebarMenu !== null) {
+				lastSidebarMenu = null;
+				menuWidth.set(0);
+				document.documentElement.style.setProperty('--right', '0px');
+			}
+			// Restore state if dragging back
+			else if (newWidth >= minWidth && lastSidebarMenu) {
+				newWidth = Math.min(newWidth, maxSidebarWidth);
+				lastSidebarMenu = null;
+				menuWidth.set(newWidth);
+				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+			}
+			// Normal resize
+			else if (newWidth >= minWidth) {
+				newWidth = Math.min(newWidth, maxSidebarWidth);
+				menuWidth.set(newWidth);
+				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+			}
+		};
+
+		const onUp = () => {
+			window.removeEventListener('pointermove', onMove);
+			document.body.style.cursor = 'default';
+		};
+
 		document.body.style.cursor = 'ew-resize';
-	}
-
-	function resize(event: MouseEvent | TouchEvent) {
-		if (!resizing) return;
-
-		let clientX = 0;
-		if (event instanceof MouseEvent) {
-			clientX = event.clientX;
-		} else {
-			clientX = event.touches[0].clientX;
-		}
-
-		// Calculate width from right edge of window, excluding the sidebar buttons width
-		let newWidth = window.innerWidth - clientX - 45; // 45px is the width of sidebar buttons
-		const maxSidebarWidth = Math.min(600, window.innerWidth - 45); // Restored to 600px max
-
-		// Store state before closing
-		if (newWidth < minWidth && lastSidebarMenu !== null) {
-			lastSidebarMenu = null;
-			menuWidth.set(0);
-		}
-		// Restore state if dragging back
-		else if (newWidth >= minWidth && lastSidebarMenu) {
-			lastSidebarMenu = lastSidebarMenu;
-			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
-			lastSidebarMenu = null;
-		}
-		// Normal resize
-		else if (newWidth >= minWidth) {
-			// Only update if we're within the maximum width
-			menuWidth.set(Math.min(newWidth, maxSidebarWidth));
-		}
-
-		// Only update chart width if we're within bounds
-		if (newWidth <= maxSidebarWidth) {
-			updateChartWidth();
-		}
-	}
-
-	function stopResize() {
-		resizing = false;
-		document.removeEventListener('mousemove', resize);
-		document.removeEventListener('mouseup', stopResize);
-		document.removeEventListener('touchmove', resize);
-		document.removeEventListener('touchend', stopResize);
-		document.body.style.cursor = 'default';
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp, { once: true });
 	}
 
 	// Bottom windows
@@ -686,8 +645,6 @@
 				}));
 			}
 		}
-
-		updateChartWidth();
 	}
 
 	function stopBottomResize() {
@@ -819,88 +776,82 @@
 	function handleKeyboardResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startResize(new MouseEvent('mousedown'));
+			startResize(new PointerEvent('pointerdown'));
 		}
 	}
 
 	function handleKeyboardLeftResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startLeftResize(new MouseEvent('mousedown'));
+			startLeftResize(new PointerEvent('pointerdown'));
 		}
 	}
 
 	// Left sidebar resizing
-	function startLeftResize(event: MouseEvent | TouchEvent) {
+	function startLeftResize(event: PointerEvent) {
 		event.preventDefault();
-		leftResizing = true;
-		document.addEventListener('mousemove', resizeLeft);
-		document.addEventListener('mouseup', stopLeftResize);
-		document.addEventListener('touchmove', resizeLeft);
-		document.addEventListener('touchend', stopLeftResize);
-		document.body.style.cursor = 'ew-resize';
-	}
+		const startX = event.clientX;
+		const start = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left'), 10);
 
-	function resizeLeft(event: MouseEvent | TouchEvent) {
-		if (!leftResizing) return;
-
-		let clientX = 0;
-		if (event instanceof MouseEvent) {
-			clientX = event.clientX;
-		} else {
-			clientX = event.touches[0].clientX;
-		}
-
-		// Calculate width from left edge of window
-		let newWidth = clientX;
-		// Limit chat to minimum 15% and maximum 40% of screen width
+		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - 45);
+		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
 
-		// Enforce minimum and maximum width without auto-closing
-		leftMenuWidth = Math.max(minLeftSidebarWidth, Math.min(newWidth, maxLeftSidebarWidth));
+		const onMove = (ev: PointerEvent) => {
+			const delta = ev.clientX - startX;
+			const newWidth = Math.round(Math.max(minLeftSidebarWidth, Math.min(start + delta, maxLeftSidebarWidth)));
+			
+			// Update CSS custom property
+			document.documentElement.style.setProperty('--left', `${newWidth}px`);
+			
+			// Update store for other components
+			leftMenuWidth.set(newWidth);
+		};
 
-		updateChartWidth();
-	}
+		const onUp = () => {
+			window.removeEventListener('pointermove', onMove);
+			document.body.style.cursor = 'default';
+		};
 
-	function stopLeftResize() {
-		leftResizing = false;
-		document.removeEventListener('mousemove', resizeLeft);
-		document.removeEventListener('mouseup', stopLeftResize);
-		document.removeEventListener('touchmove', resizeLeft);
-		document.removeEventListener('touchend', stopLeftResize);
-		document.body.style.cursor = 'default';
+		document.body.style.cursor = 'ew-resize';
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp, { once: true });
 	}
 
 	// Toggle left pane for Query
 	function toggleLeftSidebar() {
-		if (leftMenuWidth > 0) {
-			leftMenuWidth = 0;
+		if ($leftMenuWidth > 0) {
+			leftMenuWidth.set(0);
+			document.documentElement.style.setProperty('--left', '0px');
 		} else {
-			// Set to 15% of screen width when opening
-			leftMenuWidth = window.innerWidth * 0.3;
+			// Set to 30% of screen width when opening
+			const width = window.innerWidth * 0.3;
+			leftMenuWidth.set(width);
+			document.documentElement.style.setProperty('--left', `${width}px`);
 		}
-		updateChartWidth();
 	}
 	function toggleMainSidebar(menuName: Menu) {
 		if (menuName === $activeMenu) {
 			// If clicking the same menu, close it
 			lastSidebarMenu = null;
 			menuWidth.set(0);
+			document.documentElement.style.setProperty('--right', '0px');
 			changeMenu('none');
 		} else {
 			// Open new menu
 			lastSidebarMenu = null;
 			// Only set width if sidebar is currently closed, otherwise preserve current width
 			if ($menuWidth === 0) {
-				menuWidth.set(180); 
+				const width = 180;
+				menuWidth.set(width);
+				document.documentElement.style.setProperty('--right', `${width}px`);
 			}
 			changeMenu(menuName);
 		}
 	}
 	// Subscribe to the requestChatOpen store
 	$: if ($requestChatOpen && browser) {
-		if (leftMenuWidth === 0) {
+		if ($leftMenuWidth === 0) {
 			toggleLeftSidebar(); // Open the left pane if closed
 		}
 		// Reset the trigger after handling
@@ -1069,30 +1020,27 @@
 		<!-- Main area wrapper -->
 		<div class="app-container">
 			<div class="content-wrapper">
-				<!-- Left sidebar for Query -->
-				{#if leftMenuWidth > 0}
-					<div class="left-sidebar" style="width: {leftMenuWidth}px;">
-						<div class="sidebar-content">
-							<div class="main-sidebar-content">
-								<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
+				<!-- Main horizontal container -->
+				<div class="main-horizontal-container">
+					<!-- Left sidebar for Query -->
+					{#if $leftMenuWidth > 0}
+
+						<div class="left-sidebar">
+							<div class="sidebar-content">
+									<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
 							</div>
 						</div>
 						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 						<div
-							class="resize-handle right"
+							class="resizer-left"
 							role="separator"
 							aria-orientation="vertical"
 							aria-label="Resize left panel"
-							on:mousedown={startLeftResize}
-							on:touchstart={startLeftResize}
+							on:pointerdown={startLeftResize}
 							on:keydown={handleKeyboardLeftResize}
 							tabindex="0"
 						/>
-					</div>
-				{/if}
-
-				<!-- Main horizontal container -->
-				<div class="main-horizontal-container">
+					{/if}
 					<!-- Center section (chart + top bar) -->
 					<div class="center-section">
 						<!-- Top bar -->
@@ -1101,59 +1049,66 @@
 							handleCalendar={handleCalendar} 
 						/>
 
-						<!-- Content below top bar -->
-						<div class="content-below-topbar">
-							<!-- Main content area -->
-							<div class="main-content">
-								<!-- Chart area -->
-								<div class="chart-wrapper">
-									<ChartContainer width={chartWidth} defaultChartData={data.defaultChartData} />
-								</div>
+						<!-- Main content area -->
+						<div class="main-content">
+							<!-- Chart area -->
+							<div class="chart-wrapper">
+								<ChartContainer defaultChartData={data.defaultChartData} />
+							</div>
 
-								<!-- Bottom windows container -->
-								<div
-									class="bottom-windows-container"
-									style="--bottom-height: {bottomWindowsHeight}px"
-								>
-									{#each bottomWindows as w}
-										<div class="bottom-window">
-											<div class="window-content">
-												{#if w.type === 'screener'}
-													{#await import('$lib/features/screener/screener.svelte') then module}
-														<svelte:component this={module.default} />
-													{/await}
-												{:else if w.type === 'strategies'}
-													{#await import('$lib/features/strategies/strategies.svelte') then module}
-														<svelte:component this={module.default} />
-													{/await}
-												{:else if w.type === 'settings'}
-													{#await import('$lib/features/settings/settings.svelte') then module}
-														<svelte:component this={module.default} />
-													{/await}
-												{/if}
-											</div>
+							<!-- Bottom windows container -->
+							<div
+								class="bottom-windows-container"
+								style="--bottom-height: {bottomWindowsHeight}px"
+							>
+								{#each bottomWindows as w}
+									<div class="bottom-window">
+										<div class="window-content">
+											{#if w.type === 'screener'}
+												{#await import('$lib/features/screener/screener.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{:else if w.type === 'strategies'}
+												{#await import('$lib/features/strategies/strategies.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{:else if w.type === 'settings'}
+												{#await import('$lib/features/settings/settings.svelte') then module}
+													<svelte:component this={module.default} />
+												{/await}
+											{/if}
 										</div>
-									{/each}
-									{#if bottomWindows.length > 0}
-										<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-										<div
-											class="bottom-resize-handle"
-											role="separator"
-											aria-orientation="horizontal"
-											aria-label="Resize bottom panel"
-											on:mousedown={startBottomResize}
-											on:keydown={handleKeyboardBottomResize}
-											tabindex="0"
-										></div>
-									{/if}
-								</div>
+									</div>
+								{/each}
+								{#if bottomWindows.length > 0}
+									<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+									<div
+										class="bottom-resize-handle"
+										role="separator"
+										aria-orientation="horizontal"
+										aria-label="Resize bottom panel"
+										on:mousedown={startBottomResize}
+										on:keydown={handleKeyboardBottomResize}
+										tabindex="0"
+									></div>
+								{/if}
 							</div>
 						</div>
 					</div>
-
+					
 					<!-- Sidebar -->
 					{#if $menuWidth > 0}
-						<div class="sidebar" style="width: {$menuWidth}px;">
+						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+						<div
+							class="resizer-right"
+							role="separator"
+							aria-orientation="vertical"
+							aria-label="Resize sidebar"
+							on:pointerdown={startResize}
+							on:keydown={handleKeyboardResize}
+							tabindex="0"
+						/>
+						<div class="sidebar">
 							<!-- Sidebar header -->
 							<div class="sidebar-header">
 								{#if $activeMenu === 'alerts'}
@@ -1185,18 +1140,6 @@
 									<WatchlistTabs />
 								{/if}
 							</div>
-
-							<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-							<div
-								class="resize-handle"
-								role="separator"
-								aria-orientation="vertical"
-								aria-label="Resize sidebar"
-								on:mousedown={startResize}
-								on:touchstart={startResize}
-								on:keydown={handleKeyboardResize}
-								tabindex="0"
-							/>
 							<div class="sidebar-content">
 								<div class="main-sidebar-content">
 									{#if $activeMenu === 'watchlist'}
@@ -1248,7 +1191,7 @@
 		<div class="bottom-bar">
 			<div class="bottom-bar-left">
 				<button
-					class="toggle-button query-feature {leftMenuWidth > 0 ? 'active' : ''}"
+					class="toggle-button query-feature {$leftMenuWidth > 0 ? 'active' : ''}"
 					on:click={toggleLeftSidebar}
 					title="Open AI Chat"
 				>
@@ -1414,14 +1357,18 @@
 
 <style>
 
-
+	:root {
+		--left: 300px; 
+		--right: 300px;
+		--gutter: 4px;
+	}
 
 	/* Profile bar container */
 	.profile-bar {
 		position: fixed;
 		top: 0;
 		right: 0;
-		width: 45px; /* same width as sidebar-buttons */
+		width: var(--sidebar-buttons-width, 45px); /* use CSS variable with fallback */
 		height: 40px; /* same height as top bar */
 		background-color: #121212;
 		display: flex;
@@ -1462,24 +1409,34 @@
 
 	/* New layout structure styles */
 	.main-horizontal-container {
-		display: flex;
-		flex: 1;
+		display: grid;
 		height: 100%;
+		width: 100%;
+		grid-template-columns: var(--left) var(--gutter) 1fr var(--gutter) var(--right);
+		grid-template-areas:"left g1 center g2 right";
 	}
 
+	.left-sidebar {
+		grid-area: left; overflow: hidden;
+	}
 	.center-section {
+		grid-area: center;
 		display: flex;
 		flex-direction: column;
-		flex: 1;
-		min-width: 0; /* Allows flex child to shrink below content size */
 	}
 
 	.sidebar {
-		display: flex !important;
-		flex-direction: column;
-		height: 100%;
-		border-left: 4px solid var(--c1);
+		grid-area: right;
+		overflow: hidden;
 	}
+	.resizer-left , .resizer-right{
+		width:var(--gutter);
+		cursor:ew-resize;
+		background:transparent;
+		z-index:10;                   /* sit above charts for easy grab */
+	}
+	.resizer-left  { grid-area:g1; }
+	.resizer-right { grid-area:g2; }
 
 	.sidebar-header {
 		height: 40px;
@@ -1561,12 +1518,6 @@
 		flex-direction: column;
 	}
 
-	/* New layout structure styles */
-	.main-horizontal-container {
-		display: flex;
-		flex: 1;
-		height: 100%;
-	}
 
 	.center-section {
 		display: flex;
@@ -1579,7 +1530,6 @@
 		display: flex !important;
 		flex-direction: column;
 		height: 100%;
-		border-left: 4px solid var(--c1);
 	}
 
 	.sidebar-header {
