@@ -4,26 +4,25 @@ Executes Python strategies that use get_bar_data() and get_general_data() functi
 instead of receiving DataFrames as parameters.
 """
 
-import asyncio
-import logging
-import pandas as pd
-import numpy as np
-from datetime import datetime as dt, timedelta
-import datetime
-from typing import Any, Dict, List, Optional, Union, Tuple
-import json
-import time
-import io
-import contextlib
-import plotly
-import traceback
-import linecache
-import sys 
-import math
 import ast
-from plotlyToMatlab import plotly_to_matplotlib_png
+import contextlib
+import datetime
+import io
+import json
+import logging
+import math
+import sys
+import time
+import traceback
+from datetime import datetime as dt, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
-from validator import SecurityValidator, SecurityError
+import numpy as np
+import pandas as pd
+import plotly
+
+from plotlyToMatlab import plotly_to_matplotlib_png
+from validator import SecurityValidator
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class TrackedList(list):
         cls._global_instance_count = 0
         cls._max_instances = max_instances
         cls._limit_reached = False
-        logger.debug(f"Reset instance counter, max_instances: {max_instances}")
+        logger.debug("Reset instance counter, max_instances: %d", max_instances)
     
     @classmethod
     def is_limit_reached(cls):
@@ -55,12 +54,12 @@ class TrackedList(list):
             # Set flag that limit was reached but don't raise exception
             if not TrackedList._limit_reached:
                 TrackedList._limit_reached = True
-                logger.warning(f"Instance limit reached: {TrackedList._global_instance_count}/{TrackedList._max_instances}. Stopping instance collection.")
+                logger.warning("Instance limit reached: %d/%d. Stopping instance collection.", TrackedList._global_instance_count, TrackedList._max_instances)
             return False  # Don't add more instances
         
         # Log warning when approaching limit (90% threshold)
         if new_count > TrackedList._max_instances * 0.9 and not TrackedList._limit_reached:
-            logger.warning(f"Approaching instance limit: {new_count}/{TrackedList._max_instances}")
+            logger.warning("Approaching instance limit: %d/%d", new_count, TrackedList._max_instances)
         
         TrackedList._global_instance_count = new_count
         return True  # OK to add instances
@@ -114,8 +113,7 @@ class AccessorStrategyEngine:
         symbols: List[str], 
         start_date: dt, 
         end_date: dt,
-        max_instances: int = 15000,
-        **kwargs
+        max_instances: int = 15000
     ) -> Dict[str, Any]:
         """
         Execute strategy for backtesting using data accessor functions
@@ -129,7 +127,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with instances, summary, and performance metrics
         """
-        logger.info(f"Starting accessor backtest: {len(symbols)} symbols, {start_date.date()} to {end_date.date()}")
+        logger.info("Starting accessor backtest: %d symbols, %s to %s", len(symbols), start_date.date(), end_date.date())
         
         start_time = time.time()
         
@@ -174,7 +172,7 @@ class AccessorStrategyEngine:
                 },
             }
             
-            logger.info(f"Backtest completed: {len(instances)} instances, {execution_time:.1f}ms")
+            logger.info("Backtest completed: %d instances, %.1fms", len(instances), execution_time)
             return result
             
         except Exception as e:
@@ -182,7 +180,7 @@ class AccessorStrategyEngine:
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"Backtest execution failed: {e}")
+            logger.error("Backtest execution failed: %s", e)
             logger.error(detailed_error_msg)
             
             return {
@@ -213,16 +211,16 @@ class AccessorStrategyEngine:
         
         try:
             getBarDataFunctionCalls = self.extract_get_bar_data_calls(strategy_code)
-            logger.info(f"📋 Extracted {len(getBarDataFunctionCalls)} get_bar_data calls: {getBarDataFunctionCalls}")
+            logger.info("📋 Extracted %d get_bar_data calls: %s", len(getBarDataFunctionCalls), getBarDataFunctionCalls)
             tickersInStrategyCode = self.get_all_tickers_from_calls(getBarDataFunctionCalls)
-            logger.info(f"📋 Extracted {len(tickersInStrategyCode)} tickers from get_bar_data calls: {tickersInStrategyCode}")
+            logger.info("📋 Extracted %d tickers from get_bar_data calls: %s", len(tickersInStrategyCode), tickersInStrategyCode)
 
             symbolsForValidation = tickersInStrategyCode if len(tickersInStrategyCode) <= 10 else tickersInStrategyCode[:10]
             symbolsForValidation = symbolsForValidation if symbolsForValidation else ['AAPL']  # Default if empty
             
             max_timeframe, max_timeframe_min_bars = self.getMaxTimeframeAndMinBars(getBarDataFunctionCalls)
             # Log the exact requirements that will be used
-            logger.info(f"🎯 Validation will use exact min_bars requirements (timeframe: {max_timeframe}, min_bars: {max_timeframe_min_bars})")
+            logger.info("🎯 Validation will use exact min_bars requirements (timeframe: %s, min_bars: %d)", max_timeframe, max_timeframe_min_bars)
             
             # Calculate start date based on timeframe and min_bars (convert to days and round up)
             end_date = dt.now()
@@ -273,7 +271,7 @@ class AccessorStrategyEngine:
                 'message': 'Validation passed - strategy can execute without errors'
             }
             
-            logger.info(f"✅ Validation completed successfully: {execution_time:.1f}ms")
+            logger.info("✅ Validation completed successfully: %.1fms", execution_time)
             return result
             
         except Exception as e:
@@ -283,7 +281,7 @@ class AccessorStrategyEngine:
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"❌ Validation failed: {e}")
+            logger.error("❌ Validation failed: %s", e)
             logger.error(detailed_error_msg)
             
             return {
@@ -300,8 +298,7 @@ class AccessorStrategyEngine:
         strategy_code: str, 
         universe: List[str], 
         limit: int = 100,
-        max_instances: int = 15000,
-        **kwargs
+        max_instances: int = 15000
     ) -> Dict[str, Any]:
         """
         Execute strategy for screening using data accessor functions
@@ -384,8 +381,7 @@ class AccessorStrategyEngine:
         self, 
         strategy_code: str, 
         symbols: List[str],
-        max_instances: int = 15000,
-        **kwargs
+        max_instances: int = 15000
     ) -> Dict[str, Any]:
         """
         Execute strategy for real-time alerts using data accessor functions

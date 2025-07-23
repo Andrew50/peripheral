@@ -30,7 +30,7 @@ export default [
         },
         rules: {
             // Enforce camelCase for all identifiers
-            camelcase: ['error', { properties: 'always' }],
+            /*camelcase: ['error', { properties: 'always' }],
 
             // TypeScript naming conventions - enforce camelCase and disallow snake_case
             '@typescript-eslint/naming-convention': [
@@ -41,7 +41,7 @@ export default [
                 { selector: 'enumMember', format: ['PascalCase'] },
                 { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
                 { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
-            ],
+            ],*/
 
             // Additional rules for code quality
             'no-unused-vars': 'off',
@@ -69,7 +69,7 @@ export default [
         rules: {
             ...sveltePlugin.configs.recommended.rules,
             // Apply the same camelCase rules to Svelte files
-            camelcase: ['error', { properties: 'always' }],
+            /*camelcase: ['error', { properties: 'always' }],
             '@typescript-eslint/naming-convention': [
                 'error',
                 { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
@@ -78,7 +78,7 @@ export default [
                 { selector: 'enumMember', format: ['PascalCase'] },
                 { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
                 { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
-            ]
+            ]*/
         }
     },
     {

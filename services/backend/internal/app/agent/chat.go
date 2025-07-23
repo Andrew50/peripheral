@@ -362,8 +362,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			case StageFinishedExecuting:
 				go func() {
 					var cleanedModelThoughts string
-					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+					if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+						ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 						if thoughtsStr, ok := thoughtsValue.(string); ok {
 							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 						}

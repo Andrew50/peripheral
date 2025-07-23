@@ -4,19 +4,18 @@ Provides efficient data access functions for strategy execution.
 These functions replace the previous approach of passing large DataFrames to strategies.
 """
 
-import asyncio
 import logging
 import os
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from decimal import Decimal
+from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
+
 import numpy as np
 import pandas as pd
-from decimal import Decimal
 import psycopg2
-import threading
-from contextlib import contextmanager
-import time
-from zoneinfo import ZoneInfo
 try:
     from psycopg2.extras import RealDictCursor
 except ImportError:
@@ -66,19 +65,17 @@ class DataAccessorProvider:
                 break
             except psycopg2.OperationalError as e:
                 if "recovery mode" in str(e) and attempt < max_retries - 1:
-                    logging.warning(f"Database in recovery mode, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                    logging.warning("Database in recovery mode, retrying in %ss (attempt %d/%d)", retry_delay, attempt + 1, max_retries)
                     time.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                     continue
-                else:
-                    raise
+                raise
             except Exception as e:
-                logging.error(f"Database connection failed on attempt {attempt + 1}: {e}")
+                logging.error("Database connection failed on attempt %d: %s", attempt + 1, e)
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
-                else:
-                    raise
+                raise
             finally:
                 if connection:
                     connection.close()
@@ -125,10 +122,8 @@ class DataAccessorProvider:
         """
         try:
             # Validate inputs
-            if min_bars < 1:
-                min_bars = 1
-            if min_bars > 10000:  # Prevent excessive data requests
-                min_bars = 10000
+            min_bars = max(min_bars, 1)
+            min_bars = min(min_bars, 10000)  # Prevent excessive data requests
             
             # Extract tickers from filters if provided
             tickers = None
@@ -146,14 +141,14 @@ class DataAccessorProvider:
             should_batch = self._should_use_batching(tickers, aggregate_mode)
             
             if should_batch:
-                logger.info(f"🔄 Using batched data fetching for large dataset")
+                logger.info("🔄 Using batched data fetching for large dataset")
                 return self._get_bar_data_batched(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
-            else:
-                # Use original method for smaller datasets or when aggregate_mode is True
-                return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
+            
+            # Use original method for smaller datasets or when aggregate_mode is True
+            return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
                 
         except Exception as e:
-            logger.error(f"Error in get_bar_data: {e}")
+            logger.error("Error in get_bar_data: %s", e)
             return np.array([])
     
     def _should_use_batching(self, tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
@@ -167,13 +162,13 @@ class DataAccessorProvider:
         if tickers is None:
             logger.info("🔄 Batching enabled: fetching all securities") 
             return True
-        elif not tickers:  # Empty list case
+        if not tickers:  # Empty list case
             logger.info("🔄 Batching enabled: empty tickers list")
             return True
         
         # Batch when ticker list is large
         if len(tickers) > 1000:
-            logger.info(f"🔄 Batching enabled: {len(tickers)} tickers > 1000 limit")
+            logger.info("🔄 Batching enabled: %d tickers > 1000 limit", len(tickers))
             return True
         
         return False
@@ -204,20 +199,20 @@ class DataAccessorProvider:
                 if not universe_tickers:
                     logger.warning("No active tickers found in universe")
                     return np.array([])
-                logger.info(f"📊 Found {len(universe_tickers)} active tickers in universe")
+                logger.info("📊 Found %d active tickers in universe", len(universe_tickers))
             else:
                 universe_tickers = tickers
-                logger.info(f"📊 Processing {len(universe_tickers)} specified tickers")
+                logger.info("📊 Processing %d specified tickers", len(universe_tickers))
             
             # Process in batches
             total_batches = (len(universe_tickers) + batch_size - 1) // batch_size
-            logger.info(f"🔄 Processing {total_batches} batches of up to {batch_size} tickers each")
+            logger.info("🔄 Processing %d batches of up to %d tickers each", total_batches, batch_size)
             
             for i in range(0, len(universe_tickers), batch_size):
                 batch_num = i // batch_size + 1
                 batch_tickers = universe_tickers[i:i + batch_size]
                 
-                logger.info(f"📦 Processing batch {batch_num}/{total_batches}: {len(batch_tickers)} tickers")
+                logger.info("📦 Processing batch %d/%d: %d tickers", batch_num, total_batches, len(batch_tickers))
                 
                 try:
                     # Create batch filters with tickers
@@ -242,21 +237,21 @@ class DataAccessorProvider:
                         logger.debug(f"⚠️ Batch {batch_num} returned no data")
                         
                 except Exception as batch_error:
-                    logger.error(f"❌ Error in batch {batch_num}: {batch_error}")
+                    logger.error("❌ Error in batch %d: %s", batch_num, batch_error)
                     # Continue with next batch instead of failing completely
                     continue
             
             # Combine all batch results
             if all_results:
                 combined_result = np.vstack(all_results)
-                logger.info(f"✅ Batching complete: {len(combined_result)} total rows from {len(all_results)} batches")
+                logger.info("✅ Batching complete: %d total rows from %d batches", len(combined_result), len(all_results))
                 return combined_result
-            else:
-                logger.warning("No data returned from any batch")
-                return np.array([])
+            
+            logger.warning("No data returned from any batch")
+            return np.array([])
                 
         except Exception as e:
-            logger.error(f"Error in batched data fetching: {e}")
+            logger.error("Error in batched data fetching: %s", e)
             return np.array([])
     
     def _get_all_active_tickers(self, filters: Dict[str, any] = None) -> List[str]:
@@ -397,10 +392,8 @@ class DataAccessorProvider:
         """
         try:
             # Validate inputs
-            if min_bars < 1:
-                min_bars = 1
-            if min_bars > 10000:  # Prevent excessive data requests
-                min_bars = 10000
+            min_bars = max(min_bars, 1)
+            min_bars = min(min_bars, 10000)  # Prevent excessive data requests
                 
             # Extract tickers from filters if provided
             tickers = None
@@ -442,9 +435,9 @@ class DataAccessorProvider:
                 return self._get_aggregated_bar_data(
                     timeframe_config, columns, min_bars, filters, extended_hours, start_date, end_date
                 )
-            else:
-                # Direct table access
-                table_name = timeframe_config
+            
+            # Direct table access
+            table_name = timeframe_config
             
             # Default columns if not specified - include ticker by default
             if not columns:
@@ -473,12 +466,12 @@ class DataAccessorProvider:
                 # Only start date provided
                 date_filter = "o.timestamp >= %s"
                 date_params = [self._normalize_est(start_date)]
-                logger.info(f"📅 Using direct start date filter: {start_date}")
+                logger.info("📅 Using direct start date filter: %s", start_date)
             elif end_date:
                 # Only end date provided
                 date_filter = "o.timestamp <= %s"
                 date_params = [self._normalize_est(end_date)]
-                logger.info(f"📅 Using direct end date filter: {end_date}")
+                logger.info("📅 Using direct end date filter: %s", end_date)
             # Priority 2: Execution context date range
             elif context.get('start_date') and context.get('end_date'):
                 # Specific date range provided: get data from (start_date - min_bars buffer) to end_date
@@ -486,7 +479,7 @@ class DataAccessorProvider:
                 start_with_buffer = context.get('start_date') - (timeframe_delta * min_bars)
                 date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [self._normalize_est(start_with_buffer), self._normalize_est(context.get('end_date'))]
-                logger.info(f"📅 Using execution context date filter: {start_with_buffer} to {context.get('end_date')}")
+                logger.info("📅 Using execution context date filter: %s to %s", start_with_buffer, context.get('end_date'))
             elif context.get('mode') == 'validation':
                 # Validation mode: Use exact min_bars requirements for accurate validation
                 # No arbitrary caps - respect the strategy's actual needs
@@ -503,9 +496,9 @@ class DataAccessorProvider:
                         break
                 
                 if matching_requirement:
-                    logger.info(f"🧪 Validation mode: using exact min_bars={min_bars} for {timeframe} (from line {matching_requirement['line_number']})")
+                    logger.info("🧪 Validation mode: using exact min_bars=%d for %s (from line %d)", min_bars, timeframe, matching_requirement['line_number'])
                 else:
-                    logger.info(f"🧪 Validation mode: using min_bars={min_bars} for {timeframe} (no arbitrary caps applied)")
+                    logger.info("🧪 Validation mode: using min_bars=%d for %s (no arbitrary caps applied)", min_bars, timeframe)
                 
                 # No min_bars override - use the strategy's exact requirements
             elif context.get('mode') == 'screening':
@@ -595,7 +588,6 @@ class DataAccessorProvider:
             
             # Add extended hours filtering for intraday timeframes
             extended_hours_filter = ""
-            extended_hours_params = []
             
             # Only apply extended hours filtering for intraday timeframes (seconds, minutes, hours)
             # Daily and above timeframes ignore the extended_hours parameter
@@ -790,7 +782,7 @@ class DataAccessorProvider:
             return np.array(ordered_results, dtype=object)
             
         except Exception as e:
-            logger.error(f"Error in get_bar_data: {e}")
+            logger.error("Error in get_bar_data: %s", e)
             return np.array([])
     
     def _get_timeframe_delta(self, timeframe: str) -> timedelta:
@@ -888,7 +880,7 @@ class DataAccessorProvider:
             return [row[0] for row in results]
             
         except Exception as e:
-            logger.error(f"Error converting tickers to security IDs: {e}")
+            logger.error("Error converting tickers to security IDs: %s", e)
             return []
 
     def get_general_data(self, columns: List[str] = None, 
@@ -1001,7 +993,7 @@ class DataAccessorProvider:
             # Handle ticker-specific filtering
             if tickers is not None and len(tickers) > 0:
                 # Convert ticker symbols to security IDs and add to filter
-                logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
+                logger.info("Converting ticker symbols %s to security IDs for general data", tickers)
                 security_ids = self._get_security_ids_from_tickers(tickers, filters)
                 if not security_ids:
                     logger.warning("No security IDs found for provided tickers")
@@ -1046,7 +1038,7 @@ class DataAccessorProvider:
             return df
             
         except Exception as e:
-            logger.error(f"Error in get_general_data: {e}")
+            logger.error("Error in get_general_data: %s", e)
             return pd.DataFrame()
 
     def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], columns: List[str] = None, 
@@ -1114,7 +1106,7 @@ class DataAccessorProvider:
             return aggregated_data
             
         except Exception as e:
-            logger.error(f"Error in aggregated bar data: {e}")
+            logger.error("Error in aggregated bar data: %s", e)
             return np.array([])
     
     def _aggregate_ohlcv_data(self, base_data: np.ndarray, target_interval_minutes: int, 
@@ -1134,9 +1126,6 @@ class DataAccessorProvider:
             if len(base_data) == 0:
                 return np.array([])
             
-            # Convert to pandas DataFrame for easier aggregation
-            import pandas as pd
-            
             # Determine column names (assuming standard OHLCV format)
             if base_data.shape[1] >= 8:
                 columns = ["securityid", "ticker", "timestamp", "open", "high", "low", "close", "volume"]
@@ -1150,9 +1139,6 @@ class DataAccessorProvider:
             
             # Convert timestamp to datetime for aggregation
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-            
-            # Calculate aggregation interval
-            interval_ratio = target_interval_minutes // base_interval_minutes
             
             # Group by security and time intervals
             aggregated_results = []
@@ -1244,7 +1230,7 @@ class DataAccessorProvider:
             return data[:, column_indices]
             
         except Exception as e:
-            logger.error(f"Error filtering columns: {e}")
+            logger.error("Error filtering columns: %s", e)
             return np.array([])
 
     def _normalize_est(self, dt: datetime):

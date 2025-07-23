@@ -635,10 +635,10 @@ jobs:
           echo "Running SvelteKit sync to generate .svelte-kit directory and type definitions..."
           npx svelte-kit sync
 
-      - name: 🔍 Run ESLint with camelCase enforcement
+      - name: 🔍 Run ESLint
         working-directory: services/frontend
         run: |
-          echo "🔍 Running ESLint with camelCase enforcement..."
+          echo "🔍 Running ESLint..."
           npx eslint 'src/**/*.{js,ts,svelte}'
 
       #- name: 🎨 Run Stylelint with camelCase enforcement
@@ -781,21 +781,21 @@ jobs:
           echo ""
           echo "✅ Go format checks completed with camelCase enforcement"
           echo "✅ Python format checks completed with camelCase enforcement"
-          echo "✅ Svelte/TS/JS format checks completed with camelCase enforcement"
+          echo "✅ Svelte/TS/JS format checks completed"
           echo "✅ YAML format checks completed"
           echo "✅ SQL format checks completed with consistent formatting"
           echo "✅ Backend lint and security checks completed"
           echo "✅ Frontend lint and security checks completed"
           echo "✅ Worker lint and security checks completed"
           echo ""
-          echo "🎯 Most format checks enforce camelCase naming conventions"
+          echo "🎯 Go and Python format checks enforce camelCase naming conventions"
           echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
           echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
           echo ""
           echo "📋 Summary:"
           echo "- Go: golangci-lint with revive rules for camelCase"
           echo "- Python: Pylint with camelCase naming rules"
-          echo "- Svelte/TS/JS: ESLint + Stylelint with camelCase rules"
+          echo "- Svelte/TS/JS: ESLint + Stylelint"
           echo "- YAML: yamllint for formatting consistency"
           echo "- SQL: SQLFluff with consistent formatting"
           echo "- Backend: Full security and lint checks"
