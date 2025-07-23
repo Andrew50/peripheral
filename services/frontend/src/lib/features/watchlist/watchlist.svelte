@@ -30,6 +30,28 @@
 	export let showTabs: boolean = true;
 
 	let container: HTMLDivElement;
+	// Watchlist tab functionality
+	let newWatchlistName = '';
+	let currentWatchlistId: number;
+	let previousWatchlistId: number;
+	let newNameInput: HTMLInputElement;
+	let showWatchlistInput = false;
+	let showDropdown = false;
+
+	// Track visible watchlists for tabs in fixed order
+
+	function newWatchlist() {
+		if (newWatchlistName === '') return;
+
+		createNewWatchlist(newWatchlistName)
+			.then((newWatchlistId: number) => {
+				newWatchlistName = '';
+				showWatchlistInput = false;
+			})
+			.catch((error) => {
+				alert(error.message);
+			});
+	}
 
 	function deleteItem(item: WatchlistItem) {
 		if (!item.watchlistItemId) {
@@ -53,35 +75,6 @@
 			}
 		);
 	}
-
-	// Watchlist tab functionality
-	let newWatchlistName = '';
-	let currentWatchlistId: number;
-	let previousWatchlistId: number;
-	let newNameInput: HTMLInputElement;
-	let showWatchlistInput = false;
-	let showDropdown = false;
-
-	// Track visible watchlists for tabs in fixed order
-
-	// Get all visible watchlists in their fixed positions
-	$: visibleWatchlists = $visibleWatchlistIds
-		.map((id) => $watchlists?.find((w) => w.watchlistId === id))
-		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
-
-	function newWatchlist() {
-		if (newWatchlistName === '') return;
-
-		createNewWatchlist(newWatchlistName)
-			.then((newWatchlistId: number) => {
-				newWatchlistName = '';
-				showWatchlistInput = false;
-			})
-			.catch((error) => {
-				alert(error.message);
-			});
-	}
-
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
 		newWatchlistName = '';
@@ -179,34 +172,6 @@
 		// No manual reset; keeping the value ensures the dropdown remains synced.
 	}
 
-	// Keep currentWatchlistId in sync with the global store
-	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
-
-	// Full name of the currently selected watchlist for display in header row
-	$: currentWatchlistName = Array.isArray($watchlists)
-		? ($watchlists.find((w) => w.watchlistId === currentWatchlistId)?.watchlistName ?? '')
-		: '';
-
-	// Automatically select the first watchlist if none is selected
-	// This serves as a fallback in case the store initialization didn't run
-	$: if (
-		$watchlists &&
-		$watchlists.length > 0 &&
-		(!currentWatchlistId || isNaN(currentWatchlistId))
-	) {
-		selectWatchlist(String($watchlists[0].watchlistId));
-	}
-
-	// Initialize visible watchlists when watchlists and currentWatchlistId are available
-	// This serves as a fallback in case the store initialization didn't run
-	$: if (
-		$watchlists &&
-		$watchlists.length > 0 &&
-		currentWatchlistId &&
-		$visibleWatchlistIds.length === 0
-	) {
-		initializeVisibleWatchlists($watchlists, currentWatchlistId);
-	}
 
 	// Handle direct tab switching - maintain fixed positions
 	function switchToWatchlist(watchlistId: number) {
@@ -244,6 +209,38 @@
 			document.removeEventListener('click', handleClickOutside);
 		};
 	});
+	// Keep currentWatchlistId in sync with the global store
+	$: currentWatchlistId = $globalCurrentWatchlistId || 0;
+
+	// Full name of the currently selected watchlist for display in header row
+	$: currentWatchlistName = Array.isArray($watchlists)
+		? ($watchlists.find((w) => w.watchlistId === currentWatchlistId)?.watchlistName ?? '')
+		: '';
+
+	// Automatically select the first watchlist if none is selected
+	// This serves as a fallback in case the store initialization didn't run
+	$: if (
+		$watchlists &&
+		$watchlists.length > 0 &&
+		(!currentWatchlistId || isNaN(currentWatchlistId))
+	) {
+		selectWatchlist(String($watchlists[0].watchlistId));
+	}
+
+	// Initialize visible watchlists when watchlists and currentWatchlistId are available
+	// This serves as a fallback in case the store initialization didn't run
+	$: if (
+		$watchlists &&
+		$watchlists.length > 0 &&
+		currentWatchlistId &&
+		$visibleWatchlistIds.length === 0
+	) {
+		initializeVisibleWatchlists($watchlists, currentWatchlistId);
+	}
+	// Get all visible watchlists in their fixed positions
+	$: visibleWatchlists = $visibleWatchlistIds
+	.map((id) => $watchlists?.find((w) => w.watchlistId === id))
+	.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>

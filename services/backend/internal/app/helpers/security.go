@@ -1015,18 +1015,14 @@ func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMe
 		return nil, err
 	}
 
-	// Safely extract needed data before goroutine to prevent race conditions
-	results, ok := res.(GetTickerDailySnapshotResults)
-	if !ok {
-		return res, fmt.Errorf("unexpected return type from GetTickerDailySnapshot")
-	}
-
-	// Copy needed data to avoid race conditions
-	ticker := results.Ticker
-
 	go func() {
+		var args GetTickerDailySnapshotArgs
+		if err := json.Unmarshal(rawArgs, &args); err != nil {
+			return
+		}
+		ticker := args.Ticker
 		// Use polygon connection safely
-		agg, err := polygon.GetAggsData(conn.Polygon, ticker, 1, "day", models.Millis(time.Now()), models.Millis(time.Now()), 100, "asc", true)
+		agg, err := polygon.GetAggsData(conn.Polygon, ticker, 1, "day", models.Millis(time.Now().AddDate(0, 0, -100)), models.Millis(time.Now()), 100, "asc", true)
 		if err != nil {
 			fmt.Printf("Error getting agg data for ticker %s: %v\n", ticker, err)
 			return
@@ -1046,8 +1042,8 @@ func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMe
 		}
 
 		data := map[string]interface{}{
-			"ticker": ticker,
-			"data":   barData,
+			"ticker":    ticker,
+			"chartData": barData,
 		}
 		socket.SendAgentStatusUpdate(userID, "getDailySnapshot", data)
 	}()

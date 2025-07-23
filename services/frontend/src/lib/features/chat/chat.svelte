@@ -36,7 +36,6 @@
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import {
 		agentStatusStore,
-		titleUpdateStore,
 		setMessageIdUpdateCallback,
 		sendChatQuery
 	} from '$lib/utils/stream/socket'; // Import both stores and types
@@ -56,12 +55,6 @@
 	let loadingConversations = false;
 	let isCurrentConversationPublic = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
-
-	// Title typing effect state
-	let isTypingTitle = false;
-	let typingTitleText = '';
-	let typingTitleTarget = '';
-	let typingInterval: ReturnType<typeof setInterval> | null = null;
 
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
@@ -505,11 +498,6 @@
 		// Clean up copy timeout
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
-		}
-
-		// Clean up typing interval
-		if (typingInterval) {
-			clearInterval(typingInterval);
 		}
 	});
 
@@ -1224,40 +1212,6 @@
 		}
 	}
 
-	// Function to create typing effect for title
-	function startTitleTypingEffect(newTitle: string) {
-		// Don't start typing if already typing or if the title is the same
-		if (isTypingTitle || currentConversationTitle === newTitle) {
-			return;
-		}
-
-		isTypingTitle = true;
-		typingTitleTarget = newTitle;
-		typingTitleText = '';
-
-		let currentIndex = 0;
-		const typingSpeed = 50; // milliseconds per character
-
-		// Clear any existing interval
-		if (typingInterval) {
-			clearInterval(typingInterval);
-		}
-
-		typingInterval = setInterval(() => {
-			if (currentIndex < typingTitleTarget.length) {
-				typingTitleText = typingTitleTarget.substring(0, currentIndex + 1);
-				currentIndex++;
-			} else {
-				// Typing complete
-				clearInterval(typingInterval!);
-				typingInterval = null;
-				isTypingTitle = false;
-				currentConversationTitle = typingTitleTarget;
-				typingTitleText = '';
-			}
-		}, typingSpeed);
-	}
-
 	// Setup callback for handling message ID updates
 	function handleMessageIdUpdate(messageId: string, conversationId: string) {
 		// Update the temporary user message with the real backend message ID
@@ -1283,37 +1237,6 @@
 		if (!currentConversationId && conversationId) {
 			currentConversationId = conversationId;
 		}
-	}
-
-	// Reactive block to handle title updates from websocket
-	$: if ($titleUpdateStore && browser) {
-		const titleUpdate = $titleUpdateStore;
-
-		// Handle title updates for current conversation OR new conversations (when currentConversationId is empty)
-		if (
-			titleUpdate.conversation_id === currentConversationId ||
-			(!currentConversationId && titleUpdate.conversation_id)
-		) {
-			// If this is a new conversation, set the conversation ID
-			if (!currentConversationId) {
-				currentConversationId = titleUpdate.conversation_id;
-			}
-
-			// Start typing effect for the new title
-			startTitleTypingEffect(titleUpdate.title);
-
-			// Also update the conversations list if it's loaded
-			if (conversations.length > 0) {
-				conversations = conversations.map((conv) =>
-					conv.conversation_id === titleUpdate.conversation_id
-						? { ...conv, title: titleUpdate.title }
-						: conv
-				);
-			}
-		}
-
-		// Clear the store after processing
-		titleUpdateStore.set(null);
 	}
 
 	// Helper to translate technical error messages into user-friendly text
@@ -1343,8 +1266,6 @@
 		{conversationToDelete}
 		{messagesStore}
 		{isLoading}
-		{isTypingTitle}
-		{typingTitleText}
 		{isPublicViewing}
 		{sharedConversationId}
 		{toggleConversationDropdown}

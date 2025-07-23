@@ -492,6 +492,7 @@ class StrategyGenerator:
             - Histograms of performance metrics, returns, etc 
             - Always show the plot using .show()
             - Almost always include plots in the strategy to help the user understand the data
+            - Ensure to name ALL traces in the plot, otherwise the trace will say 'trace 0'.
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
             - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on separate line plots.
             - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
@@ -500,6 +501,7 @@ class StrategyGenerator:
             - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
+            - Dates should always be in American format. 
 
             RETURN FORMAT:
             - *ALWAYS* Return List[Dict] where each dict contains:
