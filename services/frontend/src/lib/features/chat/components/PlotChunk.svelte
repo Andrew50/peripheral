@@ -254,6 +254,11 @@
 				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// For scatter plots, typically show more precision for smaller values
 							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
@@ -396,6 +401,11 @@
 				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// For scatter plots, typically show more precision for smaller values
 							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
@@ -488,6 +498,11 @@
 				if (trace.y && Array.isArray(trace.y) && !trace.text && trace.y.length < 12) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// Only round values > 100,000 to 2 decimals
 							if (Math.abs(value) > 100000) {
