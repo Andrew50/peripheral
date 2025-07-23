@@ -222,11 +222,13 @@ func initUserTelegramBotJob(conn *data.Conn) error {
 // checkPartialCoverageAndStartServices checks if OHLCV partial coverage is sufficient
 // and starts screener and polygon websocket if they haven't been started yet
 func checkPartialCoverageAndStartServices(conn *data.Conn) error {
+	log.Printf("🔍 checkPartialCoverageAndStartServices called")
 	partialCoverageCheckMutex.Lock()
 	defer partialCoverageCheckMutex.Unlock()
 
 	// If both services are already started, no need to check
 	if screenerStartedByPartialCoverage && polygonStartedByPartialCoverage {
+		log.Printf("⚠️ Both services already started, skipping check")
 		return nil
 	}
 
@@ -284,7 +286,7 @@ func startPolygonWebSocketInternal(conn *data.Conn) error {
 		return nil
 	}
 
-	err := socket.StartPolygonWS(conn, useBS, true)
+	err := socket.StartPolygonWS(conn, useBS)
 	if err != nil {
 		return err
 	}
@@ -995,6 +997,7 @@ func startScreenerUpdater(conn *data.Conn) error {
 
 // startPolygonWebSocket starts the Polygon WebSocket if partial coverage is sufficient
 func startPolygonWebSocket(conn *data.Conn) error {
+	log.Printf("🔍 startPolygonWebSocket called")
 	partialCoverageCheckMutex.Lock()
 	defer partialCoverageCheckMutex.Unlock()
 
@@ -1005,6 +1008,7 @@ func startPolygonWebSocket(conn *data.Conn) error {
 	}
 
 	// Check if OHLCV partial coverage is sufficient (2 months back)
+	log.Printf("🔍 Checking OHLCV partial coverage for Polygon WebSocket...")
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
 	if err != nil {
 		log.Printf("❌ Failed to check OHLCV partial coverage for Polygon WebSocket: %v", err)

@@ -451,45 +451,6 @@
 		opacity: 1;
 	}
 
-	/* Countdown styles */
-	.countdown-container {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 6px 10px;
-		background: transparent;
-		border-radius: 6px;
-		border: none;
-		color: rgba(255, 255, 255, 0.9);
-		font-size: 13px;
-		line-height: 18px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-		transition: none;
-	}
-
-	.countdown-container:hover {
-		background: rgba(255, 255, 255, 0.15);
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-	}
-
-	.countdown-label {
-		color: inherit;
-		font-size: inherit;
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-	}
-
-	.countdown-value {
-		font-family: inherit;
-		font-weight: 600;
-		font-size: inherit;
-		color: inherit;
-		min-width: 45px;
-		text-align: center;
-	}
-
 	/* Divider styles */
 	.divider {
 		width: 1px;

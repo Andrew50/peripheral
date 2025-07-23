@@ -1,21 +1,23 @@
 /*
 GOAL: 10k ticker refreshed in 10s
 
-bucket / metric	rows per bucket	how often queried	CA?	Rationale
-Pre‑market daily stats (pre_market_stats)	330 rows / ticker	Every screen refresh	Yes — keep CA	One daily bucket, refresh touches ≤ 10 k new rows/minute, huge scan avoided
-Intraday 1 m / 15 m / 1 h deltas & ranges	≤ 16 min of raw data	Only needed for current screen	No — keep intraday_stats table	Bucket would be 1 minute → every insert invalidates it, refresh ≈ query cost
-Historical daily references (1 w–10 y, 52 w high/low)	1 row / day	Built once per day	No (plain table is fine)	Refresh cost tiny, CA would duplicate storage
-Final screener view (one row per ticker)	1 row	Always queried	No	You already up‑sert; CA adds no value
+MIGRATION 78 OPTIMIZATION:
+- Consolidated 9 continuous aggregates into 2 static reference tables
+- Only cagg_pre_market and cagg_extended_hours remain as continuous aggregates
+- All other metrics now calculated on-demand in refresh_static_refs() and refresh_static_refs_1m()
+- This reduces complexity from 11 caggs to 2, with better batch performance
 
+bucket / metric	rows per bucket	how often queried	CA?	Rationale
+Pre‑market daily stats (pre_market_stats)	330 rows / ticker	Every screen refresh	Yes — keep CA	One daily bucket, refresh touches ≤ 10k new rows/minute, huge scan avoided
+Extended‑hours daily stats	330 rows / ticker	Every screen refresh	Yes — keep CA	Time-sensitive session data
+Historical daily references + moving averages + volatility	1 row / ticker	Built periodically	No (static_refs_daily)	Batch calculation more efficient than continuous updates
+Intraday ranges + volume averages	1 row / ticker	Built frequently	No (static_refs_1m)	Batch calculation more efficient than continuous updates
+Final screener view (one row per ticker)	1 row	Always queried	No	You already up‑sert; CA adds no value
 
 OPTIMIZATION TO TRY:
-
 -- parallelize the screener update with golang workers
 
-
-
 OPTIMIZATION LOG: -- baseline 3s for 1 ticker
-
 */
 
 package screener
@@ -32,15 +34,16 @@ import (
 )
 
 const (
-	refreshInterval         = 60 * time.Second  // full screener top-off frequency (fallback)
-	refreshTimeout          = 600 * time.Second // per-refresh SQL timeout (increased from 60s)
-	extendedCloseHour       = 20                // 8 PM Eastern – hard stop
-	maxTickersPerBatch      = 0                 // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
-	staticRefs1mInterval    = 5 * time.Minute   // refresh static_refs_1m every minute
-	staticRefsDailyInterval = 20 * time.Minute  // refresh static_refs every 5 minutes
-	latestBarViewsInterval  = 30 * time.Second  // refresh latest bar materialized views every 30 seconds (CRITICAL)
-	IgnoreMarketHours       = false             // ignore market hours ==== REMOVE THIS BEFORE PR
-	useAnalysis             = false             // enable performance analysis
+	refreshInterval         = 60 * time.Second   // full screener top-off frequency (fallback)
+	refreshTimeout          = 600 * time.Second  // per-refresh SQL timeout (increased from 60s)
+	staticRefsTimeout       = 1200 * time.Second // timeout for static refs functions (increased due to more computation)
+	extendedCloseHour       = 20                 // 8 PM Eastern – hard stop
+	maxTickersPerBatch      = 0                  // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
+	staticRefs1mInterval    = 1 * time.Minute    // refresh static_refs_1m every minute (was 5 minutes)
+	staticRefsDailyInterval = 5 * time.Minute    // refresh static_refs every 5 minutes (was 20 minutes)
+	latestBarViewsInterval  = 30 * time.Second   // refresh latest bar materialized views every 30 seconds (CRITICAL)
+	IgnoreMarketHours       = false              // ignore market hours ==== REMOVE THIS BEFORE PR
+	useAnalysis             = false              // enable performance analysis
 )
 
 var (
@@ -59,18 +62,10 @@ func initialRefresh(conn *data.Conn) error {
 	refreshCommands := []string{
 		// Latest bar materialized views (CRITICAL for screener performance)
 		"SELECT refresh_latest_bar_views();",
-		// Time-bucketed aggregates
-		"CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_4_hour', now() - INTERVAL '4 hours', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_7_day', now() - INTERVAL '7 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_30_day', now() - INTERVAL '30 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_50_day', now() - INTERVAL '50 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_200_day', now() - INTERVAL '200 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL);",
-		//"CALL refresh_continuous_aggregate('cagg_rsi_14_day', now() - INTERVAL '3 weeks', NULL);", //3 weeks cause you need 14 bars to calculate rsi
+		// Only refresh the remaining continuous aggregates (pre-market and extended-hours)
+		"CALL refresh_continuous_aggregate('cagg_pre_market', now() - INTERVAL '3 days', NULL);",
+		"CALL refresh_continuous_aggregate('cagg_extended_hours', now() - INTERVAL '3 days', NULL);",
+		// Static reference tables now handle all other metrics
 		"SELECT refresh_static_refs();",
 		"SELECT refresh_static_refs_1m();",
 	}
@@ -152,9 +147,10 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	var updateCount int
 	var totalDuration time.Duration
 
-	log.Printf("🚀 Screener updater started with static refs refresh")
-	log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays)", staticRefs1mInterval)
-	log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays)", staticRefsDailyInterval)
+	log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
+	log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
+	log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
+	log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
 
 	for {
 		if !IgnoreMarketHours {
@@ -295,10 +291,10 @@ func refreshStaticRefs1m(conn *data.Conn) {
 	}
 	defer oneMinStaticRefsMu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_1m...")
+	log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
 	start := time.Now()
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefs1mQuery)
@@ -321,10 +317,10 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 	}
 	defer dailyStaticRefsMu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_daily...")
+	log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
 	start := time.Now()
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefsQuery)
@@ -413,19 +409,16 @@ var screenerAnalysisConfig = AnalysisConfig{
 		{Name: "refresh_screener_single", Query: "SELECT refresh_screener(1)"},
 		{Name: "refresh_screener_large_batch", Query: "SELECT refresh_screener(50)"},
 
-		// Static reference refreshes
+		// Static reference refreshes (now do much more work after migration 78)
 		{Name: "refresh_static_refs_daily", Query: "SELECT refresh_static_refs()"},
 		{Name: "refresh_static_refs_1m", Query: "SELECT refresh_static_refs_1m()"},
 
 		// Individual refresh operations (matching initialRefresh operations)
 		{Name: "refresh_latest_bar_views", Query: "SELECT refresh_latest_bar_views()"},
-		{Name: "refresh_cagg_1440_minute", Query: "CALL refresh_continuous_aggregate('cagg_1440_minute', now() - INTERVAL '1440 minutes', NULL)"},
-		{Name: "refresh_cagg_15_minute", Query: "CALL refresh_continuous_aggregate('cagg_15_minute', now() - INTERVAL '15 minutes', NULL)"},
-		{Name: "refresh_cagg_60_minute", Query: "CALL refresh_continuous_aggregate('cagg_60_minute', now() - INTERVAL '60 minutes', NULL)"},
-		{Name: "refresh_cagg_4_hour", Query: "CALL refresh_continuous_aggregate('cagg_4_hour', now() - INTERVAL '4 hours', NULL)"},
-		{Name: "refresh_cagg_7_day", Query: "CALL refresh_continuous_aggregate('cagg_7_day', now() - INTERVAL '7 days', NULL)"},
-		{Name: "refresh_cagg_14_day", Query: "CALL refresh_continuous_aggregate('cagg_14_day', now() - INTERVAL '14 days', NULL)"},
-		{Name: "refresh_cagg_14_minute", Query: "CALL refresh_continuous_aggregate('cagg_14_minute', now() - INTERVAL '14 minutes', NULL)"},
+
+		// Only remaining continuous aggregates after migration 78
+		{Name: "refresh_cagg_pre_market", Query: "CALL refresh_continuous_aggregate('cagg_pre_market', now() - INTERVAL '3 days', NULL)"},
+		{Name: "refresh_cagg_extended_hours", Query: "CALL refresh_continuous_aggregate('cagg_extended_hours', now() - INTERVAL '3 days', NULL)"},
 	},
 	ComponentTests: []TestQuery{
 		// Core data lookups using real stale tickers
@@ -436,16 +429,17 @@ var screenerAnalysisConfig = AnalysisConfig{
 		{Name: "ohlcv_1m_latest_batch", Query: "SELECT ticker, timestamp, close/1000.0 as close FROM ohlcv_1m WHERE ticker = ANY($1) AND timestamp >= now() - INTERVAL '1 hour' ORDER BY timestamp DESC"},
 		{Name: "ohlcv_1d_latest_batch", Query: "SELECT ticker, timestamp, close/1000.0 as close FROM ohlcv_1d WHERE ticker = ANY($1) AND timestamp >= now() - INTERVAL '30 days' ORDER BY timestamp DESC"},
 
-		// Static reference lookups (what the screener depends on)
-		{Name: "static_refs_daily_batch", Query: "SELECT ticker, price_1d, price_1w, price_1m, volume_avg_30d FROM static_refs_daily WHERE ticker = ANY($1)"},
-		{Name: "static_refs_1m_batch", Query: "SELECT ticker, price_1m, price_15m, price_1h FROM static_refs_1m WHERE ticker = ANY($1)"},
+		// Static reference lookups (what the screener depends on) - updated for migration 78
+		{Name: "static_refs_daily_batch", Query: "SELECT ticker, price_1d, price_1w, price_1m, dma_50, dma_200, volatility_1w_pct, volatility_1m_pct, avg_volume_14d FROM static_refs_daily WHERE ticker = ANY($1)"},
+		{Name: "static_refs_1m_batch", Query: "SELECT ticker, price_1m, price_15m, price_1h, price_4h, range_15m_pct, range_1h_pct, avg_volume_1m_14 FROM static_refs_1m WHERE ticker = ANY($1)"},
 
 		// Securities metadata (active ticker filtering)
 		{Name: "securities_active_batch", Query: "SELECT ticker, market_cap, sector, active FROM securities WHERE ticker = ANY($1) AND active = TRUE"},
 
-		// Performance-critical joins (simulating screener calculation logic)
+		// Performance-critical joins (simulating screener calculation logic) - updated for migration 78
 		{Name: "screener_join_simulation", Query: `
-			SELECT s.ticker, s.market_cap, sr.price_1d, sr1m.price_1m, o1d.close/1000.0 as current_price
+			SELECT s.ticker, s.market_cap, sr.price_1d, sr.dma_50, sr.dma_200, sr.volatility_1w_pct, 
+				   sr1m.price_1m, sr1m.range_15m_pct, sr1m.range_1h_pct, o1d.close/1000.0 as current_price
 			FROM securities s
 			LEFT JOIN static_refs_daily sr ON s.ticker = sr.ticker
 			LEFT JOIN static_refs_1m sr1m ON s.ticker = sr1m.ticker

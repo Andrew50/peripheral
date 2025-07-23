@@ -829,7 +829,7 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		}
 
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume * 1000, open * 1000, close * 1000, high * 1000, low * 1000,
+SELECT ticker, volume, open * 1000, close * 1000, high * 1000, low * 1000,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
 WHERE ticker IS NOT NULL AND ticker != ''

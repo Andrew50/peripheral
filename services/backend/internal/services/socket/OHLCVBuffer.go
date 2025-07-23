@@ -26,15 +26,14 @@ type OHLCVRecord struct {
 }
 
 type OHLCVBuffer struct {
-	buffer         []OHLCVRecord
-	dbConn         *data.Conn
-	mu             sync.Mutex
-	lastFlush      time.Time
-	stopTimeout    chan struct{}
-	enableRealtime bool
-	flushCh        chan []OHLCVRecord
-	wg             sync.WaitGroup
-	stopped        bool
+	buffer      []OHLCVRecord
+	dbConn      *data.Conn
+	mu          sync.Mutex
+	lastFlush   time.Time
+	stopTimeout chan struct{}
+	flushCh     chan []OHLCVRecord
+	wg          sync.WaitGroup
+	stopped     bool
 }
 
 const flushThreshold = 200000
@@ -80,25 +79,35 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 var ohlcvBuffer *OHLCVBuffer
 
 // Initialize the OHLCV buffer
-func InitOHLCVBuffer(conn *data.Conn, enableRealtime bool) error {
+func InitOHLCVBuffer(conn *data.Conn) error {
+
+	if ohlcvBuffer != nil {
+		log.Printf("⚠️ OHLCV buffer already initialized, stopping existing buffer")
+		ohlcvBuffer.Stop()
+	}
+
 	ohlcvBuffer = &OHLCVBuffer{
-		buffer:         make([]OHLCVRecord, 0, flushThreshold),
-		dbConn:         conn,
-		lastFlush:      time.Now(),
-		stopTimeout:    make(chan struct{}),
-		enableRealtime: enableRealtime,
-		flushCh:        make(chan []OHLCVRecord, 50),
-		stopped:        false,
+		buffer:      make([]OHLCVRecord, 0, flushThreshold),
+		dbConn:      conn,
+		lastFlush:   time.Now(),
+		stopTimeout: make(chan struct{}),
+		flushCh:     make(chan []OHLCVRecord, 50),
+		stopped:     false,
 	}
 
 	// Create staging tables immediately on initialization
 	if err := ohlcvBuffer.createStagingTables(); err != nil {
+		log.Printf("❌ Failed to create staging tables: %v", err)
 		return err
 	}
 
+	log.Printf("🔄 Starting OHLCV buffer writer goroutine...")
 	ohlcvBuffer.wg.Add(1)
 	go ohlcvBuffer.writer()
+
+	log.Printf("⏰ Starting OHLCV buffer timeout flusher...")
 	ohlcvBuffer.startTimeoutFlusher()
+	log.Printf("✅ OHLCV buffer initialized successfully")
 	return nil
 }
 
@@ -140,10 +149,6 @@ func (b *OHLCVBuffer) flushIfStale() {
 
 // Add a new OHLCV bar to the buffer
 func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAgg) {
-	if !b.enableRealtime {
-		return
-	}
-
 	record := OHLCVRecord{
 		Timestamp: timestamp,
 		Ticker:    ticker,
@@ -154,14 +159,24 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 		Volume:    int64(bar.Volume),
 	}
 
+	// Debug logging for first few bars or special tickers
+	//if ticker == "COIN" || ticker == "AAPL" {
+	//log.Printf("🪙 %s bar: ts=%d, O=%.4f, H=%.4f, L=%.4f, C=%.4f, V=%d",
+	//ticker, timestamp, bar.Open, bar.High, bar.Low, bar.Close, int64(bar.Volume))
+	//}
+
 	b.mu.Lock()
 	if b.stopped {
+		log.Printf("⚠️ addBar skipping %s - buffer stopped", ticker)
 		b.mu.Unlock()
 		return
 	}
 
 	b.buffer = append(b.buffer, record)
+	//log.Printf("📈 Added %s to buffer (buffer size: %d/%d)", ticker, len(b.buffer), flushThreshold)
+
 	if len(b.buffer) >= flushThreshold {
+		log.Printf("🚨 Buffer threshold reached, flushing %d records", len(b.buffer))
 		batchToFlush := make([]OHLCVRecord, len(b.buffer))
 		copy(batchToFlush, b.buffer)
 		b.buffer = b.buffer[:0]
@@ -169,6 +184,7 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 		b.mu.Unlock()
 		select {
 		case b.flushCh <- batchToFlush:
+			log.Printf("✅ Batch sent to flush channel")
 		default:
 			log.Printf("Warning: flush channel full, dropping batch of %d records", len(batchToFlush))
 		}
@@ -188,7 +204,7 @@ func (b *OHLCVBuffer) createStagingTables() error {
 	}
 	defer conn.Release()
 
-	createStage1m := `CREATE UNLOGGED TABLE IF NOT EXISTS ohlcv_1m_stage (
+	createStage1m := `CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1m_stage (
 		ticker        text         NOT NULL,
 		volume        bigint,
 		open          bigint,
@@ -199,7 +215,7 @@ func (b *OHLCVBuffer) createStagingTables() error {
 		transactions  integer
 	) WITH (autovacuum_enabled = false);`
 
-	createStage1d := `CREATE UNLOGGED TABLE IF NOT EXISTS ohlcv_1d_stage (
+	createStage1d := `CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1d_stage (
 		ticker        text         NOT NULL,
 		volume        bigint,
 		open          bigint,
@@ -220,13 +236,36 @@ func (b *OHLCVBuffer) createStagingTables() error {
 		return fmt.Errorf("create ohlcv_1d_stage: %w", err)
 	}
 
+	// -------------------------------------------------------------------
+	// Verify that the staging tables are actually visible from **this** and
+	// future connections.  This rules out search_path problems or silent
+	// roll-backs.
+	// -------------------------------------------------------------------
+	var check1m, check1d *string
+	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1m_stage')").Scan(&check1m); err != nil {
+		return fmt.Errorf("verify ohlcv_1m_stage: %w", err)
+	}
+	if check1m == nil {
+		return fmt.Errorf("verify ohlcv_1m_stage: table not found after creation")
+	}
+	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&check1d); err != nil {
+		return fmt.Errorf("verify ohlcv_1d_stage: %w", err)
+	}
+	if check1d == nil {
+		return fmt.Errorf("verify ohlcv_1d_stage: table not found after creation")
+	}
+
+	log.Printf("✅ Verified staging tables exist (ohlcv_1m_stage & ohlcv_1d_stage)")
+
 	return nil
 }
 
 func (b *OHLCVBuffer) writer() {
+	log.Printf("🔄 OHLCV writer goroutine started")
 	defer b.wg.Done()
 
 	for batch := range b.flushCh {
+		//log.Printf("📝 Writer processing batch of %d records", len(batch))
 		sort.Slice(batch, func(i, j int) bool {
 			if batch[i].Ticker != batch[j].Ticker {
 				return batch[i].Ticker < batch[j].Ticker
@@ -234,7 +273,9 @@ func (b *OHLCVBuffer) writer() {
 			return batch[i].Timestamp < batch[j].Timestamp
 		})
 		b.doCopyMerge(batch)
+		//log.Printf("✅ Writer completed batch processing")
 	}
+	log.Printf("⚠️ OHLCV writer goroutine exiting")
 }
 
 func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
@@ -297,7 +338,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	columns := []string{"ticker", "volume", "open", "close", "high", "low", "timestamp", "transactions"}
 
 	if len(m1Rows) > 0 {
-		_, err = tx.CopyFrom(ctx, pgx.Identifier{"ohlcv_1m_stage"}, columns, pgx.CopyFromRows(m1Rows))
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1m_stage"}, columns, pgx.CopyFromRows(m1Rows))
 		if err != nil {
 			log.Printf("CopyFrom 1m error: %v", err)
 			return
@@ -315,9 +356,18 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	}
 
 	if len(d1Rows) > 0 {
-		_, err = tx.CopyFrom(ctx, pgx.Identifier{"ohlcv_1d_stage"}, columns, pgx.CopyFromRows(d1Rows))
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1d_stage"}, columns, pgx.CopyFromRows(d1Rows))
 		if err != nil {
+			// If COPY fails with relation not found, verify existence immediately
 			log.Printf("CopyFrom 1d error: %v", err)
+			var exists *string
+			if e := tx.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&exists); e != nil {
+				log.Printf("⚠️  Verification query failed: %v", e)
+			} else if exists == nil {
+				log.Printf("⚠️  Verification: ohlcv_1d_stage is NOT present in current session after COPY failure")
+			} else {
+				log.Printf("ℹ️  Verification: ohlcv_1d_stage DOES exist despite COPY failure – possible search_path or privilege issue")
+			}
 			return
 		}
 		_, err = tx.Exec(ctx, mergeQuery1d)
