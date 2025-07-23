@@ -68,6 +68,7 @@ export default [
         },
         rules: {
             ...sveltePlugin.configs.recommended.rules,
+            'svelte/no-at-html-tags': 'warn',
             // Apply the same camelCase rules to Svelte files
             /*camelcase: ['error', { properties: 'always' }],
             '@typescript-eslint/naming-convention': [
