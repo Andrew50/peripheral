@@ -70,7 +70,7 @@ class DataAccessorProvider:
                     retry_delay *= 2  # Exponential backoff
                     continue
                 raise
-            except Exception as e:
+            except (psycopg2.Error, OSError) as e:
                 logging.error("Database connection failed on attempt %d: %s", attempt + 1, e)
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
@@ -147,7 +147,7 @@ class DataAccessorProvider:
             # Use original method for smaller datasets or when aggregate_mode is True
             return self._get_bar_data_single(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
                 
-        except Exception as e:
+        except (psycopg2.Error, ValueError, TypeError) as e:
             logger.error("Error in get_bar_data: %s", e)
             return np.array([])
     
@@ -232,11 +232,11 @@ class DataAccessorProvider:
                     
                     if batch_result is not None and len(batch_result) > 0:
                         all_results.append(batch_result)
-                        logger.debug(f"✅ Batch {batch_num} returned {len(batch_result)} rows")
+                        logger.debug("✅ Batch %d returned %d rows", batch_num, len(batch_result))
                     else:
-                        logger.debug(f"⚠️ Batch {batch_num} returned no data")
+                        logger.debug("⚠️ Batch %d returned no data", batch_num)
                         
-                except Exception as batch_error:
+                except (psycopg2.Error, ValueError, TypeError) as batch_error:
                     logger.error("❌ Error in batch %d: %s", batch_num, batch_error)
                     # Continue with next batch instead of failing completely
                     continue
@@ -250,7 +250,7 @@ class DataAccessorProvider:
             logger.warning("No data returned from any batch")
             return np.array([])
                 
-        except Exception as e:
+        except (psycopg2.Error, ValueError, TypeError, np.AxisError) as e:
             logger.error("Error in batched data fetching: %s", e)
             return np.array([])
     
@@ -313,8 +313,8 @@ class DataAccessorProvider:
             
             return [row[0] for row in results if row[0]]  # Filter out None tickers
             
-        except Exception as e:
-            logger.error(f"Error fetching active tickers: {e}")
+        except (psycopg2.Error, ValueError) as e:
+            logger.error("Error fetching active tickers: %s", e)
             return []
     
     def get_available_filter_values(self) -> Dict[str, List[str]]:
@@ -356,8 +356,8 @@ class DataAccessorProvider:
                 
                 return filter_values
                 
-        except Exception as e:
-            logger.error(f"Error fetching filter values: {e}")
+        except psycopg2.Error as e:
+            logger.error("Error fetching filter values: %s", e)
             return {
                 'sectors': [],
                 'industries': [],
@@ -461,7 +461,7 @@ class DataAccessorProvider:
                 else: 
                     date_filter = "o.timestamp >= %s AND o.timestamp <= %s"
                 date_params = [self._normalize_est(start_date), self._normalize_est(end_date)]
-                logger.info(f"📅 Using direct date filter: {start_date} to {end_date}")
+                logger.info("📅 Using direct date filter: %s to %s", start_date, end_date)
             elif start_date:
                 # Only start date provided
                 date_filter = "o.timestamp >= %s"
@@ -580,7 +580,7 @@ class DataAccessorProvider:
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                security_filter_parts.append(f"s.securityid IN ({placeholders})")
+                security_filter_parts.append("s.securityid IN ({})".format(placeholders))
                 security_params.extend(security_ids)
             
             # Combine all filter parts
@@ -781,7 +781,7 @@ class DataAccessorProvider:
             
             return np.array(ordered_results, dtype=object)
             
-        except Exception as e:
+        except (psycopg2.Error, ValueError, TypeError) as e:
             logger.error("Error in get_bar_data: %s", e)
             return np.array([])
     
@@ -805,12 +805,12 @@ class DataAccessorProvider:
                 return []
             
             # Build filter conditions
-            filter_parts = ["maxdate IS NULL"]
+            filter_parts = ["active = true"]
             params = []
             
             # Add ticker filter
             placeholders = ','.join(['%s'] * len(tickers))
-            filter_parts.append(f"ticker IN ({placeholders})")
+            filter_parts.append("ticker IN ({})".format(placeholders))
             params.extend(tickers)
             
             # Apply additional filters if provided
@@ -879,7 +879,7 @@ class DataAccessorProvider:
             
             return [row[0] for row in results]
             
-        except Exception as e:
+        except (psycopg2.Error, ValueError) as e:
             logger.error("Error converting tickers to security IDs: %s", e)
             return []
 
@@ -1001,7 +1001,7 @@ class DataAccessorProvider:
                 
                 # Use converted security IDs
                 placeholders = ','.join(['%s'] * len(security_ids))
-                filter_parts.append(f"securityid IN ({placeholders})")
+                filter_parts.append("securityid IN ({})".format(placeholders))
                 params.extend(security_ids)
             
             # Build final query
@@ -1037,8 +1037,10 @@ class DataAccessorProvider:
             
             return df
             
-        except Exception as e:
-            logger.error("Error in get_general_data: %s", e)
+        except (psycopg2.Error):
+            logger.error("Database error in get general data")
+        except (ValueError, TypeError) as e:
+            logger.error("Invalid data in get_general_data: %s", e)
             return pd.DataFrame()
 
     def _get_aggregated_bar_data(self, timeframe_config: Dict[str, any], columns: List[str] = None, 
@@ -1097,7 +1099,7 @@ class DataAccessorProvider:
                 return np.array([])
             
             # Perform aggregation
-            aggregated_data = self._aggregate_ohlcv_data(base_data, interval_minutes, base_interval_minutes)
+            aggregated_data = self._aggregate_ohlcv_data(base_data, interval_minutes)
             
             # Filter columns if requested
             if columns and aggregated_data is not None and len(aggregated_data) > 0:
@@ -1105,12 +1107,14 @@ class DataAccessorProvider:
             
             return aggregated_data
             
-        except Exception as e:
-            logger.error("Error in aggregated bar data: %s", e)
+        except (psycopg2.Error):
+            logger.error("Database error in aggregated bar data")
+            return np.array([])
+        except ( ValueError, TypeError):
+            logger.error("Invalid data in aggregated bar data")
             return np.array([])
     
-    def _aggregate_ohlcv_data(self, base_data: np.ndarray, target_interval_minutes: int, 
-                             base_interval_minutes: int) -> np.ndarray:
+    def _aggregate_ohlcv_data(self, base_data: np.ndarray, target_interval_minutes: int) -> np.ndarray:
         """
         Aggregate OHLCV data from base timeframe to target interval
         
@@ -1201,8 +1205,8 @@ class DataAccessorProvider:
             
             return result_df.values
             
-        except Exception as e:
-            logger.error(f"Error aggregating OHLCV data: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error("Error aggregating OHLCV data: %s", e)
             return np.array([])
     
     def _filter_columns(self, data: np.ndarray, requested_columns: List[str]) -> np.ndarray:
@@ -1229,7 +1233,7 @@ class DataAccessorProvider:
             # Extract only requested columns
             return data[:, column_indices]
             
-        except Exception as e:
+        except (ValueError, IndexError) as e:
             logger.error("Error filtering columns: %s", e)
             return np.array([])
 
@@ -1253,6 +1257,7 @@ _data_accessor = None
 
 def get_data_accessor() -> DataAccessorProvider:
     """Get global data accessor instance"""
+    # how to not make this global?
     global _data_accessor
     if _data_accessor is None:
         _data_accessor = DataAccessorProvider()
@@ -1311,6 +1316,8 @@ def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) 
     accessor = get_data_accessor()
     return accessor.get_general_data(columns=columns, filters=filters)
 
-def generate_equity_curve(instances, group_column=None):
+#TODO: Implement this
+def generate_equity_curve():
+    """Generate equity curve - placeholder function"""
     pass
 

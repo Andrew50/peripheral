@@ -72,7 +72,7 @@ class PythonAgentGenerator:
             
             return db_values
             
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("❌ CRITICAL: Could not fetch current filter values from database: %s", e)
             raise RuntimeError(f"Python agent requires database connection to get current filter values: {e}") from e
         
@@ -190,10 +190,10 @@ class PythonAgentGenerator:
         - market_cap_min: float (e.g., 1000000000 for $1B minimum)
         - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-        FILTER EXAMPLES:{'''
-        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{'''
-        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{'''
-        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{'''
+        FILTER EXAMPLES:{f'''
+        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
+        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
+        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{f'''
         - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
@@ -315,7 +315,7 @@ class PythonAgentGenerator:
             logger.info("Starting Python agent execution %s", execution_id)
             
             systemInstruction = self._getGeneralPythonSystemInstruction(prompt)
-            userPrompt = f"""{prompt}""" + f"\nData: {data}"
+            userPrompt = f"{prompt}\nData: {data}"
             
             last_error = None
             pythonCode = None
@@ -323,11 +323,11 @@ class PythonAgentGenerator:
             # Retry loop for both validation and execution errors
             for attemptCount in range(3):
                 if attemptCount > 0:
-                    userPrompt = "{}".format(prompt)  # Reset to original prompt
-                    userPrompt += "\n\nIMPORTANT - RETRY ATTEMPT {}:".format(attemptCount + 1)
+                    userPrompt = prompt  # Reset to original prompt
+                    userPrompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attemptCount + 1}:"
                     userPrompt += "\n- Previous attempt failed"
                     if last_error:
-                        userPrompt += "\n- SPECIFIC ERROR: {}".format(last_error)
+                        userPrompt += f"\n- SPECIFIC ERROR: {last_error}"
                     userPrompt += "\n- Focus on data type safety for pandas operations"
                     userPrompt += "\n- Use pd.to_numeric() before .quantile() operations"
                     userPrompt += "\n- Handle NaN values with .dropna() before statistical operations"
@@ -343,8 +343,8 @@ class PythonAgentGenerator:
                     openaiResponse = self.openai_client.responses.create(
                         model="o4-mini",
                         reasoning={"effort": "low"},
-                        input="{}".format(userPrompt),
-                        instructions="{}".format(systemInstruction),
+                        input=userPrompt,
+                        instructions=systemInstruction,
                         user="user:0",
                         metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
                         timeout=120.0  # 2 minute timeout for other models
@@ -400,14 +400,14 @@ class PythonAgentGenerator:
                     
                     return result.result, result.prints, result.plots, result.response_images, execution_id, None
                     
-                except Exception as e:
+                except (ValueError, RuntimeError, ConnectionError) as e:
                     last_error = str(e)
                     logger.error("Error during Python agent generation/execution (attempt %d/3): %s", attemptCount + 1, e)
                     logger.error("Error details: %s", traceback.format_exc())
                     continue
             
             # If we get here, all attempts failed
-            final_error = Exception(f"Failed to generate and execute valid Python code after 3 attempts. Last error: {last_error}")
+            final_error = RuntimeError(f"Failed to generate and execute valid Python code after 3 attempts. Last error: {last_error}")
             logger.error("Python agent execution %s failed after all retry attempts", execution_id)
             
             # Save failed execution to database with error info in background (non-blocking)
@@ -425,7 +425,7 @@ class PythonAgentGenerator:
             
             return [], "", [], [], execution_id, final_error
             
-        except Exception as e: 
+        except (ValueError, RuntimeError, ConnectionError) as e: 
             logger.error("Critical error in Python agent execution %s: %s", execution_id, e)
             logger.error("Critical error traceback: %s", traceback.format_exc())
             
@@ -495,7 +495,7 @@ class PythonAgentGenerator:
             conn.commit()
             return True
             
-        except Exception as e:
+        except (psycopg2.Error, ConnectionError) as e:
             # Since this runs in background, we log errors but don't raise them
             logger.error("❌ Failed to save Python agent execution %s: %s", execution_id, e)
             logger.error("📄 Save execution traceback: %s", traceback.format_exc())
@@ -508,7 +508,7 @@ class PythonAgentGenerator:
                     cursor.close()
                 if conn:
                     conn.close()
-            except Exception as cleanup_error:
+            except psycopg2.Error as cleanup_error:
                 logger.warning("⚠️ Error during database cleanup for execution %s: %s", execution_id, cleanup_error)
         
         return False        

@@ -82,7 +82,7 @@ class StrategyGenerator:
     def _init_environment(self):
         """Initialize environment variables"""
         self.environment = os.getenv('ENVIRONMENT')
-        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+        if self.environment in ("dev", "development", ""):
             self.environment = "dev"
         else:
             self.environment = "prod"
@@ -106,7 +106,7 @@ class StrategyGenerator:
             
             return db_values
             
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("❌ CRITICAL: Could not fetch current filter values from database: %s", e)
             raise RuntimeError(f"Strategy generation requires database connection to get current filter values: {e}") from e
     
@@ -570,7 +570,7 @@ class StrategyGenerator:
                 "validation_passed": validation_passed
             }
             
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("Strategy creation failed: %s", e)
             return {
                 "success": False,
@@ -606,7 +606,7 @@ class StrategyGenerator:
                     logger.warning("Max retries reached, returning last generated code")
                     return strategy_code, False
                     
-            except Exception as e:
+            except (ValueError, RuntimeError, ConnectionError) as e:
                 logger.error("Generation attempt %d failed: %s", attempt + 1, e)
                 if attempt == max_retries:
                     break
@@ -653,7 +653,7 @@ class StrategyGenerator:
             logger.warning("⚠️ No strategy found for user_id %s, strategy_id %s", user_id, strategy_id)
             return None
             
-        except Exception as e:
+        except (psycopg2.Error, ConnectionError) as e:
             logger.error("❌ Failed to fetch existing strategy: %s", e)
             logger.error("📄 Fetch strategy traceback: %s", traceback.format_exc())
             return None
@@ -666,7 +666,7 @@ class StrategyGenerator:
                 if conn:
                     conn.close()
                     logger.debug("🔌 Database connection closed")
-            except Exception as cleanup_error:
+            except psycopg2.Error as cleanup_error:
                 logger.warning("⚠️ Error during database cleanup: %s", cleanup_error)
     
     def _generate_strategy_code(self, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, attempt: int = 0, last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
@@ -724,13 +724,13 @@ class StrategyGenerator:
                 logger.info("Generated strategy code with %s (%d characters)", model_name, len(strategy_code))
                 return strategy_code
                 
-            except Exception as e:
+            except (ValueError, RuntimeError, ConnectionError) as e:
                 last_error = e
                 logger.warning("Model %s failed: %s", model_name, e)
             
             
             
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("OpenAI code generation failed: %s", e)
             return ""
 
@@ -766,7 +766,7 @@ class StrategyGenerator:
             try:
                 is_valid = self.validator.validate_strategy_code(strategy_code)
                 logger.info("🛡️ Security validation result: %s", is_valid)
-            except Exception as security_error:
+            except (SecurityError, StrategyComplianceError) as security_error:
                 logger.error("🚨 Security validation crashed: %s", security_error)
                 logger.error("📄 Security validation traceback: %s", traceback.format_exc())
                 return {
@@ -818,7 +818,7 @@ class StrategyGenerator:
                     "error": "Validation timeout - strategy may have infinite loops or performance issues"
                 }
                 
-            except Exception as exec_error:
+            except (ValueError, TypeError, AttributeError, RuntimeError) as exec_error:
                 error_msg = str(exec_error)
                 logger.warning("⚠️ Execution test failed with exception: %s", exec_error)
                 logger.warning("📄 Execution test traceback: %s", traceback.format_exc())
@@ -865,7 +865,7 @@ class StrategyGenerator:
                 "valid": False,
                 "error": str(e)
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             logger.error("💥 Unexpected validation error: %s", e)
             logger.error("📄 Validation error traceback: %s", traceback.format_exc())
             return {
@@ -990,9 +990,9 @@ class StrategyGenerator:
                     'isAlertActive': result['isalertactive']
                 }
             else:
-                raise Exception("Failed to save strategy - no result returned")
+                raise RuntimeError("Failed to save strategy - no result returned")
                 
-        except Exception as e:
+        except (psycopg2.Error, ConnectionError) as e:
             logger.error("❌ Failed to save strategy: %s", e)
             logger.error("📄 Save strategy traceback: %s", traceback.format_exc())
             raise
@@ -1005,5 +1005,5 @@ class StrategyGenerator:
                 if conn:
                     conn.close()
                     logger.debug("🔌 Database connection closed")
-            except Exception as cleanup_error:
-                logger.warning("⚠️ Error during database cleanup: %s", cleanup_error) 
+            except psycopg2.Error as cleanup_error:
+                logger.warning("⚠️ Error during database cleanup: %s", cleanup_error)

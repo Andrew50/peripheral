@@ -5,12 +5,14 @@ instead of receiving DataFrames as parameters.
 """
 
 import ast
+import base64
 import contextlib
 import datetime
 import io
 import json
 import logging
 import math
+import re
 import sys
 import time
 import traceback
@@ -19,7 +21,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import plotly
+
+try:
+    import plotly
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
 
 from plotlyToMatlab import plotly_to_matplotlib_png
 from validator import SecurityValidator
@@ -105,6 +115,9 @@ class AccessorStrategyEngine:
         from data_accessors import get_data_accessor
         self.data_accessor = get_data_accessor()
         self.validator = SecurityValidator()
+        self.plots_collection = []
+        self.response_images = []
+        self.plot_counter = 0
         
     async def execute_backtest(
         self, 
@@ -175,13 +188,13 @@ class AccessorStrategyEngine:
             logger.info("Backtest completed: %d instances, %.1fms", len(instances), execution_time)
             return result
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             # Get detailed error information
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
             logger.error("Backtest execution failed: %s", e)
-            logger.error(detailed_error_msg)
+            logger.error("%s", detailed_error_msg)
             
             return {
                 'success': False,
@@ -274,7 +287,7 @@ class AccessorStrategyEngine:
             logger.info("✅ Validation completed successfully: %.1fms", execution_time)
             return result
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             execution_time = (time.time() - start_time) * 1000
             
             # Get detailed error information
@@ -282,7 +295,7 @@ class AccessorStrategyEngine:
             detailed_error_msg = self._format_detailed_error(error_info)
             
             logger.error("❌ Validation failed: %s", e)
-            logger.error(detailed_error_msg)
+            logger.error("%s", detailed_error_msg)
             
             return {
                 'success': False,
@@ -311,7 +324,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with ranked results and scores
         """
-        logger.info(f"Starting accessor screening: {len(universe)} symbols, limit {limit}")
+        logger.info("Starting accessor screening: %d symbols, limit %d", len(universe), limit)
         logger.info("📊 Screening mode: Using minimal recent data for optimal performance")
         
         start_time = time.time()
@@ -329,8 +342,8 @@ class AccessorStrategyEngine:
             logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
             logger.debug("   ✓ NO date filtering (eliminates unnecessary data overhead)")
             logger.debug("   ✓ Database-optimized query structure (most recent records only)")
-            logger.debug(f"   ✓ Universe size: {len(universe)} symbols")
-            logger.debug(f"   ✓ Result limit: {limit}")
+            logger.debug("   ✓ Universe size: %d symbols", len(universe))
+            logger.debug("   ✓ Result limit: %d", limit)
             
             # Execute strategy with accessor context
             instances, _, _, _, error = await self._execute_strategy(
@@ -358,17 +371,19 @@ class AccessorStrategyEngine:
                 'data_strategy': 'minimal_recent'
             }
             
-            logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
-            logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
+            logger.info("✅ Screening completed: %d results, %.1fms", 
+                       len(ranked_results), execution_time)
+            logger.debug("   📈 Performance: %.1f results/second", 
+                        len(ranked_results)/execution_time*1000)
             return result
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             # Get detailed error information
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"❌ Screening execution failed: {e}")
-            logger.error(detailed_error_msg)
+            logger.error("❌ Screening execution failed: %s", e)
+            logger.error("%s", detailed_error_msg)
             
             return {
                 'success': False,
@@ -393,7 +408,7 @@ class AccessorStrategyEngine:
         Returns:
             Dict with alerts and signals
         """
-        logger.info(f"Starting accessor alert scan: {len(symbols)} symbols")
+        logger.info("Starting accessor alert scan: %d symbols", len(symbols))
         
         start_time = time.time()
         
@@ -429,16 +444,16 @@ class AccessorStrategyEngine:
                 'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
             }
             
-            logger.info(f"Alert scan completed: {len(alerts)} alerts, {execution_time:.1f}ms")
+            logger.info("Alert scan completed: %d alerts, %.1fms", len(alerts), execution_time)
             return result
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             # Get detailed error information
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"Alert execution failed: {e}")
-            logger.error(detailed_error_msg)
+            logger.error("Alert execution failed: %s", e)
+            logger.error("%s", detailed_error_msg)
             
             return {
                 'success': False,
@@ -507,7 +522,7 @@ class AccessorStrategyEngine:
             TrackedList.reset_counter(max_instances=max_instances)
             
             # Execute strategy function with proper error handling and stdout capture
-            logger.info(f"Executing strategy function using data accessor approach")
+            logger.info("Executing strategy function using data accessor approach")
             strategy_prints = ""
             try:
                 # Capture stdout and plots during strategy execution
@@ -518,23 +533,24 @@ class AccessorStrategyEngine:
                 
                 # Check if instance limit was reached during execution
                 if TrackedList.is_limit_reached():
-                    logger.warning(f"Strategy execution completed with instance limit reached. Total instances: {TrackedList._global_instance_count}")
+                    logger.warning("Strategy execution completed with instance limit reached. Total instances: %d", 
+                                 TrackedList._global_instance_count)
                 
-            except Exception as strategy_error:
+            except (ValueError, TypeError, ImportError, AttributeError) as strategy_error:
                 # Get detailed error information
                 error_info = self._get_detailed_error_info(strategy_error, strategy_code)
                 detailed_error_msg = self._format_detailed_error(error_info)
                 
-                logger.error(f"Strategy function execution failed: {strategy_error}")
-                logger.error(detailed_error_msg)
+                logger.error("Strategy function execution failed: %s", strategy_error)
+                logger.error("%s", detailed_error_msg)
                 
                 # Return empty list and any captured output instead of crashing
                 return [], "", [], [], strategy_error
             
             # Validate and clean instances
             if not isinstance(instances, list):
-                logger.error(f"Strategy function must return a list, got {type(instances)}")
-                return [], "", [], [], "Strategy function must return a list"
+                logger.error("Strategy function must return a list, got %s", type(instances))
+                return [], "", [], [], ValueError("Strategy function must return a list")
             
             # Filter out None instances and validate structure
             valid_instances = []
@@ -553,17 +569,17 @@ class AccessorStrategyEngine:
             
             # Log results with limit information
             limit_msg = " (limit reached)" if TrackedList.is_limit_reached() else ""
-            logger.info(f"Strategy returned {len(valid_instances)} valid instances{limit_msg}")
-            logger.info(f"Strategy captured {len(self.plots_collection)} plots")
+            logger.info("Strategy returned %d valid instances%s", len(valid_instances), limit_msg)
+            logger.info("Strategy captured %d plots", len(self.plots_collection))
             return valid_instances, strategy_prints, self.plots_collection, self.response_images, None
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             # Get detailed error information for compilation/setup errors
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"Strategy compilation or setup failed: {e}")
-            logger.error(detailed_error_msg)
+            logger.error("Strategy compilation or setup failed: %s", e)
+            logger.error("%s", detailed_error_msg)
             
             # Return empty list for compilation/setup errors too
             return [], "", [], [], e
@@ -581,30 +597,33 @@ class AccessorStrategyEngine:
             try:
                 return self.data_accessor.get_bar_data(timeframe, columns, min_bars, filters, 
                                                       aggregate_mode, extended_hours, start_date, end_date)
-            except Exception as e:
-                logger.error(f"Data accessor error in get_bar_data(timeframe={timeframe}, min_bars={min_bars}): {e}")
-                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+            except (ValueError, TypeError, ImportError, AttributeError) as e:
+                logger.error("Data accessor error in get_bar_data(timeframe=%s, min_bars=%s): %s", 
+                           timeframe, min_bars, e)
+                logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                 raise  # Re-raise to maintain error propagation
         
         def bound_get_general_data(columns=None, filters=None):
             try:
                 return self.data_accessor.get_general_data(columns=columns, filters=filters)
-            except Exception as e:
-                logger.error(f"Data accessor error in get_general_data(columns={columns}, filters={filters}): {e}")
-                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+            except (ValueError, TypeError, ImportError, AttributeError) as e:
+                logger.error("Data accessor error in get_general_data(columns=%s, filters=%s): %s", 
+                           columns, filters, e)
+                logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                 raise  # Re-raise to maintain error propagation
         def bound_generate_equity_curve(instances: [], group_column=None):
             try:
                 return self.data_accessor.generate_equity_curve(instances, group_column)
-            except Exception as e:
-                logger.error(f"Data accessor error in generate_equity_curve(instances={instances}, group_column={group_column}): {e}")
-                logger.debug(f"Data accessor error details: {type(e).__name__}: {e}")
+            except (ValueError, TypeError, ImportError, AttributeError) as e:
+                logger.error("Data accessor error in generate_equity_curve(instances=%s, group_column=%s): %s", 
+                           instances, group_column, e)
+                logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
                 raise  # Re-raise to maintain error propagation
         def apply_drawdown_styling(fig):
             """Apply custom styling for drawdown plots with red line and shaded fill"""
             # Update all traces to use red line with shaded fill
             fig.update_traces(
-                line=dict(color='rgb(255, 77, 77)', width=2),
+                line={'color': 'rgb(255, 77, 77)', 'width': 2},
                 fill='tozeroy',
                 fillcolor='rgba(255, 77, 77, 0.4)'
             )
@@ -617,7 +636,7 @@ class AccessorStrategyEngine:
             fig.update_traces(
                 fill=None,  # Remove any fill
                 fillcolor=None,
-                line=dict(width=2)
+                line={'width': 2}
             )
             
             # For each trace, determine the predominant color based on final value
@@ -631,7 +650,7 @@ class AccessorStrategyEngine:
                         color = 'rgb(0, 150, 255)' if final_value >= 0 else 'rgb(255, 77, 77)'
                         
                         # Update the trace color
-                        fig.data[i].update(line=dict(color=color, width=2))
+                        fig.data[i].update(line={'color': color, 'width': 2})
             
             return fig
         
@@ -689,11 +708,7 @@ class AccessorStrategyEngine:
         }
         
         # Add plotly imports if available
-        try:
-            import plotly.graph_objects as go
-            import plotly.express as px
-            from plotly.subplots import make_subplots
-            
+        if PLOTLY_AVAILABLE:
             safe_globals.update({
                 'plotly': {
                     'graph_objects': go,
@@ -704,19 +719,13 @@ class AccessorStrategyEngine:
                 'px': px,
                 'make_subplots': make_subplots
             })
-        except ImportError:
-            logger.warning("Plotly not available - plot capture disabled")
         
         return safe_globals
     
     def _plotly_capture_context(self, strategy_id=None):
         """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
         
-        try:
-            import plotly.graph_objects as go
-            import plotly.express as px
-            from plotly.subplots import make_subplots
-        except ImportError:
+        if not PLOTLY_AVAILABLE:
             # Return a no-op context manager if plotly not available
             return contextlib.nullcontext()
         
@@ -725,10 +734,10 @@ class AccessorStrategyEngine:
         original_make_subplots = make_subplots
         
         # Create capture function
-        def capture_plot(fig, *args, **kwargs):
+        def capture_plot(fig, *_args, **_kwargs):
             """Capture plot instead of showing it - extract only essential data"""
             try:
-                plotID = self.plot_counter 
+                plot_id = self.plot_counter 
                 self.plot_counter += 1
                 
                 # Extract title and ticker before extracting plot data
@@ -745,31 +754,31 @@ class AccessorStrategyEngine:
                 # Generate PNG as base64 and add to response_images using matplotlib
                 try:
 
-                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id)
+                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Strategy ID", strategy_id)
                     if png_base64:
                         self.response_images.append(png_base64)
-                        logger.debug(f"Generated PNG using matplotlib for plot {plotID}")
+                        logger.debug("Generated PNG using matplotlib for plot %d", plot_id)
                     else:
-                        logger.warning(f"Failed to generate PNG for plot {plotID}")
+                        logger.warning("Failed to generate PNG for plot %d", plot_id)
                         self.response_images.append(None)
-                except Exception as matplotlib_error:
-                    logger.warning(f"Failed to generate PNG for plot {plotID}: {matplotlib_error}")
+                except (ValueError, TypeError, ImportError, AttributeError) as matplotlib_error:
+                    logger.warning("Failed to generate PNG for plot %d: %s", plot_id, matplotlib_error)
                     # Add None to maintain index alignment with plots_collection
                     self.response_images.append(None)
                 
                 plot_data = {
-                    'plotID': plotID,
+                    'plotID': plot_id,
                     'data': figure_data,  # Entire figure object with data, layout, config
                     'titleTicker': title_ticker  # Add ticker field (None if no ticker found)
                 }
                 self.plots_collection.append(plot_data)
-            except Exception as e:
-                logger.warning(f"Failed to capture plot data: {e}")
+            except (ValueError, TypeError, ImportError, AttributeError) as e:
+                logger.warning("Failed to capture plot data: %s", e)
                 # Fallback to basic plot info with ID
-                plotID = self.plot_counter  # Use integer instead of string
+                plot_id = self.plot_counter  # Use integer instead of string
                 self.plot_counter += 1
                 fallback_plot = {
-                    'plotID': plotID,
+                    'plotID': plot_id,
                     'data': {},  # Empty object
                     'titleTicker': None  # No ticker in fallback case
                 }
@@ -781,7 +790,7 @@ class AccessorStrategyEngine:
         def captured_make_subplots(*args, **kwargs):
             fig = original_make_subplots(*args, **kwargs)
             # Monkey patch the show method on this specific figure instance
-            fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
+            fig.show = lambda *_show_args, **_show_kwargs: capture_plot(fig, *_show_args, **_show_kwargs)
             return fig
         
         @contextlib.contextmanager
@@ -831,8 +840,6 @@ class AccessorStrategyEngine:
 
     def _make_json_serializable(self, value):
         """Recursively convert numpy/pandas types to native Python types for JSON serialization"""
-        import numpy as np
-        import pandas as pd
         
         # Handle None and basic types
         if value is None or isinstance(value, (str, bool)):
@@ -845,55 +852,52 @@ class AccessorStrategyEngine:
         # Handle numpy/pandas scalar types
         if isinstance(value, np.integer):
             return int(value)
-        elif isinstance(value, np.floating):
+        if isinstance(value, np.floating):
             return float(value)
-        elif isinstance(value, np.bool_):
+        if isinstance(value, np.bool_):
             return bool(value)
-        elif isinstance(value, (np.datetime64, pd.Timestamp)):
+        if isinstance(value, (np.datetime64, pd.Timestamp)):
             # Convert datetime to Unix timestamp (int), handle NaT values
             try:
                 if isinstance(value, pd.Timestamp):
                     if pd.isna(value):
                         return None
-                    else:
-                        return int(value.timestamp())
-                else:
-                    ts = pd.Timestamp(value)
-                    if pd.isna(ts):
-                        return None
-                    else:
-                        return int(ts.timestamp())
+                    return int(value.timestamp())
+                ts = pd.Timestamp(value)
+                if pd.isna(ts):
+                    return None
+                return int(ts.timestamp())
             except (ValueError, TypeError, OverflowError) as e:
                 print(f"[make_json_serializable] Exception converting datetime: {e}, value: {value}")
                 return None
-        elif isinstance(value, dt):
+        if isinstance(value, dt):
             # Handle Python datetime objects from database
             try:
                 return int(value.timestamp())
             except (ValueError, TypeError, OverflowError) as e:
                 print(f"[make_json_serializable] Exception converting datetime.datetime: {e}, value: {value}")
                 return None
-        elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
+        if pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
             # Handle pandas nullable integer types
             return int(value.item()) if pd.notna(value) else None
-        elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
+        if pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
             # Handle pandas nullable float types
             return float(value.item()) if pd.notna(value) else None
-        elif hasattr(value, 'item'):  # Other numpy scalars
+        if hasattr(value, 'item'):  # Other numpy scalars
             return value.item()
-        elif pd.isna(value):
+        if pd.isna(value):
             # Handle pandas NA values
             return None
-        elif isinstance(value, (int, float)):
+        if isinstance(value, (int, float)):
             # Native Python types are already serializable
             return value
         
         # Handle nested structures
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [self._make_json_serializable(item) for item in value]
-        elif isinstance(value, tuple):
+        if isinstance(value, tuple):
             return [self._make_json_serializable(item) for item in value]
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {key: self._make_json_serializable(val) for key, val in value.items()}
         
         # Fallback for unknown types - try to convert to string
@@ -910,14 +914,12 @@ class AccessorStrategyEngine:
             plot_data = json.loads(fig.to_json())
             # Decode any binary data before sending to frontend
             return self._decode_binary_arrays(plot_data)
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             print(f"[extract_plot_data] Exception in fig.to_json(): {e}")
             return {}
     
     def _decode_binary_arrays(self, data):
         """Recursively decode binary arrays in plot data"""
-        import base64
-        import numpy as np
         
         if isinstance(data, dict):
             if 'bdata' in data and 'dtype' in data:
@@ -941,7 +943,7 @@ class AccessorStrategyEngine:
                     
                     # Convert to regular Python list for JSON serialization
                     return arr.tolist()
-                except Exception as e:
+                except (ValueError, TypeError, ImportError, AttributeError) as e:
                     print(f"Error decoding binary data: {e}")
                     return []
             else:
@@ -972,7 +974,7 @@ class AccessorStrategyEngine:
                     title = cleaned_title if cleaned_title else 'Untitled Plot'
             
             return title, ticker
-        except Exception:
+        except (ValueError, TypeError, ImportError, AttributeError):
             return 'Untitled Plot', None
 
     def _extract_plot_title(self, fig) -> str:
@@ -982,7 +984,7 @@ class AccessorStrategyEngine:
                 if hasattr(fig.layout.title, 'text') and fig.layout.title.text:
                     return str(fig.layout.title.text)
             return 'Untitled Plot'
-        except Exception:
+        except (ValueError, TypeError, ImportError, AttributeError):
             return 'Untitled Plot'
 
     def _extract_minimal_layout(self, fig) -> dict:
@@ -1020,7 +1022,7 @@ class AccessorStrategyEngine:
                 }
             
             return layout
-        except Exception:
+        except (ValueError, TypeError, ImportError, AttributeError):
             return {
                 'xaxis': {'title': ''},
                 'yaxis': {'title': ''}
@@ -1033,7 +1035,7 @@ class AccessorStrategyEngine:
             tb = traceback.format_exc()
             
             # Get the exception info
-            exc_type, exc_value, exc_traceback = sys.exc_info()
+            _, _, exc_traceback = sys.exc_info()
             
             error_info = {
                 'error_type': type(error).__name__,
@@ -1080,7 +1082,7 @@ class AccessorStrategyEngine:
                                         context_lines.append(f"{marker}{i:3d}: {line_content}")
                                     
                                     error_info['code_context'] = '\n'.join(context_lines)
-                            except Exception as ctx_error:
+                            except (ValueError, TypeError, ImportError, AttributeError) as ctx_error:
                                 error_info['code_context'] = f"Could not extract code context: {ctx_error}"
                         
                         break
@@ -1089,7 +1091,7 @@ class AccessorStrategyEngine:
             
             return error_info
             
-        except Exception as e:
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
             # Fallback error info
             return {
                 'error_type': type(error).__name__,
@@ -1195,9 +1197,8 @@ class AccessorStrategyEngine:
         def sort_key(instance):
             if 'score' in instance:
                 return instance['score']
-            else:
-                # Use timestamp for sorting if no score - more recent = higher priority
-                return instance.get('timestamp', 0)
+            # Use timestamp for sorting if no score - more recent = higher priority
+            return instance.get('timestamp', 0)
         
         sorted_instances = sorted(instances, key=sort_key, reverse=True)
         
@@ -1243,7 +1244,6 @@ class AccessorStrategyEngine:
         Returns:
             Tuple of (max_timeframe, max_timeframe_min_bars)
         """
-        import re
         
         max_tf_priority = (0, 0)  # (category, multiplier)
         max_tf_str = None
@@ -1298,9 +1298,9 @@ class AccessorStrategyEngine:
                             calls.append(call_info)
                             
         except SyntaxError as e:
-            logger.warning(f"Failed to parse strategy code for get_bar_data extraction: {e}")
-        except Exception as e:
-            logger.warning(f"Error extracting get_bar_data calls: {e}")
+            logger.warning("Failed to parse strategy code for get_bar_data extraction: %s", e)
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
+            logger.warning("Error extracting get_bar_data calls: %s", e)
             
         return calls
     
@@ -1348,8 +1348,8 @@ class AccessorStrategyEngine:
             
             return call_info
             
-        except Exception as e:
-            logger.debug(f"Failed to extract parameters from get_bar_data call: {e}")
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
+            logger.debug("Failed to extract parameters from get_bar_data call: %s", e)
             return None
     
     def _extract_string_value(self, node: ast.AST) -> Optional[str]:
@@ -1357,10 +1357,10 @@ class AccessorStrategyEngine:
         try:
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 return node.value
-            elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+            if isinstance(node, ast.Str):  # Python < 3.8 compatibility
                 return node.s
-        except Exception as e:
-            logger.debug(f"_extract_string_value: {e}")
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
+            logger.debug("_extract_string_value: %s", e)
         return None
 
     def _extract_int_value(self, node: ast.AST) -> Optional[int]:
@@ -1368,11 +1368,11 @@ class AccessorStrategyEngine:
         try:
             if isinstance(node, ast.Constant) and isinstance(node.value, int):
                 return node.value
-            elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+            if isinstance(node, ast.Num):  # Python < 3.8 compatibility
                 if isinstance(node.n, int):
                     return node.n
-        except Exception as e:
-            logger.debug(f"_extract_int_value: {e}")
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
+            logger.debug("_extract_int_value: %s", e)
         return None
     
     def _analyze_filters_ast(self, filters_node: Optional[ast.AST]) -> Dict[str, Any]:
@@ -1401,18 +1401,20 @@ class AccessorStrategyEngine:
                             # Handle list of tickers: ['AAPL', 'MSFT']
                             for elem in value.elts:
                                 ticker = self._extract_string_value(elem)
-                                tickers.add(ticker.upper())
+                                if ticker:
+                                    tickers.add(ticker.upper())
                         elif isinstance(value, (ast.Constant, ast.Str)):
                             # Handle single ticker: 'AAPL'
                             ticker = self._extract_string_value(value)
-                            tickers.add(ticker.upper())
+                            if ticker:
+                                tickers.add(ticker.upper())
                 
                 if tickers:
                     filter_analysis["has_tickers"] = True
                     filter_analysis["specific_tickers"] = sorted(list(tickers))
                     
-        except Exception as e:
-            logger.debug(f"Error analyzing filters AST: {e}")
+        except (ValueError, TypeError, ImportError, AttributeError) as e:
+            logger.debug("Error analyzing filters AST: %s", e)
         
         return filter_analysis
     

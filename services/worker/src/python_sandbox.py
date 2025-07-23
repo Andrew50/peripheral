@@ -26,7 +26,7 @@ try:
 except ImportError:
     logger.warning("plotlyToMatlab module not available")
     # Handle missing plotlyToMatlab gracefully
-    def plotly_to_matplotlib_png(*args, **kwargs):
+    def plotly_to_matplotlib_png(*_args, **_kwargs):
         return None
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class PythonSandbox:
                     error=f"Execution timed out after {self.config.execution_timeout} seconds",
                     execution_time_ms=(time.time() - start_time) * 1000
                 )
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                 error_info = self._get_detailed_error_info(e, code)
                 return SandboxResult(
                     success=False,
@@ -127,7 +127,7 @@ class PythonSandbox:
                     error_details=error_info,
                     execution_time_ms=(time.time() - start_time) * 1000
                 )
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
             error_info = self._get_detailed_error_info(e, code)
             return SandboxResult(
                 success=False,
@@ -172,7 +172,7 @@ class PythonSandbox:
                 'stderr': stderr_content
             }
             
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError):
             # Capture any stderr that was generated before the error
             stderr_content = stderr_buffer.getvalue()
             if stderr_content:
@@ -222,7 +222,7 @@ class PythonSandbox:
                 try:
                     return data_accessor.get_bar_data(timeframe, columns, min_bars, filters,
                                                       aggregate_mode, extended_hours, start_date, end_date)
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                     logger.error("Data accessor error in get_bar_data(timeframe=%s, min_bars=%s): %s", 
                                timeframe, min_bars, e)
                     logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
@@ -231,7 +231,7 @@ class PythonSandbox:
             def bound_get_general_data(columns=None, filters=None):
                 try:
                     return data_accessor.get_general_data(columns=columns, filters=filters)
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                     logger.error("Data accessor error in get_general_data(columns=%s, filters=%s): %s", 
                                columns, filters, e)
                     logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
@@ -240,7 +240,7 @@ class PythonSandbox:
             def bound_generate_equity_curve(instances: list, group_column=None):
                 try:
                     return data_accessor.generate_equity_curve(instances, group_column)
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                     logger.error("Data accessor error in generate_equity_curve(instances=%s, group_column=%s): %s", 
                                instances, group_column, e)
                     logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
@@ -252,7 +252,7 @@ class PythonSandbox:
                 'generate_equity_curve': bound_generate_equity_curve,
             })
             
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
             logger.error("❌ CRITICAL: Failed to bind data accessor functions: %s", e)
             logger.error("📄 Data accessor binding traceback: %s", traceback.format_exc())
             # Don't silently ignore - this is critical for Python agent functionality
@@ -278,7 +278,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
         
-        def capture_plot(fig, *args, **kwargs):
+        def capture_plot(fig, *_args, **_kwargs):
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -304,7 +304,7 @@ class PythonSandbox:
                     else:
                         logger.warning("Failed to generate PNG for plot %s", plot_id)
                         self.response_images.append(None)
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                     logger.warning("Failed to generate PNG for plot %s: %s", plot_id, e)
                     self.response_images.append(None)
                 
@@ -315,7 +315,7 @@ class PythonSandbox:
                 }
                 self.plots_collection.append(plot_data)
                 
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                 logger.warning("Failed to capture plot: %s", e)
                 plot_id = self.plot_counter
                 self.plot_counter += 1
@@ -351,7 +351,7 @@ class PythonSandbox:
         try:
             plot_data = json.loads(fig.to_json())
             return self._decode_binary_arrays(plot_data)
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
             logger.warning("Failed to extract plot data: %s", e)
             return {}
     
@@ -378,7 +378,7 @@ class PythonSandbox:
                         return []
                     
                     return arr.tolist()
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
                     logger.warning("Error decoding binary data: %s", e)
                     return []
             else:
@@ -407,14 +407,14 @@ class PythonSandbox:
                     title = cleaned_title if cleaned_title else 'Untitled Plot'
             
             return title, ticker
-        except Exception:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError):
             return 'Untitled Plot', None
     
     def _get_detailed_error_info(self, error: Exception, code: str) -> Dict[str, Any]:
         """Extract detailed error information including line numbers and code context"""
         try:
             tb = traceback.format_exc()
-            exc_type, exc_value, exc_traceback = sys.exc_info()
+            _, _, exc_traceback = sys.exc_info()
             
             error_info = {
                 'error_type': type(error).__name__,
@@ -456,7 +456,7 @@ class PythonSandbox:
                                         context_lines.append(f"{marker}{i:3d}: {line_content}")
                                     
                                     error_info['code_context'] = '\n'.join(context_lines)
-                            except Exception as ctx_error:
+                            except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as ctx_error:
                                 error_info['code_context'] = f"Could not extract code context: {ctx_error}"
                         
                         break
@@ -465,7 +465,7 @@ class PythonSandbox:
             
             return error_info
             
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
             return {
                 'error_type': type(error).__name__,
                 'error_message': str(error),

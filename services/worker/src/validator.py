@@ -18,8 +18,7 @@ import ast
 import logging
 import re
 import keyword
-from typing import Set, List, Dict, Any, Optional, Union
-import sys
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,7 @@ class SecurityValidator:
             "slice", "complex", "frozenset", "object", "format",
             # Safe console output
             "print",
-            # zip and enumerate
+            # zip and enumeratem TODO are these needed?
             "zip", "enumerate",
             # Data accessor functions
             "get_bar_data", "get_general_data"
@@ -196,9 +195,9 @@ class SecurityValidator:
                             requirements.append(call_info)
                             
         except SyntaxError as e:
-            logger.warning(f"Failed to parse strategy code for min_bars extraction: {e}")
+            logger.warning("Failed to parse strategy code for min_bars extraction: %s", e)
         except Exception as e:
-            logger.error(f"Unexpected error extracting min_bars requirements: {e}")
+            logger.error("Unexpected error extracting min_bars requirements: %s", e)
             
         return requirements
 
@@ -234,20 +233,20 @@ class SecurityValidator:
                     call_info['min_bars'] = min_bars
             
             # Extract keyword arguments
-            for keyword in call_node.keywords:
-                if keyword.arg == 'timeframe':
-                    timeframe = self._extract_string_value(keyword.value)
+            for kw in call_node.keywords:
+                if kw.arg == 'timeframe':
+                    timeframe = self._extract_string_value(kw.value)
                     if timeframe:
                         call_info['timeframe'] = timeframe
-                elif keyword.arg == 'min_bars':
-                    min_bars = self._extract_int_value(keyword.value)
+                elif kw.arg == 'min_bars':
+                    min_bars = self._extract_int_value(kw.value)
                     if min_bars is not None:
                         call_info['min_bars'] = min_bars
             
             return call_info
             
         except Exception as e:
-            logger.debug(f"Failed to extract parameters from get_bar_data call: {e}")
+            logger.debug("Failed to extract parameters from get_bar_data call: %s", e)
             return None
 
     def _extract_string_value(self, node: ast.AST) -> Optional[str]:
@@ -258,7 +257,7 @@ class SecurityValidator:
             elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
                 return node.s
         except Exception as e:
-            logger.debug(f"_extract_string_value: {e}")
+            logger.debug("_extract_string_value: %s", e)
         return None
 
     def _extract_int_value(self, node: ast.AST) -> Optional[int]:
@@ -270,7 +269,7 @@ class SecurityValidator:
                 if isinstance(node.n, int):
                     return node.n
         except Exception as e:
-            logger.debug(f"_extract_int_value: {e}")
+            logger.debug("_extract_int_value: %s", e)
         return None
 
     def validate_strategy_code(self, code: str) -> bool:
@@ -297,10 +296,10 @@ class SecurityValidator:
             return True
             
         except (SyntaxError, SecurityError, StrategyComplianceError) as e:
-            logger.warning(f"Code failed validation: {e}")
+            logger.warning("Code failed validation: %s", e)
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during validation: {e}")
+            logger.error("Unexpected error during validation: %s", e)
             return False
     def validate_code(self, code: str) -> bool:
         try: 
@@ -318,10 +317,10 @@ class SecurityValidator:
             self._check_prohibited_patterns(code)
             return True
         except (SyntaxError, SecurityError, PythonCodeError) as e:
-            logger.warning(f"Code failed validation: {e}")
+            logger.warning("Code failed validation: %s", e)
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during validation: {e}")
+            logger.error("Unexpected error during validation: %s", e)
             return False
 
     def _check_compilation(self, code: str) -> bool:
@@ -330,8 +329,8 @@ class SecurityValidator:
             compile(code, "<strategy>", "exec")
             return True
         except SyntaxError as e:
-            logger.warning(f"Code compilation failed: {e}")
-            raise StrategyComplianceError(f"Syntax error in strategy code: {e}")
+            logger.warning("Code compilation failed: %s", e)
+            raise StrategyComplianceError(f"Syntax error in strategy code: {e}") from e
 
     def _check_ast_security(self, tree: ast.AST) -> bool:
         """Perform comprehensive AST security validation"""
@@ -628,13 +627,11 @@ class SecurityValidator:
 
 class SecurityError(Exception):
     """Raised when code contains security violations"""
-    pass
 
 
 class StrategyComplianceError(Exception):
     """Raised when code doesn't comply with DataFrame strategy requirements"""
-    pass
+
 
 class PythonCodeError(Exception):
     """Raised when generic Python code validation fails"""
-    pass
