@@ -340,11 +340,11 @@ var (
 		{
 			Name:           "StartScreenerUpdater",
 			Function:       startScreenerUpdater,               // Uses partial coverage guard
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 45}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     2,
+			MaxRetries:     20,
 			RetryDelay:     30 * time.Second,
 		},
 		//TODO: FIX THIS SHIT

@@ -49,6 +49,56 @@ DROP INDEX IF EXISTS idx_mv_ohlcv_1d_latest_ticker;
 DROP INDEX IF EXISTS idx_cagg_pre_market_ticker_trade_day;
 DROP INDEX IF EXISTS idx_cagg_extended_hours_ticker_trade_day;
 
+-- =========================================================
+-- FIX COLUMN NAMING INCONSISTENCIES IN SCREENER TABLE
+-- =========================================================
+
+-- Rename columns to match what the refresh function and Go code expect
+-- These columns were created with different names in migration 68
+-- but the refresh_screener function and Go code expect the standardized names
+
+DO $$
+BEGIN
+    -- Rename change_ytd_1y_pct to change_ytd_pct
+    ALTER TABLE screener RENAME COLUMN change_ytd_1y_pct TO change_ytd_pct;
+    RAISE NOTICE 'Successfully renamed change_ytd_1y_pct to change_ytd_pct';
+EXCEPTION
+    WHEN undefined_column THEN
+        RAISE NOTICE 'Column change_ytd_1y_pct does not exist, skipping rename';
+    WHEN duplicate_column THEN
+        RAISE NOTICE 'Column change_ytd_pct already exists, skipping rename';
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error renaming change_ytd_1y_pct: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    -- Rename volatility_1w to volatility_1w_pct
+    ALTER TABLE screener RENAME COLUMN volatility_1w TO volatility_1w_pct;
+    RAISE NOTICE 'Successfully renamed volatility_1w to volatility_1w_pct';
+EXCEPTION
+    WHEN undefined_column THEN
+        RAISE NOTICE 'Column volatility_1w does not exist, skipping rename';
+    WHEN duplicate_column THEN
+        RAISE NOTICE 'Column volatility_1w_pct already exists, skipping rename';
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error renaming volatility_1w: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    -- Rename volatility_1m to volatility_1m_pct
+    ALTER TABLE screener RENAME COLUMN volatility_1m TO volatility_1m_pct;
+    RAISE NOTICE 'Successfully renamed volatility_1m to volatility_1m_pct';
+EXCEPTION
+    WHEN undefined_column THEN
+        RAISE NOTICE 'Column volatility_1m does not exist, skipping rename';
+    WHEN duplicate_column THEN
+        RAISE NOTICE 'Column volatility_1m_pct already exists, skipping rename';
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error renaming volatility_1m: %', SQLERRM;
+END $$;
+
 -- Drop stage tables
 DROP TABLE IF EXISTS static_refs_daily_prices_stage;
 DROP TABLE IF EXISTS static_refs_1m_prices_stage;

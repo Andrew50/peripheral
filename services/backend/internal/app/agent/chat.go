@@ -140,16 +140,20 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
 	}
 	if !locked {
-		// User already has an active chat
-		return QueryResponse{
-			ContentChunks: []ContentChunk{{
-				Type:    "text",
-				Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
-			}},
-			ConversationID: conversationID,
-			MessageID:      messageID,
-			Timestamp:      time.Now(),
-		}, nil
+		// User already has an active chat - but we'll continue anyway! 🚀
+		fmt.Printf("🎭 DUPLICATE CHAT DETECTED! 🎭 User %d is starting a new chat while another is in progress! 🔥💫 Let the chaos begin! 🎪\n", userID)
+		// Comment out the early return - let's allow concurrent chats for now
+		/*
+			return QueryResponse{
+				ContentChunks: []ContentChunk{{
+					Type:    "text",
+					Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
+				}},
+				ConversationID: conversationID,
+				MessageID:      messageID,
+				Timestamp:      time.Now(),
+			}, nil
+		*/
 	}
 	// Ensure lock is released
 	defer func() {
