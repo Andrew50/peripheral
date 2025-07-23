@@ -25,7 +25,7 @@ concurrency:
 
 env:
   # Linting configuration
-  GOLANGCI_LINT_VERSION: v2.1.0
+  GOLANGCI_LINT_VERSION: v2.3.0
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '18'
 
@@ -502,9 +502,9 @@ jobs:
         # continue-on-error for this combined step will be based on the job's continue-on-error
 
       - name: Go Lint with golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest # Or specify the version pre-baked in your container
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: services/backend
           args: >-
             --out-format=colored-line-number
@@ -514,7 +514,6 @@ jobs:
             --max-same-issues=5
             --build-tags=all
             --allow-parallel-runners
-            --go=1.24
             --path-prefix=services/backend
           # Disable PR diff fetching to avoid 20k line limit issues
           only-new-issues: false
