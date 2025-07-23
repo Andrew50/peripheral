@@ -47,8 +47,10 @@ const (
 )
 
 var (
-	dailyStaticRefsMu  sync.Mutex // guards refresh_static_refs()
-	oneMinStaticRefsMu sync.Mutex // guards refresh_static_refs_1m()
+	dailyStaticRefsMu   sync.Mutex // guards refresh_static_refs()
+	oneMinStaticRefsMu  sync.Mutex // guards refresh_static_refs_1m()
+	preMarketCaggMu     sync.Mutex // guards cagg_pre_market refresh
+	extendedHoursCaggMu sync.Mutex // guards cagg_extended_hours refresh
 )
 
 // initialRefresh performs a one-time refresh of all aggregates and static data at startup
@@ -65,12 +67,6 @@ func initialRefresh(conn *data.Conn) error {
 		// Clean up dead tuple bloat in static_refs tables before refresh
 		"VACUUM (ANALYZE) static_refs_1m;",
 		"VACUUM (ANALYZE) static_refs_daily;",
-		// Only refresh the remaining continuous aggregates (pre-market and extended-hours)
-		"CALL refresh_continuous_aggregate('cagg_pre_market', now() - INTERVAL '3 days', NULL);",
-		"CALL refresh_continuous_aggregate('cagg_extended_hours', now() - INTERVAL '3 days', NULL);",
-		// Static reference tables now handle all other metrics
-		"SELECT refresh_static_refs();",
-		"SELECT refresh_static_refs_1m();",
 	}
 
 	for _, cmd := range refreshCommands {
@@ -80,6 +76,16 @@ func initialRefresh(conn *data.Conn) error {
 			log.Printf("⚠️  Initial refresh command failed for '%s': %v", cmd, err)
 		}
 	}
+
+	// Refresh static reference tables with mutex protection
+	log.Println("🔄 Refreshing static reference tables with mutex protection...")
+	refreshStaticRefsDaily(conn)
+	refreshStaticRefs1m(conn)
+
+	// Refresh continuous aggregates with mutex protection (pre-market and extended-hours)
+	log.Println("🔄 Refreshing continuous aggregates with mutex protection...")
+	refreshPreMarketCagg(conn)
+	refreshExtendedHoursCagg(conn)
 
 	// Create OHLCV indexes
 	indexSQLs := marketdata.IndexSQLs()
@@ -380,6 +386,58 @@ func refreshLatestBarViews(conn *data.Conn) {
 	}
 
 	log.Printf("✅ Latest bar views refresh completed in %v", duration)
+}
+
+// refreshPreMarketCagg refreshes the cagg_pre_market continuous aggregate
+func refreshPreMarketCagg(conn *data.Conn) {
+	if !preMarketCaggMu.TryLock() {
+		log.Printf("⏭️ cagg_pre_market refresh skipped – already running")
+		return
+	}
+	defer preMarketCaggMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
+	defer cancel()
+
+	log.Printf("🔄 Refreshing cagg_pre_market continuous aggregate...")
+	start := time.Now()
+
+	_, err := conn.DB.Exec(ctx, "CALL refresh_continuous_aggregate('cagg_pre_market', now() - INTERVAL '3 days', NULL)")
+
+	duration := time.Since(start)
+
+	if err != nil {
+		log.Printf("❌ refreshPreMarketCagg: failed to refresh cagg_pre_market: %v", err)
+		return
+	}
+
+	log.Printf("✅ cagg_pre_market refresh completed in %v", duration)
+}
+
+// refreshExtendedHoursCagg refreshes the cagg_extended_hours continuous aggregate
+func refreshExtendedHoursCagg(conn *data.Conn) {
+	if !extendedHoursCaggMu.TryLock() {
+		log.Printf("⏭️ cagg_extended_hours refresh skipped – already running")
+		return
+	}
+	defer extendedHoursCaggMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
+	defer cancel()
+
+	log.Printf("🔄 Refreshing cagg_extended_hours continuous aggregate...")
+	start := time.Now()
+
+	_, err := conn.DB.Exec(ctx, "CALL refresh_continuous_aggregate('cagg_extended_hours', now() - INTERVAL '3 days', NULL)")
+
+	duration := time.Since(start)
+
+	if err != nil {
+		log.Printf("❌ refreshExtendedHoursCagg: failed to refresh cagg_extended_hours: %v", err)
+		return
+	}
+
+	log.Printf("✅ cagg_extended_hours refresh completed in %v", duration)
 }
 
 // isMarketHours checks if current time is within market hours (4am-8pm ET on weekdays)

@@ -31,6 +31,7 @@ type ColumnInfo struct {
 }
 
 // Screener column definitions based on the database schema
+// dont include calc time becuase its for internal use only
 var screenerColumns = map[string]ColumnInfo{
 	// Primary key
 	"security_id": {
@@ -213,11 +214,17 @@ var screenerColumns = map[string]ColumnInfo{
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "6-month change percentage",
 	},
-	"change_ytd_1y_pct": {
-		Name:        "change_ytd_1y_pct",
+	"change_ytd_pct": {
+		Name:        "change_ytd_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "Year-to-date change percentage",
+	},
+	"change_1y_pct": {
+		Name:        "change_1y_pct",
+		Type:        TypeFloat,
+		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
+		Description: "1-year change percentage",
 	},
 	"change_5y_pct": {
 		Name:        "change_5y_pct",
