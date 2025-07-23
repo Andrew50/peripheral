@@ -1,6 +1,7 @@
-FROM timescale/timescaledb-ha:pg17
+FROM timescale/timescaledb:latest-pg17
+
 USER root
-RUN apt-get update && apt-get install -y cron
+RUN apk add --no-cache curl ca-certificates
 
 # -------------------------------------------------------------------
 # Install kubectl for local/dev containers (matches cluster v1.30.*)
@@ -10,7 +11,7 @@ RUN curl -L -o /usr/local/bin/kubectl \
     chmod +x /usr/local/bin/kubectl
 # -------------------------------------------------------------------
 
-ENV PGDATA=/home/postgres/pgdata/data
+ENV PGDATA=/home/postgres/pgdata
 EXPOSE 5432
 
 # Copy initialization scripts

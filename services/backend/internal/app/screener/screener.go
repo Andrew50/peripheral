@@ -31,6 +31,7 @@ type ColumnInfo struct {
 }
 
 // Screener column definitions based on the database schema
+// dont include calc time becuase its for internal use only
 var screenerColumns = map[string]ColumnInfo{
 	// Primary key
 	"security_id": {
@@ -213,11 +214,17 @@ var screenerColumns = map[string]ColumnInfo{
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "6-month change percentage",
 	},
-	"change_ytd_1y_pct": {
-		Name:        "change_ytd_1y_pct",
+	"change_ytd_pct": {
+		Name:        "change_ytd_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "Year-to-date change percentage",
+	},
+	"change_1y_pct": {
+		Name:        "change_1y_pct",
+		Type:        TypeFloat,
+		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
+		Description: "1-year change percentage",
 	},
 	"change_5y_pct": {
 		Name:        "change_5y_pct",
@@ -383,17 +390,17 @@ var screenerColumns = map[string]ColumnInfo{
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
 		Description: "Day range percentage",
 	},
-	"volatility_1w": {
-		Name:        "volatility_1w",
+	"volatility_1w_pct": {
+		Name:        "volatility_1w_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
-		Description: "1-week volatility",
+		Description: "1-week volatility percentage",
 	},
-	"volatility_1m": {
-		Name:        "volatility_1m",
+	"volatility_1m_pct": {
+		Name:        "volatility_1m_pct",
 		Type:        TypeFloat,
 		AllowedOps:  []string{">", "<", ">=", "<=", "topn", "bottomn", "topn_pct", "bottomn_pct"},
-		Description: "1-month volatility",
+		Description: "1-month volatility percentage",
 	},
 	"pre_market_range_pct": {
 		Name:        "pre_market_range_pct",
@@ -812,10 +819,12 @@ func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
 
 				// The actual implementation would need to execute the count query first
 				// For now, we'll use a simplified approach
-				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s LIMIT (SELECT CEIL(COUNT(*) * %d / 100.0) FROM screener s)) ranked_results",
+				// Always sort NULLs last regardless of direction
+				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s NULLS LAST LIMIT (SELECT CEIL(COUNT(*) * %d / 100.0) FROM screener s)) ranked_results",
 					baseQuery, filter.Column, orderDirection, limitValue)
 			} else {
-				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s LIMIT %d) ranked_results",
+				// Always sort NULLs last regardless of direction
+				baseQuery = fmt.Sprintf("SELECT * FROM (%s ORDER BY s.%s %s NULLS LAST LIMIT %d) ranked_results",
 					baseQuery, filter.Column, orderDirection, limitValue)
 			}
 		}
@@ -829,6 +838,8 @@ func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
 		if args.SortDirection != "" {
 			orderClause += " " + strings.ToUpper(args.SortDirection)
 		}
+		// Add NULLS LAST to handle NULL values - always sort NULLs last regardless of direction
+		orderClause += " NULLS LAST"
 		queryParts = append(queryParts, orderClause)
 	}
 
@@ -938,5 +949,12 @@ func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	return results, nil
+	// Wrap results in a map structure for consistent handling in planner
+	response := map[string]interface{}{
+		"results": results,
+		"count":   len(results),
+		"columns": columnNames,
+	}
+
+	return response, nil
 }

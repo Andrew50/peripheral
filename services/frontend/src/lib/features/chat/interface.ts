@@ -1,5 +1,5 @@
 import { type Instance } from '$lib/utils/types/types';
-import { writable, get, type Writable } from 'svelte/store';
+import { writable, type Writable } from 'svelte/store';
 
 // Define a type for SEC Filing context items
 export interface FilingContext {
@@ -81,7 +81,7 @@ export function openChatAndQuery(context: FilingContext | Instance, query: strin
 export type TableData = {
 	caption?: string;
 	headers: string[];
-	rows: any[][];
+	rows: unknown[][];
 	// Pagination state
 	currentPage?: number;
 	rowsPerPage?: number;
@@ -98,15 +98,15 @@ export type PlotData = {
 };
 
 export type PlotTrace = {
-	x?: any[];
-	y?: any[];
-	z?: any[];
+	x?: unknown[];
+	y?: unknown[];
+	z?: unknown[];
 	name?: string;
 	type?: string;
 	mode?: string;
-	marker?: any;
-	line?: any;
-	[key: string]: any; // Allow additional Plotly trace properties
+	marker?: unknown;
+	line?: unknown;
+	[key: string]: unknown; // Allow additional Plotly trace properties
 };
 
 export type PlotLayout = {
@@ -115,12 +115,12 @@ export type PlotLayout = {
 	yaxis?: PlotAxis;
 	width?: number;
 	height?: number;
-	[key: string]: any; // Allow additional Plotly layout properties
+	[key: string]: unknown; // Allow additional Plotly layout properties
 };
 
 export type PlotAxis = {
 	title?: string;
-	[key: string]: any; // Allow additional Plotly axis properties
+	[key: string]: unknown; // Allow additional Plotly axis properties
 };
 
 export type ContentChunk = {
@@ -161,7 +161,7 @@ export type TimelineEvent = {
 	headline: string;
 	timestamp: Date;
 	type?: 'FunctionUpdate' | 'webSearchQuery' | 'webSearchCitations' | 'getWatchlistItems' | 'getDailySnapshot'; // Type of event
-	data?: any; // For web search queries or other structured data
+	data?: unknown; // For web search queries or other structured data
 };
 
 // Message type for chat history

@@ -77,7 +77,6 @@
 		});
 	}
 
-
 	// Export data prop for server-side preloaded data
 	export let data: PageData;
 
@@ -104,7 +103,6 @@
 	const alertTabs = ['active', 'inactive', 'history'] as const;
 	type AlertView = (typeof alertTabs)[number];
 	let alertView: AlertView = 'active';
-
 
 	// Bottom windows
 	type BottomWindowType =
@@ -203,7 +201,7 @@
 	$: if (browser && $leftMenuWidth !== undefined) {
 		document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
 	}
-	
+
 	$: if (browser && $menuWidth !== undefined) {
 		document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
 	}
@@ -328,10 +326,13 @@
 
 	onMount(() => {
 		if (!browser) return;
-		
+
 		// Set CSS variable for sidebar buttons width
-		document.documentElement.style.setProperty('--sidebar-buttons-width', `${SIDEBAR_BUTTONS_WIDTH}px`);
-		
+		document.documentElement.style.setProperty(
+			'--sidebar-buttons-width',
+			`${SIDEBAR_BUTTONS_WIDTH}px`
+		);
+
 		// Initialize CSS custom properties for sidebar widths if not already set
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--left')) {
 			document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
@@ -339,7 +340,7 @@
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--right')) {
 			document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
 		}
-		
+
 		initStores();
 		// Async initialization function
 		async function init() {
@@ -384,8 +385,6 @@
 			);
 			console.log('🛠️ [debug] URL override: add ?mobile=1 or ?mobile=0 to the URL');
 		});
-
-
 	});
 
 	// Defer socket connection until after initial render
@@ -444,7 +443,10 @@
 	function startResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
-		const start = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--right'), 10);
+		const start = parseInt(
+			getComputedStyle(document.documentElement).getPropertyValue('--right'),
+			10
+		);
 
 		const maxSidebarWidth = Math.min(600, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
 
@@ -521,7 +523,6 @@
 	let draggingWindowId: number | null = null;
 	let offsetX = 0;
 	let offsetY = 0;
-
 
 	function onDrag(event: MouseEvent) {
 		if (draggingWindowId === null) return;
@@ -682,7 +683,6 @@
 
 			return avatar;
 		}
-
 	}
 
 	// Keep the getProfileDisplay function for backward compatibility
@@ -791,19 +791,27 @@
 	function startLeftResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
-		const start = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left'), 10);
+		const start = parseInt(
+			getComputedStyle(document.documentElement).getPropertyValue('--left'),
+			10
+		);
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = Math.min(window.innerWidth * 0.4, window.innerWidth - SIDEBAR_BUTTONS_WIDTH);
+		const maxLeftSidebarWidth = Math.min(
+			window.innerWidth * 0.4,
+			window.innerWidth - SIDEBAR_BUTTONS_WIDTH
+		);
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
-			const newWidth = Math.round(Math.max(minLeftSidebarWidth, Math.min(start + delta, maxLeftSidebarWidth)));
-			
+			const newWidth = Math.round(
+				Math.max(minLeftSidebarWidth, Math.min(start + delta, maxLeftSidebarWidth))
+			);
+
 			// Update CSS custom property
 			document.documentElement.style.setProperty('--left', `${newWidth}px`);
-			
+
 			// Update store for other components
 			leftMenuWidth.set(newWidth);
 		};
@@ -862,15 +870,12 @@
 		}, 0);
 	}
 
-
 	async function createPriceAlert() {
 		const inst = await queryInstanceInput('any', ['ticker'], {
 			ticker: ''
 		});
 		await newPriceAlert(inst);
 	}
-
-
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
 	async function verifyAndUpdateSubscriptionStatus(sessionId: string) {
@@ -917,7 +922,7 @@
 
 	// Update the site title to reflect the active chart's ticker (or fallback when none)
 	$: if (browser) {
-		const siteTitle = $activeChartInstance?.ticker + " | Peripheral";
+		const siteTitle = $activeChartInstance?.ticker + ' | Peripheral';
 		if (document.title !== siteTitle) {
 			document.title = siteTitle;
 		}
@@ -929,13 +934,10 @@
 	let userEmail = '';
 
 	onMount(async () => {
-
 		const authToken = sessionStorage.getItem('authToken');
 		if (authToken) {
 		}
-
 	});
-
 
 	// Generate initial avatar SVG from email address
 	function generateInitialAvatar(email: string) {
@@ -952,7 +954,6 @@
 		`)}`;
 	}
 
-
 	// Update avatar generation logic
 	$: if (profilePic || userEmail) {
 		// Use profilePic if available, otherwise generate from email
@@ -961,7 +962,6 @@
 		// Default placeholder
 		profilePic = generateInitialAvatar('');
 	}
-
 
 	// Update subscription check condition
 	$: if (
@@ -1024,10 +1024,9 @@
 				<div class="main-horizontal-container">
 					<!-- Left sidebar for Query -->
 					{#if $leftMenuWidth > 0}
-
 						<div class="left-sidebar">
 							<div class="sidebar-content">
-									<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
+								<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
 							</div>
 						</div>
 						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -1044,10 +1043,7 @@
 					<!-- Center section (chart + top bar) -->
 					<div class="center-section">
 						<!-- Top bar -->
-						<TopBar 
-							instance={$activeChartInstance || {}}
-							handleCalendar={handleCalendar} 
-						/>
+						<TopBar instance={$activeChartInstance || {}} {handleCalendar} />
 
 						<!-- Main content area -->
 						<div class="main-content">
@@ -1095,7 +1091,7 @@
 							</div>
 						</div>
 					</div>
-					
+
 					<!-- Sidebar -->
 					{#if $menuWidth > 0}
 						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -1195,11 +1191,17 @@
 					on:click={toggleLeftSidebar}
 					title="Open AI Chat"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg"
-						 width="16" height="16"
-						 fill="currentColor" class="chat-icon bi bi-square-half"
-						 viewBox="0 0 16 16">
-						<path d="M8 15V1h6a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1zm6 1a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						fill="currentColor"
+						class="chat-icon bi bi-square-half"
+						viewBox="0 0 16 16"
+					>
+						<path
+							d="M8 15V1h6a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1zm6 1a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"
+						/>
 					</svg>
 				</button>
 
@@ -1220,7 +1222,6 @@
 			</div>
 
 			<div class="bottom-bar-right">
-
 				<!-- Replay buttons commented out -->
 				<!-- 
 			<button
@@ -1356,9 +1357,8 @@
 </div>
 
 <style>
-
 	:root {
-		--left: 300px; 
+		--left: 300px;
 		--right: 300px;
 		--gutter: 4px;
 	}
@@ -1412,11 +1412,12 @@
 		height: 100%;
 		width: 100%;
 		grid-template-columns: var(--left) var(--gutter) 1fr var(--gutter) var(--right);
-		grid-template-areas:"left g1 center g2 right";
+		grid-template-areas: 'left g1 center g2 right';
 	}
 
 	.left-sidebar {
-		grid-area: left; overflow: hidden;
+		grid-area: left;
+		overflow: hidden;
 	}
 	.center-section {
 		grid-area: center;
@@ -1428,14 +1429,19 @@
 		grid-area: right;
 		overflow: hidden;
 	}
-	.resizer-left , .resizer-right{
-		width:var(--gutter);
-		cursor:ew-resize;
-		background:transparent;
-		z-index:10;                   /* sit above charts for easy grab */
+	.resizer-left,
+	.resizer-right {
+		width: var(--gutter);
+		cursor: ew-resize;
+		background: transparent;
+		z-index: 10; /* sit above charts for easy grab */
 	}
-	.resizer-left  { grid-area:g1; }
-	.resizer-right { grid-area:g2; }
+	.resizer-left {
+		grid-area: g1;
+	}
+	.resizer-right {
+		grid-area: g2;
+	}
 
 	.sidebar-header {
 		height: 40px;
@@ -1516,7 +1522,6 @@
 		display: flex;
 		flex-direction: column;
 	}
-
 
 	.center-section {
 		display: flex;

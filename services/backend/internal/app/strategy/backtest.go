@@ -380,7 +380,11 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			fmt.Printf("error closing pubsub: %v\n", err)
+		}
+	}()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)

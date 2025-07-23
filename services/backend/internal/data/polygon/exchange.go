@@ -39,7 +39,11 @@ func GetExchanges(conn *data.Conn) (map[int]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("w0ig00 %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("k0if200i %d", resp.StatusCode)
 	}

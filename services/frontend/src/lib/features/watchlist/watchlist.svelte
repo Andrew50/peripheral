@@ -600,18 +600,6 @@
 		margin: 16px 0 10px 0;
 	}
 
-	.watchlist-name {
-		color: #ffffff;
-		font-size: 1rem; /* Align with alerts title size */
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-		margin: 0 0 0 8px; /* left margin for spacing */
-		margin-right: auto; /* push buttons to the right */
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
 	/* Adjust left padding of first data column (Ticker) to match Alerts list */
 	:global(.header-table th:nth-child(2)) {
 		padding-left: clamp(4px, 0.5vw, 8px) !important;

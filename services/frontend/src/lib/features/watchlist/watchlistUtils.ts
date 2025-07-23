@@ -10,7 +10,6 @@ import {
 	currentWatchlistId as globalCurrentWatchlistId,
 	watchlists
 } from '$lib/utils/stores/stores';
-import { tick } from 'svelte';
 // Extended Instance type to include watchlistItemId
 interface WatchlistItem extends Instance {
 	watchlistItemId?: number;
@@ -20,8 +19,7 @@ export const visibleWatchlistIds = writable<number[]>([]);
 
 // Function to initialize visible watchlists
 export function initializeVisibleWatchlists(
-	watchlistsArray: Watchlist[],
-	currentWatchlistId: number
+	watchlistsArray: Watchlist[]
 ) {
 	if (watchlistsArray && watchlistsArray.length > 0) {
 		// Always prioritize flag watchlist if it exists
@@ -372,10 +370,10 @@ export function addToVisibleTabs(newWatchlistId: number) {
 
 		let newIds: number[];
 
-		if (flagWatchlist && !ids.includes(flagWatchlistId)) {
+		if (flagWatchlist && flagWatchlistId !== undefined && !ids.includes(flagWatchlistId)) {
 			// Flag watchlist exists but isn't in visible tabs - add it first
 			newIds = [flagWatchlistId, newWatchlistId, ...ids];
-		} else if (ids.includes(flagWatchlistId)) {
+		} else if (flagWatchlistId !== undefined && ids.includes(flagWatchlistId)) {
 			// Flag watchlist is already visible - add new watchlist after flag
 			const flagIndex = ids.indexOf(flagWatchlistId);
 			newIds = [
