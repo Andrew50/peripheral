@@ -616,7 +616,7 @@
 	th,
 	td {
 		padding: clamp(3px, 0.35vw, 5px) clamp(2px, 0.35vw, 3px);
-		text-align: left;
+		text-align: right;
 		background: transparent;
 		overflow: hidden;
 		font-size: clamp(0.73rem, 0.82rem, 0.95rem);
@@ -851,7 +851,6 @@
 	td:nth-child(3) {
 		width: 18%;
 		min-width: 45px;
-		text-align: left;
 		padding-right: clamp(0px, 0.1vw, 1px);
 	}
 
@@ -859,7 +858,6 @@
 	td:nth-child(4) {
 		width: 18%;
 		min-width: 45px;
-		text-align: left;
 		padding-right: clamp(0px, 0.1vw, 1px);
 	}
 
@@ -867,7 +865,6 @@
 	td:nth-child(5) {
 		width: 20%;
 		min-width: 55px;
-		text-align: left;
 		padding-right: clamp(2px, 0.3vw, 4px);
 	}
 
@@ -875,7 +872,6 @@
 	td:nth-child(6) {
 		width: 13%;
 		min-width: 40px;
-		text-align: left;
 	}
 
 	.delete-button {
