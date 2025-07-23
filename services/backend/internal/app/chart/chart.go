@@ -902,11 +902,11 @@ func fetchTrades(
 		if it.Err() != nil {
 			return nil, it.Err()
 		}
-		tradeTs := time.Time(tr.ParticipantTimestamp).In(easternLocation)
-		if tradeTs.After(endTime) {
+		tradeTS := time.Time(tr.ParticipantTimestamp).In(easternLocation)
+		if tradeTS.After(endTime) {
 			break
 		}
-		if extendedHours || utils.IsTimestampRegularHours(tradeTs) {
+		if extendedHours || utils.IsTimestampRegularHours(tradeTS) {
 			trades = append(trades, tr)
 		}
 	}
@@ -1094,12 +1094,12 @@ func integrateChartEvents(
 		return
 	}
 
-	minTsSec := tempSortedBars[0].Timestamp
-	maxTsSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
+	minTSSec := tempSortedBars[0].Timestamp
+	maxTSSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
 
 	// Validate timestamps before proceeding
-	if math.IsNaN(minTsSec) || math.IsNaN(maxTsSec) || math.IsInf(minTsSec, 0) || math.IsInf(maxTsSec, 0) {
-		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
+	if math.IsNaN(minTSSec) || math.IsNaN(maxTSSec) || math.IsInf(minTSSec, 0) || math.IsInf(maxTSSec, 0) {
+		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTSSec, maxTSSec)
 		return
 	}
 
@@ -1110,9 +1110,9 @@ func integrateChartEvents(
 	}
 
 	// Calculate time range in milliseconds for the API call
-	fromMs := int64(minTsSec * 1000)
+	fromMs := int64(minTSSec * 1000)
 	// Extend 'toMs' to cover the full duration of the last bar
-	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
+	toMs := int64((maxTSSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
 	chartEvents, err := fetchChartEventsInRange(conn, userID, securityID, fromMs, toMs, includeSECFilings, true)

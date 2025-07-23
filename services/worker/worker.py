@@ -17,12 +17,12 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+# Add src directory to Python path before importing local modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 import psycopg2
 import redis
 from psycopg2.extras import RealDictCursor
-
-# Add src directory to Python path before importing local modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.data_accessors import DataAccessorProvider
 from src.pythonAgentGenerator import PythonAgentGenerator
@@ -715,7 +715,7 @@ class StrategyWorker:
             
             return error_result
             
-        except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError, OSError) as e:
+        except (TypeError, AttributeError, KeyError, ImportError, RuntimeError, OSError) as e:
             logger.error("💥 CRITICAL ERROR in strategy creation task %s: %s", task_id, e)
             logger.error("📄 Full traceback: %s", traceback.format_exc())
             

@@ -185,7 +185,11 @@ func UpdateSecurityCik(conn *data.Conn) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch SEC company tickers: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("SEC API returned non-200 status code: %d", resp.StatusCode)

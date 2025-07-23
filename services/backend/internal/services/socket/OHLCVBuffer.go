@@ -134,7 +134,7 @@ func (b *OHLCVBuffer) verifyStagingTablesExist() error {
 		return fmt.Errorf("ohlcv_1d_stage table does not exist")
 	}
 
-	log.Printf("✅ Pre-flight check: Both staging tables verified to exist")
+	// log.Printf("✅ Pre-flight check: Both staging tables verified to exist")
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (b *OHLCVBuffer) ensureStagingTablesExist() error {
 			return fmt.Errorf("staging tables still not accessible after creation: %w", verifyErr)
 		}
 
-		log.Printf("✅ Staging tables successfully recreated and verified")
+		// log.Printf("✅ Staging tables successfully recreated and verified")
 	}
 
 	return nil
@@ -180,30 +180,31 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 	}
 
 	// Pre-flight check: Ensure staging tables exist and are accessible
-	log.Printf("🔍 Running pre-flight checks for staging tables...")
+	// log.Printf("🔍 Running pre-flight checks for staging tables...")
 	if err := ohlcvBuffer.ensureStagingTablesExist(); err != nil {
 		log.Printf("❌ Pre-flight check failed: %v", err)
 		return fmt.Errorf("pre-flight staging table check failed: %w", err)
 	}
 
-	log.Printf("🔄 Starting OHLCV buffer writer goroutines...")
-	// Start multiple writer goroutines to process batches in parallel
-	numWorkers := 4 // Increased to handle more concurrent batches
+	// log.Printf("🔄 Starting OHLCV buffer writer goroutines...")
+	// Start single writer goroutine to avoid lock contention on shared staging tables and target tables
+	// Multiple workers were causing TimescaleDB chunk lock conflicts and staging table contention
+	numWorkers := 1 // Reduced from 4 to eliminate database lock contention
 	for i := 0; i < numWorkers; i++ {
 		ohlcvBuffer.wg.Add(1)
 		go ohlcvBuffer.writer(i)
 	}
 
-	log.Printf("⏰ Starting OHLCV buffer timeout flusher...")
+	// log.Printf("⏰ Starting OHLCV buffer timeout flusher...")
 	ohlcvBuffer.startTimeoutFlusher()
 
-	log.Printf("🩺 Starting OHLCV buffer health checker...")
+	// log.Printf("🩺 Starting OHLCV buffer health checker...")
 	ohlcvBuffer.startHealthChecker()
 
-	log.Printf("📊 Starting OHLCV buffer performance monitor...")
+	// log.Printf("📊 Starting OHLCV buffer performance monitor...")
 	ohlcvBuffer.startPerformanceMonitor()
 
-	log.Printf("✅ OHLCV buffer initialized successfully with channel buffer size: %d batches", channelBufferSize)
+	// log.Printf("✅ OHLCV buffer initialized successfully with channel buffer size: %d batches (single writer to avoid lock contention)", channelBufferSize)
 	return nil
 }
 
@@ -256,22 +257,41 @@ func (b *OHLCVBuffer) logPerformanceMetrics() {
 	b.mu.Lock()
 	bufferSize := len(b.buffer)
 	channelBacklog := len(b.flushCh)
-	totalAdded := b.totalRecordsAdded
-	totalProcessed := b.totalBatchesProcessed
+	// totalAdded := b.totalRecordsAdded
+	// totalProcessed := b.totalBatchesProcessed
 	totalDropped := b.totalRecordsDropped
 	b.mu.Unlock()
 
 	channelUtilization := float64(channelBacklog) / float64(channelBufferSize) * 100
 	bufferUtilization := float64(bufferSize) / float64(flushThreshold) * 100
 
-	// Only log metrics if utilization is high or records have been dropped
-	if channelUtilization > 80 || bufferUtilization > 80 || totalDropped > 0 {
-		log.Printf("📊 OHLCV Performance Metrics:")
-		log.Printf("   📈 Buffer: %d/%d records (%.1f%% full)", bufferSize, flushThreshold, bufferUtilization)
-		log.Printf("   🚰 Channel: %d/%d batches queued (%.1f%% full)", channelBacklog, channelBufferSize, channelUtilization)
-		log.Printf("   📥 Total records added: %d", totalAdded)
-		log.Printf("   ✅ Total batches processed: %d", totalProcessed)
-		log.Printf("   ❌ Total records dropped: %d", totalDropped)
+	// CRITICAL: Log connection pool stats to detect leaks
+	poolStats := b.dbConn.DB.Stat()
+	// pgxpool Stats does NOT provide a direct "waiting" metric. The closest proxies are:
+	//   ConstructingConns  – number of connections currently being established
+	//   EmptyAcquireCount – cumulative # of times Acquire() had to wait because the pool was empty
+	// We log both instead of computing a misleading value from AcquireCount.
+	constructing := poolStats.ConstructingConns()
+	emptyAcquire := poolStats.EmptyAcquireCount()
+
+	// Log pool stats if there are any waiting connections or high utilization
+	if constructing > 5 || emptyAcquire > 100 || channelUtilization > 80 || bufferUtilization > 80 || totalDropped > 0 {
+		// log.Printf("📊 OHLCV Performance Metrics:")
+		// log.Printf("   📈 Buffer: %d/%d records (%.1f%% full)", bufferSize, flushThreshold, bufferUtilization)
+		// log.Printf("   🚰 Channel: %d/%d batches queued (%.1f%% full)", channelBacklog, channelBufferSize, channelUtilization)
+		// log.Printf("   🔗 DB Pool: total=%d, idle=%d, used=%d, constructing=%d, empty_acquire=%d",
+		//	poolStats.TotalConns(), poolStats.IdleConns(), poolStats.AcquiredConns(), constructing, emptyAcquire)
+		// log.Printf("   📥 Total records added: %d", totalAdded)
+		// log.Printf("   ✅ Total batches processed: %d", totalProcessed)
+		// log.Printf("   ❌ Total records dropped: %d", totalDropped)
+
+		// Alert if pool is regularly empty or too many connections are constructing.
+		if constructing > 5 {
+			log.Printf("⚠️ WARNING: %d connections currently being established – pool may be under-sized or DB slow to accept conns", constructing)
+		}
+		if emptyAcquire > 100 {
+			log.Printf("⚠️ WARNING: pool has had %d empty-acquire events – consider upping Min/MaxConns or investigating long-running queries", emptyAcquire)
+		}
 
 		if channelUtilization > 80 {
 			log.Printf("⚠️  WARNING: Channel utilization high (%.1f%%) - writer may be falling behind", channelUtilization)
@@ -293,10 +313,10 @@ func (b *OHLCVBuffer) performHealthCheck() {
 		if createErr := b.ensureStagingTablesExist(); createErr != nil {
 			log.Printf("❌ Health check: Failed to recreate staging tables: %v", createErr)
 		} else {
-			log.Printf("✅ Health check: Staging tables successfully recreated")
+			// log.Printf("✅ Health check: Staging tables successfully recreated")
 		}
 	} else {
-		log.Printf("💚 Health check: Staging tables are healthy")
+		// log.Printf("💚 Health check: Staging tables are healthy")
 	}
 }
 
@@ -310,7 +330,7 @@ func (b *OHLCVBuffer) flushIfStale() {
 
 	if len(b.buffer) > 0 && time.Since(b.lastFlush) > flushTimeout {
 		channelBacklog := len(b.flushCh)
-		//log.Printf("⏰ Timeout flush triggered: %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
+		// log.Printf("⏰ Timeout flush triggered: %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
 
 		// Send critical alert if channel backlog is high
 		if channelBacklog > criticalChannelThreshold {
@@ -350,10 +370,10 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 	}
 
 	// Debug logging for first few bars or special tickers
-	//if ticker == "COIN" || ticker == "AAPL" {
-	//log.Printf("🪙 %s bar: ts=%d, O=%.4f, H=%.4f, L=%.4f, C=%.4f, V=%d",
-	//ticker, timestamp, bar.Open, bar.High, bar.Low, bar.Close, int64(bar.Volume))
-	//}
+	// if ticker == "COIN" || ticker == "AAPL" {
+	// log.Printf("🪙 %s bar: ts=%d, O=%.4f, H=%.4f, L=%.4f, C=%.4f, V=%d",
+	//	ticker, timestamp, bar.Open, bar.High, bar.Low, bar.Close, int64(bar.Volume))
+	// }
 
 	b.mu.Lock()
 	if b.stopped {
@@ -365,11 +385,11 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 	b.buffer = append(b.buffer, record)
 	b.totalRecordsAdded++
 	b.lastFlush = time.Now() // Update lastFlush on every add to prevent unnecessary timeout flushes
-	//log.Printf("📈 Added %s to buffer (buffer size: %d/%d)", ticker, len(b.buffer), flushThreshold)
+	// log.Printf("📈 Added %s to buffer (buffer size: %d/%d)", ticker, len(b.buffer), flushThreshold)
 
 	if len(b.buffer) >= flushThreshold {
 		channelBacklog := len(b.flushCh)
-		log.Printf("🚨 Buffer threshold reached, flushing %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
+		// log.Printf("🚨 Buffer threshold reached, flushing %d records (channel backlog: %d/%d)", len(b.buffer), channelBacklog, channelBufferSize)
 
 		// Send critical alert if channel backlog is high
 		if channelBacklog > criticalChannelThreshold {
@@ -384,7 +404,7 @@ func (b *OHLCVBuffer) addBar(timestamp int64, ticker string, bar models.EquityAg
 		b.mu.Unlock()
 		select {
 		case b.flushCh <- batchToFlush:
-			log.Printf("✅ Batch sent to flush channel (new backlog: %d/%d)", len(b.flushCh), channelBufferSize)
+			// log.Printf("✅ Batch sent to flush channel (new backlog: %d/%d)", len(b.flushCh), channelBufferSize)
 		default:
 			b.mu.Lock()
 			b.totalRecordsDropped += int64(len(batchToFlush))
@@ -444,22 +464,22 @@ func (b *OHLCVBuffer) createStagingTables() error {
 		return fmt.Errorf("create ohlcv_1d_stage: %w", err)
 	}
 
-	log.Printf("✅ Staging tables created (ohlcv_1m_stage & ohlcv_1d_stage)")
+	// log.Printf("✅ Staging tables created (ohlcv_1m_stage & ohlcv_1d_stage)")
 	return nil
 }
 
 func (b *OHLCVBuffer) writer(workerID int) {
-	log.Printf("🔄 OHLCV writer goroutine #%d started", workerID)
+	// log.Printf("🔄 OHLCV writer goroutine #%d started", workerID)
 	defer b.wg.Done()
 
 	for batch := range b.flushCh {
 		startTime := time.Now()
-		//channelBacklog := len(b.flushCh)
-		//log.Printf("📝 Writer #%d processing batch of %d records (remaining backlog: %d/%d)",
-		//workerID, len(batch), channelBacklog, channelBufferSize)
+		// channelBacklog := len(b.flushCh)
+		// log.Printf("📝 Writer #%d processing batch of %d records (remaining backlog: %d/%d)",
+		//	workerID, len(batch), channelBacklog, channelBufferSize)
 
-		// Removed unnecessary sorting - multiple workers can process batches in parallel
-		// and the staging tables are truncated after each batch anyway
+		// Single worker processes batches sequentially to avoid TimescaleDB chunk lock conflicts
+		// and staging table contention that was causing timeouts with multiple concurrent writers
 
 		// Database operation
 		dbStart := time.Now()
@@ -471,8 +491,8 @@ func (b *OHLCVBuffer) writer(workerID int) {
 		b.totalBatchesProcessed++
 		b.mu.Unlock()
 
-		//log.Printf("✅ Writer #%d completed batch: db=%v, total=%v (processed %d batches total, backlog now: %d/%d)",
-		//workerID, dbTime, processingTime, b.totalBatchesProcessed, len(b.flushCh), channelBufferSize)
+		// log.Printf("✅ Writer #%d completed batch: db=%v, total=%v (processed %d batches total, backlog now: %d/%d)",
+		//	workerID, dbTime, processingTime, b.totalBatchesProcessed, len(b.flushCh), channelBufferSize)
 
 		if processingTime > 5*time.Second {
 			log.Printf("⚠️ WARNING: Writer #%d - Slow batch processing detected (total=%v, db=%v) - database may be bottleneck",
@@ -482,10 +502,12 @@ func (b *OHLCVBuffer) writer(workerID int) {
 			log.Printf("⚠️ WARNING: Writer #%d - Slow database operation detected (%v)", workerID, dbTime)
 		}
 	}
-	log.Printf("⚠️ OHLCV writer goroutine #%d exiting", workerID)
+	// log.Printf("⚠️ OHLCV writer goroutine #%d exiting", workerID)
 }
 
 func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
+	operationStart := time.Now()
+
 	// Pre-allocate slices with estimated capacity to avoid reallocations
 	m1Rows := make([][]interface{}, 0, len(records))
 	d1Rows := make([][]interface{}, 0, len(records))
@@ -507,6 +529,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			d1Rows = append(d1Rows, []interface{}{t, v, o, c, h, l, ts, 0})
 		}
 	}
+	dataProcessingTime := time.Since(operationStart)
+	// log.Printf("📊 DB Operation - Data processing: %v (1m_rows=%d, 1d_rows=%d)", dataProcessingTime, len(m1Rows), len(d1Rows))
 
 	// Reduced timeout from 60s to 30s - operations shouldn't take this long
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -525,83 +549,135 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("✅ Staging tables recreated successfully during runtime")
 		}*/
 
+	connStart := time.Now()
 	conn, err := b.dbConn.DB.Acquire(ctx)
 	if err != nil {
-		log.Printf("Acquire conn error: %v", err)
+		log.Printf("❌ DB Operation - Connection acquisition failed after %v: %v", time.Since(connStart), err)
 		return
 	}
 	defer conn.Release()
+	connTime := time.Since(connStart)
 
+	// Log connection pool stats to help identify if pool exhaustion is causing delays
+	// poolStats := b.dbConn.DB.Stat()
+	// log.Printf("🔗 DB Operation - Connection acquired: %v (pool: total=%d, idle=%d, used=%d, constructing=%d, empty_acquire=%d)",
+	//	connTime, poolStats.TotalConns(), poolStats.IdleConns(), poolStats.AcquiredConns(), poolStats.ConstructingConns(), poolStats.EmptyAcquireCount())
+
+	txStart := time.Now()
 	tx, err := conn.Begin(ctx)
 	if err != nil {
-		log.Printf("Begin txn error: %v", err)
+		log.Printf("❌ DB Operation - Transaction begin failed after %v: %v", time.Since(txStart), err)
 		return
 	}
+	txTime := time.Since(txStart)
+	// log.Printf("🔄 DB Operation - Transaction started: %v", txTime)
 
 	var txCommitted bool
 	defer func() {
 		if !txCommitted {
+			// rollbackStart := time.Now()
 			_ = tx.Rollback(ctx)
+			// log.Printf("↩️ DB Operation - Transaction rollback: %v", time.Since(rollbackStart))
 		}
 	}()
 
 	// Batch all performance settings in one multi-statement query to reduce round trips
+	settingsStart := time.Now()
 	_, err = tx.Exec(ctx, `
 		SET synchronous_commit = off;
 		SET timescaledb.parallel_copy = on;
 	`)
 	if err != nil {
-		log.Printf("SET performance settings error: %v", err)
+		log.Printf("❌ DB Operation - Performance settings failed after %v: %v", time.Since(settingsStart), err)
 		return
 	}
+	settingsTime := time.Since(settingsStart)
+	// log.Printf("⚙️ DB Operation - Performance settings applied: %v", settingsTime)
 
 	columns := []string{"ticker", "volume", "open", "close", "high", "low", "timestamp", "transactions"}
 
 	if len(m1Rows) > 0 {
+		// 1-minute operations
+		copyStart := time.Now()
 		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1m_stage"}, columns, pgx.CopyFromRows(m1Rows))
 		if err != nil {
-			log.Printf("CopyFrom 1m error: %v", err)
+			log.Printf("❌ DB Operation - COPY 1m failed after %v: %v", time.Since(copyStart), err)
 			return
 		}
+		//copyTime := time.Since(copyStart)
+		// log.Printf("📥 DB Operation - COPY 1m completed: %v (%d rows)", copyTime, len(m1Rows))
+
+		mergeStart := time.Now()
 		_, err = tx.Exec(ctx, mergeQuery1m)
 		if err != nil {
-			log.Printf("Merge 1m error: %v", err)
+			log.Printf("❌ DB Operation - MERGE 1m failed after %v: %v", time.Since(mergeStart), err)
 			return
 		}
+		//mergeTime := time.Since(mergeStart)
+		// log.Printf("🔀 DB Operation - MERGE 1m completed: %v", mergeTime)
+
+		truncateStart := time.Now()
 		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1m_stage;")
 		if err != nil {
-			log.Printf("Truncate 1m error: %v", err)
+			log.Printf("❌ DB Operation - TRUNCATE 1m failed after %v: %v", time.Since(truncateStart), err)
 			return
 		}
+		//truncateTime := time.Since(truncateStart)
+		// log.Printf("🗑️ DB Operation - TRUNCATE 1m completed: %v", truncateTime)
 	}
 
 	if len(d1Rows) > 0 {
+		// 1-day operations
+		copyStart := time.Now()
 		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1d_stage"}, columns, pgx.CopyFromRows(d1Rows))
 		if err != nil {
 			// Enhanced error handling - if COPY fails, don't attempt verification within aborted transaction
-			log.Printf("CopyFrom 1d error: %v", err)
+			log.Printf("❌ DB Operation - COPY 1d failed after %v: %v", time.Since(copyStart), err)
 			log.Printf("⚠️ Transaction will be rolled back due to COPY failure")
 			// The verification query would fail with 25P02 in an aborted transaction, so we skip it
 			// Instead, we'll rely on the runtime check at the beginning of the next batch
 			return
 		}
+		//copyTime := time.Since(copyStart)
+		// log.Printf("📥 DB Operation - COPY 1d completed: %v (%d rows)", copyTime, len(d1Rows))
+
+		mergeStart := time.Now()
 		_, err = tx.Exec(ctx, mergeQuery1d)
 		if err != nil {
-			log.Printf("Merge 1d error: %v", err)
+			log.Printf("❌ DB Operation - MERGE 1d failed after %v: %v", time.Since(mergeStart), err)
 			return
 		}
+		//mergeTime := time.Since(mergeStart)
+		// log.Printf("🔀 DB Operation - MERGE 1d completed: %v", mergeTime)
+
+		truncateStart := time.Now()
 		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1d_stage;")
 		if err != nil {
-			log.Printf("Truncate 1d error: %v", err)
+			log.Printf("❌ DB Operation - TRUNCATE 1d failed after %v: %v", time.Since(truncateStart), err)
 			return
 		}
+		//truncateTime := time.Since(truncateStart)
+		// log.Printf("🗑️ DB Operation - TRUNCATE 1d completed: %v", truncateTime)
 	}
 
+	commitStart := time.Now()
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Printf("Commit error: %v", err)
+		log.Printf("❌ DB Operation - COMMIT failed after %v: %v", time.Since(commitStart), err)
 	} else {
 		txCommitted = true
+		//commitTime := time.Since(commitStart)
+		totalTime := time.Since(operationStart)
+		// log.Printf("✅ DB Operation - COMMIT completed: %v (total_operation_time=%v)", commitTime, totalTime)
+
+		// Performance analysis
+		if totalTime > 5*time.Second {
+			log.Printf("🐌 DB Operation - Performance Analysis (total=%v):", totalTime)
+			log.Printf("   📊 Data processing: %v (%.1f%%)", dataProcessingTime, float64(dataProcessingTime)/float64(totalTime)*100)
+			log.Printf("   🔗 Connection: %v (%.1f%%)", connTime, float64(connTime)/float64(totalTime)*100)
+			log.Printf("   🔄 Transaction start: %v (%.1f%%)", txTime, float64(txTime)/float64(totalTime)*100)
+			log.Printf("   ⚙️ Settings: %v (%.1f%%)", settingsTime, float64(settingsTime)/float64(totalTime)*100)
+		}
 	}
 }
 
@@ -621,7 +697,7 @@ func (b *OHLCVBuffer) FlushRemaining() {
 		b.mu.Unlock()
 		select {
 		case b.flushCh <- batchToFlush:
-			log.Printf("✅ Shutdown batch sent to flush channel (final backlog: %d/%d)", len(b.flushCh), channelBufferSize)
+			//log.Printf("✅ Shutdown batch sent to flush channel (final backlog: %d/%d)", len(b.flushCh), channelBufferSize)
 		default:
 			b.mu.Lock()
 			b.totalRecordsDropped += int64(len(batchToFlush))

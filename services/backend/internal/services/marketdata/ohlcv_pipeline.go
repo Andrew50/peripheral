@@ -815,7 +815,11 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer gz.Close()
+	defer func() {
+		if err := gz.Close(); err != nil {
+			fmt.Printf("Error closing gzip reader: %v\n", err)
+		}
+	}()
 
 	// Two-step load: COPY into per-connection staging (bigint ts) then upsert converting to timestamptz.
 	return db.AcquireFunc(ctx, func(c *pgxpool.Conn) error {

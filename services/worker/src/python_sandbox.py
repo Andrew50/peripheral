@@ -4,6 +4,7 @@ A domain-agnostic Python code execution environment with security, plotting, and
 """
 
 import asyncio
+import base64
 import contextlib
 import datetime
 import io
@@ -20,6 +21,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import plotly
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Set up logger before using it
 logger = logging.getLogger(__name__)
@@ -31,6 +35,12 @@ except ImportError:
     # Handle missing plotlyToMatlab gracefully
     def plotly_to_matplotlib_png(*_args, **_kwargs):
         return None
+
+try:
+    from data_accessors import get_data_accessor
+except ImportError:
+    logger.warning("data_accessors module not available")
+    get_data_accessor = None
 
 
 @dataclass
@@ -157,7 +167,8 @@ class PythonSandbox:
         try:
             # Fix exec usage
             # nosec B102 - exec necessary with proper sandboxing
-            exec(code, safe_globals, safe_locals)
+            # nosec B102  # pylint: disable=exec-used
+            exec(code, safe_globals, safe_locals)  # pylint: disable=exec-used
             # Execute with stdout/stderr capture
             code_func = safe_locals.get('code')
             if not code_func or not callable(code_func):
@@ -204,61 +215,56 @@ class PythonSandbox:
         # -----------------------------
         try:
             # Import data accessor and create bound helper functions
-            try:
-                from data_accessors import get_data_accessor
-            except ImportError:
-                logger.warning("data_accessors module not available")
-                return safe_globals
+            if get_data_accessor:
+                data_accessor = get_data_accessor()
+
+                # Set execution context for full historical data access (like strategy engine backtest mode)
+                # Use imported datetime instead of redefining
+                start_date = datetime.datetime(2003, 1, 1)
+                end_date = datetime.datetime.now()
                 
-            data_accessor = get_data_accessor()
+                data_accessor.set_execution_context(
+                    mode='backtest',
+                    symbols=None,  # All symbols
+                    start_date=start_date,
+                    end_date=end_date
+                )
 
-            # Set execution context for full historical data access (like strategy engine backtest mode)
-            # Use imported datetime instead of redefining
-            start_date = datetime.datetime(2003, 1, 1)
-            end_date = datetime.datetime.now()
-            
-            data_accessor.set_execution_context(
-                mode='backtest',
-                symbols=None,  # All symbols
-                start_date=start_date,
-                end_date=end_date
-            )
+                def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
+                                       aggregate_mode=False, extended_hours=False, start_date=None, end_date=None):
+                    try:
+                        return data_accessor.get_bar_data(timeframe, columns, min_bars, filters,
+                                                          aggregate_mode, extended_hours, start_date, end_date)
+                    except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
+                        logger.error("Data accessor error in get_bar_data(timeframe=%s, min_bars=%s): %s", 
+                                   timeframe, min_bars, e)
+                        logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
+                        raise  # Re-raise to maintain error propagation
 
-            def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
-                                   aggregate_mode=False, extended_hours=False, start_date=None, end_date=None):
-                try:
-                    return data_accessor.get_bar_data(timeframe, columns, min_bars, filters,
-                                                      aggregate_mode, extended_hours, start_date, end_date)
-                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
-                    logger.error("Data accessor error in get_bar_data(timeframe=%s, min_bars=%s): %s", 
-                               timeframe, min_bars, e)
-                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
-                    raise  # Re-raise to maintain error propagation
+                def bound_get_general_data(columns=None, filters=None):
+                    try:
+                        return data_accessor.get_general_data(columns=columns, filters=filters)
+                    except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
+                        logger.error("Data accessor error in get_general_data(columns=%s, filters=%s): %s", 
+                                   columns, filters, e)
+                        logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
+                        raise  # Re-raise to maintain error propagation
 
-            def bound_get_general_data(columns=None, filters=None):
-                try:
-                    return data_accessor.get_general_data(columns=columns, filters=filters)
-                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
-                    logger.error("Data accessor error in get_general_data(columns=%s, filters=%s): %s", 
-                               columns, filters, e)
-                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
-                    raise  # Re-raise to maintain error propagation
+                def bound_generate_equity_curve(instances: list, group_column=None):
+                    try:
+                        return data_accessor.generate_equity_curve(instances, group_column)
+                    except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
+                        logger.error("Data accessor error in generate_equity_curve(instances=%s, group_column=%s): %s", 
+                                   instances, group_column, e)
+                        logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
+                        raise  # Re-raise to maintain error propagation
 
-            def bound_generate_equity_curve(instances: list, group_column=None):
-                try:
-                    return data_accessor.generate_equity_curve(instances, group_column)
-                except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
-                    logger.error("Data accessor error in generate_equity_curve(instances=%s, group_column=%s): %s", 
-                               instances, group_column, e)
-                    logger.debug("Data accessor error details: %s: %s", type(e).__name__, e)
-                    raise  # Re-raise to maintain error propagation
-
-            safe_globals.update({
-                'get_bar_data': bound_get_bar_data,
-                'get_general_data': bound_get_general_data,
-                'generate_equity_curve': bound_generate_equity_curve,
-            })
-            
+                safe_globals.update({
+                    'get_bar_data': bound_get_bar_data,
+                    'get_general_data': bound_get_general_data,
+                    'generate_equity_curve': bound_generate_equity_curve,
+                })
+                
         except (ValueError, TypeError, AttributeError, KeyError, ImportError, RuntimeError) as e:
             logger.error("❌ CRITICAL: Failed to bind data accessor functions: %s", e)
             logger.error("📄 Data accessor binding traceback: %s", traceback.format_exc())
@@ -272,15 +278,6 @@ class PythonSandbox:
         """Context manager that captures plotly plots instead of displaying them"""
         
         if not self.config.enable_plots:
-            return contextlib.nullcontext()
-        
-        # Import here to avoid circular imports but still have access when needed
-        # These imports are used within this context manager
-        try:
-            import plotly.graph_objects as go
-            import plotly.express as px  # Used in the patching context
-            from plotly.subplots import make_subplots
-        except ImportError:
             return contextlib.nullcontext()
         
         # Store original methods
@@ -366,8 +363,6 @@ class PythonSandbox:
     
     def _decode_binary_arrays(self, data):
         """Recursively decode binary arrays in plot data"""
-        # Import here to avoid circular imports
-        import base64
         # Use the already imported np from the top of the file
         
         if isinstance(data, dict):
@@ -487,11 +482,6 @@ class PythonSandbox:
 # Default configurations for common use cases
 def create_default_config() -> SandboxConfig:
     """Create default sandbox configuration"""
-    
-    # Import here to avoid reimporting
-    import plotly.graph_objects as go
-    import plotly.express as px
-    from plotly.subplots import make_subplots
     
     return SandboxConfig(
         allowed_imports={

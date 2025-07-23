@@ -1,3 +1,5 @@
+// Package marketdata provides functionality for retrieving, processing, and storing
+// market data including price history, indexes, and other financial time series.
 package marketdata
 
 import (

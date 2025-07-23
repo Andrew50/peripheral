@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+# Import here so it's available for exec() globals
+from data_accessors import get_data_accessor
 
 try:
     import plotly
@@ -59,20 +61,22 @@ class TrackedList(list):
     
     def _check_and_update_limit(self, additional_count=1):
         """Check if adding items would exceed limit and update counter if not"""
-        new_count = self.__class__._global_instance_count + additional_count
+        cls = self.__class__
+        new_count = cls._global_instance_count + additional_count
         
-        if new_count > self.__class__._max_instances:
+        if new_count > cls._max_instances:
             # Set flag that limit was reached but don't raise exception
-            if not self.__class__._limit_reached:
-                self.__class__._limit_reached = True
-                logger.warning("Instance limit reached: %d/%d. Stopping instance collection.", self.__class__._global_instance_count, self.__class__._max_instances)
+            if not cls._limit_reached:
+                cls._limit_reached = True
+                logger.warning("Instance limit reached: %d/%d. Stopping instance collection.", 
+                              cls._global_instance_count, cls._max_instances)
             return False  # Don't add more instances
         
         # Log warning when approaching limit (90% threshold)
-        if new_count > self.__class__._max_instances * 0.9 and not self.__class__._limit_reached:
-            logger.warning("Approaching instance limit: %d/%d", new_count, self.__class__._max_instances)
+        if new_count > cls._max_instances * 0.9 and not cls._limit_reached:
+            logger.warning("Approaching instance limit: %d/%d", new_count, cls._max_instances)
         
-        self.__class__._global_instance_count = new_count
+        cls._global_instance_count = new_count
         return True  # OK to add instances
     
     def append(self, item):
@@ -113,7 +117,6 @@ class AccessorStrategyEngine:
     
     def __init__(self):
         # Use the global singleton instead of creating a new instance
-        from data_accessors import get_data_accessor
         self.data_accessor = get_data_accessor()
         self.validator = SecurityValidator()
         self.plots_collection = []
@@ -504,6 +507,7 @@ class AccessorStrategyEngine:
         
         try:
             # nosec B102 - exec necessary for strategy execution with proper sandboxing
+            # nosec B102  # pylint: disable=exec-used
             exec(strategy_code, safe_globals, safe_locals)
             
             # Find strategy function (should be named 'strategy')
@@ -535,7 +539,7 @@ class AccessorStrategyEngine:
                 # Check if instance limit was reached during execution
                 if TrackedList.is_limit_reached():
                     logger.warning("Strategy execution completed with instance limit reached. Total instances: %d", 
-                                 TrackedList._global_instance_count)
+                                 TrackedList._global_instance_count)  # pylint: disable=protected-access
                 
             except (ValueError, TypeError, ImportError, AttributeError) as strategy_error:
                 # Get detailed error information
@@ -1134,8 +1138,8 @@ class AccessorStrategyEngine:
     
     def _ensure_json_serializable(self, instances: List[Dict]) -> List[Dict]:
         """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
-        import numpy as np
-        import pandas as pd
+        # Use imported numpy and pandas from the top of the file
+        # pylint: disable=redefined-outer-name,reimported
         
         serializable_instances = []
         

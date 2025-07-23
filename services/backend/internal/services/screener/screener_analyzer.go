@@ -66,13 +66,21 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	} else {
 		logFilePath = cleanPath
 	}
-	defer logFile.Close()
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			log.Printf("Error closing log file: %v", err)
+		}
+	}()
 
 	log.Printf("✅ Successfully created analysis log file at: %s", logFilePath)
 
 	// Write header
-	fmt.Fprintf(logFile, "=== PERFORMANCE ANALYSIS LOG - %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Fprintf(logFile, "Log file path: %s\n\n", logFilePath)
+	if _, err := fmt.Fprintf(logFile, "=== PERFORMANCE ANALYSIS LOG - %s ===\n", time.Now().Format("2006-01-02 15:04:05")); err != nil {
+		log.Printf("Error writing to log file: %v", err)
+	}
+	if _, err := fmt.Fprintf(logFile, "Log file path: %s\n\n", logFilePath); err != nil {
+		log.Printf("Error writing to log file: %v", err)
+	}
 
 	// Get items (e.g., tickers) if StaleQuery is provided
 	var items []string

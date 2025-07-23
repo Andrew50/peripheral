@@ -145,7 +145,11 @@ func fetchWithRetry(ctx context.Context, url string) ([]byte, error) {
 
 		resp, err := data.DoWithRetry(http.DefaultClient, req)
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					fmt.Printf("Error closing response body: %v\n", err)
+				}
+			}()
 			if resp.StatusCode != http.StatusOK {
 				return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 			}

@@ -225,8 +225,8 @@ class StrategyGenerator:
             FILTER EXAMPLES:{f'''
             - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
             - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-            - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
-            - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
+            - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else '''
+            - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else '''
             - NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
             - Small cap stocks: filters={"market_cap_max": 2000000000}
             - Specific tickers: filters={"tickers": ["AAPL", "MRNA", "TSLA"]}
@@ -701,9 +701,9 @@ class StrategyGenerator:
                 response = self.openai_client.responses.create(
                     model=model_name,
                     reasoning={"effort": "low"},
-                    input=f"{user_prompt}",
-                    instructions=f"{system_instruction}",
-                    user=f"user:0",
+                    input=user_prompt,
+                    instructions=system_instruction,
+                    user="user:0",
                     metadata={"userID": str(userID), "env": self.environment, "convID": conversationID, "msgID": messageID},
                     timeout=150.0  # 150 second timeout for other models
                 )
@@ -761,7 +761,7 @@ class StrategyGenerator:
                 logger.error("📄 Security validation traceback: %s", traceback.format_exc())
                 return {
                     "valid": False,
-                    "error": f"Security validation crashed: {str(security_error)}"
+                    "error": "Security validation crashed: " + str(security_error)
                 }
             
             if not is_valid:

@@ -973,7 +973,11 @@ func fetchFilingText(url string) (string, error) {
 		return "", fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
