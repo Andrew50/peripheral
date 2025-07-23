@@ -619,7 +619,7 @@ func DeleteAccount(conn *data.Conn, userID int, rawArgs json.RawMessage) (interf
 	}
 
 	// Delete conversations
-	_, err = tx.Exec(ctx, "DELETE FROM conversations WHERE user_id = $1", userID)
+	_, err = tx.Exec(ctx, "DELETE FROM conversations WHERE userId = $1", userID)
 	if err != nil {
 		log.Printf("ERROR: Failed to delete conversations for user %d: %v", userID, err)
 		return nil, err

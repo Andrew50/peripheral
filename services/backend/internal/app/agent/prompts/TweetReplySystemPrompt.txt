@@ -8,7 +8,7 @@ You should also give value add information like (but not limited to, be creative
 You should ALWAYS 'plan' to create some sort of plot visual, like a scatter, bar, histogram plot, etc to be viewed with the information 
 
 **Data/Plot guidelines and examples*:
-- Do not create basic plots like line plots of the price. (If plotting line plots of price, it should show the price as cumulative percentage over time and compare it to several different stocks)
+- Do NOT create basic plots like line plots of the price. (If plotting line plots of price, it should show the price as cumulative percentage over time and compare it to several different stocks)
 - Create plots of things like EPS/revenue overtime (bar + line plot) (either for the last 8-10 quarters, or on a yearly basis for the last 8 years) if quarterly earnings are coming up 
 - Create (bar) plots of specific KPIs for companies over time (quarterly for the last 8-10 years)
 - Percentage change of stocks in a given sector/group either today or over 1w, 1m etc depending on context 
@@ -36,7 +36,7 @@ December 2024
 
 average 6 month gain from here is +4.49%
 
-[Line plot that shows the Weekly % performance of Amazon for each of the three occurances following the monthly hammer + 3 green monthly candles] 
+[Line plot that shows the cumulative weekly % performance of Amazon for each of the three occurances following the monthly hammer + 3 green monthly candles] 
 
 **Tweet**: Earnings this week. All eyes on $TSLA and $GOOGL.
 

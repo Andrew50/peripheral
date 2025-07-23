@@ -14,7 +14,6 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"go.uber.org/zap"
@@ -152,8 +151,7 @@ func _buildGeneralAgentPlanningPromptWithResults(query string, activeResults []E
 
 func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, userID int, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
-	apiKey := conn.OpenAIKey
-	client := openai.NewClient(option.WithAPIKey(apiKey))
+	client := conn.OpenAIClient
 	systemPrompt, err := getSystemInstruction(systemPromptFile)
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)

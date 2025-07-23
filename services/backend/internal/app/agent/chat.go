@@ -19,7 +19,6 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
 )
 
@@ -133,7 +132,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	}
 	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
 	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
-	socket.SendChatInitializationUpdate(userID, messageID, conversationID)
+	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
 	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 1*time.Minute).Result() // 1 min for testing lol
@@ -303,6 +302,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					go func() {
 						var cleanedModelThoughts string
 						if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+							ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 							if thoughtsStr, ok := thoughtsValue.(string); ok {
 								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 							}
@@ -356,6 +356,21 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					}, err
 				}
 			case StageFinishedExecuting:
+				go func() {
+					var cleanedModelThoughts string
+					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
+						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+						if thoughtsStr, ok := thoughtsValue.(string); ok {
+							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
+						}
+					}
+					data := map[string]interface{}{
+						"message":  cleanedModelThoughts,
+						"headline": "Tying things together",
+					}
+					socket.SendAgentStatusUpdate(userID, "FunctionUpdate", data)
+				}()
+
 				// Generate final response based on active execution results
 				var finalResponse *FinalResponse
 
@@ -921,9 +936,7 @@ func formatStatusMessage(message string, argsMap map[string]interface{}) string 
 }
 
 func cleanStatusMessage(conn *data.Conn, message string) string {
-	apiKey := conn.OpenAIKey
-
-	client := openai.NewClient(option.WithAPIKey(apiKey))
+	client := conn.OpenAIClient
 	messages := []responses.ResponseInputItemUnionParam{}
 	messages = append(messages, responses.ResponseInputItemUnionParam{
 		OfMessage: &responses.EasyInputMessageParam{

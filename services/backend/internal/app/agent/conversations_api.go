@@ -29,7 +29,7 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 				LIMIT 1
 			) as last_message_query
 		FROM conversations c
-		WHERE c.user_id = $1
+		WHERE c.userId = $1
 		ORDER BY c.updated_at DESC`
 
 	rows, err := conn.DB.Query(context.Background(), query, userID)
@@ -317,7 +317,7 @@ func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, 
 	var userID int
 	var title string
 
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, userid, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
 	if err != nil {
 		return false, 0, "", err
 	}
@@ -343,7 +343,7 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		)
 		SELECT 
 			c.is_public,
-			c.user_id,
+			c.userid,
 			c.title,
 			fm1.query as first_query,
 			COALESCE(fm2.content_chunks, '[]'::jsonb) as first_content_chunks

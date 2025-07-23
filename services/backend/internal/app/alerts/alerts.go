@@ -137,6 +137,38 @@ type NewAlertArgs struct {
 	Ticker     *string  `json:"ticker,omitempty"`
 }
 
+func AgentNewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := NewAlert(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		newAlert := res.(Alert)
+
+		alertData := map[string]interface{}{
+			"alertId":   newAlert.AlertID,
+			"alertType": "price",
+			"active":    newAlert.Active,
+		}
+		// Safely add pointer values, handling nil cases
+		if newAlert.Price != nil {
+			alertData["alertPrice"] = *newAlert.Price
+		}
+		if newAlert.SecurityID != nil {
+			alertData["securityId"] = *newAlert.SecurityID
+		}
+		if newAlert.Ticker != nil {
+			alertData["ticker"] = *newAlert.Ticker
+		}
+		if newAlert.Direction != nil {
+			alertData["direction"] = *newAlert.Direction
+		}
+
+		socket.SendAlertUpdate(userID, "add", alertData)
+	}()
+
+	return res, nil
+}
 func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args NewAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -197,33 +229,6 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		SecurityID: newAlert.SecurityID,
 		Direction:  newAlert.Direction,
 	})
-
-	// NEW: Send WebSocket update after successful creation
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		alertData := map[string]interface{}{
-			"alertId":   newAlert.AlertID,
-			"alertType": "price",
-			"active":    newAlert.Active,
-		}
-
-		// Safely add pointer values, handling nil cases
-		if newAlert.Price != nil {
-			alertData["alertPrice"] = *newAlert.Price
-		}
-		if newAlert.SecurityID != nil {
-			alertData["securityId"] = *newAlert.SecurityID
-		}
-		if newAlert.Ticker != nil {
-			alertData["ticker"] = *newAlert.Ticker
-		}
-		if newAlert.Direction != nil {
-			alertData["direction"] = *newAlert.Direction
-		}
-
-		socket.SendAlertUpdate(userID, "add", alertData)
-	}
-
 	return newAlert, nil
 }
 
@@ -237,6 +242,19 @@ type DeleteAlertArgs struct {
 	AlertID int `json:"alertId"`
 }
 
+func AgentDeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := DeleteAlert(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		alertData := map[string]interface{}{
+			"alertId": args.AlertID,
+		}
+		socket.SendAlertUpdate(userID, "remove", alertData)
+	}()*/
+	return res, nil
+}
 func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -275,15 +293,6 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 
 	// Remove from memory without decrementing counter (already handled above if needed)
 	alerts.RemoveAlertFromMemory(args.AlertID)
-
-	// NEW: Send WebSocket update after successful deletion
-	// Only send WebSocket update if called by LLM (frontend handles its own updates)
-	if conn.IsLLMExecution {
-		alertData := map[string]interface{}{
-			"alertId": args.AlertID,
-		}
-		socket.SendAlertUpdate(userID, "remove", alertData)
-	}
 
 	return nil, nil
 }
