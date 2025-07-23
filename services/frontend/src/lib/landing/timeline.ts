@@ -138,36 +138,4 @@ export function createTimelineEvents({
       backward: () => removeLastMessage()
     },
   ];
-} [
-
-  {
-    "type": "backtest_table",
-    "content": {
-      "caption": "Detailed instance-level backtest results",
-      "columns": [
-        "change_3m_pct",
-        "event_date",
-        "score",
-        "timestamp",
-        "entry_price",
-        "change_1m_pct",
-        "event_description",
-        "ticker",
-        "change_1w_pct"
-      ],
-      "strategyID": 12
-    }
-  },
-  {
-    "type": "backtest_plot",
-    "content": {
-      "length": 3,
-      "plotID": 0,
-      "chartType": "scatter",
-      "chartTitle": "3-Month % Change After Each Tariff Event",
-      "strategyID": 12,
-      "xAxisTitle": "Event Date",
-      "yAxisTitle": "3-Month % Change"
-    }
-  }
-]
+}

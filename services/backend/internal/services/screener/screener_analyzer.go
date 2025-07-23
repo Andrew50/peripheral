@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,14 +41,21 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 
 	log.Printf("📊 Creating performance analysis log at: %s", logFilePath)
 
-	// Validate file path to prevent directory traversal
-	if strings.Contains(logFilePath, "..") {
-		return fmt.Errorf("invalid log file path: path traversal detected")
+	// Validate file path to prevent directory traversal and ensure it's safe
+	cleanPath := filepath.Clean(logFilePath)
+	if strings.Contains(cleanPath, "..") || !filepath.IsAbs(cleanPath) {
+		return fmt.Errorf("invalid log file path: path traversal detected or relative path not allowed")
 	}
 
-	logFile, err := os.Create(logFilePath)
+	// Ensure the directory exists
+	dir := filepath.Dir(cleanPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for log file: %v", err)
+	}
+
+	logFile, err := os.Create(cleanPath)
 	if err != nil {
-		log.Printf("❌ Failed to create analysis log file at %s: %v", logFilePath, err)
+		log.Printf("❌ Failed to create analysis log file at %s: %v", cleanPath, err)
 		log.Printf("📊 Trying fallback location: %s", fallbackPath)
 		logFile, err = os.Create(fallbackPath)
 		if err != nil {
@@ -55,6 +63,8 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 			return fmt.Errorf("failed to create analysis log file: %v", err)
 		}
 		logFilePath = fallbackPath
+	} else {
+		logFilePath = cleanPath
 	}
 	defer logFile.Close()
 
@@ -109,21 +119,51 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	if err := analyzeWaitEvents(ctx, conn, logFile, config.QueryPatterns); err != nil {
 		fmt.Fprintf(logFile, "⚠️  Failed to analyze wait events: %v\n", err)
 	}
-	analyzePgStatStatements(ctx, conn, logFile, config.QueryPatterns)
-	analyzeQueryPlans(ctx, conn, logFile, config.TestFunctions)
-	analyzeTableStatistics(ctx, conn, logFile, config.Tables)
-	analyzeIndexUsage(ctx, conn, logFile, config.Tables)
-	analyzeMemoryUsage(ctx, conn, logFile)
-	analyzeMaintenanceStatus(ctx, conn, logFile, config.Tables)
-	analyzeConcurrentQueries(ctx, conn, logFile, config.QueryPatterns)
-	analyzePerQueryIO(ctx, conn, logFile, config.TestFunctions)
-	analyzeTableBloat(ctx, conn, logFile, config.Tables)
-	analyzeOSDiskMetrics(logFile)
-	analyzeCPUMemory(logFile)
-	analyzeWALCheckpoint(ctx, conn, logFile)
-	analyzeRefreshScreenerPlan(ctx, conn, logFile)
-	analyzePgStatIO(ctx, conn, logFile)
-	analyzeContinuousAggLag(ctx, conn, logFile)
+	if err := analyzePgStatStatements(ctx, conn, logFile, config.QueryPatterns); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze pg_stat_statements: %v\n", err)
+	}
+	if err := analyzeQueryPlans(ctx, conn, logFile, config.TestFunctions); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze query plans: %v\n", err)
+	}
+	if err := analyzeTableStatistics(ctx, conn, logFile, config.Tables); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze table statistics: %v\n", err)
+	}
+	if err := analyzeIndexUsage(ctx, conn, logFile, config.Tables); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze index usage: %v\n", err)
+	}
+	if err := analyzeMemoryUsage(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze memory usage: %v\n", err)
+	}
+	if err := analyzeMaintenanceStatus(ctx, conn, logFile, config.Tables); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze maintenance status: %v\n", err)
+	}
+	if err := analyzeConcurrentQueries(ctx, conn, logFile, config.QueryPatterns); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze concurrent queries: %v\n", err)
+	}
+	if err := analyzePerQueryIO(ctx, conn, logFile, config.TestFunctions); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze per-query IO: %v\n", err)
+	}
+	if err := analyzeTableBloat(ctx, conn, logFile, config.Tables); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze table bloat: %v\n", err)
+	}
+	if err := analyzeOSDiskMetrics(logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze OS disk metrics: %v\n", err)
+	}
+	if err := analyzeCPUMemory(logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze CPU memory: %v\n", err)
+	}
+	if err := analyzeWALCheckpoint(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze WAL checkpoint: %v\n", err)
+	}
+	if err := analyzeRefreshScreenerPlan(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze refresh screener plan: %v\n", err)
+	}
+	if err := analyzePgStatIO(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze pg_stat_io: %v\n", err)
+	}
+	if err := analyzeContinuousAggLag(ctx, conn, logFile); err != nil {
+		fmt.Fprintf(logFile, "⚠️  Failed to analyze continuous agg lag: %v\n", err)
+	}
 	_, err = conn.DB.Exec(ctx, "SET log_checkpoints = on")
 	if err != nil {
 		fmt.Fprintf(logFile, "⚠️  Failed to set log_checkpoints: %v\n", err)
@@ -131,7 +171,9 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 
 	// Run query performance analysis if applicable
 	if len(items) > 0 && (len(config.TestFunctions) > 0 || len(config.ComponentTests) > 0) {
-		analyzeQueryPerformance(ctx, conn, logFile, config.TestFunctions, config.ComponentTests, items)
+		if err := analyzeQueryPerformance(ctx, conn, logFile, config.TestFunctions, config.ComponentTests, items); err != nil {
+			fmt.Fprintf(logFile, "⚠️  Failed to analyze query performance: %v\n", err)
+		}
 	}
 
 	fmt.Fprintf(logFile, "\n📊 Analysis complete at %s\n", time.Now().Format("2006-01-02 15:04:05"))

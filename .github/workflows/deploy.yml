@@ -88,6 +88,10 @@ on:
         required: true
       STRIPE_PUBLISHABLE_KEY:
         required: true
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN:
+        required: true
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN:
+        required: true
 
 permissions:
   contents: read
@@ -125,6 +129,8 @@ jobs:
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
@@ -197,6 +203,8 @@ jobs:
           echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: [$(if [ -n "$TELEGRAM_USER_NOTIFICATION_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BEN_TWEETS_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BEN_TWEETS_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 

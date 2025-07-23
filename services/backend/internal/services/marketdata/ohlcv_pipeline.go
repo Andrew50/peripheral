@@ -44,6 +44,10 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 		log.Printf("workerCount is too large, setting to 2147483647")
 		workerCount = 2147483647
 	}
+	if workerCount < 0 {
+		log.Printf("workerCount is negative, setting to 1")
+		workerCount = 1
+	}
 	cfg.MinConns = int32(workerCount)
 	cfg.MaxConns = int32(workerCount)
 

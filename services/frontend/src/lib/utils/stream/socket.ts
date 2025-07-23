@@ -665,7 +665,7 @@ export function connect() {
 					pendingRequest.resolve(chatResponse.data);
 				} else {
 					// Create error with response data so frontend can extract messageID and conversationID
-					const error = new Error(chatResponse.error || 'Chat request failed') as any;
+					const error = new Error(chatResponse.error || 'Chat request failed') as Error & { response?: unknown };
 					error.response = chatResponse.data; // Attach response data to error
 					pendingRequest.reject(error);
 				}
