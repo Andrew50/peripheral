@@ -66,6 +66,7 @@ disable = [
     "R0912", # too-many-branches
     "R0911", # too-many-return-statements
     "R0902", # too-many-instance-attributes
+    "R1702", # too-many-nested-if-blocks
 ]
 
 [tool.pylint.format]

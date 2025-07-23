@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"backend/internal/data" // your conn.go
 
@@ -113,9 +114,9 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	for _, ex := range exchanges {
 		url := fmt.Sprintf(base, ex, ex)
 
-		body, err := fetch(ctx, url)
+		body, err := fetchWithRetry(ctx, url)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load github data for %s: %w", ex, err)
 		}
 
 		var lst []listing // listing{Symbol, Sector, Industry}
@@ -163,6 +164,54 @@ func fetch(ctx context.Context, url string) ([]byte, error) {
 		return dec, nil
 	}
 	return nil, fmt.Errorf("unexpected payload from %s", url)
+}
+
+// fetchWithRetry wraps fetch with retries on TLS handshake timeout
+func fetchWithRetry(ctx context.Context, url string) ([]byte, error) {
+	var err error
+	backoff := time.Second
+	for attempts := 1; attempts <= 3; attempts++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
+		req.Header.Set("Accept", "application/vnd.github.raw")
+
+		resp, err := data.DoWithRetry(http.DefaultClient, req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+			}
+
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+
+			// GitHub sometimes base-64s large JSON blobs
+			if json.Valid(b) {
+				return b, nil
+			}
+			if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
+				return dec, nil
+			}
+			return nil, fmt.Errorf("unexpected payload from %s", url)
+		}
+
+		// Retry only on TLS handshake timeout or context deadline exceeded
+		if !strings.Contains(err.Error(), "TLS handshake timeout") &&
+			!strings.Contains(err.Error(), "context deadline exceeded") {
+			return nil, err
+		}
+		if attempts < 3 {
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			backoff *= 2
+		}
+	}
+	return nil, err
 }
 
 // ------------------------------------------------------------------- //

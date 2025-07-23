@@ -125,7 +125,7 @@ func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookReques
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := client.Do(req)
+	resp, err := data.DoWithRetry(client, req)
 	if err != nil {
 		log.Printf("Error making Twitter API request: %v", err)
 		return fmt.Errorf("failed to make request: %w", err)

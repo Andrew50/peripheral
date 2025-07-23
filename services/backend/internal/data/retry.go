@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -116,4 +117,27 @@ func ExecWithRetry(ctx context.Context, db *pgxpool.Pool, query string, args ...
 		}
 	}
 	return tag, err
+}
+
+// DoWithRetry wraps HTTP client.Do with retries on TLS handshake timeout and context deadline exceeded
+func DoWithRetry(client *http.Client, req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	backoff := time.Second
+	for attempts := 1; attempts <= 3; attempts++ {
+		resp, err = client.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		// Retry on TLS handshake timeout or context deadline exceeded
+		if !strings.Contains(err.Error(), "TLS handshake timeout") &&
+			!strings.Contains(err.Error(), "context deadline exceeded") {
+			return nil, err
+		}
+		if attempts < 3 {
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+	}
+	return resp, err
 }

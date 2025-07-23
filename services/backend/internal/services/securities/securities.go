@@ -181,7 +181,7 @@ func UpdateSecurityCik(conn *data.Conn) error {
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
 	// Execute the request
-	resp, err := client.Do(req)
+	resp, err := data.DoWithRetry(client, req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch SEC company tickers: %w", err)
 	}

@@ -507,7 +507,6 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: services/backend
           args: >-
-            --out-format=colored-line-number
             --timeout=3m
             --config=.golangci.yml
             --max-issues-per-linter=10
