@@ -21,6 +21,9 @@ import numpy as np
 import pandas as pd
 import plotly
 
+# Set up logger before using it
+logger = logging.getLogger(__name__)
+
 try:
     from plotlyToMatlab import plotly_to_matplotlib_png
 except ImportError:
@@ -28,8 +31,6 @@ except ImportError:
     # Handle missing plotlyToMatlab gracefully
     def plotly_to_matplotlib_png(*_args, **_kwargs):
         return None
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -84,6 +85,9 @@ class PythonSandbox:
         """
         start_time = time.time()
         
+        if execution_id:
+            self.execution_id = execution_id
+            
         try:
             
             # Create execution environment
@@ -151,7 +155,8 @@ class PythonSandbox:
         return_value = None
         
         try:
-            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
+            # nosec B102 - exec necessary with proper sandboxing
+            exec(code, safe_globals, safe_locals)
             # Execute with stdout/stderr capture
             code_func = safe_locals.get('code')
             if not code_func or not callable(code_func):
@@ -267,9 +272,11 @@ class PythonSandbox:
         if not self.config.enable_plots:
             return contextlib.nullcontext()
         
+        # Import here to avoid circular imports but still have access when needed
+        # These imports are used within this context manager
         try:
             import plotly.graph_objects as go
-            import plotly.express as px
+            import plotly.express as px  # Used in the patching context
             from plotly.subplots import make_subplots
         except ImportError:
             return contextlib.nullcontext()
@@ -357,8 +364,9 @@ class PythonSandbox:
     
     def _decode_binary_arrays(self, data):
         """Recursively decode binary arrays in plot data"""
+        # Import here to avoid circular imports
         import base64
-        import numpy as np
+        import numpy as np # this needs to be here becuase it is a local context and might now havce context of the full script when used?
         
         if isinstance(data, dict):
             if 'bdata' in data and 'dtype' in data:
@@ -478,7 +486,7 @@ class PythonSandbox:
 def create_default_config() -> SandboxConfig:
     """Create default sandbox configuration"""
     
-    # Import plotly libraries
+    # Import here to avoid reimporting
     import plotly.graph_objects as go
     import plotly.express as px
     from plotly.subplots import make_subplots

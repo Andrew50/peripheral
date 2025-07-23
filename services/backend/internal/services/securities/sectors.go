@@ -134,39 +134,7 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	return out, nil
 }
 
-func fetch(ctx context.Context, url string) ([]byte, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-
-	// Outgoing headers
-	req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
-	req.Header.Set("Accept", "application/vnd.github.raw") // forces raw view
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// GitHub sometimes base-64s large JSON blobs
-	if json.Valid(b) {
-		return b, nil
-	}
-	if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
-		return dec, nil
-	}
-	return nil, fmt.Errorf("unexpected payload from %s", url)
-}
-
-// fetchWithRetry wraps fetch with retries on TLS handshake timeout
+// fetchWithRetry performs HTTP requests with retry logic for handling timeouts
 func fetchWithRetry(ctx context.Context, url string) ([]byte, error) {
 	var err error
 	backoff := time.Second

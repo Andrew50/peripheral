@@ -73,8 +73,6 @@ class SecurityValidator:
             "slice", "complex", "frozenset", "object", "format",
             # Safe console output
             "print",
-            # zip and enumeratem TODO are these needed?
-            "zip", "enumerate",
             # Data accessor functions
             "get_bar_data", "get_general_data"
         }
@@ -196,7 +194,7 @@ class SecurityValidator:
                             
         except SyntaxError as e:
             logger.warning("Failed to parse strategy code for min_bars extraction: %s", e)
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError, KeyError, IndexError) as e:
             logger.error("Unexpected error extracting min_bars requirements: %s", e)
             
         return requirements
@@ -245,7 +243,7 @@ class SecurityValidator:
             
             return call_info
             
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             logger.debug("Failed to extract parameters from get_bar_data call: %s", e)
             return None
 
@@ -254,9 +252,9 @@ class SecurityValidator:
         try:
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 return node.value
-            elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+            if isinstance(node, ast.Str):  # Python < 3.8 compatibility
                 return node.s
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             logger.debug("_extract_string_value: %s", e)
         return None
 
@@ -265,10 +263,10 @@ class SecurityValidator:
         try:
             if isinstance(node, ast.Constant) and isinstance(node.value, int):
                 return node.value
-            elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+            if isinstance(node, ast.Num):  # Python < 3.8 compatibility
                 if isinstance(node.n, int):
                     return node.n
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             logger.debug("_extract_int_value: %s", e)
         return None
 
@@ -298,7 +296,7 @@ class SecurityValidator:
         except (SyntaxError, SecurityError, StrategyComplianceError) as e:
             logger.warning("Code failed validation: %s", e)
             raise
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError, KeyError, IndexError) as e:
             logger.error("Unexpected error during validation: %s", e)
             return False
     def validate_code(self, code: str) -> bool:
@@ -319,7 +317,7 @@ class SecurityValidator:
         except (SyntaxError, SecurityError, PythonCodeError) as e:
             logger.warning("Code failed validation: %s", e)
             raise
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError, KeyError, IndexError) as e:
             logger.error("Unexpected error during validation: %s", e)
             return False
 
@@ -340,7 +338,7 @@ class SecurityValidator:
         except SecurityError:
             return False
 
-    def _check_strategy_compliance(self, tree: ast.AST, code: str) -> bool:
+    def _check_strategy_compliance(self, tree: ast.AST, _code: str) -> bool:
         """Check DataFrame strategy compliance requirements"""
         
         # Find all functions
@@ -611,7 +609,7 @@ class SecurityValidator:
         """Check class definitions (forbidden)"""
         raise SecurityError("Class definitions are not allowed in strategies")
 
-    def _check_while_loop(self, node: ast.While) -> bool:
+    def _check_while_loop(self, _node: ast.While) -> bool:
         """Check while loops (potentially dangerous)"""
         logger.warning("While loops detected - ensure they terminate to avoid infinite loops")
         return True

@@ -176,6 +176,7 @@ func broadcastTimestamp() {
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	// Start the batched stale-ticker flusher (only once per process)
+	fmt.Println("Starting stale flusher")
 	staleFlusherOnce.Do(func() { startStaleFlusher(conn) })
 
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)

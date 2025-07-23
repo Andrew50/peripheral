@@ -1,7 +1,9 @@
 package server
 
 import (
+	"backend/internal/services/alerts"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -57,5 +59,10 @@ func resolveAppError(err error) (int, string) {
 			return info.statusCode, info.publicMsg
 		}
 	}
+
+	// Log critical alert for unexpected errors that don't match any known patterns
+	genericErr := fmt.Errorf("error had to be handled generically, here is the raw error message: %v", err)
+	_ = alerts.LogCriticalAlert(genericErr, "resolveAppError")
+
 	return http.StatusInternalServerError, "Unexpected error"
 }
