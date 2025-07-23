@@ -335,7 +335,7 @@
 					horzLines: { visible: true, color: 'rgba(255, 255, 255, 0.1)', style: 1 }
 				},
 				timeScale: { 
-					visible: true,
+					visible: false,
 					timeVisible: false,
 					secondsVisible: false
 				},
