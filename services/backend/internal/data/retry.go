@@ -75,8 +75,8 @@ func ExecWithRetry(ctx context.Context, db *pgxpool.Pool, query string, args ...
 
 		// Abort retries for non-transient errors such as undefined column (SQLSTATE 42703).
 		if pgErr, ok := err.(*pgconn.PgError); ok {
-			if pgErr.Code == "42703" {
-				// Undefined column – retrying won't help.
+			if pgErr.Code == "42703" || pgErr.Code == "23505" {
+				// Undefined column or unique constraint violation – retrying won't help.
 				return tag, err
 			}
 		}

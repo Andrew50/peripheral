@@ -39,6 +39,7 @@ type OHLCVBuffer struct {
 const flushThreshold = 200000
 const flushTimeout = 1 * time.Second
 const checkInterval = 1 * time.Second
+const healthCheckInterval = 30 * time.Second
 
 const mergeQuery1m = `
 INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp")
@@ -78,6 +79,64 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 
 var ohlcvBuffer *OHLCVBuffer
 
+// verifyStagingTablesExist checks that both staging tables are accessible
+// This function works outside of any transaction to avoid 25P02 errors
+func (b *OHLCVBuffer) verifyStagingTablesExist() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := b.dbConn.DB.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for verification: %w", err)
+	}
+	defer conn.Release()
+
+	// Check both staging tables exist
+	var check1m, check1d *string
+
+	err = conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1m_stage')").Scan(&check1m)
+	if err != nil {
+		return fmt.Errorf("verify ohlcv_1m_stage existence: %w", err)
+	}
+	if check1m == nil {
+		return fmt.Errorf("ohlcv_1m_stage table does not exist")
+	}
+
+	err = conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&check1d)
+	if err != nil {
+		return fmt.Errorf("verify ohlcv_1d_stage existence: %w", err)
+	}
+	if check1d == nil {
+		return fmt.Errorf("ohlcv_1d_stage table does not exist")
+	}
+
+	log.Printf("✅ Pre-flight check: Both staging tables verified to exist")
+	return nil
+}
+
+// ensureStagingTablesExist creates tables if they don't exist, with verification
+func (b *OHLCVBuffer) ensureStagingTablesExist() error {
+	// First, try to verify existing tables
+	if err := b.verifyStagingTablesExist(); err != nil {
+		log.Printf("⚠️ Staging tables missing or inaccessible: %v", err)
+		log.Printf("🔧 Attempting to recreate staging tables...")
+
+		// Tables missing, try to create them
+		if createErr := b.createStagingTables(); createErr != nil {
+			return fmt.Errorf("failed to create staging tables: %w", createErr)
+		}
+
+		// Verify creation was successful
+		if verifyErr := b.verifyStagingTablesExist(); verifyErr != nil {
+			return fmt.Errorf("staging tables still not accessible after creation: %w", verifyErr)
+		}
+
+		log.Printf("✅ Staging tables successfully recreated and verified")
+	}
+
+	return nil
+}
+
 // Initialize the OHLCV buffer
 func InitOHLCVBuffer(conn *data.Conn) error {
 
@@ -95,10 +154,18 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 		stopped:     false,
 	}
 
-	// Create staging tables immediately on initialization
-	if err := ohlcvBuffer.createStagingTables(); err != nil {
-		log.Printf("❌ Failed to create staging tables: %v", err)
-		return err
+	// Pre-flight check: Ensure staging tables exist and are accessible
+	log.Printf("🔍 Running pre-flight checks for staging tables...")
+	if err := ohlcvBuffer.ensureStagingTablesExist(); err != nil {
+		log.Printf("❌ Pre-flight check failed: %v", err)
+		return fmt.Errorf("pre-flight staging table check failed: %w", err)
+	}
+
+	// Final verification before starting workers
+	log.Printf("🔍 Final verification before starting workers...")
+	if err := ohlcvBuffer.verifyStagingTablesExist(); err != nil {
+		log.Printf("❌ Final verification failed: %v", err)
+		return fmt.Errorf("final staging table verification failed: %w", err)
 	}
 
 	log.Printf("🔄 Starting OHLCV buffer writer goroutine...")
@@ -107,7 +174,11 @@ func InitOHLCVBuffer(conn *data.Conn) error {
 
 	log.Printf("⏰ Starting OHLCV buffer timeout flusher...")
 	ohlcvBuffer.startTimeoutFlusher()
-	log.Printf("✅ OHLCV buffer initialized successfully")
+
+	log.Printf("🩺 Starting OHLCV buffer health checker...")
+	ohlcvBuffer.startHealthChecker()
+
+	log.Printf("✅ OHLCV buffer initialized successfully with verified staging tables")
 	return nil
 }
 
@@ -124,6 +195,36 @@ func (b *OHLCVBuffer) startTimeoutFlusher() {
 			}
 		}
 	}()
+}
+
+func (b *OHLCVBuffer) startHealthChecker() {
+	ticker := time.NewTicker(healthCheckInterval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				b.performHealthCheck()
+			case <-b.stopTimeout:
+				return
+			}
+		}
+	}()
+}
+
+func (b *OHLCVBuffer) performHealthCheck() {
+	if err := b.verifyStagingTablesExist(); err != nil {
+		log.Printf("🚨 Health check failed: Staging tables missing: %v", err)
+		log.Printf("🔧 Health check: Attempting to recreate staging tables...")
+
+		if createErr := b.ensureStagingTablesExist(); createErr != nil {
+			log.Printf("❌ Health check: Failed to recreate staging tables: %v", createErr)
+		} else {
+			log.Printf("✅ Health check: Staging tables successfully recreated")
+		}
+	} else {
+		log.Printf("💚 Health check: Staging tables are healthy")
+	}
 }
 
 func (b *OHLCVBuffer) flushIfStale() {
@@ -236,27 +337,7 @@ func (b *OHLCVBuffer) createStagingTables() error {
 		return fmt.Errorf("create ohlcv_1d_stage: %w", err)
 	}
 
-	// -------------------------------------------------------------------
-	// Verify that the staging tables are actually visible from **this** and
-	// future connections.  This rules out search_path problems or silent
-	// roll-backs.
-	// -------------------------------------------------------------------
-	var check1m, check1d *string
-	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1m_stage')").Scan(&check1m); err != nil {
-		return fmt.Errorf("verify ohlcv_1m_stage: %w", err)
-	}
-	if check1m == nil {
-		return fmt.Errorf("verify ohlcv_1m_stage: table not found after creation")
-	}
-	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&check1d); err != nil {
-		return fmt.Errorf("verify ohlcv_1d_stage: %w", err)
-	}
-	if check1d == nil {
-		return fmt.Errorf("verify ohlcv_1d_stage: table not found after creation")
-	}
-
-	log.Printf("✅ Verified staging tables exist (ohlcv_1m_stage & ohlcv_1d_stage)")
-
+	log.Printf("✅ Staging tables created (ohlcv_1m_stage & ohlcv_1d_stage)")
 	return nil
 }
 
@@ -302,6 +383,18 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	// Runtime verification: Check if staging tables still exist before proceeding
+	if err := b.verifyStagingTablesExist(); err != nil {
+		log.Printf("⚠️ Runtime check: Staging tables missing before COPY operation: %v", err)
+		log.Printf("🔧 Attempting to recreate staging tables during runtime...")
+
+		if createErr := b.ensureStagingTablesExist(); createErr != nil {
+			log.Printf("❌ Failed to recreate staging tables during runtime: %v", createErr)
+			return
+		}
+		log.Printf("✅ Staging tables recreated successfully during runtime")
+	}
 
 	conn, err := b.dbConn.DB.Acquire(ctx)
 	if err != nil {
@@ -358,16 +451,11 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	if len(d1Rows) > 0 {
 		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1d_stage"}, columns, pgx.CopyFromRows(d1Rows))
 		if err != nil {
-			// If COPY fails with relation not found, verify existence immediately
+			// Enhanced error handling - if COPY fails, don't attempt verification within aborted transaction
 			log.Printf("CopyFrom 1d error: %v", err)
-			var exists *string
-			if e := tx.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&exists); e != nil {
-				log.Printf("⚠️  Verification query failed: %v", e)
-			} else if exists == nil {
-				log.Printf("⚠️  Verification: ohlcv_1d_stage is NOT present in current session after COPY failure")
-			} else {
-				log.Printf("ℹ️  Verification: ohlcv_1d_stage DOES exist despite COPY failure – possible search_path or privilege issue")
-			}
+			log.Printf("⚠️ Transaction will be rolled back due to COPY failure")
+			// The verification query would fail with 25P02 in an aborted transaction, so we skip it
+			// Instead, we'll rely on the runtime check at the beginning of the next batch
 			return
 		}
 		_, err = tx.Exec(ctx, mergeQuery1d)

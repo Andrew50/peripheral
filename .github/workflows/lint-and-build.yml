@@ -522,6 +522,23 @@ jobs:
           GO111MODULE: "on"
         # continue-on-error for this specific action is handled by job's continue-on-error
 
+      - name: 🔒 Run Go vulnerability check
+        working-directory: services/backend
+        run: |
+          echo "🔒 Running Go vulnerability scanning with govulncheck..."
+          # Install govulncheck if not available
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          
+          # Run vulnerability check
+          govulncheck ./... || VULN_EXIT_CODE=$?
+          
+          if [ "$VULN_EXIT_CODE" != "0" ]; then
+            echo "::error title=Go Security Vulnerabilities::Found security vulnerabilities in Go dependencies. Review the output above."
+            if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+              exit 1
+            fi
+          fi
+
       - name: Unit tests with race detector
         if: | # Only run for PRs to main, where continue_on_error is false
           github.event_name == 'pull_request' &&
@@ -540,13 +557,13 @@ jobs:
         run: |
           if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Backend CI Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Backend checks completed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+            echo "✅ Backend checks completed (lint, security, vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ job.status }}" == "skipped" ]]; then
             echo "### Backend CI Results ➡️" >> $GITHUB_STEP_SUMMARY
             echo "➡️ Backend checks skipped as no changes were detected in 'services/backend/'." >> $GITHUB_STEP_SUMMARY
           else
             echo "### Backend CI Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ Backend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+            echo "❌ Backend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
   frontend-lint-security:
@@ -646,6 +663,30 @@ jobs:
           echo "🎨 Running Stylelint..."
           npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
 
+      - name: 🔒 Run npm audit for security vulnerabilities
+        working-directory: services/frontend
+        run: |
+          echo "🔒 Running npm audit for security vulnerabilities..."
+          # Run audit and capture exit code
+          npm audit --audit-level=high --json > npm-audit-report.json || AUDIT_EXIT_CODE=$?
+          
+          # Display human-readable audit results
+          echo "=== NPM Audit Results ==="
+          npm audit --audit-level=high || true
+          
+          # Check if there are high or critical vulnerabilities
+          if [ -f "npm-audit-report.json" ]; then
+            HIGH_CRITICAL_COUNT=$(cat npm-audit-report.json | jq -r '.metadata.vulnerabilities.high + .metadata.vulnerabilities.critical' 2>/dev/null || echo "0")
+            echo "High + Critical vulnerabilities found: $HIGH_CRITICAL_COUNT"
+            
+            if [ "$HIGH_CRITICAL_COUNT" != "0" ] && [ "$HIGH_CRITICAL_COUNT" != "null" ]; then
+              echo "::error title=Security Vulnerabilities::Found $HIGH_CRITICAL_COUNT high or critical security vulnerabilities. Run 'npm audit fix' to resolve."
+              if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+                exit 1
+              fi
+            fi
+          fi
+
       - name: Run frontend tests
         working-directory: services/frontend
         run: |
@@ -660,13 +701,13 @@ jobs:
         run: |
           if [[ "${{ job.status }}" == "success" || ("${{ job.status }}" == "failure" && "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" == "true") ]]; then
             echo "### Frontend CI Results ✅" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Frontend checks completed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+            echo "✅ Frontend checks completed (lint, security, vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ job.status }}" == "skipped" ]]; then
             echo "### Frontend CI Results ➡️" >> $GITHUB_STEP_SUMMARY
             echo "➡️ Frontend checks skipped as no changes were detected in 'services/frontend/'." >> $GITHUB_STEP_SUMMARY
           else
             echo "### Frontend CI Results ❌" >> $GITHUB_STEP_SUMMARY
-            echo "❌ Frontend checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
+            echo "❌ Frontend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
   worker-lint-security:
