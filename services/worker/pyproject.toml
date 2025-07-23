@@ -62,6 +62,10 @@ disable = [
     "C0302", # too-many-lines in module
     "R0914", # too-many-local-variables
     "R0917", # too-many-boolean-expressions
+    "R0915", # too-many-statements
+    "R0912", # too-many-branches
+    "R0911", # too-many-return-statements
+    "R0902", # too-many-instance-attributes
 ]
 
 [tool.pylint.format]

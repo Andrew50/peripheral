@@ -1452,6 +1452,7 @@
 										{#each message.contentChunks as chunk, index}
 											{#if chunk.type === 'text'}
 												<div class="chunk-text">
+													<!-- svelte-ignore no-at-html-tags -->
 													{@html parseMarkdown(
 														typeof chunk.content === 'string'
 															? chunk.content
@@ -1485,6 +1486,7 @@
 														<div class="chunk-table-container">
 															{#if tableData.caption}
 																<div class="table-caption">
+																	<!-- svelte-ignore no-at-html-tags -->
 																	{@html parseMarkdown(tableData.caption)}
 																</div>
 															{/if}
@@ -1507,6 +1509,7 @@
 																					class:desc={currentSort.columnIndex === colIndex &&
 																						currentSort.direction === 'desc'}
 																				>
+																					<!-- svelte-ignore no-at-html-tags -->
 																					{@html parseMarkdown(
 																						typeof header === 'string' ? header : String(header)
 																					)}
@@ -1525,7 +1528,8 @@
 																				{#if Array.isArray(row)}
 																					{#each row as cell}
 																						<td
-																							>{@html parseMarkdown(
+																							><!-- svelte-ignore no-at-html-tags -->
+																							{@html parseMarkdown(
 																								typeof cell === 'string' ? cell : String(cell)
 																							)}</td
 																						>
@@ -1649,6 +1653,7 @@
 										{/each}
 									</div>
 								{:else}
+									<!-- svelte-ignore no-at-html-tags -->
 									{@html parseMarkdown(message.content)}
 								{/if}
 							</div>

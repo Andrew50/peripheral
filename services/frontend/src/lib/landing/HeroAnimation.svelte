@@ -7,6 +7,7 @@
 	import type { TimelineEvent } from '$lib/landing/timeline';
 	import { createTimelineEvents, sampleQuery, totalScroll } from '$lib/landing/timeline';
 	import { timelineProgress } from '$lib/landing/timeline';
+	import type { ContentChunk } from '$lib/landing/timeline';
 	import { get } from 'svelte/store';
 	import HeroPlotChunk from '$lib/landing/HeroPlotChunk.svelte';
 	import { isPlotData, getPlotData, generatePlotKey } from '$lib/features/chat/plotUtils';
@@ -39,7 +40,6 @@
 		data: any[];
 		[key: string]: any;
 	};
-	type ContentChunk = { type: 'text' | 'table' | 'plot'; content: string | TableData | PlotData };
 
 	interface ChatMessage {
 		message_id: string;
@@ -741,6 +741,7 @@
 										<div class="message user">
 											<div class="message-content">
 												<div class="chunk-text">
+													<!-- svelte-ignore no-at-html-tags -->
 													{@html parseMarkdown(msg.text || '')}
 												</div>
 											</div>
@@ -750,6 +751,7 @@
 											{#each msg.contentChunks as chunk, idx}
 												{#if chunk.type === 'text'}
 													<div class="chunk-text">
+														<!-- svelte-ignore no-at-html-tags -->
 														{@html parseMarkdown(
 															typeof chunk.content === 'string'
 																? chunk.content
@@ -783,6 +785,7 @@
 															<div class="chunk-table-container">
 																{#if tableData.caption}
 																	<div class="table-caption">
+																		<!-- svelte-ignore no-at-html-tags -->
 																		{@html parseMarkdown(tableData.caption)}
 																	</div>
 																{/if}
@@ -827,7 +830,8 @@
 																					{#if Array.isArray(row)}
 																						{#each row as cell}
 																							<td
-																								>{@html parseMarkdown(
+																								><!-- svelte-ignore no-at-html-tags -->
+																								{@html parseMarkdown(
 																									typeof cell === 'string' ? cell : String(cell)
 																								)}</td
 																							>
@@ -952,6 +956,7 @@
 										</div>
 									{:else}
 										<div class="assistant-message">
+											<!-- svelte-ignore no-at-html-tags -->
 											{@html parseMarkdown(msg.text || '')}
 										</div>
 									{/if}

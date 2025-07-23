@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strings"
 )
 
 // Sentinel (application) errors that can be wrapped and checked with errors.Is.
@@ -47,6 +48,10 @@ var appErrorTable = map[error]appErrorInfo{
 // and a public-facing message. If the error does not match any sentinel, a
 // generic 500 response is returned.
 func resolveAppError(err error) (int, string) {
+	// Handle database connection errors gracefully with clean message
+	if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection is closed") {
+		return http.StatusServiceUnavailable, "Database connection error. Please try again later."
+	}
 	for sentinel, info := range appErrorTable {
 		if errors.Is(err, sentinel) {
 			return info.statusCode, info.publicMsg

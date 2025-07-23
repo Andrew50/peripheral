@@ -84,22 +84,6 @@ export type ChatResponse = {
 	error?: string;
 };
 
-// NEW: Import stores for dynamic updates
-interface WatchlistItem {
-	watchlistItemId: number;
-	securityId: number;
-	ticker: string;
-	[key: string]: unknown;
-}
-
-// Local interface for strategy objects used in socket updates
-// This is different from the database Strategy interface in types.ts
-interface SocketStrategy {
-	strategyId: number;
-	name: string;
-	activeScreen?: boolean;
-	[key: string]: unknown;
-}
 
 interface StoreModule {
 	watchlists: Writable<Watchlist[]>;
