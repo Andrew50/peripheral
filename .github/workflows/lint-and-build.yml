@@ -502,7 +502,7 @@ jobs:
         # continue-on-error for this combined step will be based on the job's continue-on-error
 
       - name: Go Lint with golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: services/backend
