@@ -1,3 +1,4 @@
+// Package utils provides utility functions for data handling and manipulation
 package utils
 
 // NullString returns empty string if input is empty/zero value

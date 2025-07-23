@@ -1,3 +1,4 @@
+// Package data provides database connection and data access functionality
 package data
 
 import (

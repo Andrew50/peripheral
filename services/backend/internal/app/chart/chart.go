@@ -478,8 +478,8 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			}
 			if incompleteAgg.Open != 0 {
 				// Only add incomplete bar if it's within regular hours or daily+ timeframes
-				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
-				if (utils.IsTimestampRegularHours(incompleteTs)) ||
+				incompleteTS := time.Unix(int64(incompleteAgg.Timestamp), 0)
+				if (utils.IsTimestampRegularHours(incompleteTS)) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
 					barDataList = append(barDataList, incompleteAgg)
 				}

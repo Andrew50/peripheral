@@ -130,7 +130,11 @@ func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) (TickerE
 	if err != nil {
 		return TickerEventResult{}, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("error closing response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode == 404 {
 		// Ticker not found, return empty results

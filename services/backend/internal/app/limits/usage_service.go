@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/jackc/pgx/v4"
 )
 
 // UsageType represents different types of resource usage
@@ -100,7 +102,11 @@ func RecordUsage(conn *data.Conn, userID int, usageType UsageType, resourceConsu
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && err != pgx.ErrTxClosed {
+			fmt.Printf("error rolling back transaction: %v\n", err)
+		}
+	}()
 
 	// Get current plan name for logging
 	var planName sql.NullString

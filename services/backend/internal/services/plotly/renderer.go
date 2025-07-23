@@ -1,3 +1,4 @@
+// Package plotly provides functionality for rendering charts and plots
 package plotly
 
 import (
@@ -78,7 +79,7 @@ func New() (*Renderer, error) {
 }
 
 // RenderPlot renders a Plotly plot specification to a base64 PNG
-func (r *Renderer) RenderPlot(ctx context.Context, plotSpec interface{}, config *PlotConfig) (string, error) {
+func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *PlotConfig) (string, error) {
 	r.mu.RLock()
 	if r.closed {
 		r.mu.RUnlock()

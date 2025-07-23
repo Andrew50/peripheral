@@ -1,3 +1,4 @@
+// Package telegram provides functionality for sending notifications via Telegram
 package telegram
 
 import (
@@ -19,6 +20,7 @@ var (
 	isProdEnv                   bool
 )
 
+// InitTelegramUserNotificationBot initializes the Telegram bot for user notifications
 func InitTelegramUserNotificationBot() error {
 	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if env == "demo" || env == "prod" || env == "production" {
@@ -58,6 +60,7 @@ func InitTelegramUserNotificationBot() error {
 	return nil
 }
 
+// SendTelegramUserUsageMessage sends a usage-related message to users via Telegram
 func SendTelegramUserUsageMessage(msg string) error {
 	if !isProdEnv {
 		return nil
@@ -74,6 +77,7 @@ func SendTelegramUserUsageMessage(msg string) error {
 	return err
 }
 
+// SendTelegramBenTweetsMessage sends tweet information to the Telegram channel
 func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image string) error {
 	if !isProdEnv {
 		return nil

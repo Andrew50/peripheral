@@ -169,7 +169,11 @@ func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, u
 func waitForScreeningResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerScreeningResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			fmt.Printf("error closing pubsub: %v\n", err)
+		}
+	}()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -366,7 +370,11 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 func waitForCreateStrategyResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerCreateStrategyResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			fmt.Printf("error closing pubsub: %v\n", err)
+		}
+	}()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
