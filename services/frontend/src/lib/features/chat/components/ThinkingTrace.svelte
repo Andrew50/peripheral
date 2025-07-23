@@ -6,14 +6,8 @@
 	import { createChart } from 'lightweight-charts';
 	import type {
 		IChartApi,
-		ISeriesApi,
-		Time,
 		CandlestickData,
 		UTCTimestamp,
-		CandlestickSeriesOptions,
-		CandlestickStyleOptions,
-		SeriesOptionsCommon,
-		WhitespaceData,
 	} from 'lightweight-charts';
 
 
@@ -117,7 +111,11 @@
 	// Timeline display logic: show all items when dropdown is expanded, otherwise show only the last item
 	$: displayedTimelineItems = showTimelineDropdown 
 		? timeline 
-		: timeline.slice(-1); // Show only the last timeline item when collapsed
+		: (timeline.length >= 2 && 
+       timeline[timeline.length - 1].type === 'FunctionUpdate' && 
+       timeline[timeline.length - 2].type !== 'FunctionUpdate')
+	   ? timeline.slice(-2)
+	   : timeline.slice(-1);
 
 
 
@@ -276,34 +274,6 @@
 			}, 200);
 		}
 	}
-
-	// Reactive statement to trigger citation animations
-	$: if (browser && displayedTimelineItems.length > 0) {
-		displayedTimelineItems.forEach((event, index) => {
-			if (event.type === 'webSearchCitations' && event.data?.citations) {
-				const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
-				if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
-					startCitationCountAnimation(index, event.data.citations.length);
-				}
-			}
-		});
-	}
-
-
-
-	// Create charts for getDailySnapshot events
-	$: if (browser && displayedTimelineItems.length > 0) {
-		displayedTimelineItems.forEach((event, index) => {
-			if (event.type === 'getDailySnapshot' && event.data?.chartData) {
-				// Find the original timeline index for this event
-				const originalTimelineIndex = showTimelineDropdown 
-					? index 
-					: timeline.findIndex(item => item === event);
-				setTimeout(() => createThinkingTraceChart(originalTimelineIndex, event.data.chartData), 50);
-			}
-		});
-	}
-
 	// Function to create chart for getDailySnapshot
 	function createThinkingTraceChart(chartIndex: number, chartData: any[]) {
 		const container = document.getElementById(`thinkingtrace-chart-${chartIndex}`);
@@ -436,6 +406,32 @@
 		});
 		chartInstances.clear();
 	});
+	// Reactive statement to trigger citation animations
+	$: if (browser && displayedTimelineItems.length > 0) {
+	displayedTimelineItems.forEach((event, index) => {
+		if (event.type === 'webSearchCitations' && event.data?.citations) {
+			const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
+			if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
+				startCitationCountAnimation(index, event.data.citations.length);
+			}
+		}
+	});
+	}
+
+
+
+	// Create charts for getDailySnapshot events
+	$: if (browser && displayedTimelineItems.length > 0) {
+		displayedTimelineItems.forEach((event, index) => {
+			if (event.type === 'getDailySnapshot' && event.data?.chartData) {
+				// Find the original timeline index for this event
+				const originalTimelineIndex = showTimelineDropdown 
+					? index 
+					: timeline.findIndex(item => item === event);
+				setTimeout(() => createThinkingTraceChart(originalTimelineIndex, event.data.chartData), 50);
+			}
+		});
+	}
 </script>
 
 {#if isProcessingMessage}
@@ -818,7 +814,7 @@
 	}
 
 	.timeline-items {
-		margin-left: 0.5rem;
+		margin-left: 0.2rem;
 		margin-top: 0.5rem;
 	}
 
