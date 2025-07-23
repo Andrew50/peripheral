@@ -741,7 +741,7 @@
 										<div class="message user">
 											<div class="message-content">
 												<div class="chunk-text">
-													<!-- svelte-ignore svelte/no-at-html-tags -->
+													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 													{@html parseMarkdown(msg.text || '')}
 												</div>
 											</div>
@@ -751,7 +751,7 @@
 											{#each msg.contentChunks as chunk, idx}
 												{#if chunk.type === 'text'}
 													<div class="chunk-text">
-														<!-- svelte-ignore svelte/no-at-html-tags -->
+														<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 														{@html parseMarkdown(
 															typeof chunk.content === 'string'
 																? chunk.content
@@ -785,7 +785,7 @@
 															<div class="chunk-table-container">
 																{#if tableData.caption}
 																	<div class="table-caption">
-																		<!-- svelte-ignore svelte/no-at-html-tags -->
+																		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																		{@html parseMarkdown(tableData.caption)}
 																	</div>
 																{/if}
@@ -808,7 +808,7 @@
 																						class:desc={currentSort.columnIndex === colIndex &&
 																							currentSort.direction === 'desc'}
 																					>
-																						<!-- svelte-ignore svelte/no-at-html-tags -->
+																						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																						{@html parseMarkdown(
 																							typeof header === 'string' ? header : String(header)
 																						)}
@@ -831,7 +831,7 @@
 																					{#if Array.isArray(row)}
 																						{#each row as cell}
 																							<td
-																								><!-- svelte-ignore svelte/no-at-html-tags -->
+																								><!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																								{@html parseMarkdown(
 																									typeof cell === 'string' ? cell : String(cell)
 																								)}</td
@@ -957,7 +957,7 @@
 										</div>
 									{:else}
 										<div class="assistant-message">
-											<!-- svelte-ignore svelte/no-at-html-tags -->
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 											{@html parseMarkdown(msg.text || '')}
 										</div>
 									{/if}
