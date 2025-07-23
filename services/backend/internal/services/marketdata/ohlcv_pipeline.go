@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,8 +38,14 @@ type bulkLoadPool struct {
 
 func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, error) {
 	cfg := db.Config()
-	cfg.MinConns = int32(copyWorkerCount)
-	cfg.MaxConns = int32(copyWorkerCount)
+	// Ensure copyWorkerCount fits in int32 range to prevent overflow
+	workerCount := copyWorkerCount
+	if workerCount > 2147483647 {
+		log.Printf("workerCount is too large, setting to 2147483647")
+		workerCount = 2147483647
+	}
+	cfg.MinConns = int32(workerCount)
+	cfg.MaxConns = int32(workerCount)
 
 	// Apply tuning parameters to every connection via AfterConnect hook.
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -225,7 +232,9 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		gz, err := gzip.NewReader(resp.Body)
 		if err != nil {
-			resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				log.Printf("Warning: failed to close response body: %v", closeErr)
+			}
 			return 0, fmt.Errorf("gzip reader %s: %w", file, err)
 		}
 
@@ -238,7 +247,9 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 			headerLine, err := reader.ReadString('\n')
 			if err != nil {
 				gz.Close()
-				resp.Body.Close()
+				if closeErr := resp.Body.Close(); closeErr != nil {
+					log.Printf("Warning: failed to close response body: %v", closeErr)
+				}
 				return 0, fmt.Errorf("read header: %w", err)
 			}
 			mapped := headerLine
@@ -251,7 +262,9 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 		} else {
 			if _, err = reader.ReadString('\n'); err != nil {
 				gz.Close()
-				resp.Body.Close()
+				if closeErr := resp.Body.Close(); closeErr != nil {
+					log.Printf("Warning: failed to close response body: %v", closeErr)
+				}
 				return 0, fmt.Errorf("skip header: %w", err)
 			}
 			b.current = reader
@@ -780,7 +793,9 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		return err
 	}
 	defer func() {
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Warning: failed to close response body: %v", err)
+		}
 		if cancel != nil {
 			cancel()
 		}

@@ -641,11 +641,11 @@ jobs:
           echo "🔍 Running ESLint..."
           npx eslint 'src/**/*.{js,ts,svelte}'
 
-      #- name: 🎨 Run Stylelint with camelCase enforcement
-        #working-directory: services/frontend
-        #run: |
-          #echo "🎨 Running Stylelint with camelCase enforcement..."
-          #npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
+      - name: 🎨 Run Stylelint
+        working-directory: services/frontend
+        run: |
+          echo "🎨 Running Stylelint..."
+          npx stylelint 'src/**/*.{css,svelte}' --config .stylelintrc.json --no-fix
 
       - name: Run frontend tests
         working-directory: services/frontend

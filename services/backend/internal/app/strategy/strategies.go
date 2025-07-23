@@ -563,11 +563,13 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 			"action":     "enabled",
 		}); err != nil {
 			// If we can't record usage, rollback the alert activation
-			conn.DB.Exec(context.Background(), `
+			if _, rollbackErr := conn.DB.Exec(context.Background(), `
 				UPDATE strategies 
 				SET isalertactive = false 
 				WHERE strategyid = $1 AND userid = $2`,
-				args.StrategyID, userID)
+				args.StrategyID, userID); rollbackErr != nil {
+				log.Printf("Warning: failed to rollback strategy alert activation: %v", rollbackErr)
+			}
 			return nil, fmt.Errorf("recording strategy alert usage: %w", err)
 		}
 	} else if !args.Active && currentActive {

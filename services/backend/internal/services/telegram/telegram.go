@@ -19,6 +19,11 @@ var (
 	isProdEnv                   bool
 )
 
+const (
+	TELEGRAM_USER_NOTIFICATION_BOT_TOKEN = "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
+	TELEGRAM_BEN_TWEETS_BOT_TOKEN        = "8112187727:AAG9JxDFQlUfrRt8tyjR5yyY_8Wd9o9ehZU"
+)
+
 func InitTelegramUserNotificationBot() error {
 	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if env == "demo" || env == "prod" || env == "production" {
@@ -28,7 +33,7 @@ func InitTelegramUserNotificationBot() error {
 		return nil
 	}
 	isProdEnv = true
-	userNotificationBotToken := "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
+	userNotificationBotToken := TELEGRAM_USER_NOTIFICATION_BOT_TOKEN
 	fmt.Println("Initializing Telegram bot with token:", userNotificationBotToken)
 	chatID = -1002517629348
 	var err error
@@ -39,7 +44,7 @@ func InitTelegramUserNotificationBot() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 	}
-	benTweetsBotToken := "8112187727:AAG9JxDFQlUfrRt8tyjR5yyY_8Wd9o9ehZU"
+	benTweetsBotToken := TELEGRAM_BEN_TWEETS_BOT_TOKEN
 	chatID = -4940706341
 	telegramBenTweetsBot, err = telebot.NewBot(telebot.Settings{
 		Token:  benTweetsBotToken,

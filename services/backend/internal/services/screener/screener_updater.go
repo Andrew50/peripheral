@@ -315,7 +315,9 @@ func refreshStaticRefs1m(conn *data.Conn) {
 
 	// Apply vacuum optimizations (ignore errors if already set)
 	for _, opt := range vacuumOptimizations {
-		conn.DB.Exec(ctx, opt)
+		if _, err := conn.DB.Exec(ctx, opt); err != nil {
+			log.Printf("Warning: vacuum optimization failed: %v", err)
+		}
 	}
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefs1mQuery)
@@ -353,7 +355,9 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 
 	// Apply vacuum optimizations (ignore errors if already set)
 	for _, opt := range vacuumOptimizations {
-		conn.DB.Exec(ctx, opt)
+		if _, err := conn.DB.Exec(ctx, opt); err != nil {
+			log.Printf("Warning: vacuum optimization failed: %v", err)
+		}
 	}
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefsQuery)

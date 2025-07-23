@@ -196,10 +196,12 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Received test webhook event")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":  "success",
 				"message": "Test webhook received",
-			})
+			}); err != nil {
+				log.Printf("Warning: failed to encode JSON response: %v", err)
+			}
 			return
 		}
 
@@ -219,10 +221,12 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "success",
 			"message": "success",
-		})
+		}); err != nil {
+			log.Printf("Warning: failed to encode JSON response: %v", err)
+		}
 		// Queue the extracted data for background processing
 		err = processTwitterWebhookEvent(conn, payload.RuleTag, extractedTweets)
 		if err != nil {
@@ -240,7 +244,9 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 		if ruleTag == "Main Twitter" {
 			processTweet(conn, tweet)
 		} else if ruleTag == "Reply Webhook" {
-			twitter.HandleTweetForReply(conn, tweet)
+			if err := twitter.HandleTweetForReply(conn, tweet); err != nil {
+				log.Printf("Warning: failed to handle tweet for reply: %v", err)
+			}
 		}
 	}
 	return nil

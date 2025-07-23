@@ -40,6 +40,11 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 
 	log.Printf("📊 Creating performance analysis log at: %s", logFilePath)
 
+	// Validate file path to prevent directory traversal
+	if strings.Contains(logFilePath, "..") {
+		return fmt.Errorf("invalid log file path: path traversal detected")
+	}
+
 	logFile, err := os.Create(logFilePath)
 	if err != nil {
 		log.Printf("❌ Failed to create analysis log file at %s: %v", logFilePath, err)
