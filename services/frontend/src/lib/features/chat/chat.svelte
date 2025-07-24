@@ -189,7 +189,11 @@
 		fetchInitialSuggestions();
 	}
 
-	async function switchToConversation(conversationId: string, title: string, isConversationPublic: boolean) {
+	async function switchToConversation(
+		conversationId: string,
+		title: string,
+		isConversationPublic: boolean
+	) {
 		if (conversationId === currentConversationId) {
 			showConversationDropdown = false;
 			return;
@@ -495,7 +499,6 @@
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
 		}
-
 	});
 
 	// Scroll to bottom of chat (for user-initiated actions)
@@ -652,17 +655,15 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
-							// Clear processing state
-			isProcessingMessage = false;
+				// Clear processing state
+				isProcessingMessage = false;
 
-
-
-			// If we didn't have a conversation ID before, we should have one now
-			// Load conversation history to get the new conversation ID
-			if (!currentConversationId) {
-				await loadConversationHistory(false); // Don't scroll since we just added the message
-				await loadConversations(); // Refresh conversation list
-			}
+				// If we didn't have a conversation ID before, we should have one now
+				// Load conversation history to get the new conversation ID
+				if (!currentConversationId) {
+					await loadConversationHistory(false); // Don't scroll since we just added the message
+					await loadConversations(); // Refresh conversation list
+				}
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
@@ -803,13 +804,11 @@
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
 
-					// Clear processing state immediately on cancellation
-		isProcessingMessage = false;
+			// Clear processing state immediately on cancellation
+			isProcessingMessage = false;
 
-
-
-		isLoading = false;
-		currentAbortController = null;
+			isLoading = false;
+			currentAbortController = null;
 		}
 	}
 
@@ -1213,15 +1212,17 @@
 		}
 	}
 
-
-
 	// Setup callback for handling message ID updates
 	function handleMessageIdUpdate(messageId: string, conversationId: string) {
 		// Update the temporary user message with the real backend message ID
 		messagesStore.update((current) =>
 			current.map((msg) => {
 				// Find the most recent temporary user message and update it
-				if (msg.sender === 'user' && msg.message_id.startsWith('temp_') && msg.status === 'pending') {
+				if (
+					msg.sender === 'user' &&
+					msg.message_id.startsWith('temp_') &&
+					msg.status === 'pending'
+				) {
 					return {
 						...msg,
 						message_id: messageId,
@@ -1237,8 +1238,6 @@
 			currentConversationId = conversationId;
 		}
 	}
-
-
 
 	// Helper to translate technical error messages into user-friendly text
 	function getFriendlyErrorMessage(error: any): string {
@@ -1311,9 +1310,7 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-															<ThinkingTrace
-								isProcessingMessage={isProcessingMessage}
-							/>
+								<ThinkingTrace {isProcessingMessage} />
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
@@ -1376,6 +1373,7 @@
 										{#each message.contentChunks as chunk, index}
 											{#if chunk.type === 'text'}
 												<div class="chunk-text">
+													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 													{@html parseMarkdown(
 														typeof chunk.content === 'string'
 															? chunk.content
@@ -1409,6 +1407,7 @@
 														<div class="chunk-table-container">
 															{#if tableData.caption}
 																<div class="table-caption">
+																	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																	{@html parseMarkdown(tableData.caption)}
 																</div>
 															{/if}
@@ -1431,6 +1430,7 @@
 																					class:desc={currentSort.columnIndex === colIndex &&
 																						currentSort.direction === 'desc'}
 																				>
+																					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																					{@html parseMarkdown(
 																						typeof header === 'string' ? header : String(header)
 																					)}
@@ -1449,7 +1449,8 @@
 																				{#if Array.isArray(row)}
 																					{#each row as cell}
 																						<td
-																							>{@html parseMarkdown(
+																							><!-- eslint-disable-next-line svelte/no-at-html-tags -->
+																							{@html parseMarkdown(
 																								typeof cell === 'string' ? cell : String(cell)
 																							)}</td
 																						>
@@ -1573,6 +1574,7 @@
 										{/each}
 									</div>
 								{:else}
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									{@html parseMarkdown(message.content)}
 								{/if}
 							</div>

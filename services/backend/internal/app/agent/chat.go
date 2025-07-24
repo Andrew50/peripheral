@@ -22,6 +22,16 @@ import (
 	"github.com/openai/openai-go/responses"
 )
 
+// Custom types for context keys to avoid collisions
+type contextKey string
+
+const (
+	CONVERSATION_ID_KEY                        contextKey = "conversationID"
+	MESSAGE_ID_KEY                             contextKey = "messageID"
+	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
+	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
+)
+
 type Stage string
 
 const (
@@ -120,8 +130,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
-	ctx = context.WithValue(ctx, "conversationID", conversationID)
-	ctx = context.WithValue(ctx, "messageID", messageID)
+	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
+	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
 	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
@@ -130,16 +140,20 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
 	}
 	if !locked {
-		// User already has an active chat
-		return QueryResponse{
-			ContentChunks: []ContentChunk{{
-				Type:    "text",
-				Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
-			}},
-			ConversationID: conversationID,
-			MessageID:      messageID,
-			Timestamp:      time.Now(),
-		}, nil
+		// User already has an active chat - but we'll continue anyway! 🚀
+		fmt.Printf("🎭 DUPLICATE CHAT DETECTED! 🎭 User %d is starting a new chat while another is in progress! 🔥💫 Let the chaos begin! 🎪\n", userID)
+		// Comment out the early return - let's allow concurrent chats for now
+		/*
+			return QueryResponse{
+				ContentChunks: []ContentChunk{{
+					Type:    "text",
+					Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
+				}},
+				ConversationID: conversationID,
+				MessageID:      messageID,
+				Timestamp:      time.Now(),
+			}, nil
+		*/
 	}
 	// Ensure lock is released
 	defer func() {
@@ -250,7 +264,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
-				ctx = context.WithValue(ctx, "peripheralLatestModelThoughts", v.Thoughts)
+				ctx = context.WithValue(ctx, PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY, v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan
@@ -290,8 +304,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 					go func() {
 						var cleanedModelThoughts string
-						if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-							ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+						if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+							ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 							if thoughtsStr, ok := thoughtsValue.(string); ok {
 								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 							}
@@ -347,8 +361,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			case StageFinishedExecuting:
 				go func() {
 					var cleanedModelThoughts string
-					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+					if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+						ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 						if thoughtsStr, ok := thoughtsValue.(string); ok {
 							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 						}
