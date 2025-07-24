@@ -49,7 +49,6 @@
 </script>
 
 {#if visible}
-	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 	<div
 		class="auth-modal-overlay"
 		on:click={handleBackdropClick}

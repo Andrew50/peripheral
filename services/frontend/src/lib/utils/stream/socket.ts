@@ -1,8 +1,7 @@
 // socket.ts
-import { get, writable, type Writable } from 'svelte/store';
-import { handleTimestampUpdate } from '$lib/utils/stores/stores';
-import type { TradeData, QuoteData, CloseData, Alert, Watchlist, Instance, Strategy } from '$lib/utils/types/types';
-import type { HorizontalLine } from '$lib/utils/stores/stores';
+import { get, writable } from 'svelte/store';
+import { streamInfo, handleTimestampUpdate } from '$lib/utils/stores/stores';
+import type { StreamInfo, TradeData, QuoteData, CloseData } from '$lib/utils/types/types';
 import { base_url } from '$lib/utils/helpers/backend';
 import { browser } from '$app/environment';
 import { handleAlert } from './alert';
@@ -19,7 +18,7 @@ export type WatchlistUpdate = {
 		watchlistItemId: number;
 		securityId: number;
 		ticker: string;
-		[key: string]: unknown;
+		[key: string]: any;
 	};
 	itemId?: number;
 };
@@ -59,7 +58,7 @@ export type StrategyUpdate = {
 		strategyId: number;
 		name: string;
 		activeScreen?: boolean;
-		[key: string]: unknown;
+		[key: string]: any;
 	};
 };
 
@@ -67,7 +66,7 @@ export type AgentStatusUpdate = {
 	messageType: 'AgentStatusUpdate';
 	headline: string;
 	type: string; // e.g., 'FunctionUpdate', 'WebSearchQuery'
-	data: unknown; // The actual data - string for FunctionUpdate, object for WebSearchQuery
+	data: any; // The actual data - string for FunctionUpdate, object for WebSearchQuery
 };
 
 export type TitleUpdate = {
@@ -80,25 +79,13 @@ export type ChatResponse = {
 	type: 'chat_response';
 	request_id: string;
 	success: boolean;
-	data?: unknown;
+	data?: any;
 	error?: string;
 };
 
-
-interface StoreModule {
-	watchlists: Writable<Watchlist[]>;
-	currentWatchlistId: Writable<number | undefined>;
-	currentWatchlistItems: Writable<Instance[]>;
-	flagWatchlist: Writable<Instance[]>;
-	flagWatchlistId: number | undefined;
-	horizontalLines: Writable<HorizontalLine[]>;
-	activeAlerts: Writable<Alert[] | undefined>;
-	inactiveAlerts: Writable<Alert[] | undefined>;
-	strategies: Writable<Strategy[]>;
-}
-
+// NEW: Import stores for dynamic updates
 let storesInitialized = false;
-let storeModule: StoreModule | null = null;
+let storeModule: any = null;
 let initializationPromise: Promise<void> | null = null;
 
 // Initialize store references when needed - improved with retry logic
@@ -120,7 +107,7 @@ async function initializeStoreReferences(): Promise<void> {
 			storeModule = await import('$lib/utils/stores/stores');
 
 			// Verify that essential stores are available
-			if (!storeModule?.watchlists || !storeModule?.currentWatchlistId) {
+			if (!storeModule.watchlists || !storeModule.currentWatchlistId) {
 				throw new Error('Essential watchlist stores not available');
 			}
 
@@ -165,22 +152,14 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to current watchlist items if it's the active watchlist
 					const currentWatchlistId = get(storeModule.currentWatchlistId);
 					if (update.watchlistId === currentWatchlistId) {
-						storeModule.currentWatchlistItems.update((items: Instance[]) => {
+						storeModule.currentWatchlistItems.update((items: any[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
 							// Check if item already exists to avoid duplicates
-							if (!currentItems.find((item: Instance) =>
+							if (!currentItems.find((item: any) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
-								// Convert WatchlistItem to Instance format
-								const instanceItem: Instance = {
-									securityId: update.item!.securityId,
-									ticker: update.item!.ticker,
-									timestamp: 0,
-									timeframe: '',
-									extendedHours: false
-								};
-								return [...currentItems, instanceItem];
+								return [...currentItems, update.item!];
 							}
 							return currentItems;
 						});
@@ -189,21 +168,13 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Add to flag watchlist if applicable
 					const flagWatchlistId = storeModule.flagWatchlistId;
 					if (update.watchlistId === flagWatchlistId) {
-						storeModule.flagWatchlist.update((items: Instance[]) => {
+						storeModule.flagWatchlist.update((items: any[]) => {
 							const currentItems = Array.isArray(items) ? items : [];
-							if (!currentItems.find((item: Instance) =>
+							if (!currentItems.find((item: any) =>
 								item.securityId === update.item!.securityId ||
 								item.ticker === update.item!.ticker
 							)) {
-								// Convert WatchlistItem to Instance format
-								const instanceItem: Instance = {
-									securityId: update.item!.securityId,
-									ticker: update.item!.ticker,
-									timestamp: 0,
-									timeframe: '',
-									extendedHours: false
-								};
-								return [...currentItems, instanceItem];
+								return [...currentItems, update.item!];
 							}
 							return currentItems;
 						});
@@ -214,19 +185,13 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 			case 'remove':
 				if (update.itemId) {
 					// Remove from current watchlist items
-					storeModule.currentWatchlistItems.update((items: Instance[]) =>
-						Array.isArray(items) ? items.filter((item: Instance) =>
-							// Find by securityId since Instance doesn't have watchlistItemId
-							item.securityId !== update.itemId
-						) : []
+					storeModule.currentWatchlistItems.update((items: any[]) =>
+						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
 					);
 
 					// Remove from flag watchlist
-					storeModule.flagWatchlist.update((items: Instance[]) =>
-						Array.isArray(items) ? items.filter((item: Instance) =>
-							// Find by securityId since Instance doesn't have watchlistItemId
-							item.securityId !== update.itemId
-						) : []
+					storeModule.flagWatchlist.update((items: any[]) =>
+						Array.isArray(items) ? items.filter((item: any) => item.watchlistItemId !== update.itemId) : []
 					);
 				}
 				break;
@@ -236,14 +201,14 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Check if watchlist already exists to prevent duplicates
 					const currentWatchlists = get(storeModule.watchlists);
 					const exists = Array.isArray(currentWatchlists) &&
-						currentWatchlists.find((list: Watchlist) => list.watchlistId === update.watchlistId);
+						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
 
 					if (!exists) {
-						storeModule.watchlists.update((lists: Watchlist[]) => {
+						storeModule.watchlists.update((lists: any[]) => {
 							const currentLists = Array.isArray(lists) ? lists : [];
-							const newWatchlist: Watchlist = {
-								watchlistId: update.watchlistId!,
-								watchlistName: update.watchlistName!
+							const newWatchlist = {
+								watchlistId: update.watchlistId,
+								watchlistName: update.watchlistName
 							};
 							return [...currentLists, newWatchlist];
 						});
@@ -267,11 +232,11 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 					// Check if watchlist exists before trying to delete
 					const currentWatchlists = get(storeModule.watchlists);
 					const exists = Array.isArray(currentWatchlists) &&
-						currentWatchlists.find((list: Watchlist) => list.watchlistId === update.watchlistId);
+						currentWatchlists.find((list: any) => list.watchlistId === update.watchlistId);
 
 					if (exists) {
-						storeModule.watchlists.update((lists: Watchlist[]) =>
-							Array.isArray(lists) ? lists.filter((list: Watchlist) => list.watchlistId !== update.watchlistId) : []
+						storeModule.watchlists.update((lists: any[]) =>
+							Array.isArray(lists) ? lists.filter((list: any) => list.watchlistId !== update.watchlistId) : []
 						);
 
 						// NEW: Also remove from visibleWatchlistIds
@@ -308,8 +273,8 @@ async function handleWatchlistUpdate(update: WatchlistUpdate) {
 			case 'update':
 				// Handle watchlist name updates
 				if (update.watchlistName && update.watchlistId) {
-					storeModule.watchlists.update((lists: Watchlist[]) =>
-						Array.isArray(lists) ? lists.map((list: Watchlist) =>
+					storeModule.watchlists.update((lists: any[]) =>
+						Array.isArray(lists) ? lists.map((list: any) =>
 							list.watchlistId === update.watchlistId
 								? { ...list, watchlistName: update.watchlistName! }
 								: list
@@ -337,13 +302,13 @@ function handleHorizontalLineUpdate(update: HorizontalLineUpdate) {
 
 		// Import horizontalLines store dynamically to avoid circular dependencies
 		import('$lib/utils/stores/stores').then(({ horizontalLines }) => {
-			horizontalLines.update((lines: HorizontalLine[]) => {
+			horizontalLines.update((lines) => {
 				const currentLines = Array.isArray(lines) ? lines : [];
 
 				switch (update.action) {
 					case 'add':
 						// Add new line if it doesn't already exist
-						if (!currentLines.find((line: HorizontalLine) => line.id === update.line.id)) {
+						if (!currentLines.find(line => line.id === update.line.id)) {
 							return [...currentLines, {
 								id: update.line.id,
 								securityId: update.line.securityId,
@@ -356,11 +321,11 @@ function handleHorizontalLineUpdate(update: HorizontalLineUpdate) {
 
 					case 'remove':
 						// Remove line by ID
-						return currentLines.filter((line: HorizontalLine) => line.id !== update.line.id);
+						return currentLines.filter(line => line.id !== update.line.id);
 
 					case 'update':
 						// Update existing line
-						return currentLines.map((line: HorizontalLine) =>
+						return currentLines.map(line =>
 							line.id === update.line.id
 								? {
 									...line,
@@ -413,24 +378,24 @@ async function handleAlertUpdate(update: AlertUpdate) {
 		console.log('🔔 Processing alert update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.activeAlerts.update((alerts: Alert[] | undefined) => {
+				storeModule.activeAlerts.update((alerts: any[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
-					return [...currentAlerts, update.alert as Alert];
+					return [...currentAlerts, update.alert];
 				});
 				break;
 
 			case 'remove':
-				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
-					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: Alert[] | undefined) =>
-					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
+				storeModule.inactiveAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
-					Array.isArray(alerts) ? alerts.map((alert: Alert) =>
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.map((alert: any) =>
 						alert.alertId === update.alert.alertId ? { ...alert, ...update.alert } : alert
 					) : []
 				);
@@ -438,12 +403,12 @@ async function handleAlertUpdate(update: AlertUpdate) {
 
 			case 'trigger':
 				// Move from active to inactive alerts
-				storeModule.activeAlerts.update((alerts: Alert[] | undefined) =>
-					Array.isArray(alerts) ? alerts.filter((alert: Alert) => alert.alertId !== update.alert.alertId) : []
+				storeModule.activeAlerts.update((alerts: any[]) =>
+					Array.isArray(alerts) ? alerts.filter((alert: any) => alert.alertId !== update.alert.alertId) : []
 				);
-				storeModule.inactiveAlerts.update((alerts: Alert[] | undefined) => {
+				storeModule.inactiveAlerts.update((alerts: any[]) => {
 					const currentAlerts = Array.isArray(alerts) ? alerts : [];
-					return [...currentAlerts, { ...update.alert, active: false } as Alert];
+					return [...currentAlerts, { ...update.alert, active: false }];
 				});
 				break;
 		}
@@ -472,38 +437,22 @@ async function handleStrategyUpdate(update: StrategyUpdate) {
 		console.log('📊 Processing strategy update:', update.action, update);
 		switch (update.action) {
 			case 'add':
-				storeModule.strategies.update((strategies: Strategy[]) => {
+				storeModule.strategies.update((strategies: any[]) => {
 					const currentStrategies = Array.isArray(strategies) ? strategies : [];
-					// Convert SocketStrategy to Strategy format
-					const newStrategy: Strategy = {
-						strategyId: update.strategy.strategyId,
-						userId: 0, // Will be set by backend
-						name: update.strategy.name,
-						criteria: {
-							timeframe: '',
-							bars: 0,
-							threshold: 0,
-							dolvol: 0,
-							adr: 0,
-							mcap: 0
-						}
-					};
-					return [...currentStrategies, newStrategy];
+					return [...currentStrategies, { ...update.strategy, activeScreen: true }];
 				});
 				break;
 
 			case 'remove':
-				storeModule.strategies.update((strategies: Strategy[]) =>
-					Array.isArray(strategies) ? strategies.filter((strat: Strategy) => strat.strategyId !== update.strategy.strategyId) : []
+				storeModule.strategies.update((strategies: any[]) =>
+					Array.isArray(strategies) ? strategies.filter((strat: any) => strat.strategyId !== update.strategy.strategyId) : []
 				);
 				break;
 
 			case 'update':
-				storeModule.strategies.update((strategies: Strategy[]) =>
-					Array.isArray(strategies) ? strategies.map((strat: Strategy) =>
-						strat.strategyId === update.strategy.strategyId
-							? { ...strat, name: update.strategy.name }
-							: strat
+				storeModule.strategies.update((strategies: any[]) =>
+					Array.isArray(strategies) ? strategies.map((strat: any) =>
+						strat.strategyId === update.strategy.strategyId ? { ...strat, ...update.strategy } : strat
 					) : []
 				);
 				break;
@@ -530,7 +479,7 @@ export function setMessageIdUpdateCallback(callback: ((messageId: string, conver
 const pendingChatRequests = new Map<
 	string,
 	{
-		resolve: (value: unknown) => void;
+		resolve: (value: any) => void;
 		reject: (error: Error) => void;
 	}
 >();
@@ -538,13 +487,13 @@ const pendingChatRequests = new Map<
 // Store for single pending chat request while disconnected
 let pendingChatRequest: {
 	requestId: string;
-	resolve: (value: unknown) => void;
+	resolve: (value: any) => void;
 	reject: (error: Error) => void;
 	query: string;
-	context: unknown[];
-	activeChartContext: unknown;
+	context: any[];
+	activeChartContext: any;
 	conversationId: string;
-	timeoutId: NodeJS.Timeout;
+	timeoutId: any;
 } | null = null;
 
 // Chat request timeout duration (30 seconds)
@@ -612,7 +561,7 @@ export function connect() {
 		isConnecting = false;
 
 		// Reject all pending chat requests
-		pendingChatRequests.forEach((request) => {
+		pendingChatRequests.forEach((request, requestId) => {
 			request.reject(new Error('WebSocket connection closed'));
 		});
 		pendingChatRequests.clear();
@@ -687,7 +636,7 @@ export function connect() {
 					pendingRequest.resolve(chatResponse.data);
 				} else {
 					// Create error with response data so frontend can extract messageID and conversationID
-					const error = new Error(chatResponse.error || 'Chat request failed') as Error & { response?: unknown };
+					const error = new Error(chatResponse.error || 'Chat request failed') as any;
 					error.response = chatResponse.data; // Attach response data to error
 					pendingRequest.reject(error);
 				}
@@ -736,20 +685,14 @@ export function connect() {
 			} else {
 				// Also feed data to the new streamHub system
 				if (
-					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended'))
+					(channelName.includes('-slow-regular') || channelName.includes('-slow-extended')) 
 				) {
 					if (data.price === undefined) {
 						return;
 					}
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						const tickData: {
-							securityid: number;
-							price: number;
-							data: unknown;
-							shouldUpdatePrice: boolean;
-							isExtended?: boolean;
-						} = {
+						const tickData: any = {
 							securityid: securityId,
 							price: data.price,
 							data: data,
@@ -782,12 +725,7 @@ export function connect() {
 				) {
 					const securityId = parseInt(channelName.split('-')[0]);
 					if (!isNaN(securityId)) {
-						const tickData: {
-							securityid: number;
-							data: unknown;
-							prevClose?: number;
-							extendedClose?: number;
-						} = {
+						const tickData: any = {
 							securityid: securityId,
 							data: data
 						};
@@ -815,7 +753,7 @@ export function connect() {
 	});
 }
 
-export function disconnect() {
+function disconnect() {
 	shouldReconnect = false;
 	connectionStatus.set('disconnected');
 
@@ -888,14 +826,15 @@ export function unsubscribeSECFilings() {
 // Send chat query via WebSocket
 export function sendChatQuery(
 	query: string,
-	context: unknown[] = [],
-	activeChartContext: unknown = null,
+	context: any[] = [],
+	activeChartContext: any = null,
 	conversationId: string = ''
-): { promise: Promise<unknown>; cancel: () => void } {
-	// Generate unique request ID
-	const requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+): { promise: Promise<any>; cancel: () => void } {
+	let requestId: string;
 
 	const promise = new Promise((resolve, reject) => {
+		// Generate unique request ID
+		requestId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 		if (socket?.readyState === WebSocket.OPEN) {
 			// Connection is open, send immediately
@@ -944,7 +883,9 @@ export function sendChatQuery(
 	});
 
 	const cancel = () => {
-		cancelChatQuery(requestId);
+		if (requestId) {
+			cancelChatQuery(requestId);
+		}
 	};
 
 	return { promise, cancel };
@@ -954,10 +895,10 @@ export function sendChatQuery(
 function sendChatQueryNow(
 	requestId: string,
 	query: string,
-	context: unknown[],
-	activeChartContext: unknown,
+	context: any[],
+	activeChartContext: any,
 	conversationId: string,
-	resolve: (value: unknown) => void,
+	resolve: (value: any) => void,
 	reject: (error: Error) => void
 ) {
 	// Store the promise resolvers

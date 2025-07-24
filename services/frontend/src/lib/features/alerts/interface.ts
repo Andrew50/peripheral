@@ -1,6 +1,7 @@
 import type { Alert, AlertLog, Instance } from '$lib/utils/types/types';
+import { writable } from 'svelte/store';
 import { privateRequest } from '$lib/utils/helpers/backend';
-import { activeAlerts } from '$lib/utils/stores/stores';
+import { activeAlerts, inactiveAlerts } from '$lib/utils/stores/stores';
 
 export type { Alert, AlertLog };
 

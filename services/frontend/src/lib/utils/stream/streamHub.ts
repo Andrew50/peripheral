@@ -1,29 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
 
 type ColumnType = 'price' | 'changePct' | 'marketCap' | 'prevClose' | 'chgExt' | 'change';
-
-interface StoreValue {
-	price?: number;
-	formatted?: string;
-	change?: number;
-	pct?: number;
-	changePct?: number;
-	marketCap?: number;
-	prevClose?: number;
-	chgExt?: number;
-}
-
-interface TickData {
-	securityid: number;
-	price?: number;
-	prevClose?: number;
-	marketCap?: number;
-	isExtended?: boolean;
-	extendedClose?: number;
-	chgExt?: number;
-}
-
-const stores = new Map<string, Writable<StoreValue>>();
+const stores = new Map<string, Writable<any>>();
 
 // Cache for calculating changes - separate for regular and extended
 const priceCache = new Map<number, number>();
@@ -81,10 +59,10 @@ export function register(securityid: number) {
 
 let dirty = false;
 // Separate data structures for regular and extended hours
-const latestRegular = new Map<number, TickData>();
-const latestExtended = new Map<number, TickData>();
+const latestRegular = new Map<number, any>();
+const latestExtended = new Map<number, any>();
 
-export function enqueueTick(t: TickData) {
+export function enqueueTick(t: any) {
 	const securityid = t.securityid;
 
 	// Route to appropriate data structure based on data type
@@ -119,7 +97,7 @@ function flush() {
 	latestExtended.clear();
 }
 
-function processRegularHoursData(t: TickData) {
+function processRegularHoursData(t: any) {
 	const securityid = t.securityid;
 	// Update regular price cache and store
 	if (t.price !== undefined) {
@@ -159,7 +137,7 @@ function processRegularHoursData(t: TickData) {
 	}
 }
 
-function processExtendedHoursData(t: TickData) {
+function processExtendedHoursData(t: any) {
 	const securityid = t.securityid;
 
 	// Update extended price cache

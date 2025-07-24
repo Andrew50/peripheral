@@ -1,5 +1,3 @@
-// Package account provides functionality for user account management,
-// including trade statistics, portfolio tracking, and account settings.
 package account
 
 import (

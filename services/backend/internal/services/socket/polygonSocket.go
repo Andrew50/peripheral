@@ -176,27 +176,26 @@ func broadcastTimestamp() {
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 	// Start the batched stale-ticker flusher (only once per process)
-	fmt.Println("Starting stale flusher")
 	staleFlusherOnce.Do(func() { startStaleFlusher(conn) })
 
 	err := polygonWS.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
-		log.Printf("❌ Error subscribing to StocksQuotes: %v", err)
+		//log.Println("niv0: ", err)
 		return
 	}
 	err = polygonWS.Subscribe(polygonws.StocksTrades)
 	if err != nil {
-		log.Printf("❌ Error subscribing to StocksTrades: %v", err)
+		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
 	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
-		log.Printf("❌ Error subscribing to StocksMinAggs: %v", err)
+		//log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
 	err = polygonWS.Subscribe(polygonws.StocksSecAggs)
 	if err != nil {
-		log.Printf("❌ Error subscribing to StocksSecAggs: %v", err)
+		log.Println("Error subscribing to Polygon WebSocket: ", err)
 		return
 	}
 
@@ -223,7 +222,7 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				symbol = msg.Symbol
 				timestamp = msg.Timestamp
 			default:
-				log.Printf("⚠️ Unknown message type received: %T", msg)
+				//j//log.Println("Unknown message type received")
 				continue
 			}
 
@@ -245,18 +244,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			case models.EquityAgg:
 				// 1-second aggregate has duration 1 000 ms; skip others (e.g. 1-minute)
 				if msg.EndTimestamp-msg.StartTimestamp == 1000 {
-
-					if ohlcvBuffer != nil {
-						ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
-					} else {
-						log.Printf("⚠️ ohlcvBuffer is nil, cannot add bar for %s", symbol)
-					}
-
+					ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
 					// Mark ticker as stale for screener refresh
 					flagTickerStale(symbol)
-				} else {
-					//log.Printf("📊 Skipping EquityAgg for %s (duration=%dms, need 1000ms)",
-					//msg.Symbol, msg.EndTimestamp-msg.StartTimestamp)
 				}
 
 				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
@@ -385,17 +375,13 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 */
 
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
-func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
-	log.Printf("🚀 StartPolygonWS called")
+func StartPolygonWS(conn *data.Conn, _useAlerts bool, enableRealtime bool) error {
 	if err := initTickerToSecurityIDMap(conn); err != nil {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
 
-	// Initialize OHLCV buffer with realtime enabled
-	log.Printf("📊 About to initialize OHLCV buffer...")
-	if err := InitOHLCVBuffer(conn); err != nil {
-		return fmt.Errorf("init OHLCV buffer: %w", err)
-	}
+	// Initialize OHLCV buffer with realtime flag
+	InitOHLCVBuffer(conn, enableRealtime)
 
 	var err error
 	polygonWSConn, err = polygonws.New(polygonws.Config{
@@ -411,7 +397,6 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 		return fmt.Errorf("error connecting to polygonWS: %v", err)
 	}
 
-	log.Printf("✅ Polygon WebSocket connected, starting data stream...")
 	go StreamPolygonDataToRedis(conn, polygonWSConn)
 	return nil
 }

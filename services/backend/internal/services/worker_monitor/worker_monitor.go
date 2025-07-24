@@ -477,13 +477,11 @@ func (wm *WorkerMonitor) requeueTask(ctx context.Context, taskID string, reason 
 	wm.conn.Cache.Del(ctx, assignmentKey)
 
 	// Update task status to queued for retry
-	if err := wm.updateTaskStatus(ctx, taskID, "queued", map[string]interface{}{
+	wm.updateTaskStatus(ctx, taskID, "queued", map[string]interface{}{
 		"retry_count":  retryCount,
 		"retry_reason": reason,
 		"requeued_at":  time.Now().Format(time.RFC3339),
-	}); err != nil {
-		log.Printf("Warning: failed to update task status for retry: %v", err)
-	}
+	})
 
 	return nil
 }

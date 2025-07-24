@@ -171,11 +171,7 @@ func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, u
 func waitForScreeningResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerScreeningResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer func() {
-		if err := pubsub.Close(); err != nil {
-			fmt.Printf("error closing pubsub: %v\n", err)
-		}
-	}()
+	defer pubsub.Close()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -372,11 +368,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 func waitForCreateStrategyResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerCreateStrategyResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer func() {
-		if err := pubsub.Close(); err != nil {
-			fmt.Printf("error closing pubsub: %v\n", err)
-		}
-	}()
+	defer pubsub.Close()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -570,7 +562,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 			"action":     "enabled",
 		}); err != nil {
 			// If we can't record usage, rollback the alert activation
-			if _, rollbackErr := conn.DB.Exec(context.Background(), `
+			conn.DB.Exec(context.Background(), `
 				UPDATE strategies 
 				SET isalertactive = false, alert_threshold = $1, alert_universe = $2
 				WHERE strategyid = $3 AND userid = $4`,

@@ -27,7 +27,7 @@ spec:
                   name: db-secret
                   key: DB_ROOT_PASSWORD
             - name: PGDATA                    # ← new: tell Postgres where to keep its cluster
-              value: /home/postgres/pgdata
+              value: /home/postgres/pgdata/data
             # Telegram credentials for alerts
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
@@ -47,25 +47,17 @@ spec:
             preStop:
               exec:
                 command: ["/app/graceful-shutdown.sh"]
-          startupProbe:
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres"]
             initialDelaySeconds: 60
             periodSeconds: 30
-            failureThreshold: 45         # 45 × 30s = 22.5 minutes for migrations
             timeoutSeconds: 10
-          readinessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres"]
-            periodSeconds: 10
-            failureThreshold: 3          # Fast detection after startup (30s)
-            timeoutSeconds: 5
-          livenessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres"]
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3          # Fast detection after startup (90s)
           resources:
             requests:
               cpu: 2000m

@@ -1,10 +1,10 @@
-# Peripheral Trading Platform
+# Atlantis Trading Platform
 
 > A high-performance, AI-powered trading research and strategy development platform built with modern microservices architecture.
 
 ## 🏗️ Architecture Overview
 
-Peripheral is designed as a microservices-based trading platform that combines real-time market data processing, AI-powered analysis, and sophisticated strategy backtesting capabilities. The platform emphasizes performance, security, and scalability across four main services.
+Atlantis is designed as a microservices-based trading platform that combines real-time market data processing, AI-powered analysis, and sophisticated strategy backtesting capabilities. The platform emphasizes performance, security, and scalability across four main services.
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -47,7 +47,7 @@ Peripheral is designed as a microservices-based trading platform that combines r
 ## 📁 Repository Structure
 
 ```
-Peripheral/
+atlantis/
 ├── services/                    # Core microservices
 │   ├── backend/                 # Go API server (~4,500 LOC)
 │   ├── frontend/                # SvelteKit UI (~8,000 LOC)
@@ -59,7 +59,7 @@ Peripheral/
 │   ├── dev/                     # Development environment
 │   └── logging/                 # Logging configuration
 ├── docs/                        # Technical documentation
-├── ./workflows/           # CI/CD pipelines
+├── .github/workflows/           # CI/CD pipelines
 └── backups/                     # Database backup storage (130+ backup files)
 ```
 
@@ -139,7 +139,7 @@ async def execute_screening(self, strategy_code: str, universe: List[str]) -> Di
 ## 🚀 Development & Deployment
 
 ### CI/CD Pipeline
-**Location**: `./workflows/`
+**Location**: `.github/workflows/`
 
 #### Workflows:
 1. **Branch Protection** - Prevents direct pushes to main
@@ -242,10 +242,10 @@ safe_globals = {
 ### Development Setup
 ```bash
 # Clone repository
-git clone https://.com/your-org/Peripheral.git
+git clone https://github.com/your-org/atlantis.git
 
 # Start development environment
-cd Peripheral
+cd atlantis
 docker-compose -f config/dev/docker-compose.yaml up
 
 # Run services individually

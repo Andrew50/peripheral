@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { DateTime } from 'luxon';
 
 // Define the Filing type to match the backend structure
 export interface Filing {
@@ -39,7 +40,7 @@ function formatTimestamp(timestamp: number | string): number {
 }
 
 // Handle incoming SEC filing messages from WebSocket
-export function handleSECFilingMessage(message: Filing | { channel: string; data: Filing | Filing[] }): void {
+export function handleSECFilingMessage(message: any): void {
 	// Remove console.log for received SEC filing message
 
 	// If the message is already an array, use it directly
@@ -53,7 +54,7 @@ export function handleSECFilingMessage(message: Filing | { channel: string; data
 	}
 
 	// Check if the message has the expected structure with channel and data
-	if (message && typeof message === 'object' && 'channel' in message && message.channel === 'sec-filings' && message.data) {
+	if (message && message.channel === 'sec-filings' && message.data) {
 		// If data is an array, it's the initial load or a batch update
 		if (Array.isArray(message.data)) {
 			// Remove console.log for processing SEC filings from channel data
@@ -94,7 +95,7 @@ export function handleSECFilingMessage(message: Filing | { channel: string; data
 		console.warn('Received unexpected SEC filing message format:', message);
 
 		// Try to handle the message as a direct filing object
-		if (message && typeof message === 'object' && 'type' in message && 'url' in message) {
+		if (message && message.type && message.url) {
 			// Remove console.log for treating message as direct filing object
 
 			// Ensure the filing has a timestamp
@@ -103,13 +104,13 @@ export function handleSECFilingMessage(message: Filing | { channel: string; data
 				message.timestamp = Date.now();
 			}
 
-			globalFilings.update((filings: Filing[]) => [message as Filing, ...filings]);
+			globalFilings.update((filings: Filing[]) => [message, ...filings]);
 		}
 	}
 }
 
 // Process SEC filings data from the socket
-export function processSECFilingsMessage(message: Filing | Filing[] | { channel: string; data: Filing | Filing[] }, callback: (filings: Filing[]) => void): void {
+export function processSECFilingsMessage(message: any, callback: (filings: any) => void): void {
 	try {
 		// Remove console.log for received SEC filing message
 
@@ -131,7 +132,7 @@ export function processSECFilingsMessage(message: Filing | Filing[] | { channel:
 		}
 
 		// Handle channel data format
-		if (typeof message === 'object' && message && 'channel' in message && message.channel === 'secfilings' && Array.isArray(message.data)) {
+		if (message.channel === 'secfilings' && Array.isArray(message.data)) {
 			// Remove console.log for processing SEC filings from channel data
 
 			const formattedFilings = message.data.map((filing: Filing) => {
@@ -154,7 +155,6 @@ export function processSECFilingsMessage(message: Filing | Filing[] | { channel:
 
 		// Handle single filing in channel data
 		if (
-			typeof message === 'object' && message && 'channel' in message &&
 			message.channel === 'secfilings' &&
 			typeof message.data === 'object' &&
 			message.data !== null
@@ -183,20 +183,17 @@ export function processSECFilingsMessage(message: Filing | Filing[] | { channel:
 		// Try to handle it as a direct filing object
 		// Remove console.log for treating message as direct filing object
 
-		if (typeof message === 'object' && message && !Array.isArray(message) && 'timestamp' in message) {
-			const filing = message as Filing;
-			if (!filing.timestamp) {
-				console.warn('Direct filing missing timestamp:', filing);
-				filing.timestamp = Date.now();
-			}
-
-			callback([
-				{
-					...filing,
-					timestamp: formatTimestamp(filing.timestamp)
-				}
-			]);
+		if (!message.timestamp) {
+			console.warn('Direct filing missing timestamp:', message);
+			message.timestamp = Date.now();
 		}
+
+		callback([
+			{
+				...message,
+				timestamp: formatTimestamp(message.timestamp)
+			}
+		]);
 	} catch (error) {
 		console.error('Error processing SEC filings message:', error);
 	}

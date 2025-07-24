@@ -10,7 +10,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 )
 
 /*
@@ -234,9 +233,7 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		"price":   *args.Price,
 	}); err != nil {
 		// If we can't record usage, we should rollback the alert creation
-		if _, rollbackErr := conn.DB.Exec(context.Background(), `DELETE FROM alerts WHERE alertId = $1`, alertID); rollbackErr != nil {
-			log.Printf("Warning: failed to rollback alert creation: %v", rollbackErr)
-		}
+		conn.DB.Exec(context.Background(), `DELETE FROM alerts WHERE alertId = $1`, alertID)
 		return nil, fmt.Errorf("recording alert usage: %w", err)
 	}
 

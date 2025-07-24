@@ -4,11 +4,13 @@ import (
 	"backend/internal/data"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,8 +59,7 @@ type TwitterAPIUpdateWebhookRequest struct {
 }
 
 var twitterWebhookRuleset = "from:trad_fin OR from:tier10k OR from:TreeNewsFeed within_time:10m -filter:replies"
-
-//var replyWebhookRuleset = "within_time:20m -filter:replies -from:TheShortBear from:amitisinvesting OR from:StockMKTNewz OR from:EliteOptions2 OR from:fundstrat OR from:TrendSpider OR from:GURGAVIN OR from:unusual_whales"
+var replyWebhookRuleset = "within_time:20m -filter:replies -from:TheShortBear from:amitisinvesting OR from:StockMKTNewz OR from:EliteOptions2 OR from:fundstrat OR from:TrendSpider OR from:GURGAVIN OR from:unusual_whales"
 
 func updateTwitterNewsWebhookPollingFrequency(conn *data.Conn, intervalSeconds int, webhookStatus bool) error {
 	isEffect := 0
@@ -125,7 +126,7 @@ func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookReques
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := data.DoWithRetry(client, req)
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error making Twitter API request: %v", err)
 		return fmt.Errorf("failed to make request: %w", err)
@@ -196,12 +197,10 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Received test webhook event")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":  "success",
 				"message": "Test webhook received",
-			}); err != nil {
-				log.Printf("Warning: failed to encode JSON response: %v", err)
-			}
+			})
 			return
 		}
 
@@ -221,12 +220,10 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "success",
 			"message": "success",
-		}); err != nil {
-			log.Printf("Warning: failed to encode JSON response: %v", err)
-		}
+		})
 		// Queue the extracted data for background processing
 		err = processTwitterWebhookEvent(conn, payload.RuleTag, extractedTweets)
 		if err != nil {
@@ -244,9 +241,7 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 		if ruleTag == "Main Twitter" {
 			processTweet(conn, tweet)
 		} else if ruleTag == "Reply Webhook" {
-			if err := twitter.HandleTweetForReply(conn, tweet); err != nil {
-				log.Printf("Warning: failed to handle tweet for reply: %v", err)
-			}
+			twitter.HandleTweetForReply(conn, tweet)
 		}
 	}
 	return nil
@@ -605,7 +600,6 @@ func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
 }
 
 // saveImageToContainer saves base64 image data to container filesystem for debugging
-/*
 func saveImageToContainer(base64Data string) {
 	if base64Data == "" {
 		return
@@ -630,4 +624,4 @@ func saveImageToContainer(base64Data string) {
 
 	log.Printf("✅ Plot image saved to container at: %s", filename)
 	fmt.Printf("🚀 One-liner: docker cp $(docker ps --format 'table {{.Names}}' | grep backend | head -n1):/tmp/peripheral_plot.png ~/Desktop/ && open ~/Desktop/peripheral_plot.png\n")
-}*/
+}

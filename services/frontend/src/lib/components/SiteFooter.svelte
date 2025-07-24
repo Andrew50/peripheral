@@ -20,7 +20,7 @@
 
 <!-- Footer -->
 <!-- Big Centered Tagline Section -->
-<section class="tagline-section">
+	<section class="tagline-section">
 	<div class="tagline-inner">
 		<p class="tagline-pretext">JUMP INTO</p>
 		<h2 class="tagline-text">The Final Trading Terminal.</h2>
@@ -29,7 +29,7 @@
 </section>
 <footer class="landing-footer">
 	<div class="footer-content">
-		<div class="footer-section footer-left">
+		<div class="footer-section footer-left"> 
 			<div class="footer-section">
 				<h4 class="footer-title">Platform</h4>
 				<ul class="footer-links">
@@ -41,66 +41,28 @@
 				<h4 class="footer-title">Account</h4>
 				<ul class="footer-links">
 					<li><button on:click={navigateToSignup}>Sign Up</button></li>
-					<li>
-						<button on:click={() => (window.location.href = 'mailto:info@peripheral.io')}
-							>Contact Sales</button
-						>
-					</li>
+					<li><button on:click={() => window.location.href = 'mailto:info@peripheral.io'}>Contact Sales</button></li>
 					<li><button on:click={navigateToLogin}>Login</button></li>
 				</ul>
 			</div>
 			<div class="footer-section">
 				<h4 class="footer-title">Connect</h4>
 				<div class="footer-social-row">
-					<a
-						href="https://twitter.com/peripheralio"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="footer-social-icon"
-						aria-label="X (Twitter)"
-					>
-						<img
-							src="/x-logo-white.png"
-							alt="X (Twitter)"
-							style="width: 18px; height: 18px; object-fit: contain; display: block;"
-						/>
+					<a href="https://twitter.com/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="X (Twitter)">
+						<img src="/x-logo-white.png" alt="X (Twitter)" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 					</a>
-					<a
-						href="https://discord.gg/HpQ8ZbvDkV"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="footer-social-icon"
-						aria-label="Discord"
-					>
-						<img
-							src="/Discord-Symbol-White.png"
-							alt="Discord"
-							style="width: 18px; height: 18px; object-fit: contain; display: block;"
-						/>
+					<a href="https://discord.gg/HpQ8ZbvDkV" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="Discord">
+						<img src="/Discord-Symbol-White.png" alt="Discord" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 					</a>
-					<a
-						href="https://www.linkedin.com/company/peripheralio"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="footer-social-icon"
-						aria-label="LinkedIn"
-					>
-						<img
-							src="/InBug-White.png"
-							alt="LinkedIn"
-							style="width: 18px; height: 18px; object-fit: contain; display: block;"
-						/>
+					<a href="https://www.linkedin.com/company/peripheralio" target="_blank" rel="noopener noreferrer" class="footer-social-icon" aria-label="LinkedIn">
+						<img src="/InBug-White.png" alt="LinkedIn" style="width: 18px; height: 18px; object-fit: contain; display: block;" />
 					</a>
 				</div>
 			</div>
 		</div>
 	</div>
 	<div class="footer-bottom">
-		<p>
-			Charts powered by <a href="https://tradingview.com/" target="_blank" rel="noopener noreferrer"
-				>TradingView</a
-			>
-		</p>
+		<p>Charts powered by <a href="https://tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a></p>
 		<p>2025 Atlantis Labs, Inc.</p>
 	</div>
 	<div class="footer-brand">Peripheral</div>
@@ -128,14 +90,7 @@
 		margin: 0;
 		letter-spacing: -0.04em;
 		line-height: 1.1;
-		font-family:
-			'Geist',
-			'Inter',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			Roboto,
-			sans-serif;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 	.tagline {
 		margin-top: 3rem;
@@ -230,6 +185,17 @@
 		color: #f5f9ff;
 	}
 
+	.footer-links a {
+		color: #9ca3af;
+		text-decoration: none;
+		font-size: 0.9rem;
+		transition: color 0.3s ease;
+	}
+
+	.footer-links a:hover {
+		color: #f5f9ff;
+	}
+
 	.footer-bottom {
 		text-align: left;
 		color: rgba(255, 255, 255, 0.3);
@@ -259,14 +225,7 @@
 		margin-bottom: 0;
 		line-height: 1;
 		letter-spacing: -0.06em;
-		font-family:
-			'Geist',
-			'Inter',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			Roboto,
-			sans-serif;
+		font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		z-index: 1;
 		pointer-events: none;
 		user-select: none;
@@ -300,9 +259,7 @@
 	.footer-social-icon img {
 		filter: grayscale(1) brightness(0.8);
 		opacity: 0.7;
-		transition:
-			filter 0.2s,
-			opacity 0.2s;
+		transition: filter 0.2s, opacity 0.2s;
 	}
 
 	.footer-social-icon:hover img {
@@ -323,4 +280,4 @@
 			flex-direction: column;
 		}
 	}
-</style>
+</style> 

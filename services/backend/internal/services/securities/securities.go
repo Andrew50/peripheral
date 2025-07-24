@@ -181,15 +181,11 @@ func UpdateSecurityCik(conn *data.Conn) error {
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
 	// Execute the request
-	resp, err := data.DoWithRetry(client, req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch SEC company tickers: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("SEC API returned non-200 status code: %d", resp.StatusCode)
