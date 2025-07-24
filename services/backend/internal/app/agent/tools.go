@@ -794,11 +794,16 @@ var (
 		"getAlerts": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlerts",
-				Description: "Get all current price alerts for the user, including active and triggered alerts.",
+				Description: "Get current alerts for the user. Can filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types.",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{}, // No parameters needed
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"alertType": {
+							Type:        genai.TypeString,
+							Description: "Optional. Filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types. Defaults to 'all'.",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function:         wrapWithContext(alerts.GetAlerts),

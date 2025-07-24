@@ -1,0 +1,13 @@
+BEGIN;
+
+
+
+
+
+
+
+
+
+ALTER TABLE screener ADD COLUMN IF NOT EXISTS change_1y_pct NUMERIC DEFAULT NULL;
+
+COMMIT;

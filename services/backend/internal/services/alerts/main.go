@@ -18,9 +18,9 @@ type WorkerStrategyAlertResult struct {
 	Success         bool               `json:"success"`
 	StrategyID      int                `json:"strategy_id"`
 	ExecutionMode   string             `json:"execution_mode"`
-	Matches         []WorkerAlertMatch `json:"matches"`
+	Matches         []WorkerAlertMatch `json:"alerts"`
 	ExecutionTimeMs int                `json:"execution_time_ms"`
-	ErrorMessage    string             `json:"error_message,omitempty"`
+	ErrorMessage    string             `json:"error,omitempty"`
 }
 
 type WorkerAlertMatch struct {
@@ -179,12 +179,18 @@ func priceAlertLoop(ctx context.Context, conn *data.Conn) {
 func strategyAlertLoop(ctx context.Context, conn *data.Conn) {
 	ticker := time.NewTicker(strategyAlertFrequency)
 	defer ticker.Stop()
+	log.Printf("Starting strategy alert loop with frequency: %v", strategyAlertFrequency)
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("Strategy alert loop stopped due to context cancellation")
 			return
 		case <-ticker.C:
+			log.Printf("Processing strategy alerts - checking %d active alerts", getStrategyAlertCount())
+			startTime := time.Now()
 			processStrategyAlerts(conn)
+			duration := time.Since(startTime)
+			log.Printf("Strategy alert processing completed in %v", duration)
 		}
 	}
 }
@@ -207,18 +213,33 @@ func processPriceAlerts(conn *data.Conn) {
 
 func processStrategyAlerts(conn *data.Conn) {
 	var wg sync.WaitGroup
+	var processed, succeeded, failed int
+	var mu sync.Mutex
+
 	strategyAlerts.Range(func(_, value interface{}) bool {
 		alert := value.(StrategyAlert)
 		wg.Add(1)
 		go func(a StrategyAlert) {
 			defer wg.Done()
+			log.Printf("Processing strategy alert %d: %s (threshold: %.2f)", a.StrategyID, a.Name, a.Threshold)
 			if err := executeStrategyAlert(context.Background(), conn, a); err != nil {
 				log.Printf("Error processing strategy alert %d: %v", a.StrategyID, err)
+				mu.Lock()
+				processed++
+				failed++
+				mu.Unlock()
+			} else {
+				log.Printf("Successfully processed strategy alert %d: %s", a.StrategyID, a.Name)
+				mu.Lock()
+				processed++
+				succeeded++
+				mu.Unlock()
 			}
 		}(alert)
 		return true
 	})
 	wg.Wait()
+	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed", processed, succeeded, failed)
 }
 
 func initPriceAlerts(conn *data.Conn) error {
@@ -348,10 +369,12 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 	defer cancel()
 
 	ch := pubsub.Channel()
+	log.Printf("Listening for updates on worker_task_updates channel for task %s", taskID)
 
 	for {
 		select {
 		case <-timeoutCtx.Done():
+			log.Printf("Timeout waiting for strategy alert result for task %s", taskID)
 			return nil, fmt.Errorf("timeout waiting for strategy alert result")
 		case msg := <-ch:
 			if msg == nil {
@@ -367,6 +390,8 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 
 			if taskUpdate["task_id"] == taskID {
 				status, _ := taskUpdate["status"].(string)
+				log.Printf("Received update for task %s: status=%s", taskID, status)
+
 				if status == "completed" || status == "failed" {
 					// Convert task result to WorkerStrategyAlertResult
 					var result WorkerStrategyAlertResult
@@ -391,9 +416,11 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 								errorMsg = errorStr
 							}
 						}
+						log.Printf("Strategy alert task %s failed: %s", taskID, errorMsg)
 						return nil, fmt.Errorf("strategy alert execution failed: %s", errorMsg)
 					}
 
+					log.Printf("Strategy alert task %s completed successfully", taskID)
 					return &result, nil
 				}
 			}
@@ -405,6 +432,7 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert) error {
 	// Generate unique task ID
 	taskID := fmt.Sprintf("strategy_alert_%d_%d", strategy.StrategyID, time.Now().UnixNano())
+	log.Printf("Executing strategy alert %d (task: %s)", strategy.StrategyID, taskID)
 
 	// Prepare strategy alert task payload
 	task := map[string]interface{}{
@@ -424,12 +452,14 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	// Submit task to Redis worker queue
+	log.Printf("Submitting strategy alert task %s to Redis queue", taskID)
 	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
 	if err != nil {
 		return fmt.Errorf("error submitting task to queue: %v", err)
 	}
 
 	// Wait for result with 2 minute timeout
+	log.Printf("Waiting for strategy alert result for task %s (timeout: 2 minutes)", taskID)
 	result, err := waitForStrategyAlertResult(ctx, conn, taskID, 2*time.Minute)
 	if err != nil {
 		return fmt.Errorf("error waiting for strategy alert result: %v", err)
@@ -442,8 +472,10 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 		var message string
 		if numMatches > 0 {
 			message = fmt.Sprintf("Strategy '%s' triggered with %d matching securities", strategy.Name, numMatches)
+			log.Printf("Strategy alert %d triggered: %s", strategy.StrategyID, message)
 		} else {
 			message = fmt.Sprintf("Strategy '%s' executed successfully", strategy.Name)
+			log.Printf("Strategy alert %d executed successfully with no matches", strategy.StrategyID)
 		}
 
 		// Prepare additional data for the payload
@@ -472,8 +504,16 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 				matches = append(matches, matchData)
 			}
 			additionalData["matches"] = matches
+
+			// Log a sample of the matches
+			sampleSize := 3
+			if numMatches < sampleSize {
+				sampleSize = numMatches
+			}
+			log.Printf("Strategy alert %d sample matches: %+v", strategy.StrategyID, result.Matches[:sampleSize])
 		} else if numMatches > 50 {
 			additionalData["matches_note"] = fmt.Sprintf("Too many matches (%d) to include details", numMatches)
+			log.Printf("Strategy alert %d has too many matches (%d) to log details", strategy.StrategyID, numMatches)
 		}
 
 		err = LogStrategyAlert(conn, strategy.UserID, strategy.StrategyID, strategy.Name, message, additionalData)
@@ -481,6 +521,8 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 			log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
 			// Don't fail the entire alert processing if logging fails
 		}
+	} else {
+		log.Printf("Strategy alert %d execution completed but marked as not successful", strategy.StrategyID)
 	}
 
 	return nil

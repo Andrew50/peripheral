@@ -49,40 +49,102 @@ type GetAlertLogsResult struct {
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-func GetAlerts(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), `
-		SELECT a.alertId,
-		       'price' AS alertType,
-		       a.price,
-		       a.securityId,
-		       s.ticker,
-		       a.active,
-		       a.direction,
-		       a.triggeredTimestamp
-		FROM alerts a
-		LEFT JOIN securities s USING (securityId)
-		WHERE a.userId = $1
-		ORDER BY a.alertId`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("querying alerts: %w", err)
+type GetAlertsArgs struct {
+	AlertType string `json:"alertType,omitempty"` // "price", "strategy", or "all"
+}
+
+func GetAlerts(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetAlertsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		// Default to "all" if no args provided or parsing fails
+		args.AlertType = "all"
 	}
-	defer rows.Close()
+
+	// Default to "all" if no alert type specified
+	if args.AlertType == "" {
+		args.AlertType = "all"
+	}
 
 	var results []Alert
-	for rows.Next() {
-		var r Alert
-		var triggered sql.NullTime
-		if err := rows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
-			&r.Ticker, &r.Active, &r.Direction, &triggered); err != nil {
-			return nil, fmt.Errorf("scanning alert: %w", err)
+
+	// Fetch price alerts if requested
+	if args.AlertType == "all" || args.AlertType == "price" {
+		priceRows, err := conn.DB.Query(context.Background(), `
+			SELECT a.alertId,
+			       'price' AS alertType,
+			       a.price,
+			       a.securityId,
+			       s.ticker,
+			       a.active,
+			       a.direction
+			FROM alerts a
+			LEFT JOIN securities s USING (securityId)
+			WHERE a.userId = $1
+			ORDER BY a.alertId`, userID)
+		if err != nil {
+			return nil, fmt.Errorf("querying price alerts: %w", err)
 		}
-		if triggered.Valid {
-			ms := triggered.Time.UnixMilli()
-			r.TriggeredTimestamp = &ms
+		defer priceRows.Close()
+
+		for priceRows.Next() {
+			var r Alert
+			if err := priceRows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
+				&r.Ticker, &r.Active, &r.Direction); err != nil {
+				return nil, fmt.Errorf("scanning price alert: %w", err)
+			}
+			results = append(results, r)
 		}
-		results = append(results, r)
+		if err := priceRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating price alert rows: %w", err)
+		}
 	}
-	return results, rows.Err()
+
+	// Fetch strategy alerts if requested
+	if args.AlertType == "all" || args.AlertType == "strategy" {
+		strategyRows, err := conn.DB.Query(context.Background(), `
+			SELECT s.strategyId,
+			       'strategy' AS alertType,
+			       s.name,
+			       s.isAlertActive,
+			       COALESCE(s.alert_threshold, 0.0) as alert_threshold,
+			       COALESCE(s.alert_universe, ARRAY[]::TEXT[]) as alert_universe
+			FROM strategies s
+			WHERE s.userId = $1 AND s.isAlertActive = true
+			ORDER BY s.strategyId`, userID)
+		if err != nil {
+			return nil, fmt.Errorf("querying strategy alerts: %w", err)
+		}
+		defer strategyRows.Close()
+
+		for strategyRows.Next() {
+			var strategyID int
+			var alertType string
+			var name string
+			var isActive bool
+			var threshold float64
+			var universe []string
+
+			if err := strategyRows.Scan(&strategyID, &alertType, &name, &isActive, &threshold, &universe); err != nil {
+				return nil, fmt.Errorf("scanning strategy alert: %w", err)
+			}
+
+			// Map strategy alert to Alert struct format for frontend compatibility
+			strategyAlert := Alert{
+				AlertID:   strategyID, // Use strategyId as alertId for consistency
+				AlertType: "strategy",
+				Ticker:    &name,      // Use strategy name as ticker for display
+				Price:     &threshold, // Use threshold as price for display
+				Active:    isActive,
+			}
+
+			results = append(results, strategyAlert)
+		}
+		if err := strategyRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating strategy alert rows: %w", err)
+		}
+	}
+
+	return results, nil
 }
 
 /*
