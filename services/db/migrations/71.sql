@@ -1,3 +1,4 @@
+
 -- Migration: 071_update_plus_yearly_price_id
 -- Description: Update Plus yearly subscription price ID to new Stripe price ID
 

@@ -228,9 +228,9 @@ export function createDetailedSessionHighlighter(): SessionHighlighter {
 				: typeof timestamp === 'string'
 					? timestamp
 					: new Date().setFullYear(
-						(timestamp as any).year,
-						(timestamp as any).month - 1,
-						(timestamp as any).day
+						(timestamp as { year: number; month: number; day: number }).year,
+						(timestamp as { year: number; month: number; day: number }).month - 1,
+						(timestamp as { year: number; month: number; day: number }).day
 					)
 		);
 

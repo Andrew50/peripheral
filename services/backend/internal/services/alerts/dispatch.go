@@ -76,39 +76,22 @@ func SendTelegramMessage(msg string, chatID int64) error {
 	// }
 }
 
-func writeAlertMessage(alert Alert) string {
-	if alert.AlertType == "algo" {
-		return "Algo alert"
-	}
+func writePriceAlertMessage(alert PriceAlert) string {
 	if alert.SecurityID == nil {
-		//log.Println("SecurityID is nil")
 		return "SecurityID is missing"
 	}
-	if alert.AlertType == "setup" {
-		if alert.Price == nil {
-			//log.Println("Price is nil for setup alert")
-			return "Price is missing for setup alert"
-		}
-		return fmt.Sprintf("%s %f", *alert.Ticker, *alert.Price)
-	} else if alert.AlertType == "price" {
-		if alert.Price == nil || alert.Direction == nil {
-			//log.Println("Price or Direction is nil for price alert")
-			return "Price or Direction is missing for price alert"
-		}
-		if *alert.Direction {
-			return fmt.Sprintf("%s price above %f", *alert.Ticker, *alert.Price)
-		}
-		return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
-	} else if alert.AlertType == "algo" {
-		return fmt.Sprintf("Algo alert triggered (ID: %d)", *alert.AlgoID)
+	if alert.Price == nil || alert.Direction == nil {
+		return "Price or Direction is missing for price alert"
 	}
-	return ""
+	if *alert.Direction {
+		return fmt.Sprintf("%s price above %f", *alert.Ticker, *alert.Price)
+	}
+	return fmt.Sprintf("%s price below %f", *alert.Ticker, *alert.Price)
 }
 
-func dispatchAlert(conn *data.Conn, alert Alert) error {
-	//log.Printf("DEBUG: Dispatching alert: %+v", alert)
-	////fmt.Println("dispatching alert", alert)
-	alertMessage := writeAlertMessage(alert)
+func dispatchPriceAlert(conn *data.Conn, alert PriceAlert) error {
+	//log.Printf("DEBUG: Dispatching price alert: %+v", alert)
+	alertMessage := writePriceAlertMessage(alert)
 	timestamp := time.Now()
 	err := SendTelegramMessage(alertMessage, chatID)
 	if err != nil {
@@ -122,17 +105,8 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 		Channel:    "alert",
 		Tickers:    []string{*alert.Ticker},
 	})
-	query := `
-        INSERT INTO alertLogs (alertId, timestamp, securityId)
-        VALUES ($1, $2, $3)
-    `
-
-	_, err = data.ExecWithRetry(context.Background(), conn.DB,
-		query,
-		alert.AlertID,
-		timestamp,
-		*alert.SecurityID,
-	)
+	// Log the alert using the new centralized logging system
+	err = LogPriceAlert(conn, alert.UserID, alert.AlertID, *alert.Ticker, *alert.SecurityID, alertMessage)
 	if err != nil {
 		//log.Printf("Failed to log alert to database: %v", err)
 		return fmt.Errorf("failed to log alert: %v", err)
@@ -151,7 +125,7 @@ func dispatchAlert(conn *data.Conn, alert Alert) error {
 	}
 
 	// Remove alert from memory and decrement counter
-	if err := RemoveAlert(conn, alert.AlertID); err != nil {
+	if err := RemovePriceAlert(conn, alert.AlertID); err != nil {
 		// Log the error but don't fail the dispatch since the alert has already been processed
 		log.Printf("Warning: %v", err)
 	}

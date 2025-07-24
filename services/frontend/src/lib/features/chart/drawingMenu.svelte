@@ -17,11 +17,17 @@
 			color: string;
 			lineWidth: LineWidth;
 		}[];
+		alertLines: {
+			price: number;
+			line: IPriceLine;
+			alertId: number;
+		}[];
 		isDragging: boolean;
 		selectedLinePrice: number;
 		selectedLineColor: string;
 		selectedLineWidth: LineWidth;
 		selectedLineId?: number;
+		selectedLineType?: 'horizontal' | 'alert' | null;
 		securityId?: number;
 	}
 
@@ -32,7 +38,9 @@
 		clientY: 0,
 		active: false,
 		selectedLineId: -1,
+		selectedLineType: null,
 		horizontalLines: [],
+		alertLines: [],
 		isDragging: false,
 		selectedLinePrice: 0,
 		selectedLineColor: '#FFFFFF',
@@ -94,7 +102,7 @@
 	import '$lib/styles/global.css';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
-	import { horizontalLines } from '$lib/utils/stores/stores';
+	import { horizontalLines, activeAlerts } from '$lib/utils/stores/stores';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
 
 	// Helper function to convert viewport coordinates to chart-relative coordinates
@@ -152,27 +160,76 @@
 		}
 	}
 
+	function updateAlertPrice() {
+		if (
+			!$drawingMenuProps.selectedLine ||
+			!$drawingMenuProps.chartCandleSeries ||
+			$drawingMenuProps.selectedLineType !== 'alert'
+		) {
+			return;
+		}
+
+		const alertId = $drawingMenuProps.selectedLineId;
+		if (!alertId || alertId <= 0) return;
+
+		const newPrice = parseFloat(
+			parseFloat($drawingMenuProps.selectedLinePrice.toString()).toFixed(2)
+		);
+
+		// Optimistically update the line on the chart
+		$drawingMenuProps.selectedLine.applyOptions({ price: newPrice });
+
+		// Update the activeAlerts store
+		activeAlerts.update((alerts) => {
+			if (!alerts) return [];
+			return alerts.map((alert) =>
+				alert.alertId === alertId ? { ...alert, alertPrice: newPrice } : alert
+			);
+		});
+
+		// Update backend
+		privateRequest<void>('updateAlert', { alertId, price: newPrice }, true).catch((err) => {
+			console.error('Failed to update alert price:', err);
+			// Revert on failure if needed
+		});
+	}
+
 	function deleteHorizontalLine() {
 		if (!$drawingMenuProps.selectedLine || !$drawingMenuProps.chartCandleSeries) {
 			return;
 		}
 
-		// Find the line ID before removing it
-		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Handle horizontal line deletion
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
 
-		let deletedLineId = -1;
+			let deletedLineId = -1;
 
-		// If the line has an ID, delete it from the server
-		if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
-			deletedLineId = $drawingMenuProps.horizontalLines[lineIndex].id;
-			privateRequest('deleteHorizontalLine', {
-				id: deletedLineId
-			});
+			// If the line has an ID, delete it from the server
+			if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
+				deletedLineId = $drawingMenuProps.horizontalLines[lineIndex].id;
+				privateRequest('deleteHorizontalLine', {
+					id: deletedLineId
+				});
 
-			// Update the store to remove the line - reactive block will handle chart removal
-			horizontalLines.update((lines) => lines.filter((line) => line.id !== deletedLineId));
+				// Update the store to remove the line - reactive block will handle chart removal
+				horizontalLines.update((lines) => lines.filter((line) => line.id !== deletedLineId));
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Handle alert deletion
+			const alertId = $drawingMenuProps.selectedLineId;
+			if (alertId && alertId > 0) {
+				privateRequest('deleteAlert', {
+					alertId: alertId
+				});
+
+				// Update the activeAlerts store to remove the alert
+				activeAlerts.update((alerts) =>
+					alerts ? alerts.filter((alert) => alert.alertId !== alertId) : []
+				);
+			}
 		}
 
 		// Close the menu
@@ -278,6 +335,9 @@
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
+		// Prevent keyboard events from bubbling up to the chart container
+		event.stopPropagation();
+
 		if (event.key === 'Escape') {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
@@ -445,70 +505,95 @@
 		class="drawing-menu"
 		style={adjustedMenuStyle}
 	>
-		<button on:click={removePriceLine} class="delete-button">Delete</button>
+		<button on:click={removePriceLine} class="delete-button">
+			{#if $drawingMenuProps.selectedLineType === 'alert'}
+				Delete Alert
+			{:else}
+				Delete
+			{/if}
+		</button>
 
-		<div class="menu-section">
-			<label for="line-price">Price:</label>
-			<div class="price-input-container">
+		{#if $drawingMenuProps.selectedLineType === 'horizontal'}
+			<!-- Full menu for horizontal lines -->
+			<div class="menu-section">
+				<label for="line-price">Price:</label>
+				<div class="price-input-container">
+					<input
+						id="line-price"
+						value={formattedPrice}
+						on:input={handlePriceInput}
+						on:change={updateHorizontalLine}
+						type="number"
+						step="0.01"
+						class="price-input"
+					/>
+				</div>
+			</div>
+
+			<div class="menu-section">
+				<label for="line-width">Width:</label>
+				<select
+					id="line-width"
+					value={$drawingMenuProps.selectedLineWidth}
+					on:change={handleLineWidthChange}
+					class="line-width-select"
+				>
+					{#each lineWidthOptions as width}
+						<option value={width}>{width}px</option>
+					{/each}
+				</select>
+			</div>
+
+			<div class="menu-section">
+				<label for="line-color">Color:</label>
 				<input
-					id="line-price"
-					value={formattedPrice}
-					on:input={handlePriceInput}
-					on:change={updateHorizontalLine}
-					type="number"
-					step="0.01"
-					class="price-input"
+					id="line-color"
+					type="color"
+					value={$drawingMenuProps.selectedLineColor}
+					on:change={handleColorChange}
+					class="color-picker"
 				/>
 			</div>
-		</div>
 
-		<div class="menu-section">
-			<label for="line-width">Width:</label>
-			<select
-				id="line-width"
-				value={$drawingMenuProps.selectedLineWidth}
-				on:change={handleLineWidthChange}
-				class="line-width-select"
-			>
-				{#each lineWidthOptions as width}
-					<option value={width}>{width}px</option>
+			<div class="color-presets">
+				{#each colorPresets as color}
+					<div
+						class="color-preset"
+						style="background-color: {color}; border: 2px solid {$drawingMenuProps.selectedLineColor ===
+						color
+							? '#4CAF50'
+							: 'transparent'}"
+						on:click={() => selectColorPreset(color)}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && selectColorPreset(color)}
+					></div>
 				{/each}
-			</select>
-		</div>
+			</div>
 
-		<div class="menu-section">
-			<label for="line-color">Color:</label>
-			<input
-				id="line-color"
-				type="color"
-				value={$drawingMenuProps.selectedLineColor}
-				on:change={handleColorChange}
-				class="color-picker"
-			/>
-		</div>
-
-		<div class="color-presets">
-			{#each colorPresets as color}
+			<div class="preview-section">
 				<div
-					class="color-preset"
-					style="background-color: {color}; border: 2px solid {$drawingMenuProps.selectedLineColor ===
-					color
-						? '#4CAF50'
-						: 'transparent'}"
-					on:click={() => selectColorPreset(color)}
-					role="button"
-					tabindex="0"
-					on:keydown={(e) => e.key === 'Enter' && selectColorPreset(color)}
+					class="line-preview"
+					style="height: {$drawingMenuProps.selectedLineWidth}px; background-color: {$drawingMenuProps.selectedLineColor};"
 				></div>
-			{/each}
-		</div>
-
-		<div class="preview-section">
-			<div
-				class="line-preview"
-				style="height: {$drawingMenuProps.selectedLineWidth}px; background-color: {$drawingMenuProps.selectedLineColor};"
-			></div>
-		</div>
+			</div>
+		{:else if $drawingMenuProps.selectedLineType === 'alert'}
+			<!-- Simplified menu for alerts -->
+			<div class="menu-section">
+				<label for="alert-price">Price:</label>
+				<div class="price-input-container">
+					<input
+						id="alert-price"
+						value={formattedPrice}
+						on:input={handlePriceInput}
+						on:change={updateAlertPrice}
+						type="number"
+						step="0.01"
+						class="price-input"
+					/>
+				</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -609,5 +694,23 @@
 	.line-preview {
 		width: 100%;
 		min-height: 1px;
+	}
+
+	.alert-info {
+		padding: 8px 0 0 0;
+		text-align: center;
+	}
+
+	.alert-price {
+		font-size: 14px;
+		font-weight: bold;
+		color: #ffb74d; /* Orange color matching alert lines */
+		margin-bottom: 4px;
+	}
+
+	.alert-instruction {
+		font-size: 11px;
+		color: #ccc;
+		font-style: italic;
 	}
 </style>

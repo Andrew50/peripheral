@@ -1,3 +1,5 @@
+// Package marketdata provides functionality for retrieving, processing, and storing
+// market data including price history, indexes, and other financial time series.
 package marketdata
 
 import (
@@ -57,14 +59,13 @@ func loadS3Config() s3Config {
 }
 
 // newS3Client returns a tuned AWS S3 client for high-throughput, low-latency transfers.
-//
-//lint:ignore SA1019 using deprecated global endpoint resolver until AWS SDK upgrade completes
 func newS3Client(cfg s3Config) (*s3.Client, error) {
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(cfg.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
 		//lint:ignore SA1019 using deprecated global endpoint resolver until AWS SDK upgrade completes
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			//lint:ignore SA1019 using deprecated aws.Endpoint until AWS SDK upgrade completes
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
 				//lint:ignore SA1019 using deprecated aws.Endpoint struct until AWS SDK upgrade completes
 				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil
@@ -132,14 +133,13 @@ func getBatchSize(tableName string) int {
 
 // copyWorkerCount caps the parallel COPY operations to protect the WAL.
 var copyWorkerCount = func() int {
-	return 1 // TODO: remove this if we can get db stable
-	/*
-		cpus := runtime.NumCPU()
-		if cpus > 8 {
-			return 8
-		}
-		return cpus
-	*/
+	return 4 // TODO: remove this if we can get db stable
+	/*cpus := runtime.NumCPU()
+	if cpus > 8 {
+		cpus = 8
+	}
+	fmt.Println("cpus for ohlcv loader", cpus)
+	return cpus*/
 }()
 
 // -----------------------------------------------------------------------------
@@ -171,12 +171,9 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff: 2^attempt seconds, with jitter
-			backoffDuration := time.Duration(1<<attempt) * time.Second
-			if backoffDuration > 30*time.Second {
-				backoffDuration = 30 * time.Second // Cap at 30 seconds
-			}
+			backoffDuration := 30 * time.Second // Cap at 30 seconds
 
-			log.Printf("S3 rate limited (attempt %d/%d), backing off for %v...", attempt, maxRetries, backoffDuration)
+			// log.Printf("⚠️  S3 transient error (attempt %d/%d), backing off for %v. Last error: %v", attempt, maxRetries, backoffDuration, lastErr)
 
 			select {
 			case <-ctx.Done():
@@ -195,13 +192,13 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 				lastErr = err
 				success = false
 
-				// Check if this is a rate limit error (429)
-				if isS3RateLimitError(err) {
-					log.Printf("S3 rate limit hit during pagination for prefix %s: %v", prefix, err)
+				// Check if this is a transient error that should be retried
+				if isS3TransientError(err) {
+					// log.Printf("⚠️  S3 transient error during pagination for prefix %s (will retry): %v", prefix, err)
 					break // Break from pagination, will retry entire operation
 				}
 
-				// For non-rate-limit errors, fail immediately
+				// For non-transient errors, fail immediately
 				return nil, err
 			}
 
@@ -216,8 +213,8 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 			return out, nil
 		}
 
-		// If we hit a rate limit error but haven't exhausted retries, continue to next attempt
-		if !isS3RateLimitError(lastErr) {
+		// If we hit a transient error but haven't exhausted retries, continue to next attempt
+		if !isS3TransientError(lastErr) {
 			return nil, lastErr
 		}
 	}
@@ -225,14 +222,42 @@ func listCSVObjectsWithRetry(ctx context.Context, s3c *s3.Client, bucket, prefix
 	return nil, fmt.Errorf("S3 listing failed after %d retries, last error: %w", maxRetries, lastErr)
 }
 
-// isS3RateLimitError checks if the error is an S3 rate limiting error (429 Too Many Requests)
-func isS3RateLimitError(err error) bool {
+// isS3TransientError checks if the error is a transient S3 error that should be retried
+func isS3TransientError(err error) bool {
 	if err == nil {
 		return false
 	}
 
 	errStr := err.Error()
-	return strings.Contains(errStr, "TooManyRequests") ||
+
+	// Rate limiting errors
+	if strings.Contains(errStr, "TooManyRequests") ||
 		strings.Contains(errStr, "429") ||
-		strings.Contains(errStr, "Too Many Requests")
+		strings.Contains(errStr, "Too Many Requests") {
+		return true
+	}
+
+	// Deserialization and response body errors
+	if strings.Contains(errStr, "unexpected EOF") ||
+		strings.Contains(errStr, "deserialization failed") ||
+		strings.Contains(errStr, "failed to decode response body") {
+		return true
+	}
+
+	// Network and connection errors
+	if strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "dial error") {
+		return true
+	}
+
+	// DNS and other network errors
+	if strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "network unreachable") ||
+		strings.Contains(errStr, "temporary failure") {
+		return true
+	}
+
+	return false
 }

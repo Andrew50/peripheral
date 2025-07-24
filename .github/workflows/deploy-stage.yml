@@ -9,6 +9,31 @@ on:
       branch:
         description: 'Branch to deploy'
         required: false
+      force-deploy-db:
+        description: 'Force Deploy DB'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-frontend:
+        description: 'Force Deploy Frontend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-backend:
+        description: 'Force Deploy Backend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-cache:
+        description: 'Force Deploy Cache'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-worker:
+        description: 'Force Deploy Worker'
+        required: false
+        default: false
+        type: boolean      
 
 permissions:
   contents: read
@@ -21,21 +46,36 @@ concurrency:
 
 jobs:
   detect_changes:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/detect-changes.yml
+
+  compute_manual_strategy:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build-manual-strategy.yml
+    with:
+      force-deploy-db: ${{ github.event.inputs.force-deploy-db == 'true' }}
+      force-deploy-frontend: ${{ github.event.inputs.force-deploy-frontend == 'true' }}
+      force-deploy-backend: ${{ github.event.inputs.force-deploy-backend == 'true' }}
+      force-deploy-cache: ${{ github.event.inputs.force-deploy-cache == 'true' }}
+      force-deploy-worker: ${{ github.event.inputs.force-deploy-worker == 'true' }}
   deploy-stage:
-    needs: [detect_changes]
-    if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
+    needs:
+      - detect_changes
+    if: |
+      (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
+      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')    
     uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
-      # k8s_context: 'stage-cluster'
       k8s_namespace: 'stage'
       google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
       ingress_host: 'stage.peripheral.io'
-      # public_base_url: '/'
-      strategy: ${{ needs.detect_changes.outputs.strategy }}
-      services_changed: ${{ needs.detect_changes.outputs.services_changed }}
+      strategy: >-
+        ${{ github.event_name == 'push' && needs.detect_changes.outputs.strategy || needs.compute_manual_strategy.outputs.strategy }}
+      services_changed: >-
+        ${{ github.event_name == 'push' && needs.detect_changes.outputs.services_changed || needs.compute_manual_strategy.outputs.services_changed }}      
+      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations }}    
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -62,3 +102,5 @@ jobs:
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_DEV_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_STAGE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_DEV_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}

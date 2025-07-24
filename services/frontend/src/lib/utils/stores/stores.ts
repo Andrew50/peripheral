@@ -1,5 +1,5 @@
 //stores.ts
-import { writable, derived, type Writable, get } from 'svelte/store';
+import { writable, type Writable, get } from 'svelte/store';
 //export let currentTimestamp = writable(0);
 import type {
 	Settings,
@@ -32,7 +32,7 @@ export const menuWidth = writable(0);
 export const leftMenuWidth = writable(500);
 export let flagWatchlistId: number | undefined;
 export const entryOpen = writable(false);
-export let flagWatchlist: Writable<Instance[]> = writable([]);
+export const flagWatchlist: Writable<Instance[]> = writable([]);
 export const streamInfo = writable<StreamInfo>({
 	replayActive: false,
 	replaySpeed: 1,
@@ -48,7 +48,7 @@ export const algos: Writable<Algo[]> = writable([]);
 export const isPublicViewing = writable(false);
 
 // Store for user's last used tickers
-export const userLastTickers = writable<any[]>([]);
+export const userLastTickers = writable<Instance[]>([]);
 
 // Subscription status store
 export interface SubscriptionStatus {
@@ -127,9 +127,8 @@ export async function fetchSubscriptionStatus() {
 			error: ''
 		}));
 		console.log('Updated subscription status store successfully');
-	} catch (error) {
-		console.error('Failed to fetch subscription status:', error);
-		console.error('Error details:', error);
+	} catch {
+		console.error('Failed to fetch subscription status');
 		subscriptionStatus.update((s) => ({
 			...s,
 			loading: false,
@@ -186,7 +185,7 @@ export async function fetchUserUsage() {
 }
 
 // Function to update user's last tickers when a ticker is selected
-export function updateUserLastTickers(selectedTicker: any) {
+export function updateUserLastTickers(selectedTicker: Instance) {
 	userLastTickers.update((tickers) => {
 		// Remove the ticker if it already exists
 		const filtered = tickers.filter((t) => t.ticker !== selectedTicker.ticker);
@@ -225,8 +224,6 @@ function getDefaultMenuWidth(): number {
 
 	return Math.round(Math.max(absoluteMin, Math.min(calculatedWidth, absoluteMax)));
 }
-
-const DEFAULT_MENU_WIDTH = getDefaultMenuWidth();
 
 export interface StreamInfo {
 	replayActive: boolean;
@@ -288,8 +285,8 @@ function initStoresWithAuth() {
 				.then((s: Settings) => {
 					settings.set({ ...defaultSettings, ...s });
 				})
-				.catch((error) => {
-					console.warn('Failed to load settings:', error);
+				.catch(() => {
+					console.warn('Failed to load settings');
 					settings.set(defaultSettings);
 				});
 
@@ -307,8 +304,8 @@ function initStoresWithAuth() {
 					});
 					strategies.set(v);
 				})
-				.catch((error) => {
-					console.warn('Failed to load strategies:', error);
+				.catch(() => {
+					console.warn('Failed to load strategies');
 					strategies.set([]);
 				});
 
@@ -325,18 +322,18 @@ function initStoresWithAuth() {
 					const active = v.filter((alert: Alert) => alert.active === true);
 					activeAlerts.set(active);
 				})
-				.catch((error) => {
-					console.warn('Failed to load alerts:', error);
+				.catch(() => {
+					console.warn('Failed to load alerts');
 					inactiveAlerts.set([]);
 					activeAlerts.set([]);
 				});
 
-			privateRequest<AlertLog[]>('getAlertLogs', {})
+			privateRequest<AlertLog[]>('getAlertLogs', { alertType: 'all' })
 				.then((v: AlertLog[]) => {
 					alertLogs.set(v || []);
 				})
-				.catch((error) => {
-					console.warn('Failed to load alert logs:', error);
+				.catch(() => {
+					console.warn('Failed to load alert logs');
 					alertLogs.set([]);
 				});
 
@@ -362,7 +359,7 @@ function initStoresWithAuth() {
 										const updatedList = [{ watchlistId: newId, watchlistName: 'flag' }, ...(list || [])];
 										if (updatedList.length) {
 											selectWatchlist(String(updatedList[0].watchlistId));
-											initializeVisibleWatchlists(updatedList, updatedList[0].watchlistId);
+											initializeVisibleWatchlists(updatedList);
 										}
 									}
 								).catch(() => {
@@ -376,8 +373,8 @@ function initStoresWithAuth() {
 						flagWatchlistId = flagWatch.watchlistId;
 
 						// Initialize the flagWatchlist store with existing items
-						privateRequest<any[]>('getWatchlistItems', { watchlistId: flagWatch.watchlistId })
-							.then((items: any[]) => {
+						privateRequest<Instance[]>('getWatchlistItems', { watchlistId: flagWatch.watchlistId })
+							.then((items: Instance[]) => {
 								flagWatchlist.set(items || []);
 							})
 							.catch((err) => {
@@ -392,7 +389,7 @@ function initStoresWithAuth() {
 									// Select flag watchlist if it exists, otherwise first watchlist
 									const defaultWatchlist = flagWatch || list[0];
 									selectWatchlist(String(defaultWatchlist.watchlistId));
-									initializeVisibleWatchlists(list, defaultWatchlist.watchlistId);
+									initializeVisibleWatchlists(list);
 								}
 							}
 						).catch(() => {
@@ -406,16 +403,16 @@ function initStoresWithAuth() {
 				});
 
 			// Load user's last tickers
-			privateRequest<any[]>('getUserLastTickers', {})
-				.then((tickers: any[]) => {
+			privateRequest<Instance[]>('getUserLastTickers', {})
+				.then((tickers: Instance[]) => {
 					userLastTickers.set(tickers || []);
 				})
-				.catch((error) => {
-					console.warn('Failed to load user last tickers:', error);
+				.catch(() => {
+					console.warn('Failed to load user last tickers');
 					userLastTickers.set([]);
 				});
 		});
-	} catch (error) {
+	} catch {
 		console.warn('Failed to check public viewing mode, proceeding with auth initialization');
 	}
 	function updateTime() {
