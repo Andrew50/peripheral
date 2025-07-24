@@ -67,7 +67,8 @@ jobs:
       - compute_manual_strategy
     if: |
       (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
-      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')    uses: ./.github/workflows/deploy.yml
+      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')    
+    uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
