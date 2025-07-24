@@ -1,4 +1,3 @@
-// Package data provides database connection and data access functionality
 package data
 
 import (
@@ -335,17 +334,9 @@ func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, str
 	return true, "Redis connection test successful"
 }
 
-// NoOp is a no-operation logger implementation that discards all log messages
 type NoOp struct{}
 
-// Printf implements the Printf method of the logger interface but does nothing with the input
 func (NoOp) Printf(string, ...interface{}) {} // swallow logs
-
-// Errorf implements the Errorf method of the logger interface but does nothing with the input
 func (NoOp) Errorf(string, ...interface{}) {} // Add Errorf
-
-// Warnf implements the Warnf method of the logger interface but does nothing with the input
-func (NoOp) Warnf(string, ...interface{}) {} // Add Warnf
-
-// Debugf implements the Debugf method of the logger interface but does nothing with the input
+func (NoOp) Warnf(string, ...interface{})  {} // Add Warnf
 func (NoOp) Debugf(string, ...interface{}) {} // Add Debugf

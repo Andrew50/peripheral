@@ -297,10 +297,10 @@
 			{/if}
 		</div>
 	</div>
-
+	
 	<!-- Ideas Chips Section -->
 	<ChipSection />
-
+	
 	<!-- Footer -->
 	<SiteFooter />
 </div>
@@ -329,7 +329,12 @@
 	.auth-page {
 		width: 100%;
 		min-height: 100vh;
-		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
+		background: linear-gradient(
+			180deg,
+			#010022 0%,
+			#02175F 100%
+
+		);
 		color: #f5f9ff;
 		font-family:
 			'Geist',
@@ -399,6 +404,7 @@
 	.google-login-button:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.9);
 		transform: translateY(-1px);
+
 	}
 
 	.google-login-button:disabled {

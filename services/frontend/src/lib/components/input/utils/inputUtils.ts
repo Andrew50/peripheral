@@ -1,9 +1,10 @@
-import { publicRequest } from '$lib/utils/helpers/backend';
+import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { allKeys, type InstanceAttributes } from './inputTypes';
 export { capitalize, formatTimeframe, detectInputTypeSync };
 import { type Instance } from '$lib/utils/types/types';
 import { get } from 'svelte/store';
 import { userLastTickers } from '$lib/utils/stores/stores';
+let isLoadingSecurities = false;
 
 function capitalize(str: string, lower = false): string {
 	return (lower ? str.toLowerCase() : str).replace(/(?:^|\s|["'([{])+\S/g, (match: string) =>
@@ -75,6 +76,8 @@ export async function validateInput(
 	securities: Instance[];
 }> {
 	if (inputType === 'ticker') {
+		isLoadingSecurities = true;
+
 		try {
 			// Add a small delay to avoid too many rapid requests during typing
 			await new Promise((resolve) => setTimeout(resolve, 10));
@@ -131,7 +134,7 @@ export async function validateInput(
 				securities: []
 			};
 		} finally {
-			// Loading state previously tracked here
+			isLoadingSecurities = false;
 		}
 	} else if (inputType === 'timeframe') {
 		const regex = /^\d{1,3}[yqmwhds]?$/i;

@@ -17,7 +17,7 @@
 	const inactiveState: StrategyMenuState = { x: 0, y: 0, status: 'inactive', strategy: null };
 	const menuState: Writable<StrategyMenuState> = writable(inactiveState);
 
-	const margin = 20;
+	const MARGIN = 20;
 	function clamp(v: number, min: number, max: number) {
 		return Math.min(Math.max(v, min), max);
 	}
@@ -29,8 +29,8 @@
 		const { clientX, clientY } = e;
 
 		menuState.set({
-			x: browser ? clamp(clientX, margin, window.innerWidth - menuWidth - margin) : clientX,
-			y: clamp(clientY, margin, 99999), // y is further clamped when dragging
+			x: browser ? clamp(clientX, MARGIN, window.innerWidth - menuWidth - MARGIN) : clientX,
+			y: clamp(clientY, MARGIN, 99999), // y is further clamped when dragging
 			status: 'active',
 			strategy: null
 		});
@@ -113,13 +113,13 @@
 
 		const nx = clamp(
 			initialPos.x + (e.clientX - dragStart.x),
-			margin,
-			innerWidth - menuWidth - margin
+			MARGIN,
+			innerWidth - menuWidth - MARGIN
 		);
 		const ny = clamp(
 			initialPos.y + (e.clientY - dragStart.y),
-			margin,
-			innerHeight - menuHeight - margin
+			MARGIN,
+			innerHeight - menuHeight - MARGIN
 		);
 		menuState.update((s) => ({ ...s, x: nx, y: ny }));
 	}

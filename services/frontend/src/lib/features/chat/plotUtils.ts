@@ -3,21 +3,20 @@ import type { PlotData } from './interface';
 /**
  * Type guard to check if content is PlotData
  */
-export function isPlotData(content: unknown): content is PlotData {
+export function isPlotData(content: any): content is PlotData {
 	return (
-		!!content &&
+		content &&
 		typeof content === 'object' &&
-		content !== null &&
-		typeof (content as PlotData).chart_type === 'string' &&
-		['line', 'bar', 'scatter', 'histogram', 'heatmap'].includes((content as PlotData).chart_type) &&
-		Array.isArray((content as PlotData).data)
+		typeof content.chart_type === 'string' &&
+		['line', 'bar', 'scatter', 'histogram', 'heatmap'].includes(content.chart_type) &&
+		Array.isArray(content.data)
 	);
 }
 
 /**
  * Get plot data safely with validation
  */
-export function getPlotData(content: unknown): PlotData | null {
+export function getPlotData(content: any): PlotData | null {
 	if (isPlotData(content)) {
 		return content;
 	}
@@ -96,7 +95,7 @@ export function plotDataToText(plotData: PlotData): string {
 		}
 
 		// Extract data based on chart type
-		if (trace.x && trace.y && Array.isArray(trace.x) && Array.isArray(trace.y)) {
+		if (trace.x && trace.y) {
 			// For x,y plots
 			const length = Math.min(trace.x.length, trace.y.length);
 			for (let i = 0; i < Math.min(length, 10); i++) {
@@ -106,10 +105,10 @@ export function plotDataToText(plotData: PlotData): string {
 			if (length > 10) {
 				text += `  ... and ${length - 10} more points\n`;
 			}
-		} else if (trace.z && Array.isArray(trace.z)) {
+		} else if (trace.z) {
 			// For heatmaps
-			text += `  Heatmap data: ${trace.z.length} rows x ${Array.isArray(trace.z[0]) ? trace.z[0].length : 0} columns\n`;
-		} else if (trace.x && Array.isArray(trace.x)) {
+			text += `  Heatmap data: ${trace.z.length} rows x ${trace.z[0]?.length || 0} columns\n`;
+		} else if (trace.x) {
 			// For histograms or single-axis data
 			const length = trace.x.length;
 			for (let i = 0; i < Math.min(length, 10); i++) {
@@ -118,7 +117,7 @@ export function plotDataToText(plotData: PlotData): string {
 			if (length > 10) {
 				text += `  ... and ${length - 10} more values\n`;
 			}
-		} else if (trace.y && Array.isArray(trace.y)) {
+		} else if (trace.y) {
 			const length = trace.y.length;
 			for (let i = 0; i < Math.min(length, 10); i++) {
 				text += `  ${trace.y[i]}\n`;

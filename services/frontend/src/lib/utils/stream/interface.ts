@@ -1,17 +1,20 @@
 import { socket, subscribe, unsubscribe, activeChannels, subscribeSECFilings } from './socket';
 import type { SubscriptionRequest, StreamCallback } from './socket';
 
+import { DateTime } from 'luxon';
+import { eventChart } from '$lib/features/chart/interface';
 import { streamInfo } from '$lib/utils/stores/stores';
 import { chartEventDispatcher } from '$lib/features/chart/interface';
 import {
 	getReferenceStartTimeForDateMilliseconds,
 	isOutsideMarketHours,
-	ESTSecondstoUTCMillis
+	ESTSecondstoUTCMillis,
+	getRealTimeTime
 } from '$lib/utils/helpers/timestamp';
 import type { ReplayInfo } from '$lib/utils/stores/stores';
 import { type Instance } from '$lib/utils/types/types';
 import { get } from 'svelte/store';
-import type { StreamData, ChannelType } from './socket';
+import type { StreamData, ChannelType, TimeType } from './socket';
 import { latestValue } from './socket';
 export function releaseStream(channelName: string, callback: StreamCallback) {
 	let callbacks = activeChannels.get(channelName);
@@ -32,8 +35,8 @@ export function addStream<T extends StreamData>(
 	instance: Instance,
 	channelType: ChannelType,
 	callback: (v: T) => void
-): () => void {
-	if (!instance.securityId) return () => { };
+): Function {
+	if (!instance.securityId) return () => {};
 	const channelName = `${instance.securityId}-${channelType}`;
 	const callbacks = activeChannels.get(channelName);
 	const add = () => {
@@ -175,7 +178,7 @@ export function setExtended(extendedHours: boolean) {
 }
 
 // Function to subscribe to global SEC filings feed
-export function addGlobalSECFilingsStream(callback: StreamCallback): () => void {
+export function addGlobalSECFilingsStream(callback: StreamCallback): Function {
 	const channelName = 'sec-filings';
 	const callbacks = activeChannels.get(channelName);
 

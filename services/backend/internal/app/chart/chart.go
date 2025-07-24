@@ -478,8 +478,8 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			}
 			if incompleteAgg.Open != 0 {
 				// Only add incomplete bar if it's within regular hours or daily+ timeframes
-				incompleteTS := time.Unix(int64(incompleteAgg.Timestamp), 0)
-				if (utils.IsTimestampRegularHours(incompleteTS)) ||
+				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
+				if (utils.IsTimestampRegularHours(incompleteTs)) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
 					barDataList = append(barDataList, incompleteAgg)
 				}
@@ -902,11 +902,11 @@ func fetchTrades(
 		if it.Err() != nil {
 			return nil, it.Err()
 		}
-		tradeTS := time.Time(tr.ParticipantTimestamp).In(easternLocation)
-		if tradeTS.After(endTime) {
+		tradeTs := time.Time(tr.ParticipantTimestamp).In(easternLocation)
+		if tradeTs.After(endTime) {
 			break
 		}
-		if extendedHours || utils.IsTimestampRegularHours(tradeTS) {
+		if extendedHours || utils.IsTimestampRegularHours(tradeTs) {
 			trades = append(trades, tr)
 		}
 	}
@@ -1094,12 +1094,12 @@ func integrateChartEvents(
 		return
 	}
 
-	minTSSec := tempSortedBars[0].Timestamp
-	maxTSSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
+	minTsSec := tempSortedBars[0].Timestamp
+	maxTsSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
 
 	// Validate timestamps before proceeding
-	if math.IsNaN(minTSSec) || math.IsNaN(maxTSSec) || math.IsInf(minTSSec, 0) || math.IsInf(maxTSSec, 0) {
-		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTSSec, maxTSSec)
+	if math.IsNaN(minTsSec) || math.IsNaN(maxTsSec) || math.IsInf(minTsSec, 0) || math.IsInf(maxTsSec, 0) {
+		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
 		return
 	}
 
@@ -1110,9 +1110,9 @@ func integrateChartEvents(
 	}
 
 	// Calculate time range in milliseconds for the API call
-	fromMs := int64(minTSSec * 1000)
+	fromMs := int64(minTsSec * 1000)
 	// Extend 'toMs' to cover the full duration of the last bar
-	toMs := int64((maxTSSec + float64(chartTimeframeInSeconds)) * 1000)
+	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
 	chartEvents, err := fetchChartEventsInRange(conn, userID, securityID, fromMs, toMs, includeSECFilings, true)

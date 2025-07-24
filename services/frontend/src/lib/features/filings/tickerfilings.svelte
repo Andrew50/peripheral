@@ -101,13 +101,7 @@
 	{:else if $filings.length > 0}
 		<div class="filings-list">
 			{#each $filings as filing}
-				<div
-					class="filing-item"
-					role="button"
-					tabindex="0"
-					on:click={() => openFiling(filing.url)}
-					on:keydown={(e) => (e.key === 'Enter' || e.key === ' ' ? openFiling(filing.url) : null)}
-				>
+				<div class="filing-item" on:click={() => openFiling(filing.url)}>
 					<div class="filing-header">
 						<span class="filing-type">{filing.type}</span>
 						<span class="filing-date">{formatDate(filing.timestamp)}</span>

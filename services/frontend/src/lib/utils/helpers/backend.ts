@@ -1,20 +1,20 @@
-
+import { goto } from '$app/navigation';
 
 export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
 
 // Determine base URL for server-side (Node) context first
 if (typeof process !== 'undefined') {
-	// 1. Explicit override always wins
-	if (process.env?.BACKEND_URL) {
-		base_url = process.env.BACKEND_URL;
-	}
-	// 2. If running inside a Kubernetes pod (KUBERNETES_SERVICE_HOST is automatically
-	//    injected by Kubernetes) fall back to the ClusterIP service name.
-	else if (process.env?.KUBERNETES_SERVICE_HOST) {
-		// "backend" is the Service name defined in k8s manifests.
-		base_url = 'http://backend:5058';
-	}
+    // 1. Explicit override always wins
+    if (process.env?.BACKEND_URL) {
+        base_url = process.env.BACKEND_URL;
+    }
+    // 2. If running inside a Kubernetes pod (KUBERNETES_SERVICE_HOST is automatically
+    //    injected by Kubernetes) fall back to the ClusterIP service name.
+    else if (process.env?.KUBERNETES_SERVICE_HOST) {
+        // "backend" is the Service name defined in k8s manifests.
+        base_url = 'http://backend:5058';
+    }
 }
 
 if (typeof window !== 'undefined') {
@@ -186,11 +186,11 @@ export async function privateRequest<T>(
 			typeof result === 'object' &&
 			result !== null &&
 			'type' in result &&
-			(result as { type: string }).type === 'cancelled'
+			(result as any).type === 'cancelled'
 		) {
 			// Throw a special cancellation error that can be handled differently
-			const cancelError = new Error('Request was cancelled') as Error & { cancelled: boolean };
-			cancelError.cancelled = true;
+			const cancelError = new Error('Request was cancelled');
+			(cancelError as any).cancelled = true;
 			throw cancelError;
 		}
 
@@ -288,7 +288,7 @@ export async function streamingChatRequest<T>(
 	func: string,
 	args: Record<string, unknown>,
 	progressCallback?: (progress: string) => void,
-	partialCallback?: (partial: unknown) => void,
+	partialCallback?: (partial: any) => void,
 	signal?: AbortSignal
 ): Promise<T> {
 	// Skip API calls during SSR to prevent crashes

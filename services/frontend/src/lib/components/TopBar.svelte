@@ -8,11 +8,11 @@
 	import { writable } from 'svelte/store';
 	import { browser } from '$app/environment';
 
-	import { subscriptionStatus } from '$lib/utils/stores/stores';
-
+	import {subscriptionStatus} from '$lib/utils/stores/stores';
+	
 	export let instance: Instance;
 	export let handleCalendar: () => void;
-
+	
 	const commonTimeframes = ['1', '1h', '1d', '1w'];
 	let countdown = writable('--');
 	let countdownInterval: ReturnType<typeof setInterval>;
@@ -21,35 +21,23 @@
 
 	// TopBar handler functions
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
-		event.preventDefault();
-		event.stopPropagation();
-		queryInstanceInput(
-			[],
-			['ticker'],
-			$activeChartInstance || {},
-			'ticker',
-			'Symbol Search - TopBar'
-		)
-			.then((v: Instance) => {
-				if (v) queryChart(v, true);
-			})
-			.catch((error) => {
-				if (error.message !== 'User cancelled input') {
-					console.error('Error in ticker input:', error);
-				}
-			});
+	event.preventDefault();
+	event.stopPropagation();
+	queryInstanceInput([], ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
+		.then((v: Instance) => {
+			if (v) queryChart(v, true);
+		})
+		.catch((error) => {
+			if (error.message !== 'User cancelled input') {
+				console.error('Error in ticker input:', error);
+			}
+		});
 	}
 	function handleTickerKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			event.stopPropagation();
-			queryInstanceInput(
-				'any',
-				['ticker'],
-				$activeChartInstance || {},
-				'ticker',
-				'Symbol Search - TopBar'
-			)
+			queryInstanceInput('any', ['ticker'], $activeChartInstance || {}, 'ticker', 'Symbol Search - TopBar')
 				.then((v: Instance) => {
 					if (v) queryChart(v, true);
 				})
@@ -172,6 +160,7 @@
 	onMount(() => {
 		countdownInterval = setInterval(calculateCountdown, 1000);
 		calculateCountdown(); // Initial calculation
+
 	});
 
 	onDestroy(() => {
@@ -208,7 +197,8 @@
 		<!-- Add common timeframe buttons -->
 		{#each commonTimeframes as tf}
 			<button
-				class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe === tf
+				class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe ===
+				tf
 					? 'active'
 					: ''}"
 				on:click={() => selectTimeframe(tf)}
@@ -220,7 +210,9 @@
 		{/each}
 		<!-- Button to open custom timeframe input -->
 		<button
-			class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+			class="timeframe-custom-button metadata-button {isCustomTimeframe
+				? 'active'
+				: ''}"
 			on:click={handleCustomTimeframeClick}
 			aria-label="Select custom timeframe"
 			aria-pressed={isCustomTimeframe ? 'true' : 'false'}
@@ -296,10 +288,10 @@
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
 				>
-					<path
-						d="M4.78544 8.12311L12.8231 8.12311M12.8231 8.12311L12.8231 16.1608M12.8231 8.12311L3.1779 17.7683"
-						stroke="#333333"
-						stroke-width="1.3"
+					<path 
+						d="M4.78544 8.12311L12.8231 8.12311M12.8231 8.12311L12.8231 16.1608M12.8231 8.12311L3.1779 17.7683" 
+						stroke="#333333" 
+						stroke-width="1.3" 
 						stroke-linecap="square"
 					/>
 				</svg>
@@ -311,16 +303,16 @@
 <style>
 	/* TopBar styles */
 	.top-bar {
-		height: 40px;
-		min-height: 40px;
-		background-color: #121212;
-		display: flex;
-		align-items: center;
-		padding: 0 10px;
-		flex-shrink: 0;
-		width: 100%;
-		z-index: 10;
-		border-bottom: 4px solid var(--c1);
+	height: 40px;
+	min-height: 40px;
+	background-color: #121212;
+	display: flex;
+	align-items: center;
+	padding: 0 10px;
+	flex-shrink: 0;
+	width: 100%;
+	z-index: 10;
+	border-bottom: 4px solid var(--c1);
 	}
 
 	.top-bar-left {
@@ -451,6 +443,45 @@
 		opacity: 1;
 	}
 
+	/* Countdown styles */
+	.countdown-container {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		background: transparent;
+		border-radius: 6px;
+		border: none;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		line-height: 18px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		transition: none;
+	}
+
+	.countdown-container:hover {
+		background: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.countdown-label {
+		color: inherit;
+		font-size: inherit;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.countdown-value {
+		font-family: inherit;
+		font-weight: 600;
+		font-size: inherit;
+		color: inherit;
+		min-width: 45px;
+		text-align: center;
+	}
+
 	/* Divider styles */
 	.divider {
 		width: 1px;
@@ -462,7 +493,7 @@
 
 	/* Upgrade button styles */
 	.upgrade-button {
-		background: #cccccc;
+		background: #CCCCCC;
 		color: #333333 !important;
 		border: 1px solid rgba(255, 255, 255, 0.2);
 		transition: all 0.2s ease;

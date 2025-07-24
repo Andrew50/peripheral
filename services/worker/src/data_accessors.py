@@ -623,9 +623,6 @@ class DataAccessorProvider:
                 elif col == "timestamp":
                     # Convert timestamptz to integer seconds since epoch for backward compatibility
                     select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
-                elif col in ["open", "high", "low", "close"]:
-                    # Divide OHLC values by 1000 at database level
-                    select_columns.append(f"o.{col} / 1000.0 AS {col}")
                 else:
                     select_columns.append(f"o.{col}")
             
@@ -1327,3 +1324,4 @@ def get_general_data(columns: List[str] = None, filters: Dict[str, any] = None) 
 
 def generate_equity_curve(instances, group_column=None):
     pass
+
