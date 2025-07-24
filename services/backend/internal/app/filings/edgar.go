@@ -151,11 +151,7 @@ func fetchEdgarFilings(cik string) ([]edgar.Filing, error) {
 		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	// Check content type to ensure we're getting JSON
 	contentType := resp.Header.Get("Content-Type")
@@ -522,11 +518,7 @@ func fetchFilingText(url string) (string, error) {
 		return "", fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
@@ -625,11 +617,7 @@ func stubsFromHeaders(base, url string) ([]ExhibitStub, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 	reDoc := regexp.MustCompile(`(?s)<DOCUMENT>(.*?)</DOCUMENT>`)
 	reType := regexp.MustCompile(`(?i)<TYPE>\s*([^<\r\n]+)`)
 	reFile := regexp.MustCompile(`(?i)<FILENAME>\s*([^<\r\n]+)`)
@@ -704,11 +692,7 @@ func readHTMLExhibit(url string) (ExhibitContent, error) {
 	if err != nil {
 		return ExhibitContent{}, err
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	b, _ := io.ReadAll(resp.Body)
 	html := string(b)
@@ -770,11 +754,7 @@ func fetchAndEncodeImages(urls []string) []Base64Image {
 			if err != nil {
 				return
 			}
-			defer func() {
-				if err := res.Body.Close(); err != nil {
-					fmt.Printf("Error closing response body: %v\n", err)
-				}
-			}()
+			defer res.Body.Close()
 
 			mt := res.Header.Get("Content-Type")
 			if !strings.HasPrefix(mt, "image/") {
@@ -852,11 +832,7 @@ func GetTextFromURL(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error making HTTP request: %w", err)
 	}
-	defer func() {
-		if err := response.Body.Close(); err != nil {
-			fmt.Printf("Error closing response body: %v\n", err)
-		}
-	}()
+	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("bad status: %s", response.Status)

@@ -339,6 +339,8 @@
 		}
 	};
 
+
+
 	// Initialize component
 	async function initializeComponent() {
 		// Always fetch subscription status regardless of authentication
@@ -721,6 +723,9 @@
 </svelte:head>
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="page-wrapper">
 	<!-- Main Pricing Content -->
 	<div class="landing-container">
@@ -819,11 +824,7 @@
 										</p>
 									{/if}
 								{:else if isCurrentPlan(plan)}
-									<button
-										class="subscribe-button active-subscription"
-										on:click={handleCancelSubscription}
-										disabled
-									>
+									<button class="subscribe-button active-subscription" on:click={handleCancelSubscription} disabled>
 										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
 										{/if}
@@ -913,6 +914,7 @@
 	<SiteFooter />
 </div>
 
+
 <style>
 	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
@@ -936,13 +938,19 @@
 	:global(.landing-container) {
 		max-width: none !important;
 		width: 100% !important;
+
 	}
 
 	/* Apply the same gradient background as landing page */
 	.page-wrapper {
 		width: 100%;
 		min-height: 100vh;
-		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
+		background: linear-gradient(
+			180deg,
+			#010022 0%,
+			#02175F 100%
+
+		);
 	}
 
 	/* Landing container should have transparent background like landing page */

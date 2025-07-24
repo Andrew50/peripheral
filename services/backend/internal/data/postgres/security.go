@@ -1,5 +1,3 @@
-// Package postgres provides database operations and utilities for interacting with PostgreSQL
-// and third-party APIs like Polygon.io for financial data retrieval.
 package postgres
 
 import (
@@ -95,21 +93,18 @@ func GetPolygonRelatedTickers(client *polygon.Client, ticker string) ([]string, 
 	return relatedTickers, nil
 }
 
-// TickerEvent represents an event related to a ticker symbol, such as a ticker change,
-// company name change, or other significant corporate action.
+// Custom types to match the actual API response structure
 type TickerEvent struct {
 	Type         string                 `json:"type"`
 	Date         string                 `json:"date"`
 	TickerChange map[string]interface{} `json:"ticker_change,omitempty"`
 }
 
-// TickerEventResult represents a collection of ticker events for a specific company.
 type TickerEventResult struct {
 	Name   string        `json:"name"`
 	Events []TickerEvent `json:"events"`
 }
 
-// TickerEventsAPIResponse represents the response structure from the Polygon.io ticker events API.
 type TickerEventsAPIResponse struct {
 	Results struct {
 		Name          string        `json:"name"`
@@ -135,11 +130,7 @@ func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) (TickerE
 	if err != nil {
 		return TickerEventResult{}, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
 		// Ticker not found, return empty results

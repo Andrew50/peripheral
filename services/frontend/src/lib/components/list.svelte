@@ -661,7 +661,6 @@
 								<td colspan={columns.length + 1 + (expandable ? 1 : 0)}>
 									<div class="trade-details">
 										{#if typeof expandedContent === 'function'}
-											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 											{@html expandedContent(watch)}
 										{:else}
 											<h4>Trade Details</h4>

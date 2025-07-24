@@ -4,14 +4,17 @@ import { browser } from '$app/environment';
 // Store to track if the current device is a mobile device (phone)
 export const isMobileDevice = writable(false);
 
+// Debug override flag - can be set via URL param or localStorage
+let debugOverride: boolean | null = null;
+
 // Initialize device detection
 if (browser) {
 
     // Try modern userAgentData API first (Chromium browsers)
     let isMobile = false;
 
-    if ('userAgentData' in navigator && (navigator as { userAgentData?: { mobile: boolean } }).userAgentData?.mobile !== undefined) {
-        isMobile = (navigator as { userAgentData: { mobile: boolean } }).userAgentData.mobile;
+    if ('userAgentData' in navigator && (navigator as any).userAgentData?.mobile !== undefined) {
+        isMobile = (navigator as any).userAgentData.mobile;
         console.log('🔍 [device detection] Using userAgentData.mobile:', isMobile);
     } else {
         // Fallback to user agent string detection for phones only

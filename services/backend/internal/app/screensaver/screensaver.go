@@ -66,11 +66,7 @@ func fetchPolygonSnapshot(endpoint string, apiKey string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("error closing response body: %v\n", err)
-		}
-	}()
+	defer resp.Body.Close()
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)

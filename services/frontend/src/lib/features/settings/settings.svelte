@@ -561,6 +561,7 @@
 
 	.interface-settings,
 	.account-settings,
+	.appearance-settings,
 	.usage-settings {
 		max-width: 600px;
 	}
@@ -861,6 +862,53 @@
 	.confirm-delete-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.color-scheme-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+		gap: 1rem;
+	}
+
+	.color-scheme-option {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 1rem;
+		background-color: var(--c2);
+		border: 2px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		gap: 0.75rem;
+	}
+
+	.color-scheme-option:hover {
+		background-color: rgba(255, 255, 255, 0.05);
+	}
+
+	.color-scheme-option.selected {
+		border-color: var(--f1);
+		background-color: rgba(255, 255, 255, 0.03);
+	}
+
+	.color-preview {
+		display: flex;
+		width: 60px;
+		height: 20px;
+		border-radius: 4px;
+		overflow: hidden;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.color-bar {
+		flex: 1;
+	}
+
+	.scheme-name {
+		font-size: 0.875rem;
+		color: var(--f2);
+		font-weight: 500;
 	}
 
 	.settings-actions {

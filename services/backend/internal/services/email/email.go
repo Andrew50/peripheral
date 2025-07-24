@@ -1,4 +1,3 @@
-// Package jobs provides email sending functionality using OAuth2 authentication
 package jobs
 
 import (
@@ -97,22 +96,14 @@ func SendEmail(to, subject, body string) error {
 	if err != nil {
 		return fmt.Errorf("TLS connection error: %v", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("error closing connection: %v\n", err)
-		}
-	}()
+	defer conn.Close()
 
 	// Create SMTP client
 	client, err := smtp.NewClient(conn, smtpHost)
 	if err != nil {
 		return fmt.Errorf("SMTP client creation error: %v", err)
 	}
-	defer func() {
-		if err := client.Close(); err != nil {
-			fmt.Printf("error closing SMTP client: %v\n", err)
-		}
-	}()
+	defer client.Close()
 
 	// Authenticate with OAuth2
 	auth := &xoauth2Auth{

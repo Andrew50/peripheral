@@ -151,7 +151,7 @@ export interface Study {
 	timestamp: string; // Assuming timestamp comes as string, adjust if Date object
 	tradeId?: number;
 	completed: boolean;
-	entry: Record<string, unknown>; // JSON blob, define more strictly if structure is known
+	entry: any; // JSON blob, define more strictly if structure is known
 }
 
 export interface Trade {
@@ -178,8 +178,8 @@ export type Task = {
 	id: string;
 	state: TaskState;
 	function: string;
-	args: Record<string, unknown>;
-	result?: Record<string, unknown>;
+	args: any;
+	result?: any;
 	error?: string;
 	logs: LogEntry[];
 	createdAt: string;

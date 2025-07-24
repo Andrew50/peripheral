@@ -688,9 +688,7 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 					lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
 				} else {
 					imageData, errRead := io.ReadAll(resp.Body)
-					if closeErr := resp.Body.Close(); closeErr != nil {
-						log.Printf("Warning: failed to close response body: %v", closeErr)
-					}
+					resp.Body.Close()
 					if errRead != nil {
 						log.Printf("Error reading image data from %s: %v", url, errRead)
 						lastErr = errRead

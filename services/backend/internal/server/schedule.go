@@ -212,27 +212,6 @@ func initUserTelegramBotJob(conn *data.Conn) error {
 	return telegram.InitTelegramUserNotificationBot()
 }
 
-// startPolygonWebSocketInternal is the internal implementation for starting polygon websocket
-func startPolygonWebSocketInternal(conn *data.Conn) error {
-	polygonInitMutex.Lock()
-	defer polygonInitMutex.Unlock()
-
-	if polygonInitialized {
-		log.Printf("⚠️ Polygon WebSocket already running")
-		return nil
-	}
-
-	// Set up critical alert callback for socket package before starting WebSocket
-	socket.SetCriticalAlertCallback(alerts.LogCriticalAlert)
-
-	err := socket.StartPolygonWS(conn, useBS)
-	if err != nil {
-		return err
-	}
-	polygonInitialized = true
-	return nil
-}
-
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
@@ -249,24 +228,24 @@ var (
 		{
 			Name:           "UpdateSecurityTables",
 			Function:       simpleSecuritiesUpdateJob,
-			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - update ecurities table with currently listed tickers
-			RunOnInit:      true,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
+			RunOnInit:      false,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
-		{ // enable this before PR
+		{
 			Name:           "UpdateAllOHLCV",
 			Function:       marketdata.UpdateAllOHLCV,
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     100,
+			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
 		},
-		// COMMENTED OUT: Aggregates initialization disabled, legacy code
+		// COMMENTED OUT: Aggregates initialization disabled
 		/*
 			{
 				Name:           "InitAggregates",
@@ -277,19 +256,19 @@ var (
 			},
 		*/
 		{
-			Name:           "StartScreenerUpdater",
-			Function:       startScreenerUpdater,               // Uses partial coverage guard
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 45}}, // Run before market open
+			Name: "StartScreenerUpdater",
+			//	Function: screener.StartScreenerUpdaterLoop,
+			Function:       startScreenerUpdater,               // TODO: ENABLE THIS BEFORE PR !!!!!!!!!!!!
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     100,             // Retry until partial coverage is achieved
-			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
+			MaxRetries:     2,
+			RetryDelay:     30 * time.Second,
 		},
 		//TODO: FIX THIS SHIT
 		/*{
 			Name:           "StartAlertLoop",
-
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
@@ -302,8 +281,8 @@ var (
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
-			MaxRetries:     100,             // Retry until partial coverage is achieved
-			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
+			MaxRetries:     2,
+			RetryDelay:     30 * time.Second,
 		},
 		{
 			Name:           "UpdateSecurityDetails",
@@ -867,56 +846,64 @@ func startAlertLoop(conn *data.Conn) error {
 }
 */
 
-// startScreenerUpdater starts the screener updater if partial coverage is sufficient
-// Returns an error if coverage is insufficient, triggering job retry
+// startScreenerUpdater starts the screener updater if data is fresh
 func startScreenerUpdater(conn *data.Conn) error {
-
-	// Check if OHLCV partial coverage is sufficient (2 months back)
-	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
+	// Check if OHLCV data is fresh (within 7 days)
+	dataFresh, err := marketdata.CheckOHLCVDataFreshness(conn)
 	if err != nil {
-		log.Printf("❌ Failed to check OHLCV partial coverage for screener: %v", err)
-		return err
+		log.Printf("❌ Failed to check OHLCV data freshness for screener: %v", err)
+		// Send critical alert about the freshness check failure
+		_ = alerts.LogCriticalAlert(fmt.Errorf("failed to check OHLCV data freshness for screener: %w", err), "startScreenerUpdater")
+		// Default to disabling screener if check fails
+		dataFresh = false
 	}
 
-	if !hasCoverage {
-		log.Printf("⏳ Screener updater blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
-		return fmt.Errorf("OHLCV partial coverage not yet sufficient for screener updater")
+	if !dataFresh {
+		// Send critical alert about stale data
+		_ = alerts.LogCriticalAlert(fmt.Errorf("OHLCV data is stale (older than 7 days) - screener updater disabled"), "startScreenerUpdater")
+		log.Printf("⚠️ Screener updater disabled due to stale OHLCV data")
+		return nil
 	}
 
-	// Partial coverage is sufficient, start the screener updater
-	log.Printf("🚀 Starting screener updater - OHLCV partial coverage is sufficient")
+	// Data is fresh, start the screener updater
 	err = screener.StartScreenerUpdaterLoop(conn)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("✅ Screener updater started successfully")
 	return nil
 }
 
-// startPolygonWebSocket starts the Polygon WebSocket if partial coverage is sufficient
-// Returns an error if coverage is insufficient, triggering job retry
+// startPolygonWebSocket starts the Polygon WebSocket if not already running
 func startPolygonWebSocket(conn *data.Conn) error {
+	polygonInitMutex.Lock()
+	defer polygonInitMutex.Unlock()
 
-	// Check if OHLCV partial coverage is sufficient (2 months back)
-	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
-	if err != nil {
-		log.Printf("❌ Failed to check OHLCV partial coverage for Polygon WebSocket: %v", err)
-		return err
+	if !polygonInitialized {
+		// Check if OHLCV data is fresh (within 7 days)
+		dataFresh, err := marketdata.CheckOHLCVDataFreshness(conn)
+		if err != nil {
+			log.Printf("❌ Failed to check OHLCV data freshness: %v", err)
+			// Send critical alert about the freshness check failure
+			_ = alerts.LogCriticalAlert(fmt.Errorf("failed to check OHLCV data freshness: %w", err), "startPolygonWebSocket")
+			// Default to disabling realtime if check fails
+			dataFresh = false
+		}
+
+		if !dataFresh {
+			// Send critical alert about stale data
+			_ = alerts.LogCriticalAlert(fmt.Errorf("OHLCV data is stale (older than 7 days) - realtime streaming disabled"), "startPolygonWebSocket")
+		}
+
+		err = socket.StartPolygonWS(conn, useBS, true) // TODO: remove this before PR, revert to pass dataFresh
+		if err != nil {
+			//log.Printf("Failed to start Polygon WebSocket: %v", err)
+			return err
+		}
+		polygonInitialized = true
 	}
+	// Log that websocket is already running
 
-	if !hasCoverage {
-		log.Printf("⏳ Polygon WebSocket blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
-		return fmt.Errorf("OHLCV partial coverage not yet sufficient for Polygon WebSocket")
-	}
-
-	// Partial coverage is sufficient, start the Polygon WebSocket
-	err = startPolygonWebSocketInternal(conn)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("✅ Polygon WebSocket started successfully")
 	return nil
 }
 

@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"backend/internal/data" // your conn.go
 
@@ -114,9 +113,9 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	for _, ex := range exchanges {
 		url := fmt.Sprintf(base, ex, ex)
 
-		body, err := fetchWithRetry(ctx, url)
+		body, err := fetch(ctx, url)
 		if err != nil {
-			return nil, fmt.Errorf("load github data for %s: %w", ex, err)
+			return nil, err
 		}
 
 		var lst []listing // listing{Symbol, Sector, Industry}
@@ -134,56 +133,36 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	return out, nil
 }
 
-// fetchWithRetry performs HTTP requests with retry logic for handling timeouts
-func fetchWithRetry(ctx context.Context, url string) ([]byte, error) {
-	var err error
-	backoff := time.Second
-	for attempts := 1; attempts <= 3; attempts++ {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
-		req.Header.Set("Accept", "application/vnd.github.raw")
+func fetch(ctx context.Context, url string) ([]byte, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
-		resp, err := data.DoWithRetry(http.DefaultClient, req)
-		if err == nil {
-			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("Error closing response body: %v\n", err)
-				}
-			}()
-			if resp.StatusCode != http.StatusOK {
-				return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
-			}
+	// Outgoing headers
+	req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
+	req.Header.Set("Accept", "application/vnd.github.raw") // forces raw view
 
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-
-			// GitHub sometimes base-64s large JSON blobs
-			if json.Valid(b) {
-				return b, nil
-			}
-			if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
-				return dec, nil
-			}
-			return nil, fmt.Errorf("unexpected payload from %s", url)
-		}
-
-		// Retry only on TLS handshake timeout or context deadline exceeded
-		if !strings.Contains(err.Error(), "TLS handshake timeout") &&
-			!strings.Contains(err.Error(), "context deadline exceeded") {
-			return nil, err
-		}
-		if attempts < 3 {
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-			backoff *= 2
-		}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// GitHub sometimes base-64s large JSON blobs
+	if json.Valid(b) {
+		return b, nil
+	}
+	if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
+		return dec, nil
+	}
+	return nil, fmt.Errorf("unexpected payload from %s", url)
 }
 
 // ------------------------------------------------------------------- //

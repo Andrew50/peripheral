@@ -323,9 +323,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		resp.ProfilePic = ""
 	}
 
-	if err := telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website", a.Email)); err != nil {
-		log.Printf("Warning: failed to send telegram notification: %v", err)
-	}
+	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website", a.Email))
 	return resp, nil
 }
 
@@ -500,9 +498,7 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		return nil, fmt.Errorf("failed to create token: %v", err)
 	}
 
-	if err := telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website [google auth]", googleUser.Email)); err != nil {
-		log.Printf("Warning: failed to send telegram notification: %v", err)
-	}
+	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website [google auth]", googleUser.Email))
 	return GoogleLoginResponse{
 		Token:      jwtToken,
 		ProfilePic: googleUser.Picture,

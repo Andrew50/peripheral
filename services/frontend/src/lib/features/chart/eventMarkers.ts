@@ -114,7 +114,8 @@ function drawEventMarker(
 
 // Custom series view for event markers.
 export class EventMarkersPaneView
-	implements ICustomSeriesPaneView<Time, EventMarker, CustomSeriesOptions> {
+	implements ICustomSeriesPaneView<Time, EventMarker, CustomSeriesOptions>
+{
 	private markers: EventMarker[] = [];
 	private markerPositions: MarkerPosition[] = [];
 	private options: CustomSeriesOptions = this.defaultOptions();
@@ -220,9 +221,9 @@ export class EventMarkersPaneView
 
 	renderer(): ICustomSeriesPaneRenderer {
 		return {
-			draw: (target) => {
+			draw: (target, priceToCoordinate, visibleRange) => {
 				target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-					const { height } = mediaSize;
+					const { width, height } = mediaSize;
 
 					if (this.markers.length === 0) {
 						return;
@@ -293,7 +294,7 @@ export class EventMarkersPaneView
 		this.visibleRange = data.visibleRange || { from: 0, to: 0 }; // Handle null case
 	}
 
-	priceValueBuilder(): CustomSeriesPricePlotValues {
+	priceValueBuilder(plotRow: EventMarker): CustomSeriesPricePlotValues {
 		const prices: number[] = [];
 		return prices; // Return empty array as we're not showing price-related data
 	}
@@ -321,5 +322,5 @@ export class EventMarkersPaneView
 		} as CustomSeriesOptions;
 	}
 
-	destroy(): void { }
+	destroy(): void {}
 }

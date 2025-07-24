@@ -1,44 +1,8 @@
-import { publicRequest } from '$lib/utils/helpers/backend';
+import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import type { Instance } from '$lib/utils/types/types';
 import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
 import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore – types provided by the package at runtime; this line quiets TS until it is installed
-import DOMPurify from 'isomorphic-dompurify';
-
-// ---------------------------------------------------------------------------
-// DOMPurify global configuration
-// We want to allow inline hover effects on <a> tags added by parseMarkdown.
-// These use `onmouseenter` / `onmouseleave` attributes to tweak colours.
-// By default DOMPurify strips any `on*` attribute, so we re-allow ONLY
-// these two attributes and ONLY on <a> elements.
-// ---------------------------------------------------------------------------
-
-const ALLOWED_EVENT_ATTRS = new Set(['onmouseenter', 'onmouseleave']);
-
-// Register the hook exactly once (module scope). The hook is idempotent; if
-// the file is re-imported HMR will register multiple hooks, so guard it.
-// `DOMPurify.version` is constant, we can attach a flag to it.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore attach flag on the DOMPurify constructor
-if (!DOMPurify.__peripheralHookAdded) {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	DOMPurify.addHook('uponSanitizeAttribute', (_node: any, data: any) => {
-		if (data.attrName && ALLOWED_EVENT_ATTRS.has(data.attrName.toLowerCase())) {
-			// Allow only on <a> elements to reduce surface area
-			if (data && data.attrName && (_node as HTMLElement).nodeName === 'A') {
-				// Keep the attribute as is (inline JS). Note: still reliant on our
-				// own generated markup; user-supplied `onmouseenter` will be removed
-				// because we never expose <a> tags with those attrs in user input.
-				data.keepAttr = true;
-			}
-		}
-	});
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
-	DOMPurify.__peripheralHookAdded = true;
-}
 
 // Centralized ticker formatting regex pattern
 const TICKER_FORMAT_REGEX = /\$\$([A-Z0-9.]{1,6})-(\d+)\$\$/g;
@@ -48,14 +12,14 @@ export function parseMarkdown(content: string): string {
 	try {
 		// Format ISO 8601 timestamps like 2025-04-08T21:36:28Z to a more readable format
 		const isoTimestampRegex = /\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/g;
-		const processedContent = content.replace(isoTimestampRegex, (match) => {
+		let processedContent = content.replace(isoTimestampRegex, (match) => {
 			try {
 				const date = new Date(match);
 				if (!isNaN(date.getTime())) {
 					return date.toLocaleString();
 				}
 				return match;
-			} catch {
+			} catch (e) {
 				return match;
 			}
 		});
@@ -99,26 +63,7 @@ export function parseMarkdown(content: string): string {
 		// Strip strikethrough formatting - replace <del> and <s> tags with plain text
 		const withoutStrikethrough = withCleanHeaders.replace(/<(del|s)[^>]*>(.*?)<\/(del|s)>/gi, '$2');
 
-		// Sanitize the final HTML to mitigate XSS while preserving the custom
-		// elements and attributes we purposely inject (e.g., ticker buttons).
-		const cleanHtml = DOMPurify.sanitize(withoutStrikethrough, {
-			// Allow standard safe-HTML elements and attributes
-			USE_PROFILES: { html: true },
-			// Permit our custom <button> element produced by ticker formatting
-			'ADD_TAGS': ['button'],
-			// Allow styling hooks and custom data attributes used throughout chat
-			'ADD_ATTR': [
-				'class',
-				'style',
-				'data-ticker',
-				'data-timestamp-ms',
-				'target',
-				'rel',
-				'onmouseenter',
-				'onmouseleave'
-			]
-		});
-		return cleanHtml;
+		return withoutStrikethrough;
 	} catch (error) {
 		console.error('Error parsing markdown:', error);
 		return content; // Fallback to plain text if parsing fails
@@ -170,7 +115,7 @@ export function cleanHtmlContent(htmlContent: string): string {
 
 	// First, handle the original $$ ticker patterns before they're converted to buttons
 	// Pattern: $$TICKER-TIMESTAMPINMS$$
-	const processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
+	let processedContent = htmlContent.replace(TICKER_FORMAT_REGEX, '$1');
 
 	// Create a temporary DOM element to parse HTML
 	const tempDiv = document.createElement('div');
@@ -196,7 +141,7 @@ export function cleanTickerFormatting(text: string): string {
 	return text.replace(TICKER_FORMAT_REGEX, '$1');
 }
 // Generic function to recursively clean ticker formatting from any data structure
-function cleanDataRecursively(data: unknown): unknown {
+function cleanDataRecursively(data: any): any {
 	if (!data) return data;
 
 	if (typeof data === 'string') {
@@ -208,7 +153,7 @@ function cleanDataRecursively(data: unknown): unknown {
 	}
 
 	if (typeof data === 'object' && data !== null) {
-		const cleaned: Record<string, unknown> = {};
+		const cleaned: any = {};
 		for (const [key, value] of Object.entries(data)) {
 			cleaned[key] = cleanDataRecursively(value);
 		}
@@ -219,17 +164,17 @@ function cleanDataRecursively(data: unknown): unknown {
 }
 
 // Function to clean ticker formatting from plot data
-export function cleanPlotData(plotData: unknown): unknown {
+export function cleanPlotData(plotData: any): any {
 	return cleanDataRecursively(plotData);
 }
 
 // Function to clean ticker formatting from content chunks (only plots)
-export function cleanContentChunk(chunk: unknown): unknown {
-	if (!chunk || (chunk as { type: string }).type !== 'plot') {
+export function cleanContentChunk(chunk: any): any {
+	if (!chunk || chunk.type !== 'plot') {
 		return chunk;
 	}
 
-	const cleanedContent = cleanPlotData((chunk as { content: unknown }).content);
+	const cleanedContent = cleanPlotData(chunk.content);
 
 	const result = {
 		...chunk,
@@ -241,16 +186,16 @@ export function cleanContentChunk(chunk: unknown): unknown {
 
 // Helper function to create text content for copying from a content chunk
 export function getContentChunkTextForCopy(
-	chunk: { type: string; content: unknown },
-	isTableData: (content: unknown) => boolean,
-	plotDataToText: (data: unknown) => string
+	chunk: any,
+	isTableData: (content: any) => boolean,
+	plotDataToText: (data: any) => string
 ): string {
 	if (chunk.type === 'text') {
 		const content = typeof chunk.content === 'string' ? chunk.content : String(chunk.content);
 		return cleanHtmlContent(content);
 	} else if (chunk.type === 'table' && isTableData(chunk.content)) {
 		// For tables, create a simple text representation
-		const tableData = chunk.content as { caption?: string; headers: unknown[]; rows: unknown[] };
+		const tableData = chunk.content;
 		let tableText = '';
 		if (tableData.caption) {
 			const cleanCaption = cleanHtmlContent(tableData.caption);
@@ -258,12 +203,12 @@ export function getContentChunkTextForCopy(
 		}
 		// Add headers (clean ticker formatting from headers too)
 		tableText +=
-			tableData.headers.map((header: unknown) => cleanHtmlContent(String(header))).join('\t') + '\n';
+			tableData.headers.map((header: any) => cleanHtmlContent(String(header))).join('\t') + '\n';
 		// Add rows
 		tableText += tableData.rows
-			.map((row: unknown) => {
+			.map((row: any) => {
 				if (Array.isArray(row)) {
-					return row.map((cell: unknown) => cleanHtmlContent(String(cell))).join('\t');
+					return row.map((cell: any) => cleanHtmlContent(String(cell))).join('\t');
 				} else {
 					return cleanHtmlContent(String(row));
 				}
@@ -273,7 +218,7 @@ export function getContentChunkTextForCopy(
 	} else if (chunk.type === 'plot') {
 		// For plots, clean ticker formatting and create a text representation
 		const cleanedChunk = cleanContentChunk(chunk);
-		return plotDataToText((cleanedChunk as { content: unknown }).content);
+		return plotDataToText(cleanedChunk.content);
 	}
 	return '';
 }

@@ -38,20 +38,8 @@ type bulkLoadPool struct {
 
 func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, error) {
 	cfg := db.Config()
-	// Ensure copyWorkerCount fits in int32 range to prevent overflow
-	workerCount := copyWorkerCount
-	if workerCount > 2147483647 {
-		log.Printf("workerCount is too large, setting to 2147483647")
-		workerCount = 2147483647
-	}
-	if workerCount < 0 {
-		log.Printf("workerCount is negative, setting to 1")
-		workerCount = 1
-	}
-	// Safe conversion after bounds checking
-	workerCountInt32 := int32(workerCount) // #nosec G115 -- bounds checked above
-	cfg.MinConns = workerCountInt32
-	cfg.MaxConns = workerCountInt32
+	cfg.MinConns = int32(copyWorkerCount)
+	cfg.MaxConns = int32(copyWorkerCount)
 
 	// Apply tuning parameters to every connection via AfterConnect hook.
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -79,7 +67,7 @@ func newBulkLoadPool(ctx context.Context, db *pgxpool.Pool) (*bulkLoadPool, erro
 		// continue; for any other error we still abort pool creation.
 		if _, err := conn.Exec(ctx, "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"); err != nil {
 			if strings.Contains(err.Error(), "unrecognized configuration parameter") {
-				// log.Printf("ℹ️  Parameter timescaledb.max_tuples_decompressed_per_dml_transaction not available: %v", err)
+				log.Printf("ℹ️  Parameter timescaledb.max_tuples_decompressed_per_dml_transaction not available: %v", err)
 			} else {
 				return fmt.Errorf("set timescaledb.max_tuples_decompressed_per_dml_transaction: %w", err)
 			}
@@ -114,7 +102,7 @@ func newBulkLoadPoolWithRetry(ctx context.Context, db *pgxpool.Pool) (*bulkLoadP
 		blp, err := newBulkLoadPool(ctx, db)
 		if err == nil {
 			if attempt > 1 {
-				// log.Printf("✅ Bulk load pool created successfully on attempt %d/%d", attempt, maxAttempts)
+				log.Printf("✅ Bulk load pool created successfully on attempt %d/%d", attempt, maxAttempts)
 			}
 			return blp, nil
 		}
@@ -137,8 +125,8 @@ func newBulkLoadPoolWithRetry(ctx context.Context, db *pgxpool.Pool) (*bulkLoadP
 			break
 		}
 
-		// log.Printf("⚠️ Bulk load pool creation failed (attempt %d/%d): %v - retrying in %v",
-		//	attempt, maxAttempts, err, delay)
+		log.Printf("⚠️ Bulk load pool creation failed (attempt %d/%d): %v - retrying in %v",
+			attempt, maxAttempts, err, delay)
 
 		// Sleep with context cancellation check
 		select {
@@ -238,9 +226,7 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 
 		gz, err := gzip.NewReader(resp.Body)
 		if err != nil {
-			if closeErr := resp.Body.Close(); closeErr != nil {
-				log.Printf("Warning: failed to close response body: %v", closeErr)
-			}
+			resp.Body.Close()
 			return 0, fmt.Errorf("gzip reader %s: %w", file, err)
 		}
 
@@ -252,12 +238,8 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 		if !b.hasRead {
 			headerLine, err := reader.ReadString('\n')
 			if err != nil {
-				if closeErr := gz.Close(); closeErr != nil {
-					log.Printf("Warning: failed to close gzip reader: %v", closeErr)
-				}
-				if closeErr := resp.Body.Close(); closeErr != nil {
-					log.Printf("Warning: failed to close response body: %v", closeErr)
-				}
+				gz.Close()
+				resp.Body.Close()
 				return 0, fmt.Errorf("read header: %w", err)
 			}
 			mapped := headerLine
@@ -269,12 +251,8 @@ func (b *batchedCSVReader) Read(p []byte) (int, error) {
 			b.current = io.MultiReader(bytes.NewReader(b.header), reader)
 		} else {
 			if _, err = reader.ReadString('\n'); err != nil {
-				if closeErr := gz.Close(); closeErr != nil {
-					log.Printf("Warning: failed to close gzip reader: %v", closeErr)
-				}
-				if closeErr := resp.Body.Close(); closeErr != nil {
-					log.Printf("Warning: failed to close response body: %v", closeErr)
-				}
+				gz.Close()
+				resp.Body.Close()
 				return 0, fmt.Errorf("skip header: %w", err)
 			}
 			b.current = reader
@@ -341,7 +319,7 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		// job crashes between batches.
 		defer func() {
 			if _, err := c.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stageTable)); err != nil {
-				// log.Printf("warning: drop staging table %s: %v", stageTable, err)
+				log.Printf("warning: drop staging table %s: %v", stageTable, err)
 			}
 		}()
 
@@ -374,14 +352,14 @@ func (pw *pipelineWorker) processFiles(ctx context.Context, files []string) erro
 		var nullTickerCount int64
 		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE ticker IS NULL OR ticker = ''`, stageTable)
 		if err := c.QueryRow(ctx, countSQL).Scan(&nullTickerCount); err != nil {
-			// log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
+			log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
 		} else if nullTickerCount > 0 {
-			// log.Printf("⚠️  Filtering out %d records with null/empty tickers from batch", nullTickerCount)
+			log.Printf("⚠️  Filtering out %d records with null/empty tickers from batch", nullTickerCount)
 		}
 
 		// Step 2: Upsert into main table.
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume * 1000, open * 1000, close * 1000, high * 1000, low * 1000,
+SELECT ticker, volume, open, close, high, low,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
 WHERE ticker IS NOT NULL AND ticker != ''
@@ -443,7 +421,7 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 			}
 			// Gracefully handle truncated or corrupted gzip files (unexpected EOF).
 			if errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "unexpected EOF") {
-				// log.Printf("warning: skipping %s due to gzip error: %v", file, err)
+				log.Printf("warning: skipping %s due to gzip error: %v", file, err)
 				atomic.AddInt64(pw.skipped, 1)
 				if pw.collector != nil {
 					if day, errDay := parseDayFromKey(file); errDay == nil {
@@ -470,12 +448,12 @@ ON CONFLICT (ticker, "timestamp") DO UPDATE SET
 }
 
 // processFilesWithPipeline is the public dispatcher that fans out work to COPY workers.
-func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string, keys []string, table string, timeframe string, pool *bulkLoadPool, fc *failedCollector, processed *int64, skipped *int64, total int64, progressInterval int64, db *pgxpool.Pool, initialCutoff time.Time, directionForward bool, state LoadState) (time.Time, error) {
+func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string, keys []string, table string, timeframe string, pool *bulkLoadPool, fc *failedCollector, processed *int64, skipped *int64, total int64, progressInterval int64, db *pgxpool.Pool, initialCutoff time.Time) (time.Time, error) {
 	if len(keys) == 0 {
 		return time.Time{}, nil
 	}
 
-	//startTime := time.Now()
+	startTime := time.Now()
 
 	// Build list of unique days for the tracker.
 	uniq := make(map[time.Time]struct{})
@@ -489,8 +467,7 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 		days = append(days, d)
 	}
 
-	// Create tracker with explicit direction
-	tracker := newDayStatusTracker(days, initialCutoff, directionForward)
+	tracker := newDayStatusTracker(days, initialCutoff)
 
 	// Channel for per-file results.
 	resultCh := make(chan workerResult, 100)
@@ -509,15 +486,7 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
-		var persisted time.Time
-		if directionForward {
-			persisted = state.Latest
-		} else {
-			persisted = state.Earliest
-		}
-		if persisted.IsZero() {
-			persisted = initialCutoff
-		}
+		persisted := initialCutoff
 
 		flush := func() {
 			cut := tracker.CurrentCutoff()
@@ -533,44 +502,9 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				}
 			}
 
-			// Update load state based on direction
-			var shouldUpdate bool
-			var newState LoadState = state
-
-			// log.Printf("🔍 State update check: timeframe=%s, direction=%s, cut=%s, persisted=%s",
-			//	timeframe, map[bool]string{true: "forward", false: "backward"}[directionForward],
-			//	cut.Format("2006-01-02"), persisted.Format("2006-01-02"))
-
-			if directionForward && cut.After(persisted) {
-				shouldUpdate = true
-				newState.Latest = cut
-				// log.Printf("🔍 State update: %s forward complete up to %s (was %s)", timeframe, cut.Format("2006-01-02"), persisted.Format("2006-01-02"))
-			} else if !directionForward && cut.Before(persisted) {
-				shouldUpdate = true
-				newState.Earliest = cut
-				// log.Printf("🔍 State update: %s backward complete down to %s (was %s)", timeframe, cut.Format("2006-01-02"), persisted.Format("2006-01-02"))
-			} else {
-				// log.Printf("🔍 State update: no update needed (cut=%s, persisted=%s, forward=%v)",
-				//	cut.Format("2006-01-02"), persisted.Format("2006-01-02"), directionForward)
-			}
-
-			if shouldUpdate {
-				// log.Printf("🔍 State update: updating database - earliest=%s, latest=%s",
-				//	func() string {
-				//		if newState.Earliest.IsZero() {
-				//			return "null"
-				//		} else {
-				//			return newState.Earliest.Format("2006-01-02")
-				//		}
-				//	}(),
-				//	func() string {
-				//		if newState.Latest.IsZero() {
-				//			return "null"
-				//		} else {
-				//			return newState.Latest.Format("2006-01-02")
-				//		}
-				//	}())
-				if err := setLoadState(ctx, db, timeframe, newState); err != nil {
+			// Persist last_loaded_at if we can move the cut-off.
+			if cut.After(persisted) {
+				if err := setLastLoadedAt(ctx, db, timeframe, cut); err != nil {
 					select {
 					case errCh <- err:
 					default:
@@ -579,51 +513,6 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 					return
 				}
 				persisted = cut
-
-				// Manual chunk compression with bidirectional safety
-				now := time.Now().UTC()
-				var minDuration time.Duration
-				var chunkOffset time.Duration
-
-				if timeframe == "1-minute" {
-					minDuration = 7 * 24 * time.Hour
-					chunkOffset = 4 * 30 * 24 * time.Hour // 4 months
-				} else if timeframe == "1-day" {
-					minDuration = 60 * 24 * time.Hour
-					chunkOffset = 8 * 365 * 24 * time.Hour // 8 years
-				}
-
-				// Only compress if we have both bounds established
-				if !newState.Latest.IsZero() && !newState.Earliest.IsZero() {
-					lower := time.Date(2003, 9, 10, 0, 0, 0, 0, time.UTC)
-
-					// Determine safe compression range
-					upperBound := newState.Latest.Add(-chunkOffset)
-					lowerBound := newState.Earliest.Add(chunkOffset)
-
-					// Apply recent-data safety limit
-					recentSafe := now.Add(-minDuration)
-					if upperBound.After(recentSafe) {
-						upperBound = recentSafe
-					}
-
-					// Skip lower bound check if we've reached the absolute minimum
-					if newState.Earliest.Equal(lower) || newState.Earliest.Before(lower) {
-						lowerBound = time.Time{} // No lower bound restriction
-					}
-
-					// Validate compression bounds before attempting compression
-					if !lowerBound.IsZero() && !upperBound.After(lowerBound) {
-						// log.Printf("ℹ️  Skipping periodic compression for %s: insufficient data range (span less than %v)",
-						//	table, chunkOffset*2)
-					} else {
-						go func(upper, lower time.Time) {
-							if err := compressChunksInRange(context.Background(), db, table, upper, lower); err != nil {
-								// log.Printf("periodic compression failed for %s: %v", table, err)
-							}
-						}(upperBound, lowerBound)
-					}
-				}
 			}
 		}
 
@@ -642,9 +531,8 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				} else {
 					tracker.MarkFailed(r.day)
 				}
-				// If the guaranteed cutoff changed, flush immediately.
-				if (directionForward && tracker.CurrentCutoff().After(before)) ||
-					(!directionForward && tracker.CurrentCutoff().Before(before)) {
+				// If the guaranteed cutoff advanced, flush immediately.
+				if tracker.CurrentCutoff().After(before) {
 					flush()
 				}
 			case <-ticker.C:
@@ -696,9 +584,13 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 					}
 					n := atomic.AddInt64(processed, int64(len(batch)))
 					if n%progressInterval == 0 || n == total {
-						// elapsed := time.Since(startTime)
-						// remainingFiles := total - n
-						// log.Printf("%s progress: %d/%d processed | elapsed %v | est remaining %v", table, n, total, elapsed.Truncate(time.Second), estRemaining.Truncate(time.Second))
+						elapsed := time.Since(startTime)
+						remainingFiles := total - n
+						var estRemaining time.Duration
+						if n > 0 {
+							estRemaining = time.Duration(float64(elapsed) * float64(remainingFiles) / float64(n))
+						}
+						log.Printf("%s progress: %d/%d processed | elapsed %v | est remaining %v", table, n, total, elapsed.Truncate(time.Second), estRemaining.Truncate(time.Second))
 					}
 				}
 			}
@@ -751,7 +643,7 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 				backoffDuration = 30 * time.Second
 			}
 
-			// log.Printf("⚠️  S3 GetObject transient error for %s (attempt %d/%d), backing off for %v. Last error: %v", key, attempt, maxRetries, backoffDuration, lastErr)
+			log.Printf("S3 GetObject rate limited for %s (attempt %d/%d), backing off for %v...", key, attempt, maxRetries, backoffDuration)
 
 			select {
 			case <-ctx.Done():
@@ -769,13 +661,12 @@ func getS3ObjectWithRetry(ctx context.Context, s3c *s3.Client, bucket, key strin
 
 			lastErr = err
 
-			// Check if this is a transient error that should be retried
-			if isS3TransientError(err) {
-				// log.Printf("⚠️  S3 GetObject transient error for %s (will retry): %v", key, err)
-				continue // Retry on transient errors
+			// Check if this is a rate limit error
+			if isS3RateLimitError(err) {
+				continue // Retry on rate limit
 			}
 
-			// For non-transient errors, fail immediately
+			// For non-rate-limit errors, fail immediately
 			return nil, nil, err
 		}
 
@@ -803,9 +694,7 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		return err
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("Warning: failed to close response body: %v", err)
-		}
+		resp.Body.Close()
 		if cancel != nil {
 			cancel()
 		}
@@ -815,11 +704,7 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer func() {
-		if err := gz.Close(); err != nil {
-			fmt.Printf("Error closing gzip reader: %v\n", err)
-		}
-	}()
+	defer gz.Close()
 
 	// Two-step load: COPY into per-connection staging (bigint ts) then upsert converting to timestamptz.
 	return db.AcquireFunc(ctx, func(c *pgxpool.Conn) error {
@@ -852,13 +737,13 @@ func copyObject(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket, k
 		var nullTickerCount int64
 		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE ticker IS NULL OR ticker = ''`, stageTable)
 		if err := c.QueryRow(ctx, countSQL).Scan(&nullTickerCount); err != nil {
-			// log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
+			log.Printf("warning: failed to count null tickers in %s: %v", stageTable, err)
 		} else if nullTickerCount > 0 {
-			// log.Printf("⚠️  Filtering out %d records with null/empty tickers from %s", nullTickerCount, key)
+			log.Printf("⚠️  Filtering out %d records with null/empty tickers from %s", nullTickerCount, key)
 		}
 
 		upsertSQL := fmt.Sprintf(`INSERT INTO %s (ticker, volume, open, close, high, low, "timestamp", transactions)
-SELECT ticker, volume, open * 1000, close * 1000, high * 1000, low * 1000,
+SELECT ticker, volume, open, close, high, low,
        to_timestamp("timestamp"::double precision / 1000000000) AT TIME ZONE 'UTC',
        transactions FROM %s
 WHERE ticker IS NOT NULL AND ticker != ''
@@ -962,155 +847,6 @@ func (p *processedDateTracker) GetConservativeUpdateDate() time.Time {
 	return earliest.AddDate(0, 0, -1)
 }
 */
-
-// compressOldChunks compresses chunks older than the given effective timestamp in batches of 5.
-func compressOldChunks(ctx context.Context, db *pgxpool.Pool, table string, effective time.Time) error {
-	var lastChunk string
-	for {
-		var query string
-		params := []interface{}{table, effective}
-		if lastChunk == "" {
-			query = `SELECT c.chunk_name 
-					FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
-					LEFT JOIN chunk_compression_stats($1) ccs 
-						ON c.chunk_name::text = ccs.chunk_name::text
-					WHERE ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed'
-					ORDER BY c.chunk_name`
-		} else {
-			query = `SELECT c.chunk_name 
-					FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
-					LEFT JOIN chunk_compression_stats($1) ccs 
-						ON c.chunk_name::text = ccs.chunk_name::text
-					WHERE (ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed')
-						AND c.chunk_name::text > $3::text
-					ORDER BY c.chunk_name`
-			params = append(params, lastChunk)
-		}
-
-		rows, err := db.Query(ctx, query, params...)
-		if err != nil {
-			return fmt.Errorf("query chunks: %w", err)
-		}
-		defer rows.Close()
-
-		count := 0
-		for rows.Next() {
-			var chunk string
-			if err := rows.Scan(&chunk); err != nil {
-				// log.Printf("scan chunk: %v", err)
-				continue
-			}
-			if _, err := db.Exec(ctx, `SELECT compress_chunk($1, true)`, chunk); err != nil {
-				// log.Printf("compress %s failed: %v", chunk, err)
-			}
-			lastChunk = chunk
-			count++
-		}
-		if rows.Err() != nil {
-			return fmt.Errorf("rows error: %w", rows.Err())
-		}
-		if count == 0 {
-			break
-		}
-	}
-	return nil
-}
-
-// compressChunksInRange compresses chunks between lower and upper bounds
-func compressChunksInRange(ctx context.Context, db *pgxpool.Pool, table string, upper, lower time.Time) error {
-	// Validate time range bounds - if upper <= lower, there's nothing to compress
-	if !lower.IsZero() && !upper.After(lower) {
-		// log.Printf("ℹ️  Skipping compression for %s: insufficient data range (upper=%s, lower=%s)",
-		//	table, upper.Format("2006-01-02"), lower.Format("2006-01-02"))
-		return nil
-	}
-
-	var lastChunk string
-	for {
-		var query string
-		var params []interface{}
-
-		// Build query based on whether we have a lower bound
-		if lower.IsZero() {
-			// No lower bound - compress everything older than upper
-			params = []interface{}{table, upper}
-			if lastChunk == "" {
-				query = `SELECT c.chunk_name 
-						FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
-						LEFT JOIN chunk_compression_stats($1) ccs 
-							ON c.chunk_name::text = ccs.chunk_name::text
-						WHERE ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed'
-						ORDER BY c.chunk_name`
-			} else {
-				query = `SELECT c.chunk_name 
-						FROM show_chunks($1, older_than => $2::timestamptz) AS c(chunk_name)
-						LEFT JOIN chunk_compression_stats($1) ccs 
-							ON c.chunk_name::text = ccs.chunk_name::text
-						WHERE (ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed')
-							AND c.chunk_name::text > $3::text
-						ORDER BY c.chunk_name`
-				params = append(params, lastChunk)
-			}
-		} else {
-			// Have both bounds - compress only chunks in range
-			params = []interface{}{table, upper, lower}
-			if lastChunk == "" {
-				query = `SELECT c.chunk_name 
-						FROM show_chunks($1, older_than => $2::timestamptz, newer_than => $3::timestamptz) AS c(chunk_name)
-						LEFT JOIN chunk_compression_stats($1) ccs 
-							ON c.chunk_name::text = ccs.chunk_name::text
-						WHERE ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed'
-						ORDER BY c.chunk_name`
-			} else {
-				query = `SELECT c.chunk_name 
-						FROM show_chunks($1, older_than => $2::timestamptz, newer_than => $3::timestamptz) AS c(chunk_name)
-						LEFT JOIN chunk_compression_stats($1) ccs 
-							ON c.chunk_name::text = ccs.chunk_name::text
-						WHERE (ccs.chunk_name IS NULL OR ccs.compression_status = 'Uncompressed')
-							AND c.chunk_name::text > $4::text
-						ORDER BY c.chunk_name`
-				params = append(params, lastChunk)
-			}
-		}
-
-		rows, err := db.Query(ctx, query, params...)
-		if err != nil {
-			// Check if this is the "invalid time range" error from TimescaleDB
-			if strings.Contains(err.Error(), "invalid time range") && strings.Contains(err.Error(), "22023") {
-				// log.Printf("ℹ️  Skipping compression for %s: invalid time range detected (likely insufficient data span)", table)
-				return nil
-			}
-			return fmt.Errorf("query chunks: %w", err)
-		}
-		defer rows.Close()
-
-		count := 0
-		for rows.Next() {
-			var chunk string
-			if err := rows.Scan(&chunk); err != nil {
-				// log.Printf("scan chunk: %v", err)
-				continue
-			}
-			if _, err := db.Exec(ctx, `SELECT compress_chunk($1, true)`, chunk); err != nil {
-				// log.Printf("compress %s failed: %v", chunk, err)
-			}
-			lastChunk = chunk
-			count++
-		}
-		if rows.Err() != nil {
-			// Check if this is the "invalid time range" error from TimescaleDB
-			if strings.Contains(rows.Err().Error(), "invalid time range") && strings.Contains(rows.Err().Error(), "22023") {
-				// log.Printf("ℹ️  Skipping compression for %s: invalid time range detected (likely insufficient data span)", table)
-				return nil
-			}
-			return fmt.Errorf("rows error: %w", rows.Err())
-		}
-		if count == 0 {
-			break
-		}
-	}
-	return nil
-}
 
 // parseDayFromKey extracts YYYY-MM-DD from an S3 key that ends with .csv.gz.
 func parseDayFromKey(key string) (time.Time, error) {
