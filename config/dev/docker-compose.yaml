@@ -37,6 +37,7 @@ services:
       - SMTP_PORT=${SMTP_PORT}
       - TELEGRAM_USER_NOTIFICATION_BOT_TOKEN=${TELEGRAM_USER_NOTIFICATION_BOT_TOKEN}
       - TELEGRAM_BEN_TWEETS_BOT_TOKEN=${TELEGRAM_BEN_TWEETS_BOT_TOKEN}
+      - PGDATA=/home/postgres/pgdata/data
       # - GITHUB_TOKEN=${GITHUB_TOKEN}
     platform: ${PLATFORM:-linux/amd64}
   db:
@@ -48,7 +49,7 @@ services:
     networks:
       - compose_network
     volumes:
-      - db:/home/postgres/pgdata
+      - db:/home/postgres/pgdata/data
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres

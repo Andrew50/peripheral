@@ -103,6 +103,7 @@ func dispatchPriceAlert(conn *data.Conn, alert PriceAlert) error {
 		SecurityID: *alert.SecurityID,
 		Message:    alertMessage,
 		Channel:    "alert",
+		Type:       "price",
 		Tickers:    []string{*alert.Ticker},
 	})
 	// Log the alert using the new centralized logging system

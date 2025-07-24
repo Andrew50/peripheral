@@ -870,7 +870,12 @@
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
 	function handleMouseMove(event: MouseEvent) {
+		console.log('[DRAG-DEBUG] handleMouseMove called');
 		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			console.log('[DRAG-DEBUG] handleMouseMove early return', {
+				isDragging: $drawingMenuProps.isDragging,
+				selectedLine: !!$drawingMenuProps.selectedLine
+			});
 			return;
 		}
 
@@ -879,6 +884,10 @@
 
 		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
+
+		console.log(
+			`[DRAG-DEBUG] handleMouseMove: dragging ${$drawingMenuProps.selectedLineType} to price ${price}`
+		);
 
 		// Update the line position visually with immediate feedback
 		// For alert lines, use orange color and line width 1
@@ -890,6 +899,7 @@
 		const lineWidth =
 			$drawingMenuProps.selectedLineType === 'alert' ? 1 : $drawingMenuProps.selectedLineWidth;
 
+		console.log('[DRAG-DEBUG] handleMouseMove: applying options', { price, lineColor, lineWidth });
 		$drawingMenuProps.selectedLine.applyOptions({
 			price: price,
 			color: lineColor,
@@ -922,6 +932,7 @@
 	}
 
 	function handleMouseUp() {
+		console.log(`[DRAG-DEBUG] handleMouseUp called for ${$drawingMenuProps.selectedLineType}`);
 		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
 			return;
 		}
@@ -980,6 +991,9 @@
 						(alert) => alert.alertId === alertData.alertId
 					);
 					if (alertIndex !== -1) {
+						console.log(
+							`[DRAG-DEBUG] handleMouseUp: Updating alert line in store with new price ${newPrice}`
+						);
 						props.alertLines[alertIndex].price = newPrice;
 					}
 					return props;
@@ -996,12 +1010,19 @@
 			}
 		}
 
-		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
+		drawingMenuProps.update((v) => ({
+			...v,
+			isDragging: false,
+			selectedLine: null,
+			selectedLineId: -1,
+			selectedLineType: null
+		}));
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 
 	function startDragging(event: MouseEvent) {
+		console.log(`[DRAG-DEBUG] startDragging called for ${$drawingMenuProps.selectedLineType}`);
 		if (!$drawingMenuProps.selectedLine) {
 			return;
 		}
@@ -1015,6 +1036,7 @@
 	}
 
 	function determineClickedLine(event: MouseEvent) {
+		console.log('[DRAG-DEBUG] determineClickedLine called');
 		const relativeY = getRelativeMouseY(event);
 		if (relativeY === null) return false;
 
@@ -1027,6 +1049,7 @@
 		// First check regular horizontal lines
 		for (const line of $drawingMenuProps.horizontalLines) {
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
+				console.log('[DRAG-DEBUG] Horizontal line clicked:', line);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
@@ -1050,6 +1073,7 @@
 		// Then check alert lines
 		for (const alertLine of $drawingMenuProps.alertLines) {
 			if (alertLine.price <= upperPrice && alertLine.price >= lowerPrice) {
+				console.log('[DRAG-DEBUG] Alert line clicked:', alertLine);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
@@ -1091,7 +1115,7 @@
 		}
 
 		if (determineClickedLine(event)) {
-			//console.log('🎯 Line detected in determineClickedLine, setting up drag/click handlers');
+			console.log('[DRAG-DEBUG] handleMouseDown: line detected');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -1101,7 +1125,9 @@
 				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
 
 				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-					//console.log('🔄 Drag detected, starting drag operation');
+					console.log(
+						'[DRAG-DEBUG] handleMouseDown: Drag threshold exceeded, calling startDragging'
+					);
 					// It's a drag - start dragging and remove this temporary listener
 					document.removeEventListener('mousemove', handleMouseMoveForDrag);
 					document.removeEventListener('mouseup', handleMouseUpForClick);
@@ -1124,7 +1150,7 @@
 				);*/
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					//console.log('✅ Click confirmed, activating menu');
+					console.log('[DRAG-DEBUG] handleMouseDown: Click confirmed, activating menu');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -1465,7 +1491,14 @@
 	}
 
 	// Add subscription to activeAlerts store to update alert lines
-	$: if ($activeAlerts && chartCandleSeries && $drawingMenuProps) {
+	$: if (
+		$activeAlerts &&
+		chartCandleSeries &&
+		$drawingMenuProps &&
+		!$drawingMenuProps.isDragging &&
+		!$drawingMenuProps.selectedLine
+	) {
+		console.log('[DRAG-DEBUG] Alert lines reactive block fired.');
 		// Remove existing alert lines
 		$drawingMenuProps.alertLines.forEach((line) => {
 			chartCandleSeries.removePriceLine(line.line);
@@ -1515,6 +1548,7 @@
 		chartSecurityId &&
 		!$drawingMenuProps.isDragging
 	) {
+		console.log('[DRAG-DEBUG] Horizontal lines reactive block fired.');
 		// Get current lines for this security from drawingMenuProps
 		const currentDrawingLines = $drawingMenuProps.horizontalLines || [];
 
