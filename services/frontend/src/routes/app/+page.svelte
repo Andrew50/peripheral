@@ -100,9 +100,9 @@
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// ─── Alert tabs ────────────────────────────────────────────────────────────
-	const alertTabs = ['active', 'inactive', 'history'] as const;
+	const alertTabs = ['price', 'strategy', 'logs'] as const;
 	type AlertView = (typeof alertTabs)[number];
-	let alertView: AlertView = 'active';
+	let alertView: AlertView = 'price';
 
 	// Bottom windows
 	type BottomWindowType =
@@ -874,7 +874,13 @@
 
 	async function createPriceAlert() {
 		if (alertsComponent) {
-			alertsComponent.showForm();
+			alertsComponent.showPriceForm();
+		}
+	}
+
+	async function createStrategyAlert() {
+		if (alertsComponent) {
+			alertsComponent.showStrategyForm();
 		}
 	}
 
@@ -1115,22 +1121,25 @@
 											<button
 												class="watchlist-tab {alertView === tab ? 'active' : ''}"
 												on:click={() => (alertView = tab)}
-												title={tab === 'history'
-													? 'Alert History'
-													: tab.charAt(0).toUpperCase() + tab.slice(1) + ' Alerts'}
+												title={tab.charAt(0).toUpperCase() + tab.slice(1) + ' Alerts'}
 											>
-												{tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'History'}
+												{tab.charAt(0).toUpperCase() + tab.slice(1)}
 											</button>
 										{/each}
 
-										<button
-											class="watchlist-tab plus-button"
-											on:click={createPriceAlert}
-											title="Create New Price Alert"
-											style="margin-left: auto;"
-										>
-											+
-										</button>
+										{#if alertView !== 'logs'}
+											<button
+												class="watchlist-tab plus-button"
+												on:click={() => {
+													if (alertView === 'price') createPriceAlert();
+													else if (alertView === 'strategy') createStrategyAlert();
+												}}
+												title="Create New {alertView === 'price' ? 'Price' : 'Strategy'} Alert"
+												style="margin-left: auto;"
+											>
+												+
+											</button>
+										{/if}
 									</div>
 								{/if}
 								{#if $activeMenu === 'watchlist'}

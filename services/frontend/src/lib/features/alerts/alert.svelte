@@ -30,7 +30,21 @@
 
 	/* ───── Delete helpers ──────────────────────────────────────────────────── */
 	function deleteAlert(alert: Alert) {
-		privateRequest('deleteAlert', { alertId: alert.alertId }, true);
+		console.log(alert.alertType);
+		if (alert.alertType === 'strategy') {
+			privateRequest(
+				'setAlert',
+				{
+					strategyId: alert.strategyId,
+					active: false,
+					threshold: alert.alertThreshold,
+					universe: alert.alertUniverse || []
+				},
+				true
+			);
+		} else {
+			privateRequest('deleteAlert', { alertId: alert.alertId }, true);
+		}
 	}
 
 	function deleteAlertLog(alertLog: AlertLog) {
@@ -129,38 +143,48 @@
 		universeAllTickers = true;
 	}
 
-	/* ───── Export function for parent components ───────────────────────────── */
-	export function showForm() {
+	/* ───── Export functions for parent components ──────────────────────────── */
+	export function showPriceForm() {
+		console.log('Showing price alert form');
 		showAddAlertForm = true;
-		alertTypeSelection = null; // Start with type selection
+		alertTypeSelection = 'price'; // Skip type selection, go directly to price form
+	}
+
+	export function showStrategyForm() {
+		console.log('Showing strategy alert form');
+		showAddAlertForm = true;
+		alertTypeSelection = 'strategy'; // Skip type selection, go directly to strategy form
 	}
 
 	/* ───── Props ──────────────────────────────────────────────────────────── */
-	export let view: 'active' | 'inactive' | 'history' = 'active';
+	export let view: 'price' | 'strategy' | 'logs' = 'price';
 
-	/* ───── Filtering state ─────────────────────────────────────────────────── */
-	let alertFilter: 'all' | 'price' | 'strategy' = 'all';
+	/* ───── View-specific data preparation ──────────────────────────────────── */
+	$: priceAlerts = [
+		...($activeAlerts?.filter((alert) => alert.alertType === 'price') || []),
+		...($inactiveAlerts?.filter((alert) => alert.alertType === 'price') || [])
+	];
 
-	/* ───── Filtered stores ─────────────────────────────────────────────────── */
-	$: filteredActiveAlerts =
-		$activeAlerts?.filter((alert) => alertFilter === 'all' || alert.alertType === alertFilter) ||
-		[];
+	$: strategyAlerts =
+		$strategies?.filter(
+			(strategy) => strategy.alertThreshold !== null && strategy.alertThreshold !== undefined
+		) || [];
 
-	$: filteredInactiveAlerts =
-		$inactiveAlerts?.filter((alert) => alertFilter === 'all' || alert.alertType === alertFilter) ||
-		[];
-
-	$: filteredAlertLogs =
-		$alertLogs?.filter((log) => alertFilter === 'all' || log.alertType === alertFilter) || [];
+	$: alertLogsWithCondition =
+		$alertLogs?.map((log) => ({
+			...log,
+			Condition:
+				log.alertType === 'price'
+					? `Crossed $${log.alertPrice}`
+					: log.strategyName || 'Unknown Strategy'
+		})) || [];
 
 	/* ───── Cast stores for <List> component ────────────────────────────────── */
-	$: extendedActiveAlerts = writable(filteredActiveAlerts) as unknown as Writable<
+	$: extendedPriceAlerts = writable(priceAlerts) as unknown as Writable<ExtendedInstance[]>;
+	$: extendedStrategyAlerts = writable(strategyAlerts) as unknown as Writable<ExtendedInstance[]>;
+	$: extendedAlertLogs = writable(alertLogsWithCondition) as unknown as Writable<
 		ExtendedInstance[]
 	>;
-	$: extendedInactiveAlerts = writable(filteredInactiveAlerts) as unknown as Writable<
-		ExtendedInstance[]
-	>;
-	$: extendedAlertLogs = writable(filteredAlertLogs) as unknown as Writable<ExtendedInstance[]>;
 
 	const handleDeleteAlert = (item: ExtendedInstance) => deleteAlert(item as unknown as Alert);
 	const handleDeleteAlertLog = (item: ExtendedInstance) =>
@@ -178,20 +202,7 @@
 		<div class="add-alert-form">
 			<h4>Create New Alert</h4>
 
-			<!-- Alert Type Selection -->
-			{#if !alertTypeSelection}
-				<div class="alert-type-selection">
-					<p>Choose alert type:</p>
-					<div class="type-buttons">
-						<button class="type-button" on:click={() => (alertTypeSelection = 'price')}>
-							Price Alert
-						</button>
-						<button class="type-button" on:click={() => (alertTypeSelection = 'strategy')}>
-							Strategy Alert
-						</button>
-					</div>
-				</div>
-			{:else if alertTypeSelection === 'price'}
+			{#if alertTypeSelection === 'price'}
 				<!-- Price Alert Form -->
 				<div class="form-field">
 					<label>Ticker:</label>
@@ -214,7 +225,6 @@
 
 				<div class="form-buttons">
 					<button class="cancel-button" on:click={cancel}>Cancel</button>
-					<button class="back-button" on:click={() => (alertTypeSelection = null)}>Back</button>
 					<button class="save-button" on:click={saveAlert} disabled={!isPriceFormValid}>
 						Save Alert
 					</button>
@@ -262,7 +272,6 @@
 
 				<div class="form-buttons">
 					<button class="cancel-button" on:click={cancel}>Cancel</button>
-					<button class="back-button" on:click={() => (alertTypeSelection = null)}>Back</button>
 					<button class="save-button" on:click={saveStrategyAlert} disabled={!isStrategyFormValid}>
 						Save Alert
 					</button>
@@ -271,61 +280,37 @@
 		</div>
 	{/if}
 
-	<!-- Alert Filter Controls -->
-	<div class="filter-controls">
-		<div class="filter-buttons">
-			<button
-				class="filter-button {alertFilter === 'all' ? 'active' : ''}"
-				on:click={() => (alertFilter = 'all')}
-			>
-				All
-			</button>
-			<button
-				class="filter-button {alertFilter === 'price' ? 'active' : ''}"
-				on:click={() => (alertFilter = 'price')}
-			>
-				Price
-			</button>
-			<button
-				class="filter-button {alertFilter === 'strategy' ? 'active' : ''}"
-				on:click={() => (alertFilter = 'strategy')}
-			>
-				Strategy
-			</button>
-		</div>
-	</div>
-
-	{#if view === 'active'}
-		<!-- Active Alerts -->
-		<h3>Active Alerts</h3>
+	{#if view === 'price'}
+		<!-- Price Alerts -->
+		<h3>Price Alerts</h3>
 		<List
 			on:contextmenu={(event) => {
 				event.preventDefault();
 			}}
-			list={extendedActiveAlerts}
+			list={extendedPriceAlerts}
 			columns={['Ticker', 'alertPrice']}
 			parentDelete={handleDeleteAlert}
 		/>
-	{:else if view === 'inactive'}
-		<!-- Inactive Alerts -->
-		<h3>Inactive Alerts</h3>
+	{:else if view === 'strategy'}
+		<!-- Strategy Alerts -->
+		<h3>Strategy Alerts</h3>
 		<List
 			on:contextmenu={(event) => {
 				event.preventDefault();
 			}}
-			list={extendedInactiveAlerts}
-			columns={['Ticker', 'alertPrice']}
+			list={extendedStrategyAlerts}
+			columns={['name', 'alertThreshold']}
 			parentDelete={handleDeleteAlert}
 		/>
-	{:else if view === 'history'}
-		<!-- Alert History -->
-		<h3>Alert History</h3>
+	{:else if view === 'logs'}
+		<!-- Alert Logs -->
+		<h3>Alert Logs</h3>
 		<List
 			on:contextmenu={(event) => {
 				event.preventDefault();
 			}}
 			list={extendedAlertLogs}
-			columns={['Ticker', 'Timestamp']}
+			columns={['Ticker', 'Timestamp', 'Condition']}
 			parentDelete={handleDeleteAlertLog}
 		/>
 	{/if}
@@ -446,59 +431,6 @@
 		cursor: not-allowed;
 	}
 
-	/* ───── Alert Type Selection ──────────────────────────────────────────── */
-	.alert-type-selection {
-		text-align: center;
-		margin-bottom: 16px;
-	}
-
-	.alert-type-selection p {
-		margin: 0 0 12px 0;
-		color: #ffffff;
-		font-size: 13px;
-	}
-
-	.type-buttons {
-		display: flex;
-		gap: 12px;
-		justify-content: center;
-	}
-
-	.type-button {
-		flex: 1;
-		padding: 12px 16px;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 6px;
-		color: #ffffff;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
-
-	.type-button:hover {
-		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.3);
-	}
-
-	.back-button {
-		flex: 1;
-		padding: 8px 16px;
-		border: none;
-		border-radius: 4px;
-		font-size: 12px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		background: rgba(255, 255, 255, 0.15);
-		color: #ffffff;
-	}
-
-	.back-button:hover {
-		background: rgba(255, 255, 255, 0.25);
-	}
-
 	/* ───── Strategy Alert Form ────────────────────────────────────────────── */
 	.strategy-selector,
 	.threshold-input {
@@ -559,42 +491,5 @@
 		outline: none;
 		border-color: rgba(255, 255, 255, 0.4);
 		background: rgba(255, 255, 255, 0.15);
-	}
-
-	/* ───── Filter Controls ────────────────────────────────────────────────── */
-	.filter-controls {
-		margin-bottom: 16px;
-	}
-
-	.filter-buttons {
-		display: flex;
-		gap: 4px;
-		background: rgba(255, 255, 255, 0.05);
-		border-radius: 6px;
-		padding: 4px;
-	}
-
-	.filter-button {
-		flex: 1;
-		padding: 6px 12px;
-		background: transparent;
-		border: none;
-		border-radius: 4px;
-		color: rgba(255, 255, 255, 0.7);
-		font-size: 12px;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
-
-	.filter-button:hover {
-		color: #ffffff;
-		background: rgba(255, 255, 255, 0.1);
-	}
-
-	.filter-button.active {
-		background: rgba(255, 255, 255, 0.15);
-		color: #ffffff;
-		font-weight: 600;
 	}
 </style>
