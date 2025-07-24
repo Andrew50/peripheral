@@ -6,23 +6,18 @@ on:
       force-deploy-db:
         required: false
         type: boolean
-        default: false
       force-deploy-frontend:
         required: false
         type: boolean
-        default: false
       force-deploy-backend:
         required: false
         type: boolean
-        default: false
       force-deploy-cache:
         required: false
         type: boolean
-        default: false
       force-deploy-worker:
         required: false
         type: boolean
-        default: false    
     outputs:
       strategy:
         description: "Deployment strategy"
