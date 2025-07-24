@@ -64,7 +64,7 @@ jobs:
       ingress_host: 'stage.peripheral.io'
       strategy: ${{ needs.compute_manual_strategy.outputs.strategy }}
       services_changed: ${{ needs.compute_manual_strategy.outputs.services_changed }}      
-      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations }}    
+      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations == 'true' }}    
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
