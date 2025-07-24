@@ -65,6 +65,9 @@ func SendTelegramUserUsageMessage(msg string) error {
 	fmt.Println("Sending Telegram message to chat ID:", chatID)
 	recipient := telebot.ChatID(chatID)
 	_, err := telegramUserNotificationBot.Send(recipient, msg)
+	if err != nil {
+		fmt.Println("Failed to send Telegram message:", err)
+	}
 	return err
 }
 
