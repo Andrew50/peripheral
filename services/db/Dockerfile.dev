@@ -11,7 +11,7 @@ RUN curl -L -o /usr/local/bin/kubectl \
     chmod +x /usr/local/bin/kubectl
 # -------------------------------------------------------------------
 
-ENV PGDATA=/home/postgres/pgdata
+ENV PGDATA=/home/postgres/pgdata/data
 EXPOSE 5432
 
 # Copy initialization scripts
