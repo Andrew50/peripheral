@@ -9,23 +9,23 @@
 	// Function to get the appropriate icon based on alert type
 	function getAlertIcon(alertType: string = 'default'): string {
 		const iconMap: Record<string, string> = {
-			'price': 'icon-price-alert.svg',
-			'strategy': 'icon-strategy-alert.svg',
-			'triggered': 'icon-triggered-alert.svg',
-			'moving-context': 'icon-movingcontext.svg',
-			'default': 'icon-movingcontext.svg'
+			price: 'icon-price-alert.svg',
+			strategy: 'icon-strategy-alert.svg',
+			triggered: 'icon-triggered-alert.svg',
+			movingContext: 'icon-movingcontext.svg',
+			default: 'icon-movingcontext.svg'
 		};
 		return iconMap[alertType] || iconMap['default'];
 	}
-
+ 
 	// Function to get the appropriate trending icon based on alert type
 	function getTrendingIcon(alertType: string = 'default'): string {
 		const iconMap: Record<string, string> = {
-			'price': 'icon-price-trend.svg',
-			'strategy': 'icon-strategy-trend.svg',
-			'triggered': 'icon-movingup.svg',
-			'moving-context': 'icon-movingup.svg',
-			'default': 'icon-movingup.svg'
+			price: 'icon-price-trend.svg',
+			strategy: 'icon-strategy-trend.svg',
+			triggered: 'icon-movingup.svg',
+			movingContext: 'icon-movingup.svg',
+			default: 'icon-movingup.svg'
 		};
 		return iconMap[alertType] || iconMap['default'];
 	}
@@ -34,17 +34,13 @@
 	function getAlertType(alert: any): string {
 		return alert?.type || alert?.alertType || 'default';
 	}
+</script>
 
-	</script>
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="alert-container">
 	{#if $alertPopup}
-		<div
-			class="alert-popup"
-			transition:fade
-			on:click={() => dismissAlert($alertPopup.alertId)}
-		>
+		<div class="alert-popup" transition:fade on:click={() => dismissAlert($alertPopup.alertId)}>
 			<div class="alert-title">
 				<div class="maximize-icon">
 					<img src={getAlertIcon(getAlertType($alertPopup))} alt="Alert Icon" />
@@ -52,7 +48,11 @@
 				<div class="alert-stack">
 					<div class="alert-content">
 						<p class="alert-message">{$alertPopup.message}</p>
-						<p class="alert-metadata">{Math.round((Date.now() - $alertPopup.timestamp) / 1000)}s • {new Date($alertPopup.timestamp).toLocaleTimeString()} • {$alertPopup.type}</p>
+						<p class="alert-metadata">
+							{Math.round((Date.now() - $alertPopup.timestamp) / 1000)}s • {new Date(
+								$alertPopup.timestamp
+							).toLocaleTimeString()} • {$alertPopup.type}
+						</p>
 					</div>
 					<div class="alert-buttons">
 						{#each $alertPopup.tickers as ticker}
@@ -98,7 +98,6 @@
 			padding: 12px;
 		}
 	}
-
 
 	.alert-title {
 		display: flex;

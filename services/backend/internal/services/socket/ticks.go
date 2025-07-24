@@ -175,8 +175,8 @@ func getTradeData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime
 		}
 
 		for iter.Next() {
-			tradeTsMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
-			if tradeTsMillis > windowEndTime {
+			tradeTSMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
+			if tradeTSMillis > windowEndTime {
 				return tradeDataList, nil
 			}
 			if !utils.IsTimestampRegularHours(time.Time(iter.Item().ParticipantTimestamp)) {
@@ -243,8 +243,8 @@ func getQuoteData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime
 		}
 		iter := polygon.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		for iter.Next() {
-			quoteTsMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
-			if quoteTsMillis > windowEndTime {
+			quoteTSMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
+			if quoteTSMillis > windowEndTime {
 				return quoteDataList, nil
 			}
 			// We do not exclude extended hours quotes

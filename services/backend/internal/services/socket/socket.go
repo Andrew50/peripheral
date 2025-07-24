@@ -145,6 +145,7 @@ type AlertMessage struct {
 	SecurityID int      `json:"securityId"`
 	Message    string   `json:"message"`
 	Channel    string   `json:"channel"`
+	Type       string   `json:"type"`
 	Tickers    []string `json:"tickers"`
 }
 

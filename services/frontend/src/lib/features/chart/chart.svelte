@@ -43,7 +43,8 @@
 		HistogramData,
 		HistogramSeriesOptions,
 		LineStyleOptions,
-		LineWidth
+		LineWidth,
+		IPriceLine
 	} from 'lightweight-charts';
 	import { calculateSingleADR, calculateVWAP, calculateMultipleSMAs } from './indicators';
 	import type { Writable } from 'svelte/store';
@@ -222,15 +223,9 @@
 	const isHistogram = (data: any): data is HistogramData<Time> =>
 		data && typeof data === 'object' && 'value' in data;
 
-	// Add new interface for alert lines
-	interface AlertLine {
-		price: number;
-		line: any; // Use any for now since we don't have the full IPriceLine type
-		alertId: number;
-	}
+	// Alert lines are now defined in DrawingMenuProps interface
 
-	// Add new property to track alert lines
-	let alertLines: AlertLine[] = [];
+	// Alert lines are now managed in drawingMenuProps.alertLines
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
@@ -238,7 +233,6 @@
 
 	// Track previous security ID to avoid unnecessary stream changes
 	let previousSecurityId: number | null = null;
-
 
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
@@ -302,6 +296,8 @@
 	let latestLoadToken = 0;
 	let activeTickerChangeRequestAbort: AbortController | null = null;
 
+	// Alert line dragging is now handled the same way as horizontal lines
+
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -310,14 +306,8 @@
 		alertId: number;
 	}
 
-	interface IPriceLine {
-		price: number;
-		color: string;
-		lineWidth: number;
-		lineStyle: number;
-		axisLabelVisible: boolean;
-		title: string;
-	}
+	// Remove the local IPriceLine interface to use the one from lightweight-charts
+	// The lightweight-charts IPriceLine already has all the properties and methods we need
 
 	interface HorizontalLine {
 		id: number;
@@ -699,7 +689,23 @@
 						// Adjust events to trading days using the combined candle data
 						// Ensure newCandleData exists and is an array before spreading
 						const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
-						finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
+
+						// Convert EventMarker[] to ChartEvent[] format expected by adjustEventsToTradingDays
+						const chartEvents = finalEventData.map((event) => ({
+							time: typeof event.time === 'number' ? event.time : Number(event.time),
+							events: event.events
+						}));
+
+						// Adjust the events and convert back to EventMarker format
+						const adjustedChartEvents = adjustEventsToTradingDays(
+							chartEvents,
+							candleDataForAdjustment
+						);
+
+						finalEventData = adjustedChartEvents.map((event) => ({
+							time: event.time as UTCTimestamp,
+							events: event.events
+						})) as EventMarker[];
 
 						// Set the final data
 						eventSeries.setData(finalEventData);
@@ -738,7 +744,9 @@
 
 			// Only set up new streams if the securityId actually changed
 			const currentSecurityId =
-				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId || null;
+				typeof inst.securityId === 'string'
+					? parseInt(inst.securityId, 10)
+					: inst.securityId || null;
 
 			if (inst.requestType == 'loadNewTicker' && previousSecurityId !== currentSecurityId) {
 				releaseFast();
@@ -862,8 +870,14 @@
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
 	function handleMouseMove(event: MouseEvent) {
-		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine)
+		console.log('[DRAG-DEBUG] handleMouseMove called');
+		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			console.log('[DRAG-DEBUG] handleMouseMove early return', {
+				isDragging: $drawingMenuProps.isDragging,
+				selectedLine: !!$drawingMenuProps.selectedLine
+			});
 			return;
+		}
 
 		const relativeY = getRelativeMouseY(event);
 		if (relativeY === null) return;
@@ -871,112 +885,171 @@
 		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
-		// Update the line position visually, preserving custom color and width
+		console.log(
+			`[DRAG-DEBUG] handleMouseMove: dragging ${$drawingMenuProps.selectedLineType} to price ${price}`
+		);
+
+		// Update the line position visually with immediate feedback
+		// For alert lines, use orange color and line width 1
+		// For horizontal lines, use the stored color and width
+		const lineColor =
+			$drawingMenuProps.selectedLineType === 'alert'
+				? '#FFB74D'
+				: $drawingMenuProps.selectedLineColor;
+		const lineWidth =
+			$drawingMenuProps.selectedLineType === 'alert' ? 1 : $drawingMenuProps.selectedLineWidth;
+
+		console.log('[DRAG-DEBUG] handleMouseMove: applying options', { price, lineColor, lineWidth });
 		$drawingMenuProps.selectedLine.applyOptions({
 			price: price,
-			color: $drawingMenuProps.selectedLineColor,
-			lineWidth: $drawingMenuProps.selectedLineWidth
+			color: lineColor,
+			lineWidth: lineWidth
 		});
 
-		// Update the stored price in local horizontalLines array (for immediate visual feedback)
-		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
-		if (lineIndex !== -1) {
-			$drawingMenuProps.horizontalLines[lineIndex].price = price;
+		// Update the drawingMenuProps price for immediate feedback
+		drawingMenuProps.update((v) => ({ ...v, selectedLinePrice: price }));
+
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Update the stored price in local horizontalLines array (for immediate visual feedback)
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
+			if (lineIndex !== -1) {
+				$drawingMenuProps.horizontalLines[lineIndex].price = price;
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Update the stored price in alertLines array (for immediate visual feedback)
+			drawingMenuProps.update((props) => {
+				const alertIndex = props.alertLines.findIndex(
+					(alert) => alert.alertId === $drawingMenuProps.selectedLineId
+				);
+				if (alertIndex !== -1) {
+					props.alertLines[alertIndex].price = price;
+				}
+				return props;
+			});
 		}
 	}
 
 	function handleMouseUp() {
-		console.log('🖱️ handleMouseUp called');
+		console.log(`[DRAG-DEBUG] handleMouseUp called for ${$drawingMenuProps.selectedLineType}`);
 		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
-			console.log('❌ Not dragging or no selected line, returning early');
 			return;
 		}
 
-		const lineData = $drawingMenuProps.horizontalLines.find(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
-
-		if (lineData) {
-			console.log('✅ Updating line position in backend');
-			// Update line position in backend
-			privateRequest<void>(
-				'updateHorizontalLine',
-				{
-					id: lineData.id,
-					price: lineData.price,
-					securityId: chartSecurityId
-				},
-				true
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Handle horizontal line update
+			const lineData = $drawingMenuProps.horizontalLines.find(
+				(line) => line.line === $drawingMenuProps.selectedLine
 			);
 
-			// Update the store - reactive block will handle chart updates
-			if (lineData.id > 0) {
-				horizontalLines.update((lines) =>
-					lines.map((line) => (line.id === lineData.id ? { ...line, price: lineData.price } : line))
+			if (lineData) {
+				// Update line position in backend
+				privateRequest<void>(
+					'updateHorizontalLine',
+					{
+						id: lineData.id,
+						price: lineData.price,
+						securityId: chartSecurityId
+					},
+					true
 				);
+
+				// Update the store - reactive block will handle chart updates
+				if (lineData.id > 0) {
+					horizontalLines.update((lines) =>
+						lines.map((line) =>
+							line.id === lineData.id ? { ...line, price: lineData.price } : line
+						)
+					);
+				}
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Handle alert update - lookup by alertId instead of line object reference
+			const alertData = $drawingMenuProps.alertLines.find(
+				(alert) => alert.alertId === $drawingMenuProps.selectedLineId
+			);
+
+			if (alertData) {
+				const newPrice = Math.round($drawingMenuProps.selectedLinePrice * 100) / 100;
+
+				// Update alert position in backend
+				privateRequest<void>(
+					'updateAlert',
+					{
+						alertId: alertData.alertId,
+						price: newPrice
+					},
+					true
+				).catch((error) => {
+					console.error('Failed to update alert price:', error);
+				});
+
+				// Update the alertLines array for immediate visual feedback
+				drawingMenuProps.update((props) => {
+					const alertIndex = props.alertLines.findIndex(
+						(alert) => alert.alertId === alertData.alertId
+					);
+					if (alertIndex !== -1) {
+						console.log(
+							`[DRAG-DEBUG] handleMouseUp: Updating alert line in store with new price ${newPrice}`
+						);
+						props.alertLines[alertIndex].price = newPrice;
+					}
+					return props;
+				});
+
+				// Update the activeAlerts store which will trigger a re-render
+				activeAlerts.update((alerts) => {
+					if (!alerts) return [];
+
+					return alerts.map((alert) =>
+						alert.alertId === alertData.alertId ? { ...alert, alertPrice: newPrice } : alert
+					);
+				});
 			}
 		}
 
-		console.log('✅ Setting isDragging to false');
-		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
+		drawingMenuProps.update((v) => ({
+			...v,
+			isDragging: false,
+			selectedLine: null,
+			selectedLineId: -1,
+			selectedLineType: null
+		}));
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 
 	function startDragging(event: MouseEvent) {
-		//console.log('🔄 startDragging called');
+		console.log(`[DRAG-DEBUG] startDragging called for ${$drawingMenuProps.selectedLineType}`);
 		if (!$drawingMenuProps.selectedLine) {
-			//console.log('❌ No selected line, returning early');
 			return;
 		}
 
 		event.preventDefault();
 		event.stopPropagation();
 
-		//console.log('✅ Setting isDragging to true');
 		drawingMenuProps.update((v) => ({ ...v, isDragging: true }));
 		document.addEventListener('mousemove', handleMouseMove);
 		document.addEventListener('mouseup', handleMouseUp);
 	}
 
 	function determineClickedLine(event: MouseEvent) {
-		//console.log('🔍 determineClickedLine called');
+		console.log('[DRAG-DEBUG] determineClickedLine called');
 		const relativeY = getRelativeMouseY(event);
-		//console.log('📍 relativeY:', relativeY);
-		if (relativeY === null) {
-			//console.log('❌ relativeY is null, returning false');
-			return false;
-		}
+		if (relativeY === null) return false;
 
 		const pixelBuffer = 5;
 		const upperPrice = chartCandleSeries.coordinateToPrice(relativeY - pixelBuffer) || 0;
 		const lowerPrice = chartCandleSeries.coordinateToPrice(relativeY + pixelBuffer) || 0;
 
-		//console.log('💰 Price range - upper:', upperPrice, 'lower:', lowerPrice);
+		if (upperPrice == 0 || lowerPrice == 0) return false;
 
-		if (upperPrice == 0 || lowerPrice == 0) {
-			//console.log('❌ Invalid price range, returning false');
-			return false;
-		}
-
-		console.log('📊 Checking', $drawingMenuProps.horizontalLines.length, 'horizontal lines');
-
-		// Only check regular horizontal lines, not alert lines
+		// First check regular horizontal lines
 		for (const line of $drawingMenuProps.horizontalLines) {
-			/*console.log(
-				'🔍 Checking line:',
-				line.id,
-				'price:',
-				line.price,
-				'range:',
-				lowerPrice,
-				'to',
-				upperPrice
-			);*/
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
-				//console.log('✅ Line clicked! Line ID:', line.id, 'Price:', line.price);
+				console.log('[DRAG-DEBUG] Horizontal line clicked:', line);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
@@ -987,7 +1060,8 @@
 					clientX: event.clientX,
 					clientY: event.clientY,
 					active: false, // Keep false until mouseup to distinguish drag vs click
-					selectedLineId: line.id
+					selectedLineId: line.id,
+					selectedLineType: 'horizontal'
 				}));
 
 				event.preventDefault();
@@ -996,12 +1070,37 @@
 			}
 		}
 
-		//console.log('❌ No line found in range');
+		// Then check alert lines
+		for (const alertLine of $drawingMenuProps.alertLines) {
+			if (alertLine.price <= upperPrice && alertLine.price >= lowerPrice) {
+				console.log('[DRAG-DEBUG] Alert line clicked:', alertLine);
+				drawingMenuProps.update((v: DrawingMenuProps) => ({
+					...v,
+					chartCandleSeries: chartCandleSeries,
+					selectedLine: alertLine.line,
+					selectedLinePrice: alertLine.price,
+					selectedLineColor: '#FFB74D', // Orange color for alert lines
+					selectedLineWidth: 1, // Alert lines have fixed width
+					clientX: event.clientX,
+					clientY: event.clientY,
+					active: false, // Keep false until mouseup to distinguish drag vs click
+					selectedLineId: alertLine.alertId,
+					selectedLineType: 'alert'
+				}));
+
+				event.preventDefault();
+				event.stopPropagation();
+				return true;
+			}
+		}
+
+		// Clear selection if no line was clicked
 		setTimeout(() => {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
 				selectedLine: null,
 				selectedLineId: -1,
+				selectedLineType: null,
 				active: false
 			}));
 		}, 100);
@@ -1016,7 +1115,7 @@
 		}
 
 		if (determineClickedLine(event)) {
-			//console.log('🎯 Line detected in determineClickedLine, setting up drag/click handlers');
+			console.log('[DRAG-DEBUG] handleMouseDown: line detected');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -1026,7 +1125,9 @@
 				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
 
 				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-					//console.log('🔄 Drag detected, starting drag operation');
+					console.log(
+						'[DRAG-DEBUG] handleMouseDown: Drag threshold exceeded, calling startDragging'
+					);
 					// It's a drag - start dragging and remove this temporary listener
 					document.removeEventListener('mousemove', handleMouseMoveForDrag);
 					document.removeEventListener('mouseup', handleMouseUpForClick);
@@ -1049,7 +1150,7 @@
 				);*/
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					//console.log('✅ Click confirmed, activating menu');
+					console.log('[DRAG-DEBUG] handleMouseDown: Click confirmed, activating menu');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -1390,12 +1491,25 @@
 	}
 
 	// Add subscription to activeAlerts store to update alert lines
-	$: if ($activeAlerts && chartCandleSeries) {
+	$: if (
+		$activeAlerts &&
+		chartCandleSeries &&
+		$drawingMenuProps &&
+		!$drawingMenuProps.isDragging &&
+		!$drawingMenuProps.selectedLine
+	) {
+		console.log('[DRAG-DEBUG] Alert lines reactive block fired.');
 		// Remove existing alert lines
-		alertLines.forEach((line) => {
+		$drawingMenuProps.alertLines.forEach((line) => {
 			chartCandleSeries.removePriceLine(line.line);
 		});
-		alertLines = [];
+
+		// Create new alert lines array - using the correct type from the DrawingMenuProps interface
+		const newAlertLines: Array<{
+			price: number;
+			line: IPriceLine;
+			alertId: number;
+		}> = [];
 
 		// Add new alert lines for price alerts
 		$activeAlerts.forEach((alert) => {
@@ -1407,12 +1521,11 @@
 					lineStyle: 1, // Dashed line
 					axisLabelVisible: true,
 					title: `Alert: ${alert.alertPrice}`
-					// Make lines unclickable by not adding any interactive properties
 				});
 
 				// Fix the alert ID type
 				if (alert.alertId !== undefined) {
-					alertLines.push({
+					newAlertLines.push({
 						price: alert.alertPrice,
 						line: priceLine,
 						alertId: alert.alertId
@@ -1420,6 +1533,12 @@
 				}
 			}
 		});
+
+		// Update the drawingMenuProps store with new alert lines
+		drawingMenuProps.update((props) => ({
+			...props,
+			alertLines: newAlertLines
+		}));
 	}
 
 	// Add subscription to horizontalLines store to update chart lines
@@ -1429,6 +1548,7 @@
 		chartSecurityId &&
 		!$drawingMenuProps.isDragging
 	) {
+		console.log('[DRAG-DEBUG] Horizontal lines reactive block fired.');
 		// Get current lines for this security from drawingMenuProps
 		const currentDrawingLines = $drawingMenuProps.horizontalLines || [];
 
@@ -1625,10 +1745,13 @@
 
 		// Clear existing alert lines when changing tickers
 		if (chartCandleSeries) {
-			alertLines.forEach((line) => {
+			$drawingMenuProps.alertLines.forEach((line) => {
 				chartCandleSeries.removePriceLine(line.line);
 			});
-			alertLines = [];
+			drawingMenuProps.update((props) => ({
+				...props,
+				alertLines: []
+			}));
 		}
 
 		// Reset session highlighting when changing securities
@@ -1694,6 +1817,19 @@
 			event.preventDefault();
 			if (!chartCandleSeries) return;
 
+			// First check if a line was clicked
+			if (determineClickedLine(event)) {
+				// If a line was clicked, show the drawing menu instead of the right-click menu
+				drawingMenuProps.update((v: DrawingMenuProps) => ({
+					...v,
+					active: true,
+					clientX: event.clientX,
+					clientY: event.clientY
+				}));
+				return;
+			}
+
+			// No line was clicked, proceed with normal right-click menu
 			const relativeY = getRelativeMouseY(event);
 			if (relativeY === null) return;
 
@@ -2206,7 +2342,8 @@
 				};
 				change(req);
 			} else if (e.event == 'addHorizontalLine') {
-				addHorizontalLine(e.data.price, e.data.securityId);
+				const data = e.data as { price: number; securityId: number };
+				addHorizontalLine(data.price, data.securityId);
 			}
 		});
 
@@ -2453,12 +2590,7 @@
 	}
 </script>
 
-<div
-	class="chart"
-	id="chart_container-{chartId}"
-	style="position: relative;"
-	tabindex="-1"
->
+<div class="chart" id="chart_container-{chartId}" style="position: relative;" tabindex="-1">
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />

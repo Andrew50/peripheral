@@ -5,6 +5,7 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
+	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
 	"backend/internal/data"
@@ -494,9 +495,9 @@ var (
 			StatusMessage:    "Scanning backtest instances",
 			UserSpecificTool: false,
 		},
-		"runScreener": {
+		"runStrategyScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "runScreener",
+				Name:        "runStrategyScreener",
 				Description: "Screen current market opportunities using a Python trading strategy. Processes live market data to identify and rank securities matching strategy criteria. Strategies access real-time OHLCV data, technical indicators, fundamental metrics, and market conditions. Execution takes 15-45 seconds for full market screening. Use for finding current trading opportunities, generating ranked watchlists, and identifying securities matching specific criteria right now.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
@@ -807,11 +808,16 @@ var (
 		"getAlertLogs": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlertLogs",
-				Description: "Get all triggered/fired price alerts for the user. These are alerts that have been activated.",
+				Description: "Get all triggered/fired alerts for the user. These are alerts that have been activated. Can filter by alert type.",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{}, // No parameters needed
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"alertType": {
+							Type:        genai.TypeString,
+							Description: "Optional. Filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types. Defaults to 'all'.",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function:         wrapWithContext(alerts.GetAlertLogs),
@@ -837,18 +843,52 @@ var (
 			StatusMessage:    "Deleting alert",
 			UserSpecificTool: true,
 		},
+		"configureStrategyAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "configureStrategyAlert",
+				Description: "Configure a strategy alert to monitor when a strategy identifies opportunities. When enabled, the strategy will run periodically and alert when matches are found above the threshold.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the strategy to configure alerts for.",
+						},
+						"active": {
+							Type:        genai.TypeBoolean,
+							Description: "Whether to enable (true) or disable (false) the strategy alert.",
+						},
+						"threshold": {
+							Type:        genai.TypeNumber,
+							Description: "Optional. The minimum score threshold for triggering alerts. Only securities scoring above this value will trigger alerts. Defaults to 0 if not specified.",
+						},
+						"universe": {
+							Type:        genai.TypeArray,
+							Description: "Optional. Array of ticker symbols to monitor. If omitted or empty, monitors all available securities.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+					},
+					Required: []string{"strategyId", "active"},
+				},
+			},
+			Function:         wrapWithContext(strategy.SetAlert),
+			StatusMessage:    "Configuring strategy alert",
+			UserSpecificTool: true,
+		},
 		// [END ALERT TOOLS]
 		// [SCREENER TOOLS]
-		/*"runScreener": {
+		"runScreener": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runScreener",
-				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments.",
+				Description: "Screen stocks based on financial metrics, technical indicators, and market data. Filter securities using price, volume, performance, sector, technical indicators (RSI, moving averages), and more. Supports 47+ data columns including OHLCV, market cap, sector/industry, pre-market data, volatility, beta, and performance metrics across multiple timeframes. Use comparison operators (>, <, =, !=, >=, <=), pattern matching (LIKE), set operations (IN), and ranking filters (topn, bottomn, topn_pct, bottomn_pct). Results can be ordered with custom sort direction (ASC/DESC) and limited. Perfect for finding stocks matching specific criteria, generating watchlists, or analyzing market segments. When sorting is applied, NULL values are automatically sorted last regardless of sort direction to ensure meaningful results are prioritized.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"returnColumns": {
 							Type:        genai.TypeArray,
-							Description: "Array of column names to return in results. Available columns: security_id, open, high, low, close, wk52_low, wk52_high, pre_market_open, pre_market_high, pre_market_low, pre_market_close, market_cap, sector, industry, pre_market_change, pre_market_change_pct, extended_hours_change, extended_hours_change_pct, change_1_pct, change_15_pct, change_1h_pct, change_4h_pct, change_1d_pct, change_1w_pct, change_1m_pct, change_3m_pct, change_6m_pct, change_ytd_1y_pct, change_5y_pct, change_10y_pct, change_all_time_pct, change_from_open, change_from_open_pct, price_over_52wk_high, price_over_52wk_low, rsi, dma_200, dma_50, price_over_50dma, price_over_200dma, beta_1y_vs_spy, beta_1m_vs_spy, volume, avg_volume_1m, dollar_volume, avg_dollar_volume_1m, pre_market_volume, pre_market_dollar_volume, relative_volume_14, pre_market_vol_over_14d_vol, range_1m_pct, range_15m_pct, range_1h_pct, day_range_pct, volatility_1w, volatility_1m, pre_market_range_pct. At least one column is required.",
+							Description: "Array of column names to return in results. Available columns: ticker, calc_time, security_id, open, high, low, close, wk52_low, wk52_high, pre_market_open, pre_market_high, pre_market_low, pre_market_close, market_cap, sector, industry, pre_market_change, pre_market_change_pct, extended_hours_change, extended_hours_change_pct, change_1_pct, change_15_pct, change_1h_pct, change_4h_pct, change_1d_pct, change_1w_pct, change_1m_pct, change_3m_pct, change_6m_pct, change_ytd_pct, change_1y_pct, change_5y_pct, change_10y_pct, change_all_time_pct, change_from_open, change_from_open_pct, price_over_52wk_high, price_over_52wk_low, rsi, dma_200, dma_50, price_over_50dma, price_over_200dma, beta_1y_vs_spy, beta_1m_vs_spy, volume, avg_volume_1m, dollar_volume, avg_dollar_volume_1m, pre_market_volume, pre_market_dollar_volume, relative_volume_14, pre_market_vol_over_14d_vol, range_1m_pct, range_15m_pct, range_1h_pct, day_range_pct, volatility_1w_pct, volatility_1m_pct, pre_market_range_pct. At least one column is required.",
 							Items: &genai.Schema{
 								Type: genai.TypeString,
 							},
@@ -893,7 +933,7 @@ var (
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
 			StatusMessage: "Screening stocks...",
-		},*/
+		},
 		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]
 		"dateToSeconds": {

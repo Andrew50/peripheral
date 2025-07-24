@@ -1,3 +1,5 @@
+// Package polygon provides interfaces and utilities for interacting with the Polygon.io API
+// to retrieve market data, securities information, and other financial data.
 package polygon
 
 import (

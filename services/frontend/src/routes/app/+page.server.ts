@@ -1,4 +1,4 @@
-export const load = async ({ fetch }: { fetch: any }) => {
+export const load = async ({ fetch }: { fetch: typeof globalThis.fetch }) => {
 	try {
 		// Get backend URL - handle both development and production
 		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
