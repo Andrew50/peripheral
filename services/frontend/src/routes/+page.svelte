@@ -58,7 +58,7 @@
 	<section class="hero-title-section">
 		<div class="hero-title-container">
 			<h1 class="hero-title">
-				The <span class="gradient-text">best</span> way to trade.
+				The <span class="gradient-text">Agentic</span> Trading Terminal
 			</h1>
 			<p class="hero-subtitle">
 				Peripheral enables you to envision and execute your trading ideas.<br />
@@ -159,7 +159,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 10rem 0.5rem 17rem 0.5rem;
+		padding: 14rem 0.5rem 17rem 0.5rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
@@ -170,7 +170,7 @@
 
 	.hero-title-container {
 		text-align: center;
-		max-width: 1200px;
+		max-width: 1800px;
 		margin: 0 auto;
 		padding: 0 1rem;
 	}
@@ -178,7 +178,7 @@
 	.hero-title {
 		font-size: clamp(4.05rem, 6vw, 7.5rem);
 		font-weight: 800;
-		margin: 0 0 1.5rem 0;
+		margin: 0 0 1rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
 		color: #f5f9ff;

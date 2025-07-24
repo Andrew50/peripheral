@@ -803,7 +803,7 @@ button[data-ticker].ticker-button:hover,
 /* Firefox scrollbar styles */
 .chat-messages {
 	scrollbar-width: thin;
-	scrollbar-color: #909090 var(--ui-bg-element, #333);
+	scrollbar-color: #2e2e2e var(--ui-bg-element, #333);
 }
 
 
