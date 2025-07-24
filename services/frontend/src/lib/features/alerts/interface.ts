@@ -24,6 +24,7 @@ export function newAlert(alert: Alert) {
 
 	privateRequest<Alert>('newAlert', alertRecord).then((createdAlert: Alert) => {
 		createdAlert.ticker = alert.ticker;
+		createdAlert.alertType = alert.alertType;
 		if (activeAlerts !== undefined) {
 			activeAlerts.update((currentAlerts: Alert[] | undefined) => {
 				if (Array.isArray(currentAlerts) && currentAlerts.length > 0) {

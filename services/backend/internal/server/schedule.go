@@ -266,14 +266,13 @@ var (
 			MaxRetries:     2,
 			RetryDelay:     30 * time.Second,
 		},
-		//TODO: FIX THIS SHIT
-		/*{
+		{
 			Name:           "StartAlertLoop",
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},*/
+		},
 		{
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,
@@ -826,8 +825,6 @@ func initAggregates(conn *data.Conn) error {
 */
 
 // startAlertLoop starts the alert loop if not already running
-// TODO: Currently commented out - see JobList for related commented job
-/*
 func startAlertLoop(conn *data.Conn) error {
 	alertsInitMutex.Lock()
 	defer alertsInitMutex.Unlock()
@@ -844,7 +841,6 @@ func startAlertLoop(conn *data.Conn) error {
 
 	return nil
 }
-*/
 
 // startScreenerUpdater starts the screener updater if data is fresh
 func startScreenerUpdater(conn *data.Conn) error {

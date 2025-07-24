@@ -12,16 +12,18 @@ import (
 
 // Strategy represents a simplified strategy with natural language description and generated Python code
 type Strategy struct {
-	StrategyID    int    `json:"strategyId"`
-	UserID        int    `json:"userId"`
-	Name          string `json:"name"`
-	Description   string `json:"description"` // Human-readable description
-	Prompt        string `json:"prompt"`      // Original user prompt
-	PythonCode    string `json:"pythonCode"`  // Generated Python classifier
-	Score         int    `json:"score,omitempty"`
-	Version       string `json:"version,omitempty"`
-	CreatedAt     string `json:"createdAt,omitempty"`
-	IsAlertActive bool   `json:"isAlertActive,omitempty"`
+	StrategyID     int      `json:"strategyId"`
+	UserID         int      `json:"userId"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"` // Human-readable description
+	Prompt         string   `json:"prompt"`      // Original user prompt
+	PythonCode     string   `json:"pythonCode"`  // Generated Python classifier
+	Score          int      `json:"score,omitempty"`
+	Version        string   `json:"version,omitempty"`
+	CreatedAt      string   `json:"createdAt,omitempty"`
+	IsAlertActive  bool     `json:"isAlertActive,omitempty"`
+	AlertThreshold *float64 `json:"alertThreshold,omitempty"`
+	AlertUniverse  []string `json:"alertUniverse,omitempty"`
 }
 
 // CreateStrategyFromPromptArgs contains the user's natural language prompt
@@ -466,7 +468,9 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 		       COALESCE(score, 0) as score,
 		       COALESCE(version, '1.0') as version,
 		       COALESCE(createdat, NOW()) as createdat,
-		       COALESCE(isalertactive, false) as isalertactive
+		       COALESCE(isalertactive, false) as isalertactive,
+		       alert_threshold,
+		       alert_universe
 		FROM strategies WHERE userid = $1 ORDER BY createdat DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -488,6 +492,8 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 			&strategy.Version,
 			&createdAt,
 			&strategy.IsAlertActive,
+			&strategy.AlertThreshold,
+			&strategy.AlertUniverse,
 		); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
@@ -501,8 +507,10 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 }
 
 type SetAlertArgs struct {
-	StrategyID int  `json:"strategyId"`
-	Active     bool `json:"active"`
+	StrategyID int      `json:"strategyId"`
+	Active     bool     `json:"active"`
+	Threshold  *float64 `json:"threshold,omitempty"`
+	Universe   []string `json:"universe,omitempty"`
 }
 
 func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -511,30 +519,21 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Get current alert status before doing anything
+	// Get current alert status and configuration before doing anything
 	var currentActive bool
+	var currentThreshold *float64
+	var currentUniverse []string
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT COALESCE(isalertactive, false) 
+		SELECT COALESCE(isalertactive, false), alert_threshold, alert_universe
 		FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`,
-		args.StrategyID, userID).Scan(&currentActive)
+		args.StrategyID, userID).Scan(&currentActive, &currentThreshold, &currentUniverse)
 	if err != nil {
 		return nil, fmt.Errorf("error checking current alert status: %v", err)
 	}
 
-	// If the alert is already in the desired state, return early
-	if currentActive == args.Active {
-		log.Printf("Strategy %d alert is already %v, no action needed", args.StrategyID, args.Active)
-		return map[string]interface{}{
-			"success":     true,
-			"strategyId":  args.StrategyID,
-			"alertActive": args.Active,
-			"message":     "Alert status unchanged",
-		}, nil
-	}
-
 	// If enabling the alert, check if user can create more strategy alerts
-	if args.Active {
+	if args.Active && !currentActive {
 		allowed, remaining, err := limits.CheckUsageAllowed(conn, userID, limits.UsageTypeStrategyAlert, 0)
 		if err != nil {
 			return nil, fmt.Errorf("checking strategy alert limits: %w", err)
@@ -544,15 +543,15 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		}
 	}
 
-	// Update the alert status
+	// Update the alert status and configuration
 	_, err = conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
-		SET isalertactive = $1 
-		WHERE strategyid = $2 AND userid = $3`,
-		args.Active, args.StrategyID, userID)
+		SET isalertactive = $1, alert_threshold = $2, alert_universe = $3
+		WHERE strategyid = $4 AND userid = $5`,
+		args.Active, args.Threshold, args.Universe, args.StrategyID, userID)
 
 	if err != nil {
-		return nil, fmt.Errorf("error updating alert status: %v", err)
+		return nil, fmt.Errorf("error updating alert configuration: %v", err)
 	}
 
 	// Update the strategy alert counter based on the change
@@ -565,9 +564,11 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 			// If we can't record usage, rollback the alert activation
 			conn.DB.Exec(context.Background(), `
 				UPDATE strategies 
-				SET isalertactive = false 
-				WHERE strategyid = $1 AND userid = $2`,
-				args.StrategyID, userID)
+				SET isalertactive = false, alert_threshold = $1, alert_universe = $2
+				WHERE strategyid = $3 AND userid = $4`,
+				currentThreshold, currentUniverse, args.StrategyID, userID); rollbackErr != nil {
+				log.Printf("Warning: failed to rollback strategy alert activation: %v", rollbackErr)
+			}
 			return nil, fmt.Errorf("recording strategy alert usage: %w", err)
 		}
 	} else if !args.Active && currentActive {
@@ -578,12 +579,15 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		}
 	}
 
-	log.Printf("Strategy %d alert status updated to: %v", args.StrategyID, args.Active)
+	log.Printf("Strategy %d alert configuration updated - active: %v, threshold: %v, universe: %v",
+		args.StrategyID, args.Active, args.Threshold, args.Universe)
 
 	return map[string]interface{}{
-		"success":     true,
-		"strategyId":  args.StrategyID,
-		"alertActive": args.Active,
+		"success":        true,
+		"strategyId":     args.StrategyID,
+		"alertActive":    args.Active,
+		"alertThreshold": args.Threshold,
+		"alertUniverse":  args.Universe,
 	}, nil
 }
 
