@@ -49,6 +49,7 @@ jobs:
     if: github.event_name == 'push'
     uses: ./.github/workflows/detect-changes.yml
   compute_manual_strategy:
+    needs: [detect_changes, compute_manual_strategy]
     if: github.event_name == 'workflow_dispatch'
     outputs:
       strategy: ${{ steps.set-strategy.outputs.strategy }}
