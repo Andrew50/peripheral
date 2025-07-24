@@ -53,12 +53,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build-manual-strategy.yml
     with:
-      force-deploy-db: ${{ github.event.inputs.force-deploy-db }}
-      force-deploy-frontend: ${{ github.event.inputs.force-deploy-frontend }}
-      force-deploy-backend: ${{ github.event.inputs.force-deploy-backend }}
-      force-deploy-cache: ${{ github.event.inputs.force-deploy-cache }}
-      force-deploy-worker: ${{ github.event.inputs.force-deploy-worker }}
-
+      force-deploy-db: ${{ github.event.inputs.force-deploy-db == 'true' }}
+      force-deploy-frontend: ${{ github.event.inputs.force-deploy-frontend == 'true' }}
+      force-deploy-backend: ${{ github.event.inputs.force-deploy-backend == 'true' }}
+      force-deploy-cache: ${{ github.event.inputs.force-deploy-cache == 'true' }}
+      force-deploy-worker: ${{ github.event.inputs.force-deploy-worker == 'true' }}
   deploy-stage:
     needs:
       - detect_changes
