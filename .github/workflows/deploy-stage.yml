@@ -77,6 +77,11 @@ jobs:
           if [ "${{ inputs.force-deploy-worker }}" = "true" ]; then
             SERVICES_CHANGED="worker $SERVICES_CHANGED"
           fi
+
+          echo "Services changed: $SERVICES_CHANGED"
+          echo "Skip migrations: $SKIP_MIGRATIONS"
+          echo "Strategy: force deploy"
+
           echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
           echo "skip_migrations=$SKIP_MIGRATIONS" >> $GITHUB_OUTPUT
           echo "strategy=force deploy" >> $GITHUB_OUTPUT
