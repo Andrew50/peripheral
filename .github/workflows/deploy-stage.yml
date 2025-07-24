@@ -46,11 +46,9 @@ concurrency:
 
 jobs:
   detect_changes:
-    if: github.event_name == 'push'
     uses: ./.github/workflows/detect-changes.yml
 
   compute_manual_strategy:
-    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build-manual-strategy.yml
     with:
       force-deploy-db: ${{ github.event.inputs.force-deploy-db == 'true' }}
