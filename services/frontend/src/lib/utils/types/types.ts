@@ -42,7 +42,17 @@ export interface Strategy {
 	strategyId: number;
 	userId: number;
 	name: string;
-	criteria: StrategyCriteria; // Corresponds to the JSON column
+	criteria?: StrategyCriteria; // Corresponds to the JSON column
+	description?: string;
+	prompt?: string;
+	pythonCode?: string;
+	score?: number;
+	version?: string;
+	createdAt?: string;
+	isAlertActive?: boolean;
+	alertThreshold?: number;
+	alertUniverse?: string[];
+	activeScreen?: boolean; // Frontend-specific field
 }
 
 export interface Watchlist {
@@ -106,6 +116,8 @@ export interface AlertLog {
 	alertId: number; // Refers to either PriceAlert or StrategyAlert ID
 	timestamp: string; // Assuming timestamp comes as string, adjust if Date object
 	securityId: number;
+	alertType?: 'price' | 'strategy'; // Type discriminator for filtering
+	ticker?: string; // Ticker symbol for the alert
 }
 
 // Generic Alert configuration used in frontend components.
@@ -120,6 +132,10 @@ export interface Alert {
 	price?: number; // Target price for price alerts
 	direction?: boolean; // Direction for price/strategy alerts
 	alertPrice?: number; // Ensure this field is present
+	// Strategy alert specific fields
+	name?: string; // Strategy name for strategy alerts
+	alertThreshold?: number; // Threshold for strategy alerts
+	alertUniverse?: string[]; // Universe of tickers for strategy alerts
 }
 
 // Specific type for Price Alerts based on 'priceAlerts' table

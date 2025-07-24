@@ -286,15 +286,13 @@ var (
 			MaxRetries:     100,             // Retry until partial coverage is achieved
 			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
-		//TODO: FIX THIS SHIT
-		/*{
+		{
 			Name:           "StartAlertLoop",
-
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
-		},*/
+		},
 		{
 			Name:           "StartPolygonWebSocket",
 			Function:       startPolygonWebSocket,
@@ -847,8 +845,6 @@ func initAggregates(conn *data.Conn) error {
 */
 
 // startAlertLoop starts the alert loop if not already running
-// TODO: Currently commented out - see JobList for related commented job
-/*
 func startAlertLoop(conn *data.Conn) error {
 	alertsInitMutex.Lock()
 	defer alertsInitMutex.Unlock()
@@ -865,7 +861,6 @@ func startAlertLoop(conn *data.Conn) error {
 
 	return nil
 }
-*/
 
 // startScreenerUpdater starts the screener updater if partial coverage is sufficient
 // Returns an error if coverage is insufficient, triggering job retry

@@ -808,11 +808,16 @@ var (
 		"getAlertLogs": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlertLogs",
-				Description: "Get all triggered/fired price alerts for the user. These are alerts that have been activated.",
+				Description: "Get all triggered/fired alerts for the user. These are alerts that have been activated. Can filter by alert type.",
 				Parameters: &genai.Schema{
-					Type:       genai.TypeObject,
-					Properties: map[string]*genai.Schema{}, // No parameters needed
-					Required:   []string{},
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"alertType": {
+							Type:        genai.TypeString,
+							Description: "Optional. Filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types. Defaults to 'all'.",
+						},
+					},
+					Required: []string{},
 				},
 			},
 			Function:         wrapWithContext(alerts.GetAlertLogs),
@@ -836,6 +841,40 @@ var (
 			},
 			Function:         wrapWithContext(alerts.AgentDeleteAlert),
 			StatusMessage:    "Deleting alert",
+			UserSpecificTool: true,
+		},
+		"configureStrategyAlert": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "configureStrategyAlert",
+				Description: "Configure a strategy alert to monitor when a strategy identifies opportunities. When enabled, the strategy will run periodically and alert when matches are found above the threshold.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"strategyId": {
+							Type:        genai.TypeInteger,
+							Description: "The ID of the strategy to configure alerts for.",
+						},
+						"active": {
+							Type:        genai.TypeBoolean,
+							Description: "Whether to enable (true) or disable (false) the strategy alert.",
+						},
+						"threshold": {
+							Type:        genai.TypeNumber,
+							Description: "Optional. The minimum score threshold for triggering alerts. Only securities scoring above this value will trigger alerts. Defaults to 0 if not specified.",
+						},
+						"universe": {
+							Type:        genai.TypeArray,
+							Description: "Optional. Array of ticker symbols to monitor. If omitted or empty, monitors all available securities.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+					},
+					Required: []string{"strategyId", "active"},
+				},
+			},
+			Function:         wrapWithContext(strategy.SetAlert),
+			StatusMessage:    "Configuring strategy alert",
 			UserSpecificTool: true,
 		},
 		// [END ALERT TOOLS]

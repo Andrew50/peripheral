@@ -328,7 +328,7 @@ function initStoresWithAuth() {
 					activeAlerts.set([]);
 				});
 
-			privateRequest<AlertLog[]>('getAlertLogs', {})
+			privateRequest<AlertLog[]>('getAlertLogs', { alertType: 'all' })
 				.then((v: AlertLog[]) => {
 					alertLogs.set(v || []);
 				})

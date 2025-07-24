@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-func processPriceAlert(conn *data.Conn, alert Alert) error {
+func processPriceAlert(conn *data.Conn, alert PriceAlert) error {
 	directionPtr := alert.Direction
 	if directionPtr != nil {
 		// Get the latest price from the websocket price cache
@@ -22,13 +22,13 @@ func processPriceAlert(conn *data.Conn, alert Alert) error {
 
 		if *directionPtr {
 			if price >= *alert.Price {
-				if err := dispatchAlert(conn, alert); err != nil {
+				if err := dispatchPriceAlert(conn, alert); err != nil {
 					return fmt.Errorf("failed to dispatch alert: %v", err)
 				}
 			}
 		} else {
 			if price <= *alert.Price {
-				if err := dispatchAlert(conn, alert); err != nil {
+				if err := dispatchPriceAlert(conn, alert); err != nil {
 					return fmt.Errorf("failed to dispatch alert: %v", err)
 				}
 			}

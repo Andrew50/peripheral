@@ -870,11 +870,12 @@
 		}, 0);
 	}
 
+	let alertsComponent: any; // Reference to the Alerts component
+
 	async function createPriceAlert() {
-		const inst = await queryInstanceInput('any', ['ticker'], {
-			ticker: ''
-		});
-		await newPriceAlert(inst);
+		if (alertsComponent) {
+			alertsComponent.showForm();
+		}
 	}
 
 	// Stripe-recommended pattern: verify checkout session and update subscription status
@@ -1141,7 +1142,7 @@
 									{#if $activeMenu === 'watchlist'}
 										<Watchlist showTabs={false} />
 									{:else if $activeMenu === 'alerts'}
-										<Alerts view={alertView} />
+										<Alerts bind:this={alertsComponent} view={alertView} />
 										<!--{:else if $activeMenu === 'news'}
 									<News />-->
 									{/if}
