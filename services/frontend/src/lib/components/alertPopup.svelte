@@ -17,7 +17,7 @@
 		};
 		return iconMap[alertType] || iconMap['default'];
 	}
-
+ 
 	// Function to get the appropriate trending icon based on alert type
 	function getTrendingIcon(alertType: string = 'default'): string {
 		const iconMap: Record<string, string> = {
