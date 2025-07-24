@@ -15,8 +15,12 @@ spec:
         app: db
     spec:
       nodeSelector:
-        kubernetes.io/hostname: big-pool-lg63q
-
+        dedicated: db
+      tolerations:
+        - key: "db-only"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
       initContainers:
         - name: init-db-dir
           image: busybox
@@ -58,11 +62,11 @@ spec:
             timeoutSeconds: 10
           resources:
             requests:
-              cpu: 300m
-              memory: 500Mi
-            limits:
-              cpu: 1000m
+              cpu: 2000m
               memory: 4000Mi
+            limits:
+              cpu: 3500m
+              memory: 6250Mi
           volumeMounts:
             - name: db-pvc
               mountPath: /home/postgres/pgdata
