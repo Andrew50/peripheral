@@ -51,6 +51,7 @@ type OHLCVBuffer struct {
 	flushCh     chan []OHLCVRecord
 	wg          sync.WaitGroup
 	stopped     bool
+	writerID    int // Added to identify each writer's staging tables
 	// Performance tracking
 	totalRecordsAdded     int64
 	totalBatchesProcessed int64
@@ -64,42 +65,6 @@ const checkInterval = 1 * time.Second        // check for stale buffer every thi
 const healthCheckInterval = 30 * time.Second // check for staging table health every this many seconds
 const channelBufferSize = 50                 // increased buffer to handle more peak buffering (increased from 20)
 const criticalChannelThreshold = 20          // send critical alert when channel backlog exceeds this (reduced false alerts)
-
-const mergeQuery1m = `
-INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp")
-SELECT ticker, SUM(volume) AS volume, first_open, last_close, MAX(high) AS high, MIN(low) AS low, minute AS "timestamp"
-FROM (
-  SELECT ticker, volume, open, close, high, low, "timestamp",
-    FIRST_VALUE(open) OVER (PARTITION BY ticker, date_trunc('minute', "timestamp") ORDER BY "timestamp" ASC) AS first_open,
-    FIRST_VALUE(close) OVER (PARTITION BY ticker, date_trunc('minute', "timestamp") ORDER BY "timestamp" DESC) AS last_close,
-    date_trunc('minute', "timestamp") AS minute
-  FROM ohlcv_1m_stage
-) sub
-GROUP BY ticker, minute, first_open, last_close
-ON CONFLICT (ticker, "timestamp") DO UPDATE SET
-  high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
-  low = LEAST(ohlcv_1m.low, EXCLUDED.low),
-  close = EXCLUDED.close,
-  volume = ohlcv_1m.volume + EXCLUDED.volume,
-  open = COALESCE(ohlcv_1m.open, EXCLUDED.open);`
-
-const mergeQuery1d = `
-INSERT INTO ohlcv_1d (ticker, volume, open, close, high, low, "timestamp")
-SELECT ticker, SUM(volume) AS volume, first_open, last_close, MAX(high) AS high, MIN(low) AS low, day AS "timestamp"
-FROM (
-  SELECT ticker, volume, open, close, high, low, "timestamp",
-    FIRST_VALUE(open) OVER (PARTITION BY ticker, date_trunc('day', "timestamp") ORDER BY "timestamp" ASC) AS first_open,
-    FIRST_VALUE(close) OVER (PARTITION BY ticker, date_trunc('day', "timestamp") ORDER BY "timestamp" DESC) AS last_close,
-    date_trunc('day', "timestamp") AS day
-  FROM ohlcv_1d_stage
-) sub
-GROUP BY ticker, day, first_open, last_close
-ON CONFLICT (ticker, "timestamp") DO UPDATE SET
-  high = GREATEST(ohlcv_1d.high, EXCLUDED.high),
-  low = LEAST(ohlcv_1d.low, EXCLUDED.low),
-  close = EXCLUDED.close,
-  volume = ohlcv_1d.volume + EXCLUDED.volume,
-  open = COALESCE(ohlcv_1d.open, EXCLUDED.open);`
 
 var ohlcvBuffer *OHLCVBuffer
 
@@ -115,26 +80,29 @@ func (b *OHLCVBuffer) verifyStagingTablesExist() error {
 	}
 	defer conn.Release()
 
-	// Check both staging tables exist
+	// Check worker-specific staging tables exist
 	var check1m, check1d *string
 
-	err = conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1m_stage')").Scan(&check1m)
+	stage1mTable := fmt.Sprintf("public.ohlcv_1m_stage_w%d", b.writerID)
+	stage1dTable := fmt.Sprintf("public.ohlcv_1d_stage_w%d", b.writerID)
+
+	err = conn.QueryRow(ctx, "SELECT to_regclass($1)", stage1mTable).Scan(&check1m)
 	if err != nil {
-		return fmt.Errorf("verify ohlcv_1m_stage existence: %w", err)
+		return fmt.Errorf("verify %s existence: %w", stage1mTable, err)
 	}
 	if check1m == nil {
-		return fmt.Errorf("ohlcv_1m_stage table does not exist")
+		return fmt.Errorf("%s table does not exist", stage1mTable)
 	}
 
-	err = conn.QueryRow(ctx, "SELECT to_regclass('public.ohlcv_1d_stage')").Scan(&check1d)
+	err = conn.QueryRow(ctx, "SELECT to_regclass($1)", stage1dTable).Scan(&check1d)
 	if err != nil {
-		return fmt.Errorf("verify ohlcv_1d_stage existence: %w", err)
+		return fmt.Errorf("verify %s existence: %w", stage1dTable, err)
 	}
 	if check1d == nil {
-		return fmt.Errorf("ohlcv_1d_stage table does not exist")
+		return fmt.Errorf("%s table does not exist", stage1dTable)
 	}
 
-	// log.Printf("✅ Pre-flight check: Both staging tables verified to exist")
+	// log.Printf("✅ Pre-flight check: Both worker-%d staging tables verified to exist", b.writerID)
 	return nil
 }
 
@@ -432,45 +400,54 @@ func (b *OHLCVBuffer) createStagingTables() error {
 	}
 	defer conn.Release()
 
-	createStage1m := `CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1m_stage (
-		ticker        text         NOT NULL,
-		volume        bigint,
-		open          bigint,
-		close         bigint,
-		high          bigint,
-		low           bigint,
-		"timestamp"   timestamptz  NOT NULL,
-		transactions  integer
-	) WITH (autovacuum_enabled = false);`
+	// Create staging tables for all workers (single writer mode = 1 worker)
+	numWorkers := 1
+	for workerID := 0; workerID < numWorkers; workerID++ {
+		createStage1m := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1m_stage_w%d (
+			ticker        text         NOT NULL,
+			volume        bigint,
+			open          bigint,
+			close         bigint,
+			high          bigint,
+			low           bigint,
+			"timestamp"   timestamptz  NOT NULL,
+			transactions  integer
+		) WITH (autovacuum_enabled = false);`, workerID)
 
-	createStage1d := `CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1d_stage (
-		ticker        text         NOT NULL,
-		volume        bigint,
-		open          bigint,
-		close         bigint,
-		high          bigint,
-		low           bigint,
-		"timestamp"   timestamptz  NOT NULL,
-		transactions  integer
-	) WITH (autovacuum_enabled = false);`
+		createStage1d := fmt.Sprintf(`CREATE UNLOGGED TABLE IF NOT EXISTS public.ohlcv_1d_stage_w%d (
+			ticker        text         NOT NULL,
+			volume        bigint,
+			open          bigint,
+			close         bigint,
+			high          bigint,
+			low           bigint,
+			"timestamp"   timestamptz  NOT NULL,
+			transactions  integer
+		) WITH (autovacuum_enabled = false);`, workerID)
 
-	_, err = conn.Exec(ctx, createStage1m)
-	if err != nil {
-		return fmt.Errorf("create ohlcv_1m_stage: %w", err)
+		_, err = conn.Exec(ctx, createStage1m)
+		if err != nil {
+			return fmt.Errorf("create ohlcv_1m_stage_w%d: %w", workerID, err)
+		}
+
+		_, err = conn.Exec(ctx, createStage1d)
+		if err != nil {
+			return fmt.Errorf("create ohlcv_1d_stage_w%d: %w", workerID, err)
+		}
 	}
 
-	_, err = conn.Exec(ctx, createStage1d)
-	if err != nil {
-		return fmt.Errorf("create ohlcv_1d_stage: %w", err)
-	}
-
-	// log.Printf("✅ Staging tables created (ohlcv_1m_stage & ohlcv_1d_stage)")
+	// log.Printf("✅ Worker-specific staging tables created (ohlcv_1m_stage_w0-w%d & ohlcv_1d_stage_w0-w%d)", numWorkers-1, numWorkers-1)
 	return nil
 }
 
 func (b *OHLCVBuffer) writer(workerID int) {
 	// log.Printf("🔄 OHLCV writer goroutine #%d started", workerID)
 	defer b.wg.Done()
+
+	// Store the worker ID for this writer instance
+	b.mu.Lock()
+	b.writerID = workerID
+	b.mu.Unlock()
 
 	for batch := range b.flushCh {
 		startTime := time.Now()
@@ -483,7 +460,7 @@ func (b *OHLCVBuffer) writer(workerID int) {
 
 		// Database operation
 		dbStart := time.Now()
-		b.doCopyMerge(batch)
+		b.doCopyMerge(batch, workerID)
 		dbTime := time.Since(dbStart)
 
 		processingTime := time.Since(startTime)
@@ -505,7 +482,7 @@ func (b *OHLCVBuffer) writer(workerID int) {
 	// log.Printf("⚠️ OHLCV writer goroutine #%d exiting", workerID)
 }
 
-func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
+func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord, workerID int) {
 	operationStart := time.Now()
 
 	// Pre-allocate slices with estimated capacity to avoid reallocations
@@ -531,6 +508,46 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	}
 	dataProcessingTime := time.Since(operationStart)
 	// log.Printf("📊 DB Operation - Data processing: %v (1m_rows=%d, 1d_rows=%d)", dataProcessingTime, len(m1Rows), len(d1Rows))
+
+	// Generate worker-specific table names and queries
+	stage1mTable := fmt.Sprintf("ohlcv_1m_stage_w%d", workerID)
+	stage1dTable := fmt.Sprintf("ohlcv_1d_stage_w%d", workerID)
+
+	mergeQuery1m := fmt.Sprintf(`
+INSERT INTO ohlcv_1m (ticker, volume, open, close, high, low, "timestamp")
+SELECT ticker, SUM(volume) AS volume, first_open, last_close, MAX(high) AS high, MIN(low) AS low, minute AS "timestamp"
+FROM (
+  SELECT ticker, volume, open, close, high, low, "timestamp",
+    FIRST_VALUE(open) OVER (PARTITION BY ticker, date_trunc('minute', "timestamp") ORDER BY "timestamp" ASC) AS first_open,
+    FIRST_VALUE(close) OVER (PARTITION BY ticker, date_trunc('minute', "timestamp") ORDER BY "timestamp" DESC) AS last_close,
+    date_trunc('minute', "timestamp") AS minute
+  FROM %s
+) sub
+GROUP BY ticker, minute, first_open, last_close
+ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+  high = GREATEST(ohlcv_1m.high, EXCLUDED.high),
+  low = LEAST(ohlcv_1m.low, EXCLUDED.low),
+  close = EXCLUDED.close,
+  volume = ohlcv_1m.volume + EXCLUDED.volume,
+  open = COALESCE(ohlcv_1m.open, EXCLUDED.open);`, stage1mTable)
+
+	mergeQuery1d := fmt.Sprintf(`
+INSERT INTO ohlcv_1d (ticker, volume, open, close, high, low, "timestamp")
+SELECT ticker, SUM(volume) AS volume, first_open, last_close, MAX(high) AS high, MIN(low) AS low, day AS "timestamp"
+FROM (
+  SELECT ticker, volume, open, close, high, low, "timestamp",
+    FIRST_VALUE(open) OVER (PARTITION BY ticker, date_trunc('day', "timestamp") ORDER BY "timestamp" ASC) AS first_open,
+    FIRST_VALUE(close) OVER (PARTITION BY ticker, date_trunc('day', "timestamp") ORDER BY "timestamp" DESC) AS last_close,
+    date_trunc('day', "timestamp") AS day
+  FROM %s
+) sub
+GROUP BY ticker, day, first_open, last_close
+ON CONFLICT (ticker, "timestamp") DO UPDATE SET
+  high = GREATEST(ohlcv_1d.high, EXCLUDED.high),
+  low = LEAST(ohlcv_1d.low, EXCLUDED.low),
+  close = EXCLUDED.close,
+  volume = ohlcv_1d.volume + EXCLUDED.volume,
+  open = COALESCE(ohlcv_1d.open, EXCLUDED.open);`, stage1dTable)
 
 	// Reduced timeout from 60s to 30s - operations shouldn't take this long
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -599,7 +616,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	if len(m1Rows) > 0 {
 		// 1-minute operations
 		copyStart := time.Now()
-		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1m_stage"}, columns, pgx.CopyFromRows(m1Rows))
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", stage1mTable}, columns, pgx.CopyFromRows(m1Rows))
 		if err != nil {
 			log.Printf("❌ DB Operation - COPY 1m failed after %v: %v", time.Since(copyStart), err)
 			return
@@ -617,7 +634,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		log.Printf("🔀 DB Operation - MERGE 1m completed: %v", mergeTime)
 
 		truncateStart := time.Now()
-		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1m_stage;")
+		_, err = tx.Exec(ctx, fmt.Sprintf("TRUNCATE %s;", stage1mTable))
 		if err != nil {
 			log.Printf("❌ DB Operation - TRUNCATE 1m failed after %v: %v", time.Since(truncateStart), err)
 			return
@@ -629,7 +646,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 	if len(d1Rows) > 0 {
 		// 1-day operations
 		copyStart := time.Now()
-		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", "ohlcv_1d_stage"}, columns, pgx.CopyFromRows(d1Rows))
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{"public", stage1dTable}, columns, pgx.CopyFromRows(d1Rows))
 		if err != nil {
 			// Enhanced error handling - if COPY fails, don't attempt verification within aborted transaction
 			log.Printf("❌ DB Operation - COPY 1d failed after %v: %v", time.Since(copyStart), err)
@@ -651,7 +668,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		log.Printf("🔀 DB Operation - MERGE 1d completed: %v", mergeTime)
 
 		truncateStart := time.Now()
-		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1d_stage;")
+		_, err = tx.Exec(ctx, fmt.Sprintf("TRUNCATE %s;", stage1dTable))
 		if err != nil {
 			log.Printf("❌ DB Operation - TRUNCATE 1d failed after %v: %v", time.Since(truncateStart), err)
 			return
@@ -666,9 +683,9 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		log.Printf("❌ DB Operation - COMMIT failed after %v: %v", time.Since(commitStart), err)
 	} else {
 		txCommitted = true
-		commitTime := time.Since(commitStart)
+		//commitTime := time.Since(commitStart)
 		totalTime := time.Since(operationStart)
-		log.Printf("✅ DB Operation - COMMIT completed: %v (total_operation_time=%v)", commitTime, totalTime)
+		//log.Printf("✅ DB Operation - COMMIT completed: %v (total_operation_time=%v)", commitTime, totalTime)
 
 		// Performance analysis
 		if totalTime > 5*time.Second {

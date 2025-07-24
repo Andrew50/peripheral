@@ -29,7 +29,6 @@ func InitTelegramUserNotificationBot() error {
 		isProdEnv = false
 		return nil
 	}
-	isProdEnv = true
 	userNotificationBotToken := os.Getenv("TELEGRAM_USER_NOTIFICATION_BOT_TOKEN")
 	if userNotificationBotToken == "" {
 		return fmt.Errorf("TELEGRAM_USER_NOTIFICATION_BOT_TOKEN environment variable is required")

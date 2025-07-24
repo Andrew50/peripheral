@@ -109,6 +109,7 @@ export interface AlertData {
 	timestamp: number;
 	securityId: number;
 	channel: string;
+	type: string;
 	tickers: string[];
 }
 export interface AlertLog {

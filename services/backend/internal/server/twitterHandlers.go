@@ -270,6 +270,7 @@ func processTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) {
 		SecurityID: 1,
 		Message:    tweet.Text,
 		Channel:    "alert",
+		Type:       "news",
 		Tickers:    tickers,
 	})
 	storeTweet(conn, tweet)
