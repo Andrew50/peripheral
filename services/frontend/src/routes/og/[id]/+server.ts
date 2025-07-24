@@ -2,25 +2,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WIDTH = 1200;
 const HEIGHT = 630;
 const CACHE_DIR = '/tmp/og'; // Use /tmp instead of /var/www for development
-
-// Helper function to get logo as base64
-async function getLogoBase64(): Promise<string> {
-	try {
-		const logoPath = path.join(process.cwd(), 'static', 'atlantis_logo_transparent.png');
-		const logoBuffer = await fs.readFile(logoPath);
-		return logoBuffer.toString('base64');
-	} catch (error) {
-		console.error('Failed to load logo:', error);
-		// Return empty string as fallback
-		return '';
-	}
-}
 
 export async function HEAD({ params }) {
 	// Reuse the same meta lookup you do for GET
@@ -50,7 +35,7 @@ export async function GET({ params }: { params: { id: string } }) {
 
 		// ---------- 2) Fetch data ----------------------
 		const snippetData = await getChatSnippet(params.id);
-		const { t, q, a } = snippetData ?? {
+		const { q } = snippetData ?? {
 			t: 'Peripheral Chat',
 			q: 'Can you get all the dates of the big boeing plane crashes within the last 5 years....',
 			a: 'The new best way to trade.'
@@ -200,7 +185,7 @@ export async function GET({ params }: { params: { id: string } }) {
 
 		// ---------- 5) Write-through cache -------------
 		await fs.mkdir(CACHE_DIR, { recursive: true });
-		fs.writeFile(filePath, png).catch(() => {}); // fire-and-forget
+		fs.writeFile(filePath, png).catch(() => { }); // fire-and-forget
 
 		// ---------- 6) Return asset --------------------
 		return new Response(png, {

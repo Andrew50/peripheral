@@ -3,13 +3,13 @@ import { privateRequest } from '$lib/utils/helpers/backend';
 import { writable } from 'svelte/store';
 import { dispatchMenuChange } from '$lib/utils/stores/stores';
 export type SetupEvent = 'new' | 'save' | 'cancel' | number;
-export let eventDispatcher = writable<SetupEvent>();
+export const eventDispatcher = writable<SetupEvent>();
 export function setSample(setupId: number, instance: Instance): void {
 	if (!setupId || !instance.securityId || !instance.timestamp) return;
 	privateRequest<void>('setSample', { setupId: setupId, ...instance });
 }
 export async function newSetup(): Promise<number | null> {
-	return new Promise((resolve, reject) => {
+	return new Promise((resolve) => {
 		dispatchMenuChange.set('setups');
 		eventDispatcher.set('new');
 

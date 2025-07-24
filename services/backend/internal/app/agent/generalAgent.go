@@ -44,7 +44,7 @@ func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptF
 
 	var executor *Executor
 	var activeResults []ExecuteResult
-	var discardedResults []ExecuteResult
+	//var discardedResults []ExecuteResult
 	var accumulatedThoughts []string
 
 	var modelExecutionPlan ExecutionPlan
@@ -78,13 +78,14 @@ func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptF
 			// Separate active results into kept and discarded
 			var newActiveResults []ExecuteResult
 			for _, result := range activeResults {
-				if discardMap[result.FunctionID] {
-					// Move to discarded
-					discardedResults = append(discardedResults, result)
-				} else {
+				if !discardMap[result.FunctionID] {
 					// Keep active
 					newActiveResults = append(newActiveResults, result)
 				}
+				/*else{
+				discardedResults = append(discardedResults, result)
+				}*/
+				// Discarded results are simply not added to newActiveResults
 			}
 			activeResults = newActiveResults
 		}

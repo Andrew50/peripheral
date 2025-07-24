@@ -45,7 +45,7 @@ spec:
     - name: POSTGRES_PASSWORD
       value: "temppass"
     - name: PGDATA
-      value: "/home/postgres/pgdata/data"
+      value: "/home/postgres/pgdata"
   volumes:
   - name: db-pvc
     persistentVolumeClaim:
@@ -60,12 +60,11 @@ echo ""
 echo "Step 3: Completely clearing all database files..."
 kubectl exec db-reset-pod -- bash -c "
     echo 'Removing all data...'
-    rm -rf /home/postgres/pgdata/data || true
-    rm -rf /home/postgres/pgdata/* || true
-    rm -rf /home/postgres/pgdata/.* 2>/dev/null || true
+    rm -rf \$PGDATA/* || true
+    rm -rf \$PGDATA/.* 2>/dev/null || true
     
     echo 'Ensuring clean state...'
-    ls -la /home/postgres/pgdata/ || true
+    ls -la \$PGDATA/ || true
 "
 
 echo ""
