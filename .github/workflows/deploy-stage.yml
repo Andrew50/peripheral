@@ -75,7 +75,6 @@ jobs:
         ${{ github.event_name == 'push' && needs.detect_changes.outputs.strategy || needs.compute_manual_strategy.outputs.strategy }}
       services_changed: >-
         ${{ github.event_name == 'push' && needs.detect_changes.outputs.services_changed || needs.compute_manual_strategy.outputs.services_changed }}      
-      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations }}    
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
