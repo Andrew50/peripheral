@@ -9,6 +9,31 @@ on:
       branch:
         description: 'Branch to deploy'
         required: false
+      force-deploy-db:
+        description: 'Force Deploy DB'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-frontend:
+        description: 'Force Deploy Frontend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-backend:
+        description: 'Force Deploy Backend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-cache:
+        description: 'Force Deploy Cache'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-worker:
+        description: 'Force Deploy Worker'
+        required: false
+        default: false
+        type: boolean      
 
 permissions:
   contents: read
@@ -21,21 +46,56 @@ concurrency:
 
 jobs:
   detect_changes:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/detect-changes.yml
+  compute_manual_strategy:
+    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      strategy: ${{ steps.set-strategy.outputs.strategy }}
+      services_changed: ${{ steps.set-strategy.outputs.services_changed }}
+      skip_migrations: ${{ steps.set-strategy.outputs.skip_migrations }}    
+    steps:
+      - name: Set strategy from inputs
+        id: set-strategy
+        run: |
+          SERVICES_CHANGED=""
+          SKIP_MIGRATIONS=false
+          if [ "${{ inputs.force-deploy-db }}" = "true" ]; then
+            SERVICES_CHANGED="db $SERVICES_CHANGED"
+            SKIP_MIGRATIONS=true
+          fi
+          if [ "${{ inputs.force-deploy-frontend }}" = "true" ]; then
+            SERVICES_CHANGED="frontend $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-backend }}" = "true" ]; then
+            SERVICES_CHANGED="backend $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-cache }}" = "true" ]; then
+            SERVICES_CHANGED="cache $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-worker }}" = "true" ]; then
+            SERVICES_CHANGED="worker $SERVICES_CHANGED"
+          fi
+          echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
+          echo "skip_migrations=$SKIP_MIGRATIONS" >> $GITHUB_OUTPUT
+          echo "strategy=force deploy" >> $GITHUB_OUTPUT
   deploy-stage:
-    #needs: [detect_changes]
-    #if: ${{ needs.detect_changes.outputs.strategy != 'no-changes' }}
+    needs: [detect_changes, compute_manual_strategy]
+    if: |
+      (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
+      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.services_changed != '')
     uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
-      # k8s_context: 'stage-cluster'
       k8s_namespace: 'stage'
       google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
       ingress_host: 'stage.peripheral.io'
-      # public_base_url: '/'
-      #strategy: ${{ needs.detect_changes.outputs.strategy }}
-      services_changed: 'db cache frontend backend worker' #${{ needs.detect_changes.outputs.services_changed }}
+      strategy: >-
+        ${{ github.event_name == 'push' && needs.detect_changes.outputs.strategy || needs.compute_manual_strategy.outputs.strategy }}
+      services_changed: >-
+        ${{ github.event_name == 'push' && needs.detect_changes.outputs.services_changed || needs.compute_manual_strategy.outputs.services_changed }}      
+      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations }}    
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
