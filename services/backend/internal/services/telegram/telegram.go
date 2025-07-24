@@ -48,7 +48,7 @@ func InitTelegramUserNotificationBot() error {
 	if benTweetsBotToken == "" {
 		return fmt.Errorf("TELEGRAM_BEN_TWEETS_BOT_TOKEN environment variable is required")
 	}
-	chatID = -4940706341
+	benTweetsChatID = -4940706341
 	telegramBenTweetsBot, err = telebot.NewBot(telebot.Settings{
 		Token:  benTweetsBotToken,
 		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
