@@ -97,7 +97,7 @@
 <div class="sidebar" class:open={isSidebarOpen && isMobile}>
 	<div class="sidebar-header">
 		<div class="logo-section">
-			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text">Peripheral</p>
 		</div>
 		<button class="close-button" on:click={closeSidebar}>
@@ -136,7 +136,7 @@
 			aria-label="Go to home page"
 			style="cursor: pointer; background: none; border: none; padding: 0;"
 		>
-			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text" class:transparent={isHeaderTransparent}>Peripheral</p>
 		</button>
 
@@ -196,7 +196,7 @@
 	}
 
 	.logo-image {
-		height: 32px;
+		height: 28px;
 		width: auto;
 		object-fit: contain;
 		max-width: 140px;
