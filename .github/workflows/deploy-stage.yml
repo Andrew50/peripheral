@@ -78,18 +78,26 @@ jobs:
             SERVICES_CHANGED="worker $SERVICES_CHANGED"
           fi
 
+          SERVICES_CHANGED="$(echo "$SERVICES_CHANGED" | xargs)"
+
+          if [ -z "$SERVICES_CHANGED" ]; then
+            STRATEGY="no-changes"
+          else
+            STRATEGY="force deploy"
+          fi
+
           echo "Services changed: $SERVICES_CHANGED"
           echo "Skip migrations: $SKIP_MIGRATIONS"
-          echo "Strategy: force deploy"
+          echo "Strategy: $STRATEGY"
 
           echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
           echo "skip_migrations=$SKIP_MIGRATIONS" >> $GITHUB_OUTPUT
-          echo "strategy=force deploy" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
   deploy-stage:
     needs: [detect_changes, compute_manual_strategy]
     if: |
       (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
-      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.services_changed != '')
+      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')
     uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
