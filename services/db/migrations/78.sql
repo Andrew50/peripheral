@@ -48,6 +48,16 @@ ALTER EXTENSION timescaledb UPDATE;
 
 BEGIN;
 
+-- force-disconnect all other sessions on this database
+DO $$
+BEGIN
+  PERFORM pg_terminate_backend(pid)
+  FROM pg_stat_activity
+  WHERE pid <> pg_backend_pid()
+    AND datname = current_database();
+END
+$$;
+
 -- Create temporary backup tables to preserve existing data
 /*CREATE TABLE IF NOT EXISTS ohlcv_1m_backup AS 
 SELECT * FROM ohlcv_1m LIMIT 0;*/
