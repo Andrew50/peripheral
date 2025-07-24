@@ -94,7 +94,7 @@ jobs:
           echo "skip_migrations=$SKIP_MIGRATIONS" >> $GITHUB_OUTPUT
           echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
   deploy-stage:
-    needs: [detect_changes, compute_manual_strategy]
+    needs: ${{ github.event_name == 'push' && 'detect_changes' || 'compute_manual_strategy' }}
     if: |
       (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
       (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')
