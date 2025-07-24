@@ -58,7 +58,7 @@
 	<section class="hero-title-section">
 		<div class="hero-title-container">
 			<h1 class="hero-title">
-				The <span class="gradient-text">best</span> way to trade.
+				The <span class="gradient-text">agentic</span> trading terminal.
 			</h1>
 			<p class="hero-subtitle">
 				Peripheral enables you to envision and execute your trading ideas.<br />
