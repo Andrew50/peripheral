@@ -570,14 +570,14 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		return
 	}
 	txTime := time.Since(txStart)
-	// log.Printf("🔄 DB Operation - Transaction started: %v", txTime)
+	log.Printf("🔄 DB Operation - Transaction started: %v", txTime)
 
 	var txCommitted bool
 	defer func() {
 		if !txCommitted {
-			// rollbackStart := time.Now()
+			rollbackStart := time.Now()
 			_ = tx.Rollback(ctx)
-			// log.Printf("↩️ DB Operation - Transaction rollback: %v", time.Since(rollbackStart))
+			log.Printf("↩️ DB Operation - Transaction rollback: %v", time.Since(rollbackStart))
 		}
 	}()
 
@@ -592,7 +592,7 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		return
 	}
 	settingsTime := time.Since(settingsStart)
-	// log.Printf("⚙️ DB Operation - Performance settings applied: %v", settingsTime)
+	log.Printf("⚙️ DB Operation - Performance settings applied: %v", settingsTime)
 
 	columns := []string{"ticker", "volume", "open", "close", "high", "low", "timestamp", "transactions"}
 
@@ -604,8 +604,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("❌ DB Operation - COPY 1m failed after %v: %v", time.Since(copyStart), err)
 			return
 		}
-		//copyTime := time.Since(copyStart)
-		// log.Printf("📥 DB Operation - COPY 1m completed: %v (%d rows)", copyTime, len(m1Rows))
+		copyTime := time.Since(copyStart)
+		log.Printf("📥 DB Operation - COPY 1m completed: %v (%d rows)", copyTime, len(m1Rows))
 
 		mergeStart := time.Now()
 		_, err = tx.Exec(ctx, mergeQuery1m)
@@ -613,8 +613,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("❌ DB Operation - MERGE 1m failed after %v: %v", time.Since(mergeStart), err)
 			return
 		}
-		//mergeTime := time.Since(mergeStart)
-		// log.Printf("🔀 DB Operation - MERGE 1m completed: %v", mergeTime)
+		mergeTime := time.Since(mergeStart)
+		log.Printf("🔀 DB Operation - MERGE 1m completed: %v", mergeTime)
 
 		truncateStart := time.Now()
 		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1m_stage;")
@@ -622,8 +622,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("❌ DB Operation - TRUNCATE 1m failed after %v: %v", time.Since(truncateStart), err)
 			return
 		}
-		//truncateTime := time.Since(truncateStart)
-		// log.Printf("🗑️ DB Operation - TRUNCATE 1m completed: %v", truncateTime)
+		truncateTime := time.Since(truncateStart)
+		log.Printf("🗑️ DB Operation - TRUNCATE 1m completed: %v", truncateTime)
 	}
 
 	if len(d1Rows) > 0 {
@@ -638,8 +638,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			// Instead, we'll rely on the runtime check at the beginning of the next batch
 			return
 		}
-		//copyTime := time.Since(copyStart)
-		// log.Printf("📥 DB Operation - COPY 1d completed: %v (%d rows)", copyTime, len(d1Rows))
+		copyTime := time.Since(copyStart)
+		log.Printf("📥 DB Operation - COPY 1d completed: %v (%d rows)", copyTime, len(d1Rows))
 
 		mergeStart := time.Now()
 		_, err = tx.Exec(ctx, mergeQuery1d)
@@ -647,8 +647,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("❌ DB Operation - MERGE 1d failed after %v: %v", time.Since(mergeStart), err)
 			return
 		}
-		//mergeTime := time.Since(mergeStart)
-		// log.Printf("🔀 DB Operation - MERGE 1d completed: %v", mergeTime)
+		mergeTime := time.Since(mergeStart)
+		log.Printf("🔀 DB Operation - MERGE 1d completed: %v", mergeTime)
 
 		truncateStart := time.Now()
 		_, err = tx.Exec(ctx, "TRUNCATE ohlcv_1d_stage;")
@@ -656,8 +656,8 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 			log.Printf("❌ DB Operation - TRUNCATE 1d failed after %v: %v", time.Since(truncateStart), err)
 			return
 		}
-		//truncateTime := time.Since(truncateStart)
-		// log.Printf("🗑️ DB Operation - TRUNCATE 1d completed: %v", truncateTime)
+		truncateTime := time.Since(truncateStart)
+		log.Printf("🗑️ DB Operation - TRUNCATE 1d completed: %v", truncateTime)
 	}
 
 	commitStart := time.Now()
@@ -666,9 +666,9 @@ func (b *OHLCVBuffer) doCopyMerge(records []OHLCVRecord) {
 		log.Printf("❌ DB Operation - COMMIT failed after %v: %v", time.Since(commitStart), err)
 	} else {
 		txCommitted = true
-		//commitTime := time.Since(commitStart)
+		commitTime := time.Since(commitStart)
 		totalTime := time.Since(operationStart)
-		// log.Printf("✅ DB Operation - COMMIT completed: %v (total_operation_time=%v)", commitTime, totalTime)
+		log.Printf("✅ DB Operation - COMMIT completed: %v (total_operation_time=%v)", commitTime, totalTime)
 
 		// Performance analysis
 		if totalTime > 5*time.Second {

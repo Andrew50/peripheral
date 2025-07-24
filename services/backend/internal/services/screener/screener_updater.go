@@ -24,8 +24,7 @@ package screener
 
 import (
 	"backend/internal/data"
-	"backend/internal/services/marketdata" // Add this import
-	"context"                              // Added fmt import
+	"context" // Added fmt import
 	"fmt"
 	"log"
 	"os"
@@ -86,15 +85,6 @@ func initialRefresh(conn *data.Conn) error {
 	log.Println("🔄 Refreshing continuous aggregates with mutex protection...")
 	refreshPreMarketCagg(conn)
 	refreshExtendedHoursCagg(conn)
-
-	// Create OHLCV indexes
-	indexSQLs := marketdata.IndexSQLs()
-	for _, idxCmd := range indexSQLs {
-		log.Printf("Executing index creation: %s", idxCmd)
-		if _, err := conn.DB.Exec(ctx, idxCmd); err != nil {
-			log.Printf("⚠️  Index creation failed: %v", err)
-		}
-	}
 
 	log.Printf("✅ Initial data refresh completed in %v", time.Since(start))
 	return nil

@@ -268,28 +268,7 @@ func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string, isFirstRun 
 		}
 	*/
 
-	if isFirstRun {
-		dropSQL := fmt.Sprintf(`DO $$
-DECLARE idx record;
-BEGIN
-  FOR idx IN
-    SELECT ci.relname AS indexname
-    FROM pg_index i
-    JOIN pg_class ci ON ci.oid = i.indexrelid
-    JOIN pg_class ct ON ct.oid = i.indrelid
-    JOIN pg_namespace n ON n.oid = ct.relnamespace
-    WHERE n.nspname = 'public'
-      AND ct.relname = '%s'
-      AND NOT i.indisprimary
-      AND NOT i.indisunique
-  LOOP
-    EXECUTE format('DROP INDEX IF EXISTS %%I', idx.indexname);
-  END LOOP;
-END$$;`, tbl)
-		if _, err := data.ExecWithRetry(ctx, db, dropSQL); err != nil {
-			return fmt.Errorf("drop indexes: %w", err)
-		}
-	}
+	// Note: Indexes are now managed by the database on startup and should not be dropped here
 
 	// TimescaleDB automatically creates chunks on demand; explicit pre-creation is no longer necessary.
 
@@ -317,21 +296,8 @@ func PostLoadCleanup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 		}
 	*/
 
-	// Recreate helpful covering indexes on source tables
-	var indexSQLs []string
-	switch tbl {
-	case "ohlcv_1m":
-		indexSQLs = Ohlcv1mIndexSQLs()
-	case "ohlcv_1d":
-		indexSQLs = Ohlcv1dIndexSQLs()
-	default:
-		indexSQLs = nil
-	}
-	for _, q := range indexSQLs {
-		if _, err := data.ExecWithRetry(ctx, db, q); err != nil {
-			return fmt.Errorf("recreate index %s: %w", q, err)
-		}
-	}
+	// Note: Indexes are now managed by the database on startup and should not be recreated here
+
 	if _, err := data.ExecWithRetry(ctx, db, fmt.Sprintf(`ANALYZE %s`, tbl)); err != nil {
 		log.Printf("analyze warning for %s: %v", tbl, err)
 	}
