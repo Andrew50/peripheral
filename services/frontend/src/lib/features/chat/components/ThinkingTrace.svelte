@@ -3,6 +3,14 @@
 	import { agentStatusStore } from '$lib/utils/stream/socket';
 	import { browser } from '$app/environment';
 	import { onDestroy } from 'svelte';
+	import { createChart } from 'lightweight-charts';
+	import type {
+		IChartApi,
+		CandlestickData,
+		UTCTimestamp,
+	} from 'lightweight-charts';
+
+
 
 	export let isProcessingMessage: boolean = false;
 
@@ -14,6 +22,9 @@
 	let streamingTimeout: NodeJS.Timeout | null = null;
 	let lastAnimatedIndex: number = -1;
 	let animatedCitationCounts: Map<number, { current: number; target: number; isAnimating: boolean }> = new Map();
+
+	// Chart instances management
+	let chartInstances: Map<number, IChartApi> = new Map();
 
 	// Debug reactive statements
 	$: {
@@ -100,7 +111,13 @@
 	// Timeline display logic: show all items when dropdown is expanded, otherwise show only the last item
 	$: displayedTimelineItems = showTimelineDropdown 
 		? timeline 
-		: timeline.slice(-1); // Show only the last timeline item when collapsed
+		: (timeline.length >= 2 && 
+       timeline[timeline.length - 1].type === 'FunctionUpdate' && 
+       timeline[timeline.length - 2].type !== 'FunctionUpdate')
+	   ? timeline.slice(-2)
+	   : timeline.slice(-1);
+
+
 
 	// Reset timeline when processing starts/stops
 	$: if (!isProcessingMessage) {
@@ -111,6 +128,15 @@
 		streamedMessages = streamedMessages; // Trigger reactivity
 		lastAnimatedIndex = -1;
 		animatedCitationCounts.clear();
+		// Clear chart instances
+		chartInstances.forEach(chart => {
+			try {
+				chart.remove();
+			} catch (e) {
+				console.warn('Error removing chart:', e);
+			}
+		});
+		chartInstances.clear();
 		if (streamingTimeout) {
 			clearTimeout(streamingTimeout);
 			streamingTimeout = null;
@@ -175,6 +201,18 @@
 					data: statusUpdate.data
 				}
 			];
+		} else if (statusUpdate.type === "getDailySnapshot" && statusUpdate.data) {
+			// Add daily snapshot data to timeline
+			lastStatusMessage = statusUpdate.headline;
+			timeline = [
+				...timeline,
+				{
+					headline: statusUpdate.headline,
+					timestamp: new Date(),
+					type: 'getDailySnapshot',
+					data: statusUpdate.data
+				}
+			];
 		}
 	}
 
@@ -236,17 +274,89 @@
 			}, 200);
 		}
 	}
+	// Function to create chart for getDailySnapshot
+	function createThinkingTraceChart(chartIndex: number, chartData: any[]) {
+		const container = document.getElementById(`thinkingtrace-chart-${chartIndex}`);
+		if (!container) return;
 
-	// Reactive statement to trigger citation animations
-	$: if (browser && displayedTimelineItems.length > 0) {
-		displayedTimelineItems.forEach((event, index) => {
-			if (event.type === 'webSearchCitations' && event.data?.citations) {
-				const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
-				if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
-					startCitationCountAnimation(index, event.data.citations.length);
-				}
+		// If chart instance already exists, remove it to force recreation
+		// This ensures charts are recreated when timeline state changes
+		if (chartInstances.has(chartIndex)) {
+			const existingChart = chartInstances.get(chartIndex);
+			try {
+				existingChart?.remove();
+			} catch (e) {
+				console.warn('Error removing existing chart:', e);
 			}
-		});
+			chartInstances.delete(chartIndex);
+		}
+		
+		try {
+			const chart = createChart(container, {
+				width: container.clientWidth,
+				height: container.clientHeight,
+				layout: {
+					background: { color: 'transparent' },
+					textColor: '#ffffff',
+					attributionLogo: false
+				},
+				grid: {
+					vertLines: { visible: true, color: 'rgba(255, 255, 255, 0.1)', style: 1 },
+					horzLines: { visible: true, color: 'rgba(255, 255, 255, 0.1)', style: 1 }
+				},
+				timeScale: { 
+					visible: false,
+					timeVisible: false,
+					secondsVisible: false
+				},
+				handleScroll: {
+					mouseWheel: false,
+					pressedMouseMove: false,
+					horzTouchDrag: false,
+					vertTouchDrag: false
+				},
+				handleScale: { 
+					mouseWheel: false, 
+					pinch: false 
+				}
+			});
+
+			// Create candlestick series
+			const candleSeries = chart.addCandlestickSeries({
+				upColor: '#26a69a',
+				downColor: '#ef5350',
+				borderVisible: false,
+				wickUpColor: '#26a69a',
+				wickDownColor: '#ef5350'
+			});
+
+			// Convert backend data to lightweight-charts format
+			const convertedData: CandlestickData[] = chartData.map((bar: any) => ({
+				time: bar.timestamp as UTCTimestamp,
+				open: bar.open,
+				high: bar.high,
+				low: bar.low,
+				close: bar.close
+			}));
+
+			candleSeries.setData(convertedData);
+			chart.timeScale().fitContent();
+
+			// Store chart instance
+			chartInstances.set(chartIndex, chart);
+
+			// Handle resize
+			const resizeObserver = new ResizeObserver(() => {
+				chart.applyOptions({
+					width: container.clientWidth,
+					height: container.clientHeight
+				});
+			});
+			resizeObserver.observe(container);
+
+		} catch (error) {
+			console.error('Error creating chart:', error);
+		}
 	}
 
 	// Helper functions for watchlist formatting
@@ -271,13 +381,57 @@
 		if (typeof value !== 'number') return '';
 		return value >= 0 ? 'positive' : 'negative';
 	}
+	function formatVolume(volume: number): string {
+		if (volume < 1000000) {
+			return (volume/1000).toFixed(1) + 'K';
+		} else if (volume < 1000000000) {
+			return (volume/1000000).toFixed(1) + 'M';
+		} else {
+			return (volume/1000000000).toFixed(1) + 'B';
+		}
+	}
 
 	// Cleanup timeout on component destroy
 	onDestroy(() => {
 		if (streamingTimeout) {
 			clearTimeout(streamingTimeout);
 		}
+		// Clear chart instances on component destroy
+		chartInstances.forEach(chart => {
+			try {
+				chart.remove();
+			} catch (e) {
+				console.warn('Error removing chart on destroy:', e);
+			}
+		});
+		chartInstances.clear();
 	});
+	// Reactive statement to trigger citation animations
+	$: if (browser && displayedTimelineItems.length > 0) {
+	displayedTimelineItems.forEach((event, index) => {
+		if (event.type === 'webSearchCitations' && event.data?.citations) {
+			const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
+			if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
+				startCitationCountAnimation(index, event.data.citations.length);
+			}
+		}
+	});
+	}
+
+
+
+	// Create charts for getDailySnapshot events
+	$: if (browser && displayedTimelineItems.length > 0) {
+		displayedTimelineItems.forEach((event, index) => {
+			if (event.type === 'getDailySnapshot' && event.data?.chartData) {
+				// Find the original timeline index for this event
+				const originalTimelineIndex = showTimelineDropdown 
+					? index 
+					: timeline.findIndex(item => item === event);
+				setTimeout(() => createThinkingTraceChart(originalTimelineIndex, event.data.chartData), 50);
+			}
+		});
+	}
 </script>
 
 {#if isProcessingMessage}
@@ -387,6 +541,18 @@
 												<span class="citation-url">{citation.url ? citation.url.replace(/^https?:\/\//, '').split('/')[0].split('.').slice(0, -1).join('.') : 'Unknown URL'}</span>
 											</div>
 										{/each}
+									</div>
+								</div>
+							{:else if event.type === 'getDailySnapshot' && event.data?.chartData}
+								{@const originalTimelineIndex = showTimelineDropdown ? index : timeline.findIndex(item => item === event)}
+								{@const ticker = event.data.ticker || ''}
+								<div class="timeline-chart" class:animate-fade-in={shouldAnimate}>
+									<div class="chart-container" id={`thinkingtrace-chart-${originalTimelineIndex}`}>
+										<div class="chart-legend">
+											<span class="ticker">{ticker}</span>
+											<span>{event.data.chartData[event.data.chartData.length - 1].close.toFixed(2)}</span>
+											<span>Vol: {formatVolume(event.data.chartData[event.data.chartData.length - 1].volume)}</span>
+										</div>
 									</div>
 								</div>
 							{:else if event.type === 'getWatchlistItems' && event.data}
@@ -648,7 +814,7 @@
 	}
 
 	.timeline-items {
-		margin-left: 0.5rem;
+		margin-left: 0.2rem;
 		margin-top: 0.5rem;
 	}
 
@@ -1072,5 +1238,40 @@
 
 	.watchlist-table-body::-webkit-scrollbar-thumb:hover {
 		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	/* Chart styles */
+	.timeline-chart {
+		width: 100%;
+		height: 300px; /* Fixed height for the chart */
+		background-color: #121212;
+		border: 1.5px solid #2e2e2e;
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.timeline-chart.animate-fade-in {
+		animation: fadeInUp 0.3s ease-out;
+	}
+
+
+	.chart-container {
+		width: 100%;
+		height: 100%; /* Subtract header height */
+	}
+	.chart-legend {
+		position: relative;
+		background: none;
+		overflow: hidden;
+		color: hsl(0, 0%, 0%);
+		padding: 4px 6px;
+		border-radius: 4px;
+		font-size: 0.4rem;
+		display: flex;
+		gap: 0.4rem;
+		pointer-events: none;
+	}
+	.chart-legend .ticker {
+		font-weight: 600;
 	}
 </style>

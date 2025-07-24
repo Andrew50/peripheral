@@ -235,23 +235,12 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	userContent := &genai.Content{Parts: userParts}
 	// --- End Prompt Preparation ---
 
-	// --- Call LLM ---
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting Gemini key: %w", err)
-	}
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating Gemini client: %w", err)
-	}
+	client := conn.GeminiClient
 
 	// Use GenerateContent with []*genai.Content input
 	result, err := client.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash",
+		"gemini-2.5-flash-lite-preview-06-17",
 		[]*genai.Content{userContent},
 		cfg,
 	)

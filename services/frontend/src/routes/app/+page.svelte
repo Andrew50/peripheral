@@ -1374,7 +1374,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-left: 4px solid var(--c1);
 		border-bottom: 4px solid var(--c1);
 		z-index: 11; /* above top bar */
 	}
