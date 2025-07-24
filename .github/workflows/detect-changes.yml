@@ -15,7 +15,7 @@ on:
         value: ${{ jobs.detect.outputs.services_changed }}
 jobs:
   detect:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     outputs:
       database-migrations: ${{ steps.changes.outputs.database-migrations }}
       database-config: ${{ steps.changes.outputs.database-config }}
