@@ -3,6 +3,7 @@ package strategy
 import (
 	"backend/internal/app/limits"
 	"backend/internal/data"
+	"backend/internal/queue"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -331,23 +332,15 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	return response, nil
 }
 
-// callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
+// callWorkerBacktestWithProgress calls the worker's run_backtest function via the new queue system with progress callbacks
 func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunBacktestArgs, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("backtest_%d_%d", args.StrategyID, time.Now().UnixNano())
-
-	// Prepare backtest task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "backtest",
-		"args": map[string]interface{}{
-			"strategy_id": fmt.Sprintf("%d", args.StrategyID),
-			"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
-			"version":     args.Version,
-			"start_date":  args.StartDate,
-			"end_date":    args.EndDate,
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
+	// Prepare backtest task arguments
+	taskArgs := map[string]interface{}{
+		"strategy_id": fmt.Sprintf("%d", args.StrategyID),
+		"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
+		"version":     args.Version,
+		"start_date":  args.StartDate,
+		"end_date":    args.EndDate,
 	}
 
 	// Check for active backtests using comprehensive check
@@ -359,24 +352,34 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 		return nil, fmt.Errorf("another backtest is already queued or running for your account. Please wait for it to complete before starting a new one")
 	}
 
-	// Submit task to Redis queue
-	taskJSON, err := json.Marshal(task)
+	// Queue the task using the new queue system
+	handle, err := queue.QueueBacktest(ctx, conn, taskArgs)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling task: %v", err)
+		return nil, fmt.Errorf("error queuing backtest task: %v", err)
 	}
 
-	// Push task to worker queue
-	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
-	if err != nil {
-		return nil, fmt.Errorf("error submitting task to queue: %v", err)
-	}
+	// Monitor progress and wait for result
+	go func() {
+		for update := range handle.Updates {
+			if progressCallback != nil {
+				// Convert status to message format expected by ProgressCallback
+				message := fmt.Sprintf("Status: %s", update.Status)
+				if update.Data != nil {
+					if msg, ok := update.Data["message"].(string); ok {
+						message = msg
+					}
+				}
+				progressCallback(message)
+			}
+		}
+	}()
 
-	// Wait for result with timeout and progress callbacks
-	result, err := waitForBacktestResultWithProgress(ctx, conn, taskID, 10*time.Minute, progressCallback)
+	// Wait for result with timeout using typed await
+	result, err := queue.AwaitTypedResult[WorkerBacktestResult](ctx, handle)
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}
-	fmt.Println("\n\nresult version:", result.Version)
+
 	return result, nil
 }
 
