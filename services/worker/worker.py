@@ -22,7 +22,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.strategy_engine import AccessorStrategyEngine
+from src.strategy_engine import StrategyEngine
 from src.validator import SecurityValidator, SecurityError
 from src.strategy_generator import StrategyGenerator
 from concurrent.futures import ThreadPoolExecutor
@@ -61,7 +61,7 @@ class StrategyWorker:
         # Import the new data accessor
         self.data_accessor = DataAccessorProvider()
         
-        self.strategy_engine = AccessorStrategyEngine()
+        self.strategy_engine = StrategyEngine()
         self.security_validator = SecurityValidator()
         self.strategy_generator = StrategyGenerator()
         self.python_agent_generator = PythonAgentGenerator()

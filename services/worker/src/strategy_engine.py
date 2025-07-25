@@ -5,6 +5,9 @@ instead of receiving DataFrames as parameters.
 """
 
 import asyncio
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 import logging
 import pandas as pd
 import numpy as np
@@ -16,6 +19,9 @@ import time
 import io
 import contextlib
 import plotly
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 import traceback
 import sys 
 import math
@@ -90,7 +96,7 @@ class TrackedList(list):
         return self
 
 
-class AccessorStrategyEngine:
+class StrategyEngine:
     """
     Executes strategies that use data accessor functions
     
@@ -520,9 +526,9 @@ class AccessorStrategyEngine:
     async def _execute_strategy(
         self,
         strategy_code: str, 
-        execution_mode: str,
+        execution_mode: str, # backtest, alert, screening, validation
         max_instances: int = 15000,
-        strategy_id: int = None
+        strategy_id: int = None # None means new strategy
     ) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
         
@@ -681,6 +687,7 @@ class AccessorStrategyEngine:
         
         safe_globals = {
             # Built-ins for safe execution (including __import__ for import statements)
+            # we dont use defaults becuase that would allow for things like open, eval, exec, etc.
             '__builtins__': {
                 'print': print,
                 '__import__': __import__,
@@ -729,40 +736,20 @@ class AccessorStrategyEngine:
             'time': dt.time,
             
             # Execution mode info
-            'execution_mode': execution_mode,
+            'plotly': {
+                'graph_objects': go,
+                'express': px,
+                'subplots': {'make_subplots': make_subplots}
+            },
+            'go': go,
+            'px': px,
+            'make_subplots': make_subplots
         }
-        
-        # Add plotly imports if available
-        try:
-            import plotly.graph_objects as go
-            import plotly.express as px
-            from plotly.subplots import make_subplots
-            
-            safe_globals.update({
-                'plotly': {
-                    'graph_objects': go,
-                    'express': px,
-                    'subplots': {'make_subplots': make_subplots}
-                },
-                'go': go,
-                'px': px,
-                'make_subplots': make_subplots
-            })
-        except ImportError:
-            logger.warning("Plotly not available - plot capture disabled")
         
         return safe_globals
     
     def _plotly_capture_context(self, strategy_id=None):
         """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
-        
-        try:
-            import plotly.graph_objects as go
-            import plotly.express as px
-            from plotly.subplots import make_subplots
-        except ImportError:
-            # Return a no-op context manager if plotly not available
-            return contextlib.nullcontext()
         
         # Store original methods
         original_figure_show = go.Figure.show

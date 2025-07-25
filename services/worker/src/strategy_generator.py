@@ -21,7 +21,7 @@ from openai import OpenAI
 from google import genai 
 from google.genai import types
 from validator import SecurityValidator, SecurityError, StrategyComplianceError
-from strategy_engine import AccessorStrategyEngine
+from strategy_engine import StrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -789,7 +789,7 @@ class StrategyGenerator:
             logger.info("🧪 Running execution test...")
             try:
                 # Use fast validation mode with minimal data and short timeout
-                engine = AccessorStrategyEngine()
+                engine = StrategyEngine()
                 test_result = await asyncio.wait_for(
                     engine.execute_validation(
                         strategy_code=strategy_code
