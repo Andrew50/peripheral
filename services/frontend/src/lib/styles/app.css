@@ -104,6 +104,7 @@
 	z-index: 2;
 	flex-shrink: 0;
 	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
+	border-left: 4px solid var(--c1);
 	/* 600px max with button bar */
 }
 
