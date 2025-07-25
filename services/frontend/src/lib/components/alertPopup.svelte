@@ -69,7 +69,7 @@
 	function getAlertIcon(alertType: string = 'default'): string {
 		return 'icon-movingcontext.svg';
 	}
-
+ 
 	// Function to get the appropriate trending icon based on alert type
 	function getTrendingIcon(alertType: string = 'default'): string {
 		return 'icon-movingup.svg';

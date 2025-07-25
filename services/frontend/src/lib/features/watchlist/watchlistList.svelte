@@ -908,8 +908,8 @@
 		content: '';
 		position: absolute;
 		bottom: -1px;
-		left: 12px;
-		right: 12px;
+		left: 0px;
+		right: 0px;
 		height: 1px;
 		background: rgba(255, 255, 255, 0.08);
 		border-radius: 0.5px;

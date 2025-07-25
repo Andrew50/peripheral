@@ -16,7 +16,8 @@ import (
 var (
 	telegramUserNotificationBot *telebot.Bot
 	telegramBenTweetsBot        *telebot.Bot
-	chatID                      int64
+	userChatID                  int64
+	benTweetsChatID             int64
 	isProdEnv                   bool
 )
 
@@ -34,7 +35,7 @@ func InitTelegramUserNotificationBot() error {
 		return fmt.Errorf("TELEGRAM_USER_NOTIFICATION_BOT_TOKEN environment variable is required")
 	}
 	fmt.Println("Initializing Telegram bot with token:", userNotificationBotToken)
-	chatID = -1002517629348
+	userChatID = -1002517629348
 	var err error
 	telegramUserNotificationBot, err = telebot.NewBot(telebot.Settings{
 		Token:  userNotificationBotToken,
@@ -47,7 +48,7 @@ func InitTelegramUserNotificationBot() error {
 	if benTweetsBotToken == "" {
 		return fmt.Errorf("TELEGRAM_BEN_TWEETS_BOT_TOKEN environment variable is required")
 	}
-	chatID = -4940706341
+	benTweetsChatID = -4940706341
 	telegramBenTweetsBot, err = telebot.NewBot(telebot.Settings{
 		Token:  benTweetsBotToken,
 		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
@@ -70,9 +71,12 @@ func SendTelegramUserUsageMessage(msg string) error {
 			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 		}
 	}
-	fmt.Println("Sending Telegram message to chat ID:", chatID)
-	recipient := telebot.ChatID(chatID)
+	fmt.Println("Sending Telegram message to chat ID:", userChatID)
+	recipient := telebot.ChatID(userChatID)
 	_, err := telegramUserNotificationBot.Send(recipient, msg)
+	if err != nil {
+		fmt.Println("Failed to send Telegram message:", err)
+	}
 	return err
 }
 
@@ -87,7 +91,7 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 		}
 	}
-	recipient := telebot.ChatID(chatID)
+	recipient := telebot.ChatID(benTweetsChatID)
 	if i := strings.IndexByte(image, ','); i >= 0 {
 		image = image[i+1:]
 	}

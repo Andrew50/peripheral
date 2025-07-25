@@ -1,9 +1,6 @@
-name: Deploy to Kubernetes (Staging)
+name: Manual Deploy to Stage
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       branch:
@@ -45,10 +42,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  detect_changes:
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/detect-changes.yml
-
   compute_manual_strategy:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build-manual-strategy.yml
@@ -60,10 +53,8 @@ jobs:
       force-deploy-worker: ${{ github.event.inputs.force-deploy-worker == 'true' }}
   deploy-stage:
     needs:
-      - detect_changes
-    if: |
-      (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
-      (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')    
+      - compute_manual_strategy
+    if:  needs.compute_manual_strategy.outputs.strategy != 'no-changes'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: 'stage'
@@ -71,10 +62,9 @@ jobs:
       k8s_namespace: 'stage'
       google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
       ingress_host: 'stage.peripheral.io'
-      strategy: >-
-        ${{ github.event_name == 'push' && needs.detect_changes.outputs.strategy || needs.compute_manual_strategy.outputs.strategy }}
-      services_changed: >-
-        ${{ github.event_name == 'push' && needs.detect_changes.outputs.services_changed || needs.compute_manual_strategy.outputs.services_changed }}      
+      strategy: ${{ needs.compute_manual_strategy.outputs.strategy }}
+      services_changed: ${{ needs.compute_manual_strategy.outputs.services_changed }}      
+      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations == 'true' }}    
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}

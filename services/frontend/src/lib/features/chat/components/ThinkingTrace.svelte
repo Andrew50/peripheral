@@ -742,20 +742,28 @@
 	}
 
 	.current-status {
+		--shimmer-contrast: #0009;
+		
 		color: transparent;
+		text-fill-color: transparent;
+		-webkit-text-fill-color: transparent;
 		font-size: 0.9rem;
 		font-weight: 500;
 		flex: 1;
-		background: linear-gradient(
-			90deg,
-			var(--text-secondary, #aaa),
-			rgba(255, 255, 255, 0.9),
-			var(--text-secondary, #aaa)
+		background: #ffffff linear-gradient(
+			to right, 
+			#ffffff 0%, 
+			var(--shimmer-contrast) 40%, 
+			var(--shimmer-contrast) 60%, 
+			#ffffff 100%
 		);
-		background-size: 200% auto;
+		background-size: 50% 200%;
+		background-position: -100% 0;
+		background-repeat: no-repeat;
 		background-clip: text;
 		-webkit-background-clip: text;
-		animation: loading-text-highlight 2.5s infinite linear;
+		animation: loading-text-highlight 3s infinite linear;
+		animation-delay: 0.3s;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -763,10 +771,10 @@
 
 	@keyframes loading-text-highlight {
 		0% {
-			background-position: 200% center;
+			background-position: -100% 0;
 		}
 		100% {
-			background-position: -200% center;
+			background-position: 200% 0;
 		}
 	}
 

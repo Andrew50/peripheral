@@ -131,8 +131,6 @@ VALUES (
     'Combined screener system with static refs optimization - retired caggs except pre-market/extended-hours'
 ) ON CONFLICT (version) DO NOTHING;
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS timescaledb_toolkit;
 
 -- Enable window functions in continuous aggregates
 SET timescaledb.enable_cagg_window_functions = true;

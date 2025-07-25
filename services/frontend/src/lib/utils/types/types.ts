@@ -47,7 +47,7 @@ export interface Strategy {
 	prompt?: string;
 	pythonCode?: string;
 	score?: number;
-	version?: string;
+	version?: number;
 	createdAt?: string;
 	isAlertActive?: boolean;
 	alertThreshold?: number;

@@ -582,7 +582,6 @@
 		overflow: visible; /* Remove scrolling from this container */
 		min-height: 0; /* Necessary for flex-grow in some cases */
 		/* Match padding pattern used in alerts container */
-		padding: 0 clamp(0.5rem, 1vw, 1rem) clamp(0.5rem, 1vw, 1rem);
 		background: transparent;
 		border: none;
 		border-radius: 0;

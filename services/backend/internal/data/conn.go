@@ -41,7 +41,7 @@ type Conn struct {
 	ExecutionEnvironment string
 }
 
-// Result structs for thread-safe communication
+// Result structs for thread-safe communication.
 type dbConnResult struct {
 	conn *pgxpool.Pool
 	err  error
