@@ -90,7 +90,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     return plotted
 
 
-def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
+def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version=None) -> str:
     """
     Convert any Plotly figure to a simple matplotlib PNG for LLM analysis
     
@@ -136,9 +136,15 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id) -> str:
                 # Correctly fetch title text from the figure layout; fallback to a default if missing
                 title_text = getattr(plotly_fig.layout.title, 'text', None)
                 if title_text:
-                    title_text = f"Plot {plotID} {id_naming}: {strategy_id} - " + title_text
+                    if version:
+                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version} - " + title_text
+                    else:
+                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} - " + title_text
                 else: 
-                    title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
+                    if version:
+                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version}"
+                    else:
+                        title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
                 ax.set_title(title_text)
         except Exception as e:
             logger.debug(f"Optional: could not set plot title: {e}")
