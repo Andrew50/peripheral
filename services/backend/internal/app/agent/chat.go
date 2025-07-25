@@ -460,12 +460,14 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
 	StrategyID int         `json:"strategyID"`        // strategyId
+	Version    int         `json:"version"`           // version
 	Columns    interface{} `json:"columns"`           // Internal column names as either []string or string
 	Caption    string      `json:"caption"`           // Table title
 	NumRows    int         `json:"numRows,omitempty"` // Number of rows in the table
 }
 type BacktestPlotChunkData struct {
 	StrategyID int    `json:"strategyID"`
+	Version    int    `json:"version"`
 	PlotID     int    `json:"plotID"`
 	ChartType  string `json:"chartType,omitempty"`
 	ChartTitle string `json:"chartTitle,omitempty"`
@@ -483,9 +485,14 @@ type AgentPlotChunkData struct {
 	YAxisTitle  string `json:"yAxisTitle,omitempty"`
 }
 
+// getBacktestKey creates a composite key for the backtest results map using strategy ID and version
+func getBacktestKey(strategyID, version int) string {
+	return fmt.Sprintf("%d-%d", strategyID, version)
+}
+
 func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+	var backtestResultsMap = make(map[string]*strategy.BacktestResponse)
 	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		if chunk.Type == "backtest_table" {
@@ -506,21 +513,22 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 				continue
 			}
 			// Get backtest results for this strategy
-			if backtestResultsMap[backtestTableChunkContent.StrategyID] == nil {
-				backtestResultsMap[backtestTableChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID)
+			backtestKey := getBacktestKey(backtestTableChunkContent.StrategyID, backtestTableChunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID, backtestTableChunkContent.Version)
 				if err != nil {
 					continue
 				}
 			}
 			if backtestTableChunkContent.Columns == "all" {
 				// Store all columns from the backtest results
-				backtestTableChunkContent.Columns = backtestResultsMap[backtestTableChunkContent.StrategyID].Summary.Columns
+				backtestTableChunkContent.Columns = backtestResultsMap[backtestKey].Summary.Columns
 				chunk.Content = backtestTableChunkContent
 			} else {
 				// store only columns specified
 				chunk.Content = backtestTableChunkContent
 			}
-			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestTableChunkContent.StrategyID].Instances)
+			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestKey].Instances)
 
 			processedChunks = append(processedChunks, chunk)
 		} else if chunk.Type == "backtest_plot" {
@@ -540,13 +548,14 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 				})
 				continue
 			}
-			if backtestResultsMap[backtestPlotChunkContent.StrategyID] == nil {
-				backtestResultsMap[backtestPlotChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID)
+			backtestKey := getBacktestKey(backtestPlotChunkContent.StrategyID, backtestPlotChunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID, backtestPlotChunkContent.Version)
 				if err != nil {
 					continue
 				}
 			}
-			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
+			strategyPlots := backtestResultsMap[backtestKey].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == backtestPlotChunkContent.PlotID {
 					// Extract axis titles safely with nil checks
@@ -564,6 +573,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
+						Version:    backtestPlotChunkContent.Version,
 						PlotID:     backtestPlotChunkContent.PlotID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
@@ -635,7 +645,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 // processContentChunksForFrontend iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+	var backtestResultsMap = make(map[string]*strategy.BacktestResponse)
 	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
@@ -656,8 +666,9 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 				})
 				continue
 			}
-			if backtestResultsMap[chunkContent.StrategyID] == nil {
-				backtestResultsMap[chunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
+			backtestKey := getBacktestKey(chunkContent.StrategyID, chunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID, chunkContent.Version)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -666,8 +677,8 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 					continue
 				}
 			}
-			backtestInstances := backtestResultsMap[chunkContent.StrategyID].Instances
-			backtestColumns := backtestResultsMap[chunkContent.StrategyID].Summary.Columns
+			backtestInstances := backtestResultsMap[backtestKey].Instances
+			backtestColumns := backtestResultsMap[backtestKey].Summary.Columns
 			// Ensure "ticker" is the first column
 			tickerIdx := -1
 			timestampIdx := -1
@@ -816,8 +827,9 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 			}
 			strategyID := chunkContent.StrategyID
 			plotID := chunkContent.PlotID
-			if backtestResultsMap[strategyID] == nil {
-				backtestResultsMap[strategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID)
+			backtestKey := getBacktestKey(strategyID, chunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID, chunkContent.Version)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -826,7 +838,7 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 					continue
 				}
 			}
-			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
+			strategyPlots := backtestResultsMap[backtestKey].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == plotID {
 					var titleIcon string

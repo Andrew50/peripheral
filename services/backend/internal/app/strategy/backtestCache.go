@@ -10,8 +10,10 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, response BacktestResponse) error {
-	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
+const BacktestCacheKey = "backtest:userID:%d:strategyID:%d:version:%d"
+
+func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int, response BacktestResponse) error {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 
 	cacheData, err := json.Marshal(response)
 	if err != nil {
@@ -21,14 +23,14 @@ func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strate
 	return conn.Cache.Set(ctx, cacheKey, cacheData, cachedDataTTL).Err()
 }
 
-func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, strategyID int) (*BacktestResponse, error) {
-	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
+func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int) (*BacktestResponse, error) {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 
 	cacheData, err := conn.Cache.Get(ctx, cacheKey).Result()
 	if err != nil {
 		if err == redis.Nil {
 			// Cache miss - run backtest and cache result
-			rawArgs := json.RawMessage(fmt.Sprintf(`{"strategyId": %d}`, strategyID))
+			rawArgs := json.RawMessage(fmt.Sprintf(`{"strategyId": %d, "version": %d}`, strategyID, version))
 			backtestResponse, err := RunBacktest(ctx, conn, userID, rawArgs)
 			if err != nil {
 				return nil, fmt.Errorf("error running backtest: %v", err)
@@ -58,8 +60,8 @@ func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, stra
 	return &response, nil
 }
 
-func InvalidateBacktestInstancesCache(ctx context.Context, conn *data.Conn, userID int, strategyID int) error {
-	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID)
+func InvalidateBacktestInstancesCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int) error {
+	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 
 	return conn.Cache.Del(ctx, cacheKey).Err()
 }

@@ -16,6 +16,7 @@ type InstanceFilter struct {
 }
 type GetBacktestInstancesArgs struct {
 	StrategyID int              `json:"strategyID"`
+	Version    int              `json:"version"`
 	Filters    []InstanceFilter `json:"filters"`
 }
 
@@ -25,7 +26,7 @@ func GetBacktestInstances(ctx context.Context, conn *data.Conn, userID int, rawA
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	backtestResponse, err := GetBacktestData(ctx, conn, userID, args.StrategyID)
+	backtestResponse, err := GetBacktestData(ctx, conn, userID, args.StrategyID, args.Version)
 	if err != nil {
 		return nil, fmt.Errorf("error getting backtest data: %v", err)
 	}
@@ -207,8 +208,8 @@ func convertToFloat64(value interface{}) (float64, bool) {
 	}
 }
 
-func GetBacktestData(ctx context.Context, conn *data.Conn, userID int, strategyID int) (*strategy.BacktestResponse, error) {
-	response, err := strategy.GetBacktestFromCache(ctx, conn, userID, strategyID)
+func GetBacktestData(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int) (*strategy.BacktestResponse, error) {
+	response, err := strategy.GetBacktestFromCache(ctx, conn, userID, strategyID, version)
 	if err != nil {
 		return nil, fmt.Errorf("error getting backtest from cache: %v", err)
 	}
