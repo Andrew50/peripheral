@@ -623,6 +623,9 @@ class DataAccessorProvider:
                 elif col == "timestamp":
                     # Convert timestamptz to integer seconds since epoch for backward compatibility
                     select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
+                elif col == "volume":
+                    # Preserve raw volume (do not scale by 1000)
+                    select_columns.append("o.volume AS volume")
                 elif col in ["open", "high", "low", "close"]:
                     # Divide OHLC values by 1000 at database level
                     select_columns.append(f"o.{col} / 1000.0 AS {col}")

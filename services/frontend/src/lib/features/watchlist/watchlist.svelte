@@ -172,7 +172,6 @@
 		// No manual reset; keeping the value ensures the dropdown remains synced.
 	}
 
-
 	// Handle direct tab switching - maintain fixed positions
 	function switchToWatchlist(watchlistId: number) {
 		if (watchlistId === currentWatchlistId) return;
@@ -239,8 +238,8 @@
 	}
 	// Get all visible watchlists in their fixed positions
 	$: visibleWatchlists = $visibleWatchlistIds
-	.map((id) => $watchlists?.find((w) => w.watchlistId === id))
-	.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
+		.map((id) => $watchlists?.find((w) => w.watchlistId === id))
+		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
 </script>
 
 <div tabindex="-1" class="feature-container" bind:this={container}>
@@ -330,7 +329,8 @@
 	<div class="list-scroll-container">
 		<!-- Top row containing the Add Symbol button -->
 		<div class="add-symbol-row">
-			<!-- Alert settings button -->
+			<!-- Alert settings button (commented out) -->
+			<!--
 			<button
 				class="alert-settings-button"
 				title="Watchlist Alerts Settings"
@@ -340,6 +340,7 @@
 			>
 				<img src="/alerts.png" alt="Alerts" class="icon" />
 			</button>
+			-->
 
 			<!-- Add Symbol button -->
 			<button

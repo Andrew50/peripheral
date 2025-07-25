@@ -476,7 +476,7 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 		       COALESCE(score, 0) as score,
 		       COALESCE(version, '1.0') as version,
 		       COALESCE(createdat, NOW()) as createdat,
-		       COALESCE(isalertactive, false) as isalertactive,
+		       alertactive as alertactive,
 		       alert_threshold,
 		       alert_universe
 		FROM strategies WHERE userid = $1 ORDER BY createdat DESC`, userID)
@@ -532,7 +532,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	var currentThreshold *float64
 	var currentUniverse []string
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT COALESCE(isalertactive, false), alert_threshold, alert_universe
+		SELECT COALESCE(alertactive, false), alert_threshold, alert_universe
 		FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`,
 		args.StrategyID, userID).Scan(&currentActive, &currentThreshold, &currentUniverse)
@@ -554,7 +554,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	// Update the alert status and configuration
 	_, err = conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
-		SET isalertactive = $1, alert_threshold = $2, alert_universe = $3
+		SET alertactive = $1, alert_threshold = $2, alert_universe = $3
 		WHERE strategyid = $4 AND userid = $5`,
 		args.Active, args.Threshold, args.Universe, args.StrategyID, userID)
 
@@ -572,7 +572,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 			// If we can't record usage, rollback the alert activation
 			if _, rollbackErr := conn.DB.Exec(context.Background(), `
 				UPDATE strategies 
-				SET isalertactive = false, alert_threshold = $1, alert_universe = $2
+				SET alertactive = false, alert_threshold = $1, alert_universe = $2
 				WHERE strategyid = $3 AND userid = $4`,
 				currentThreshold, currentUniverse, args.StrategyID, userID); rollbackErr != nil {
 				log.Printf("Warning: failed to rollback strategy alert activation: %v", rollbackErr)
@@ -612,7 +612,7 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 	// Check if the strategy has an active alert before deleting
 	var isAlertActive bool
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT COALESCE(isalertactive, false) 
+		SELECT COALESCE(alertactive, false) 
 		FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`,
 		args.StrategyID, userID).Scan(&isAlertActive)

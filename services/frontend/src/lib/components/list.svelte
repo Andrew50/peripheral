@@ -648,6 +648,7 @@
 							<td class="default-td">
 								<button
 									class="delete-button"
+									on:mousedown|stopPropagation
 									on:click={(event) => {
 										deleteRow(event, watch);
 									}}

@@ -117,8 +117,10 @@ export interface AlertLog {
 	alertId: number; // Refers to either PriceAlert or StrategyAlert ID
 	timestamp: string; // Assuming timestamp comes as string, adjust if Date object
 	securityId: number;
-	alertType?: 'price' | 'strategy'; // Type discriminator for filtering
+	alertType: 'price' | 'strategy'; // Type discriminator for filtering
 	ticker?: string; // Ticker symbol for the alert
+	alertPrice?: number; // Price for price alerts
+	strategyName?: string; // Strategy name for strategy alerts
 }
 
 // Generic Alert configuration used in frontend components.

@@ -4,8 +4,10 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/postgres"
 	"encoding/json"
+	"strings"
 
 	"backend/internal/app/limits"
+	"backend/internal/services/socket"
 	"context"
 	"fmt"
 	"log"
@@ -297,7 +299,7 @@ func initStrategyAlerts(conn *data.Conn) error {
 		       COALESCE(alert_threshold, 0.0) as alert_threshold,
 		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe
 		FROM strategies 
-		WHERE isAlertActive = true 
+		WHERE alertactive = true 
 		ORDER BY strategyId
 	`
 	rows, err := conn.DB.Query(ctx, query)
@@ -478,11 +480,19 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 			log.Printf("Strategy alert %d executed successfully with no matches", strategy.StrategyID)
 		}
 
-		// Prepare additional data for the payload
+		// Extract matched tickers for logging
+		var hitTickers []string
+		for _, match := range result.Matches {
+			hitTickers = append(hitTickers, match.Symbol)
+		}
+		tickerCSV := strings.Join(hitTickers, ",")
+
+		// Prepare additional data for the payload, including comma-separated tickers
 		additionalData := map[string]interface{}{
 			"execution_mode":    result.ExecutionMode,
 			"execution_time_ms": result.ExecutionTimeMs,
 			"num_matches":       numMatches,
+			"ticker":            tickerCSV,
 		}
 
 		// Add match details if available (limit to prevent huge payloads)
@@ -521,6 +531,18 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 			log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
 			// Don't fail the entire alert processing if logging fails
 		}
+		// Dispatch Telegram and WebSocket notifications for strategy alert
+		if err2 := SendTelegramMessage(message, chatID); err2 != nil {
+			log.Printf("Warning: failed to send Telegram message for strategy %d: %v", strategy.StrategyID, err2)
+		}
+		socket.SendAlertToUser(strategy.UserID, socket.AlertMessage{
+			AlertID:   strategy.StrategyID,
+			Timestamp: time.Now().Unix() * 1000,
+			Message:   message,
+			Channel:   "alert",
+			Type:      "strategy",
+			Tickers:   hitTickers,
+		})
 	} else {
 		log.Printf("Strategy alert %d execution completed but marked as not successful", strategy.StrategyID)
 	}

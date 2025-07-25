@@ -58,18 +58,41 @@
 				lastFetchedWhyMovingTicker = chartInstance.ticker;
 				privateRequest<any[]>('getWhyMoving', { tickers: [chartInstance.ticker] })
 					.then((res) => {
-						if (Array.isArray(res) && res.length > 0 && res[0]?.content) {
-							const item = res[0];
-							const timestamp = new Date(item.created_at).getTime();
-							const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
-							whyMovingContent = Date.now() - timestamp <= maxAgeMs ? item.content : null;
-						} else {
-							whyMovingContent = null;
+						// Only process the response if this is still the current ticker
+						if (chartInstance.ticker === lastFetchedWhyMovingTicker) {
+							if (Array.isArray(res) && res.length > 0 && res[0]?.content) {
+								const item = res[0];
+								const timestamp = new Date(item.created_at).getTime();
+								const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
+								whyMovingContent = Date.now() - timestamp <= maxAgeMs ? item.content : null;
+							} else {
+								whyMovingContent = null;
+							}
 						}
 					})
 					.catch((e) => {
-						console.error('Quote component: Error fetching why moving:', e);
-						whyMovingContent = null;
+						// Only log and reset if this is still the current ticker
+						if (chartInstance.ticker === lastFetchedWhyMovingTicker) {
+							// Handle different types of errors more gracefully
+							if (e && typeof e === 'object' && 'message' in e) {
+								const errorMessage = e.message;
+								// Don't log network errors as prominently since they're often temporary
+								if (
+									errorMessage.includes('Failed to fetch') ||
+									errorMessage.includes('NetworkError')
+								) {
+									console.warn(
+										'Quote component: Network error fetching why moving for',
+										chartInstance.ticker
+									);
+								} else {
+									console.error('Quote component: Error fetching why moving:', e);
+								}
+							} else {
+								console.error('Quote component: Error fetching why moving:', e);
+							}
+							whyMovingContent = null;
+						}
 					});
 			}
 
@@ -691,7 +714,6 @@
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 		text-align: left;
 	}
-
 
 	.why-moving-text {
 		font-size: 0.8em;
