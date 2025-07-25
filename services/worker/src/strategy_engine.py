@@ -110,6 +110,7 @@ class AccessorStrategyEngine:
     async def execute_backtest(
         self, 
         strategy_id: int,
+        version: int,
         strategy_code: str, 
         symbols: List[str], 
         start_date: dt, 
@@ -148,7 +149,8 @@ class AccessorStrategyEngine:
                 strategy_code, 
                 execution_mode='backtest',
                 max_instances=max_instances,
-                strategy_id=strategy_id
+                strategy_id=strategy_id,
+                version=version
             )
             if error: 
                 raise error
@@ -161,6 +163,7 @@ class AccessorStrategyEngine:
             
             result = {
                 'success': True,
+                'version': version,
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
@@ -187,6 +190,7 @@ class AccessorStrategyEngine:
             
             return {
                 'success': False,
+                'version': version,
                 'error': str(e),
                 'error_details': error_info,
                 'execution_mode': 'backtest',
@@ -523,7 +527,8 @@ class AccessorStrategyEngine:
         strategy_code: str, 
         execution_mode: str,
         max_instances: int = 15000,
-        strategy_id: int = None
+        strategy_id: int = None,
+        version: int = None
     ) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
         
@@ -557,7 +562,7 @@ class AccessorStrategyEngine:
             try:
                 # Capture stdout and plots during strategy execution
                 stdout_buffer = io.StringIO()
-                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context(strategy_id):
+                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context(strategy_id, version):
                     instances = strategy_func()
                 strategy_prints = stdout_buffer.getvalue()
                 
@@ -754,7 +759,7 @@ class AccessorStrategyEngine:
         
         return safe_globals
     
-    def _plotly_capture_context(self, strategy_id=None):
+    def _plotly_capture_context(self, strategy_id=None, version=None):
         """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
         
         try:
@@ -790,7 +795,7 @@ class AccessorStrategyEngine:
                 # Generate PNG as base64 and add to response_images using matplotlib
                 try:
 
-                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id)
+                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id, version)
                     if png_base64:
                         self.response_images.append(png_base64)
                         logger.debug(f"Generated PNG using matplotlib for plot {plotID}")

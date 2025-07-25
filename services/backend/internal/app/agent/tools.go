@@ -451,6 +451,10 @@ var (
 							Type:        genai.TypeInteger,
 							Description: "id of the strategy to backtest",
 						},
+						"version": {
+							Type:        genai.TypeInteger,
+							Description: "version of the strategy to backtest. If omitted, the latest version is used.",
+						},
 						"startDate": {
 							Type:        genai.TypeString,
 							Description: "The start date of the backtest in YYYY-MM-DD format.",
