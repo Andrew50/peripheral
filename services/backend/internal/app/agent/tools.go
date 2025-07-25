@@ -672,7 +672,7 @@ var (
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategies",
-				Description: "Retrieves all strategies for the current user, including strategy names, ids, and alert configuration (isAlertActive, alertThreshold, alertUniverse). Use this to fetch unknown strategy ids or to get strategy alert information.",
+				Description: "Retrieves all strategies for the current user, including strategy names, ids, and alert configuration (AlertActive, alertThreshold, alertUniverse). Use this to fetch unknown strategy ids or to get strategy alert information.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},

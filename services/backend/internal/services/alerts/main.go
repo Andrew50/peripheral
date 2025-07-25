@@ -476,10 +476,8 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 			message = fmt.Sprintf("Strategy '%s' triggered with %d matching securities", strategy.Name, numMatches)
 			log.Printf("Strategy alert %d triggered: %s", strategy.StrategyID, message)
 		} else {
-			message = fmt.Sprintf("Strategy '%s' executed successfully", strategy.Name)
-			log.Printf("Strategy alert %d executed successfully with no matches", strategy.StrategyID)
+			return nil
 		}
-
 		// Extract matched tickers for logging
 		var hitTickers []string
 		for _, match := range result.Matches {
