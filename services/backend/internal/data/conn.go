@@ -36,6 +36,7 @@ type Conn struct {
 	XAPISecretKey        string
 	XAccessToken         string
 	XAccessSecret        string
+	FredAPIKey           string
 	GeminiClient         *genai.Client
 	OpenAIClient         openai.Client
 	ExecutionEnvironment string
@@ -71,7 +72,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	grokAPIKey := getEnv("GROK_API_KEY", "")
 	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
 	openAIKey := getEnv("OPENAI_API_KEY", "")
-
+	fredAPIKey := getEnv("FRED_API_KEY", "")
 	xAPIKey := getEnv("X_API_KEY", "")
 	xAPISecretKey := getEnv("X_API_SECRET", "")
 	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
@@ -259,6 +260,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		GrokAPIKey:           grokAPIKey,
 		TwitterAPIioKey:      twitterAPIioKey,
 		OpenAIKey:            openAIKey,
+		FredAPIKey:           fredAPIKey,
 		XAPIKey:              xAPIKey,
 		XAPISecretKey:        xAPISecretKey,
 		XAccessToken:         xAccessToken,
