@@ -434,7 +434,7 @@
 	});
 
 	// Sidebar resizing
-	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let minWidth = 120; // Default minimum width, will be updated in browser
 
 	function startRightSidebarResize(event: PointerEvent) {
 		event.preventDefault();
@@ -449,22 +449,23 @@
 		const onMove = (ev: PointerEvent) => {
 			const delta = startX - ev.clientX; // inverse for right sidebar!
 			let newWidth = Math.max(start + delta, 0);
+			const dynamicMinWidth = window.innerWidth * 0.10; // Calculate minimum width dynamically
 
 			// Handle collapsing logic
-			if (newWidth < minWidth && lastSidebarMenu !== null) {
+			if (newWidth < dynamicMinWidth && lastSidebarMenu !== null) {
 				lastSidebarMenu = null;
 				menuWidth.set(0);
 				document.documentElement.style.setProperty('--right-sidebar-width', '0px');
 			}
 			// Restore state if dragging back
-			else if (newWidth >= minWidth && lastSidebarMenu) {
+			else if (newWidth >= dynamicMinWidth && lastSidebarMenu) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				lastSidebarMenu = null;
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
 			}
 			// Normal resize
-			else if (newWidth >= minWidth) {
+			else if (newWidth >= dynamicMinWidth) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);

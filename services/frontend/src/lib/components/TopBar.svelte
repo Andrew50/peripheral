@@ -332,6 +332,7 @@
 
 	.top-bar-right {
 		display: flex;
+		overflow: hidden;
 		align-items: center;
 		gap: 4px;
 	}

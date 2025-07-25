@@ -499,7 +499,6 @@
 	flex-direction: column;
 	position: relative;
 	flex-shrink: 0;
-	max-width: min(800px, calc(100vw - 60px));
 }
 
 /* Add right position for left sidebar handle */
