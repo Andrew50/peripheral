@@ -199,11 +199,11 @@
 
 	// Sync store values with CSS custom properties
 	$: if (browser && $leftMenuWidth !== undefined) {
-		document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+		document.documentElement.style.setProperty('--left-sidebar-width', `${$leftMenuWidth}px`);
 	}
 
 	$: if (browser && $menuWidth !== undefined) {
-		document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+		document.documentElement.style.setProperty('--right-sidebar-width', `${$menuWidth}px`);
 	}
 
 	// Add a reactive statement to handle window events
@@ -332,18 +332,17 @@
 			'--sidebar-buttons-width',
 			`${SIDEBAR_BUTTONS_WIDTH}px`
 		);
-
+		initStores();
 		// Initialize CSS custom properties for sidebar widths if not already set
-		if (!getComputedStyle(document.documentElement).getPropertyValue('--left')) {
-			document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--left-sidebar-width')) {
+			document.documentElement.style.setProperty('--left-sidebar-width', `${$leftMenuWidth}px`);
 			document.documentElement.style.setProperty('--left-gutter', $leftMenuWidth > 0 ? '4px' : '0px');
 		}
-		if (!getComputedStyle(document.documentElement).getPropertyValue('--right')) {
-			document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--right-sidebar-width')) {
+			document.documentElement.style.setProperty('--right-sidebar-width', `${$menuWidth}px`);
 			document.documentElement.style.setProperty('--right-gutter', $menuWidth > 0 ? '4px' : '0px');
 		}
 
-		initStores();
 		// Async initialization function
 		async function init() {
 			// Check for Stripe checkout success session_id parameter
@@ -442,11 +441,11 @@
 	// Sidebar resizing
 	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
 
-	function startResize(event: PointerEvent) {
+	function startRightSidebarResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
 		const start = parseInt(
-			getComputedStyle(document.documentElement).getPropertyValue('--right'),
+			getComputedStyle(document.documentElement).getPropertyValue('--right-sidebar-width'),
 			10
 		);
 
@@ -460,7 +459,7 @@
 			if (newWidth < minWidth && lastSidebarMenu !== null) {
 				lastSidebarMenu = null;
 				menuWidth.set(0);
-				document.documentElement.style.setProperty('--right', '0px');
+				document.documentElement.style.setProperty('--right-sidebar-width', '0px');
 				document.documentElement.style.setProperty('--right-gutter', '0px');
 			}
 			// Restore state if dragging back
@@ -468,14 +467,14 @@
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				lastSidebarMenu = null;
 				menuWidth.set(newWidth);
-				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
 				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			// Normal resize
 			else if (newWidth >= minWidth) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				menuWidth.set(newWidth);
-				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
 				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 		};
@@ -719,13 +718,13 @@
 		event.preventDefault();
 		sidebarResizing = true;
 		document.body.style.cursor = 'ns-resize';
-		document.addEventListener('mousemove', handleSidebarResize);
+		document.addEventListener('mousemove', handleRightSidebarMenusResize);
 		document.addEventListener('mouseup', stopSidebarResize);
-		document.addEventListener('touchmove', handleSidebarResize);
+		document.addEventListener('touchmove', handleRightSidebarMenusResize);
 		document.addEventListener('touchend', stopSidebarResize);
 	}
 
-	function handleSidebarResize(event: MouseEvent | TouchEvent) {
+	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) {
 		if (!sidebarResizing) return;
 
 		let currentY;
@@ -752,9 +751,9 @@
 
 		sidebarResizing = false;
 		document.body.style.cursor = '';
-		document.removeEventListener('mousemove', handleSidebarResize);
+		document.removeEventListener('mousemove', handleRightSidebarMenusResize);
 		document.removeEventListener('mouseup', stopSidebarResize);
-		document.removeEventListener('touchmove', handleSidebarResize);
+		document.removeEventListener('touchmove', handleRightSidebarMenusResize);
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
@@ -781,7 +780,7 @@
 	function handleKeyboardResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startResize(new PointerEvent('pointerdown'));
+			startRightSidebarResize(new PointerEvent('pointerdown'));
 		}
 	}
 
@@ -797,16 +796,13 @@
 		event.preventDefault();
 		const startX = event.clientX;
 		const start = parseInt(
-			getComputedStyle(document.documentElement).getPropertyValue('--left'),
+			getComputedStyle(document.documentElement).getPropertyValue('--left-sidebar-width'),
 			10
 		);
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = Math.min(
-			window.innerWidth * 0.4,
-			window.innerWidth - SIDEBAR_BUTTONS_WIDTH
-		);
+		const maxLeftSidebarWidth = window.innerWidth*0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -815,7 +811,7 @@
 			);
 
 			// Update CSS custom property
-			document.documentElement.style.setProperty('--left', `${newWidth}px`);
+			document.documentElement.style.setProperty('--left-sidebar-width', `${newWidth}px`);
 			document.documentElement.style.setProperty('--left-gutter', newWidth > 0 ? '4px' : '0px');
 
 			// Update store for other components
@@ -836,13 +832,13 @@
 	function toggleLeftSidebar() {
 		if ($leftMenuWidth > 0) {
 			leftMenuWidth.set(0);
-			document.documentElement.style.setProperty('--left', '0px');
+			document.documentElement.style.setProperty('--left-sidebar-width', '0px');
 			document.documentElement.style.setProperty('--left-gutter', '0px');
 		} else {
 			// Set to 30% of screen width when opening
 			const width = window.innerWidth * 0.3;
 			leftMenuWidth.set(width);
-			document.documentElement.style.setProperty('--left', `${width}px`);
+			document.documentElement.style.setProperty('--left-sidebar-width', `${width}px`);
 			document.documentElement.style.setProperty('--left-gutter', '4px');
 		}
 	}
@@ -851,7 +847,7 @@
 			// If clicking the same menu, close it
 			lastSidebarMenu = null;
 			menuWidth.set(0);
-			document.documentElement.style.setProperty('--right', '0px');
+			document.documentElement.style.setProperty('--right-sidebar-width', '0px');
 			document.documentElement.style.setProperty('--right-gutter', '0px');
 			changeMenu('none');
 		} else {
@@ -861,7 +857,7 @@
 			if ($menuWidth === 0) {
 				const width = 180;
 				menuWidth.set(width);
-				document.documentElement.style.setProperty('--right', `${width}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${width}px`);
 				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			changeMenu(menuName);
@@ -1117,7 +1113,7 @@
 							role="separator"
 							aria-orientation="vertical"
 							aria-label="Resize sidebar"
-							on:pointerdown={startResize}
+							on:pointerdown={startRightSidebarResize}
 							on:keydown={handleKeyboardResize}
 							tabindex="0"
 						/>
@@ -1378,8 +1374,8 @@
 
 <style>
 	:root {
-		--left: 0px;
-		--right: 0px;
+		--left-sidebar-width: 0px;
+		--right-sidebar-width: 0px;
 		--left-gutter: 0px;
 		--right-gutter: 0px;
 		--gutter: 4px;
@@ -1397,6 +1393,7 @@
 		align-items: center;
 		justify-content: center;
 		border-bottom: 4px solid var(--c1);
+		border-left: 4px solid var(--c1);
 		z-index: 11; /* above top bar */
 	}
 
@@ -1433,7 +1430,7 @@
 		display: grid;
 		height: 100%;
 		width: 100%;
-		grid-template-columns: var(--left) var(--left-gutter) 1fr var(--right-gutter) var(--right);
+		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(--right-sidebar-width);
 		grid-template-areas: 'left g1 center g2 right';
 	}
 
