@@ -717,7 +717,33 @@
 </script>
 
 <svelte:head>
+	<!-- Basic meta tags -->
 	<title>Pricing | Peripheral</title>
+	<meta name="description" content="The intelligent trading terminal." />
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Pricing | Peripheral" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta property="og:description" content="The intelligent trading terminal." />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Pricing | Peripheral" />
+	<meta name="twitter:description" content="The intelligent trading terminal." />
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->

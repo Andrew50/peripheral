@@ -98,6 +98,35 @@
 	<SiteFooter />
 </main>
 </div>
+<svelte:head>
+	<!-- Basic meta tags -->
+	<title>Peripheral</title>
+	<meta name="description" content="The intelligent trading terminal." />
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Peripheral.io" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta property="og:description" content="The intelligent trading terminal." />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Peripheral.io" />
+	<meta name="twitter:description" content="The intelligent trading terminal." />
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
+</svelte:head>
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
