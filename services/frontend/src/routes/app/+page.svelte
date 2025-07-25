@@ -1454,8 +1454,12 @@
 	.resizer-left {
 		width: var(--left-gutter);
 		cursor: ew-resize;
-		background: transparent;
+		background: rgba(255, 255, 255, 0.1);
 		z-index: 10; /* sit above charts for easy grab */
+		transition: background-color 0.2s ease;
+	}
+	.resizer-left:hover {
+		background: rgba(255, 255, 255, 0.2);
 	}
 	.resizer-right {
 		width: var(--right-gutter);
