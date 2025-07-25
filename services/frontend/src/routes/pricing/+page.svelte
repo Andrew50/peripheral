@@ -887,7 +887,7 @@
 				</div>
 
 				<!-- Query Products Section -->
-				<div class="credits-section">
+				<!-- <div class="credits-section">
 					<div class="credits-header">
 						<h2 class="landing-subtitle">Add More Queries</h2>
 						<p class="credits-description">
@@ -932,7 +932,7 @@
 							</div>
 						{/each}
 					</div>
-				</div>
+				</div> -->
 			{/if}
 		</div>
 	</div>
