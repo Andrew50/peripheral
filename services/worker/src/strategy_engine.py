@@ -221,19 +221,19 @@ class StrategyEngine:
         start_time = time.time()
         
         try:
+            #TODO just use one ticker as the validator should just pass anything to validate functionality
             getBarDataFunctionCalls = self.extract_get_bar_data_calls(strategy_code)
-            logger.info(f"📋 Extracted {len(getBarDataFunctionCalls)} get_bar_data calls: {getBarDataFunctionCalls}")
             tickersInStrategyCode = self.get_all_tickers_from_calls(getBarDataFunctionCalls)
-            logger.info(f"📋 Extracted {len(tickersInStrategyCode)} tickers from get_bar_data calls: {tickersInStrategyCode}")
 
             symbolsForValidation = tickersInStrategyCode if len(tickersInStrategyCode) <= 10 else tickersInStrategyCode[:10]
             symbolsForValidation = symbolsForValidation if symbolsForValidation else ['AAPL']  # Default if empty
             
             max_timeframe, max_timeframe_min_bars = self.getMaxTimeframeAndMinBars(getBarDataFunctionCalls)
-            # Log the exact requirements that will be used
-            logger.info(f"🎯 Validation will use exact min_bars requirements (timeframe: {max_timeframe}, min_bars: {max_timeframe_min_bars})")
             
             # Calculate start date based on timeframe and min_bars (convert to days and round up)
+            #TODO this cannot use date ranges as this is not equivvalent to min bars
+            # because stock weekends, holidays, etc.
+            # instead should just use bars
             end_date = dt.now()
             if max_timeframe and max_timeframe_min_bars > 0:
                 # Parse timeframe and convert to days
@@ -324,7 +324,6 @@ class StrategyEngine:
             Dict with ranked results and scores
         """
         logger.info(f"Starting accessor screening: {len(universe)} symbols, limit {limit}")
-        logger.info("📊 Screening mode: Using minimal recent data for optimal performance")
         
         start_time = time.time()
         
@@ -335,14 +334,6 @@ class StrategyEngine:
                 mode='screening',
                 symbols=universe
             )
-            
-            # Log optimization settings
-            logger.debug("🔧 Screening optimizations enabled:")
-            logger.debug("   ✓ Exact data fetching (ROW_NUMBER gets precise min_bars per security)")
-            logger.debug("   ✓ NO date filtering (eliminates unnecessary data overhead)")
-            logger.debug("   ✓ Database-optimized query structure (most recent records only)")
-            logger.debug(f"   ✓ Universe size: {len(universe)} symbols")
-            logger.debug(f"   ✓ Result limit: {limit}")
             
             # Execute strategy with accessor context
             instances, _, _, _, error = await self._execute_strategy(
@@ -446,18 +437,6 @@ class StrategyEngine:
             
             execution_time = (time.time() - start_time) * 1000
             
-            # Log alert results
-            if alerts:
-                logger.info(f"🔔✅ Strategy alert triggered {len(alerts)} alerts")
-                # Log a sample of alerts (up to 3)
-                sample_size = min(3, len(alerts))
-                if sample_size > 0:
-                    logger.info(f"🔔 Alert samples:")
-                    for i in range(sample_size):
-                        logger.info(f"🔔   - {alerts[i]['symbol']}: {alerts[i]['message']}")
-            else:
-                logger.info(f"🔔 Strategy executed successfully but no alerts were triggered")
-                
             result = {
                 'success': True,
                 'execution_mode': 'alert',
