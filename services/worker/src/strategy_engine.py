@@ -27,6 +27,7 @@ import sys
 import math
 import ast
 from plotlyToMatlab import plotly_to_matplotlib_png
+from data_accessors import get_data_accessor
 
 from validator import SecurityValidator, SecurityError
 
@@ -108,7 +109,6 @@ class StrategyEngine:
     
     def __init__(self):
         # Use the global singleton instead of creating a new instance
-        from data_accessors import get_data_accessor
         self.data_accessor = get_data_accessor()
         self.validator = SecurityValidator()
         
@@ -860,80 +860,7 @@ class StrategyEngine:
         except Exception:
             return 'line'
 
-    def _make_json_serializable(self, value):
-        """Recursively convert numpy/pandas types to native Python types for JSON serialization"""
-        import numpy as np
-        import pandas as pd
-        
-        # Handle None and basic types
-        if value is None or isinstance(value, (str, bool)):
-            return value
-        
-        # Handle numpy arrays
-        if isinstance(value, np.ndarray):
-            return value.tolist()
-        
-        # Handle numpy/pandas scalar types
-        if isinstance(value, np.integer):
-            return int(value)
-        elif isinstance(value, np.floating):
-            return float(value)
-        elif isinstance(value, np.bool_):
-            return bool(value)
-        elif isinstance(value, (np.datetime64, pd.Timestamp)):
-            # Convert datetime to Unix timestamp (int), handle NaT values
-            try:
-                if isinstance(value, pd.Timestamp):
-                    if pd.isna(value):
-                        return None
-                    else:
-                        return int(value.timestamp())
-                else:
-                    ts = pd.Timestamp(value)
-                    if pd.isna(ts):
-                        return None
-                    else:
-                        return int(ts.timestamp())
-            except (ValueError, TypeError, OverflowError) as e:
-                print(f"[make_json_serializable] Exception converting datetime: {e}, value: {value}")
-                return None
-        elif isinstance(value, dt):
-            # Handle Python datetime objects from database
-            try:
-                return int(value.timestamp())
-            except (ValueError, TypeError, OverflowError) as e:
-                print(f"[make_json_serializable] Exception converting datetime.datetime: {e}, value: {value}")
-                return None
-        elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
-            # Handle pandas nullable integer types
-            return int(value.item()) if pd.notna(value) else None
-        elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
-            # Handle pandas nullable float types
-            return float(value.item()) if pd.notna(value) else None
-        elif hasattr(value, 'item'):  # Other numpy scalars
-            return value.item()
-        elif pd.isna(value):
-            # Handle pandas NA values
-            return None
-        elif isinstance(value, (int, float)):
-            # Native Python types are already serializable
-            return value
-        
-        # Handle nested structures
-        elif isinstance(value, list):
-            return [self._make_json_serializable(item) for item in value]
-        elif isinstance(value, tuple):
-            return [self._make_json_serializable(item) for item in value]
-        elif isinstance(value, dict):
-            return {key: self._make_json_serializable(val) for key, val in value.items()}
-        
-        # Fallback for unknown types - try to convert to string
-        else:
-            try:
-                return str(value)
-            except Exception as e:
-                print(f"[make_json_serializable] Exception in fallback str: {e}, value: {value}")
-                return None
+    
 
     def _extract_plot_data(self, fig) -> dict:
         """Extract trace data from plotly figure using Plotly's built-in serialization (fig.to_dict())."""
@@ -1016,46 +943,6 @@ class StrategyEngine:
         except Exception:
             return 'Untitled Plot'
 
-    def _extract_minimal_layout(self, fig) -> dict:
-        """Extract minimal layout information from plotly figure"""
-        try:
-            layout = {}
-            
-            if hasattr(fig, 'layout'):
-                # Extract axis titles
-                if hasattr(fig.layout, 'xaxis') and hasattr(fig.layout.xaxis, 'title'):
-                    if hasattr(fig.layout.xaxis.title, 'text'):
-                        layout['xaxis'] = {'title': str(fig.layout.xaxis.title.text) if fig.layout.xaxis.title.text else ''}
-                    else:
-                        layout['xaxis'] = {'title': ''}
-                else:
-                    layout['xaxis'] = {'title': ''}
-                
-                if hasattr(fig.layout, 'yaxis') and hasattr(fig.layout.yaxis, 'title'):
-                    if hasattr(fig.layout.yaxis.title, 'text'):
-                        layout['yaxis'] = {'title': str(fig.layout.yaxis.title.text) if fig.layout.yaxis.title.text else ''}
-                    else:
-                        layout['yaxis'] = {'title': ''}
-                else:
-                    layout['yaxis'] = {'title': ''}
-                
-                # Extract dimensions if explicitly set and make JSON serializable
-                if hasattr(fig.layout, 'width') and fig.layout.width:
-                    layout['width'] = self._make_json_serializable(fig.layout.width)
-                if hasattr(fig.layout, 'height') and fig.layout.height:
-                    layout['height'] = self._make_json_serializable(fig.layout.height)
-            else:
-                layout = {
-                    'xaxis': {'title': ''},
-                    'yaxis': {'title': ''}
-                }
-            
-            return layout
-        except Exception:
-            return {
-                'xaxis': {'title': ''},
-                'yaxis': {'title': ''}
-            }
 
     def _get_detailed_error_info(self, error: Exception, strategy_code: str) -> Dict[str, Any]:
         """Extract detailed error information including line numbers and code context"""
