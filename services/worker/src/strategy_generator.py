@@ -895,11 +895,8 @@ class StrategyGenerator:
     def _generate_strategy_name(self, prompt: str, is_edit: bool, existing_strategy: Optional[Dict[str, Any]] = None) -> str:
         """Generate a strategy name"""
         if is_edit and existing_strategy:
-            # For edits, keep the original name but add "Updated"
-            original_name = existing_strategy.get('name', 'Strategy')
-            if "(Updated" not in original_name:
-                return f"{original_name} (Updated)"
-            return original_name
+            # For edits, keep the original name (versioning handles uniqueness)
+            return existing_strategy.get('name', 'Strategy')
         
         # For new strategies, generate from prompt
         words = prompt.split()[:5]  # Increased from 4 to 5 words
@@ -941,37 +938,42 @@ class StrategyGenerator:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
             if strategy_id:
-                # Update existing strategy
+                # Create new version of existing strategy - preserve old version as separate row
+                # First get the existing strategy data
                 cursor.execute("""
-                    UPDATE strategies 
-                    SET name = %s, description = %s, prompt = %s, pythoncode = %s, 
-                        updated_at = NOW()
-                    WHERE strategyid = %s AND userid = %s
-                    RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updated_at, isalertactive
-                """, (name, description, prompt, python_code, strategy_id, user_id))
-            else:
-                # Create new strategy with duplicate name handling
-                # First check if name already exists and modify if needed
-                original_name = name
-                cursor.execute("""
-                    SELECT COUNT(*) as count FROM strategies 
-                    WHERE userid = %s AND name = %s
-                """, (user_id, name))
-                count_result = cursor.fetchone()
+                    SELECT name, COALESCE(MAX(version), 0) + 1 as next_version
+                    FROM strategies 
+                    WHERE userid = %s AND name = (SELECT name FROM strategies WHERE strategyid = %s AND userid = %s)
+                    GROUP BY name
+                """, (user_id, strategy_id, user_id))
+                version_result = cursor.fetchone()
                 
-                if count_result and count_result['count'] > 0:
-                    # Name exists, add timestamp suffix
-                    timestamp_suffix = datetime.now().strftime("%m%d_%H%M%S")
-                    name = f"{original_name} ({timestamp_suffix})"
-                    logger.info(f"Strategy name conflict detected, using: {name}")
+                if not version_result:
+                    raise Exception(f"Strategy {strategy_id} not found for user {user_id}")
+                
+                strategy_name = version_result['name']
+                next_version = version_result['next_version']
+                
+                logger.info(f"Creating new version {next_version} of strategy '{strategy_name}' for user {user_id}")
+                
+                # Insert new row with incremented version (preserves old version)
+                cursor.execute("""
+                    INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
+                                          createdat, updated_at, isalertactive, score, version)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, %s)
+                    RETURNING strategyid, name, description, prompt, pythoncode, 
+                             createdat, updated_at, isalertactive, version
+                """, (user_id, strategy_name, description, prompt, python_code, next_version))
+            else:
+                # Create new strategy - always start at version 1
+                logger.info(f"Creating new strategy '{name}' version 1 for user {user_id}")
                 
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
                                           createdat, updated_at, isalertactive, score, version)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, '1.0')
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, 1)
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updated_at, isalertactive
+                             createdat, updated_at, isalertactive, version
                 """, (user_id, name, description, prompt, python_code))
             
             result = cursor.fetchone()
@@ -987,6 +989,7 @@ class StrategyGenerator:
                     'description': result['description'],
                     'prompt': result['prompt'],
                     'pythonCode': result['pythoncode'],
+                    'version': result['version'],
                     'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
                     'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
                     'isAlertActive': result['isalertactive']
