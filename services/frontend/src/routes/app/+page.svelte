@@ -1310,7 +1310,7 @@
 					on:click={() => (window.location.href = '/')}
 					aria-label="Go to home page"
 				>
-					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+					<img src="/favicon.png" alt="Logo" class="bottom-logo" />
 				</button>
 			</div>
 		</div>
