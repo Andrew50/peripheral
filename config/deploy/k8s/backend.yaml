@@ -84,6 +84,11 @@ spec:
                 secretKeyRef:
                   name: openai-secret
                   key: OPENAI_API_KEY
+            - name: FRED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fred-secret
+                  key: FRED_API_KEY
             - name: GROK_API_KEY
               valueFrom:
                 secretKeyRef:

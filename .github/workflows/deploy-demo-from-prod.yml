@@ -71,6 +71,8 @@ on:
         required: true
       OPENAI_API_KEY:
         required: true
+      FRED_API_KEY:
+        required: true
       GEMINI_FREE_KEYS:
         required: true
       GEMINI_API_KEY:
@@ -120,6 +122,7 @@ jobs:
       POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
       POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -203,6 +206,7 @@ jobs:
           echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
           echo "GEMINI_API_KEY: [$(if [ -n "$GEMINI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "FRED_API_KEY: [$(if [ -n "$FRED_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
