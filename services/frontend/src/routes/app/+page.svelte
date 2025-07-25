@@ -336,9 +336,11 @@
 		// Initialize CSS custom properties for sidebar widths if not already set
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--left')) {
 			document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+			document.documentElement.style.setProperty('--left-gutter', $leftMenuWidth > 0 ? '4px' : '0px');
 		}
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--right')) {
 			document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+			document.documentElement.style.setProperty('--right-gutter', $menuWidth > 0 ? '4px' : '0px');
 		}
 
 		initStores();
@@ -459,6 +461,7 @@
 				lastSidebarMenu = null;
 				menuWidth.set(0);
 				document.documentElement.style.setProperty('--right', '0px');
+				document.documentElement.style.setProperty('--right-gutter', '0px');
 			}
 			// Restore state if dragging back
 			else if (newWidth >= minWidth && lastSidebarMenu) {
@@ -466,12 +469,14 @@
 				lastSidebarMenu = null;
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			// Normal resize
 			else if (newWidth >= minWidth) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 		};
 
@@ -811,6 +816,7 @@
 
 			// Update CSS custom property
 			document.documentElement.style.setProperty('--left', `${newWidth}px`);
+			document.documentElement.style.setProperty('--left-gutter', newWidth > 0 ? '4px' : '0px');
 
 			// Update store for other components
 			leftMenuWidth.set(newWidth);
@@ -831,11 +837,13 @@
 		if ($leftMenuWidth > 0) {
 			leftMenuWidth.set(0);
 			document.documentElement.style.setProperty('--left', '0px');
+			document.documentElement.style.setProperty('--left-gutter', '0px');
 		} else {
 			// Set to 30% of screen width when opening
 			const width = window.innerWidth * 0.3;
 			leftMenuWidth.set(width);
 			document.documentElement.style.setProperty('--left', `${width}px`);
+			document.documentElement.style.setProperty('--left-gutter', '4px');
 		}
 	}
 	function toggleMainSidebar(menuName: Menu) {
@@ -844,6 +852,7 @@
 			lastSidebarMenu = null;
 			menuWidth.set(0);
 			document.documentElement.style.setProperty('--right', '0px');
+			document.documentElement.style.setProperty('--right-gutter', '0px');
 			changeMenu('none');
 		} else {
 			// Open new menu
@@ -853,6 +862,7 @@
 				const width = 180;
 				menuWidth.set(width);
 				document.documentElement.style.setProperty('--right', `${width}px`);
+				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			changeMenu(menuName);
 		}
@@ -1368,8 +1378,10 @@
 
 <style>
 	:root {
-		--left: 300px;
-		--right: 300px;
+		--left: 0px;
+		--right: 0px;
+		--left-gutter: 0px;
+		--right-gutter: 0px;
 		--gutter: 4px;
 	}
 
@@ -1421,7 +1433,7 @@
 		display: grid;
 		height: 100%;
 		width: 100%;
-		grid-template-columns: var(--left) var(--gutter) 1fr var(--gutter) var(--right);
+		grid-template-columns: var(--left) var(--left-gutter) 1fr var(--right-gutter) var(--right);
 		grid-template-areas: 'left g1 center g2 right';
 	}
 
@@ -1439,9 +1451,14 @@
 		grid-area: right;
 		overflow: hidden;
 	}
-	.resizer-left,
+	.resizer-left {
+		width: var(--left-gutter);
+		cursor: ew-resize;
+		background: transparent;
+		z-index: 10; /* sit above charts for easy grab */
+	}
 	.resizer-right {
-		width: var(--gutter);
+		width: var(--right-gutter);
 		cursor: ew-resize;
 		background: transparent;
 		z-index: 10; /* sit above charts for easy grab */
