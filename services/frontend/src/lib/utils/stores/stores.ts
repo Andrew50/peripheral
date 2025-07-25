@@ -310,7 +310,7 @@ function initStoresWithAuth() {
 				});
 
 			// Add alert initialization
-			privateRequest<Alert[]>('getAlerts', {})
+			privateRequest<Alert[]>('getAlerts', { alertType: 'all' })
 				.then((v: Alert[]) => {
 					if (v === undefined || v === null) {
 						inactiveAlerts.set([]);

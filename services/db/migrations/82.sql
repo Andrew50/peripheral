@@ -1,23 +1,25 @@
--- Migration 082: Enable strategy versioning by updating unique constraint
--- Description: Change unique constraint from (userId, name) to (userId, name, version) to allow multiple versions
+-- Migration 082: Reset strategies.version to INTEGER
+-- Description: Drop and recreate version column as INTEGER with default value of 1
 
 BEGIN;
 
--- Drop the existing unique constraint on (userId, name)
-ALTER TABLE strategies DROP CONSTRAINT IF EXISTS strategies_userid_name_key;
+-- Drop the existing index on version column
+DROP INDEX IF EXISTS idx_strategies_version;
 
--- Add new unique constraint on (userId, name, version)
-ALTER TABLE strategies ADD CONSTRAINT strategies_userid_name_version_key 
-    UNIQUE (userId, name, version);
+-- Drop the version column entirely
+ALTER TABLE strategies DROP COLUMN IF EXISTS version;
 
--- Create index for efficient querying of strategy versions
-CREATE INDEX IF NOT EXISTS idx_strategies_user_name_version ON strategies(userId, name, version DESC);
+-- Add version column back as INTEGER with default 1
+ALTER TABLE strategies ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+
+-- Recreate the index on the version column
+CREATE INDEX IF NOT EXISTS idx_strategies_version ON strategies(version);
 
 -- Update schema version
 INSERT INTO schema_versions (version, description)
 VALUES (
     82,
-    'Enable strategy versioning by changing unique constraint to (userId, name, version)'
+    'Reset strategies.version to INTEGER with default value of 1'
 ) ON CONFLICT (version) DO NOTHING;
 
 COMMIT; 
