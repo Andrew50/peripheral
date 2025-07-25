@@ -110,6 +110,7 @@ class AccessorStrategyEngine:
     async def execute_backtest(
         self, 
         strategy_id: int,
+        version: int,
         strategy_code: str, 
         symbols: List[str], 
         start_date: dt, 
@@ -148,7 +149,8 @@ class AccessorStrategyEngine:
                 strategy_code, 
                 execution_mode='backtest',
                 max_instances=max_instances,
-                strategy_id=strategy_id
+                strategy_id=strategy_id,
+                version=version
             )
             if error: 
                 raise error
@@ -161,6 +163,7 @@ class AccessorStrategyEngine:
             
             result = {
                 'success': True,
+                'version': version,
                 'instances': instances,
                 'symbols_processed': len(symbols),
                 'strategy_prints': strategy_prints,
@@ -187,6 +190,7 @@ class AccessorStrategyEngine:
             
             return {
                 'success': False,
+                'version': version,
                 'error': str(e),
                 'error_details': error_info,
                 'execution_mode': 'backtest',
@@ -397,31 +401,58 @@ class AccessorStrategyEngine:
         Returns:
             Dict with alerts and signals
         """
-        logger.info(f"Starting accessor alert scan: {len(symbols)} symbols")
+        strategy_id = kwargs.get('strategy_id', 'unknown')
+        user_id = kwargs.get('user_id', 'unknown')
+        logger.info(f"🔔 Starting strategy alert execution - ID: {strategy_id}, User: {user_id}")
+        logger.info(f"🔔 Alert universe: {len(symbols)} symbols")
         
         start_time = time.time()
         
         try:
+            # Log strategy parameters
+            logger.info(f"🔔 Alert execution parameters: max_instances={max_instances}")
             
             # Set execution context for data accessors
+            logger.info(f"🔔 Setting execution context for alert mode")
             self.data_accessor.set_execution_context(
                 mode='alert',
                 symbols=symbols
             )
             
             # Execute strategy with accessor context
-            instances, _, _, _, error = await self._execute_strategy(
+            logger.info(f"🔔 Executing strategy code")
+            instances, strategy_prints, strategy_plots, response_images, error = await self._execute_strategy(
                 strategy_code, 
                 execution_mode='alert',
-                max_instances=max_instances
+                max_instances=max_instances,
+                strategy_id=strategy_id
             )
             if error: 
+                logger.error(f"🔔❌ Strategy alert execution failed: {error}")
                 raise error
+                
+            # Log any strategy output
+            if strategy_prints:
+                logger.info(f"🔔 Strategy output:\n{strategy_prints}")
+                
             # Convert instances to alerts
+            logger.info(f"🔔 Converting {len(instances)} instances to alerts")
             alerts = self._convert_instances_to_alerts(instances)
             
             execution_time = (time.time() - start_time) * 1000
             
+            # Log alert results
+            if alerts:
+                logger.info(f"🔔✅ Strategy alert triggered {len(alerts)} alerts")
+                # Log a sample of alerts (up to 3)
+                sample_size = min(3, len(alerts))
+                if sample_size > 0:
+                    logger.info(f"🔔 Alert samples:")
+                    for i in range(sample_size):
+                        logger.info(f"🔔   - {alerts[i]['symbol']}: {alerts[i]['message']}")
+            else:
+                logger.info(f"🔔 Strategy executed successfully but no alerts were triggered")
+                
             result = {
                 'success': True,
                 'execution_mode': 'alert',
@@ -433,47 +464,61 @@ class AccessorStrategyEngine:
                 'execution_time_ms': int(execution_time)  # Convert to integer for Go compatibility
             }
             
-            logger.info(f"Alert scan completed: {len(alerts)} alerts, {execution_time:.1f}ms")
+            logger.info(f"🔔✅ Alert scan completed: {len(alerts)} alerts, {execution_time:.1f}ms")
             return result
             
         except Exception as e:
+            execution_time = (time.time() - start_time) * 1000
+            
             # Get detailed error information
             error_info = self._get_detailed_error_info(e, strategy_code)
             detailed_error_msg = self._format_detailed_error(error_info)
             
-            logger.error(f"Alert execution failed: {e}")
+            logger.error(f"🔔❌ Alert execution failed: {e}")
             logger.error(detailed_error_msg)
             
             return {
                 'success': False,
                 'error': str(e),
                 'error_details': error_info,
-                'execution_mode': 'alert'
+                'execution_mode': 'alert',
+                'execution_time_ms': int(execution_time)
             }
     
     def _convert_instances_to_alerts(self, instances: List[Dict]) -> List[Dict]:
         """Convert instances to alert format for real-time mode"""
         
         alerts = []
+        logger.debug(f"Converting {len(instances)} instances to alerts")
+        
         for instance in instances:
             # Since all instances are signals (they met criteria), convert all to alerts
+            symbol = instance['ticker']
+            message = instance.get('message', f"{symbol} triggered strategy signal")
+            
             alert = {
-                'symbol': instance['ticker'],
+                'symbol': symbol,
                 'type': 'strategy_signal',
-                'message': instance.get('message', f"{instance['ticker']} triggered strategy signal"),
+                'message': message,
                 'timestamp': dt.now().isoformat(),
                 'data': instance
             }
             
             # Add priority based on score/strength
             if 'score' in instance:
-                alert['priority'] = 'high' if instance['score'] > 0.8 else 'medium'
+                score = instance['score']
+                alert['priority'] = 'high' if score > 0.8 else 'medium'
+                logger.debug(f"Alert for {symbol} with score {score:.2f} - priority: {alert['priority']}")
             elif 'signal_strength' in instance:
-                alert['priority'] = 'high' if instance['signal_strength'] > 0.8 else 'medium'
+                strength = instance['signal_strength']
+                alert['priority'] = 'high' if strength > 0.8 else 'medium'
+                logger.debug(f"Alert for {symbol} with signal strength {strength:.2f} - priority: {alert['priority']}")
             else:
                 alert['priority'] = 'medium'
+                logger.debug(f"Alert for {symbol} with default medium priority")
             
             alerts.append(alert)
+            logger.debug(f"Created alert: {symbol} - {message}")
         
         return alerts
 
@@ -482,7 +527,8 @@ class AccessorStrategyEngine:
         strategy_code: str, 
         execution_mode: str,
         max_instances: int = 15000,
-        strategy_id: int = None
+        strategy_id: int = None,
+        version: int = None
     ) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
         """Execute the strategy function with data accessor context"""
         
@@ -516,7 +562,7 @@ class AccessorStrategyEngine:
             try:
                 # Capture stdout and plots during strategy execution
                 stdout_buffer = io.StringIO()
-                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context(strategy_id):
+                with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context(strategy_id, version):
                     instances = strategy_func()
                 strategy_prints = stdout_buffer.getvalue()
                 
@@ -713,7 +759,7 @@ class AccessorStrategyEngine:
         
         return safe_globals
     
-    def _plotly_capture_context(self, strategy_id=None):
+    def _plotly_capture_context(self, strategy_id=None, version=None):
         """Context manager that temporarily patches plotly to capture plots instead of displaying them"""
         
         try:
@@ -749,7 +795,7 @@ class AccessorStrategyEngine:
                 # Generate PNG as base64 and add to response_images using matplotlib
                 try:
 
-                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id)
+                    png_base64 = plotly_to_matplotlib_png(fig, plotID, "Strategy ID", strategy_id, version)
                     if png_base64:
                         self.response_images.append(png_base64)
                         logger.debug(f"Generated PNG using matplotlib for plot {plotID}")

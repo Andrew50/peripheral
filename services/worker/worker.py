@@ -170,14 +170,68 @@ class StrategyWorker:
             # For other errors, don't reconnect to avoid infinite loops
             pass
     
-    def _fetch_strategy_code(self, strategy_id: str) -> str:
+    def _fetch_strategy_code(self, strategy_id: str, version: int = None) -> str:
         """Fetch strategy code from database by strategy_id"""
-        result = self._fetch_multiple_strategy_codes([strategy_id])
+        if not strategy_id:
+            raise ValueError("strategy_id is required")
         
-        if strategy_id not in result:
-            raise ValueError(f"Strategy not found or has no Python code for strategy_id: {strategy_id}")
+        # Convert string ID to integer for database query
+        try:
+            int_strategy_id = int(strategy_id)
+        except ValueError:
+            raise ValueError(f"Invalid strategy_id: {strategy_id}")
         
-        return result[strategy_id]
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self._ensure_db_connection()
+                
+                with self.db_conn.cursor() as cursor:
+                    result = None
+                    
+                    # First, try to get the specific version if provided
+                    if version is not None:
+                        cursor.execute(
+                            "SELECT pythonCode, version FROM strategies WHERE strategyId = %s AND version = %s AND is_active = true",
+                            (int_strategy_id, version)
+                        )
+                        result = cursor.fetchone()
+                    
+                    # If no specific version found or no version provided, get the latest version
+                    if not result:
+                        cursor.execute(
+                            "SELECT pythonCode, version FROM strategies WHERE strategyId = %s AND is_active = true ORDER BY version DESC LIMIT 1",
+                            (int_strategy_id,)
+                        )
+                        result = cursor.fetchone()
+                        
+                        if version is not None and result:
+                            logger.warning(f"Requested version {version} not found for strategy_id {strategy_id}, using latest version")
+                    
+                    if not result:
+                        raise ValueError(f"Strategy not found for strategy_id: {strategy_id}")
+                    
+                    if not result['pythoncode']:
+                        raise ValueError(f"Strategy has no Python code for strategy_id: {strategy_id}")
+                    
+                    return result['pythoncode'], result['version']  
+                    
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                logger.warning(f"Database connection error on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    try:
+                        self.db_conn.close()
+                    except Exception:
+                        logger.debug("Error closing database connection (expected during reconnection)")
+                    self.db_conn = self._init_database()
+                else:
+                    logger.error(f"Failed to fetch strategy code after {max_retries} attempts")
+                    raise
+            except Exception as e:
+                logger.error(f"Failed to fetch strategy code for strategy_id {strategy_id}: {e}")
+                raise
+        
+        raise Exception(f"Failed to fetch strategy code for strategy_id {strategy_id} after {max_retries} attempts")
     
     
     def _fetch_multiple_strategy_codes(self, strategy_ids: List[str]) -> Dict[str, str]:
@@ -440,7 +494,7 @@ class StrategyWorker:
     
     async def _execute_backtest(self, task_id: str = None, symbols: List[str] = None, 
                                start_date: str = None, end_date: str = None, 
-                               securities: List[str] = None, strategy_id: str = None, **kwargs) -> Dict[str, Any]:
+                               securities: List[str] = None, strategy_id: str = None, version: int = None, **kwargs) -> Dict[str, Any]:
         """Execute backtest task using new accessor strategy engine"""
         if not strategy_id:
             raise ValueError("strategy_id is required")
@@ -448,7 +502,7 @@ class StrategyWorker:
         if task_id:
             self._publish_progress(task_id, "initialization", "Fetching strategy code from database...")
         
-        strategy_code = self._fetch_strategy_code(strategy_id)
+        strategy_code, version = self._fetch_strategy_code(strategy_id, version)
         logger.debug(f"Fetched strategy code from database for strategy_id: {strategy_id}")
         
         # Handle symbols and securities filtering
@@ -518,6 +572,7 @@ class StrategyWorker:
         # Execute using accessor strategy engine
         result = await self.strategy_engine.execute_backtest(
             strategy_id=strategy_id,
+            version=version,
             strategy_code=strategy_code,
             symbols=target_symbols,
             start_date=parsed_start_date,

@@ -19,7 +19,7 @@ type Strategy struct {
 	Prompt         string   `json:"prompt"`      // Original user prompt
 	PythonCode     string   `json:"pythonCode"`  // Generated Python classifier
 	Score          int      `json:"score,omitempty"`
-	Version        string   `json:"version,omitempty"`
+	Version        int      `json:"version,omitempty"`
 	CreatedAt      string   `json:"createdAt,omitempty"`
 	IsAlertActive  bool     `json:"isAlertActive,omitempty"`
 	AlertThreshold *float64 `json:"alertThreshold,omitempty"`
@@ -245,7 +245,7 @@ func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningR
 type CreateStrategyFromPromptResult struct {
 	StrategyID int    `json:"strategyId"`
 	Name       string `json:"name"`
-	Version    string `json:"version"`
+	Version    int    `json:"version"`
 }
 
 func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
@@ -474,7 +474,7 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 		       COALESCE(prompt, '') as prompt,
 		       COALESCE(pythoncode, '') as pythoncode,
 		       COALESCE(score, 0) as score,
-		       COALESCE(version, '1.0') as version,
+		       COALESCE(version, 1) as version,
 		       COALESCE(createdat, NOW()) as createdat,
 		       COALESCE(isalertactive, false) as isalertactive,
 		       alert_threshold,

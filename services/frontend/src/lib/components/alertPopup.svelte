@@ -1,33 +1,78 @@
 <script lang="ts">
 	import { alertPopup } from '$lib/utils/stores/stores';
 	import { fade } from 'svelte/transition';
+	import { queryChart } from '$lib/features/chart/interface';
+	import { onMount, onDestroy } from 'svelte';
+
+	let timeUpdateInterval: NodeJS.Timeout | null = null;
+	let timeDelta = 0;
 
 	function dismissAlert(alertId: number = 0) {
 		alertPopup.set(null);
 	}
 
+	function handleAlertClick(event: MouseEvent) {
+		// Don't navigate if clicking on X button
+		if ((event.target as HTMLElement).closest('.close-button')) {
+			return;
+		}
+
+		if ($alertPopup?.tickers && $alertPopup.tickers.length > 0) {
+			const ticker = $alertPopup.tickers[0];
+			if (ticker && $alertPopup.securityId) {
+				queryChart({
+					ticker: ticker,
+					securityId: $alertPopup.securityId,
+					timeframe: '1d',
+					timestamp: 0,
+					extendedHours: false
+				});
+			}
+		}
+		// Hide the alert popup after navigating or clicking anywhere
+		dismissAlert($alertPopup.alertId);
+	}
+
+	function updateTimeDelta() {
+		if ($alertPopup) {
+			timeDelta = Math.round((Date.now() - $alertPopup.timestamp) / 1000);
+		}
+	}
+
+	// Update time delta every second
+	onMount(() => {
+		if ($alertPopup) {
+			updateTimeDelta();
+			timeUpdateInterval = setInterval(updateTimeDelta, 1000);
+		}
+	});
+
+	onDestroy(() => {
+		if (timeUpdateInterval) {
+			clearInterval(timeUpdateInterval);
+		}
+	});
+
+	// Restart interval when alert changes
+	$: if ($alertPopup) {
+		if (timeUpdateInterval) {
+			clearInterval(timeUpdateInterval);
+		}
+		updateTimeDelta();
+		timeUpdateInterval = setInterval(updateTimeDelta, 1000);
+	} else if (timeUpdateInterval) {
+		clearInterval(timeUpdateInterval);
+		timeUpdateInterval = null;
+	}
+
 	// Function to get the appropriate icon based on alert type
 	function getAlertIcon(alertType: string = 'default'): string {
-		const iconMap: Record<string, string> = {
-			price: 'icon-price-alert.svg',
-			strategy: 'icon-strategy-alert.svg',
-			triggered: 'icon-triggered-alert.svg',
-			movingContext: 'icon-movingcontext.svg',
-			default: 'icon-movingcontext.svg'
-		};
-		return iconMap[alertType] || iconMap['default'];
+		return 'icon-movingcontext.svg';
 	}
  
 	// Function to get the appropriate trending icon based on alert type
 	function getTrendingIcon(alertType: string = 'default'): string {
-		const iconMap: Record<string, string> = {
-			price: 'icon-price-trend.svg',
-			strategy: 'icon-strategy-trend.svg',
-			triggered: 'icon-movingup.svg',
-			movingContext: 'icon-movingup.svg',
-			default: 'icon-movingup.svg'
-		};
-		return iconMap[alertType] || iconMap['default'];
+		return 'icon-movingup.svg';
 	}
 
 	// Function to get alert type from alert data
@@ -40,31 +85,42 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="alert-container">
 	{#if $alertPopup}
-		<div class="alert-popup" transition:fade on:click={() => dismissAlert($alertPopup.alertId)}>
-			<div class="alert-title">
-				<div class="maximize-icon">
-					<img src={getAlertIcon(getAlertType($alertPopup))} alt="Alert Icon" />
-				</div>
-				<div class="alert-stack">
-					<div class="alert-content">
-						<p class="alert-message">{$alertPopup.message}</p>
-						<p class="alert-metadata">
-							{Math.round((Date.now() - $alertPopup.timestamp) / 1000)}s • {new Date(
-								$alertPopup.timestamp
-							).toLocaleTimeString()} • {$alertPopup.type}
-						</p>
+		<div class="alert-popup" transition:fade on:click={handleAlertClick}>
+			<div class="alert-header">
+				<div class="alert-title">
+					<div class="maximize-icon">
+						<img src={getAlertIcon(getAlertType($alertPopup))} alt="Alert Icon" />
 					</div>
-					<div class="alert-buttons">
-						{#each $alertPopup.tickers as ticker}
-							<div class="alert-button">
-								<div class="trending-icon">
-									<img src={getTrendingIcon(getAlertType($alertPopup))} alt="Trending Icon" />
+					<div class="alert-stack">
+						<div class="alert-content">
+							<p class="alert-message">{$alertPopup.message}</p>
+							<p class="alert-metadata">
+								{timeDelta}s • {new Date($alertPopup.timestamp).toLocaleTimeString()} • {$alertPopup.type}
+							</p>
+						</div>
+						<div class="alert-buttons">
+							{#each $alertPopup.tickers as ticker}
+								<div class="alert-button">
+									<div class="trending-icon">
+										<img src={getTrendingIcon(getAlertType($alertPopup))} alt="Trending Icon" />
+									</div>
+									<p class="alert-ticker">{ticker}</p>
 								</div>
-								<p class="alert-ticker">{ticker}</p>
-							</div>
-						{/each}
+							{/each}
+						</div>
 					</div>
 				</div>
+				<button class="close-button" on:click={() => dismissAlert($alertPopup.alertId)}>
+					<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+						<path
+							d="M9 3L3 9M3 3L9 9"
+							stroke="rgba(245, 245, 245, 0.8)"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</button>
 			</div>
 		</div>
 	{/if}
@@ -97,6 +153,13 @@
 		.alert-popup {
 			padding: 12px;
 		}
+	}
+
+	.alert-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		width: 100%;
 	}
 
 	.alert-title {
@@ -228,5 +291,26 @@
 		text-transform: none;
 		color: rgba(245, 245, 245, 1);
 		margin: 0;
+	}
+
+	.close-button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 2px;
+		transition: background-color 0.2s ease;
+		flex-shrink: 0;
+	}
+
+	.close-button:hover {
+		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.close-button:active {
+		background-color: rgba(255, 255, 255, 0.2);
 	}
 </style>
