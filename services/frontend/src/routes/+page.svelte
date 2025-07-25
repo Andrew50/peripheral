@@ -33,9 +33,9 @@
 			image: '/alert_glass.png'
 		},
 		{
-			title: 'Analysis at the speed of now',
+			title: 'Analysis now, not after the trade',
 			description:
-				'In dynamic, fast-moving markets, every second counts. Peripheral provides quality analysis of news, fundamentals, and data XX% faster than ChatGPT, Perplexity, and comparable services with accurate data.',
+				'In dynamic, fast-moving markets, every second counts. Our agent analyzes headlines, fundamental events, and data 100% faster than ChatGPT and Perplexity.',
 			content: '',
 			image: '/splash-speed-color.png'
 		},
