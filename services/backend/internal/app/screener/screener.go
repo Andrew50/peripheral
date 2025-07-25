@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgtype"
 )
 
 // ColumnType represents the data type of a column
@@ -889,6 +892,51 @@ func buildFilterClause(filter Filter, startParamIndex int) (string, []interface{
 	return clause, params, nil
 }
 
+// convertDBValue normalizes database driver values into JSON-friendly Go values.
+// In particular, it converts pgtype.Numeric into float64 (when possible) so that
+// numerical values don’t appear as structs like {Int: 123, Exp: 2, ...} in the
+// JSON output.
+func convertDBValue(v interface{}) interface{} {
+	switch n := v.(type) {
+	case pgtype.Numeric:
+		// Handle NULL numeric
+		if n.Status != pgtype.Present {
+			return nil
+		}
+		// The Numeric type implements driver.Valuer – convert to string then to float64
+		if val, err := (&n).Value(); err == nil {
+			switch vv := val.(type) {
+			case string:
+				if f, err := strconv.ParseFloat(vv, 64); err == nil {
+					return f
+				}
+				return vv // fallback to string
+			default:
+				return vv
+			}
+		}
+		return nil
+	case *pgtype.Numeric:
+		if n == nil || n.Status != pgtype.Present {
+			return nil
+		}
+		if val, err := n.Value(); err == nil {
+			switch vv := val.(type) {
+			case string:
+				if f, err := strconv.ParseFloat(vv, 64); err == nil {
+					return f
+				}
+				return vv
+			default:
+				return vv
+			}
+		}
+		return nil
+	default:
+		return v
+	}
+}
+
 // GetScreenerData retrieves screener data based on the provided arguments
 func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args ScreenerArgs
@@ -939,7 +987,7 @@ func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 		// Create result map
 		result := make(map[string]interface{})
 		for i, colName := range columnNames {
-			result[colName] = values[i]
+			result[colName] = convertDBValue(values[i])
 		}
 
 		results = append(results, result)
@@ -955,6 +1003,9 @@ func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (inte
 		"count":   len(results),
 		"columns": columnNames,
 	}
+
+	// DEBUG: print the response for visibility during development
+	log.Printf("GetScreenerData response (user=%d): %+v", userID, response)
 
 	return response, nil
 }
