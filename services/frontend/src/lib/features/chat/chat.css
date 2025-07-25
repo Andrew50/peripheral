@@ -1357,7 +1357,7 @@ button[data-ticker].ticker-button:hover,
 	margin: 0;
 	font-size: 0.9rem;
 	font-weight: 500;
-	color: var(--text-primary, #fff);
+	color: #e9e9f9;
 }
 
 .share-modal-header .close-btn {
@@ -1387,7 +1387,7 @@ button[data-ticker].ticker-button:hover,
 
 .share-description {
 	margin: 0 0 1rem 0;
-	color: var(--text-secondary, #aaa);
+	color: #e9e9f9;
 	font-size: 0.8rem;
 	line-height: 1.4;
 }

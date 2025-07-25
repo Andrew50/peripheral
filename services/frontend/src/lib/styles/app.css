@@ -287,7 +287,7 @@
 	flex-shrink: 0;
 	border-top: 1px solid var(--c3);
 	background: #121212;
-	height: var(--ticker-height);
+	height: var(--ticker-info-container-height);
 	overflow-y: auto;
 	overflow-x: hidden;
 	/* Remove padding to let Quote component handle its own spacing */

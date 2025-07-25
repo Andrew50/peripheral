@@ -96,7 +96,6 @@
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
-	let sidebarWidth = 0;
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// ─── Alert tabs ────────────────────────────────────────────────────────────
@@ -147,11 +146,9 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerHeight = 500; // Initial height
-	const MIN_TICKER_HEIGHT = 100;
-	const MAX_TICKER_HEIGHT = 600;
-
-	// Add left sidebar state variables next to the other state variables
+	let tickerInfoContainerHeight = 500; // Initial height
+	const MIN_TICKER_INFO_CONTAINER_HEIGHT = 100;
+	const MAX_TICKER_INFO_CONTAINER_HEIGHT = 600;
 
 	// Calendar state
 	let calendarVisible = false;
@@ -336,11 +333,9 @@
 		// Initialize CSS custom properties for sidebar widths if not already set
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--left-sidebar-width')) {
 			document.documentElement.style.setProperty('--left-sidebar-width', `${$leftMenuWidth}px`);
-			document.documentElement.style.setProperty('--left-gutter', $leftMenuWidth > 0 ? '4px' : '0px');
 		}
 		if (!getComputedStyle(document.documentElement).getPropertyValue('--right-sidebar-width')) {
 			document.documentElement.style.setProperty('--right-sidebar-width', `${$menuWidth}px`);
-			document.documentElement.style.setProperty('--right-gutter', $menuWidth > 0 ? '4px' : '0px');
 		}
 
 		// Async initialization function
@@ -460,7 +455,6 @@
 				lastSidebarMenu = null;
 				menuWidth.set(0);
 				document.documentElement.style.setProperty('--right-sidebar-width', '0px');
-				document.documentElement.style.setProperty('--right-gutter', '0px');
 			}
 			// Restore state if dragging back
 			else if (newWidth >= minWidth && lastSidebarMenu) {
@@ -468,14 +462,12 @@
 				lastSidebarMenu = null;
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
-				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			// Normal resize
 			else if (newWidth >= minWidth) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				menuWidth.set(newWidth);
 				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
-				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 		};
 
@@ -724,7 +716,7 @@
 		document.addEventListener('touchend', stopSidebarResize);
 	}
 
-	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) {
+	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) { // for tickerinfo/quote 
 		if (!sidebarResizing) return;
 
 		let currentY;
@@ -740,10 +732,10 @@
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
-		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
+		tickerInfoContainerHeight = Math.min(Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT), MAX_TICKER_INFO_CONTAINER_HEIGHT);
 
 		// Update the CSS variable
-		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+		document.documentElement.style.setProperty('--ticker-info-container-height', `${tickerInfoContainerHeight}px`);
 	}
 
 	function stopSidebarResize() {
@@ -787,12 +779,12 @@
 	function handleKeyboardLeftResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startLeftResize(new PointerEvent('pointerdown'));
+			startLeftSidebarResize(new PointerEvent('pointerdown'));
 		}
 	}
 
 	// Left sidebar resizing
-	function startLeftResize(event: PointerEvent) {
+	function startLeftSidebarResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
 		const start = parseInt(
@@ -802,7 +794,7 @@
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = window.innerWidth*0.4;
+		const maxLeftSidebarWidth = window.innerWidth*0.3;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -812,7 +804,6 @@
 
 			// Update CSS custom property
 			document.documentElement.style.setProperty('--left-sidebar-width', `${newWidth}px`);
-			document.documentElement.style.setProperty('--left-gutter', newWidth > 0 ? '4px' : '0px');
 
 			// Update store for other components
 			leftMenuWidth.set(newWidth);
@@ -833,13 +824,11 @@
 		if ($leftMenuWidth > 0) {
 			leftMenuWidth.set(0);
 			document.documentElement.style.setProperty('--left-sidebar-width', '0px');
-			document.documentElement.style.setProperty('--left-gutter', '0px');
 		} else {
 			// Set to 30% of screen width when opening
 			const width = window.innerWidth * 0.3;
 			leftMenuWidth.set(width);
 			document.documentElement.style.setProperty('--left-sidebar-width', `${width}px`);
-			document.documentElement.style.setProperty('--left-gutter', '4px');
 		}
 	}
 	function toggleMainSidebar(menuName: Menu) {
@@ -848,7 +837,6 @@
 			lastSidebarMenu = null;
 			menuWidth.set(0);
 			document.documentElement.style.setProperty('--right-sidebar-width', '0px');
-			document.documentElement.style.setProperty('--right-gutter', '0px');
 			changeMenu('none');
 		} else {
 			// Open new menu
@@ -858,7 +846,6 @@
 				const width = 180;
 				menuWidth.set(width);
 				document.documentElement.style.setProperty('--right-sidebar-width', `${width}px`);
-				document.documentElement.style.setProperty('--right-gutter', '4px');
 			}
 			changeMenu(menuName);
 		}
@@ -1048,7 +1035,7 @@
 							role="separator"
 							aria-orientation="vertical"
 							aria-label="Resize left panel"
-							on:pointerdown={startLeftResize}
+							on:pointerdown={startLeftSidebarResize}
 							on:keydown={handleKeyboardLeftResize}
 							tabindex="0"
 						/>
@@ -1176,7 +1163,7 @@
 								></div>
 
 								<!-- Quote section now on bottom -->
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
+								<div class="ticker-info-container" style="height: {tickerInfoContainerHeight}px">
 									<Quote />
 								</div>
 							</div>
@@ -1376,8 +1363,8 @@
 	:root {
 		--left-sidebar-width: 0px;
 		--right-sidebar-width: 0px;
-		--left-gutter: 0px;
-		--right-gutter: 0px;
+		--left-gutter: clamp(0px, var(--left-sidebar-width), 4px);
+		--right-gutter: clamp(0px, var(--right-sidebar-width), 4px);
 		--gutter: 4px;
 	}
 
