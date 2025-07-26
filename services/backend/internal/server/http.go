@@ -46,6 +46,8 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
 	"validateInvite":                   ValidateInvite,
+	"verifyOTP":                        VerifyOTP,
+	"sendVerificationOTP":              SendVerificationOTP,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers

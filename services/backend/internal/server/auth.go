@@ -25,6 +25,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -96,6 +97,12 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("%w: invalid signup args: %v", ErrInvalidInput, err)
 	}
 
+	hashedPassword, err := HashPassword(a.Password)
+	if err != nil {
+		log.Printf("ERROR: Failed to hash password: %v", err)
+		return nil, fmt.Errorf("error processing password")
+	}
+
 	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -158,7 +165,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	// Note: invite_code_used column will accept NULL/empty string when no invite was used
 	err = tx.QueryRow(ctx,
 		"INSERT INTO users (email, password, auth_type, invite_code_used) VALUES ($1, $2, $3, NULLIF($4, '')) RETURNING userId",
-		a.Email, a.Password, "password", inviteCodeVal).Scan(&userID)
+		a.Email, hashedPassword, "password", inviteCodeVal).Scan(&userID)
 	if err != nil {
 		log.Printf("ERROR: Failed to create user: %v", err)
 		return nil, fmt.Errorf("error creating user: %v", err)
@@ -198,7 +205,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var resp LoginResponse
 	var userID int
-	var storedPw string
+	var storedHashedPw string
 	var authType string
 	var profilePicture sql.NullString
 	var verified bool
@@ -207,7 +214,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	err := conn.DB.QueryRow(ctx,
 		`SELECT userId, password, profile_picture, auth_type, verified
 		 FROM users WHERE email=$1`,
-		a.Email).Scan(&userID, &storedPw, &profilePicture, &authType, &verified)
+		a.Email).Scan(&userID, &storedHashedPw, &profilePicture, &authType, &verified)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -226,7 +233,7 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
 	if authType == "password" || authType == "both" {
-		if storedPw != a.Password {
+		if !VerifyPassword(a.Password, storedHashedPw) {
 			log.Printf("Login failed: Password mismatch for email: %s", a.Email)
 			return nil, fmt.Errorf("%w", ErrIncorrectPassword)
 		}
@@ -406,6 +413,19 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	// we return nil indicating success and then have the frontend call login again
 	return nil, nil
+}
+
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
+}
+
+func VerifyPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
 
 type SendVerificationOTPArgs struct {
