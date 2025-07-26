@@ -33,9 +33,9 @@
 			image: '/alert_glass.png'
 		},
 		{
-			title: 'Analysis at the speed of now',
+			title: 'Analysis now, not after the trade',
 			description:
-				'In dynamic, fast-moving markets, every second counts. Peripheral provides quality analysis of news, fundamentals, and data XX% faster than ChatGPT, Perplexity, and comparable services with accurate data.',
+				'In dynamic, fast-moving markets, every second counts. Our agent analyzes headlines, fundamental events, and data 100% faster than ChatGPT and Perplexity.',
 			content: '',
 			image: '/splash-speed-color.png'
 		},
@@ -58,7 +58,7 @@
 	<section class="hero-title-section">
 		<div class="hero-title-container">
 			<h1 class="hero-title">
-				The <span class="gradient-text">best</span> way to trade.
+				The <span class="gradient-text">Intelligent</span> Trading Terminal
 			</h1>
 			<p class="hero-subtitle">
 				Peripheral enables you to envision and execute your trading ideas.<br />
@@ -98,6 +98,35 @@
 	<SiteFooter />
 </main>
 </div>
+<svelte:head>
+	<!-- Basic meta tags -->
+	<title>Peripheral</title>
+	<meta name="description" content="The intelligent trading terminal." />
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Peripheral.io" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta property="og:description" content="The intelligent trading terminal." />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Peripheral.io" />
+	<meta name="twitter:description" content="The intelligent trading terminal." />
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
+</svelte:head>
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
@@ -159,7 +188,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 10rem 0.5rem 17rem 0.5rem;
+		padding: 14rem 0.5rem 17rem 0.5rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
@@ -170,7 +199,7 @@
 
 	.hero-title-container {
 		text-align: center;
-		max-width: 1200px;
+		max-width: 1800px;
 		margin: 0 auto;
 		padding: 0 1rem;
 	}
@@ -178,7 +207,7 @@
 	.hero-title {
 		font-size: clamp(4.05rem, 6vw, 7.5rem);
 		font-weight: 800;
-		margin: 0 0 1.5rem 0;
+		margin: 0 0 1rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
 		color: #f5f9ff;

@@ -179,7 +179,7 @@
 	// Helper function to create standard layout configurations
 	const createStandardLayout = (baseLayout: any, userLayout: any, yAxisSide: 'left' | 'right' = 'right', gridAlpha = 0.03) => {
 		// Calculate padded ranges if not explicitly set by user
-		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+		const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.02);
 		const yRange = userLayout.yaxis?.range || calculatePaddedRange(plotData.data, 'y', 0.10);
 
 		return {
@@ -254,6 +254,11 @@
 				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// For scatter plots, typically show more precision for smaller values
 							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
@@ -318,7 +323,64 @@
 				}
 				return trace;
 			},
-			configureLayout: (baseLayout: any, userLayout: any) => createStandardLayout(baseLayout, userLayout)
+			configureLayout: (baseLayout: any, userLayout: any) => {
+				// For line charts, use 0 padding on x-axis and default padding on y-axis
+				const xRange = userLayout.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0);
+				const yRange = userLayout.yaxis?.range || calculatePaddedRange(plotData.data, 'y', 0.10);
+
+				return {
+					...baseLayout,
+					xaxis: {
+						...baseLayout.xaxis,
+						...userLayout.xaxis,
+						gridcolor: 'rgba(255, 255, 255, 0.03)',
+						linecolor: 'rgba(255, 255, 255, 0.8)',
+						...(xRange && { range: xRange }),
+						title: capitalizeAxisTitle(userLayout.xaxis?.title || ''),
+						tickfont: { 
+							color: '#f1f5f9', 
+							size: 11,
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+						titlefont: { 
+							color: '#f8fafc',
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+					},
+					hoverlabel: defaultHoverLabel,
+					yaxis: {
+						...baseLayout.yaxis,
+						...userLayout.yaxis,
+						side: 'right',
+						gridcolor: 'rgba(255, 255, 255, 0.03)',
+						linecolor: 'rgba(255, 255, 255, 0.8)',
+						...(yRange && { range: yRange }),
+						title: capitalizeAxisTitle(userLayout.yaxis?.title || ''),
+						tickfont: { 
+							color: '#f1f5f9', 
+							size: 11,
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+						titlefont: { 
+							color: '#f8fafc',
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+					},
+					legend: {
+						...(baseLayout.legend ?? {}),
+						...(userLayout.legend ?? {}),
+						tickfont: { 
+							color: '#f1f5f9', 
+							size: 11,
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+						titlefont: { 
+							color: '#f8fafc',
+							family: 'Geist, Inter, system-ui, sans-serif'
+						},
+					}
+				};
+			}
 		},
 		scatter: {
 			configureTrace: (trace: any, index: number) => {
@@ -339,6 +401,11 @@
 				if (trace.y && Array.isArray(trace.y) && trace.y.length < 12 && !trace.text) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// For scatter plots, typically show more precision for smaller values
 							if (Math.abs(value) < 1 && Math.abs(value) > 0) {
@@ -431,6 +498,11 @@
 				if (trace.y && Array.isArray(trace.y) && !trace.text && trace.y.length < 12) {
 					// Format values for display
 					trace.text = trace.y.map((value: any) => {
+						// Hide null, undefined, or NaN values
+						if (value == null || (typeof value === 'number' && isNaN(value))) {
+							return '';
+						}
+						
 						if (typeof value === 'number') {
 							// Only round values > 100,000 to 2 decimals
 							if (Math.abs(value) > 100000) {
@@ -691,7 +763,7 @@
 			);
 
 			// Calculate padded ranges for dual y-axis
-			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.10);
+			const xRange = userLayoutWithoutDimensions.xaxis?.range || calculatePaddedRange(plotData.data, 'x', 0.02);
 			const primaryYTraces = plotData.data.filter((trace: any) => !trace.yaxis || trace.yaxis === 'y');
 			const secondaryYTraces = plotData.data.filter((trace: any) => trace.yaxis === 'y2');
 			const primaryYRange = userLayoutWithoutDimensions.yaxis?.range || calculatePaddedRange(primaryYTraces, 'y', 0.10);

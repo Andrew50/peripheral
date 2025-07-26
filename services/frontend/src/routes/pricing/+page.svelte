@@ -339,8 +339,6 @@
 		}
 	};
 
-
-
 	// Initialize component
 	async function initializeComponent() {
 		// Always fetch subscription status regardless of authentication
@@ -719,13 +717,36 @@
 </script>
 
 <svelte:head>
+	<!-- Basic meta tags -->
 	<title>Pricing | Peripheral</title>
+	<meta name="description" content="The intelligent trading terminal." />
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Pricing | Peripheral" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta property="og:description" content="The intelligent trading terminal." />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Pricing | Peripheral" />
+	<meta name="twitter:description" content="The intelligent trading terminal." />
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="page-wrapper">
 	<!-- Main Pricing Content -->
 	<div class="landing-container">
@@ -824,7 +845,11 @@
 										</p>
 									{/if}
 								{:else if isCurrentPlan(plan)}
-									<button class="subscribe-button active-subscription" on:click={handleCancelSubscription} disabled>
+									<button
+										class="subscribe-button active-subscription"
+										on:click={handleCancelSubscription}
+										disabled
+									>
 										{#if busyKey === 'cancel'}
 											<div class="landing-loader"></div>
 										{/if}
@@ -862,7 +887,7 @@
 				</div>
 
 				<!-- Query Products Section -->
-				<div class="credits-section">
+				<!-- <div class="credits-section">
 					<div class="credits-header">
 						<h2 class="landing-subtitle">Add More Queries</h2>
 						<p class="credits-description">
@@ -907,13 +932,12 @@
 							</div>
 						{/each}
 					</div>
-				</div>
+				</div> -->
 			{/if}
 		</div>
 	</div>
 	<SiteFooter />
 </div>
-
 
 <style>
 	/* Critical global styles - applied immediately to prevent layout shift */
@@ -938,19 +962,13 @@
 	:global(.landing-container) {
 		max-width: none !important;
 		width: 100% !important;
-
 	}
 
 	/* Apply the same gradient background as landing page */
 	.page-wrapper {
 		width: 100%;
 		min-height: 100vh;
-		background: linear-gradient(
-			180deg,
-			#010022 0%,
-			#02175F 100%
-
-		);
+		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 	}
 
 	/* Landing container should have transparent background like landing page */

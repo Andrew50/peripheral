@@ -1,3 +1,5 @@
+// Package utils provides utility functions for data handling, time operations,
+// and other common helper functionality used throughout the application.
 package utils
 
 // NullString returns empty string if input is empty/zero value

@@ -1,8 +1,7 @@
-FROM timescale/timescaledb-ha:pg17
+FROM timescale/timescaledb:latest-pg17
 USER root
+RUN apk add --no-cache curl ca-certificates
 # Password will be provided via environment variables
-RUN apt-get update && apt-get install -y cron
-
 # -------------------------------------------------------------------
 # Install kubectl so health-monitor script can fetch pod logs
 # Keep version aligned with cluster minor version (1.30.*)
@@ -12,6 +11,7 @@ RUN curl -L -o /usr/local/bin/kubectl \
     chmod +x /usr/local/bin/kubectl
 # -------------------------------------------------------------------
 
+ENV PGDATA=/home/postgres/pgdata/data
 EXPOSE 5432
 
 # Copy initialization scripts

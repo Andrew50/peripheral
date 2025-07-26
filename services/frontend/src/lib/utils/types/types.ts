@@ -42,7 +42,17 @@ export interface Strategy {
 	strategyId: number;
 	userId: number;
 	name: string;
-	criteria: StrategyCriteria; // Corresponds to the JSON column
+	criteria?: StrategyCriteria; // Corresponds to the JSON column
+	description?: string;
+	prompt?: string;
+	pythonCode?: string;
+	score?: number;
+	version?: number;
+	createdAt?: string;
+	isAlertActive?: boolean;
+	alertThreshold?: number;
+	alertUniverse?: string[];
+	activeScreen?: boolean; // Frontend-specific field
 }
 
 export interface Watchlist {
@@ -99,6 +109,7 @@ export interface AlertData {
 	timestamp: number;
 	securityId: number;
 	channel: string;
+	type: string;
 	tickers: string[];
 }
 export interface AlertLog {
@@ -106,6 +117,8 @@ export interface AlertLog {
 	alertId: number; // Refers to either PriceAlert or StrategyAlert ID
 	timestamp: string; // Assuming timestamp comes as string, adjust if Date object
 	securityId: number;
+	alertType?: 'price' | 'strategy'; // Type discriminator for filtering
+	ticker?: string; // Ticker symbol for the alert
 }
 
 // Generic Alert configuration used in frontend components.
@@ -120,6 +133,10 @@ export interface Alert {
 	price?: number; // Target price for price alerts
 	direction?: boolean; // Direction for price/strategy alerts
 	alertPrice?: number; // Ensure this field is present
+	// Strategy alert specific fields
+	name?: string; // Strategy name for strategy alerts
+	alertThreshold?: number; // Threshold for strategy alerts
+	alertUniverse?: string[]; // Universe of tickers for strategy alerts
 }
 
 // Specific type for Price Alerts based on 'priceAlerts' table
@@ -151,7 +168,7 @@ export interface Study {
 	timestamp: string; // Assuming timestamp comes as string, adjust if Date object
 	tradeId?: number;
 	completed: boolean;
-	entry: any; // JSON blob, define more strictly if structure is known
+	entry: Record<string, unknown>; // JSON blob, define more strictly if structure is known
 }
 
 export interface Trade {
@@ -178,8 +195,8 @@ export type Task = {
 	id: string;
 	state: TaskState;
 	function: string;
-	args: any;
-	result?: any;
+	args: Record<string, unknown>;
+	result?: Record<string, unknown>;
 	error?: string;
 	logs: LogEntry[];
 	createdAt: string;

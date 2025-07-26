@@ -9,7 +9,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Ensures no more than 1 pod exists during updates
+    type: Recreate # Ensures no more than 1 pod exists during updates
   selector:
     matchLabels:
       app: backend
@@ -18,7 +18,7 @@ spec:
       labels:
         app: backend
     spec:
-      restartPolicy: Always  # Update the restart policy to "Always"
+      restartPolicy: Always # Update the restart policy to "Always"
       nodeSelector:
         kubernetes.io/hostname: big-pool-thu0i
       containers:
@@ -30,7 +30,7 @@ spec:
             - containerPort: 5058
           readinessProbe:
             httpGet:
-              path: /healthz  # add a trivial handler that just returns 200
+              path: /healthz # add a trivial handler that just returns 200
               port: 5058
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -132,11 +132,27 @@ spec:
                   name: telegram-secret
                   key: chat-id
                   optional: true
+            # Add new Telegram bot tokens
+            - name: TELEGRAM_USER_NOTIFICATION_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-bot-secret
+                  key: TELEGRAM_USER_NOTIFICATION_BOT_TOKEN
+            - name: TELEGRAM_BEN_TWEETS_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-bot-secret
+                  key: TELEGRAM_BEN_TWEETS_BOT_TOKEN
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: openai-secret
                   key: OPENAI_API_KEY
+            - name: FRED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fred-secret
+                  key: FRED_API_KEY
             - name: GROK_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -226,4 +242,4 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 80  # requried even though min = max = 1
+          averageUtilization: 80 # requried even though min = max = 1

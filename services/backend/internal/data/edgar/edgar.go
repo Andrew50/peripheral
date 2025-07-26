@@ -340,7 +340,11 @@ func fetchEdgarFilingsPage(conn *data.Conn, page int, perPage int) ([]GlobalEDGA
 		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("error closing response body: %v\n", err)
+		}
+	}()
 
 	// Process response body as before
 	body, err := io.ReadAll(resp.Body)
@@ -592,7 +596,11 @@ func fetchEdgarFilings(cik string) ([]Filing, error) {
 		return nil, fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("error closing response body: %v\n", err)
+		}
+	}()
 
 	// Check content type to ensure we're getting JSON
 	contentType := resp.Header.Get("Content-Type")
@@ -965,7 +973,11 @@ func fetchFilingText(url string) (string, error) {
 		return "", fmt.Errorf("SEC API rate limit exceeded after %d retries", maxRetries)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)

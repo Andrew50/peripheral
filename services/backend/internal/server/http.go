@@ -108,6 +108,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getAlerts":    alerts.GetAlerts,
 	"getAlertLogs": alerts.GetAlertLogs,
 	"newAlert":     alerts.NewAlert,
+	"updateAlert":  alerts.UpdateAlert,
 	"deleteAlert":  alerts.DeleteAlert,
 
 	// --- trades / statistics --------------------------------------------------

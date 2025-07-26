@@ -2,6 +2,23 @@ import { UTCSecondstoESTSeconds } from '$lib/utils/helpers/timestamp';
 import html2canvas from 'html2canvas';
 import type { UTCTimestamp } from 'lightweight-charts';
 
+// Define interfaces for the data structures
+interface EventItem {
+	type: string;
+	title: string;
+	[key: string]: unknown;
+}
+
+interface ChartEvent {
+	time: number;
+	events: EventItem[];
+}
+
+interface CandleData {
+	time: number | UTCTimestamp;
+	[key: string]: unknown;
+}
+
 export async function handleScreenshot(chartId: string) {
 	try {
 		// Get the entire chart container including legend
@@ -30,14 +47,14 @@ export async function handleScreenshot(chartId: string) {
 			})
 		]);
 
-		('Chart copied to clipboard!');
+		console.log('Chart copied to clipboard!');
 	} catch (error) {
 		console.error('Failed to copy chart:', error);
 	}
 }
 
 // Improved function to adjust events to trading days and handle collisions
-export function adjustEventsToTradingDays(events: any[], candleData: any[]) {
+export function adjustEventsToTradingDays(events: ChartEvent[], candleData: CandleData[]) {
 	// Exit early if we don't have both event data and candle data
 	if (!events.length || !candleData.length) return events;
 
@@ -86,7 +103,7 @@ export function adjustEventsToTradingDays(events: any[], candleData: any[]) {
 	});
 
 	// Second pass: merge events that now share the same timestamp
-	const mergedEventsMap = new Map<number, any>();
+	const mergedEventsMap = new Map<number, ChartEvent>();
 
 	adjustedEvents.forEach((event) => {
 		const time = event.time;
@@ -102,7 +119,7 @@ export function adjustEventsToTradingDays(events: any[], candleData: any[]) {
 			const existingEvent = mergedEventsMap.get(time);
 
 			// Combine and deduplicate events
-			const combinedEvents = [...existingEvent.events, ...event.events];
+			const combinedEvents = [...existingEvent!.events, ...event.events];
 
 			// Simple deduplication (assuming events with the same title are duplicates)
 			const uniqueEvents = [];

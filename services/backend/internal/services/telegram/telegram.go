@@ -1,3 +1,4 @@
+// Package telegram provides functionality for sending notifications via Telegram
 package telegram
 
 import (
@@ -15,10 +16,12 @@ import (
 var (
 	telegramUserNotificationBot *telebot.Bot
 	telegramBenTweetsBot        *telebot.Bot
-	chatID                      int64
+	userChatID                  int64
+	benTweetsChatID             int64
 	isProdEnv                   bool
 )
 
+// InitTelegramUserNotificationBot initializes the Telegram bot for user notifications
 func InitTelegramUserNotificationBot() error {
 	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
 	if env == "demo" || env == "prod" || env == "production" {
@@ -27,10 +30,12 @@ func InitTelegramUserNotificationBot() error {
 		isProdEnv = false
 		return nil
 	}
-	isProdEnv = true
-	userNotificationBotToken := "7988152298:AAGatpFVJuCVYpv547XFoApwMXzrKeRqoa8"
+	userNotificationBotToken := os.Getenv("TELEGRAM_USER_NOTIFICATION_BOT_TOKEN")
+	if userNotificationBotToken == "" {
+		return fmt.Errorf("TELEGRAM_USER_NOTIFICATION_BOT_TOKEN environment variable is required")
+	}
 	fmt.Println("Initializing Telegram bot with token:", userNotificationBotToken)
-	chatID = -1002517629348
+	userChatID = -1002517629348
 	var err error
 	telegramUserNotificationBot, err = telebot.NewBot(telebot.Settings{
 		Token:  userNotificationBotToken,
@@ -39,8 +44,11 @@ func InitTelegramUserNotificationBot() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 	}
-	benTweetsBotToken := "8112187727:AAG9JxDFQlUfrRt8tyjR5yyY_8Wd9o9ehZU"
-	chatID = -4940706341
+	benTweetsBotToken := os.Getenv("TELEGRAM_BEN_TWEETS_BOT_TOKEN")
+	if benTweetsBotToken == "" {
+		return fmt.Errorf("TELEGRAM_BEN_TWEETS_BOT_TOKEN environment variable is required")
+	}
+	benTweetsChatID = -4940706341
 	telegramBenTweetsBot, err = telebot.NewBot(telebot.Settings{
 		Token:  benTweetsBotToken,
 		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
@@ -52,6 +60,7 @@ func InitTelegramUserNotificationBot() error {
 	return nil
 }
 
+// SendTelegramUserUsageMessage sends a usage-related message to users via Telegram
 func SendTelegramUserUsageMessage(msg string) error {
 	if !isProdEnv {
 		return nil
@@ -62,12 +71,16 @@ func SendTelegramUserUsageMessage(msg string) error {
 			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 		}
 	}
-	fmt.Println("Sending Telegram message to chat ID:", chatID)
-	recipient := telebot.ChatID(chatID)
+	fmt.Println("Sending Telegram message to chat ID:", userChatID)
+	recipient := telebot.ChatID(userChatID)
 	_, err := telegramUserNotificationBot.Send(recipient, msg)
+	if err != nil {
+		fmt.Println("Failed to send Telegram message:", err)
+	}
 	return err
 }
 
+// SendTelegramBenTweetsMessage sends tweet information to the Telegram channel
 func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image string) error {
 	if !isProdEnv {
 		return nil
@@ -78,7 +91,7 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 		}
 	}
-	recipient := telebot.ChatID(chatID)
+	recipient := telebot.ChatID(benTweetsChatID)
 	if i := strings.IndexByte(image, ','); i >= 0 {
 		image = image[i+1:]
 	}
@@ -92,6 +105,9 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 	}
 	photo := &telebot.Photo{File: telebot.FromReader(bytes.NewReader(data)), Caption: msg}
 	_, err = telegramBenTweetsBot.Send(recipient, photo)
+	if err != nil {
+		return fmt.Errorf("failed to send photo: %w", err)
+	}
 	deepLink := fmt.Sprintf("https://x.com/intent/post?in_reply_to=%s&text=%s", id, url.QueryEscape(msg))
 	_, err = telegramBenTweetsBot.Send(recipient, deepLink)
 	return err

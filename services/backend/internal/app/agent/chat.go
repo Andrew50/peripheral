@@ -22,6 +22,16 @@ import (
 	"github.com/openai/openai-go/responses"
 )
 
+// Custom types for context keys to avoid collisions
+type contextKey string
+
+const (
+	CONVERSATION_ID_KEY                        contextKey = "conversationID"
+	MESSAGE_ID_KEY                             contextKey = "messageID"
+	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
+	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
+)
+
 type Stage string
 
 const (
@@ -120,8 +130,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
-	ctx = context.WithValue(ctx, "conversationID", conversationID)
-	ctx = context.WithValue(ctx, "messageID", messageID)
+	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
+	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
 	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 	// ----- Acquire per-user chat lock ------------------------------------
 	lockKey := fmt.Sprintf("chat_lock:%d", userID)
@@ -130,23 +140,25 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
 	}
 	if !locked {
-		// User already has an active chat
-		return QueryResponse{
-			ContentChunks: []ContentChunk{{
-				Type:    "text",
-				Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
-			}},
-			ConversationID: conversationID,
-			MessageID:      messageID,
-			Timestamp:      time.Now(),
-		}, nil
+		// User already has an active chat - but we'll continue anyway! 🚀
+		fmt.Printf("🎭 DUPLICATE CHAT DETECTED! 🎭 User %d is starting a new chat while another is in progress! 🔥💫 Let the chaos begin! 🎪\n", userID)
+		// Comment out the early return - let's allow concurrent chats for now
+		/*
+			return QueryResponse{
+				ContentChunks: []ContentChunk{{
+					Type:    "text",
+					Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
+				}},
+				ConversationID: conversationID,
+				MessageID:      messageID,
+				Timestamp:      time.Now(),
+			}, nil
+		*/
 	}
 	// Ensure lock is released
 	defer func() {
 		_ = conn.Cache.Del(context.Background(), lockKey).Err()
 	}()
-
-	// no credit deducted yet – will deduct on success
 
 	var executor *Executor
 	var activeResults []ExecuteResult
@@ -226,18 +238,19 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}
 			// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
 			processedChunks := processContentChunksForFrontend(ctx, conn, userID, v.ContentChunks)
-
-			// Record usage and deduct 1 credit now that chat completed successfully
-			metadata := map[string]interface{}{
-				"query":           query.Query,
-				"conversation_id": conversationID,
-				"message_id":      messageID,
-				"token_count":     totalTokenCounts.TotalTokenCount,
-				"result_type":     "direct_answer",
-			}
-			if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
-				fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
-			}
+			go func() {
+				// Record usage and deduct 1 credit now that chat completed successfully
+				metadata := map[string]interface{}{
+					"query":           query.Query,
+					"conversation_id": conversationID,
+					"message_id":      messageID,
+					"token_count":     totalTokenCounts.TotalTokenCount,
+					"result_type":     "direct_answer",
+				}
+				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
+					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+				}
+			}()
 
 			return QueryResponse{
 				ContentChunks:  processedChunks,
@@ -251,7 +264,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
-				ctx = context.WithValue(ctx, "peripheralLatestModelThoughts", v.Thoughts)
+				ctx = context.WithValue(ctx, PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY, v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan
@@ -291,8 +304,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 					go func() {
 						var cleanedModelThoughts string
-						if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-							ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+						if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+							ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 							if thoughtsStr, ok := thoughtsValue.(string); ok {
 								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 							}
@@ -348,8 +361,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			case StageFinishedExecuting:
 				go func() {
 					var cleanedModelThoughts string
-					if thoughtsValue := ctx.Value("peripheralLatestModelThoughts"); thoughtsValue != nil && thoughtsValue != ctx.Value("peripheralAlreadyUsedModelThoughts") {
-						ctx = context.WithValue(ctx, "peripheralAlreadyUsedModelThoughts", thoughtsValue)
+					if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
+						ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
 						if thoughtsStr, ok := thoughtsValue.(string); ok {
 							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 						}
@@ -400,19 +413,20 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 						Timestamp:      time.Now(),
 					}, fmt.Errorf("error updating pending message to completed: %w", err)
 				}
-
-				// Record usage and deduct 1 credit now that chat completed successfully
-				usageMetadata := map[string]interface{}{
-					"query":           query.Query,
-					"conversation_id": conversationID,
-					"message_id":      messageID,
-					"token_count":     totalTokenCounts.TotalTokenCount,
-					"result_type":     "final_response",
-					"function_count":  len(allResults),
-				}
-				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, usageMetadata); err != nil {
-					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
-				}
+				go func() {
+					// Record usage and deduct 1 credit now that chat completed successfully
+					usageMetadata := map[string]interface{}{
+						"query":           query.Query,
+						"conversation_id": conversationID,
+						"message_id":      messageID,
+						"token_count":     totalTokenCounts.TotalTokenCount,
+						"result_type":     "final_response",
+						"function_count":  len(allResults),
+					}
+					if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, usageMetadata); err != nil {
+						fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+					}
+				}()
 
 				// Process any table instructions in the content chunks for frontend viewing for backtest table and backtest plot chunks
 				processedChunks := processContentChunksForFrontend(ctx, conn, userID, finalResponse.ContentChunks)
@@ -446,12 +460,14 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 // TableInstructionData holds the parameters for generating a table from cached data
 type BacktestTableChunkData struct {
 	StrategyID int         `json:"strategyID"`        // strategyId
+	Version    int         `json:"version"`           // version
 	Columns    interface{} `json:"columns"`           // Internal column names as either []string or string
 	Caption    string      `json:"caption"`           // Table title
 	NumRows    int         `json:"numRows,omitempty"` // Number of rows in the table
 }
 type BacktestPlotChunkData struct {
 	StrategyID int    `json:"strategyID"`
+	Version    int    `json:"version"`
 	PlotID     int    `json:"plotID"`
 	ChartType  string `json:"chartType,omitempty"`
 	ChartTitle string `json:"chartTitle,omitempty"`
@@ -469,9 +485,14 @@ type AgentPlotChunkData struct {
 	YAxisTitle  string `json:"yAxisTitle,omitempty"`
 }
 
+// getBacktestKey creates a composite key for the backtest results map using strategy ID and version
+func getBacktestKey(strategyID, version int) string {
+	return fmt.Sprintf("%d-%d", strategyID, version)
+}
+
 func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+	var backtestResultsMap = make(map[string]*strategy.BacktestResponse)
 	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		if chunk.Type == "backtest_table" {
@@ -492,21 +513,22 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 				continue
 			}
 			// Get backtest results for this strategy
-			if backtestResultsMap[backtestTableChunkContent.StrategyID] == nil {
-				backtestResultsMap[backtestTableChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID)
+			backtestKey := getBacktestKey(backtestTableChunkContent.StrategyID, backtestTableChunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestTableChunkContent.StrategyID, backtestTableChunkContent.Version)
 				if err != nil {
 					continue
 				}
 			}
 			if backtestTableChunkContent.Columns == "all" {
 				// Store all columns from the backtest results
-				backtestTableChunkContent.Columns = backtestResultsMap[backtestTableChunkContent.StrategyID].Summary.Columns
+				backtestTableChunkContent.Columns = backtestResultsMap[backtestKey].Summary.Columns
 				chunk.Content = backtestTableChunkContent
 			} else {
 				// store only columns specified
 				chunk.Content = backtestTableChunkContent
 			}
-			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestTableChunkContent.StrategyID].Instances)
+			backtestTableChunkContent.NumRows = len(backtestResultsMap[backtestKey].Instances)
 
 			processedChunks = append(processedChunks, chunk)
 		} else if chunk.Type == "backtest_plot" {
@@ -526,13 +548,14 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 				})
 				continue
 			}
-			if backtestResultsMap[backtestPlotChunkContent.StrategyID] == nil {
-				backtestResultsMap[backtestPlotChunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID)
+			backtestKey := getBacktestKey(backtestPlotChunkContent.StrategyID, backtestPlotChunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, backtestPlotChunkContent.StrategyID, backtestPlotChunkContent.Version)
 				if err != nil {
 					continue
 				}
 			}
-			strategyPlots := backtestResultsMap[backtestPlotChunkContent.StrategyID].StrategyPlots
+			strategyPlots := backtestResultsMap[backtestKey].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == backtestPlotChunkContent.PlotID {
 					// Extract axis titles safely with nil checks
@@ -550,6 +573,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 
 					chunk.Content = BacktestPlotChunkData{
 						StrategyID: backtestPlotChunkContent.StrategyID,
+						Version:    backtestPlotChunkContent.Version,
 						PlotID:     backtestPlotChunkContent.PlotID,
 						ChartType:  plot.ChartType,
 						ChartTitle: plot.Title,
@@ -621,7 +645,7 @@ func processContentChunksForDB(ctx context.Context, conn *data.Conn, userID int,
 // processContentChunksForFrontend iterates through chunks and generates tables for "backtest_table" type.
 func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userID int, inputChunks []ContentChunk) []ContentChunk {
 	processedChunks := make([]ContentChunk, 0, len(inputChunks))
-	var backtestResultsMap = make(map[int]*strategy.BacktestResponse)
+	var backtestResultsMap = make(map[string]*strategy.BacktestResponse)
 	var agentResultsMap = make(map[string]*RunPythonAgentResponse)
 	for _, chunk := range inputChunks {
 		// Check for the type "backtest_table"
@@ -642,8 +666,9 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 				})
 				continue
 			}
-			if backtestResultsMap[chunkContent.StrategyID] == nil {
-				backtestResultsMap[chunkContent.StrategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID)
+			backtestKey := getBacktestKey(chunkContent.StrategyID, chunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, chunkContent.StrategyID, chunkContent.Version)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -652,8 +677,8 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 					continue
 				}
 			}
-			backtestInstances := backtestResultsMap[chunkContent.StrategyID].Instances
-			backtestColumns := backtestResultsMap[chunkContent.StrategyID].Summary.Columns
+			backtestInstances := backtestResultsMap[backtestKey].Instances
+			backtestColumns := backtestResultsMap[backtestKey].Summary.Columns
 			// Ensure "ticker" is the first column
 			tickerIdx := -1
 			timestampIdx := -1
@@ -802,8 +827,9 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 			}
 			strategyID := chunkContent.StrategyID
 			plotID := chunkContent.PlotID
-			if backtestResultsMap[strategyID] == nil {
-				backtestResultsMap[strategyID], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID)
+			backtestKey := getBacktestKey(strategyID, chunkContent.Version)
+			if backtestResultsMap[backtestKey] == nil {
+				backtestResultsMap[backtestKey], err = strategy.GetBacktestFromCache(ctx, conn, userID, strategyID, chunkContent.Version)
 				if err != nil {
 					processedChunks = append(processedChunks, ContentChunk{
 						Type:    "text",
@@ -812,7 +838,7 @@ func processContentChunksForFrontend(ctx context.Context, conn *data.Conn, userI
 					continue
 				}
 			}
-			strategyPlots := backtestResultsMap[strategyID].StrategyPlots
+			strategyPlots := backtestResultsMap[backtestKey].StrategyPlots
 			for _, plot := range strategyPlots {
 				if plot.PlotID == plotID {
 					var titleIcon string

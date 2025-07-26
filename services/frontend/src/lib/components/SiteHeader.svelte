@@ -13,6 +13,7 @@
 	let prevScrollY = 0;
 	// Mobile sidebar state
 	let isSidebarOpen = false;
+	let isMobile = false;
 
 	import '$lib/styles/splash.css';
 
@@ -53,6 +54,17 @@
 		isSidebarOpen = false;
 	}
 
+	function handleResize() {
+		if (!browser) return;
+		const wasMobile = isMobile;
+		isMobile = window.innerWidth < 768;
+		
+		// Close sidebar when transitioning from mobile to desktop
+		if (wasMobile && !isMobile && isSidebarOpen) {
+			isSidebarOpen = false;
+		}
+	}
+
 	onMount(() => {
 		if (!browser) return;
 		// Preload code for commonly visited routes to make subsequent navigations instantaneous
@@ -61,14 +73,16 @@
 
 		// Initial scroll state setup
 		handleScroll();
+		// Initial mobile state setup
+		isMobile = window.innerWidth < 768;
 	});
 </script>
 
-<!-- Window scroll listener -->
-<svelte:window on:scroll={handleScroll} />
+<!-- Window scroll and resize listeners -->
+<svelte:window on:scroll={handleScroll} on:resize={handleResize} />
 
 <!-- Mobile sidebar overlay -->
-{#if isSidebarOpen}
+{#if isSidebarOpen && isMobile}
 	<div
 		class="sidebar-overlay"
 		on:click={closeSidebar}
@@ -80,10 +94,10 @@
 {/if}
 
 <!-- Mobile sidebar -->
-<div class="sidebar" class:open={isSidebarOpen}>
+<div class="sidebar" class:open={isSidebarOpen && isMobile}>
 	<div class="sidebar-header">
 		<div class="logo-section">
-			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text">Peripheral</p>
 		</div>
 		<button class="close-button" on:click={closeSidebar}>
@@ -122,7 +136,7 @@
 			aria-label="Go to home page"
 			style="cursor: pointer; background: none; border: none; padding: 0;"
 		>
-			<img src="/atlantis_logo_transparent.png" alt="Peripheral Logo" class="logo-image" />
+			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
 			<p class="logo-text" class:transparent={isHeaderTransparent}>Peripheral</p>
 		</button>
 
@@ -182,7 +196,7 @@
 	}
 
 	.logo-image {
-		height: 32px;
+		height: 28px;
 		width: auto;
 		object-fit: contain;
 		max-width: 140px;
@@ -316,6 +330,16 @@
 		z-index: 2000;
 		transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+	}
+
+	/* Hide sidebar completely on desktop to prevent any flashing */
+	@media (min-width: 769px) {
+		.sidebar {
+			display: none !important;
+		}
+		.sidebar-overlay {
+			display: none !important;
+		}
 	}
 
 	.sidebar.open {

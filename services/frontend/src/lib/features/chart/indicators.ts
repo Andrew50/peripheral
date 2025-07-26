@@ -3,28 +3,14 @@ import { settings } from '$lib/utils/stores/stores';
 import { privateRequest } from '$lib/utils/helpers/backend';
 import type { BarData } from '$lib/features/chart/interface';
 import type {
-	IChartApi,
-	ISeriesApi,
 	CandlestickData,
-	Time,
-	WhitespaceData,
-	CandlestickSeriesOptions,
-	DeepPartial,
-	CandlestickStyleOptions,
-	SeriesOptionsCommon,
-	UTCTimestamp,
-	HistogramStyleOptions,
-	HistogramData,
-	HistogramSeriesOptions
+	UTCTimestamp
 } from 'lightweight-charts';
 let dailyVolumeSecurityId = -1;
 let dailyVolumeDate = -1;
 let vol: number;
 
-interface SMAResult {
-	time: UTCTimestamp;
-	value: number;
-}
+
 
 export function calculateSMA(
 	data: CandlestickData[],
@@ -156,7 +142,7 @@ export function calculateVWAP(
 	data: CandlestickData[],
 	volumeData: { time: UTCTimestamp; volume: number }[]
 ): { time: UTCTimestamp; value: number }[] {
-	let vwapData: { time: UTCTimestamp; value: number }[] = [];
+	const vwapData: { time: UTCTimestamp; value: number }[] = [];
 	let cumulativeVolume = 0;
 	let cumulativePriceVolume = 0;
 	let currentDay: string | null = null; // Track the current day

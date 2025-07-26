@@ -33,6 +33,9 @@ on:
       services_changed:
         required: false
         type: string
+      skip_migrations:
+        required: false
+        type: boolean
       # public_base_url:
       #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
       #   required: true
@@ -70,6 +73,8 @@ on:
         required: true
       OPENAI_API_KEY:
         required: true
+      FRED_API_KEY:
+        required: true
       GROK_API_KEY:
         required: true
       TWITTER_API_IO_KEY:
@@ -87,6 +92,10 @@ on:
       STRIPE_WEBHOOK_SECRET:
         required: true
       STRIPE_PUBLISHABLE_KEY:
+        required: true
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN:
+        required: true
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN:
         required: true
 
 permissions:
@@ -116,6 +125,7 @@ jobs:
       TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
       TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
       TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
@@ -125,6 +135,8 @@ jobs:
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
@@ -188,6 +200,7 @@ jobs:
           echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"
           echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "FRED_API_KEY: [$(if [ -n "$FRED_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
@@ -197,6 +210,8 @@ jobs:
           echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: [$(if [ -n "$TELEGRAM_USER_NOTIFICATION_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BEN_TWEETS_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BEN_TWEETS_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
@@ -233,6 +248,7 @@ jobs:
         run: config/deploy/scripts/setup-configs.sh
 
       - name: Copy Migrations to Database Pod
+        if: inputs.skip_migrations != true
         env:
           K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
         run: |
@@ -241,6 +257,7 @@ jobs:
           kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -n "$K8S_NAMESPACE" -c db
 
       - name: Run Migrations
+        if: inputs.skip_migrations != true
         env:
           K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
         run: |

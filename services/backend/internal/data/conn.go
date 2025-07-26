@@ -1,3 +1,4 @@
+// Package data provides database connection and data access functionality
 package data
 
 import (
@@ -35,12 +36,13 @@ type Conn struct {
 	XAPISecretKey        string
 	XAccessToken         string
 	XAccessSecret        string
+	FredAPIKey           string
 	GeminiClient         *genai.Client
 	OpenAIClient         openai.Client
 	ExecutionEnvironment string
 }
 
-// Result structs for thread-safe communication
+// Result structs for thread-safe communication.
 type dbConnResult struct {
 	conn *pgxpool.Pool
 	err  error
@@ -70,7 +72,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 	grokAPIKey := getEnv("GROK_API_KEY", "")
 	twitterAPIioKey := getEnv("TWITTER_API_IO_KEY", "")
 	openAIKey := getEnv("OPENAI_API_KEY", "")
-
+	fredAPIKey := getEnv("FRED_API_KEY", "")
 	xAPIKey := getEnv("X_API_KEY", "")
 	xAPISecretKey := getEnv("X_API_SECRET", "")
 	xAccessToken := getEnv("X_ACCESS_TOKEN", "")
@@ -258,6 +260,7 @@ func InitConn(inContainer bool) (*Conn, func()) {
 		GrokAPIKey:           grokAPIKey,
 		TwitterAPIioKey:      twitterAPIioKey,
 		OpenAIKey:            openAIKey,
+		FredAPIKey:           fredAPIKey,
 		XAPIKey:              xAPIKey,
 		XAPISecretKey:        xAPISecretKey,
 		XAccessToken:         xAccessToken,
@@ -334,9 +337,17 @@ func (c *Conn) TestRedisConnectivity(ctx context.Context, userID int) (bool, str
 	return true, "Redis connection test successful"
 }
 
+// NoOp is a no-operation logger implementation that discards all log messages
 type NoOp struct{}
 
+// Printf implements the Printf method of the logger interface but does nothing with the input
 func (NoOp) Printf(string, ...interface{}) {} // swallow logs
+
+// Errorf implements the Errorf method of the logger interface but does nothing with the input
 func (NoOp) Errorf(string, ...interface{}) {} // Add Errorf
-func (NoOp) Warnf(string, ...interface{})  {} // Add Warnf
+
+// Warnf implements the Warnf method of the logger interface but does nothing with the input
+func (NoOp) Warnf(string, ...interface{}) {} // Add Warnf
+
+// Debugf implements the Debugf method of the logger interface but does nothing with the input
 func (NoOp) Debugf(string, ...interface{}) {} // Add Debugf

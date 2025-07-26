@@ -11,14 +11,13 @@ import (
 	"time"
 )
 
-const BacktestCacheKey = "backtest:userID:%d:strategyID:%d"
-
 // RunBacktestArgs represents arguments for backtesting (API compatibility)
 type RunBacktestArgs struct {
 	StrategyID  int    `json:"strategyId"`
 	Securities  []int  `json:"securities"`
 	StartDate   string `json:"startDate"`
 	EndDate     string `json:"endDate"`
+	Version     int    `json:"version"`
 	FullResults bool   `json:"fullResults"`
 }
 
@@ -43,6 +42,7 @@ type BacktestSummary struct {
 
 // BacktestResponse represents the complete backtest response (API compatibility)
 type BacktestResponse struct {
+	Version        int                   `json:"version"`
 	Instances      []BacktestInstanceRow `json:"instances,omitempty"`
 	Summary        BacktestSummary       `json:"summary"`
 	StrategyPrints string                `json:"strategyPrints,omitempty"`
@@ -76,6 +76,7 @@ type ResponseImage struct {
 type WorkerBacktestResult struct {
 	Success        bool               `json:"success"`
 	StrategyID     int                `json:"strategy_id"`
+	Version        int                `json:"version"`
 	Instances      []map[string]any   `json:"instances"`
 	Summary        WorkerSummary      `json:"summary"`
 	StrategyPrints string             `json:"strategy_prints,omitempty"`
@@ -291,13 +292,14 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	}
 	responseWithInstances := BacktestResponse{
 		Summary:        summary,
+		Version:        result.Version,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  lightweightPlots,
 		ResponseImages: responseImages,
 		Instances:      convertWorkerInstancesToBacktestResults(result.Instances),
 	}
 	// Cache the results
-	if err := SetBacktestToCache(ctx, conn, userID, args.StrategyID, responseWithInstances); err != nil {
+	if err := SetBacktestToCache(ctx, conn, userID, args.StrategyID, result.Version, responseWithInstances); err != nil {
 		log.Printf("Warning: Failed to cache backtest results: %v", err)
 		// Don't return error, just log warning
 	}
@@ -321,6 +323,7 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	}
 	response := &BacktestResponse{
 		Summary:        summary,
+		Version:        result.Version,
 		StrategyPrints: result.StrategyPrints,
 		StrategyPlots:  responseWithInstances.StrategyPlots,
 		ResponseImages: responseImages,
@@ -340,6 +343,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 		"args": map[string]interface{}{
 			"strategy_id": fmt.Sprintf("%d", args.StrategyID),
 			"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
+			"version":     args.Version,
 			"start_date":  args.StartDate,
 			"end_date":    args.EndDate,
 		},
@@ -372,7 +376,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}
-
+	fmt.Println("\n\nresult version:", result.Version)
 	return result, nil
 }
 
@@ -380,7 +384,11 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			fmt.Printf("error closing pubsub: %v\n", err)
+		}
+	}()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)

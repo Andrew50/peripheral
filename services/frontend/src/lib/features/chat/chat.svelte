@@ -36,7 +36,6 @@
 	import { activeChartInstance } from '$lib/features/chart/interface';
 	import {
 		agentStatusStore,
-		titleUpdateStore,
 		setMessageIdUpdateCallback,
 		sendChatQuery
 	} from '$lib/utils/stream/socket'; // Import both stores and types
@@ -56,12 +55,6 @@
 	let loadingConversations = false;
 	let isCurrentConversationPublic = false;
 	let conversationToDelete = ''; // Add state to track which conversation is being deleted
-
-	// Title typing effect state
-	let isTypingTitle = false;
-	let typingTitleText = '';
-	let typingTitleTarget = '';
-	let typingInterval: ReturnType<typeof setInterval> | null = null;
 
 	import ConversationHeader from './components/ConversationHeader.svelte';
 	import PlotChunk from './components/PlotChunk.svelte';
@@ -196,7 +189,11 @@
 		fetchInitialSuggestions();
 	}
 
-	async function switchToConversation(conversationId: string, title: string, isConversationPublic: boolean) {
+	async function switchToConversation(
+		conversationId: string,
+		title: string,
+		isConversationPublic: boolean
+	) {
 		if (conversationId === currentConversationId) {
 			showConversationDropdown = false;
 			return;
@@ -502,11 +499,6 @@
 		if (copyTimeout) {
 			clearTimeout(copyTimeout);
 		}
-
-		// Clean up typing interval
-		if (typingInterval) {
-			clearInterval(typingInterval);
-		}
 	});
 
 	// Scroll to bottom of chat (for user-initiated actions)
@@ -663,17 +655,15 @@
 
 				messagesStore.update((current) => [...current, assistantMessage]);
 
-							// Clear processing state
-			isProcessingMessage = false;
+				// Clear processing state
+				isProcessingMessage = false;
 
-
-
-			// If we didn't have a conversation ID before, we should have one now
-			// Load conversation history to get the new conversation ID
-			if (!currentConversationId) {
-				await loadConversationHistory(false); // Don't scroll since we just added the message
-				await loadConversations(); // Refresh conversation list
-			}
+				// If we didn't have a conversation ID before, we should have one now
+				// Load conversation history to get the new conversation ID
+				if (!currentConversationId) {
+					await loadConversationHistory(false); // Don't scroll since we just added the message
+					await loadConversations(); // Refresh conversation list
+				}
 			} catch (error: any) {
 				// Check if the request was cancelled (either by AbortController or by our cancellation response)
 				if (requestCancelled || error.cancelled === true) {
@@ -814,13 +804,11 @@
 			// Remove any loading messages
 			messagesStore.update((current) => current.filter((m) => !m.isLoading));
 
-					// Clear processing state immediately on cancellation
-		isProcessingMessage = false;
+			// Clear processing state immediately on cancellation
+			isProcessingMessage = false;
 
-
-
-		isLoading = false;
-		currentAbortController = null;
+			isLoading = false;
+			currentAbortController = null;
 		}
 	}
 
@@ -1224,48 +1212,17 @@
 		}
 	}
 
-
-	// Function to create typing effect for title
-	function startTitleTypingEffect(newTitle: string) {
-		// Don't start typing if already typing or if the title is the same
-		if (isTypingTitle || currentConversationTitle === newTitle) {
-			return;
-		}
-
-		isTypingTitle = true;
-		typingTitleTarget = newTitle;
-		typingTitleText = '';
-
-		let currentIndex = 0;
-		const typingSpeed = 50; // milliseconds per character
-
-		// Clear any existing interval
-		if (typingInterval) {
-			clearInterval(typingInterval);
-		}
-
-		typingInterval = setInterval(() => {
-			if (currentIndex < typingTitleTarget.length) {
-				typingTitleText = typingTitleTarget.substring(0, currentIndex + 1);
-				currentIndex++;
-			} else {
-				// Typing complete
-				clearInterval(typingInterval!);
-				typingInterval = null;
-				isTypingTitle = false;
-				currentConversationTitle = typingTitleTarget;
-				typingTitleText = '';
-			}
-		}, typingSpeed);
-	}
-
 	// Setup callback for handling message ID updates
 	function handleMessageIdUpdate(messageId: string, conversationId: string) {
 		// Update the temporary user message with the real backend message ID
 		messagesStore.update((current) =>
 			current.map((msg) => {
 				// Find the most recent temporary user message and update it
-				if (msg.sender === 'user' && msg.message_id.startsWith('temp_') && msg.status === 'pending') {
+				if (
+					msg.sender === 'user' &&
+					msg.message_id.startsWith('temp_') &&
+					msg.status === 'pending'
+				) {
 					return {
 						...msg,
 						message_id: messageId,
@@ -1281,39 +1238,6 @@
 			currentConversationId = conversationId;
 		}
 	}
-
-	// Reactive block to handle title updates from websocket
-	$: if ($titleUpdateStore && browser) {
-		const titleUpdate = $titleUpdateStore;
-
-		// Handle title updates for current conversation OR new conversations (when currentConversationId is empty)
-		if (
-			titleUpdate.conversation_id === currentConversationId ||
-			(!currentConversationId && titleUpdate.conversation_id)
-		) {
-			// If this is a new conversation, set the conversation ID
-			if (!currentConversationId) {
-				currentConversationId = titleUpdate.conversation_id;
-			}
-
-			// Start typing effect for the new title
-			startTitleTypingEffect(titleUpdate.title);
-
-			// Also update the conversations list if it's loaded
-			if (conversations.length > 0) {
-				conversations = conversations.map((conv) =>
-					conv.conversation_id === titleUpdate.conversation_id
-						? { ...conv, title: titleUpdate.title }
-						: conv
-				);
-			}
-		}
-
-		// Clear the store after processing
-		titleUpdateStore.set(null);
-	}
-
-
 
 	// Helper to translate technical error messages into user-friendly text
 	function getFriendlyErrorMessage(error: any): string {
@@ -1342,8 +1266,6 @@
 		{conversationToDelete}
 		{messagesStore}
 		{isLoading}
-		{isTypingTitle}
-		{typingTitleText}
 		{isPublicViewing}
 		{sharedConversationId}
 		{toggleConversationDropdown}
@@ -1388,9 +1310,7 @@
 						{#if message.isLoading}
 							<!-- Show timeline with current status (always show if processing) -->
 							{#if isProcessingMessage}
-															<ThinkingTrace
-								isProcessingMessage={isProcessingMessage}
-							/>
+								<ThinkingTrace {isProcessingMessage} />
 							{/if}
 						{:else if editingMessageId === message.message_id}
 							<!-- Editing interface - using CSS classes -->
@@ -1453,6 +1373,7 @@
 										{#each message.contentChunks as chunk, index}
 											{#if chunk.type === 'text'}
 												<div class="chunk-text">
+													<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 													{@html parseMarkdown(
 														typeof chunk.content === 'string'
 															? chunk.content
@@ -1486,6 +1407,7 @@
 														<div class="chunk-table-container">
 															{#if tableData.caption}
 																<div class="table-caption">
+																	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																	{@html parseMarkdown(tableData.caption)}
 																</div>
 															{/if}
@@ -1508,6 +1430,7 @@
 																					class:desc={currentSort.columnIndex === colIndex &&
 																						currentSort.direction === 'desc'}
 																				>
+																					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 																					{@html parseMarkdown(
 																						typeof header === 'string' ? header : String(header)
 																					)}
@@ -1526,7 +1449,8 @@
 																				{#if Array.isArray(row)}
 																					{#each row as cell}
 																						<td
-																							>{@html parseMarkdown(
+																							><!-- eslint-disable-next-line svelte/no-at-html-tags -->
+																							{@html parseMarkdown(
 																								typeof cell === 'string' ? cell : String(cell)
 																							)}</td
 																						>
@@ -1650,6 +1574,7 @@
 										{/each}
 									</div>
 								{:else}
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									{@html parseMarkdown(message.content)}
 								{/if}
 							</div>

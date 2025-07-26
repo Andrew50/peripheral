@@ -10,7 +10,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"time"
+	"log"
 )
 
 /*
@@ -49,40 +49,102 @@ type GetAlertLogsResult struct {
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-func GetAlerts(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), `
-		SELECT a.alertId,
-		       'price' AS alertType,
-		       a.price,
-		       a.securityId,
-		       s.ticker,
-		       a.active,
-		       a.direction,
-		       a.triggeredTimestamp
-		FROM alerts a
-		LEFT JOIN securities s USING (securityId)
-		WHERE a.userId = $1
-		ORDER BY a.alertId`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("querying alerts: %w", err)
+type GetAlertsArgs struct {
+	AlertType string `json:"alertType,omitempty"` // "price", "strategy", or "all"
+}
+
+func GetAlerts(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetAlertsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		// Default to "all" if no args provided or parsing fails
+		args.AlertType = "all"
 	}
-	defer rows.Close()
+
+	// Default to "all" if no alert type specified
+	if args.AlertType == "" {
+		args.AlertType = "all"
+	}
 
 	var results []Alert
-	for rows.Next() {
-		var r Alert
-		var triggered sql.NullTime
-		if err := rows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
-			&r.Ticker, &r.Active, &r.Direction, &triggered); err != nil {
-			return nil, fmt.Errorf("scanning alert: %w", err)
+
+	// Fetch price alerts if requested
+	if args.AlertType == "all" || args.AlertType == "price" {
+		priceRows, err := conn.DB.Query(context.Background(), `
+			SELECT a.alertId,
+			       'price' AS alertType,
+			       a.price,
+			       a.securityId,
+			       s.ticker,
+			       a.active,
+			       a.direction
+			FROM alerts a
+			LEFT JOIN securities s USING (securityId)
+			WHERE a.userId = $1
+			ORDER BY a.alertId`, userID)
+		if err != nil {
+			return nil, fmt.Errorf("querying price alerts: %w", err)
 		}
-		if triggered.Valid {
-			ms := triggered.Time.UnixMilli()
-			r.TriggeredTimestamp = &ms
+		defer priceRows.Close()
+
+		for priceRows.Next() {
+			var r Alert
+			if err := priceRows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
+				&r.Ticker, &r.Active, &r.Direction); err != nil {
+				return nil, fmt.Errorf("scanning price alert: %w", err)
+			}
+			results = append(results, r)
 		}
-		results = append(results, r)
+		if err := priceRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating price alert rows: %w", err)
+		}
 	}
-	return results, rows.Err()
+
+	// Fetch strategy alerts if requested
+	if args.AlertType == "all" || args.AlertType == "strategy" {
+		strategyRows, err := conn.DB.Query(context.Background(), `
+			SELECT s.strategyId,
+			       'strategy' AS alertType,
+			       s.name,
+			       s.isAlertActive,
+			       COALESCE(s.alert_threshold, 0.0) as alert_threshold,
+			       COALESCE(s.alert_universe, ARRAY[]::TEXT[]) as alert_universe
+			FROM strategies s
+			WHERE s.userId = $1 AND s.isAlertActive = true
+			ORDER BY s.strategyId`, userID)
+		if err != nil {
+			return nil, fmt.Errorf("querying strategy alerts: %w", err)
+		}
+		defer strategyRows.Close()
+
+		for strategyRows.Next() {
+			var strategyID int
+			var alertType string
+			var name string
+			var isActive bool
+			var threshold float64
+			var universe []string
+
+			if err := strategyRows.Scan(&strategyID, &alertType, &name, &isActive, &threshold, &universe); err != nil {
+				return nil, fmt.Errorf("scanning strategy alert: %w", err)
+			}
+
+			// Map strategy alert to Alert struct format for frontend compatibility
+			strategyAlert := Alert{
+				AlertID:   strategyID, // Use strategyId as alertId for consistency
+				AlertType: "strategy",
+				Ticker:    &name,      // Use strategy name as ticker for display
+				Price:     &threshold, // Use threshold as price for display
+				Active:    isActive,
+			}
+
+			results = append(results, strategyAlert)
+		}
+		if err := strategyRows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating strategy alert rows: %w", err)
+		}
+	}
+
+	return results, nil
 }
 
 /*
@@ -91,36 +153,60 @@ func GetAlerts(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, err
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-func GetAlertLogs(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
-	rows, err := conn.DB.Query(context.Background(), `
-		SELECT a.alertId,
-		       a.alertId AS alertLogId,
-		       a.triggeredTimestamp,
-		       a.securityId,
-		       s.ticker
-		FROM alerts a
-		LEFT JOIN securities s USING (securityId)
-		WHERE a.userId = $1
-		  AND a.triggeredTimestamp IS NOT NULL
-		ORDER BY a.triggeredTimestamp DESC`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("querying fired alerts: %w", err)
+type GetAlertLogsArgs struct {
+	AlertType string `json:"alertType,omitempty"` // "price", "strategy", or "all"
+}
+
+func GetAlertLogs(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args GetAlertLogsArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		// Default to "all" if no args provided or parsing fails
+		args.AlertType = "all"
 	}
-	defer rows.Close()
+
+	// Default to "all" if no alert type specified
+	if args.AlertType == "" {
+		args.AlertType = "all"
+	}
+
+	// Use the new centralized logging system to get alert logs
+	alertLogs, err := alerts.GetAlertLogs(conn, userID, args.AlertType)
+	if err != nil {
+		return nil, fmt.Errorf("querying alert logs: %w", err)
+	}
 
 	var logs []GetAlertLogsResult
-	for rows.Next() {
-		var (
-			l     GetAlertLogsResult
-			fired time.Time
-		)
-		if err := rows.Scan(&l.AlertID, &l.AlertLogID, &fired, &l.SecurityID, &l.Ticker); err != nil {
-			return nil, fmt.Errorf("scanning alert log: %w", err)
+	for _, log := range alertLogs {
+		// Extract ticker and securityId from the payload
+		var ticker *string
+		var securityID int
+
+		if tickerVal, exists := log.Payload["ticker"]; exists {
+			if tickerStr, ok := tickerVal.(string); ok {
+				ticker = &tickerStr
+			}
 		}
-		l.Timestamp = fired.UnixMilli()
-		logs = append(logs, l)
+
+		if securityIDVal, exists := log.Payload["securityId"]; exists {
+			switch v := securityIDVal.(type) {
+			case int:
+				securityID = v
+			case float64:
+				securityID = int(v)
+			}
+		}
+
+		result := GetAlertLogsResult{
+			AlertLogID: log.LogID,
+			AlertID:    log.RelatedID, // For price alerts, relatedID is the alertID; for strategy alerts, it's the strategyID
+			Timestamp:  log.Timestamp.UnixMilli(),
+			SecurityID: securityID,
+			Ticker:     ticker,
+		}
+		logs = append(logs, result)
 	}
-	return logs, rows.Err()
+
+	return logs, nil
 }
 
 /*
@@ -210,7 +296,9 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		"price":   *args.Price,
 	}); err != nil {
 		// If we can't record usage, we should rollback the alert creation
-		conn.DB.Exec(context.Background(), `DELETE FROM alerts WHERE alertId = $1`, alertID)
+		if _, rollbackErr := conn.DB.Exec(context.Background(), `DELETE FROM alerts WHERE alertId = $1`, alertID); rollbackErr != nil {
+			log.Printf("Warning: failed to rollback alert creation: %v", rollbackErr)
+		}
 		return nil, fmt.Errorf("recording alert usage: %w", err)
 	}
 
@@ -223,13 +311,131 @@ func NewAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		Direction:  &dir,
 	}
 	// Keep in-memory scheduler/store up-to-date
-	alerts.AddAlert(conn, alerts.Alert{
+	alerts.AddPriceAlert(conn, alerts.PriceAlert{
 		AlertID:    newAlert.AlertID,
+		UserID:     userID,
 		Price:      newAlert.Price,
 		SecurityID: newAlert.SecurityID,
 		Direction:  newAlert.Direction,
+		Ticker:     newAlert.Ticker,
 	})
 	return newAlert, nil
+}
+
+/*
+   ────────────────────────────────────────────────────────────────────────────────
+   Update Alert
+   ────────────────────────────────────────────────────────────────────────────────
+*/
+
+type UpdateAlertArgs struct {
+	AlertID int      `json:"alertId"`
+	Price   *float64 `json:"price,omitempty"`
+}
+
+func AgentUpdateAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := UpdateAlert(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		updatedAlert := res.(Alert)
+
+		alertData := map[string]interface{}{
+			"alertId":   updatedAlert.AlertID,
+			"alertType": "price",
+			"active":    updatedAlert.Active,
+		}
+		// Safely add pointer values, handling nil cases
+		if updatedAlert.Price != nil {
+			alertData["alertPrice"] = *updatedAlert.Price
+		}
+		if updatedAlert.SecurityID != nil {
+			alertData["securityId"] = *updatedAlert.SecurityID
+		}
+		if updatedAlert.Ticker != nil {
+			alertData["ticker"] = *updatedAlert.Ticker
+		}
+		if updatedAlert.Direction != nil {
+			alertData["direction"] = *updatedAlert.Direction
+		}
+
+		socket.SendAlertUpdate(userID, "update", alertData)
+	}()
+
+	return res, nil
+}
+
+func UpdateAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args UpdateAlertArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %w", err)
+	}
+	if args.Price == nil {
+		return nil, fmt.Errorf("price is required")
+	}
+
+	// First, get the current alert to verify ownership and get the ticker/securityId
+	var currentAlert Alert
+	var ticker string
+	err := conn.DB.QueryRow(context.Background(), `
+		SELECT a.alertId, a.price, a.direction, a.securityId, a.active, s.ticker
+		FROM alerts a
+		LEFT JOIN securities s USING (securityId)
+		WHERE a.alertId = $1 AND a.userId = $2`,
+		args.AlertID, userID).Scan(
+		&currentAlert.AlertID,
+		&currentAlert.Price,
+		&currentAlert.Direction,
+		&currentAlert.SecurityID,
+		&currentAlert.Active,
+		&ticker)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("alert not found or permission denied")
+		}
+		return nil, fmt.Errorf("fetching alert: %w", err)
+	}
+
+	// Determine new direction relative to the last trade
+	lastTrade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
+	if err != nil {
+		return nil, fmt.Errorf("fetching last trade: %w", err)
+	}
+	newDir := *args.Price > lastTrade.Price // true = wait for price to rise up to alert
+
+	// Update the alert in the database
+	_, err = conn.DB.Exec(context.Background(), `
+		UPDATE alerts 
+		SET price = $1, direction = $2
+		WHERE alertId = $3 AND userId = $4`,
+		*args.Price, newDir, args.AlertID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("updating alert: %w", err)
+	}
+
+	// Create the updated alert object to return
+	updatedAlert := Alert{
+		AlertID:    currentAlert.AlertID,
+		Price:      args.Price,
+		SecurityID: currentAlert.SecurityID,
+		Ticker:     &ticker,
+		Active:     currentAlert.Active,
+		Direction:  &newDir,
+	}
+
+	// Update the in-memory scheduler/store
+	alerts.AddPriceAlert(conn, alerts.PriceAlert{
+		AlertID:    updatedAlert.AlertID,
+		UserID:     userID,
+		Price:      updatedAlert.Price,
+		SecurityID: updatedAlert.SecurityID,
+		Direction:  updatedAlert.Direction,
+		Ticker:     updatedAlert.Ticker,
+	})
+
+	return updatedAlert, nil
 }
 
 /*
@@ -292,7 +498,7 @@ func DeleteAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfac
 	}
 
 	// Remove from memory without decrementing counter (already handled above if needed)
-	alerts.RemoveAlertFromMemory(args.AlertID)
+	alerts.RemovePriceAlertFromMemory(args.AlertID)
 
 	return nil, nil
 }

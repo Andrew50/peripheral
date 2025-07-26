@@ -71,6 +71,8 @@ on:
         required: true
       OPENAI_API_KEY:
         required: true
+      FRED_API_KEY:
+        required: true
       GEMINI_FREE_KEYS:
         required: true
       GEMINI_API_KEY:
@@ -93,6 +95,10 @@ on:
         required: true
       STRIPE_PUBLISHABLE_KEY:
         required: true
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN:
+        required: true
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN:
+        required: true
 
 
 permissions:
@@ -103,7 +109,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     # Removed the needs: [check-build] dependency
     if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
     env:
@@ -116,6 +122,7 @@ jobs:
       POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
       POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -133,6 +140,8 @@ jobs:
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
       
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
@@ -197,6 +206,7 @@ jobs:
           echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
           echo "GEMINI_API_KEY: [$(if [ -n "$GEMINI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "FRED_API_KEY: [$(if [ -n "$FRED_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
@@ -207,6 +217,8 @@ jobs:
           echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: [$(if [ -n "$TELEGRAM_USER_NOTIFICATION_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BEN_TWEETS_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BEN_TWEETS_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 

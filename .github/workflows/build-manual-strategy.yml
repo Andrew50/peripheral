@@ -1,0 +1,76 @@
+name: Build Manual Strategy
+
+on:
+  workflow_call:
+    inputs:
+      force-deploy-db:
+        required: false
+        type: boolean
+      force-deploy-frontend:
+        required: false
+        type: boolean
+      force-deploy-backend:
+        required: false
+        type: boolean
+      force-deploy-cache:
+        required: false
+        type: boolean
+      force-deploy-worker:
+        required: false
+        type: boolean
+    outputs:
+      strategy:
+        description: "Deployment strategy"
+        value: ${{ jobs.build_strategy.outputs.strategy }}
+      services_changed:
+        description: "Changed services"
+        value: ${{ jobs.build_strategy.outputs.services_changed }}
+      skip_migrations:
+        description: "Whether to skip migrations"
+        value: ${{ jobs.build_strategy.outputs.skip_migrations }}
+
+jobs:
+  build_strategy:
+    runs-on: [self-hosted, Linux, X64]
+    outputs:
+      strategy: ${{ steps.set-strategy.outputs.strategy }}
+      services_changed: ${{ steps.set-strategy.outputs.services_changed }}
+      skip_migrations: ${{ steps.set-strategy.outputs.skip_migrations }}    
+    steps:
+      - name: Set strategy from inputs
+        id: set-strategy
+        run: |
+          SERVICES_CHANGED=""
+          SKIP_MIGRATIONS=false
+          if [ "${{ inputs.force-deploy-db }}" = "true" ]; then
+            SERVICES_CHANGED="db $SERVICES_CHANGED"
+            SKIP_MIGRATIONS=true
+          fi
+          if [ "${{ inputs.force-deploy-frontend }}" = "true" ]; then
+            SERVICES_CHANGED="frontend $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-backend }}" = "true" ]; then
+            SERVICES_CHANGED="backend $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-cache }}" = "true" ]; then
+            SERVICES_CHANGED="cache $SERVICES_CHANGED"
+          fi
+          if [ "${{ inputs.force-deploy-worker }}" = "true" ]; then
+            SERVICES_CHANGED="worker $SERVICES_CHANGED"
+          fi
+
+          SERVICES_CHANGED="$(echo "$SERVICES_CHANGED" | xargs)"
+
+          if [ -z "$SERVICES_CHANGED" ]; then
+            STRATEGY="no-changes"
+          else
+            STRATEGY="force deploy"
+          fi
+
+          echo "Services changed: $SERVICES_CHANGED"
+          echo "Skip migrations: $SKIP_MIGRATIONS"
+          echo "Strategy: $STRATEGY"
+
+          echo "services_changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
+          echo "skip_migrations=$SKIP_MIGRATIONS" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT

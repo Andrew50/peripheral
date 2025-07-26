@@ -245,32 +245,6 @@
 		});
 	}
 
-	onMount(() => {
-		try {
-			isLoading = true;
-			window.addEventListener('keydown', handleKeydown);
-			const preventContextMenu = (e: Event) => {
-				e.preventDefault();
-			};
-
-			window.addEventListener('contextmenu', preventContextMenu);
-
-			// Load icons if needed
-			// Use original column name 'Ticker' if that's the key
-			if (columns?.includes('Ticker') && $list?.length > 0) {
-				loadIcons();
-			}
-
-			return () => {
-				window.removeEventListener('contextmenu', preventContextMenu);
-			};
-		} catch (error) {
-			loadError = error instanceof Error ? error.message : 'An unknown error occurred';
-			console.error('Failed to load data:', error);
-		} finally {
-			isLoading = false;
-		}
-	});
 
 	async function loadIcons() {
 		if (isLoadingIcons) return;
@@ -319,9 +293,6 @@
 		isLoadingIcons = false;
 	}
 
-	onDestroy(() => {
-		window.removeEventListener('keydown', handleKeydown);
-	});
 
 	function clickHandler(
 		event: MouseEvent,
@@ -404,12 +375,6 @@
 				return 'price'; // Sensible fallback
 		}
 	}
-
-	// Add reactive synchronization with activeChartInstance
-	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
-		syncWatchlistWithActiveChart($activeChartInstance.ticker);
-	}
-
 	function syncWatchlistWithActiveChart(activeTicker: string) {
 		if (!activeTicker || !$list?.length) return;
 
@@ -425,8 +390,46 @@
 			setTimeout(() => {
 				scrollToRow(selectedRowIndex, false);
 			}, 0);
+		} else if (matchIndex === -1) {
+			// No match found, clear selection
+			selectedRowIndex = -1;
 		}
 	}
+	onMount(() => {
+		try {
+			isLoading = true;
+			window.addEventListener('keydown', handleKeydown);
+			const preventContextMenu = (e: Event) => {
+				e.preventDefault();
+			};
+
+			window.addEventListener('contextmenu', preventContextMenu);
+
+			// Load icons if needed
+			// Use original column name 'Ticker' if that's the key
+			if (columns?.includes('Ticker') && $list?.length > 0) {
+				loadIcons();
+			}
+
+			return () => {
+				window.removeEventListener('contextmenu', preventContextMenu);
+			};
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'An unknown error occurred';
+			console.error('Failed to load data:', error);
+		} finally {
+			isLoading = false;
+		}
+	});
+	onDestroy(() => {
+		window.removeEventListener('keydown', handleKeydown);
+	});
+	
+	// Add reactive synchronization with activeChartInstance
+	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
+		syncWatchlistWithActiveChart($activeChartInstance.ticker);
+	}
+
 </script>
 
 <div class="table-container">
@@ -616,8 +619,9 @@
 	th,
 	td {
 		padding: clamp(3px, 0.35vw, 5px) clamp(2px, 0.35vw, 3px);
-		text-align: left;
+		text-align: right;
 		background: transparent;
+		overflow: hidden;
 		font-size: clamp(0.73rem, 0.82rem, 0.95rem);
 		vertical-align: middle;
 	}
@@ -701,8 +705,7 @@
 	}
 
 	.th-content {
-		display: flex;
-		align-items: center;
+		align-items: right;
 		justify-content: space-between;
 	}
 
@@ -850,7 +853,6 @@
 	td:nth-child(3) {
 		width: 18%;
 		min-width: 45px;
-		text-align: left;
 		padding-right: clamp(0px, 0.1vw, 1px);
 	}
 
@@ -858,7 +860,6 @@
 	td:nth-child(4) {
 		width: 18%;
 		min-width: 45px;
-		text-align: left;
 		padding-right: clamp(0px, 0.1vw, 1px);
 	}
 
@@ -866,7 +867,6 @@
 	td:nth-child(5) {
 		width: 20%;
 		min-width: 55px;
-		text-align: left;
 		padding-right: clamp(2px, 0.3vw, 4px);
 	}
 
@@ -874,7 +874,6 @@
 	td:nth-child(6) {
 		width: 13%;
 		min-width: 40px;
-		text-align: left;
 	}
 
 	.delete-button {
@@ -911,8 +910,8 @@
 		content: '';
 		position: absolute;
 		bottom: -1px;
-		left: 12px;
-		right: 12px;
+		left: 0px;
+		right: 0px;
 		height: 1px;
 		background: rgba(255, 255, 255, 0.08);
 		border-radius: 0.5px;

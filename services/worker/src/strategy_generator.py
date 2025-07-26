@@ -186,6 +186,8 @@ class StrategyGenerator:
             FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
             - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
             - get_general_data(columns, filters) → pandas.DataFrame
+            - apply_drawdown_styling(fig) → returns styled fig
+            - apply_equity_curve_styling(fig) → returns styled fig
 
             CRITICAL REQUIREMENTS:
             - Function named 'strategy()' with NO parameters
@@ -496,12 +498,16 @@ class StrategyGenerator:
             - Histograms of performance metrics, returns, etc 
             - Always show the plot using .show()
             - Almost always include plots in the strategy to help the user understand the data
+            - Ensure to name ALL traces in the plot, otherwise the trace will say 'trace 0'.
             - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-            - Do not worry about the styling of the plot.
-            - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on SEPERATE plots.
+            - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on separate line plots. These should not be scatterplots.
+            - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
+            - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
+            - Do NOT use timestamp as x-axis values. Use dates instead.
             - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
+            - Dates should always be in American format. 
 
             RETURN FORMAT:
             - *ALWAYS* Return List[Dict] where each dict contains:
@@ -889,11 +895,8 @@ class StrategyGenerator:
     def _generate_strategy_name(self, prompt: str, is_edit: bool, existing_strategy: Optional[Dict[str, Any]] = None) -> str:
         """Generate a strategy name"""
         if is_edit and existing_strategy:
-            # For edits, keep the original name but add "Updated"
-            original_name = existing_strategy.get('name', 'Strategy')
-            if "(Updated" not in original_name:
-                return f"{original_name} (Updated)"
-            return original_name
+            # For edits, keep the original name (versioning handles uniqueness)
+            return existing_strategy.get('name', 'Strategy')
         
         # For new strategies, generate from prompt
         words = prompt.split()[:5]  # Increased from 4 to 5 words
@@ -935,37 +938,42 @@ class StrategyGenerator:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
             if strategy_id:
-                # Update existing strategy
+                # Create new version of existing strategy - preserve old version as separate row
+                # First get the existing strategy data
                 cursor.execute("""
-                    UPDATE strategies 
-                    SET name = %s, description = %s, prompt = %s, pythoncode = %s, 
-                        updated_at = NOW()
-                    WHERE strategyid = %s AND userid = %s
-                    RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updated_at, isalertactive
-                """, (name, description, prompt, python_code, strategy_id, user_id))
-            else:
-                # Create new strategy with duplicate name handling
-                # First check if name already exists and modify if needed
-                original_name = name
-                cursor.execute("""
-                    SELECT COUNT(*) as count FROM strategies 
-                    WHERE userid = %s AND name = %s
-                """, (user_id, name))
-                count_result = cursor.fetchone()
+                    SELECT name, COALESCE(MAX(version), 0) + 1 as next_version
+                    FROM strategies 
+                    WHERE userid = %s AND name = (SELECT name FROM strategies WHERE strategyid = %s AND userid = %s)
+                    GROUP BY name
+                """, (user_id, strategy_id, user_id))
+                version_result = cursor.fetchone()
                 
-                if count_result and count_result['count'] > 0:
-                    # Name exists, add timestamp suffix
-                    timestamp_suffix = datetime.now().strftime("%m%d_%H%M%S")
-                    name = f"{original_name} ({timestamp_suffix})"
-                    logger.info(f"Strategy name conflict detected, using: {name}")
+                if not version_result:
+                    raise Exception(f"Strategy {strategy_id} not found for user {user_id}")
+                
+                strategy_name = version_result['name']
+                next_version = version_result['next_version']
+                
+                logger.info(f"Creating new version {next_version} of strategy '{strategy_name}' for user {user_id}")
+                
+                # Insert new row with incremented version (preserves old version)
+                cursor.execute("""
+                    INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
+                                          createdat, updated_at, isalertactive, score, version)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, %s)
+                    RETURNING strategyid, name, description, prompt, pythoncode, 
+                             createdat, updated_at, isalertactive, version
+                """, (user_id, strategy_name, description, prompt, python_code, next_version))
+            else:
+                # Create new strategy - always start at version 1
+                logger.info(f"Creating new strategy '{name}' version 1 for user {user_id}")
                 
                 cursor.execute("""
                     INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
                                           createdat, updated_at, isalertactive, score, version)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, '1.0')
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, 1)
                     RETURNING strategyid, name, description, prompt, pythoncode, 
-                             createdat, updated_at, isalertactive
+                             createdat, updated_at, isalertactive, version
                 """, (user_id, name, description, prompt, python_code))
             
             result = cursor.fetchone()
@@ -981,6 +989,7 @@ class StrategyGenerator:
                     'description': result['description'],
                     'prompt': result['prompt'],
                     'pythonCode': result['pythoncode'],
+                    'version': result['version'],
                     'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
                     'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
                     'isAlertActive': result['isalertactive']
