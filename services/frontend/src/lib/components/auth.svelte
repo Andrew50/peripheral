@@ -13,11 +13,12 @@
 
 	const dispatch = createEventDispatcher();
 
-	export let mode: 'login' | 'signup' = 'login';
+	export let mode: 'login' | 'signup' | 'verify' = 'login';
 	export let modalMode: boolean = false;
 	export let inviteCode: string = '';
 	let email = '';
 	let password = '';
+	let otp = 0;
 	let errorMessage = writable('');
 	let loading = false;
 	let isLoaded = false;
@@ -39,7 +40,13 @@
 
 	onMount(() => {
 		if (browser) {
-			document.title = mode === 'login' ? 'Login | Peripheral' : 'Sign Up | Peripheral';
+			if (mode === 'login') {
+				document.title = 'Login | Peripheral';
+			} else if (mode === 'signup') {
+				document.title = 'Sign Up | Peripheral';
+			} else {
+				document.title = 'Verify | Peripheral';
+			}
 			isLoaded = true;
 
 			// Check for redirect parameters
@@ -53,8 +60,10 @@
 		if (event.key === 'Enter') {
 			if (mode === 'login') {
 				signIn(email, password);
-			} else {
+			} else if (mode === 'signup') {
 				signUp(email, password);
+			} else {
+				verify(email, otp);
 			}
 		}
 	}
@@ -77,8 +86,18 @@
 			goto(`/pricing?upgrade=${redirectPlan}`);
 		} else {
 			// Default redirect to app
-			goto('/app');
+			goto('/app'); 
 		}
+	}
+
+	async function sendVerificationOTP(email: string) {
+		try {
+			await publicRequest('sendVerificationOTP', { email });
+			// Maybe show a success message briefly
+			errorMessage.set('Verification code sent to your email');
+		} catch (error) {
+			errorMessage.set('Failed to send verification code');
+		}	
 	}
 
 	async function signIn(email: string, password: string) {
@@ -93,6 +112,13 @@
 
 			handleAuthSuccess(r);
 		} catch (error) {
+			if (typeof error === 'string' && error.toLowerCase().includes('email address not verified')) {
+				mode = 'verify';
+				console.log("wowo this is so cool")
+				sendVerificationOTP(email);
+				errorMessage.set('Please check your email to verify your account');
+				return;
+			}
 			let displayError = 'Login failed. Please try again.';
 			if (typeof error === 'string') {
 				// Extract the core message sent from the backend
@@ -120,10 +146,40 @@
 			}
 
 			await publicRequest('signup', signupData);
-			await signIn(email, password);
+
+			mode = 'verify';
+
+			sendVerificationOTP(email);
+
+			errorMessage.set('Please check your email for verification code');
 		} catch (error) {
 			console.log(error);
 			let displayError = 'Failed to create account. Please try again.';
+			if (typeof error === 'string') {
+				// Extract the core message sent from the backend
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
+			}
+			errorMessage.set(displayError);
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function verify(email: string, otp: number) {
+		loading = true;
+
+		try {
+			const verifyData: any = { email: email, otp: otp };
+
+			await publicRequest('verifyOTP', verifyData);
+			await signIn(email, password);
+		} catch (error) {
+			console.log(error);
+			let displayError = 'Failed to verify OTP. Please try again.';
 			if (typeof error === 'string') {
 				// Extract the core message sent from the backend
 				const prefix = /^Server error: \d+ - /;
@@ -187,83 +243,115 @@
 			on:submit|preventDefault={() => {
 				if (mode === 'login') {
 					signIn(email, password);
-				} else {
+				} else if (mode === 'signup') {
 					signUp(email, password);
+				} else {
+					verify(email, otp);
 				}
 			}}
 			class="auth-form"
 		>
-			<!-- Google Login Button -->
-			<div class="form-group">
-				<button
-					class="google-login-button"
-					on:click={handleGoogleLogin}
-					type="button"
-					disabled={loading}
-				>
-					<div class="google-icon">
-						<svg
-							version="1.1"
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 48 48"
-							xmlns:xlink="http://www.w3.org/1999/xlink"
-							style="display: block;"
-						>
-							<path
-								fill="#EA4335"
-								d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-							></path>
-							<path
-								fill="#4285F4"
-								d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-							></path>
-							<path
-								fill="#FBBC05"
-								d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-							></path>
-							<path
-								fill="#34A853"
-								d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-							></path>
-							<path fill="none" d="M0 0h48v48H0z"></path>
-						</svg>
-					</div>
-					<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
-				</button>
-			</div>
 
-			<!-- Divider -->
-			<div class="auth-divider">
-				<span>OR</span>
-			</div>
+			{#if mode === 'verify'}
+				<div class="form-group">
+					<input
+						type="number"
+						id="otp"
+						bind:value={otp}
+						required
+						on:keydown={handleKeydown}
+						placeholder="Enter 5-digit verification code"
+						class="auth-input"
+						disabled={loading}
+					/>
+				</div>
 
-			<!-- Email Input -->
-			<div class="form-group">
-				<input
-					type="email"
-					id="email"
-					bind:value={email}
-					required
-					on:keydown={handleKeydown}
-					placeholder="Email"
-					class="auth-input"
-					disabled={loading}
-				/>
-			</div>
+				<div class="resend-section">
+					<button 
+						type="button" 
+						class="resend-button" 
+						on:click={() => sendVerificationOTP(email)}
+						disabled={loading}
+					>
+						Resend Code
+					</button>
+				</div>
+			{:else}
 
-			<!-- Password Input -->
-			<div class="form-group">
-				<input
-					type="password"
-					id="password"
-					bind:value={password}
-					required
-					on:keydown={handleKeydown}
-					placeholder="Password"
-					class="auth-input"
-					disabled={loading}
-				/>
-			</div>
+						<!-- Google Login Button -->
+						<div class="form-group">
+							<button
+								class="google-login-button"
+								on:click={handleGoogleLogin}
+								type="button"
+								disabled={loading}
+							>
+								<div class="google-icon">
+									<svg
+										version="1.1"
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 48 48"
+										xmlns:xlink="http://www.w3.org/1999/xlink"
+										style="display: block;"
+									>
+										<path
+											fill="#EA4335"
+											d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+										></path>
+										<path
+											fill="#4285F4"
+											d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+										></path>
+										<path
+											fill="#FBBC05"
+											d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+										></path>
+										<path
+											fill="#34A853"
+											d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+										></path>
+										<path fill="none" d="M0 0h48v48H0z"></path>
+									</svg>
+								</div>
+								<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
+							</button>
+						</div>
+			
+						<!-- Divider -->
+						<div class="auth-divider">
+							<span>OR</span>
+						</div>
+			
+						<!-- Email Input -->
+						<div class="form-group">
+							<input
+								type="email"
+								id="email"
+								bind:value={email}
+								required
+								on:keydown={handleKeydown}
+								placeholder="Email"
+								class="auth-input"
+								disabled={loading}
+							/>
+						</div>
+			
+			
+				<!-- Password Input -->
+				<div class="form-group">
+					<input
+						type="password"
+						id="password"
+						bind:value={password}
+						required
+						on:keydown={handleKeydown}
+						placeholder="Password"
+						class="auth-input"
+						disabled={loading}
+					/>
+				</div>
+
+			{/if}
 
 			<!-- Error Message -->
 			{#if errorMessageText}
@@ -276,7 +364,14 @@
 					{#if loading}
 						<div class="loader"></div>
 					{:else}
-						{mode === 'login' ? 'Sign In' : 'Create Account'}
+						{#if mode === 'login'}
+							Sign In
+						{:else if mode === 'signup'}
+							Create Account
+						{:else}
+							Verify Email
+						{/if}
+					
 					{/if}
 				</button>
 			</div>
@@ -289,18 +384,26 @@
 					Don't have an account?
 					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
 				</p>
-			{:else}
+			{:else if mode === 'signup'}
 				<p>
 					Already have an account?
 					<a href="/login" on:click={handleToggleMode} class="auth-link">Sign In</a>
 				</p>
+			{:else}
+				<p>
+					Don't have an account?
+					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
+					Already have an account?
+					<a href="/login" on:click={handleToggleMode} class="auth-link">Sign In</a>
+
+				</p>
 			{/if}
 		</div>
 	</div>
-	
+
 	<!-- Ideas Chips Section -->
 	<ChipSection />
-	
+
 	<!-- Footer -->
 	<SiteFooter />
 </div>
@@ -329,12 +432,7 @@
 	.auth-page {
 		width: 100%;
 		min-height: 100vh;
-		background: linear-gradient(
-			180deg,
-			#010022 0%,
-			#02175F 100%
-
-		);
+		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 		color: #f5f9ff;
 		font-family:
 			'Geist',
@@ -404,7 +502,6 @@
 	.google-login-button:hover:not(:disabled) {
 		background: rgba(255, 255, 255, 0.9);
 		transform: translateY(-1px);
-
 	}
 
 	.google-login-button:disabled {

@@ -289,6 +289,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Public handler error [%s]: %v", req.Function, err)
 			// Map to safe client message
 			status, msg := resolveAppError(err)
+			log.Printf("%d %s", status, msg)
 			http.Error(w, msg, status)
 			return
 		}

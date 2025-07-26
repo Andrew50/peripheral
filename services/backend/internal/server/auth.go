@@ -7,8 +7,11 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"math/big"
+	"net/smtp"
 	"strings"
 
 	//"log"
@@ -50,6 +53,7 @@ var (
 		},
 		Endpoint: google.Endpoint,
 	}
+	ErrEmailNotVerified = errors.New("email not verified")
 )
 
 // Helper function to get environment variables with defaults
@@ -82,7 +86,8 @@ type SignupArgs struct {
 	InviteCode string `json:"inviteCode,omitempty"` // Optional invite code for trial subscriptions
 }
 
-// Signup performs operations related to Signup functionality.
+// Signup creates a new user (if not already registered) and stores invite metadata.
+// It returns nil on success; all information is conveyed via error.
 func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	log.Println("Signup attempt started")
 
@@ -166,6 +171,162 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	}
 	txClosed = true
 
+	return nil, nil
+
+}
+
+// LoginArgs represents a structure for handling LoginArgs data.
+type LoginArgs struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// Login performs operations related to Login functionality.
+func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	log.Println("Login attempt started")
+
+	var a LoginArgs
+	if err := json.Unmarshal(rawArgs, &a); err != nil {
+		return nil, fmt.Errorf("%w: login invalid args: %v", ErrInvalidInput, err)
+	}
+
+	log.Printf("Login attempt for email: %s", a.Email)
+
+	// Create a timeout context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var resp LoginResponse
+	var userID int
+	var storedPw string
+	var authType string
+	var profilePicture sql.NullString
+	var verified bool
+
+	// 1) Does the email exist? Get user details.
+	err := conn.DB.QueryRow(ctx,
+		`SELECT userId, password, profile_picture, auth_type, verified
+		 FROM users WHERE email=$1`,
+		a.Email).Scan(&userID, &storedPw, &profilePicture, &authType, &verified)
+
+	switch {
+	case err == pgx.ErrNoRows:
+		log.Printf("Login failed: No user found for email: %s", a.Email)
+		return nil, fmt.Errorf("%w", ErrIncorrectEmail)
+	case err != nil:
+		log.Printf("ERROR: Database query failed during login check: %v", err)
+		return nil, fmt.Errorf("database error: %v", err)
+	}
+
+	// 2) Is this a Google-only account?
+	if authType == "google" {
+		log.Printf("Login failed: Google-only user attempting password login for email: %s", a.Email)
+		return nil, fmt.Errorf("%w", ErrGoogleAuthRequired)
+	}
+
+	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
+	if authType == "password" || authType == "both" {
+		if storedPw != a.Password {
+			log.Printf("Login failed: Password mismatch for email: %s", a.Email)
+			return nil, fmt.Errorf("%w", ErrIncorrectPassword)
+		}
+	} else {
+		// This case should ideally not be reached if authType logic is correct,
+		// but added for robustness.
+		log.Printf("ERROR: Unexpected auth_type '%s' encountered for password login attempt for email: %s", authType, a.Email)
+		return nil, fmt.Errorf("invalid account state")
+	}
+
+	// add check here for verification
+	if !verified {
+		log.Printf("Unverified user signin attempt for email: %s", a.Email)
+		return nil, fmt.Errorf("%w", ErrEmailNotVerified)
+	}
+
+	token, err := createToken(userID)
+	if err != nil {
+		log.Printf("ERROR: Token creation failed for user ID %d: %v", userID, err)
+		return nil, err
+	}
+	resp.Token = token
+
+	// Set profile picture if it exists, otherwise empty string
+	if profilePicture.Valid {
+		resp.ProfilePic = profilePicture.String
+	} else {
+		resp.ProfilePic = ""
+	}
+
+	if err := telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website", a.Email)); err != nil {
+		log.Printf("Warning: failed to send telegram notification: %v", err)
+	}
+	return resp, nil
+}
+
+type VerifyOTPArgs struct {
+	Email string `json:"email"`
+	OTP   int    `json:"otp"`
+}
+
+// this takes the userid and otp, returns status on whether verification was successful
+// on success handles invite and sets user to verified
+func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	log.Printf("Verification attempt started")
+
+	var a VerifyOTPArgs
+	if err := json.Unmarshal(rawArgs, &a); err != nil {
+		return nil, fmt.Errorf("%w: verify invalid args: %v", ErrInvalidInput, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var userID int
+	var inviteCodeUsed sql.NullString
+	var otp_code int
+	var otp_expires_at time.Time
+	var verified bool
+
+	// 1) Does the email exist? Get user details.
+	err := conn.DB.QueryRow(ctx,
+		`SELECT userId, invite_code_used, otp_code, otp_expires_at, verified
+		 FROM users WHERE email=$1`,
+		a.Email).Scan(&userID, &inviteCodeUsed, &otp_code, &otp_expires_at, &verified)
+
+	switch {
+	case err == pgx.ErrNoRows:
+		log.Printf("Verification failed: No user found for id: %s", userID)
+		return nil, fmt.Errorf("No user found")
+	case err != nil:
+		log.Printf("ERROR: Database query failed during user check: %v", err)
+		return nil, fmt.Errorf("database error: %v", err)
+	}
+
+	if verified {
+		return nil, nil
+	}
+
+	if a.OTP != otp_code || time.Now().After(otp_expires_at) {
+		return nil, fmt.Errorf("OTP invalid or expired")
+	}
+
+	// TODO: if this ever catches then someone else used invite or invite got deleted
+	// currently account just doesnt use invite
+	var invite *data.Invite
+	if inviteCodeUsed.Valid {
+		log.Printf("Processing signup with invite code: %s", inviteCodeUsed.String)
+
+		// Verify the invite code is valid and unused
+		invite, err = data.GetInviteByCode(conn, inviteCodeUsed.String)
+		if err != nil {
+			log.Printf("ERROR: Invalid or us ed invite code %s: %v", inviteCodeUsed.String, err)
+			invite = nil
+		} else if invite.Used {
+			log.Printf("ERROR: Invite code %s already used", inviteCodeUsed.String)
+			invite = nil
+		}
+	}
+
 	// Handle invite-based trial subscription or regular free plan
 	if invite != nil {
 		log.Printf("Creating trial subscription for user %d with invite %s for plan %s", userID, invite.Code, invite.PlanName)
@@ -232,99 +393,132 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		}
 	}
 
-	// Create modified login args with the email
-	loginArgs, err := json.Marshal(map[string]string{
-		"email":    a.Email,
-		"password": a.Password,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error preparing login: %v", err)
+	_, dbErr := conn.DB.Exec(ctx, `
+	UPDATE users
+	SET verified = true
+	WHERE userId = $1`,
+		userID,
+	)
+	if dbErr != nil {
+		log.Printf("ERROR: Failed to verify user %d: %v", userID, dbErr)
+		return nil, fmt.Errorf("failed to verify")
 	}
 
-	// Log in the new user
-	result, err := Login(conn, loginArgs)
-
-	log.Printf("Signup completed for user ID: %d", userID)
-	return result, err
+	// we return nil indicating success and then have the frontend call login again
+	return nil, nil
 }
 
-// LoginArgs represents a structure for handling LoginArgs data.
-type LoginArgs struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type SendVerificationOTPArgs struct {
+	Email string `json:"email"` // Use email instead of UserID
 }
 
-// Login performs operations related to Login functionality.
-func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
-	log.Println("Login attempt started")
-
-	var a LoginArgs
+func SendVerificationOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
+	var a SendVerificationOTPArgs
 	if err := json.Unmarshal(rawArgs, &a); err != nil {
-		return nil, fmt.Errorf("%w: login invalid args: %v", ErrInvalidInput, err)
+		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
 	}
 
-	log.Printf("Login attempt for email: %s", a.Email)
-
-	// Create a timeout context to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var resp LoginResponse
+	// Check if user exists and get their verification status
 	var userID int
-	var storedPw string
-	var authType string
-	var profilePicture sql.NullString
-
-	// 1) Does the email exist? Get user details.
+	var verified bool
 	err := conn.DB.QueryRow(ctx,
-		`SELECT userId, password, profile_picture, auth_type
-		 FROM users WHERE email=$1`,
-		a.Email).Scan(&userID, &storedPw, &profilePicture, &authType)
+		"SELECT userId, verified FROM users WHERE email = $1",
+		a.Email).Scan(&userID, &verified)
 
-	switch {
-	case err == pgx.ErrNoRows:
-		log.Printf("Login failed: No user found for email: %s", a.Email)
-		return nil, fmt.Errorf("%w", ErrIncorrectEmail)
-	case err != nil:
-		log.Printf("ERROR: Database query failed during login check: %v", err)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		log.Printf("ERROR: failed to lookup user %d: %v", userID, err)
+
 		return nil, fmt.Errorf("database error: %v", err)
 	}
 
-	// 2) Is this a Google-only account?
-	if authType == "google" {
-		log.Printf("Login failed: Google-only user attempting password login for email: %s", a.Email)
-		return nil, fmt.Errorf("%w", ErrGoogleAuthRequired)
+	if verified {
+		return nil, fmt.Errorf("email already verified")
 	}
 
-	// 3) Wrong password? (Only check for 'password' or 'both' auth types)
-	if authType == "password" || authType == "both" {
-		if storedPw != a.Password {
-			log.Printf("Login failed: Password mismatch for email: %s", a.Email)
-			return nil, fmt.Errorf("%w", ErrIncorrectPassword)
-		}
-	} else {
-		// This case should ideally not be reached if authType logic is correct,
-		// but added for robustness.
-		log.Printf("ERROR: Unexpected auth_type '%s' encountered for password login attempt for email: %s", authType, a.Email)
-		return nil, fmt.Errorf("invalid account state")
-	}
-
-	token, err := createToken(userID)
+	new_otp, err := createOTP()
 	if err != nil {
-		log.Printf("ERROR: Token creation failed for user ID %d: %v", userID, err)
-		return nil, err
-	}
-	resp.Token = token
-
-	// Set profile picture if it exists, otherwise empty string
-	if profilePicture.Valid {
-		resp.ProfilePic = profilePicture.String
-	} else {
-		resp.ProfilePic = ""
+		log.Printf("ERROR: failed to lookup user %d: %v", userID, err)
+		return nil, fmt.Errorf("error creating OTP")
 	}
 
-	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website", a.Email))
-	return resp, nil
+	_, err = conn.DB.Exec(ctx,
+		`UPDATE users
+		 SET otp_code = $1, otp_expires_at = $2
+		 WHERE userId = $3`, new_otp.otp, new_otp.otp_expires_at, userID)
+	if err != nil {
+		log.Printf("ERROR: failed to insert otp for user %d: %v", userID, err)
+		return nil, fmt.Errorf("error inserting OTP in database")
+	}
+
+	err = sendOTPEmail(a.Email, new_otp.otp)
+	if err != nil {
+		log.Printf("ERROR: failed to send email to %s: %v", a.Email, err)
+		return nil, fmt.Errorf("error sending verification email")
+	}
+
+	return nil, nil
+
+}
+
+// TODO: ACTUALLY ADD THESE AS ENV STUFF
+func sendOTPEmail(to string, otp int) error {
+	authEmail := os.Getenv("EMAIL_FROM_ADDRESS")
+	from := os.Getenv("SMTP_FROM_EMAIL")
+	password := os.Getenv("SMTP_PASSWORD")
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_OTP_PORT")
+
+	log.Printf("DEBUG - SMTP Config:")
+	log.Printf("  From: %s", from)
+	log.Printf("  Host: %s", smtpHost)
+	log.Printf("  Port: %s", smtpPort)
+	log.Printf("  Password length: %d", len(password))
+
+	subject := "Your OTP Code"
+	body := fmt.Sprintf("Your OTP is: %d", otp)
+	message := fmt.Sprintf(
+		"From: %s\r\n"+
+			"To: %s\r\n"+
+			"Subject: %s\r\n"+
+			"MIME-Version: 1.0\r\n"+
+			"Content-Type: text/plain; charset=\"utf-8\"\r\n"+
+			"\r\n"+
+			"%s\r\n",
+		from, to, subject, body,
+	)
+
+	auth := smtp.PlainAuth("", authEmail, password, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, []byte(message))
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+
+	return nil
+}
+
+type OTP struct {
+	otp            int
+	otp_expires_at time.Time
+}
+
+func createOTP() (OTP, error) {
+	// generates otp between 10000 and 99999
+	n, err := rand.Int(rand.Reader, big.NewInt(90000))
+	if err != nil {
+		log.Printf("ERROR: failed to generate OTP")
+		return OTP{}, fmt.Errorf("error creating otp")
+	}
+	otp := int(n.Int64()) + 10000
+	otp_expires_at := time.Now().Add(time.Minute * 5)
+
+	return OTP{otp, otp_expires_at}, nil
 }
 
 func createToken(userID int) (string, error) {
@@ -441,8 +635,8 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 	if err != nil {
 		// User doesn't exist, create new user with auth_type='google'
 		err = conn.DB.QueryRow(context.Background(),
-			"INSERT INTO users (password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5) RETURNING userId",
-			"", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userID)
+			"INSERT INTO users (password, email, google_id, profile_picture, auth_type, verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING userId",
+			"", googleUser.Email, googleUser.ID, googleUser.Picture, "google", true).Scan(&userID)
 		if err != nil {
 			log.Printf("ERROR: Failed to create Google user: %v", err)
 
@@ -498,7 +692,9 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		return nil, fmt.Errorf("failed to create token: %v", err)
 	}
 
-	telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website [google auth]", googleUser.Email))
+	if err := telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s logged in to the website [google auth]", googleUser.Email)); err != nil {
+		log.Printf("Warning: failed to send telegram notification: %v", err)
+	}
 	return GoogleLoginResponse{
 		Token:      jwtToken,
 		ProfilePic: googleUser.Picture,
