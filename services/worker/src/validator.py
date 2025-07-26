@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 class SecurityValidator:
     """Validates Python code for security issues and DataFrame strategy compliance"""
 
-    def __init__(self):
+    def __init__(self, conn):
+        self.conn = conn
         # Node type checkers
         self.forbidden_nodes = {
             ast.Import: self._check_import,
@@ -293,7 +294,7 @@ class SecurityValidator:
             if not self._validate_strategy_structure(tree):
                 return False
                 
-            logger.info("Code passed all validation checks")
+            #logger.info("Code passed all validation checks")
             return True
             
         except (SyntaxError, SecurityError, StrategyComplianceError) as e:
