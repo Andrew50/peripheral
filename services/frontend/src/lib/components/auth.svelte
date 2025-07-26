@@ -18,6 +18,8 @@
 	export let inviteCode: string = '';
 	let email = '';
 	let password = '';
+	let otpDigits = ['', '', '', '', ''];
+	let inputRefs: HTMLInputElement[] = [];
 	let otp = 0;
 	let errorMessage = writable('');
 	let loading = false;
@@ -56,14 +58,93 @@
 		}
 	});
 
+	function otpHandleInput(index: number, event: Event) {
+		if (event.target === null) {
+			return
+		}
+		const input = event.target as HTMLInputElement;
+		const value = input.value;
+
+		// Only allow numbers
+		if (!/^\d$/.test(value)) {
+			input.value = '';
+			otpDigits[index] = '';
+			return;
+		}
+
+		otpDigits[index] = value;
+		
+		// Auto-focus next input
+		if (value && index < 4) {
+			inputRefs[index + 1]?.focus();
+		}
+		
+		// Dispatch complete event when all 5 digits are filled
+		if (otpDigits.every(digit => digit !== '')) {
+			verify(email, +otpDigits.join(''));
+		}
+	}
+
+	function otpHandleKeydown(index: number, event: KeyboardEvent): void {
+		// Handle backspace
+		if (event.key === 'Backspace') {
+		if (!otpDigits[index] && index > 0) {
+			// If current field is empty, go to previous and clear it
+			otpDigits[index - 1] = '';
+			inputRefs[index - 1]?.focus();
+		} else if (otpDigits[index]) {
+			// Clear current field
+			otpDigits[index] = '';
+		}
+		}
+		
+		// Handle arrow keys
+		if (event.key === 'ArrowRight' && index < 4) {
+		inputRefs[index + 1]?.focus();
+		}
+		if (event.key === 'ArrowLeft' && index > 0) {
+		inputRefs[index - 1]?.focus();
+		}
+	}
+
+	function otpHandlePaste(event: ClipboardEvent): void {
+		event.preventDefault();
+		const pastedData = event.clipboardData?.getData('text') || '';
+		
+		// Extract only digits and take first 5
+		const digits = pastedData.replace(/\D/g, '').slice(0, 5);
+		
+		if (digits.length > 0) {
+			// Clear current OTP
+			otpDigits = ['', '', '', '', ''];
+			
+			// Fill with pasted digits
+			for (let i = 0; i < digits.length; i++) {
+				otpDigits[i] = digits[i];
+			}
+			
+			// Focus the next empty field or the last field
+			const nextIndex = Math.min(digits.length, 4);
+			inputRefs[nextIndex]?.focus();
+			
+			// Dispatch complete if we have 5 digits
+			if (digits.length === 5) {
+				verify(email, +digits);
+			}
+		}
+	}
+
+	function otpHandleFocus(index: number): void {
+		// Select all text when focusing
+		inputRefs[index]?.select();
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			if (mode === 'login') {
 				signIn(email, password);
-			} else if (mode === 'signup') {
-				signUp(email, password);
 			} else {
-				verify(email, otp);
+				signUp(email, password);
 			}
 		}
 	}
@@ -93,8 +174,6 @@
 	async function sendVerificationOTP(email: string) {
 		try {
 			await publicRequest('sendVerificationOTP', { email });
-			// Maybe show a success message briefly
-			errorMessage.set('Verification code sent to your email');
 		} catch (error) {
 			errorMessage.set('Failed to send verification code');
 		}	
@@ -151,7 +230,6 @@
 
 			sendVerificationOTP(email);
 
-			errorMessage.set('Please check your email for verification code');
 		} catch (error) {
 			console.log(error);
 			let displayError = 'Failed to create account. Please try again.';
@@ -234,7 +312,13 @@
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
-				{mode === 'login' ? 'Sign into Peripheral' : 'Execute with Peripheral'}
+				{#if mode === 'login'}
+				 Sign into Peripheral
+				{:else if mode === 'signup'}
+				 Execute with Peripheral
+				{:else}
+					 Verify Email Address
+				{/if}
 			</h1>
 		</div>
 
@@ -251,31 +335,65 @@
 			}}
 			class="auth-form"
 		>
-
 			{#if mode === 'verify'}
-				<div class="form-group">
+			<!-- Verification Code Section -->
+			<div class="verification-container">
+			  <!-- Email Reminder -->
+			  <div class="email-reminder">
+				<div class="email-icon">
+				  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+					<polyline points="22,6 12,13 2,6"/>
+				  </svg>
+				</div>
+				<p class="email-text">We sent a code to <strong>{email}</strong></p>
+			  </div>
+		  
+			  <!-- OTP Input Grid -->
+			  <div class="otp-container">
+				<div class="otp-grid">
+				  {#each otpDigits as digit, index}
 					<input
-						type="number"
-						id="otp"
-						bind:value={otp}
-						required
-						on:keydown={handleKeydown}
-						placeholder="Enter 5-digit verification code"
-						class="auth-input"
-						disabled={loading}
+					  bind:this={inputRefs[index]}
+					  type="text"
+					  inputmode="numeric"
+					  maxlength="1"
+					  bind:value={otpDigits[index]}
+					  on:input={(e) => otpHandleInput(index, e)}
+					  on:keydown={(e) => otpHandleKeydown(index, e)}
+					  on:paste={otpHandlePaste}
+					  on:focus={() => otpHandleFocus(index)}
+					  disabled={loading}
+					  placeholder=""
+					  class="otp-digit {digit ? 'filled' : ''} {loading ? 'loading' : ''}"
 					/>
+				  {/each}
 				</div>
-
-				<div class="resend-section">
-					<button 
-						type="button" 
-						class="resend-button" 
-						on:click={() => sendVerificationOTP(email)}
-						disabled={loading}
-					>
-						Resend Code
-					</button>
+				
+				<p class="otp-instruction">Enter the 5-digit verification code</p>
+			  </div>
+		  
+			  <!-- Status Section -->
+			  {#if loading}
+				<div class="status-container verifying">
+				  <div class="spinner"></div>
+				  <span>Verifying your code...</span>
 				</div>
+			  {/if}
+		  
+			  <!-- Resend Section -->
+			  <div class="resend-section">
+				<p class="resend-text">Didn't receive the code?</p>
+				<button
+				  type="button"
+				  class="resend-button"
+				  on:click={() => sendVerificationOTP(email)}
+				  disabled={loading}
+				>
+				  Resend Code
+				</button>
+			  </div>
+			</div>
 			{:else}
 
 						<!-- Google Login Button -->
@@ -351,14 +469,7 @@
 					/>
 				</div>
 
-			{/if}
-
-			<!-- Error Message -->
-			{#if errorMessageText}
-				<p class="error-message">{errorMessageText}</p>
-			{/if}
-
-			<!-- Submit Button -->
+							<!-- Submit Button -->
 			<div class="form-group">
 				<button type="submit" class="submit-button" disabled={loading}>
 					{#if loading}
@@ -368,13 +479,20 @@
 							Sign In
 						{:else if mode === 'signup'}
 							Create Account
-						{:else}
-							Verify Email
 						{/if}
 					
 					{/if}
 				</button>
 			</div>
+
+
+			{/if}
+
+			<!-- Error Message -->
+			{#if errorMessageText}
+				<p class="error-message">{errorMessageText}</p>
+			{/if}
+
 		</form>
 
 		<!-- Toggle Auth Mode -->
@@ -693,4 +811,196 @@
 		position: relative;
 		z-index: 10;
 	}
+
+
+	.verification-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    width: 100%;
+    padding: 1rem 0;
+  }
+
+  .email-reminder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .email-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  }
+
+  .email-text {
+    color: #6b7280;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .email-text strong {
+    color: #374151;
+    font-weight: 600;
+  }
+
+  .otp-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .otp-grid {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .otp-digit {
+    width: 56px;
+    height: 56px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    background: #ffffff;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: relative;
+  }
+
+  .otp-digit::placeholder {
+    color: transparent;
+  }
+
+  .otp-digit:hover:not(:disabled) {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .otp-digit:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 4px 12px rgba(59, 130, 246, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .otp-digit.filled {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+    color: #065f46;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  }
+
+  .otp-digit.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .otp-instruction {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin: 0;
+    text-align: center;
+  }
+
+  .status-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .status-container.verifying {
+    color: #3b82f6;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+    border-color: #bfdbfe;
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #bfdbfe;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .resend-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  .resend-text {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  .resend-button {
+    background: none;
+    border: none;
+    color: #3b82f6;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .resend-button:hover:not(:disabled) {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .resend-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Mobile responsiveness */
+  @media (max-width: 480px) {
+    .verification-container {
+      gap: 1.5rem;
+    }
+
+    .otp-grid {
+      gap: 0.5rem;
+    }
+
+    .otp-digit {
+      width: 48px;
+      height: 48px;
+      font-size: 1.25rem;
+    }
+  }
 </style>
