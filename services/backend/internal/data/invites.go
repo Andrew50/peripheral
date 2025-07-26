@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v4"
 )
 
 // Invite represents an invitation record
@@ -74,6 +76,25 @@ func MarkInviteUsed(conn *Conn, code string) error {
 	defer cancel()
 
 	result, err := ExecWithRetry(ctx, conn.DB, `
+		UPDATE invites 
+		SET used = true 
+		WHERE code = $1 AND used = false`,
+		code)
+
+	if err != nil {
+		return fmt.Errorf("failed to mark invite as used: %v", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("invite not found or already used")
+	}
+
+	return nil
+}
+
+// MarkInviteUsedTx marks an invite as used within a transaction
+func MarkInviteUsedTx(ctx context.Context, tx pgx.Tx, code string) error {
+	result, err := tx.Exec(ctx, `
 		UPDATE invites 
 		SET used = true 
 		WHERE code = $1 AND used = false`,
