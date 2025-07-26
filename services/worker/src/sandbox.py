@@ -20,7 +20,7 @@ import linecache
 import sys 
 import math
 from dataclasses import dataclass
-from plotlyToMatlab import plotly_to_matplotlib_png
+from utils.plotlyToMatlab import plotly_to_matplotlib_png
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class PythonSandbox:
             self._reset_capture_systems()
             
             # Execute with timeout and capture
-            logger.info("🚀 Starting code execution...")
+            #logger.info("🚀 Starting code execution...")
             try:
                 result = await asyncio.wait_for(
                     self._execute_with_capture(code, safe_globals, safe_locals),

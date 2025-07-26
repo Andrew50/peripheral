@@ -3,28 +3,13 @@ package strategy
 import (
 	"backend/internal/app/limits"
 	"backend/internal/data"
+	"backend/internal/queue"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 )
-
-// Strategy represents a simplified strategy with natural language description and generated Python code
-type Strategy struct {
-	StrategyID     int      `json:"strategyId"`
-	UserID         int      `json:"userId"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description"` // Human-readable description
-	Prompt         string   `json:"prompt"`      // Original user prompt
-	PythonCode     string   `json:"pythonCode"`  // Generated Python classifier
-	Score          int      `json:"score,omitempty"`
-	Version        int      `json:"version,omitempty"`
-	CreatedAt      string   `json:"createdAt,omitempty"`
-	IsAlertActive  bool     `json:"isAlertActive,omitempty"`
-	AlertThreshold *float64 `json:"alertThreshold,omitempty"`
-	AlertUniverse  []string `json:"alertUniverse,omitempty"`
-}
 
 // CreateStrategyFromPromptArgs contains the user's natural language prompt
 type CreateStrategyFromPromptArgs struct {
@@ -310,18 +295,8 @@ func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, 
 	}, nil
 }
 
-// WorkerCreateStrategyResult represents the result from the Python worker
-type WorkerCreateStrategyResult struct {
-	Success  bool      `json:"success"`
-	Strategy *Strategy `json:"strategy,omitempty"`
-	Error    string    `json:"error,omitempty"`
-	TaskID   string    `json:"task_id,omitempty"`
-}
-
-// callWorkerCreateStrategy calls the worker's create_strategy function via Redis queue
-func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, prompt string, strategyID int) (*WorkerCreateStrategyResult, error) {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("create_strategy_%d_%d", userID, time.Now().UnixNano())
+// callWorkerCreateStrategy calls the worker's create_strategy function via the new queue system
+func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, prompt string, strategyID int) (*queue.CreateStrategyResult, error) {
 	messageID, ok := ctx.Value("messageID").(string)
 	if !ok {
 		messageID = ""
@@ -330,141 +305,25 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	if !ok {
 		conversationID = ""
 	}
-	// Prepare strategy creation task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "create_strategy",
-		"args": map[string]interface{}{
-			"user_id":        userID,
-			"prompt":         prompt,
-			"strategy_id":    strategyID,
-			"conversationID": conversationID,
-			"messageID":      messageID,
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-		"priority":   "high", // Mark strategy creation as high priority
+
+	// Prepare strategy creation task arguments
+	args := map[string]interface{}{
+		"user_id":        userID,
+		"prompt":         prompt,
+		"strategy_id":    strategyID,
+		"conversationID": conversationID,
+		"messageID":      messageID,
 	}
 
-	// Submit task to Redis queue
-	taskJSON, err := json.Marshal(task)
+	// Queue the task using the new typed queue system and return result directly
+	result, err := queue.QueueCreateStrategyTyped(ctx, conn, args)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling task: %v", err)
+		return nil, fmt.Errorf("error queuing strategy creation task: %v", err)
 	}
 
-	// Push task to PRIORITY worker queue for strategy creation/editing
-	err = conn.Cache.RPush(ctx, "strategy_queue_priority", string(taskJSON)).Err()
-	if err != nil {
-		return nil, fmt.Errorf("error submitting task to priority queue: %v", err)
-	}
-
-	log.Printf("Submitted strategy creation task %s to PRIORITY worker queue", taskID)
-
-	// Wait for result with timeout
-	result, err := waitForCreateStrategyResult(ctx, conn, taskID, 3*time.Minute)
-	if err != nil {
-		return nil, fmt.Errorf("error waiting for strategy creation result: %v", err)
-	}
+	log.Printf("Submitted strategy creation task to PRIORITY worker queue via new queue system")
 
 	return result, nil
-}
-
-// waitForCreateStrategyResult waits for a strategy creation result via Redis pubsub
-func waitForCreateStrategyResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerCreateStrategyResult, error) {
-	// Subscribe to task updates
-	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer func() {
-		if err := pubsub.Close(); err != nil {
-			fmt.Printf("error closing pubsub: %v\n", err)
-		}
-	}()
-
-	// Create timeout context
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ch := pubsub.Channel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return nil, fmt.Errorf("timeout waiting for strategy creation result")
-		case msg := <-ch:
-			if msg == nil {
-				continue
-			}
-
-			var taskUpdate map[string]interface{}
-			err := json.Unmarshal([]byte(msg.Payload), &taskUpdate)
-			if err != nil {
-				log.Printf("Failed to unmarshal task update: %v", err)
-				continue
-			}
-
-			if taskUpdate["task_id"] == taskID {
-				status, _ := taskUpdate["status"].(string)
-				if status == "completed" || status == "error" {
-					// Convert task result to WorkerCreateStrategyResult
-					var result WorkerCreateStrategyResult
-					result.TaskID = taskID
-
-					if status == "error" {
-						result.Success = false
-						if errorMsg, exists := taskUpdate["error_message"]; exists {
-							result.Error = fmt.Sprintf("%v", errorMsg)
-						} else if resultData, exists := taskUpdate["result"]; exists {
-							if resultMap, ok := resultData.(map[string]interface{}); ok {
-								if errorMsg, exists := resultMap["error"]; exists {
-									result.Error = fmt.Sprintf("%v", errorMsg)
-								}
-							}
-						}
-					} else {
-						// Parse successful result
-						if resultData, exists := taskUpdate["result"]; exists {
-							resultJSON, err := json.Marshal(resultData)
-							if err != nil {
-								return nil, fmt.Errorf("error marshaling task result: %v", err)
-							}
-
-							var workerResult map[string]interface{}
-							err = json.Unmarshal(resultJSON, &workerResult)
-							if err != nil {
-								return nil, fmt.Errorf("error unmarshaling worker result: %v", err)
-							}
-
-							if success, exists := workerResult["success"]; exists {
-								result.Success = success.(bool)
-							}
-
-							if result.Success {
-								if strategyData, exists := workerResult["strategy"]; exists {
-									// Convert strategy data to Strategy struct
-									strategyJSON, err := json.Marshal(strategyData)
-									if err != nil {
-										return nil, fmt.Errorf("error marshaling strategy data: %v", err)
-									}
-
-									var strategy Strategy
-									err = json.Unmarshal(strategyJSON, &strategy)
-									if err != nil {
-										return nil, fmt.Errorf("error unmarshaling strategy: %v", err)
-									}
-
-									result.Strategy = &strategy
-								}
-							} else {
-								if errorMsg, exists := workerResult["error"]; exists {
-									result.Error = fmt.Sprintf("%v", errorMsg)
-								}
-							}
-						}
-					}
-
-					return &result, nil
-				}
-			}
-		}
-	}
 }
 
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
@@ -485,9 +344,9 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 	}
 	defer rows.Close()
 
-	var strategies []Strategy
+	var strategies []queue.Strategy
 	for rows.Next() {
-		var strategy Strategy
+		var strategy queue.Strategy
 		var createdAt time.Time
 
 		if err := rows.Scan(

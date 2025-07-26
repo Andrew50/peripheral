@@ -9,7 +9,6 @@ import (
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
 	"backend/internal/services/telegram"
-	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
 	"log"
@@ -27,8 +26,6 @@ var (
 	polygonInitMutex   sync.Mutex
 	alertsInitialized  bool
 	alertsInitMutex    sync.Mutex
-	workerMonitor      *worker_monitor.WorkerMonitor
-	workerMonitorMutex sync.Mutex
 )
 
 // JobFunc represents a function that can be executed as a job
@@ -287,7 +284,7 @@ var (
 			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		{
-			Name:           "StartAlertLoop",
+			Name: "StartAlertLoop",
 
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
@@ -341,16 +338,6 @@ var (
 			RetryOnFailure: true,
 			MaxRetries:     2,
 			RetryDelay:     1 * time.Minute,
-		},
-		{
-			Name:           "StartWorkerMonitor",
-			Function:       startWorkerMonitor,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 55}}, // Start before other services
-			RunOnInit:      true,
-			SkipOnWeekends: false, // Monitor should run 24/7
-			RetryOnFailure: true,
-			MaxRetries:     2,
-			RetryDelay:     30 * time.Second,
 		},
 		{
 			Name:           "UpdateYearlySubscriptionCredits",
@@ -945,34 +932,5 @@ func stopPolygonWebSocket() {
 func stopServicesJob(_ *data.Conn) error {
 	stopAlertLoop()
 	stopPolygonWebSocket()
-	stopWorkerMonitor()
 	return nil
-}
-
-// startWorkerMonitor starts the worker monitoring service
-func startWorkerMonitor(conn *data.Conn) error {
-	workerMonitorMutex.Lock()
-	defer workerMonitorMutex.Unlock()
-
-	if workerMonitor == nil {
-		workerMonitor = worker_monitor.NewWorkerMonitor(conn)
-		workerMonitor.Start()
-		log.Println("✅ Worker monitor service started")
-	} else {
-		log.Println("⚠️ Worker monitor already running")
-	}
-
-	return nil
-}
-
-// stopWorkerMonitor stops the worker monitoring service
-func stopWorkerMonitor() {
-	workerMonitorMutex.Lock()
-	defer workerMonitorMutex.Unlock()
-
-	if workerMonitor != nil {
-		workerMonitor.Stop()
-		workerMonitor = nil
-		log.Println("✅ Worker monitor service stopped")
-	}
 }

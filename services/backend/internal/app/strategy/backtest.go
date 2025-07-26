@@ -362,6 +362,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 	go func() {
 		for update := range handle.Updates {
 			if progressCallback != nil {
+
 				// Convert status to message format expected by ProgressCallback
 				message := fmt.Sprintf("Status: %s", update.Status)
 				if update.Data != nil {
