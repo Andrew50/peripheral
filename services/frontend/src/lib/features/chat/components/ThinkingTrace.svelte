@@ -478,7 +478,6 @@
 					{@const actualTimelineIndex = showTimelineDropdown ? index : timeline.length - 1}
 					{@const shouldAnimate = shouldAnimateTimelineItem(index)}
 					<div class="timeline-item">
-						<div class="timeline-dot"></div>
 						<div class="timeline-content">
 							{#if event.type === 'FunctionUpdate' && event.data}
 								<div class="timeline-message">
@@ -736,30 +735,21 @@
 		margin-bottom: 0;
 	}
 
-	.timeline-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background-color: var(--text-secondary, #ccc);
-		margin-right: 0.75rem;
-		margin-top: 0.4rem;
-		flex-shrink: 0;
-		position: relative;
-	}
 
-	.timeline-dot::after {
+
+	.timeline-item::before {
 		content: '';
 		position: absolute;
-		left: 50%;
-		top: 100%;
-		transform: translateX(-50%);
+		left: 0;
+		top: 0;
 		width: 1px;
-		height: 1.5rem;
+		height: 100%;
 		background-color: var(--text-secondary, #ccc);
 		opacity: 0.3;
+		z-index: -1;
 	}
 
-	.timeline-item:last-child .timeline-dot::after {
+	.timeline-item:last-child::before {
 		display: none;
 	}
 
@@ -770,14 +760,11 @@
 		color: var(--text-secondary, #ccc);
 		min-width: 0; /* Allows flex item to shrink */
 		max-width: 100%;
+		margin-left: 1rem; /* Add spacing where the dot used to be */
 	}
 
-	/* Hide timeline dots and connecting lines when collapsed */
-	.timeline-items.collapsed .timeline-dot {
-		display: none;
-	}
-
-	.timeline-items.collapsed .timeline-dot::after {
+	/* Hide connecting lines when collapsed */
+	.timeline-items.collapsed .timeline-item::before {
 		display: none;
 	}
 
