@@ -11,6 +11,7 @@ The 'web search' tool will likely NOT have information about the headline as the
 Some things to consider:
 - How does this change the narrative of the company/sector/overall market
 - Specific nuances to observe 
+- Run backtests on the news or similar events historically and determine the price impact, what are similarities/differences between now and then?
 
 You should also give value add information like other recent market news, past earnings results, etc when it makes sense in the context of the headline. 
 

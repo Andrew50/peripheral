@@ -941,7 +941,7 @@ var (
 				},
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
-			StatusMessage: "Screening stocks...",
+			StatusMessage: "Screening stocks",
 		},
 		"getFredSeries": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -956,7 +956,7 @@ var (
 				},
 			},
 			Function:         wrapWithContext(GetFredSeries),
-			StatusMessage:    "Searching for FRED series...",
+			StatusMessage:    "Searching for FRED series",
 			UserSpecificTool: false,
 		},
 		"getFredSeriesData": {
@@ -976,7 +976,7 @@ var (
 				},
 			},
 			Function:         wrapWithContext(GetFredSeriesData),
-			StatusMessage:    "Getting FRED series data...",
+			StatusMessage:    "Getting FRED series data",
 			UserSpecificTool: false,
 		},
 		// [END SCREENER TOOLS]
