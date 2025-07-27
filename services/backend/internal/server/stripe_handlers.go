@@ -200,6 +200,15 @@ func GetSubscriptionStatus(conn *data.Conn, userID int, rawArgs json.RawMessage)
 			return nil, fmt.Errorf("active subscription found but plan information is missing")
 		}
 		currentPlan = subscriptionPlan
+	case "trialing":
+		isActive = true // Trial subscriptions are considered active
+		isCanceling = false
+		// Require plan name for trial subscriptions
+		if subscriptionPlan == "" {
+			log.Printf("Error: Trial subscription found for user %d but no plan name stored", userID)
+			return nil, fmt.Errorf("trial subscription found but plan information is missing")
+		}
+		currentPlan = subscriptionPlan
 	case "canceling":
 		isActive = true // Still active until period end
 		isCanceling = true

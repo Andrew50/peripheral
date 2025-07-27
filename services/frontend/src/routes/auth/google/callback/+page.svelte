@@ -63,17 +63,30 @@
 		}
 
 		try {
-			const response = await publicRequest<GoogleCallbackResponse>('googleCallback', {
+			// Retrieve stored invite code if it exists
+			const storedInviteCode = sessionStorage.getItem('inviteCode');
+
+			const requestData: any = {
 				code,
 				state
-			});
+			};
+
+			// Include invite code if it was stored
+			if (storedInviteCode) {
+				requestData.inviteCode = storedInviteCode;
+			}
+
+			const response = await publicRequest<GoogleCallbackResponse>('googleCallback', requestData);
 
 			// Set auth data using centralized utilities
 			setAuthCookies(response.token, response.profilePic);
 			setAuthSessionStorage(response.token, response.profilePic);
 
-			// Clean up stored state
+			// Clean up stored state and invite code
 			sessionStorage.removeItem('googleAuthState');
+			if (storedInviteCode) {
+				sessionStorage.removeItem('inviteCode');
+			}
 
 			// Handle deep linking from stored parameters
 			const redirectPlan = sessionStorage.getItem('redirectPlan');
