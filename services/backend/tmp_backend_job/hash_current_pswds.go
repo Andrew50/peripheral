@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend/internal/data"
+	"backend/internal/server"
 	"context"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 			continue
 		}
 
-		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		hashed, err := server.HashPassword(password)
 		if err != nil {
 			log.Printf("Hashing error for user %d: %v", userID, err)
 			continue
