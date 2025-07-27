@@ -190,6 +190,7 @@
 		// Clear initial suggestions and fetch new ones for empty chat
 		initialSuggestions = [];
 		fetchInitialSuggestions();
+		showUpgradePrompt = false;
 	}
 
 	async function switchToConversation(
@@ -213,6 +214,7 @@
 		currentConversationTitle = title;
 		isCurrentConversationPublic = isConversationPublic;
 		showConversationDropdown = false;
+		showUpgradePrompt = false;
 
 		// Clear current messages and context items immediately
 		messagesStore.set([]);
@@ -1307,11 +1309,11 @@
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->
 				<p class="capabilities-text">
-					Chat is a powerful interface for analyzing market data, filings, news, backtesting
-					strategies, and more. It can answer questions and perform tasks.
+					Peripheral Agent analyzes market data, filings, breaking news, backtests
+					strategies and event driven research, and more.
 				</p>
 				<p class="suggestions-header">
-					Ask Peripheral a question or to perform a task to get started.
+					Ask Peripheral Agent a question or to perform a task to get started.
 				</p>
 			</div>
 		{:else}
