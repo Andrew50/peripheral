@@ -287,7 +287,7 @@ var (
 			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		{
-			Name:           "StartAlertLoop",
+			Name: "StartAlertLoop",
 
 			Function:       startAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
