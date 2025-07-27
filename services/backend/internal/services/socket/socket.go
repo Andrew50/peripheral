@@ -238,7 +238,7 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 	// Handle different status types
 	switch statusType {
 	case "WebSearchQuery":
-		headline = "Searching the web..."
+		headline = "Searching the web"
 
 		// For web searches, create structured data with query
 		data = map[string]interface{}{
@@ -267,10 +267,10 @@ func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
 			}
 		}
 	case "getWatchlistItems":
-		headline = "Reading watchlist..."
+		headline = "Reading watchlist"
 		data = value
 	case "newWatchlist":
-		headline = "Creating watchlist..."
+		headline = "Creating watchlist"
 		data = value
 	case "getDailySnapshot":
 		headline = "Analyzing data for " + value.(map[string]interface{})["ticker"].(string)

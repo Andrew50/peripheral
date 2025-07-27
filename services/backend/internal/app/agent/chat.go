@@ -107,16 +107,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 		return nil, fmt.Errorf("error checking usage limits: %w", err)
 	}
 	if !allowed {
-		return QueryResponse{
-			ContentChunks: []ContentChunk{{
-				Type:    "text",
-				Content: "You have reached your query limit. Please add more credits to your account to continue.",
-			}},
-			Suggestions:    []string{"View Pricing Plans", "Add Credits"},
-			ConversationID: query.ConversationID,
-			MessageID:      "", // Will be generated
-			Timestamp:      time.Now(),
-		}, nil
+		return nil, fmt.Errorf("USAGE_LIMIT_REACHED")
 	}
 
 	// Save pending message using the provided conversation ID
