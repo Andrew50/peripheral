@@ -1,88 +1,12 @@
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+import ast
 
-def get_all_tickers_from_calls(getBarDataFunctionCalls: List[Dict[str, Any]]) -> List[str]:
-    """
-    Extract all unique tickers from all get_bar_data calls
-    
-    Returns:
-        List of unique ticker symbols found in filters
-    """
-    all_tickers = set()
-    
-    for call in getBarDataFunctionCalls:
-        analysis = call.get("filter_analysis", {})
-        if analysis.get("has_tickers"):
-            specific_tickers = analysis.get("specific_tickers", [])
-            all_tickers.update(specific_tickers)
-    
-    return sorted(list(all_tickers))
+logger = logging.getLogger(__name__)
+from typing import Any, Dict, List, Optional, Tuple
 
-def getMaxTimeframeAndMinBars(getBarDataFunctionCalls: List[Dict[str, Any]]) -> Tuple[Optional[str], int]:
-    """
-    Get the max timeframe and its associated min_bars from get_bar_data calls
-    
-    Returns:
-        Tuple of (max_timeframe, max_timeframe_min_bars)
-    """
-    import re
-    
-    max_tf_priority = (0, 0)  # (category, multiplier)
-    max_tf_str = None
-    max_tf_min_bars = 0
-    
-    # Timeframe priority: week/month > day > hour > minute
-    tf_categories = {'m': 0, 'h': 1, 'd': 2, 'w': 3, 'M': 4}
-    
-    for call in getBarDataFunctionCalls:
-        timeframe = call.get("timeframe")
-        if isinstance(timeframe, str):
-            # Parse timeframe (e.g., "13m" -> category=0, multiplier=13)
-            match = re.match(r'(\d+)([mhdwM])', timeframe)
-            if match:
-                multiplier = int(match.group(1))
-                category = tf_categories.get(match.group(2), 0)
-                tf_priority = (category, multiplier)
-                
-                # Update max timeframe if this one has higher priority
-                if tf_priority > max_tf_priority:
-                    max_tf_priority = tf_priority
-                    max_tf_str = timeframe
-                    max_tf_min_bars = call.get("min_bars", 0)
-    
-    return max_tf_str, max_tf_min_bars
 
-def extract_get_bar_data_calls(strategy_code: str) -> List[Dict[str, Any]]:
-    """
-    Extract all get_bar_data calls from strategy code using AST parsing.
-    Returns list of dicts with timeframe, min_bars, and filter_analysis.
-    """
-    calls = []
-    
-    try:
-        # Parse the code into an AST
-        tree = ast.parse(strategy_code)
-        
-        # Walk through all nodes in the AST
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                # Check if this is a get_bar_data call
-                func_name = None
-                if isinstance(node.func, ast.Name):
-                    func_name = node.func.id
-                elif isinstance(node.func, ast.Attribute):
-                    func_name = node.func.attr
-                
-                if func_name == 'get_bar_data':
-                    # Extract parameters from the call
-                    call_info = _extract_get_bar_data_params(node)
-                    if call_info:
-                        calls.append(call_info)
-                        
-    except SyntaxError as e:
-        logger.warning(f"Failed to parse strategy code for get_bar_data extraction: {e}")
-    except Exception as e:
-        logger.warning(f"Error extracting get_bar_data calls: {e}")
-        
-    return calls
+
 
 def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]]:
     """

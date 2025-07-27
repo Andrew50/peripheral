@@ -36,7 +36,7 @@ class Conn:
         else:
             self.environment = "prod"
         #logger.info(f"Environment initialized to: {self.environment}")
-     def _init_openai_client(self):
+    def _init_openai_client(self):
         """Initialize OpenAI client"""
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:

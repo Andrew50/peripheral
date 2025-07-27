@@ -22,43 +22,43 @@ async def screen(self, task_id: str = None, universe: List[str] = None,
     # Execute using accessor strategy engine
     start_time = time.time()
         
-        try:
-            
-            # Set execution context for data accessors with screening optimizations
-            set_execution_context(
-                mode='screening',
-                symbols=universe
-            )
-            
-            # Execute strategy with accessor context
-            instances, _, _, _, error = await _execute_strategy(
-                strategy_code, 
-                execution_mode='screening',
-                max_instances=max_instances
-            )
-            if error: 
-                raise error
-            # Rank and limit results
-            ranked_results = _rank_screening_results(instances, limit)
-            
-            execution_time = (time.time() - start_time) * 1000
-            
-            result = {
-                'success': True,
-                'execution_mode': 'screening',
-                'ranked_results': ranked_results,
-                'universe_size': len(universe),
-                'results_returned': len(ranked_results),
-                'instance_limit_reached': TrackedList.is_limit_reached(),
-                'max_instances_configured': max_instances,
-                'execution_time_ms': int(execution_time),  # Convert to integer for Go compatibility
-                'optimization_enabled': True,
-                'data_strategy': 'minimal_recent'
-            }
-            
-            #logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
-            logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
-            return result
+    try:
+        
+        # Set execution context for data accessors with screening optimizations
+        set_execution_context(
+            mode='screening',
+            symbols=universe
+        )
+        
+        # Execute strategy with accessor context
+        instances, _, _, _, error = execute_strategy(
+            strategy_code, 
+            execution_mode='screening',
+            max_instances=max_instances
+        )
+        if error: 
+            raise error
+        # Rank and limit results
+        ranked_results = _rank_screening_results(instances, limit)
+        
+        execution_time = (time.time() - start_time) * 1000
+        
+        result = {
+            'success': True,
+            'execution_mode': 'screening',
+            'ranked_results': ranked_results,
+            'universe_size': len(universe),
+            'results_returned': len(ranked_results),
+            'instance_limit_reached': TrackedList.is_limit_reached(),
+            'max_instances_configured': max_instances,
+            'execution_time_ms': int(execution_time),  # Convert to integer for Go compatibility
+            'optimization_enabled': True,
+            'data_strategy': 'minimal_recent'
+        }
+        
+        #logger.info(f"✅ Screening completed: {len(ranked_results)} results, {execution_time:.1f}ms")
+        logger.debug(f"   📈 Performance: {len(ranked_results)/execution_time*1000:.1f} results/second")
+        return result
     
     #logger.info(f"Screening completed: {len(result.get('ranked_results', []))} results found")
     return result

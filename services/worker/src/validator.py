@@ -1,6 +1,7 @@
 """
 Security Validator
-Validates Python code for security issues before execution and ensures compliance with data accessor strategy requirements.
+Validates Python code for security issues before execution and ensures compliance with data accessor
+ strategy requirements.
 
 The strategy engine expects functions that:
 1. Accept no parameters (use get_bar_data() and get_general_data() instead)
@@ -18,10 +19,19 @@ import ast
 import logging
 import re
 import keyword
-from typing import Set, List, Dict, Any, Optional, Union
+import time
 import sys
+import traceback
+from typing import List, Dict, Any, Optional
+from .engine import execute_strategy
+from .utils.context import Context
 
 logger = logging.getLogger(__name__)
+
+#allows for custom exceptions to be raised so we can catch them and
+# return a more detailed error message
+class ValidationError(Exception):
+    """Base exception for validation errors"""
 
         # Forbidden built-in functions (only truly dangerous ones)
 forbidden_functions = {
@@ -39,7 +49,7 @@ forbidden_functions = {
     # Dangerous built-ins
     "id", "hash", "repr", "ascii", "bin", "hex", "oct",
 }
-        
+
         # Explicitly allowed built-in functions for strategy processing
 allowed_functions = {
     # Type conversions needed for pandas
@@ -138,11 +148,13 @@ forbidden_attributes = {
 
         # Strategy requirements - updated for data accessor approach
 required_instance_fields = {"ticker", "timestamp"}
-reserved_global_names = {"pd", "pandas", "np", "numpy", "datetime", "timedelta", "math", 
+reserved_global_names = {"pd", "pandas", "np", "numpy", "datetime", "timedelta", "math",
                                      "get_bar_data", "get_general_data"}
-        
+
         # Data accessor function names
 data_accessor_functions = {"get_bar_data", "get_general_data"}
+
+
 
 def _normalize_module_name(module_name: str) -> str:
     """Normalize module name by resolving aliases to canonical names"""
@@ -169,11 +181,11 @@ def extract_min_bars_requirements(code: str) -> List[Dict[str, Any]]:
         ]
     """
     requirements = []
-    
+
     try:
         # Parse the code into an AST
         tree = ast.parse(code)
-        
+
         # Walk through all nodes in the AST
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
@@ -183,18 +195,17 @@ def extract_min_bars_requirements(code: str) -> List[Dict[str, Any]]:
                     func_name = node.func.id
                 elif isinstance(node.func, ast.Attribute):
                     func_name = node.func.attr
-                
+
                 if func_name == 'get_bar_data':
                     # Extract parameters from the call
                     call_info = _extract_get_bar_data_params(node)
                     if call_info:
                         requirements.append(call_info)
-                        
+
     except SyntaxError as e:
-        logger.warning(f"Failed to parse strategy code for min_bars extraction: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error extracting min_bars requirements: {e}")
-        
+        logger.warning("Failed to parse strategy code for min_bars extraction: %s", e)
+    except ValueError as e:
+        logger.error("Unexpected error extracting min_bars requirements: %s", e)
     return requirements
 
 def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]]:
@@ -214,36 +225,63 @@ def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]
             'min_bars': 1,      # default
             'line_number': getattr(call_node, 'lineno', 0)
         }
-        
         # Extract positional arguments
         if len(call_node.args) >= 1:
             # First arg is timeframe
             timeframe = _extract_string_value(call_node.args[0])
             if timeframe:
                 call_info['timeframe'] = timeframe
-                
         if len(call_node.args) >= 4:
             # Fourth arg is min_bars (timeframe, security_ids, columns, min_bars)
             min_bars = _extract_int_value(call_node.args[3])
             if min_bars is not None:
                 call_info['min_bars'] = min_bars
-        
         # Extract keyword arguments
-        for keyword in call_node.keywords:
-            if keyword.arg == 'timeframe':
-                timeframe = _extract_string_value(keyword.value)
+        for kw in call_node.keywords:
+            if kw.arg == 'timeframe':
+                timeframe = _extract_string_value(kw.value)
                 if timeframe:
                     call_info['timeframe'] = timeframe
-            elif keyword.arg == 'min_bars':
-                min_bars = _extract_int_value(keyword.value)
+            elif kw.arg == 'min_bars':
+                min_bars = _extract_int_value(kw.value)
                 if min_bars is not None:
                     call_info['min_bars'] = min_bars
-        
+
         return call_info
-        
-    except Exception as e:
-        logger.debug(f"Failed to extract parameters from get_bar_data call: {e}")
+
+    except ValueError as e:
+        logger.debug("Failed to extract parameters from get_bar_data call: %s", e)
         return None
+
+
+def extract_get_bar_data_calls(strategy_code: str) -> List[Dict[str, Any]]:
+    """
+    Extract all get_bar_data calls from strategy code using AST parsing.
+    Returns list of dicts with timeframe, min_bars, and filter_analysis.
+    """
+    calls = []
+    try:
+        # Parse the code into an AST
+        tree = ast.parse(strategy_code)
+        # Walk through all nodes in the AST
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                # Check if this is a get_bar_data call
+                func_name = None
+                if isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    func_name = node.func.attr
+                if func_name == 'get_bar_data':
+                    # Extract parameters from the call
+                    call_info = _extract_get_bar_data_params(node)
+                    if call_info:
+                        calls.append(call_info)
+    except SyntaxError as e:
+        logger.warning("Failed to parse strategy code for get_bar_data extraction: %s", e)
+    except ValueError as e:
+        logger.warning("Error extracting get_bar_data calls: %s", e)
+    return calls
 
 def _extract_string_value(node: ast.AST) -> Optional[str]:
     """Extract string value from AST node if possible."""
@@ -252,8 +290,8 @@ def _extract_string_value(node: ast.AST) -> Optional[str]:
             return node.value
         elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
             return node.s
-    except Exception as e:
-        logger.debug(f"_extract_string_value: {e}")
+    except ValueError as e:
+        logger.debug("_extract_string_value: %s", e)
     return None
 
 def _extract_int_value(node: ast.AST) -> Optional[int]:
@@ -264,11 +302,11 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
         elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
             if isinstance(node.n, int):
                 return node.n
-    except Exception as e:
-        logger.debug(f"_extract_int_value: {e}")
+    except ValueError as e:
+        logger.debug("_extract_int_value: %s", e)
     return None
 
-def validate_strategy(code: str) -> bool:
+def validate_strategy(ctx: Context, code: str) -> bool:
     """
     Comprehensive code validation including:
     1. Syntax compilation check
@@ -279,81 +317,83 @@ def validate_strategy(code: str) -> bool:
     """
     try:
         validate_code(code)
-        testResult = executeStrategy(code,"validation")                 
-        return testResult.get('success', False)
+        _,_,_,_,error = execute_strategy(ctx,code,"validation")
+        return error is None
 
-    except (SyntaxError, SecurityError, StrategyComplianceError) as e:
-        logger.warning(f"Code failed validation: {e}")
+    except (SyntaxError, ValidationError) as e:
+        logger.warning("Code failed validation: %s", e)
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error during validation: {e}")
+    except ValueError as e:
+        logger.error("Unexpected error during validation: %s", e)
         return False
 def validate_code(code: str) -> bool:
-    try: 
+    """
+    Validate code syntax and structure
+    """
+    try:
         if not code or not code.strip():
-            raise PythonCodeError("Code cannot be empty")
+            raise ValidationError("Code cannot be empty")
         # Parse AST for validation (this also checks syntax)
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
-            logger.warning(f"Code compilation failed: {e}")
-            raise StrategyComplianceError(f"Syntax error in strategy code: {e}")
-        
+            logger.warning("Code compilation failed: %s", e)
+            raise ValidationError("Syntax error in strategy code: " + str(e)) from e
         # Single AST walk for security and compliance
-        _analyze_ast(tree, code)
-        # Additional pattern checks 
+        _analyze_ast(tree)
         _check_prohibited_patterns(code)
         return True
-    except (SecurityError, PythonCodeError, StrategyComplianceError) as e:
-        logger.warning(f"Code failed validation: {e}")
+    except ValidationError as e:
+        logger.warning("Code failed validation: %s", e)
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error during validation: {e}")
+    except ValueError as e:
+        logger.error("Unexpected error during validation: %s", e)
         return False
 
 
 
-def _analyze_ast(tree: ast.AST, code: str) -> None:
+def _analyze_ast(tree: ast.AST) -> None:
     """Single AST walk for security and compliance validation"""
     strategy_functions = []
-    
+
     # Single pass through all nodes
     for node in ast.walk(tree):
         # Security checks for each node
         for node_type, checker in forbidden_nodes.items():
             if isinstance(node, node_type):
                 if not checker(node):
-                    raise SecurityError(f"Forbidden operation: {node_type.__name__}")
-        
+                    raise ValidationError(f"Forbidden operation: {node_type.__name__}")
+
         # Collect function definitions for compliance checking
         if isinstance(node, ast.FunctionDef):
             if not node.name.startswith('_') and not node.name.startswith('__'):
                 # Check for legacy patterns and collect strategy functions
                 if node.name == 'classify_symbol':
-                    raise StrategyComplianceError(
+                    raise ValidationError(
                         "Old pattern function 'classify_symbol' is no longer supported. "
                         "Use 'strategy()' with get_bar_data() and get_general_data() instead."
                     )
-                
+
                 if node.name.startswith('run_'):
-                    raise StrategyComplianceError(
+                    raise ValidationError(
                         f"Function '{node.name}' uses old batch pattern. "
                         "Use 'strategy()' with accessor functions instead."
                     )
-                
+
                 # Only accept 'strategy' function name
                 if node.name == 'strategy':
                     strategy_functions.append(node)
-    
+
     # Strategy compliance checks
     if not strategy_functions:
-        raise StrategyComplianceError("No 'strategy' function found. Must define a function named 'strategy'.")
-        
+        raise ValidationError("No 'strategy' function found. "
+        + "Must define a function named 'strategy'.")
+
     if len(strategy_functions) > 1:
-        raise StrategyComplianceError("Only one 'strategy' function is allowed")
-        
+        raise ValidationError("Only one 'strategy' function is allowed")
+
     func_node = strategy_functions[0]
-    
+
     # Validate function signature and body
     _validate_function_signature(func_node)
     _validate_function_body(func_node)
@@ -362,51 +402,53 @@ def _analyze_ast(tree: ast.AST, code: str) -> None:
 
 def _validate_function_signature(func_node: ast.FunctionDef) -> bool:
     """Validate that function signature matches requirements: () -> List[Dict]"""
-    
+
     # Check function has no parameters (new data accessor approach)
     if len(func_node.args.args) != 0:
-        raise StrategyComplianceError(
-            f"Strategy function must have no parameters (use get_bar_data() and get_general_data() instead), "
-            f"found {len(func_node.args.args)} parameters"
+        raise ValidationError(
+            "Strategy function must have no parameters "
+            + "(use get_bar_data() and get_general_data() instead), "
+            + f"found {len(func_node.args.args)} parameters"
         )
-    
+
     return True
 
 def _validate_function_body(func_node: ast.FunctionDef) -> bool:
     """Validate function body follows strategy requirements"""
-    
+
     # Check for return statements
     return_nodes = []
     for node in ast.walk(func_node):
         if isinstance(node, ast.Return):
             return_nodes.append(node)
-    
+
     if not return_nodes:
-        raise StrategyComplianceError("Strategy function must have at least one return statement")
-    
+        raise ValueError("Strategy function must have at least one return statement")
+
     # Validate return statements structure
     for return_node in return_nodes:
         if return_node.value is None:
-            raise StrategyComplianceError("Strategy function cannot return None")
-    
+            raise ValueError("Strategy function cannot return None")
+
     return True
 
 def _check_prohibited_patterns(code: str) -> bool:
     """Check for prohibited patterns in raw code"""
-    
+
     # Only patterns that AST checks cannot detect (very minimal list)
     prohibited_patterns = [
         # String-based dynamic imports that could bypass AST module checking
-        (r'__import__\s*\(\s*["\'][^"\']*(?:os|sys)', "Dynamic import of forbidden modules is forbidden"),
+        (r'__import__\s*\(\s*["\'][^"\']*(?:os|sys)',
+        "Dynamic import of forbidden modules is forbidden"),
     ]
-    
+
     lines = code.split('\n')
     in_docstring = False
     docstring_delimiter = None
-    
+
     for line_num, line in enumerate(lines, 1):
         stripped = line.strip()
-        
+
         # Track docstring state
         if '"""' in line:
             if not in_docstring:
@@ -422,16 +464,13 @@ def _check_prohibited_patterns(code: str) -> bool:
             elif docstring_delimiter == "'''":
                 in_docstring = False
                 docstring_delimiter = None
-        
         # Skip comments and docstrings
         if stripped.startswith('#') or in_docstring:
             continue
-            
         # Check each prohibited pattern
         for pattern, message in prohibited_patterns:
             if re.search(pattern, line, re.IGNORECASE):
-                raise SecurityError(f"Line {line_num}: {message}")
-    
+                raise ValueError(f"Line {line_num}: {message}")
     return True
 
 
@@ -442,10 +481,10 @@ def _check_import(node: ast.Import) -> bool:
         module_name = alias.name.split('.')[0]  # Get root module
         normalized_name = _normalize_module_name(module_name)
         if normalized_name in forbidden_modules:
-            raise SecurityError(f"Import of forbidden module: {module_name}")
+            raise ValueError(f"Import of forbidden module: {module_name}")
         # Only allow explicitly safe modules
         if normalized_name not in allowed_modules:
-            raise SecurityError(f"Import of non-whitelisted module: {module_name}")
+            raise ValueError(f"Import of non-whitelisted module: {module_name}")
     return True
 
 def _check_import_from(node: ast.ImportFrom) -> bool:
@@ -454,9 +493,9 @@ def _check_import_from(node: ast.ImportFrom) -> bool:
         module_name = node.module.split('.')[0]  # Get root module
         normalized_name = _normalize_module_name(module_name)
         if normalized_name in forbidden_modules:
-            raise SecurityError(f"Import from forbidden module: {module_name}")
+            raise ValueError(f"Import from forbidden module: {module_name}")
         if normalized_name not in allowed_modules:
-            raise SecurityError(f"Import from non-whitelisted module: {module_name}")
+            raise ValueError(f"Import from non-whitelisted module: {module_name}")
     return True
 
 def _check_function_call(node: ast.Call) -> bool:
@@ -467,7 +506,7 @@ def _check_function_call(node: ast.Call) -> bool:
             return True
         # Block forbidden functions
         if node.func.id in forbidden_functions:
-            raise SecurityError(f"Forbidden function call: {node.func.id}")
+            raise ValidationError(f"Forbidden function call: {node.func.id}")
         # Allow pandas and numpy functions
         if node.func.id.startswith(('pd.', 'pandas.', 'np.', 'numpy.', 'math.')):
             return True
@@ -485,54 +524,33 @@ def _check_function_call(node: ast.Call) -> bool:
             'astype', 'shape', 'size', 'dtype', 'ndim', 'T', 'reshape', 
             'flatten', 'ravel', 'copy', 'mean', 'std', 'min', 'max', 'sum'
         }
-        
-        if (node.func.attr in allowed_pandas_methods or 
+
+        if (node.func.attr in allowed_pandas_methods or
             node.func.attr in allowed_array_methods):
             return True
         # Check for dangerous method calls
         if node.func.attr in forbidden_functions:
-            raise SecurityError(f"Forbidden method call: {node.func.attr}")
+            raise ValidationError(f"Forbidden method call: {node.func.attr}")
     return True
 
 def _check_attribute_access(node: ast.Attribute) -> bool:
     """Check attribute access for dangerous attributes"""
     if node.attr in forbidden_attributes:
-        raise SecurityError(f"Forbidden attribute access: {node.attr}")
+        raise ValidationError(f"Forbidden attribute access: {node.attr}")
     return True
 
 def _check_function_definition(node: ast.FunctionDef) -> bool:
     """Check function definitions"""
     # Prevent overriding reserved names
     if node.name in reserved_global_names:
-        raise SecurityError(f"Cannot override reserved name: {node.name}")
-    
+        raise ValidationError(f"Cannot override reserved name: {node.name}")
+
     # Prevent Python keywords
     if keyword.iskeyword(node.name):
-        raise SecurityError(f"Cannot use Python keyword as function name: {node.name}")
-    
+        raise ValidationError(f"Cannot use Python keyword as function name: {node.name}")
+
     return True
 
-'''def _check_async_function_definition(node: ast.AsyncFunctionDef) -> bool:
-    """Check async function definitions (forbidden)"""
-    raise SecurityError("Async function definitions are not allowed in strategies")
-
-def _check_class_definition(node: ast.ClassDef) -> bool:
-    """Check class definitions (forbidden)"""
-    raise SecurityError("Class definitions are not allowed in strategies")
-
-def _check_while_loop(node: ast.While) -> bool:
-    """Check while loops (potentially dangerous)"""
-    logger.warning("While loops detected - ensure they terminate to avoid infinite loops")
-    return True
-
-def _check_global_statement(node: ast.Global) -> bool:
-    """Check global statements (forbidden)"""
-    raise SecurityError("Global statements are not allowed in strategies")
-
-def _check_nonlocal_statement(node: ast.Nonlocal) -> bool:
-    """Check nonlocal statements (forbidden)"""
-    raise SecurityError("Nonlocal statements are not allowed in strategies")
-    '''
 
 
 # Node type checkers - defined after functions to avoid NameError
@@ -542,11 +560,11 @@ forbidden_nodes = {
     ast.Call: _check_function_call,
     ast.Attribute: _check_attribute_access,
     ast.FunctionDef: _check_function_definition,
-    ast.AsyncFunctionDef: _check_async_function_definition,
-    ast.ClassDef: _check_class_definition,
-    ast.While: _check_while_loop,
-    ast.Global: _check_global_statement,
-    ast.Nonlocal: _check_nonlocal_statement,
+    ast.AsyncFunctionDef: False,
+    ast.ClassDef: False,
+    ast.While: False,
+    ast.Global: False,
+    ast.Nonlocal: False,
 }
 
 '''
@@ -564,105 +582,173 @@ class PythonCodeError(Exception):
     pass
 '''
 
-    async def execute_validation(
-        ctx: Context, 
-        strategy_code: str
-    ) -> Dict[str, Any]:
-        """
-        Execute strategy for VALIDATION ONLY using exact min_bars requirements for speed
+def execute_validation(
+    ctx: Context,
+    strategy_code: str
+) -> Tuple[bool, str]:
+    """
+    Execute strategy for VALIDATION ONLY using exact min_bars requirements for speed
+    
+    Args:
+        strategy_code: Python code defining the strategy function  
         
-        Args:
-            strategy_code: Python code defining the strategy function  
-            
-        Returns:
-            Dict with validation result (success/error only)
-        """
-        #logger.info("🧪 Starting fast validation execution (exact min_bars requirements)")
-        
-        start_time = time.time()
-        
-        try:
-            #TODO just use one ticker as the validator should just pass anything to validate functionality
-            getBarDataFunctionCalls = extract_get_bar_data_calls(strategy_code)
-            tickersInStrategyCode = get_all_tickers_from_calls(getBarDataFunctionCalls)
+    Returns:
+        Dict with validation result (success/error only)
+    """
+    get_bar_data_function_calls = extract_get_bar_data_calls(strategy_code)
+    tickers_in_strategy_code = get_all_tickers_from_calls(get_bar_data_function_calls)
 
-            symbolsForValidation = tickersInStrategyCode if len(tickersInStrategyCode) <= 2 else tickersInStrategyCode[:2]
-            # Fail validation if no tickers were extracted (no default fallback)
-            if not symbolsForValidation:
-                raise ValueError("Validation failed: no tickers extracted from strategy code; cannot validate without ticker filters")
-            
-            max_timeframe, max_timeframe_min_bars = getMaxTimeframeAndMinBars(getBarDataFunctionCalls)
-            
-            # Calculate start date based on timeframe and min_bars (convert to days and round up)
-            #TODO this cannot use date ranges as this is not equivvalent to min bars
-            # because stock weekends, holidays, etc.
-            # instead should just use bars
-            end_date = dt.now()
-            if max_timeframe and max_timeframe_min_bars > 0:
-                # Parse timeframe and convert to days
-                if max_timeframe.endswith('d'):
-                    days_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
-                elif max_timeframe.endswith('h'):
-                    hours_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
-                    days_back = math.ceil(hours_back / 24)  # Round up to nearest day
-                elif max_timeframe.endswith('m'):
-                    minutes_back = int(max_timeframe[:-1]) * max_timeframe_min_bars
-                    days_back = math.ceil(minutes_back / (24 * 60))  # Round up to nearest day
-                else:
-                    days_back = 30  # Default fallback
-                start_date = end_date - timedelta(days=days_back)
-            else:
-                start_date = end_date - timedelta(days=30)  # Default fallback
-            
-            # Set execution context for validation with exact requirements
-            context_data = {
-                'mode': 'validation',  # Special validation mode
-                'symbols': symbolsForValidation,   # Use extracted tickers for more realistic validation
-                'start_date': start_date,
-                'end_date': end_date
-            }
-            
-            set_execution_context(**context_data)
-            
-            validationMaxInstances = 100
-            # Execute strategy with validation context (don't care about results)
-            instances, _, _, _, error = await _execute_strategy(
-                strategy_code, 
-                execution_mode='validation',
-                max_instances=validationMaxInstances # Lower limit for validation
-            )
-            if error: 
-                raise error
-            execution_time = (time.time() - start_time) * 1000
-            
-            result = {
-                'success': True,
-                'execution_mode': 'validation',
-                'instances_generated': len(instances),
-                'instance_limit_reached': TrackedList.is_limit_reached(),
-                'max_instances_configured': validationMaxInstances,  # Validation uses lower limit
-                'execution_time_ms': int(execution_time),
-                'message': 'Validation passed - strategy can execute without errors'
-            }
-            
-            #logger.info(f"✅ Validation completed successfully: {execution_time:.1f}ms")
-            return result
-            
-        except Exception as e:
-            execution_time = (time.time() - start_time) * 1000
-            
-            # Get detailed error information
-            error_info = _get_detailed_error_info(e, strategy_code)
-            detailed_error_msg = _format_detailed_error(error_info)
-            
-            logger.error(f"❌ Validation failed: {e}")
-            logger.error(detailed_error_msg)
-            
-            return {
-                'success': False,
-                'error': str(e),
-                'error_details': error_info,
-                'execution_mode': 'validation',
-                'strategy_prints': '',
-                'execution_time_ms': int(execution_time)
-            }
+    symbols_for_validation = tickers_in_strategy_code if len(tickers_in_strategy_code) <= 2 else tickers_in_strategy_code[:2]
+    if not symbols_for_validation:
+        raise ValueError("Validation failed: no tickers extracted from strategy code; cannot validate without ticker filters")
+
+    # execute with single symbol and single output timestep
+    _, _, _, _, error = execute_strategy(
+        ctx,
+        strategy_code,
+        symbols=symbols_for_validation,
+        start_date=None,
+        end_date=None
+    )
+    if error:
+        return False, str(_get_detailed_error_info(error, strategy_code))
+    return True, ""
+               
+def _get_detailed_error_info(error: Exception, strategy_code: str) -> Dict[str, Any]:
+    """Extract detailed error information including line numbers and code context"""
+    try:
+        # Get the full traceback
+        tb = traceback.format_exc()
+
+        # Get the exception info
+        _, _, exc_traceback = sys.exc_info()
+        error_info = {
+            'error_type': type(error).__name__,
+            'error_message': str(error),
+            'full_traceback': tb,
+            'line_number': None,
+            'code_context': None,
+            'function_name': None,
+            'file_name': None
+        }
+        if exc_traceback:
+            # Walk through the traceback to find the strategy code execution
+            tb_frame = exc_traceback
+            while tb_frame:
+                frame = tb_frame.tb_frame
+                filename = frame.f_code.co_filename
+                line_number = tb_frame.tb_lineno
+                function_name = frame.f_code.co_name
+                # Look for the exec frame or strategy function
+                if ('<string>' in filename or 
+                    'strategy' in function_name.lower() or
+                    tb_frame.tb_next is None):  # Last frame
+                    error_info['line_number'] = line_number
+                    error_info['function_name'] = function_name
+                    error_info['file_name'] = filename
+                    # Try to get code context from strategy_code
+                    if '<string>' in filename:
+                        # This is from our exec'd strategy code
+                        try:
+                            code_lines = strategy_code.split('\n')
+                            if 1 <= line_number <= len(code_lines):
+                                # Get context around the error line
+                                start_line = max(1, line_number - 3)
+                                end_line = min(len(code_lines), line_number + 3)
+                                context_lines = []
+                                for i in range(start_line, end_line + 1):
+                                    line_content = code_lines[i - 1]  # Convert to 0-based indexing
+                                    marker = ">>> " if i == line_number else "    "
+                                    context_lines.append(f"{marker}{i:3d}: {line_content}")
+                                error_info['code_context'] = '\n'.join(context_lines)
+                        except ValueError as ctx_error:
+                            error_info['code_context'] = f"Could not extract code context: {ctx_error}"
+                    break
+                tb_frame = tb_frame.tb_next
+        return error_info
+    except ValueError as e:
+        # Fallback error info
+        return {
+            'error_type': type(error).__name__,
+            'error_message': str(error),
+            'full_traceback': traceback.format_exc(),
+            'extraction_error': f"Could not extract detailed error info: {e}"
+        }
+
+def _format_detailed_error(error_info: Dict[str, Any]) -> str:
+    """Format detailed error information for logging"""
+    formatted = [
+        f"❌ STRATEGY EXECUTION ERROR: {error_info['error_type']}",
+        f"📄 Error Message: {error_info['error_message']}",
+    ]
+
+    if error_info.get('line_number'):
+        formatted.append(f"📍 Line Number: {error_info['line_number']}")
+
+    if error_info.get('function_name'):
+        formatted.append(f"🔧 Function: {error_info['function_name']}")
+
+    if error_info.get('code_context'):
+        formatted.extend([
+            "📋 Code Context:",
+            error_info['code_context']
+        ])
+    if error_info.get('full_traceback'):
+        formatted.extend([
+            "🔍 Full Traceback:",
+            error_info['full_traceback']
+        ])
+    if error_info.get('extraction_error'):
+        formatted.append(f"⚠️ Error Info Extraction Issue: {error_info['extraction_error']}")
+    return '\n'.join(formatted)
+
+
+def get_all_tickers_from_calls(get_bar_data_function_calls: List[Dict[str, Any]]) -> List[str]:
+    """
+    Extract all unique tickers from all get_bar_data calls
+    
+    Returns:
+        List of unique ticker symbols found in filters
+    """
+    all_tickers = set()
+
+    for call in get_bar_data_function_calls:
+        analysis = call.get("filter_analysis", {})
+        if analysis.get("has_tickers"):
+            specific_tickers = analysis.get("specific_tickers", [])
+            all_tickers.update(specific_tickers)
+    return sorted(list(all_tickers))
+
+def get_max_timeframe_and_min_bars(get_bar_data_function_calls: List[Dict[str, Any]]) -> Tuple[Optional[str], int]:
+    """
+    Get the max timeframe and its associated min_bars from get_bar_data calls
+    
+    Returns:
+        Tuple of (max_timeframe, max_timeframe_min_bars)
+    """
+    import re
+
+    max_tf_priority = (0, 0)  # (category, multiplier)
+    max_tf_str = None
+    max_tf_min_bars = 0
+
+    # Timeframe priority: week/month > day > hour > minut
+    tf_categories = {'m': 0, 'h': 1, 'd': 2, 'w': 3, 'M': 4}
+
+    for call in get_bar_data_function_calls:
+        timeframe = call.get("timeframe")
+        if isinstance(timeframe, str):
+            # Parse timeframe (e.g., "13m" -> category=0, multiplier=13)
+            match = re.match(r'(\d+)([mhdwM])', timeframe)
+            if match:
+                multiplier = int(match.group(1))
+                category = tf_categories.get(match.group(2), 0)
+                tf_priority = (category, multiplier)
+
+                # Update max timeframe if this one has higher priority
+                if tf_priority > max_tf_priority:
+                    max_tf_priority = tf_priority
+                    max_tf_str = timeframe
+                    max_tf_min_bars = call.get("min_bars", 0)
+
+    return max_tf_str, max_tf_min_bars

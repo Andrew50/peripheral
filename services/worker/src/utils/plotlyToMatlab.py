@@ -119,36 +119,31 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version
                         traces_plotted += 1
                     
             except Exception as trace_error:
-                logger.debug(f"Skipping trace {i} due to error: {trace_error}")
+                logger.debug("Skipping trace %s due to error: %s", i, trace_error)
                 continue
-        
         # Apply basic styling for readability
         ax.grid(True, alpha=0.3)
         ax.set_facecolor('#f8f9fa')  # Light background for better LLM analysis
-        
         # Add legend if multiple traces
         if traces_plotted > 1:
             ax.legend()
-        
         # Extract title if available
         try:
             if hasattr(plotly_fig, 'layout') and hasattr(plotly_fig.layout, 'title'):
-                # Correctly fetch title text from the figure layout; fallback to a default if missing
                 title_text = getattr(plotly_fig.layout.title, 'text', None)
                 if title_text:
                     if version:
                         title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version} - " + title_text
                     else:
                         title_text = f"Plot {plotID} {id_naming}: {strategy_id} - " + title_text
-                else: 
+                else:
                     if version:
                         title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version}"
                     else:
                         title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
                 ax.set_title(title_text)
-        except Exception as e:
-            logger.debug(f"Optional: could not set plot title: {e}")
-        
+        except ValueError as e:
+            logger.debug("Optional: could not set plot title: %s", e)
         # Extract axis labels if available
         try:
             if hasattr(plotly_fig, 'layout'):
@@ -156,29 +151,24 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version
                     x_title = getattr(plotly_fig.layout.xaxis.title, 'text', None)
                     if x_title:
                         ax.set_xlabel(x_title)
-                
                 if hasattr(plotly_fig.layout, 'yaxis') and hasattr(plotly_fig.layout.yaxis, 'title'):
                     y_title = getattr(plotly_fig.layout.yaxis.title, 'text', None)
                     if y_title:
                         ax.set_ylabel(y_title)
-        except Exception as e:
-            logger.debug(f"Optional: could not set axis labels: {e}")
-        
+        except ValueError as e:
+            logger.debug("Optional: could not set axis labels: %s", e)
         # Convert to PNG bytes
         buffer = BytesIO()
         plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100, 
                    facecolor='white', edgecolor='none')
         plt.close(fig)  # Important: close figure to free memory
         buffer.seek(0)
-        
-        # Convert to base64
         png_bytes = buffer.read()
         png_base64 = base64.b64encode(png_bytes).decode('utf-8')
-        
-        logger.debug(f"Successfully generated matplotlib fallback chart with {traces_plotted} traces")
+        logger.debug("Successfully generated matplotlib fallback chart with %s traces", traces_plotted)
         return png_base64
         
-    except Exception as e:
-        logger.error(f"Failed to generate matplotlib fallback chart: {e}")
+    except ValueError as e:
+        logger.error("Failed to generate matplotlib fallback chart: %s", e)
         # Return empty string on complete failure
         return "" 

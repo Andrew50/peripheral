@@ -70,7 +70,7 @@ disable = [
 ]
 
 [tool.pylint.format]
-max-line-length = 120
+max-line-length = 150
 good-names = ["i", "j", "k", "ex", "Run", "_", "id", "db"]
 
 [tool.pylint.naming]

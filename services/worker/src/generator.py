@@ -108,7 +108,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - apply_equity_curve_styling(fig) → returns styled fig
 
         CRITICAL REQUIREMENTS:
-        - Function named 'strategy()' with NO parameters
+        - Function must be named 'strategy' with no parameters
         - Use data accessor functions with filters:
         * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
             Columns: ticker, timestamp, open, high, low, close, volume
@@ -228,7 +228,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
             bar_data_1d = get_bar_data(
                 timeframe="1d",
                 columns=["ticker", "timestamp", "close"],
-                min_bars=21,  # Need 20 bars for RSI calculation (14 + buffer)
+                min_bars=15,  # Need 15 bars for RSI calculation
                 filters={{"sector": "Technology"}}  # Filter to technology sector
             )
             
@@ -445,48 +445,47 @@ def _get_system_instruction(ctx, prompt: str) -> str:
     
 async def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversationID: str = None, messageID: str = None) -> Dict[str, Any]:
     """Create or edit a strategy from natural language prompt"""
-    try:
-        
-        # Check if this is an edit operation
-        is_edit = strategy_id != -1
-        existing_strategy = None
-        
-        if is_edit:
-            existing_strategy = await fetch_strategy_code(user_id, strategy_id)
-            if not existing_strategy:
-                return {
-                    "success": False,
-                    "error": f"Strategy {strategy_id} not found for user {user_id}"
-                }
-        
-        strategy_code= await _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
-        
-        if not strategy_code:
+    
+    # Check if this is an edit operation
+    is_edit = strategy_id != -1
+    existing_strategy = None
+    
+    if is_edit:
+        existing_strategy = await fetch_strategy_code(user_id, strategy_id)
+        if not existing_strategy:
             return {
                 "success": False,
-                "error": "Failed to generate valid strategy code after retries"
+                "error": f"Strategy {strategy_id} not found for user {user_id}"
             }
-        
-        description = _extract_description(strategy_code, prompt)
-        if is_edit:
-            name = existing_strategy.get('name', 'Strategy')
-        else:
-            name = _generate_strategy_name(prompt)
-        
-        saved_strategy = await save_strategy(
-            user_id=user_id,
-            name=name,
-            description=description,
-            prompt=prompt,
-            python_code=strategy_code,
-            strategy_id=strategy_id if is_edit else None
-        )
-        
+    
+    strategy_code= await _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
+    
+    if not strategy_code:
         return {
-            "success": True,
-            "strategy": saved_strategy,
-            "validation_passed": validation_passed
+            "success": False,
+            "error": "Failed to generate valid strategy code after retries"
         }
+    
+    description = _extract_description(strategy_code, prompt)
+    if is_edit:
+        name = existing_strategy.get('name', 'Strategy')
+    else:
+        name = _generate_strategy_name(prompt)
+    
+    saved_strategy = await save_strategy(
+        user_id=user_id,
+        name=name,
+        description=description,
+        prompt=prompt,
+        python_code=strategy_code,
+        strategy_id=strategy_id if is_edit else None
+    )
+    
+    return {
+        "success": True,
+        "strategy": saved_strategy,
+        "validation_passed": validation_passed
+    }
         
     
 
