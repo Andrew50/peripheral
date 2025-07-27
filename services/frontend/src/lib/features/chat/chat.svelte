@@ -119,6 +119,9 @@
 	// Processing state
 	let isProcessingMessage = false;
 
+	// Usage limit state
+	let showUpgradePrompt = false;
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -165,7 +168,7 @@
 		currentConversationTitle = 'New Chat';
 		isCurrentConversationPublic = false;
 
-		// Clear current chat and context items
+		// Clear current chat and context item
 		messagesStore.set([]);
 		contextItems.set([]); // Clear context items when creating new conversation
 
@@ -696,14 +699,22 @@
 
 				// Try to clean up pending message on backend for network errors
 				await cleanupPendingMessage(currentProcessingQuery);
-
-				const errorMessage: Message = {
-					message_id: errorMessageId,
-					content: 'Error: ' + getFriendlyErrorMessage(error),
-					sender: 'assistant',
-					timestamp: new Date(),
-					status: 'error'
-				};
+				
+				let errorMessage: Message;
+				
+				if (error.message === 'USAGE_LIMIT_REACHED') {
+					// Show upgrade prompt and set friendly error message
+					showUpgradePrompt = true;
+					return;
+				} else {
+					errorMessage = {
+						message_id: errorMessageId,
+						content: 'Error: ' + getFriendlyErrorMessage(error),
+						sender: 'assistant',
+						timestamp: new Date(),
+						status: 'error'
+					};
+				}
 
 				messagesStore.update((current) => [...current, errorMessage]);
 			}
@@ -734,13 +745,21 @@
 
 			// Add error message if we have a loading message
 			if (loadingMessage) {
-				const errorMessage: Message = {
-					message_id: errorMessageId,
-					content: 'Error: ' + getFriendlyErrorMessage(error),
-					sender: 'assistant',
-					timestamp: new Date(),
-					status: 'error'
-				};
+				let errorMessage: Message;
+				
+				if (error.message === 'USAGE_LIMIT_REACHED') {
+					// Show upgrade prompt and set friendly error message
+					showUpgradePrompt = true;
+					return;
+				} else {
+					errorMessage = {
+						message_id: errorMessageId,
+						content: 'Error: ' + getFriendlyErrorMessage(error),
+						sender: 'assistant',
+						timestamp: new Date(),
+						status: 'error'
+					};
+				}
 
 				messagesStore.update((current) => [...current, errorMessage]);
 			}
@@ -1748,6 +1767,21 @@
 					{/if}
 				</div>
 			{/each}
+			
+			<!-- Upgrade prompt displayed as part of chat when usage limit is reached -->
+			{#if showUpgradePrompt && !isPublicViewing}
+				<div class="message-wrapper assistant">
+					<div class="upgrade-prompt">
+						<p>You've reached your query limit. Upgrade to continue using Peripheral Agent without interruption.</p>
+						<button 
+							class="upgrade-btn"
+							on:click={() => window.location.href = '/pricing'}
+						>
+							View Plans
+						</button>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</div>
 
