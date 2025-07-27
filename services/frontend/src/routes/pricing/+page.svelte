@@ -1712,7 +1712,6 @@
 
 	.feature-column {
 		padding: 0.25rem 1.5rem;
-		border-right: 1px solid rgba(255, 255, 255, 0.08);
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
