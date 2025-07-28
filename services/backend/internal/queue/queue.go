@@ -24,25 +24,20 @@ type ResultUpdate struct {
 
 // BacktestResult represents the result of a backtest task
 type BacktestResult struct {
-	Success        bool               `json:"success"`
-	StrategyID     int                `json:"strategy_id"`
-	Version        int                `json:"version"`
-	Instances      []map[string]any   `json:"instances"`
-	Summary        BacktestSummary    `json:"summary"`
-	StrategyPrints string             `json:"strategy_prints,omitempty"`
-	StrategyPlots  []StrategyPlotData `json:"strategy_plots,omitempty"`
-	ResponseImages []string           `json:"response_images,omitempty"`
-	ErrorMessage   string             `json:"error_message,omitempty"`
-}
-
-// BacktestSummary represents backtest summary statistics
-type BacktestSummary struct {
-	TotalInstances            int      `json:"total_instances"`
-	PositiveInstances         int      `json:"positive_instances"`
-	DateRange                 []string `json:"date_range"`
-	SymbolsProcessed          int      `json:"symbols_processed"`
-	ExecutionType             string   `json:"execution_type,omitempty"`
-	SuccessfulClassifications int      `json:"successful_classifications,omitempty"`
+	Success                   bool               `json:"success"`
+	StrategyID                int                `json:"strategy_id"`
+	Version                   int                `json:"version"`
+	TotalInstances            int                `json:"total_instances"`
+	PositiveInstances         int                `json:"positive_instances"`
+	DateRange                 []string           `json:"date_range"`
+	SymbolsProcessed          int                `json:"symbols_processed"`
+	ExecutionType             string             `json:"execution_type,omitempty"`
+	SuccessfulClassifications int                `json:"successful_classifications,omitempty"`
+	Instances                 []map[string]any   `json:"instances"`
+	StrategyPrints            string             `json:"strategy_prints,omitempty"`
+	StrategyPlots             []StrategyPlotData `json:"strategy_plots,omitempty"`
+	ResponseImages            []string           `json:"response_images,omitempty"`
+	ErrorMessage              string             `json:"error_message,omitempty"`
 }
 
 // StrategyPlotData represents plotly plot data
@@ -54,15 +49,16 @@ type StrategyPlotData struct {
 
 // ScreeningResult represents the result of a screening task
 type ScreeningResult struct {
-	Success       bool                     `json:"success"`
-	RankedResults []map[string]interface{} `json:"ranked_results"`
-	ErrorMessage  string                   `json:"error_message,omitempty"`
+	Success   bool                     `json:"success"`
+	Instances []map[string]interface{} `json:"instances"`
+	Error     string                   `json:"error,omitempty"`
 }
 
 // AlertResult represents the result of an alert task
 type AlertResult struct {
-	Success      bool   `json:"success"`
-	ErrorMessage string `json:"error_message,omitempty"`
+	Success      bool                     `json:"success"`
+	Instances    []map[string]interface{} `json:"instances"`
+	ErrorMessage string                   `json:"error_message,omitempty"`
 }
 
 // CreateStrategyResult represents the result of a strategy creation task
@@ -116,6 +112,7 @@ type Handle struct {
 
 	// Internal fields for cleanup
 	taskID     string
+	taskType   string
 	statusID   string
 	conn       *data.Conn
 	updatesCh  chan ResultUpdate
@@ -210,6 +207,7 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 	handle := &Handle{
 		Updates:   updatesCh,
 		taskID:    taskID,
+		taskType:  taskType,
 		statusID:  statusID,
 		conn:      conn,
 		updatesCh: updatesCh,
@@ -617,7 +615,7 @@ func (h *Handle) requeueTask(ctx context.Context, retryCount int, reason string,
 
 	taskData := TaskData{
 		TaskID:            h.taskID,
-		TaskType:          "backtest", // Default, should be extracted from original
+		TaskType:          h.taskType, // Use the original task type
 		Kwargs:            string(kwargsJSON),
 		CreatedAt:         time.Now().Format(time.RFC3339),
 		Priority:          priorityStr,
@@ -734,12 +732,12 @@ func QueueCreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[str
 
 // QueuePythonAgent queues a general python agent task with default settings
 func QueuePythonAgent(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "general_python_agent", args, false, 3, 8*time.Minute)
+	return QueueTask(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 }
 
 // QueuePythonAgentTyped queues a general python agent task and returns a typed result
 func QueuePythonAgentTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*PythonAgentResult, error) {
-	handle, err := QueueTask(ctx, conn, "general_python_agent", args, false, 3, 8*time.Minute)
+	handle, err := QueueTask(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 	if err != nil {
 		return nil, err
 	}

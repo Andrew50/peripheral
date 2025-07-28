@@ -15,6 +15,10 @@ class NoSubscribersException(Exception):
 
 
 class Context():
+    """
+    Context is a class that provides a unified interface for all task execution contexts.
+    It is used to publish progress updates, results, and heartbeats to the Redis pubsub system.
+    """
 
     def __init__(self, conn: Conn, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str):
         self.conn = conn
@@ -37,10 +41,17 @@ class Context():
     def publish_update(self, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks using unified messaging"""
         try:
+            # Calculate elapsed time since task initialization
+            elapsed_time = time.time() - self.task_start_time
+            
+            # Prepare data payload with elapsed time
+            update_data = data.copy() if data else {}
+            update_data['elapsed_time'] = round(elapsed_time, 2)
+            
             self._publish_status(
                 message_type="update",
                 status=message,
-                data=data or {}
+                data=update_data
             )
         except Exception as e:
             logger.error(f"❌ Failed to publish progress for {self.task_id}: {e}")
@@ -56,13 +67,16 @@ class Context():
 
 
     # all status updates go through here
-    def _publish_status(self, message_type: str, status: str, data: Dict[str, Any]):
+    def _publish_status(self, message_type: str, status: str, data: Dict[str, Any], error: str = None):
         """Publish status update"""
+        elapsed_time = time.time() - self.task_start_time
         subscribers = self.conn.redis_client.publish(f"task_status:{self.status_id}", json.dumps({
             "task_id": self.task_id,
             "message_type": message_type,
             "status": status,
-            "data": data
+            "data": data,
+            "elapsed_time": elapsed_time,
+            "error": error
         }))
         if subscribers == 0:
             raise NoSubscribersException(f"No subscribers for task {self.task_id}")
@@ -75,30 +89,31 @@ class Context():
                 self.publish_update("heartbeat", {})
 
             except NoSubscribersException:
-                logger.warning(f"Task {self.task_id} has no subscribers, signalling cancellation.")
+                logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
                 self._cancellation_event.set()
                 break  # Stop heartbeat thread
             except Exception as e:
-                logger.error(f"❌ Heartbeat thread error: {e}")
+                logger.error("❌ Heartbeat thread error: %s", e)
             self._heartbeat_stop_event.wait(self.heartbeat_interval)
 
-    def publish_result(self, results: Dict[str, Any], status: str, error: str = None):
+    def publish_result(self, results: Dict[str, Any], error: str = None):
         """Set task result in Redis and publish unified update"""
+        # Calculate elapsed time since task initialization
         # Prepare data payload, include error if present
         payload = results.copy() if isinstance(results, dict) else {}
-        if error:
-            payload['error'] = error
+
         try:
             self._publish_status(
                 message_type="result",
-                status=status,
-                data=payload
+                status="completed",
+                error=error,
+                data=payload,
             )
         except NoSubscribersException:
             # It's ok if there are no subscribers when publishing final result.
             pass
         except Exception as e:
-            logger.error(f"❌ Failed to publish result: {e}")
+            logger.error("❌ Failed to publish result: %s", e)
 
     def destroy(self):
         """Destroy the execution context"""

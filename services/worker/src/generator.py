@@ -490,14 +490,14 @@ async def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: 
         
     
 
-async def _generate_and_validate_strategy(ctx: Context, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> tuple[str, bool]:
+async def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> tuple[str, bool]:
     """Generate strategy with validation retry logic"""
     
     last_validation_error = None
     
     for attempt in range(max_retries + 1):
         try:
-            strategy_code = _generate_strategy_code(ctx,userID, prompt, existing_strategy, attempt, last_validation_error, conversationID, messageID)
+            strategy_code = _generate_strategy_code(ctx, user_id, prompt, existing_strategy, last_validation_error, conversationID, messageID)
             if not strategy_code:
                 continue
             
@@ -512,7 +512,7 @@ async def _generate_and_validate_strategy(ctx: Context, userID: int, prompt: str
     return ""
 
 
-def _generate_strategy_code(ctx, userID: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None,  last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
+def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None,  last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
     """
     Generate strategy code using OpenAI with optimized prompts
     """
@@ -546,34 +546,29 @@ def _generate_strategy_code(ctx, userID: int, prompt: str, existing_strategy: Op
         model_name = "o3"
         last_error = None
         
-        try:
             
             #logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
-            
-            response = ctx.conn.openai_client.responses.create(
-                model=model_name,
-                reasoning={"effort": "low"},
-                input=f"{user_prompt}",
-                instructions=f"{system_instruction}",
-                user=f"user:0",
-                metadata={"userID": str(userID), "env": self.environment, "convID": conversationID, "msgID": messageID},
-                timeout=150.0  # 150 second timeout for other models
-            )
-            
-            strategy_code = response.output_text
-            strategy_code = _extract_python_code(strategy_code)
-            
-            return strategy_code
-            
-        except Exception as e:
-            last_error = e
-            logger.warning(f"Model {model_name} failed: {e}")
         
+        response = ctx.conn.openai_client.responses.create(
+            model=model_name,
+            reasoning={"effort": "low"},
+            input=f"{user_prompt}",
+            instructions=f"{system_instruction}",
+            user=f"user:0",
+            metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
+            timeout=150.0  # 150 second timeout for other models
+        )
         
+        strategy_code = response.output_text
+        strategy_code = _extract_python_code(strategy_code)
+        
+        return strategy_code
         
     except Exception as e:
-        logger.error(f"OpenAI code generation failed: {e}")
-        return ""
+        last_error = e
+        logger.warning(f"Model {model_name} failed: {e}")
+    
+        
 
     
 def _extract_python_code(self, response: str) -> str:

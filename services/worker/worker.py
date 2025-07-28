@@ -5,6 +5,7 @@ Executes trading strategies via Redis queue for backtesting and screening
 """
 
 import json
+import sys
 import traceback
 import datetime
 import time
@@ -12,19 +13,16 @@ import os
 import asyncio
 import redis
 import signal
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
-import logging
 
-import sys
-import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from validator import ValidationError
-from generator import create_strategy
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from agent import python_agent
@@ -34,6 +32,7 @@ from src.screen import screen
 from src.alert import alert
 from src.generator import create_strategy
 from src.agent import python_agent
+from src.utils.context import Context, NoSubscribersException
 
 #from utils.context import ExecutionContext, NoSubscribersException
 
@@ -58,7 +57,7 @@ class Worker:
         self._current_task_id = None
         self._current_status_id = None
         self._current_heartbeat_interval = None
-        self._task_start_time = None 
+        self._task_start_time = None
         self.func_map = {
             'backtest': backtest,
             'screen': screen,
@@ -73,23 +72,19 @@ class Worker:
         self._worker_start_time = time.time()
 
 
-        
         while True:
             task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
-            
             if not task:
                 self.conn.check_connections()
                 continue
-            
             queue_name, task_data = task
             self.tasks_processed += 1
-
             # parsing of task data, this shouldnt fail unless the task data is malformed which is not task dependent
             # therefore this shouldnt send an error message back as this cannot happen
             try:
                 task_data = json.loads(task_data)
             except json.JSONDecodeError as e:
-                logger.error(f"❌ Failed to parse task JSON: {e}")
+                logger.error("❌ Failed to parse task JSON: %s", e)
                 continue
                 
             task_id = task_data.get('task_id')
@@ -99,38 +94,40 @@ class Worker:
             status_id = task_data.get('status_id')  # Extract status_id for unified channel
             heartbeat_interval = task_data.get('heartbeat_interval')  # Extract heartbeat interval
             if not task_id or not task_type or not status_id or not heartbeat_interval or not priority:
-                logger.error(f"❌ Missing required task data: {task_data}")
+                logger.error("❌ Missing required task data: %s", task_data)
                 continue
 
             func = self.func_map.get(task_type, None)
             if not func:
-                logger.error(f"❌ Unknown task type: {task_type}.")
+                logger.error("❌ Unknown task type: %s.", task_type)
                 continue
 
-            execution_context = ExecutionContext(self.conn, strategy_generator, python_agent_generator, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
-            logger.debug(f"🔧 Executing {task_type} with args: {kwargs}")
-                    
+
+            execution_context = Context(self.conn, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
+            kwargs["ctx"] = execution_context
+            logger.debug("🔧 Executing %s with args: %s", task_type, kwargs)
+
             result = None
             error = None
 
             try:
-                result = asyncio.run(func(TaskContext(execution_context, self.conn, openai_client, gemini_client), **kwargs))
+                result = asyncio.run(func(**kwargs))
                 status = "completed"
             except NoSubscribersException as e:
-                logger.warning(f"Task {task_id} cancelled: {e}")
+                logger.warning("Task %s cancelled: %s", task_id, e)
                 status = "cancelled" # Special status for cancelled tasks
             except asyncio.TimeoutError as timeout_error:
-                logger.error(f"💥 Task {task_id} timed out: {timeout_error}")
+                logger.error("💥 Task %s timed out: %s", task_id, timeout_error)
                 status = "error"
                 error = f"Task execution timed out: {str(timeout_error)}"
             except MemoryError as memory_error:
-                logger.error(f"💥 Task {task_id} ran out of memory: {memory_error}")
+                logger.error("💥 Task %s ran out of memory: %s", task_id, memory_error)
                 status = "error"
                 error = f"Task execution failed due to memory constraints: {str(memory_error)}"
             except Exception as exec_error:
                 error = f"Task execution failed: {str(exec_error)}"
             finally:
-                execution_context.publish_result(result, status, error) #publish result and stop heartbeat
+                execution_context.publish_result(result, error) #publish result and stop heartbeat
                 execution_context.destroy() #stop heartbeat and context
 
 if __name__ == "__main__":
