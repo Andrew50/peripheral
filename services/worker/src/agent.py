@@ -8,7 +8,9 @@ import traceback
 import psycopg2
 import asyncio
 from typing import Dict, Any
-from validator import SecurityValidator
+from validator import ValidationError
+from utils.context import Context
+from utils.data_accessors import get_available_filter_values
 from sandbox import PythonSandbox, create_default_config
 import json
 from google import genai 
@@ -273,7 +275,7 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
                     metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
                     timeout=120.0  # 2 minute timeout for other models
                 )
-                pythonCode = self._extract_python_code(openaiResponse.output_text)
+                pythonCode = _extract_python_code(openaiResponse.output_text)
                 
                 # Validate code
                 is_valid = validate_code(pythonCode)
@@ -380,7 +382,7 @@ def _extract_python_code(response: str) -> str:
     # If no code blocks found, return the response as-is
     return response.strip()
 
-async def _save_agent_python_code(user_id: int, prompt: str, python_code: str, 
+async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, python_code: str, 
                                 execution_id: str, result: Any = None, prints: str = "", 
                                 plots: list = None, response_images: list = None, 
                                 error_message: str = None) -> bool:
@@ -389,8 +391,8 @@ async def _save_agent_python_code(user_id: int, prompt: str, python_code: str,
     cursor = None
     try:
         # Use connection manager if available, otherwise fallback to direct connection
-        self.conn.ensure_db_connection()
-        conn = self.conn.db_conn
+        ctx.conn.ensure_db_connection()
+        conn = ctx.conn.db_conn
         cursor = conn.cursor()
         
         # Convert complex objects to JSON strings for storage
@@ -414,8 +416,8 @@ async def _save_agent_python_code(user_id: int, prompt: str, python_code: str,
         
     except Exception as e:
         # Since this runs in background, we log errors but don't raise them
-        logger.error(f"❌ Failed to save Python agent execution {execution_id}: {e}")
-        logger.error(f"📄 Save execution traceback: {traceback.format_exc()}")
+        logger.error("❌ Failed to save Python agent execution %s: %s", execution_id, e)
+        logger.error("📄 Save execution traceback: %s", traceback.format_exc())
         # Don't raise - this is a background task and shouldn't affect user experience
         return False
     finally:
@@ -434,64 +436,65 @@ async def _save_agent_python_code(user_id: int, prompt: str, python_code: str,
 async def python_agent(ctx: Context, task_id: str = None, user_id: int = None, 
                                     prompt: str = None, data: str = None, conversationID: str = None, messageID: str = None, **kwargs) -> Dict[str, Any]:
 # Initialize defaults to avoid scope issues
-result, prints, plots, response_images = [], "", [], []
-execution_id = None  # Initialize to avoid UnboundLocalError
+    result, prints, plots, response_images = [], "", [], []
+    execution_id = None  # Initialize to avoid UnboundLocalError
 
-try:
-    # Validate input parameters
-    if user_id is None:
-        raise ValueError("user_id is required for general Python agent")
-    if not prompt or not prompt.strip():
-        raise ValueError("prompt is required for general Python agent")
-    
-    # Publish progress update
-    if task_id:
-        self._publish_progress(task_id, "initializing", "Starting general Python agent execution...")         
-    
-    # Execute with timeout
-    result, prints, plots, response_images, execution_id, error = await asyncio.wait_for(
-        python_agent_generator.start_general_python_agent(
-            user_id=user_id,
-            prompt=prompt,
-            data=data,
-            conversationID=conversationID,
-            messageID=messageID
-        ),
-        timeout=240.0  # 4 minute timeout
-    )
-    
-    # Check if there was an error
-    if error:
-        logger.error(f"❌ General Python agent execution FAILED for task {task_id}: {error}")
-        if task_id:
-            self._publish_progress(task_id, "error", f"Execution failed: {str(error)}")
-        raise error
-    
-    # Success case
-    #logger.info(f"✅ General Python agent execution SUCCESS for task {task_id}")
-    if task_id:
-        self._publish_progress(task_id, "completed", "Python agent execution completed successfully")
-    
-    return {
-        "success": True,
-        "result": result,
-        "prints": prints,
-        "plots": plots,
-        "responseImages": response_images,
-        "executionID": execution_id,
-    }
-    
-except Exception as e:
-    logger.error(f"💥 General Python agent task {task_id} failed: {e}")
-    
-    if task_id:
-        self._publish_progress(task_id, "error", f"Error: {str(e)}")
-    return {
-        "success": False,
-        "error": str(e),
-        "result": result,
-        "prints": prints,
-        "plots": plots,
-        "responseImages": response_images,
-        "executionID": execution_id,
-    }
+    try:
+        # Validate input parameters
+        if user_id is None:
+            raise ValueError("user_id is required for general Python agent")
+        if not prompt or not prompt.strip():
+            raise ValueError("prompt is required for general Python agent")
+        
+        # Publish progress update
+        #if task_id:
+            #ctx.publish_progress(task_id, "initializing", "Starting general Python agent execution...")         
+        
+        # Execute with timeout
+        result, prints, plots, response_images, execution_id, error = await asyncio.wait_for(
+            start_general_python_agent(
+                ctx=ctx,
+                user_id=user_id,
+                prompt=prompt,
+                data=data,
+                conversationID=conversationID,
+                messageID=messageID
+            ),
+            timeout=240.0  # 4 minute timeout
+        )
+        
+        # Check if there was an error
+        if error:
+            logger.error(f"❌ General Python agent execution FAILED for task {task_id}: {error}")
+            #if task_id:
+                #self._publish_progress(task_id, "error", f"Execution failed: {str(error)}")
+            raise error
+        
+        # Success case
+        #logger.info(f"✅ General Python agent execution SUCCESS for task {task_id}")
+        #if task_id:
+            #self._publish_progress(task_id, "completed", "Python agent execution completed successfully")
+        
+        return {
+            "success": True,
+            "result": result,
+            "prints": prints,
+            "plots": plots,
+            "responseImages": response_images,
+            "executionID": execution_id,
+        }
+        
+    except Exception as e:
+        logger.error(f"💥 General Python agent task {task_id} failed: {e}")
+        
+        #if task_id:
+            #self._publish_progress(task_id, "error", f"Error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "result": result,
+            "prints": prints,
+            "plots": plots,
+            "responseImages": response_images,
+            "executionID": execution_id,
+        }

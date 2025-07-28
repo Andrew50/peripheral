@@ -16,11 +16,8 @@ class NoSubscribersException(Exception):
 
 class Context():
 
-    def __init__(self, conn: Conn, strategy_generator: StrategyGenerator, python_agent_generator: PythonAgentGenerator, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str):
+    def __init__(self, conn: Conn, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str):
         self.conn = conn
-        self.llm_client = co
-        self.strategy_generator = strategy_generator
-        self.python_agent_generator = python_agent_generator
         self.start_time = time.time()
         self.task_id = task_id
         self.status_id = status_id

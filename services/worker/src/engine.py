@@ -5,29 +5,23 @@ instead of receiving DataFrames as parameters.
 """
 
 from datetime import datetime as dt, timedelta
-import sys
 import json
 import datetime
 import base64
 import logging
-import traceback
 import io
 import contextlib
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
-import numpy as np
-from utils.context import Context
 import plotly
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+
 from utils.plotlyToMatlab import plotly_to_matplotlib_png
-from utils.data_accessors import get_data_accessor
-
-from .validator import SecurityValidator, SecurityError
-
-from src.data_accessors import get_bar_data, get_general_data, generate_equity_curve
+from utils.context import Context
+from utils.data_accessors import _get_bar_data, _get_general_data
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +86,7 @@ class TrackedList(list):
 def execute_strategy(
     ctx: Context,
     strategy_code: str, 
+    strategy_id: int,
     version: int = None,
     start_date: str = "2003-01-01",
     end_date: str = dt.now().isoformat(),
@@ -102,7 +97,7 @@ def execute_strategy(
     """Execute the strategy function with data accessor context"""
 
     # Create safe execution environment with data accessor functions
-    safe_globals = _create_safe_globals()
+    safe_globals = _create_safe_globals(ctx, start_date, end_date)
     safe_locals = {}
 
     try:
@@ -123,7 +118,7 @@ def execute_strategy(
         try:
             # Capture stdout and plots during strategy execution
             stdout_buffer = io.StringIO()
-            with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(strategy_id, version):
+            with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(strategy_id, version) as (plots_collection, response_images):
                 instances = strategy_func()
             strategy_prints = stdout_buffer.getvalue()
 
@@ -166,7 +161,7 @@ def execute_strategy(
         logger.error("Strategy compilation or setup failed: %s", e)
         return [], "", [], [], e
 
-def _create_safe_globals() -> Dict[str, Any]:
+def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIntersect: List[str] = None) -> Dict[str, Any]:
     """Create safe execution environment with data accessor functions"""
 
     # Initialize plots collection for this execution
@@ -202,12 +197,16 @@ def _create_safe_globals() -> Dict[str, Any]:
                     fig.data[i].update(line=dict(color=color, width=2))
         return fig
     
-    def get_bar_data(timeframe,min_bars, columns=None, filters=None, 
+    def get_bar_data(timeframe, min_bars, columns=None, filters=None, 
                          extended_hours=False):
-        return _get_bar_data(ctx,start_date,end_date,timeframe, min_bars, columns, filters, 
-                                                    extended_hours)
+        return _get_bar_data(ctx,start_date,end_date,timeframe, columns, min_bars, filters, extended_hours)
     def get_general_data(columns=None, filters=None):
-        return _get_general_data(ctx,columns, filters, start_date, end_date)
+        #if the execution is called with a certain set of symboles then we need to intersect that with each get bar data call
+        # this will cause references to statuc symbols to possibly fail like if you are referencing spy in a strategy not returning spy
+        if symbolsIntersect :
+            filters['symbols'] = symbolsIntersect.intersection(filters['symbols'])
+        return _get_general_data(ctx, columns, filters)
+    
 
     safe_globals = {
         # Built-ins for safe execution (including __import__ for import statements)
@@ -245,7 +244,6 @@ def _create_safe_globals() -> Dict[str, Any]:
         # Bound data accessor functions (use this engine's instance)
         'get_bar_data': get_bar_data,
         'get_general_data': get_general_data,
-        'generate_equity_curve': generate_equity_curve,
         # Plot styling functions
         'apply_drawdown_styling': apply_drawdown_styling,
         'apply_equity_curve_styling': apply_equity_curve_styling,
@@ -276,7 +274,7 @@ def _plotly_capture_context(strategy_id=None, version=None):
     response_images = []
     plot_counter = 0
     # Create capture function
-    def capture_plot(fig, *args, **kwargs):
+    def capture_plot(fig):
         """Capture plot instead of showing it - extract only essential data"""
         nonlocal plot_counter
         try:

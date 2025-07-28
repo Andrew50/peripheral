@@ -19,12 +19,11 @@ import ast
 import logging
 import re
 import keyword
-import time
 import sys
 import traceback
-from typing import List, Dict, Any, Optional
-from .engine import execute_strategy
-from .utils.context import Context
+from typing import List, Dict, Any, Optional, Tuple
+from engine import execute_strategy
+from utils.context import Context
 
 logger = logging.getLogger(__name__)
 
@@ -726,7 +725,6 @@ def get_max_timeframe_and_min_bars(get_bar_data_function_calls: List[Dict[str, A
     Returns:
         Tuple of (max_timeframe, max_timeframe_min_bars)
     """
-    import re
 
     max_tf_priority = (0, 0)  # (category, multiplier)
     max_tf_str = None

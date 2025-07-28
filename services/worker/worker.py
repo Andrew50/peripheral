@@ -23,19 +23,19 @@ from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from engine import StrategyEngine
-from validator import SecurityValidator, SecurityError
-from generator import StrategyGenerator
+from validator import ValidationError
+from generator import create_strategy
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from utils.data_accessors import DataAccessorProvider
-from agent import PythonAgentGenerator
+from agent import python_agent
 from utils.conn import Conn
-from utils.strategy_crud import StrategyCRUD
-from utils.context import ExecutionContext, NoSubscribersException
-from entry import backtest, screen, alert, create_strategy, python_agent
-from openai import OpenAI
-from google import genai
+from src.backtest import backtest
+from src.screen import screen
+from src.alert import alert
+from src.generator import create_strategy
+from src.agent import python_agent
+
+#from utils.context import ExecutionContext, NoSubscribersException
 
 # Configure logging
 logging.basicConfig(
@@ -44,18 +44,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
-
-
-class TaskContext:
-    def __init__(self, conn: Conn, strategy_generator: StrategyGenerator, python_agent_generator: PythonAgentGenerator, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str):
-        self.conn = conn
-        self.ctx = executionContext
-        self.openai_client = openai_client
-        self.gemini_client = gemini_client
-
-
-    
-
 
 class Worker:
     """Redis queue-based strategy execution worker"""
@@ -81,12 +69,10 @@ class Worker:
 
     def run(self):
         """Main queue processing loop with priority queue support"""
-        logger.info(f"🎯 Strategy worker {self.worker_id} starting queue processing...")
+        logger.info("🎯 Strategy worker %s starting queue processing...", self.worker_id)
         self._worker_start_time = time.time()
 
 
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        gemini_client = GoogleGenerativeAI(api_key=os.getenv("GEMINI_API_KEY"))
         
         while True:
             task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)

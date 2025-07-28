@@ -17,11 +17,11 @@ import psycopg2
 from zoneinfo import ZoneInfo
 from psycopg2.extras import RealDictCursor, NamedTupleCursor
 
-from context import Context
+from .context import Context
 
 logger = logging.getLogger(__name__)
 
-def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, exectuion_mode: str, timeframe: str = "1d", columns: List[str] = None, 
+def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timeframe: str = "1d", columns: List[str] = None, 
                     min_bars: int = 1, filters: Dict[str, any] = None, 
                     extended_hours: bool = False) -> pd.DataFrame:
     """
@@ -61,7 +61,7 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, exectu
                 else:
                     tickers = None
         # Check if we need to use batching (now with potentially corrected tickers)
-        should_batch = _should_use_batching(ctx, tickers, exectuion_mode)
+        should_batch = _should_use_batching(tickers)
         
         if should_batch:
             return _get_bar_data_batched(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
@@ -72,7 +72,7 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, exectu
         logger.error("Error in get_bar_data: %s", e)
         return np.array([])
 
-def _should_use_batching(ctx: Context, tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
+def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
     """Determine if batching should be used based on the request parameters"""
     # Never batch if aggregate_mode is explicitly enabled
     if aggregate_mode:
@@ -87,7 +87,7 @@ def _should_use_batching(ctx: Context, tickers: List[str] = None, aggregate_mode
         return True
 
     # Batch when ticker list is large
-    if len(tickers) > 1000:
+    if len(tickers) > 250:
         #logger.info(f"🔄 Batching enabled: {len(tickers)} tickers > 1000 limit")
         return True
 
@@ -159,7 +159,7 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
                 return None
 
         # Process batches in parallel using ThreadPoolExecutor
-        logger.info(f"🚀 Processing {len(ticker_batches)} batches in parallel")
+        logger.info("🚀 Processing %d batches in parallel", len(ticker_batches))
         # Determine optimal number of workers based on batch count and system resources
         max_workers = min(len(ticker_batches), 10)  # Cap at 10 to avoid overwhelming the database
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -236,11 +236,11 @@ def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> Lis
             cursor.close()
         return [row[0] for row in results if row[0]]  # Filter out None tickers
     except Exception as e:
-        logger.error(f"Error fetching active tickers: {e}")
+        logger.error("Error fetching active tickers: %s", e)
         return []
 
 
-def _build_query(ctx: Context, timeframe: str, columns: List[str], min_bars: int,
+def _build_query(timeframe: str, columns: List[str], min_bars: int,
                 filters: Dict[str, any] = None, extended_hours: bool = False,
                 start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> tuple[str, List, List[str]]:
     """
@@ -526,7 +526,7 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
         safe_columns = [col for col in columns if col in allowed_columns]
 
         if not safe_columns:
-            return np.array([])
+            return np.arraa([])
         
         # Determine date range - check direct parameters first, then execution context
         
@@ -829,7 +829,7 @@ def _get_security_ids_from_tickers(ctx: Context, tickers: List[str], filters: Di
         logger.error("Error converting tickers to security IDs: %s", e)
         return []
 
-def get_general_data(ctx: Context, columns: List[str] = None, 
+def _get_general_data(ctx: Context, columns: List[str] = None, 
             filters: Dict[str, any] = None) -> pd.DataFrame:
     """
     Get general security information as pandas DataFrame
@@ -1147,3 +1147,53 @@ def _normalize_est(dt: datetime):
     if dt.tzinfo is None:
         return dt.replace(tzinfo=eastern)
     return dt.astimezone(eastern)
+
+def get_available_filter_values(ctx: Context) -> Dict[str, List[str]]:
+        """Get all available values for filter fields from the database"""
+        try:
+            with ctx.conn.get_connection() as conn:
+                cursor = conn.cursor()
+
+                filter_values = {}
+
+                # Get distinct sectors
+                cursor.execute("""
+                    SELECT DISTINCT sector 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL 
+                    ORDER BY sector
+                """)
+                filter_values['sectors'] = [row[0] for row in cursor.fetchall()]
+
+                # Get distinct industries
+                cursor.execute("""
+                    SELECT DISTINCT industry 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL 
+                    ORDER BY industry
+                """)
+                filter_values['industries'] = [row[0] for row in cursor.fetchall()]
+
+                # Get distinct primary exchanges
+                cursor.execute("""
+                    SELECT DISTINCT primary_exchange 
+                    FROM securities 
+                    WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL 
+                    ORDER BY primary_exchange
+                """)
+                filter_values['primary_exchanges'] = [row[0] for row in cursor.fetchall()]
+
+                cursor.close()
+                required_keys = ['sectors', 'industries', 'primary_exchanges']
+                for key in required_keys:
+                    if key not in filter_values or not filter_values[key]:
+                        raise ValueError(f"Database returned empty {key} list")
+                return filter_values
+
+        except Exception as e:
+            logger.error(f"Error fetching filter values: {e}")
+            return {
+                'sectors': [],
+                'industries': [],
+                'primary_exchanges': [],
+            }

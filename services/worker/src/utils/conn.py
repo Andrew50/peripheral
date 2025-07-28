@@ -11,6 +11,8 @@ from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from datetime import datetime
 import redis
+from openai import OpenAI
+from google import genai
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -23,9 +25,13 @@ class Conn:
         """Initialize all connections"""
         self.redis_client = self._init_redis()
         self.db_conn = self._init_database()
-        self.openai_client = self._init_openai_client()
-        self.gemini_client = self._init_gemini_client()
-        self.environment = self._init_environment()
+
+        self.openai_client = None
+        self.gemini_client = None
+        self._init_openai_client()
+        self._init_gemini_client()
+        self.environment = None
+        self._init_environment()
         logger.info("🔗 Conn initialized with Redis and Database connections")
 
     def _init_environment(self):
@@ -74,7 +80,7 @@ class Conn:
             client.ping()
             logger.info("✅ Redis connection established")
         except Exception as e:
-            logger.error(f"❌ Redis connection failed: {e}")
+            logger.error("❌ Redis connection failed: %s", e)
             raise
         
         return client
@@ -99,7 +105,7 @@ class Conn:
             logger.info("✅ Database connection established")
             return connection
         except Exception as e:
-            logger.error(f"❌ Failed to connect to database: {e}")
+            logger.error("❌ Failed to connect to database: %s", e)
             raise
     
     def ensure_db_connection(self):
@@ -112,17 +118,17 @@ class Conn:
                 try:
                     cursor.execute("SELECT 1")
                     result = cursor.fetchone()
-                    logger.debug(f"✅ Connection test successful, result: {result}")
+                    logger.debug("✅ Connection test successful, result: %s", result)
                 except psycopg2.Error as test_error:
-                    logger.error(f"❌ Database test query failed: {test_error}", exc_info=True)
-                    logger.error(f"🔍 PostgreSQL error details - Code: {getattr(test_error, 'pgcode', 'N/A')}, SQLSTATE: {getattr(test_error, 'sqlstate', 'N/A')}")
+                    logger.error("❌ Database test query failed: %s", test_error, exc_info=True)
+                    logger.error("🔍 PostgreSQL error details - Code: %s, SQLSTATE: %s", getattr(test_error, 'pgcode', 'N/A'), getattr(test_error, 'sqlstate', 'N/A'))
                     raise  # Re-raise to trigger reconnection
                 except Exception as unexpected_error:
-                    logger.error(f"❌ Unexpected error during database test query: {unexpected_error}", exc_info=True)
+                    logger.error("❌ Unexpected error during database test query: %s", unexpected_error, exc_info=True)
                     raise  # Re-raise to trigger reconnection
                     
         except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-            logger.warning(f"🔌 Database connection test failed, attempting reconnection: {e}", exc_info=True)
+            logger.warning("🔌 Database connection test failed, attempting reconnection: %s", e, exc_info=True)
             try:
                 # Close existing connection if it exists
                 if hasattr(self, 'db_conn') and self.db_conn:
@@ -139,24 +145,24 @@ class Conn:
                 logger.info("✅ Database reconnection successful")
                 
             except Exception as reconnect_error:
-                logger.error(f"❌ Failed to reconnect to database: {reconnect_error}", exc_info=True)
+                logger.error("❌ Failed to reconnect to database: %s", reconnect_error, exc_info=True)
                 raise  # Re-raise to let caller handle the failed reconnection
                 
         except psycopg2.Error as db_error:
             # Catch other PostgreSQL errors that might indicate transaction issues
-            logger.error(f"❌ PostgreSQL error during connection test: {db_error}", exc_info=True)
-            logger.error(f"🔍 Error details - Code: {getattr(db_error, 'pgcode', 'N/A')}, SQLSTATE: {getattr(db_error, 'sqlstate', 'N/A')}")
+            logger.error("❌ PostgreSQL error during connection test: %s", db_error, exc_info=True)
+            logger.error("🔍 Error details - Code: %s, SQLSTATE: %s", getattr(db_error, 'pgcode', 'N/A'), getattr(db_error, 'sqlstate', 'N/A'))
             
             # For transaction-related errors, try to rollback and reconnect
             if hasattr(db_error, 'pgcode') and db_error.pgcode in ['25P02']:  # current transaction is aborted
-                logger.warning(f"🔄 Detected aborted transaction (pgcode: {db_error.pgcode}), attempting recovery")
+                logger.warning("🔄 Detected aborted transaction (pgcode: %s), attempting recovery", db_error.pgcode)
                 try:
                     # Try to rollback the transaction
                     logger.debug("🔄 Attempting transaction rollback")
                     self.db_conn.rollback()
                     logger.info("✅ Transaction rollback successful")
                 except Exception as rollback_error:
-                    logger.warning(f"⚠️ Transaction rollback failed, forcing reconnection: {rollback_error}")
+                    logger.warning("⚠️ Transaction rollback failed, forcing reconnection: %s", rollback_error)
                     # If rollback fails, force a reconnection
                     try:
                         self.db_conn.close()
@@ -170,7 +176,7 @@ class Conn:
                 raise
                 
         except Exception as e:
-            logger.error(f"❌ Unexpected error testing database connection: {e}", exc_info=True)
+            logger.error("❌ Unexpected error testing database connection: %s", e, exc_info=True)
             # For other errors, don't reconnect to avoid infinite loops
             raise
     
@@ -191,7 +197,7 @@ class Conn:
         try:
             self.ensure_db_connection()
         except Exception as conn_error:
-            logger.error(f"❌ Failed to ensure database connection before transaction: {conn_error}", exc_info=True)
+            logger.error("❌ Failed to ensure database connection before transaction: %s", conn_error, exc_info=True)
             raise
         
         cursor = None
@@ -208,27 +214,27 @@ class Conn:
             
         except psycopg2.Error as db_error:
             # Database error occurred - rollback transaction
-            logger.error(f"❌ Database error in transaction, rolling back: {db_error}", exc_info=True)
-            logger.error(f"🔍 PostgreSQL error details - Code: {getattr(db_error, 'pgcode', 'N/A')}, SQLSTATE: {getattr(db_error, 'sqlstate', 'N/A')}")
+            logger.error("❌ Database error in transaction, rolling back: %s", db_error, exc_info=True)
+            logger.error("🔍 PostgreSQL error details - Code: %s, SQLSTATE: %s", getattr(db_error, 'pgcode', 'N/A'), getattr(db_error, 'sqlstate', 'N/A'))
             
             try:
                 self.db_conn.rollback()
                 logger.info("✅ Transaction rollback successful")
             except Exception as rollback_error:
-                logger.error(f"❌ Failed to rollback transaction: {rollback_error}", exc_info=True)
+                logger.error("❌ Failed to rollback transaction: %s", rollback_error, exc_info=True)
                 # Force reconnection if rollback fails
                 try:
                     self.db_conn.close()
                     self.db_conn = self._init_database()
                     logger.warning("⚠️ Forced database reconnection after rollback failure")
                 except Exception as reconnect_error:
-                    logger.error(f"❌ Failed to reconnect after rollback failure: {reconnect_error}", exc_info=True)
+                    logger.error("❌ Failed to reconnect after rollback failure: %s", reconnect_error, exc_info=True)
             
             raise  # Re-raise the original database error
             
         except Exception as general_error:
             # Non-database error occurred - still rollback transaction to be safe
-            logger.error(f"❌ Non-database error in transaction, rolling back: {general_error}", exc_info=True)
+            logger.error("❌ Non-database error in transaction, rolling back: %s", general_error, exc_info=True)
             
             try:
                 self.db_conn.rollback()
@@ -245,7 +251,7 @@ class Conn:
                     cursor.close()
                     logger.debug("🔌 Database cursor closed")
                 except Exception as close_error:
-                    logger.debug(f"⚠️ Error closing cursor (non-critical): {close_error}")
+                    logger.debug("⚠️ Error closing cursor (non-critical): %s", close_error)
     
     def check_connections(self):
         """Lightweight connection check - only when necessary"""
@@ -253,14 +259,14 @@ class Conn:
         try:
             self.redis_client.ping()
         except Exception as e:
-            logger.error(f"Redis connection lost, reconnecting: {e}")
+            logger.error("Redis connection lost, reconnecting: %s", e)
             self.redis_client = self._init_redis()
         
         # Lightweight DB connection check to prevent stale connections
         try:
             self.ensure_db_connection()
         except Exception as e:
-            logger.error(f"Database connection check failed: {e}")
+            logger.error("Database connection check failed: %s", e)
             # Don't raise here to avoid interrupting the worker loop
     
     def close_connections(self):
@@ -270,11 +276,11 @@ class Conn:
                 self.redis_client.close()
                 logger.info("🔌 Redis connection closed")
         except Exception as e:
-            logger.error(f"Error closing Redis connection: {e}")
+            logger.error("Error closing Redis connection: %s", e)
         
         try:
             if hasattr(self, 'db_conn') and self.db_conn:
                 self.db_conn.close()
                 logger.info("🔌 Database connection closed")
         except Exception as e:
-            logger.error(f"Error closing database connection: {e}") 
+            logger.error("Error closing database connection: %s", e) 
