@@ -61,7 +61,7 @@
 				The <span class="gradient-text">Intelligent</span> Trading Terminal
 			</h1>
 			<p class="hero-subtitle">
-				Peripheral enables you to envision and execute your trading ideas.<br />
+				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy in realtime.<br />
 			</p>
 			<a href="/signup" class="hero-cta-button">
 				Get Started for Free
