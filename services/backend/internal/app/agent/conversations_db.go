@@ -503,9 +503,11 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 	}
 
 	// Invalidate cache for this conversation since the message was updated
-	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
-		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
-	}
+	go func() {
+		if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+			fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
+		}
+	}()
 
 	return &messageData, nil
 }
