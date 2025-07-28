@@ -683,6 +683,26 @@ func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversat
 	return nil
 }
 
+func UpdateConversationPlot(ctx context.Context, conn *data.Conn, conversationID string, plotData string) error {
+	// Determine if plot data is provided
+	hasPlot := plotData != ""
+
+	querySQL := `
+		UPDATE conversations 
+		SET 
+			plot = $2,
+			has_plot = $3,
+			updated_at = $4
+		WHERE conversation_id = $1`
+
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, plotData, hasPlot, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update conversation plot: %w", err)
+	}
+
+	return nil
+}
+
 // ValidateMessageForEdit ensures the message can be edited
 func ValidateMessageForEdit(ctx context.Context, conn *data.Conn, conversationID string, messageOrder int) error {
 	// Check if message exists and get its details
