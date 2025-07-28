@@ -237,6 +237,8 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 // processTwitterWebhookEvent processes the extracted tweet data
 func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitter.ExtractedTweetData) error {
 	fmt.Println("queueTwitterWebhookEvent ruletag", ruleTag, "extractedTweets", tweets)
+	fmt.Println("tweets", tweets)
+	fmt.Println("ruleTag", ruleTag)
 	for _, tweet := range tweets {
 		if ruleTag == "Main Twitter" {
 			processTweet(conn, tweet)
