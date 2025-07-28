@@ -121,6 +121,41 @@ func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPeriphe
 	fmt.Println("Tweet sent successfully")
 }
 
+func SendTweetReplyToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPeripheralTweet, replyToTweetID string) { // TODO: Implement plot rendering and image upload
+	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
+	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
+	client := cfg.Client(oauth1.NoContext, token)
+	payload := map[string]any{"text": tweet.Text, "reply": map[string]any{"in_reply_to_tweet_id": replyToTweetID}}
+
+	if tweet.Image != "" {
+		imageID, err := UploadImageToTwitter(conn, tweet.Image)
+		if err != nil {
+			log.Printf("Error uploading image: %v", err)
+			return
+		}
+		payload["media"] = map[string]any{"media_ids": []string{imageID}}
+	}
+	body, _ := json.Marshal(payload)
+
+	req, err := http.NewRequest("POST", "https://api.x.com/2/tweets", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending tweet: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated { // 201 on success
+		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
+		return
+	}
+	fmt.Println("Tweet sent successfully")
+}
+
 func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
 	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
 	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
