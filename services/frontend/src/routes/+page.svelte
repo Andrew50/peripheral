@@ -68,7 +68,7 @@
 			</a>
 		</div>
 	</section>
-
+	<ChipSection />
 	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
@@ -95,7 +95,6 @@
 -->
 	
 	<!-- Ideas Chips Section -->
-	<ChipSection />
 	<!-- Footer -->
 	<SiteFooter />
 </main>
@@ -268,7 +267,7 @@
 	}
 
 	.features-title {
-		font-size: clamp(2.5rem, 5vw, 3.5rem);
+		font-size: clamp(3rem, 7vw, 4rem);
 		font-weight: 400;
 		margin: 0 0 4rem 0;
 		color: #f5f9ff;
@@ -306,7 +305,7 @@
 	}
 
 	.subsection-title {
-		font-size: clamp(2rem, 5vw, 2.5rem);
+		font-size: clamp(3rem, 7vw, 3.5rem);
 		font-weight: 400;
 		margin: 0 0 1.5rem 0;
 		color: #f5f9ff;
@@ -324,30 +323,13 @@
 
 	.subsection-description {
 		font-size: 1.2rem;
-		color: var(--color-primary);
+		color: #f5f9ff;
 		font-weight: 400;
 		margin-bottom: 1.5rem;
 		line-height: 1.5;
 	}
 
-	/* Specific styling for Frictionless Trading section */
-	.subsection.frictionless .subsection-title {
-		color: white;
-	}
 
-	.subsection.frictionless .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Analysis at the speed of now section */
-	.subsection.speed-analysis .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Never miss a trade section */
-	.subsection.never-miss .subsection-description {
-		color: white;
-	}
 
 	.subsection-content {
 		font-size: 1rem;
