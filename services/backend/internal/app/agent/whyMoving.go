@@ -176,7 +176,7 @@ func generateWhyMoving(conn *data.Conn, tickers []string) ([]WhyMovingResult, er
 	if err != nil {
 		return nil, fmt.Errorf("error creating gemini client: %w", err)
 	}
-	systemPrompt, err := getSystemInstruction("whyMovingPrompt")
+	systemPrompt, err := GetSystemInstruction("whyMovingPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting why moving system instruction: %w", err)
 	}

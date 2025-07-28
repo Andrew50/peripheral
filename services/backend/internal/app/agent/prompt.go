@@ -302,7 +302,7 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	if err != nil {
 		return
 	}
-	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("defaultSystemPrompt")
 	if err != nil {
 		return
 	}

@@ -69,6 +69,7 @@ metadata:
 spec:
   # Run at 6:00 AM and 6:00 PM every day
   schedule: "0 6,18 * * *"
+  suspend: true
   timeZone: "UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 5
@@ -76,7 +77,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 1800  # 30 minutes timeout
+      activeDeadlineSeconds: 1800 # 30 minutes timeout
       template:
         metadata:
           labels:
@@ -144,7 +145,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Only one monitor should run
+    type: Recreate # Only one monitor should run
   selector:
     matchLabels:
       app: db-health-monitor
@@ -263,7 +264,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      activeDeadlineSeconds: 3600  # 1 hour timeout
+      activeDeadlineSeconds: 3600 # 1 hour timeout
       template:
         metadata:
           labels:
@@ -383,7 +384,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      activeDeadlineSeconds: 600  # 10 minutes timeout
+      activeDeadlineSeconds: 600 # 10 minutes timeout
       template:
         metadata:
           labels:

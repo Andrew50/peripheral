@@ -19,18 +19,11 @@
 	// Subsections data
 	const subsections = [
 		{
-			title: 'Transform ideas into edge in minutes',
+			title: 'Backtest trading ideas',
 			description:
 				'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
 			content: '',
 			image: '/query_glass.png'
-		},
-		{
-			title: 'Never miss a trade.',
-			description:
-				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
-			content: '',
-			image: '/alert_glass.png'
 		},
 		{
 			title: 'Analysis now, not after the trade',
@@ -38,6 +31,13 @@
 				'In dynamic, fast-moving markets, every second counts. Our agent analyzes headlines, fundamental events, and data 100% faster than ChatGPT and Perplexity.',
 			content: '',
 			image: '/splash-speed-color.png'
+		},
+		{
+			title: 'Never miss a trade.',
+			description:
+				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
+			content: '',
+			image: '/alert_glass.png'
 		},
 		{
 			title: 'Frictionless trading.',
@@ -72,6 +72,8 @@
 	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
+		<h2 class="features-title">Features</h2>
+		
 		<div class="subsections-content">
 			{#each subsections as subsection, index}
 				<div class="subsection" class:reverse={index % 2 === 0} class:frictionless={index === 3} class:speed-analysis={index === 2} class:never-miss={index === 1}>
@@ -299,6 +301,16 @@
 		flex-shrink: 0;
 	}
 
+	.features-title {
+		font-size: clamp(2.5rem, 5vw, 3.5rem);
+		font-weight: 800;
+		margin: 0 0 4rem 0;
+		color: #f5f9ff;
+		line-height: 1.2;
+		text-align: center;
+		letter-spacing: -0.02em;
+	}
+
 	.subsections-content {
 		width: 80vw;
 		max-width: 1400px;
@@ -396,16 +408,11 @@
 
 	/* Make query_glass.png bigger */
 	.subsection:first-child .subsection-image {
-		max-width: 1000px;
+		max-width: 1200px;
 	}
 	
 	.subsection:first-child .subsection-image img {
-		max-width: 1000px;
-	}
-
-	/* Make the study.png image white (first subsection) */
-	.subsection:first-child .subsection-image img {
-		filter: brightness(0) invert(1);
+		max-width: 1200px;
 	}
 
 	/* Responsive Design */

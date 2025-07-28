@@ -216,7 +216,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	barsJSON, _ := json.MarshalIndent(processedBars, "", "  ") // Use processedBars
 
-	sysPrompt, err := getSystemInstruction("initialQueriesPrompt")
+	sysPrompt, err := GetSystemInstruction("initialQueriesPrompt")
 	if err != nil {
 		////fmt.Printf("Error getting system instruction: %v\n", err)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, fmt.Errorf("error fetching system prompt: %w", err)
