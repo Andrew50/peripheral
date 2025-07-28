@@ -158,7 +158,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Verify the X-API-Key header for request authenticity
-		/*twitterAPIKey := r.Header.Get("X-API-Key")
+		twitterAPIKey := r.Header.Get("X-API-Key")
 		if twitterAPIKey == "" {
 			log.Printf("Twitter webhook request missing X-API-Key header")
 			http.Error(w, "Missing API key", http.StatusUnauthorized)
@@ -169,7 +169,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Twitter webhook request with invalid API key: %s", twitterAPIKey)
 			http.Error(w, "Invalid API key", http.StatusUnauthorized)
 			return
-		}*/
+		}
 
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
