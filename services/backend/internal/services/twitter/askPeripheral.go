@@ -192,7 +192,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		Image: base64PNG,
 	}
 	fmt.Println("Tweet response", formattedAskPeripheralTweet)
-	//SendTweetToPeripheralTwitterAccount(conn, formattedAskPeripheralTweet)
+	SendTweetReplyToPeripheralTwitterAccount(conn, formattedAskPeripheralTweet, tweet.ID)
 
 	return nil
 }
