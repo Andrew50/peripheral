@@ -20,6 +20,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 	// Remove @askperipheral mentions (case insensitive)
 	tweetText = strings.ReplaceAll(tweetText, "@AskPeripheral ", "")
 	tweetText = strings.ReplaceAll(tweetText, "@askPeripheral ", "")
+	tweetText = strings.ReplaceAll(tweetText, "@askperipheral ", "")
 	tweetText = strings.ReplaceAll(tweetText, "@PeripheralIO ", "")
 	tweetText = strings.ReplaceAll(tweetText, "@peripheralio ", "")
 
