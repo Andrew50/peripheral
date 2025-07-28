@@ -46,11 +46,42 @@
 </script>
 
 <svelte:head>
+	<!-- Basic meta tags -->
 	<title>Join with Invite Code - Peripheral</title>
 	<meta
 		name="description"
 		content="Join Peripheral with your exclusive invite code and start your free trial."
 	/>
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Join with Invite Code - Peripheral.io" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta
+		property="og:description"
+		content="Join Peripheral with your exclusive invite code and start your free trial."
+	/>
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Join with Invite Code - Peripheral.io" />
+	<meta
+		name="twitter:description"
+		content="Join Peripheral with your exclusive invite code and start your free trial."
+	/>
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
 
 <main class="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -100,11 +131,8 @@
 <style>
 	/* Custom styles for the invite page */
 	main {
-		background-image: radial-gradient(
-				circle at 25% 25%,
-				rgba(59, 130, 246, 0.1) 0%,
-				transparent 50%
-			),
+		background-image:
+			radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
 			radial-gradient(circle at 75% 75%, rgba(168, 85, 247, 0.1) 0%, transparent 50%);
 	}
 </style>
