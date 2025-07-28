@@ -20,8 +20,8 @@ var (
 	systemPromptCacheMutex      sync.RWMutex
 )
 
-// getSystemInstruction returns the processed prompt named <name>.txt
-func getSystemInstruction(name string) (string, error) {
+// GetSystemInstruction returns the processed prompt named <name>.txt
+func GetSystemInstruction(name string) (string, error) {
 	raw, err := fs.ReadFile("prompts/" + name + ".txt") // 3️⃣ no paths, no os.ReadFile
 	if err != nil {
 		return "", fmt.Errorf("reading prompt: %w", err)

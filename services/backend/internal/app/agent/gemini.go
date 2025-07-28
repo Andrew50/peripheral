@@ -35,7 +35,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 	}
 
 	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
+	baseSystemInstruction, err := GetSystemInstruction(systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
