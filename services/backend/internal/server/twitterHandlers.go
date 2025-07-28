@@ -245,6 +245,7 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 				log.Printf("Warning: failed to handle tweet for reply: %v", err)
 			}
 		} else if ruleTag == "Ask Peripheral" {
+			fmt.Println("Processing @Ask Peripheral tweet", tweet)
 			twitter.GenerateAskPeripheralTweet(conn, tweet)
 		}
 	}
