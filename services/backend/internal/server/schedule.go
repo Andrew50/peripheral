@@ -516,8 +516,6 @@ func (s *JobScheduler) Start() chan struct{} {
 				ticker.Stop()
 				queueStatusTicker.Stop()
 				// Stop alert loop and polygon websocket when scheduler stops
-				stopAlertLoop()
-				stopPolygonWebSocket()
 				s.mutex.Lock()
 				s.IsRunning = false
 				s.mutex.Unlock()
