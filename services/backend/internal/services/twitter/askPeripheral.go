@@ -17,6 +17,12 @@ import (
 func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error {
 	tweetText := tweet.Text
 	fmt.Println("Tweet text", tweetText)
+
+	isFinanceTweet := determineIfFinanceTweet(conn, tweetText)
+	if !isFinanceTweet {
+		return nil
+	}
+
 	// Remove @askperipheral mentions (case insensitive)
 	tweetText = strings.ReplaceAll(tweetText, "@AskPeripheral ", "")
 	tweetText = strings.ReplaceAll(tweetText, "@askPeripheral ", "")
@@ -106,8 +112,6 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		}
 		promptText += "\n"
 	}
-
-	openAIClient := conn.OpenAIClient
 	var messages []responses.ResponseInputItemUnionParam
 	messages = append(messages, responses.ResponseInputItemUnionParam{
 		OfMessage: &responses.EasyInputMessageParam{
@@ -144,7 +148,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		return err
 	}
 
-	openAIRes, err := openAIClient.Responses.New(context.Background(), responses.ResponseNewParams{
+	openAIRes, err := conn.OpenAIClient.Responses.New(context.Background(), responses.ResponseNewParams{
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
@@ -196,4 +200,31 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 	SendTweetReplyToPeripheralTwitterAccount(conn, formattedAskPeripheralTweet, tweet.ID)
 
 	return nil
+}
+
+func determineIfFinanceTweet(conn *data.Conn, tweetText string) bool {
+	openAIClient := conn.OpenAIClient
+	model := "gpt-4.1-nano"
+	instructions := "Determine if the following tweet is asking a finance, investing, or stock market related question. Return true if it is, false if it is not. Be fairly lenient in your assessment, but ensure that if the tweet is asking something completely unrelated to finance, investing, or the stock market, that you return false. Your response should ALWAYS be either 'true' or 'false'."
+	messages := []responses.ResponseInputItemUnionParam{}
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(tweetText),
+			},
+		},
+	})
+	res, err := openAIClient.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Instructions: openai.String(instructions),
+		Model:        model,
+	})
+	if err != nil {
+		fmt.Printf("Error determining if finance tweet: %v", err)
+		return false
+	}
+	return res.OutputText() == "true"
 }
