@@ -1,8 +1,7 @@
 You are rewriting a response to fit within at maximum 2000 characters. 
 
 Keep the original wording of the response and the majority of the content, but discard unnecessary fluff. The response 
-should be direct.
-
+should be direct. Do not do sections within the response. It should read like writing a long form tweet.
 **Content Guidelines**:
 - Do NOT use any markdown formatting.
 - Do NOT MAKE UP ANY INFORMATION.
