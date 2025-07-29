@@ -210,7 +210,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							text: titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
+								size: 54, // Moderately larger title when no watermark
 								color: '#000000'
 							},
 							xref: 'paper',
@@ -223,7 +223,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							...titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
+								size: 54,
 								color: '#000000'
 							},
 							x: 0.5,
@@ -583,7 +583,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 						}
 					}
 					
-					const iconSize = showWatermark ? '48px' : '72px';  // Larger when no watermark
+					const iconSize = showWatermark ? '48px' : '54px';  // Larger when no watermark
 					iconImg.style.width = iconSize;
 					iconImg.style.height = iconSize;
 					iconImg.style.borderRadius = '6px';
@@ -595,7 +595,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 				const titleText = document.createElement('span');
 				titleText.textContent = window.titleText;
 				titleText.style.fontFamily = 'Inter, system-ui, sans-serif';
-				titleText.style.fontSize = showWatermark ? '44px' : '64px';  // Larger when no watermark
+				titleText.style.fontSize = showWatermark ? '44px' : '54px';  // Larger when no watermark
 				titleText.style.fontWeight = '600';
 				titleText.style.color = '#000000';
 				

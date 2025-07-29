@@ -59,14 +59,6 @@ func SendTweetReplyToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPe
 	client := cfg.Client(oauth1.NoContext, token)
 	payload := map[string]any{"text": tweet.Text, "reply": map[string]any{"in_reply_to_tweet_id": replyToTweetID}}
 
-	if tweet.Image != "" {
-		imageID, err := UploadImageToTwitter(conn, tweet.Image)
-		if err != nil {
-			log.Printf("Error uploading image: %v", err)
-			return
-		}
-		payload["media"] = map[string]any{"media_ids": []string{imageID}}
-	}
 	body, _ := json.Marshal(payload)
 
 	req, err := http.NewRequest("POST", "https://api.x.com/2/tweets", bytes.NewBuffer(body))
