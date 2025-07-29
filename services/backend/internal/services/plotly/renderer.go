@@ -210,7 +210,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							text: titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: showWatermark ? 54 : 88, // Larger title when no watermark
+								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
 								color: '#000000'
 							},
 							xref: 'paper',
@@ -223,7 +223,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							...titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: showWatermark ? 54 : 88, // Larger title when no watermark
+								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
 								color: '#000000'
 							},
 							x: 0.5,
@@ -234,12 +234,13 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			}
 			
 			// Margin configuration - better centered for larger canvas (1600x1133)
-			// Adjust bottom margin based on watermark presence
+			// Adjust margins based on watermark presence
 			const bottomMargin = showWatermark ? 180 : 80; // Reduced bottom margin when no watermark
+			const topMargin = showWatermark ? 120 : 140; // Increased top margin for larger title when no watermark
 			if (!plotLayout.margin) {
-				plotLayout.margin = { l: 220, r: 220, t: 120, b: bottomMargin, autoexpand: true };
+				plotLayout.margin = { l: 220, r: 220, t: topMargin, b: bottomMargin, autoexpand: true };
 			} else {
-				plotLayout.margin.t = 120; // Increased for title and better vertical centering
+				plotLayout.margin.t = topMargin; // Adjust for title size and positioning
 				plotLayout.margin.b = bottomMargin; // Adjust for watermark presence
 				plotLayout.margin.l = 220; // Increased left margin for better horizontal centering
 				plotLayout.margin.r = 220; // Increased right margin to accommodate legend
@@ -546,7 +547,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
-				titleContainer.style.top = '50px';  // Adjusted for larger canvas
+				titleContainer.style.top = showWatermark ? '50px' : '80px';  // More top padding when no watermark
 				titleContainer.style.left = '50%';
 				titleContainer.style.transform = 'translateX(-50%)';
 				titleContainer.style.display = 'flex';
@@ -582,7 +583,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 						}
 					}
 					
-					const iconSize = showWatermark ? '48px' : '96px';  // 2x larger when no watermark
+					const iconSize = showWatermark ? '48px' : '72px';  // Larger when no watermark
 					iconImg.style.width = iconSize;
 					iconImg.style.height = iconSize;
 					iconImg.style.borderRadius = '6px';
@@ -594,7 +595,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 				const titleText = document.createElement('span');
 				titleText.textContent = window.titleText;
 				titleText.style.fontFamily = 'Inter, system-ui, sans-serif';
-				titleText.style.fontSize = showWatermark ? '44px' : '88px';  // 2x larger when no watermark
+				titleText.style.fontSize = showWatermark ? '44px' : '64px';  // Larger when no watermark
 				titleText.style.fontWeight = '600';
 				titleText.style.color = '#000000';
 				
