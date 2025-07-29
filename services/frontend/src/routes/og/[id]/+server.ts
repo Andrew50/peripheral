@@ -128,7 +128,8 @@ export async function GET({ params }: { params: { id: string } }) {
 									paddingLeft: '0px',
 									paddingTop: '106px',
 									paddingBottom: '0px',
-									height: '100%'
+									height: '100%',
+									minHeight: '630px' // Ensure full height usage
 								},
 								children: [
 									// Plot area - use actual plot if available, otherwise placeholder
@@ -137,25 +138,33 @@ export async function GET({ params }: { params: { id: string } }) {
 										props: {
 											style: {
 												width: '100%',
-												height: '100%',
-												borderRadius: '12px 12px 0px 0px',
+												flex: '1', // Take up all remaining space
 												display: 'flex',
 												alignItems: 'center',
 												justifyContent: 'center',
-												backgroundImage: `url(data:image/png;base64,${plot})`,
-												backgroundSize: 'contain',
-												backgroundPosition: 'center',
-												backgroundRepeat: 'no-repeat'
-											}
+												padding: '0 0 15px 0' // Reduced padding to make border radius more visible
+											},
+											children: [{
+												type: 'img',
+												props: {
+													src: `data:image/png;base64,${plot}`,
+													style: {
+														width: '100%',
+														height: '100%',
+														objectFit: 'contain',
+														borderRadius: '24px 24px 0px 0px'
+													}
+												}
+											}]
 										}
 									} : {
 										type: 'div',
 										props: {
 											style: {
 												width: '100%',
-												height: '100%',
+												flex: '1', // Take up all remaining space
 												backgroundColor: 'rgba(255, 255, 255, 0.1)',
-												borderRadius: '12px 12px 0px 0px',
+												borderRadius: '24px 24px 0px 0px',
 												display: 'flex',
 												alignItems: 'center',
 												justifyContent: 'center'

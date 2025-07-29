@@ -47,7 +47,7 @@ func RenderTwitterPlotToBase64(conn *data.Conn, plot interface{}, watermark bool
 					}
 				}
 
-				//saveImageToContainer(base64PNG)
+				saveImageToContainer(base64PNG)
 				return base64PNG, nil
 			}
 		}

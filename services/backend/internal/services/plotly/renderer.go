@@ -45,8 +45,8 @@ func DefaultPlotConfig() PlotConfig {
 // DefaultPlotConfigNoWatermark returns config without watermark and adjusted sizing
 func DefaultPlotConfigNoWatermark() PlotConfig {
 	return PlotConfig{
-		Width:         1600,
-		Height:        1133,
+		Width:         1474,
+		Height:        1000,
 		ShowWatermark: false,
 	}
 }
@@ -235,8 +235,8 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			
 			// Margin configuration - better centered for larger canvas (1600x1133)
 			// Adjust margins based on watermark presence
-			const bottomMargin = showWatermark ? 180 : 80; // Reduced bottom margin when no watermark
-			const topMargin = showWatermark ? 120 : 140; // Increased top margin for larger title when no watermark
+			const bottomMargin = showWatermark ? 180 : 80; // Minimal bottom margin when no watermark
+			const topMargin = showWatermark ? 120 : 120; // Consistent top margin regardless of watermark
 			if (!plotLayout.margin) {
 				plotLayout.margin = { l: 220, r: 220, t: topMargin, b: bottomMargin, autoexpand: true };
 			} else {
@@ -547,7 +547,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
-				titleContainer.style.top = showWatermark ? '50px' : '80px';  // More top padding when no watermark
+				titleContainer.style.top = showWatermark ? '50px' : '20px';  // Reduced top padding when no watermark
 				titleContainer.style.left = '50%';
 				titleContainer.style.transform = 'translateX(-50%)';
 				titleContainer.style.display = 'flex';
