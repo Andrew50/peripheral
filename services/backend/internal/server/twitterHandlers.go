@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"backend/internal/app/agent"
+	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
 	"backend/internal/services/twitter"
 
@@ -331,7 +332,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweet
 	agentResult.Plot = samplePlot*/
 
 	var base64PNG string
-	base64PNG, err = twitter.RenderTwitterPlotToBase64(conn, agentResult.Plot)
+	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, false)
 	if err != nil {
 		log.Printf("🚨 ERROR rendering Twitter plot: %v", err)
 	}

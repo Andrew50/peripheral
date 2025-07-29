@@ -6,6 +6,7 @@ import (
 	"backend/internal/app/limits"
 	"backend/internal/app/strategy"
 	"backend/internal/data"
+	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
 	"context"
 	"encoding/json"
@@ -240,6 +241,31 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 				if err := limits.RecordUsage(conn, userID, limits.UsageTypeCredits, 1, metadata); err != nil {
 					fmt.Printf("Warning: Failed to record usage for user %d: %v\n", userID, err)
+				}
+				// Update conversation plot if there is none yet
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+				hasPlot, err := HasConversationPlot(ctx, conn, conversationID)
+				if err != nil {
+					fmt.Printf("Warning: failed to check if conversation has plot: %v\n", err)
+				}
+				if !hasPlot {
+					for _, chunk := range v.ContentChunks {
+						if chunk.Type == "plot" {
+							plotBase64, err := plotly.RenderTwitterPlotToBase64(conn, chunk.Content, false)
+							if err != nil {
+								fmt.Printf("Warning: failed to render plot: %v\n", err)
+								continue
+							}
+							err = UpdateConversationPlot(ctx, conn, conversationID, plotBase64)
+							fmt.Printf("\n\n\nUpdated conversation plot")
+							if err != nil {
+								fmt.Printf("Warning: failed to update conversation plot: %v\n", err)
+								continue
+							}
+							break
+						}
+					}
 				}
 			}()
 

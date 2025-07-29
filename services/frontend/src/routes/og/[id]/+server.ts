@@ -35,17 +35,28 @@ export async function GET({ params }: { params: { id: string } }) {
 
 		// ---------- 2) Fetch data ----------------------
 		const snippetData = await getChatSnippet(params.id);
-		const { q } = snippetData ?? {
+		const { q, plot } = snippetData ?? {
 			t: 'Peripheral Chat',
-			q: 'Can you get all the dates of the big boeing plane crashes within the last 5 years....',
-			a: 'The new best way to trade.'
+			q: 'what do you think about $RDDT here based on the price action and give a preview of the upcoming earnings',
+			a: 'The new best way to trade.',
+			plot: ''
 		};
 
 		// Use the user query as the main title
 		const rawTitle = q || 'Peripheral Query';
-		const title = rawTitle.length > 95 ? rawTitle.substring(0, 95) + '...' : rawTitle;
+		const title = rawTitle.length > 105 ? rawTitle.substring(0, 105) + '...' : rawTitle;
 
-		// ---------- 3) Render SVG via Satori -----------
+		// ---------- 3) Load background image -----------
+		let backgroundImageBase64 = '';
+		try {
+			const backgroundImagePath = path.join(process.cwd(), 'static', 'opengraph-background.png');
+			const backgroundImageBuffer = await fs.readFile(backgroundImagePath);
+			backgroundImageBase64 = `data:image/png;base64,${backgroundImageBuffer.toString('base64')}`;
+		} catch (error) {
+			console.warn('Could not load background image, falling back to gradient:', error);
+		}
+
+		// ---------- 4) Render SVG via Satori -----------
 		const svg = await satori(
 			{
 				type: 'div',
@@ -54,97 +65,111 @@ export async function GET({ params }: { params: { id: string } }) {
 						width: WIDTH,
 						height: HEIGHT,
 						display: 'flex',
-						flexDirection: 'column',
-						background: 'linear-gradient(135deg, #308494 0%, #2c7a85 100%)',
+						flexDirection: 'row',
+						...(backgroundImageBase64 
+							? {
+								backgroundImage: `url(${backgroundImageBase64})`,
+								backgroundSize: 'cover',
+								backgroundPosition: 'center',
+								backgroundRepeat: 'no-repeat'
+							}
+							: {
+								background: 'linear-gradient(135deg, #308494 0%, #2c7a85 100%)'
+							}
+						),
 						color: 'white',
-						padding: '48px',
+						padding: '24px 48px 0px 0px',
 						fontFamily: 'Inter',
 						position: 'relative',
 						borderRadius: '16px'
 					},
 					children: [
-						// Main title at the top
-						{
-							type: 'h1',
-							props: {
-								style: {
-									fontSize: '72px',
-									margin: '0 0 60px 0',
-									lineHeight: 1.2,
-									fontWeight: '600',
-									color: '#ffffff',
-									flex: '1'
-								},
-								children: title
-							}
-						},
-						// Bottom section with logo/branding and arrow
+						// Left side - Title area
 						{
 							type: 'div',
 							props: {
 								style: {
+									width: '415px',
 									display: 'flex',
-									justifyContent: 'space-between',
-									alignItems: 'center',
-									width: '100%'
+									flexDirection: 'column',
+									justifyContent: 'flex-start',
+									paddingTop: '106px',
+									paddingLeft: '20px',
+									paddingRight: '15px'
 								},
 								children: [
-									// Left side - Atlantis branding
 									{
-										type: 'div',
+										type: 'h1',
 										props: {
 											style: {
-												display: 'flex',
-												alignItems: 'center'
+												fontSize: '44px',
+												margin: '0',
+												lineHeight: 1.3,
+												fontWeight: '400',
+												color: '#ffffff',
+												letterSpacing: '-0.04em'
 											},
-											children: [
-												{
-													type: 'span',
-													props: {
-														style: {
-															fontSize: '84px',
-															fontWeight: '600',
-															color: '#ffffff'
-														},
-														children: 'Peripheral'
-													}
-												}
-											]
+											children: title
 										}
-									},
-									// Right side - Arrow
-									{
+									}
+								]
+							}
+						},
+						// Right side - Content area (for charts, etc.)
+						{
+							type: 'div',
+							props: {
+								style: {
+									flex: '1',
+									display: 'flex',
+									flexDirection: 'column',
+									justifyContent: 'flex-start',
+									alignItems: 'stretch',
+									paddingLeft: '0px',
+									paddingTop: '106px',
+									paddingBottom: '0px',
+									height: '100%'
+								},
+								children: [
+									// Plot area - use actual plot if available, otherwise placeholder
+									plot ? {
 										type: 'div',
 										props: {
 											style: {
-												width: '108px',
-												height: '108px',
-												borderRadius: '50%',
-												background: '#43daf5',
+												width: '100%',
+												height: '100%',
+												borderRadius: '12px 12px 0px 0px',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'center',
+												backgroundImage: `url(data:image/png;base64,${plot})`,
+												backgroundSize: 'contain',
+												backgroundPosition: 'center',
+												backgroundRepeat: 'no-repeat'
+											}
+										}
+									} : {
+										type: 'div',
+										props: {
+											style: {
+												width: '100%',
+												height: '100%',
+												backgroundColor: 'rgba(255, 255, 255, 0.1)',
+												borderRadius: '12px 12px 0px 0px',
 												display: 'flex',
 												alignItems: 'center',
 												justifyContent: 'center'
 											},
 											children: [
 												{
-													type: 'svg',
+													type: 'span',
 													props: {
-														viewBox: '0 0 18 18',
-														width: '70',
-														height: '70',
 														style: {
-															transform: 'rotate(90deg)',
-															fill: '#ffffff'
+															fontSize: '24px',
+															color: 'rgba(255, 255, 255, 0.7)',
+															textAlign: 'center'
 														},
-														children: [
-															{
-																type: 'path',
-																props: {
-																	d: 'M7.99992 14.9993V5.41334L4.70696 8.70631C4.31643 9.09683 3.68342 9.09683 3.29289 8.70631C2.90237 8.31578 2.90237 7.68277 3.29289 7.29225L8.29289 2.29225L8.36906 2.22389C8.76184 1.90354 9.34084 1.92613 9.70696 2.29225L14.707 7.29225L14.7753 7.36842C15.0957 7.76119 15.0731 8.34019 14.707 8.70631C14.3408 9.07242 13.7618 9.09502 13.3691 8.77467L13.2929 8.70631L9.99992 5.41334V14.9993C9.99992 15.5516 9.55221 15.9993 8.99992 15.9993C8.44764 15.9993 7.99993 15.5516 7.99992 14.9993Z',
-																	fill: '#ffffff'
-																}
-															}
-														]
+														children: 'Chart Area'
 													}
 												}
 											]
@@ -152,7 +177,7 @@ export async function GET({ params }: { params: { id: string } }) {
 									}
 								]
 							}
-						}
+						},
 					]
 				}
 			},
@@ -180,14 +205,14 @@ export async function GET({ params }: { params: { id: string } }) {
 			}
 		);
 
-		// ---------- 4) Convert SVG → PNG ---------------
+		// ---------- 5) Convert SVG → PNG ---------------
 		const png = new Resvg(svg).render().asPng();
 
-		// ---------- 5) Write-through cache -------------
+		// ---------- 6) Write-through cache -------------
 		await fs.mkdir(CACHE_DIR, { recursive: true });
 		fs.writeFile(filePath, png).catch(() => { }); // fire-and-forget
 
-		// ---------- 6) Return asset --------------------
+		// ---------- 7) Return asset --------------------
 		return new Response(png, {
 			headers: {
 				'Content-Type': 'image/png',
@@ -215,12 +240,13 @@ export async function GET({ params }: { params: { id: string } }) {
 
 async function getChatSnippet(
 	conversationId: string
-): Promise<{ t: string; q: string; a: string } | null> {
+): Promise<{ t: string; q: string; a: string; plot: string } | null> {
 	try {
 		interface ConversationSnippetResponse {
 			title: string;
 			first_response: string;
 			first_query: string;
+			plot: string;
 		}
 		// For server-side requests in Docker, use the backend service name
 		const backendUrl = process.env.BACKEND_URL || 'http://backend:5058';
@@ -241,9 +267,10 @@ async function getChatSnippet(
 		const result = (await response.json()) as ConversationSnippetResponse;
 		console.log(result);
 		return {
-			t: result.title || 'Atlantis Chat',
+			t: result.title || 'Peripheral Chat',
 			a: result.first_response || 'The new best way to trade',
-			q: result.first_query || 'Atlantis Chat'
+			q: result.first_query || 'Peripheral Chat',
+			plot: result.plot || ''
 		};
 	} catch (error) {
 		console.error('Error fetching conversation snippet:', error);

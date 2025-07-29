@@ -3,6 +3,7 @@ package twitter
 import (
 	"backend/internal/app/agent"
 	"backend/internal/data"
+	"backend/internal/services/plotly"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -186,12 +187,16 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 	}
 
 	// Render the plot to base64
-	base64PNG, err := RenderTwitterPlotToBase64(conn, tweetResponse.Plot)
+	base64PNG, err := plotly.RenderTwitterPlotToBase64(conn, tweetResponse.Plot, false)
 	if err != nil {
 		fmt.Printf("Error rendering plot: %v", err)
 		return err
 	}
-
+	err = agent.UpdateConversationPlot(context.Background(), conn, conversationID, base64PNG)
+	if err != nil {
+		fmt.Printf("Error updating conversation plot: %v", err)
+		return err
+	}
 	formattedAskPeripheralTweet := FormattedPeripheralTweet{
 		Text:  tweetResponse.Text,
 		Image: base64PNG,
