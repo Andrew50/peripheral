@@ -189,7 +189,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 14rem 0.5rem 17rem 0.5rem;
+		padding: 14rem 0.5rem 12rem 0.5rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
