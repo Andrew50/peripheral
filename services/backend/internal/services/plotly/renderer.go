@@ -28,15 +28,26 @@ type Renderer struct {
 
 // PlotConfig contains configuration for the plot rendering
 type PlotConfig struct {
-	Width  int `json:"width"`
-	Height int `json:"height"`
+	Width         int  `json:"width"`
+	Height        int  `json:"height"`
+	ShowWatermark bool `json:"show_watermark"`
 }
 
 // DefaultPlotConfig returns sensible defaults for Twitter images
 func DefaultPlotConfig() PlotConfig {
 	return PlotConfig{
-		Width:  1600, // Twitter recommendation: 1200x675 for best display
-		Height: 1133,
+		Width:         1600, // Twitter recommendation: 1200x675 for best display
+		Height:        1133,
+		ShowWatermark: true,
+	}
+}
+
+// DefaultPlotConfigNoWatermark returns config without watermark and adjusted sizing
+func DefaultPlotConfigNoWatermark() PlotConfig {
+	return PlotConfig{
+		Width:         1474,
+		Height:        1000,
+		ShowWatermark: false,
 	}
 }
 
@@ -133,7 +144,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 	}
 
 	// Render the plot using proper parameter passing
-	renderScript := `(plotDataJSON, width, height) => {
+	renderScript := `(plotDataJSON, width, height, showWatermark) => {
 		try {
 			// Parse the JSON data
 			const plotSpec = JSON.parse(plotDataJSON);
@@ -199,7 +210,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							text: titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 54,
+								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
 								color: '#000000'
 							},
 							xref: 'paper',
@@ -212,7 +223,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 							...titleText,
 							font: {
 								family: 'Inter, system-ui, sans-serif',
-								size: 54,
+								size: showWatermark ? 54 : 64, // Moderately larger title when no watermark
 								color: '#000000'
 							},
 							x: 0.5,
@@ -223,11 +234,14 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			}
 			
 			// Margin configuration - better centered for larger canvas (1600x1133)
+			// Adjust margins based on watermark presence
+			const bottomMargin = showWatermark ? 180 : 80; // Minimal bottom margin when no watermark
+			const topMargin = showWatermark ? 120 : 120; // Consistent top margin regardless of watermark
 			if (!plotLayout.margin) {
-				plotLayout.margin = { l: 220, r: 220, t: 120, b: 180, autoexpand: true };
+				plotLayout.margin = { l: 220, r: 220, t: topMargin, b: bottomMargin, autoexpand: true };
 			} else {
-				plotLayout.margin.t = 120; // Increased for title and better vertical centering
-				plotLayout.margin.b = 180; // Increased for watermark and better vertical centering
+				plotLayout.margin.t = topMargin; // Adjust for title size and positioning
+				plotLayout.margin.b = bottomMargin; // Adjust for watermark presence
 				plotLayout.margin.l = 220; // Increased left margin for better horizontal centering
 				plotLayout.margin.r = 220; // Increased right margin to accommodate legend
 			}
@@ -533,7 +547,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 			if (window.titleText) {
 				const titleContainer = document.createElement('div');
 				titleContainer.style.position = 'absolute';
-				titleContainer.style.top = '50px';  // Adjusted for larger canvas
+				titleContainer.style.top = showWatermark ? '50px' : '20px';  // Reduced top padding when no watermark
 				titleContainer.style.left = '50%';
 				titleContainer.style.transform = 'translateX(-50%)';
 				titleContainer.style.display = 'flex';
@@ -569,8 +583,9 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 						}
 					}
 					
-					iconImg.style.width = '48px';  // Slightly larger for bigger canvas
-					iconImg.style.height = '48px';
+					const iconSize = showWatermark ? '48px' : '72px';  // Larger when no watermark
+					iconImg.style.width = iconSize;
+					iconImg.style.height = iconSize;
 					iconImg.style.borderRadius = '6px';
 					iconImg.style.objectFit = 'cover';
 					titleContainer.appendChild(iconImg);
@@ -580,7 +595,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 				const titleText = document.createElement('span');
 				titleText.textContent = window.titleText;
 				titleText.style.fontFamily = 'Inter, system-ui, sans-serif';
-				titleText.style.fontSize = '44px';  // Slightly larger for bigger canvas
+				titleText.style.fontSize = showWatermark ? '44px' : '64px';  // Larger when no watermark
 				titleText.style.fontWeight = '600';
 				titleText.style.color = '#000000';
 				
@@ -588,16 +603,19 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 				document.getElementById('plot').appendChild(titleContainer);
 			}
 
-			const watermark = document.createElement('div');
-			watermark.style.position = 'absolute';
-			watermark.style.bottom = '35px';  // Adjusted for larger canvas
-			watermark.style.right = '35px';   // Adjusted for larger canvas
-			watermark.style.fontFamily = 'Inter, system-ui, sans-serif';
-			watermark.style.fontSize = '24px';
-			watermark.style.color = 'rgba(0, 0, 0, 1)';
-			watermark.style.zIndex = '1000';
-			watermark.innerHTML = 'Powered by <span style="font-size: 44px; font-weight: 600;">Peripheral.io</span>';
-			document.getElementById('plot').appendChild(watermark);
+			// Only add watermark if requested
+			if (showWatermark) {
+				const watermark = document.createElement('div');
+				watermark.style.position = 'absolute';
+				watermark.style.bottom = '35px';  // Adjusted for larger canvas
+				watermark.style.right = '35px';   // Adjusted for larger canvas
+				watermark.style.fontFamily = 'Inter, system-ui, sans-serif';
+				watermark.style.fontSize = '24px';
+				watermark.style.color = 'rgba(0, 0, 0, 1)';
+				watermark.style.zIndex = '1000';
+				watermark.innerHTML = 'Powered by <span style="font-size: 44px; font-weight: 600;">Peripheral.io</span>';
+				document.getElementById('plot').appendChild(watermark);
+			}
 			
 			return true;
 		} catch (e) {
@@ -607,7 +625,7 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 		}
 	}`
 
-	result, err := page.Eval(renderScript, string(plotJSON), config.Width, config.Height)
+	result, err := page.Eval(renderScript, string(plotJSON), config.Width, config.Height, config.ShowWatermark)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute render script: %w", err)
 	}
@@ -636,6 +654,12 @@ func (r *Renderer) RenderPlot(_ context.Context, plotSpec interface{}, config *P
 	base64Img := base64.StdEncoding.EncodeToString(screenshot)
 
 	return base64Img, nil
+}
+
+// RenderPlotNoWatermark renders a Plotly plot without watermark, larger title elements, and adjusted margins
+func (r *Renderer) RenderPlotNoWatermark(ctx context.Context, plotSpec interface{}) (string, error) {
+	config := DefaultPlotConfigNoWatermark()
+	return r.RenderPlot(ctx, plotSpec, &config)
 }
 
 // Close shuts down the renderer and browser

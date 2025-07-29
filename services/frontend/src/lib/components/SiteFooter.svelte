@@ -107,6 +107,7 @@
 </footer>
 
 <style>
+	
 	.tagline-section {
 		width: 100vw;
 		padding: 4rem 0 8rem 0;
@@ -122,7 +123,7 @@
 	}
 	.tagline-text {
 		font-size: clamp(2.5rem, 7vw, 5rem);
-		font-weight: 900;
+		font-weight: 700;
 		color: #ffffff;
 		text-align: center;
 		margin: 0;
@@ -154,6 +155,7 @@
 		justify-content: center;
 		text-decoration: none;
 		white-space: nowrap;
+		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 	.tagline:hover {
 		transform: translateY(-3px);
@@ -201,14 +203,16 @@
 	.footer-title {
 		color: var(--color-light);
 		font-size: 1.1rem;
-		font-weight: 600;
+		font-weight: 400;
 		margin: 0 0 1rem 0;
+		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 
 	.footer-links {
 		list-style: none;
 		padding: 0;
 		margin: 0;
+		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 
 	.footer-links li {

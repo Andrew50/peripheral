@@ -63,6 +63,11 @@
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 
+	// Override del renderer to disable strikethrough formatting
+	renderer.del = function({ tokens }) {
+		return this.parser.parseInline(tokens); // Return plain text instead of wrapped in <del> tags
+	};
+
 	marked.setOptions({
 		renderer,
 		breaks: true,

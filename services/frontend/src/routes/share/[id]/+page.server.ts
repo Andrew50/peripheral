@@ -64,6 +64,7 @@ export const load: ServerLoad = async ({ params, request, url }) => {
 			title: string;
 			first_response: string;
 			first_query: string;
+			plot: string;
 		}
 
 		const result = await publicRequest<ConversationSnippetResponse>('getConversationSnippet', {
@@ -71,7 +72,7 @@ export const load: ServerLoad = async ({ params, request, url }) => {
 		});
 
 		const cleanTitle = result.title || 'Peripheral';
-
+		const cleanPlot = result.plot || '';
 		const origin = process.env.ORIGIN || request.url.split('/').slice(0, 3).join('/');
 		const shareUrl = `${origin}/share/${params.id}`;
 		const ogImageUrl = `${origin}/og/${params.id}`;
@@ -82,7 +83,8 @@ export const load: ServerLoad = async ({ params, request, url }) => {
 			meta: {
 				title: cleanTitle,
 				shareUrl,
-				ogImageUrl
+				ogImageUrl,
+				plot: cleanPlot
 			}
 		};
 	} catch (error) {

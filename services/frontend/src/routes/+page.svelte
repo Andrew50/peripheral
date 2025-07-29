@@ -58,17 +58,17 @@
 	<section class="hero-title-section">
 		<div class="hero-title-container">
 			<h1 class="hero-title">
-				The <span class="gradient-text">Intelligent</span> Trading Terminal
+				The Intelligent Trading Terminal
 			</h1>
 			<p class="hero-subtitle">
-				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy in realtime.<br />
+				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents in realtime.<br />
 			</p>
 			<a href="/signup" class="hero-cta-button">
 				Get Started for Free
 			</a>
 		</div>
 	</section>
-
+	<ChipSection />
 	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
@@ -95,7 +95,6 @@
 -->
 	
 	<!-- Ideas Chips Section -->
-	<ChipSection />
 	<!-- Footer -->
 	<SiteFooter />
 </main>
@@ -133,6 +132,7 @@
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
 
 
 	/* Critical global styles - applied immediately to prevent layout shift */
@@ -175,8 +175,7 @@
 		background: transparent;
 		color: var(--color-dark);
 		font-family:
-			'Geist',
-			'Inter',
+			'Instrument Sans',
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -190,7 +189,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 14rem 0.5rem 17rem 0.5rem;
+		padding: 14rem 0.5rem 12rem 0.5rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
@@ -208,7 +207,7 @@
 
 	.hero-title {
 		font-size: clamp(4.05rem, 6vw, 7.5rem);
-		font-weight: 800;
+		font-weight: 400;
 		margin: 0 0 1rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
@@ -225,7 +224,7 @@
 		line-height: 1.6;
 		margin-top: 0;
 		font-weight: 400;
-		font-family: 'Geist', 'Inter', sans-serif;
+		font-family: 'Instrument Sans', sans-serif;
 	}
 
 	.hero-cta-button {
@@ -236,8 +235,8 @@
 		padding: 1rem 2rem;
 		border-radius: 2rem;
 		font-size: 1.1rem;
-		font-weight: 600;
-		font-family: 'Geist', 'Inter', sans-serif;
+		font-weight: 400;
+		font-family: 'Instrument Sans', sans-serif;
 		transition: all 0.3s ease;
 		box-shadow: 
 			0 4px 14px 0 rgba(255, 255, 255, 0.1),
@@ -257,40 +256,6 @@
 		transform: translateY(0);
 	}
 
-	.gradient-text {
-		background: linear-gradient(
-			135deg,
-			#3b82f6 0%,
-			#6366f1 25%,
-			#8b5cf6 50%,
-			#ec4899 75%,
-			#f59e0b 100%
-		);
-		background-size: 200% 200%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		-webkit-text-fill-color: transparent;
-		animation: gradient-shift 8s ease infinite;
-		font-size: 1em;
-		font-family: 'Geist', 'Inter', sans-serif;
-		font-weight: 800;
-	}
-
-	@keyframes gradient-shift {
-		0%,
-		100% {
-			background-position: 0% 50%;
-		}
-		25% {
-			background-position: 100% 50%;
-		}
-		50% {
-			background-position: 100% 100%;
-		}
-		75% {
-			background-position: 0% 100%;
-		}
-	}
 
 	/* Subsections Section */
 	.subsections-section {
@@ -302,8 +267,8 @@
 	}
 
 	.features-title {
-		font-size: clamp(2.5rem, 5vw, 3.5rem);
-		font-weight: 800;
+		font-size: clamp(3rem, 7vw, 4rem);
+		font-weight: 400;
 		margin: 0 0 4rem 0;
 		color: #f5f9ff;
 		line-height: 1.2;
@@ -340,8 +305,8 @@
 	}
 
 	.subsection-title {
-		font-size: clamp(2rem, 5vw, 2.5rem);
-		font-weight: 700;
+		font-size: clamp(3rem, 7vw, 3.5rem);
+		font-weight: 400;
 		margin: 0 0 1.5rem 0;
 		color: #f5f9ff;
 		line-height: 1.2;
@@ -358,30 +323,13 @@
 
 	.subsection-description {
 		font-size: 1.2rem;
-		color: var(--color-primary);
-		font-weight: 500;
+		color: #f5f9ff;
+		font-weight: 400;
 		margin-bottom: 1.5rem;
 		line-height: 1.5;
 	}
 
-	/* Specific styling for Frictionless Trading section */
-	.subsection.frictionless .subsection-title {
-		color: white;
-	}
 
-	.subsection.frictionless .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Analysis at the speed of now section */
-	.subsection.speed-analysis .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Never miss a trade section */
-	.subsection.never-miss .subsection-description {
-		color: white;
-	}
 
 	.subsection-content {
 		font-size: 1rem;

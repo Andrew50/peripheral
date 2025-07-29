@@ -290,7 +290,8 @@ class PythonAgentGenerator:
         - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include a title icon.
         - When the dataset has fewer than five distinct points, avoid oversized bar/line charts. Instead, reason about and produce a visualization that scales gracefully with small‑N data.
-        - Dates should always be in American format, and x-axis should be ordered chronologically from left to right.
+        - Dates should always be in American format, and dates should ALWAYS be chronologically ordered, from oldest on the left to the most recent on the right, unless the user specifically asks otherwise.
+        - Ensure that the data is properly ordered before plotting.
 
 
         **CRITICAL**: 

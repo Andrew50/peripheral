@@ -501,11 +501,12 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		}
 		return nil, fmt.Errorf("failed to update pending message: %w", err)
 	}
-
-	// Invalidate cache for this conversation since the message was updated
-	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
-		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
-	}
+	go func() {
+		// Invalidate cache for this conversation since the message was updated
+		if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+			fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
+		}
+	}()
 
 	return &messageData, nil
 }
@@ -679,6 +680,35 @@ func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversat
 	}
 
 	return nil
+}
+
+func UpdateConversationPlot(ctx context.Context, conn *data.Conn, conversationID string, plotData string) error {
+	// Determine if plot data is provided
+	hasPlot := plotData != ""
+
+	querySQL := `
+		UPDATE conversations 
+		SET 
+			plot = $2,
+			has_plot = $3,
+			updated_at = $4
+		WHERE conversation_id = $1`
+
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, plotData, hasPlot, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update conversation plot: %w", err)
+	}
+
+	return nil
+}
+
+func HasConversationPlot(ctx context.Context, conn *data.Conn, conversationID string) (bool, error) {
+	var hasPlot bool
+	err := conn.DB.QueryRow(ctx, "SELECT has_plot FROM conversations WHERE conversation_id = $1", conversationID).Scan(&hasPlot)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if conversation has plot: %w", err)
+	}
+	return hasPlot, nil
 }
 
 // ValidateMessageForEdit ensures the message can be edited
