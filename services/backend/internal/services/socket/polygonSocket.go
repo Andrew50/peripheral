@@ -27,6 +27,12 @@ var tickerToSecurityIDLock sync.RWMutex
 
 var polygonWSConn *polygonws.Client
 
+// Quit mechanism for clean shutdown
+var (
+	quitChan     chan struct{}
+	quitChanOnce sync.Once
+)
+
 const TimestampUpdateInterval = 2 * time.Second
 
 var (
@@ -174,7 +180,7 @@ func broadcastTimestamp() {
 }
 
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
-func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
+func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client, quit <-chan struct{}) {
 	// Start the batched stale-ticker flusher (only once per process)
 	fmt.Println("Starting stale flusher")
 	staleFlusherOnce.Do(func() { startStaleFlusher(conn) })
@@ -206,9 +212,16 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 
 	for {
 		select {
+		case <-quit:
+			log.Printf("🛑 StreamPolygonDataToRedis received quit signal")
+			return
 		case <-timestampTicker.C:
 			broadcastTimestamp()
-		case out := <-polygonWS.Output():
+		case out, ok := <-polygonWS.Output():
+			if !ok {
+				log.Printf("🛑 polygonWS output channel closed – exiting")
+				return
+			}
 			var symbol string
 			var timestamp int64
 
@@ -223,7 +236,9 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				symbol = msg.Symbol
 				timestamp = msg.Timestamp
 			default:
-				log.Printf("⚠️ Unknown message type received: %T", msg)
+				if msg != nil {
+					log.Printf("⚠️ Unknown message type received: %T", msg)
+				}
 				continue
 			}
 
@@ -391,6 +406,10 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
 	}
 
+	// Initialize quit channel for clean shutdown
+	quitChan = make(chan struct{})
+	quitChanOnce = sync.Once{}
+
 	// Initialize OHLCV buffer with realtime enabled
 	log.Printf("📊 About to initialize OHLCV buffer...")
 	if err := InitOHLCVBuffer(conn); err != nil {
@@ -412,7 +431,7 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 	}
 
 	log.Printf("✅ Polygon WebSocket connected, starting data stream...")
-	go StreamPolygonDataToRedis(conn, polygonWSConn)
+	go StreamPolygonDataToRedis(conn, polygonWSConn, quitChan)
 	return nil
 }
 
@@ -422,6 +441,9 @@ func StopPolygonWS() error {
 		fmt.Println("polygon websocket connection is not initialized")
 		return fmt.Errorf("polygon websocket connection is not initialized")
 	}
+
+	// Signal the streaming goroutine to quit
+	quitChanOnce.Do(func() { close(quitChan) })
 
 	if ohlcvBuffer != nil {
 		ohlcvBuffer.Stop()
