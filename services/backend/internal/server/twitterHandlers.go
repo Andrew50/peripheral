@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"backend/internal/app/agent"
+	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
 	"backend/internal/services/twitter"
 
@@ -93,9 +94,9 @@ func verifyTwitterWebhookConfiguration(conn *data.Conn) error {
 	// Check if it's between 6 AM (6) and 9 PM (21) - market hours
 	if currentHour >= 6 && currentHour < 21 {
 
-		return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+		return updateTwitterNewsWebhookPollingFrequency(conn, 60, true)
 	} else {
-		return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+		return updateTwitterNewsWebhookPollingFrequency(conn, 60, false)
 	}
 }
 func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookRequest) error {
@@ -331,7 +332,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweet
 	agentResult.Plot = samplePlot*/
 
 	var base64PNG string
-	base64PNG, err = twitter.RenderTwitterPlotToBase64(conn, agentResult.Plot)
+	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, false)
 	if err != nil {
 		log.Printf("🚨 ERROR rendering Twitter plot: %v", err)
 	}

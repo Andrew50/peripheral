@@ -79,7 +79,7 @@ func _openaiWebSearch(ctx context.Context, conn *data.Conn, userID int, systemPr
 			{
 				OfWebSearchPreview: &responses.WebSearchToolParam{
 					Type:              "web_search_preview",
-					SearchContextSize: "medium",
+					SearchContextSize: "high",
 				},
 			},
 		},

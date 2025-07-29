@@ -112,3 +112,32 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 	_, err = telegramBenTweetsBot.Send(recipient, deepLink)
 	return err
 }
+
+// SendTelegramBenTweetsMessage sends tweet information to the Telegram channel
+func SendTelegramAskPeripheralTweets(id string, msg string, image string) error {
+	if !isProdEnv {
+		return nil
+	}
+	if telegramBenTweetsBot == nil {
+		err := InitTelegramUserNotificationBot()
+		if err != nil {
+			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
+		}
+	}
+	recipient := telebot.ChatID(benTweetsChatID)
+	if i := strings.IndexByte(image, ','); i >= 0 {
+		image = image[i+1:]
+	}
+	data, err := base64.StdEncoding.DecodeString(image)
+	if err != nil {
+		return fmt.Errorf("failed to decode image: %w", err)
+	}
+	photo := &telebot.Photo{File: telebot.FromReader(bytes.NewReader(data)), Caption: msg}
+	_, err = telegramBenTweetsBot.Send(recipient, photo)
+	if err != nil {
+		return fmt.Errorf("failed to send photo: %w", err)
+	}
+	deepLink := fmt.Sprintf("https://x.com/intent/post?in_reply_to=%s&text=%s", id, url.QueryEscape(msg))
+	_, err = telegramBenTweetsBot.Send(recipient, deepLink)
+	return err
+}
