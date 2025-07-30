@@ -121,8 +121,7 @@ def fetch_multiple_strategy_codes(ctx: Context, userId: int, strategyIds: List[i
             logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
 
 '''
-
-async def _save_strategy(ctx: Context, user_id: int, name: str, description: str, prompt: str, 
+def save_strategy(ctx: Context, user_id: int, name: str, description: str, prompt: str, 
                         python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
     """Save strategy to database with duplicate name handling"""
     conn = None

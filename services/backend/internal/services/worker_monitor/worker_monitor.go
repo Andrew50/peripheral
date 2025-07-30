@@ -21,7 +21,7 @@ type WorkerHeartbeat struct {
 	QueueStats    map[string]interface{} `json:"queue_stats"`
 }
 
-// TaskAssignment represents a task currently assigned to a worker
+// TaskAssignment represents a task currently assigned to a worker (derived from heartbeats)
 type TaskAssignment struct {
 	WorkerID  string `json:"worker_id"`
 	TaskID    string `json:"task_id"`
@@ -129,12 +129,8 @@ func (wm *WorkerMonitor) performHealthCheck() {
 		return
 	}
 
-	// Get all task assignments
-	taskAssignments, err := wm.getTaskAssignments(ctx)
-	if err != nil {
-		log.Printf("❌ Error getting task assignments: %v", err)
-		return
-	}
+	// Get all task assignments (derived from active workers)
+	taskAssignments := wm.getTaskAssignments(activeWorkers)
 
 	// Check for dead workers and stuck tasks
 	deadWorkers := wm.findDeadWorkers(activeWorkers)
@@ -196,37 +192,38 @@ func (wm *WorkerMonitor) getActiveWorkers(ctx context.Context) (map[string]Worke
 	return activeWorkers, nil
 }
 
-// getTaskAssignments retrieves all current task assignments
-func (wm *WorkerMonitor) getTaskAssignments(ctx context.Context) (map[string]TaskAssignment, error) {
-	// Get all task assignment keys
-	keys, err := wm.conn.Cache.Keys(ctx, "task_assignment:*").Result()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get task assignment keys: %w", err)
-	}
-
+// getTaskAssignments derives current task assignments from worker heartbeats
+func (wm *WorkerMonitor) getTaskAssignments(activeWorkers map[string]WorkerHeartbeat) map[string]TaskAssignment {
 	assignments := make(map[string]TaskAssignment)
 
-	for _, key := range keys {
-		// Extract task ID from key
-		taskID := strings.TrimPrefix(key, "task_assignment:")
-
-		// Get assignment data
-		assignmentJSON, err := wm.conn.Cache.Get(ctx, key).Result()
-		if err != nil {
-			log.Printf("⚠️ Failed to get assignment for task %s: %v", taskID, err)
+	for workerID, heartbeat := range activeWorkers {
+		// Skip workers that don't have an active task
+		if heartbeat.ActiveTask == nil || *heartbeat.ActiveTask == "" {
 			continue
 		}
 
-		var assignment TaskAssignment
-		if err := json.Unmarshal([]byte(assignmentJSON), &assignment); err != nil {
-			log.Printf("⚠️ Failed to parse assignment for task %s: %v", taskID, err)
-			continue
+		taskID := *heartbeat.ActiveTask
+
+		// Parse heartbeat timestamp to use as started time
+		var startedAt string
+		if heartbeatTime, err := time.Parse(time.RFC3339, heartbeat.Timestamp); err == nil {
+			startedAt = heartbeatTime.Format(time.RFC3339)
+		} else {
+			// Fallback to current time if parsing fails
+			startedAt = time.Now().Format(time.RFC3339)
+		}
+
+		assignment := TaskAssignment{
+			WorkerID:  workerID,
+			TaskID:    taskID,
+			StartedAt: startedAt,
+			Status:    "running", // All active tasks are considered running
 		}
 
 		assignments[taskID] = assignment
 	}
 
-	return assignments, nil
+	return assignments
 }
 
 // findDeadWorkers identifies workers that haven't sent heartbeats recently
@@ -472,9 +469,7 @@ func (wm *WorkerMonitor) requeueTask(ctx context.Context, taskID string, reason 
 		return fmt.Errorf("failed to push task %s to queue %s: %w", taskID, queueName, err)
 	}
 
-	// Clear task assignment and update task status
-	assignmentKey := fmt.Sprintf("task_assignment:%s", taskID)
-	wm.conn.Cache.Del(ctx, assignmentKey)
+	// Update task status for retry (no need to clear assignment keys anymore)
 
 	// Update task status to queued for retry
 	if err := wm.updateTaskStatus(ctx, taskID, "queued", map[string]interface{}{
@@ -541,21 +536,18 @@ func (wm *WorkerMonitor) GetMonitoringStats(ctx context.Context) (map[string]int
 		return nil, err
 	}
 
-	taskAssignments, err := wm.getTaskAssignments(ctx)
-	if err != nil {
-		return nil, err
-	}
+	taskAssignments := wm.getTaskAssignments(activeWorkers)
 
 	deadWorkers := wm.findDeadWorkers(activeWorkers)
 	stuckTasks := wm.findStuckTasks(taskAssignments, activeWorkers)
 
 	stats := map[string]interface{}{
-		"active_workers":   len(activeWorkers),
-		"task_assignments": len(taskAssignments),
-		"dead_workers":     len(deadWorkers),
-		"stuck_tasks":      len(stuckTasks),
-		"is_running":       wm.isRunning,
-		"last_check":       time.Now().Format(time.RFC3339),
+		"active_workers": len(activeWorkers),
+		"active_tasks":   len(taskAssignments), // Derived from worker heartbeats
+		"dead_workers":   len(deadWorkers),
+		"stuck_tasks":    len(stuckTasks),
+		"is_running":     wm.isRunning,
+		"last_check":     time.Now().Format(time.RFC3339),
 		"config": map[string]interface{}{
 			"heartbeat_timeout_seconds": wm.heartbeatTimeout.Seconds(),
 			"task_timeout_minutes":      wm.taskTimeout.Minutes(),

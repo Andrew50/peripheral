@@ -9,10 +9,11 @@ from .engine import execute_strategy
 from .utils.context import Context
 #from .utils.tracked_list import TrackedList
 from .utils.strategy_crud import fetch_multiple_strategy_codes
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
-async def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe: List[str] = None) -> Dict[str, Any]:
+def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe: List[str] = None) -> Dict[str, Any]:
     """Execute screening task using new accessor strategy engine"""
     if not strategy_ids:
         raise ValueError("strategy_ids is required")
@@ -42,7 +43,11 @@ async def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, uni
         )
 
         if error:
-            raise error
+            return {
+                'success': False,
+                'instances': [],
+                'error': error
+            }
             
         # Rank and limit results
         ranked_results = _rank_screening_results(instances)
@@ -50,15 +55,15 @@ async def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, uni
         return {
             'success': True,
             'instances': ranked_results,
-            'error': ""
+            'error': None
         }
 
     except Exception as e:
-        logger.error("Error during screening: %s", e)
+        error_obj = capture_exception(logger, e)
         return {
             'success': False,
             'instances': [],
-            'error': str(e)
+            'error': error_obj
         }
 
 

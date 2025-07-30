@@ -3,32 +3,31 @@ Strategy Generator
 Generates trading strategies from natural language using OpenAI o3 and validates them immediately.
 """
 
-import os
 import json
 import logging
-import asyncio
-import traceback
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from datetime import datetime, time
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import re
 import time
 import threading
+import traceback as _tb
 from contextlib import contextmanager
 
 from openai import OpenAI
-from google import genai 
+from google import genai
 from google.genai import types
-from validator import ValidationError
+from validator import ValidationError, validate_strategy
 from engine import execute_strategy
 from utils.context import Context
+from utils.strategy_crud import fetch_strategy_code, save_strategy
+from utils.error_utils import capture_exception
+from utils.errors import ModelGenerationError
 
 logger = logging.getLogger(__name__)
 from utils.data_accessors import get_available_filter_values
 
 
-    
+
 def _parse_filter_needs_response( response) -> Dict[str, bool]:
     """Parse the Gemini API response to determine which filters are needed"""
     try:
@@ -42,7 +41,7 @@ def _parse_filter_needs_response( response) -> Dict[str, bool]:
             json_match = re.search(r'```\s*(\{.*?\})\s*```', response_text, re.DOTALL)
             if json_match:
                 response_text = json_match.group(1)
-        
+
         filter_needs = json.loads(response_text)
         #logger.info(f"Filter needs determined: {filter_needs}")
         return filter_needs
@@ -50,7 +49,7 @@ def _parse_filter_needs_response( response) -> Dict[str, bool]:
         logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
         # Default to needing all filters if parsing fails
         return {"sectors": True, "industries": True, "primary_exchanges": True}
-    
+
 def _get_system_instruction(ctx, prompt: str) -> str:
     """Get system instruction for OpenAI code generation with current database filter values"""
     contents = [
@@ -62,8 +61,8 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         thinking_config = types.ThinkingConfig(
             thinking_budget=0
         ),
-        system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then 
-            you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed. 
+        system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
+            you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed.
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
             - primary_exchanges: NYSE, NASDAQ, ARCA
@@ -77,12 +76,12 @@ def _get_system_instruction(ctx, prompt: str) -> str:
 
     # Parse the JSON response to determine which filters are needed
     filter_needs = _parse_filter_needs_response(response)
-    
+
     # Only get filter values from database if they're needed
     filter_values = {}
     if any(filter_needs.values()):
         db_filter_values = get_available_filter_values(ctx)
-        
+
         # Only include the filter values that are marked as needed
         if filter_needs.get("sectors", False):
             filter_values['sectors'] = db_filter_values['sectors']
@@ -90,54 +89,58 @@ def _get_system_instruction(ctx, prompt: str) -> str:
             filter_values['industries'] = db_filter_values['industries']
         if filter_needs.get("primary_exchanges", False):
             filter_values['primary_exchanges'] = db_filter_values['primary_exchanges']
-    
+
     # Format filter values for the prompt (only include if they exist)
     sectors_str = '", "'.join(filter_values.get('sectors', [])) if filter_values.get('sectors') else ""
     industries_str = '", "'.join(filter_values.get('industries', [])) if filter_values.get('industries') else ""
     exchanges_str = '", "'.join(filter_values.get('primary_exchanges', [])) if filter_values.get('primary_exchanges') else ""
-    
+
     return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
-        Allowed imports: 
-        - pandas, numpy, datetime, math, plotly. 
+        Allowed imports:
+        - pandas, numpy, datetime, math, plotly.
         - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
         FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
-        - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → numpy.ndarray
+        - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → pandas.DataFrame
         - get_general_data(columns, filters) → pandas.DataFrame
         - apply_drawdown_styling(fig) → returns styled fig
         - apply_equity_curve_styling(fig) → returns styled fig
 
         CRITICAL REQUIREMENTS:
         - Function must be named 'strategy' with no parameters
-        - Use data accessor functions with filters:
-        * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> numpy array
+        - Use data accessor functions with filters (get_bar_data returns pandas.DataFrame directly):
+        * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas.DataFrame
             Columns: ticker, timestamp, open, high, low, close, volume
-        * get_bar_data(timeframe="5m", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> numpy array
+        * get_bar_data(timeframe="5", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> pandas.DataFrame
             For precise date filtering - essential for multi-timeframe strategies and exact stop loss timing
-            
+
             SUPPORTED TIMEFRAMES:
-            • Direct table access: "1m", "1h", "1d", "1w" (fastest, use when available)
-            • Custom aggregations: "5m", "10m", "15m", "30m"
-                                "2h", "4h", "6h", "8h"
-                                "2w", "3w"
-            
+            • Custom aggregations: Any integer prefix (1 to within reason) + time unit:
+                - <none> (minute): "1", "5", "15", "30", "60", etc.
+                - h (hourly): "1h", "2h", "4h", "8h", "12h", etc.
+                - d (daily): "1d", "2d", "3d", "7d", etc.
+                - w (weekly): "1w", "2w", "3w", "4w", etc.
+                - m (monthly): "1m", "2m", "3m", "6m", etc.
+                - q (quarterly): "1q", "2q", "3q", "4q", etc.
+                - y (yearly): "1y", "2y", "3y", "5y", etc.
+
             TIMEFRAME SELECTION GUIDE:
-            - Scalping/Day Trading: Use "1m", "5m", "15m", "30m"
-            - Swing Trading: Use "1h", "4h", "1d" 
-            - Position Trading: Use "1d", "1w"
+            - Scalping/Day Trading: Use "1", "5", "15", "30"
+            - Swing Trading: Use "1h", "4h", "1d"
+            - Position Trading: Use "1d", "1w", "1m", "1q", "1y"
             - Multi-timeframe: Combine different intervals for confirmation
-            
-            Min_bars: This is the minimum number of bars needed to determine whether an instance is valid. 
+
+            Min_bars: This is the minimum number of bars needed to determine whether an instance is valid.
                 - This cannot exceed 10,000. Use the minimum needed.
                 - 1 bar: Simple current patterns (volume spikes, price thresholds)
                 - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
                 - 20+ bars: Technical indicators (moving averages, RSI)
                 - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
 
-        * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}}) 
+        * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}})
             Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
-        * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame  
+        * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame
             Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
         AVAILABLE FILTERS (use in filters parameter):{f'''
@@ -224,9 +227,9 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         # Example 1: Multi-timeframe RSI + Trend Strategy
         def strategy():
             instances = []
-            
-            # Get daily data for RSI calculation
-            bar_data_1d = get_bar_data(
+
+                        # Get daily data for RSI calculation
+            df_1d = get_bar_data(
                 timeframe="1d",
                 columns=["ticker", "timestamp", "close"],
                 min_bars=15,  # Need 15 bars for RSI calculation
@@ -234,19 +237,16 @@ def _get_system_instruction(ctx, prompt: str) -> str:
             )
             
             # Get hourly data for short-term trend
-            bar_data_1h = get_bar_data(
+            df_1h = get_bar_data(
                 timeframe="1h",
                 columns=["ticker", "timestamp", "close"],
                 min_bars=5,   # Need 5 hours for short-term moving average
                 filters={{"sector": "Technology"}}
             )
             
-            if bar_data_1d is None or len(bar_data_1d) == 0 or bar_data_1h is None or len(bar_data_1h) == 0:
+            if df_1d is None or len(df_1d) == 0 or df_1h is None or len(df_1h) == 0:
                 return instances
-            
-            df_1d = pd.DataFrame(bar_data_1d, columns=["ticker", "timestamp", "close"])
-            df_1h = pd.DataFrame(bar_data_1h, columns=["ticker", "timestamp", "close"])
-            
+
             # Calculate RSI for each ticker
             def calculate_rsi(prices, period=14):
                 delta = prices.diff()
@@ -254,25 +254,25 @@ def _get_system_instruction(ctx, prompt: str) -> str:
                 loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
                 rs = gain / loss
                 return 100 - (100 / (1 + rs))
-            
+
             common_tickers = set(df_1d['ticker']).intersection(set(df_1h['ticker']))
-            
+
             for ticker in common_tickers:
                 ticker_1d = df_1d[df_1d['ticker'] == ticker].sort_values('timestamp')
                 ticker_1h = df_1h[df_1h['ticker'] == ticker].sort_values('timestamp')
-                
+
                 if len(ticker_1d) < 15 or len(ticker_1h) < 5:
                     continue
-                
+
                 # Calculate daily RSI
                 ticker_1d['rsi'] = calculate_rsi(ticker_1d['close'])
                 latest_1d = ticker_1d.iloc[-1]
-                
+
                 # Calculate hourly trend (5-hour SMA)
                 ticker_1h['sma_5'] = ticker_1h['close'].rolling(5).mean()
                 latest_1h = ticker_1h.iloc[-1]
                 trend_strength = (latest_1h['close'] / latest_1h['sma_5']) - 1
-                
+
                 # Strategy trigger: RSI oversold + positive hourly trend
                 if latest_1d['rsi'] < 30 and trend_strength > 0.02:  # RSI < 30 + 2%+ above hourly SMA
                     instances.append({{
@@ -286,40 +286,38 @@ def _get_system_instruction(ctx, prompt: str) -> str:
                         'rsi_oversold_depth': round(float(30 - latest_1d['rsi']), 2),
                         'score': round(min(1.0, (30 - latest_1d['rsi']) / 20 + trend_strength), 3)
                     }})
-            
+
             return instances
 
         # Example 2: Gap Strategy with Specific Tickers
         def strategy():
             instances = []
+
+                        target_tickers = ["AAPL", "TSLA", "NVDA"]  # Specific tickers from prompt
             
-            target_tickers = ["AAPL", "TSLA", "NVDA"]  # Specific tickers from prompt
-            
-            bar_data = get_bar_data(
+            df = get_bar_data(
                 timeframe="1d",
                 columns=["ticker", "timestamp", "open", "close"],
                 min_bars=2,  # Need 2 bars: previous close + current open
                 filters={{"tickers": target_tickers}}
             )
             
-            if bar_data is None or len(bar_data) == 0:
+            if df is None or len(df) == 0:
                 return instances
-            
-            df = pd.DataFrame(bar_data, columns=["ticker", "timestamp", "open", "close"])
             df = df.sort_values(['ticker', 'timestamp']).reset_index(drop=True)
-            
+
             # Calculate gaps: compare current open vs previous close
             df['prev_close'] = df.groupby('ticker')['close'].shift(1)
             df = df.dropna()  # Remove rows without previous close
             df['gap_percent'] = ((df['open'] - df['prev_close']) / df['prev_close']) * 100
-            
+
             # CRITICAL: Ensure numeric dtype for calculations
             df['gap_percent'] = pd.to_numeric(df['gap_percent'], errors='coerce')
             df = df.dropna(subset=['gap_percent'])
-            
+
             # Find significant gaps (3%+ up or down)
             significant_gaps = df[abs(df['gap_percent']) >= 3.0]
-            
+
             for _, row in significant_gaps.iterrows():
                 instances.append({{
                     'ticker': row['ticker'],
@@ -330,7 +328,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
                     'gap_magnitude': round(float(abs(row['gap_percent'])), 3),
                     'score': round(min(1.0, abs(row['gap_percent']) / 10.0), 3)  # Normalize by 10%
                 }})
-            
+
             return instances
         ```
 
@@ -340,6 +338,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - No 'score' field - score is required for ranking
         - aggregate_mode=True for individual stock patterns - use only for market-wide calculations
         - using TICKER-0 in instead of TICKER - ignore user input in this format and use actual ticker
+        - Converting get_bar_data result to DataFrame - it's already a pandas.DataFrame, use directly
         - Any value you attach to a dict, list, or Plotly trace must already be JSON-serialisable — so cast NumPy scalars to plain int/float/bool, turn any date-time object (np.datetime64, pd.Timestamp, datetime)
         into an ISO-8601 string (or Unix-seconds int), replace NaN/NA with None, and flatten arrays/Series to plain Python lists before you return or plot them.
         - BAD STOP LOSS: if low <= stop: exit_price = stop_price  # Ignores gaps!
@@ -348,6 +347,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
 
         ✅ qualifying_instances = df[condition]  # CORRECT - returns all matching instances
         ✅ qualifying_instances = df[df['gap_percent'] >= threshold]  # CORRECT - all qualifying rows
+        ✅ df = get_bar_data(...)  # CORRECT - get_bar_data returns pandas.DataFrame directly
         ✅ Include 'entry_price', 'gap_percent', etc.  # CORRECT - meaningful data
         ✅ 'score': min(1.0, instance_strength / max_strength)  # CORRECT - normalized score
         ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
@@ -358,7 +358,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         PATTERN RECOGNITION:
         - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
         min_bars=2 (need current + previous), Score: min(1.0, gap_percent / 10.0)
-        - Volume patterns: Compare current vs historical average - return ALL volume spikes  
+        - Volume patterns: Compare current vs historical average - return ALL volume spikes
         min_bars=1 for simple threshold, min_bars=20+ for rolling average
         Score: min(1.0, (volume_ratio - 1.0) / 4.0) - higher volume = higher score
         - Price patterns: Use moving averages, RSI - return ALL qualifying instances
@@ -375,18 +375,18 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - No exec, eval, or dynamic code execution
         - Use only standard mathematical and data manipulation operations
 
-        CODE OPTIMIZATIONS: 
+        CODE OPTIMIZATIONS:
         - Drop intermediate columns once they are no longer needed that are not output in the final instance list
         - Minimize the number of shift() and index manipulation operations
 
         DATA VALIDATION:
-        - Always check if data is None or empty before processing: if data is None or len(data) == 0: return []
+        - Check if DataFrame is None or empty before processing: if df is None or len(df) == 0: handle accordingly which may involve simply returning []
         - Use proper DataFrame column checks when needed: if 'column_name' in df.columns
         - Handle missing data gracefully with pandas methods like dropna()
         - Return empty list [] when no valid data is available
         - Handle edge cases like division by zero
 
-        **CRITICAL STOP LOSS IMPLEMENTATION**: 
+        **CRITICAL STOP LOSS IMPLEMENTATION**:
         BE EXTREMELY CAREFUL WITH stop loss prices. Markets can gap through stops, resulting in much worse exits than expected.
 
         # Step 1: Check for overnight gaps FIRST
@@ -405,16 +405,16 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         3. Walk through intraday bars to find exact stop hit timing
         4. Always check gap-down scenarios first before intraday analysis
 
-        Example: get_bar_data(timeframe="5m", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
+        Example: get_bar_data(timeframe="5", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
 
-        PRINTING DATA (REQUIRED): 
+        PRINTING DATA (REQUIRED):
         - Use print() to print useful data for the user
         - This should include things like but not limited to:number of instances, averages, medians, standard deviations, and other nuanced or unusual or interesting metrics.
         - This should SUPER comprehensive. The user will not have access to the data and information other than what is printed and the instance list.
 
         PLOTLY PLOT GENERATION (REQUIRED):
         - Use plotly to generate plots of useful visualizations of the data
-        - Histograms of performance metrics, returns, etc 
+        - Histograms of performance metrics, returns, etc
         - Always show the plot using .show()
         - Almost always include plots in the strategy to help the user understand the data
         - Ensure to name ALL traces in the plot, otherwise the trace will say 'trace 0'.
@@ -423,10 +423,10 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
         - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
         - Do NOT use timestamp as x-axis values. Use dates instead.
-        - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
+        - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title.
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
-        - Dates should always be in American format. 
+        - Dates should always be in American format.
 
         RETURN FORMAT:
         - *ALWAYS* Return List[Dict] where each dict contains:
@@ -438,42 +438,43 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         * Order these fields logically that would make it best for the reader to understand the table of instances.
         - CRITICAL JSON SAFETY: ALL values must be native Python types (int, float, str, bool)
         - NEVER return pandas/numpy types (datetime64, int64, float64) - they cause JSON serialization errors
-        - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit. 
-        - ALL trades should be shown. The instance list should still consider new trades even if there are open trades. 
+        - ENSURE YOU RETURN THE TRADES/INSTANCES. Do not omit.
+        - ALL trades should be shown. The instance list should still consider new trades even if there are open trades.
         - Instance should STILL be added even if exits have not occured or there is not enough data yet to calculate an exit. Both closed and open trades should be returned.
 
         Generate clean, robust Python code."""
-    
-async def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversationID: str = None, messageID: str = None) -> Dict[str, Any]:
-    """Create or edit a strategy from natural language prompt"""
-    
+
+def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversationID: str = None, messageID: str = None) -> Dict[str, Any]:
+
+
     # Check if this is an edit operation
     is_edit = strategy_id != -1
     existing_strategy = None
-    
+
     if is_edit:
-        existing_strategy = await fetch_strategy_code(user_id, strategy_id)
+        existing_strategy = fetch_strategy_code(user_id, strategy_id)
         if not existing_strategy:
             return {
                 "success": False,
                 "error": f"Strategy {strategy_id} not found for user {user_id}"
             }
-    
-    strategy_code= await _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
-    
+
+    strategy_code= _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
+
     if not strategy_code:
         return {
             "success": False,
             "error": "Failed to generate valid strategy code after retries"
         }
-    
+
     description = _extract_description(strategy_code, prompt)
     if is_edit:
         name = existing_strategy.get('name', 'Strategy')
     else:
         name = _generate_strategy_name(prompt)
-    
-    saved_strategy = await save_strategy(
+
+    saved_strategy = save_strategy(
+        ctx,
         user_id=user_id,
         name=name,
         description=description,
@@ -481,34 +482,37 @@ async def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: 
         python_code=strategy_code,
         strategy_id=strategy_id if is_edit else None
     )
-    
+
     return {
         "success": True,
         "strategy": saved_strategy,
-        "validation_passed": validation_passed
+        "validation_passed": True  # If we got here, validation passed
     }
-        
-    
 
-async def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> tuple[str, bool]:
+
+
+def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> str:
     """Generate strategy with validation retry logic"""
-    
+
     last_validation_error = None
-    
+
     for attempt in range(max_retries + 1):
         try:
             strategy_code = _generate_strategy_code(ctx, user_id, prompt, existing_strategy, last_validation_error, conversationID, messageID)
-            if not strategy_code:
-                continue
-            
-            validation_result, last_validation_error = validate_strategy(strategy_code)                 
-            if validation_result:
-                return strategy_code
+            if strategy_code:
+                valid, last_validation_error = validate_strategy(ctx, strategy_code)
+                if valid:
+                    return strategy_code
+        except ModelGenerationError as e:
+            capture_exception(logger, e)
+            last_validation_error = str(e)
         except Exception as e:
-            logger.error(f"Generation attempt {attempt + 1} failed: {e}")
-            if attempt == max_retries:
-                break
-    
+            # Catch-all for any other exceptions (including ValidationError)
+            capture_exception(logger, e)
+            last_validation_error = str(e)
+        if attempt == max_retries:
+            break
+
     return ""
 
 
@@ -518,7 +522,7 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
     """
     try:
         system_instruction = _get_system_instruction(ctx, prompt)
-        
+
         # Create concise user prompt based on context
         if existing_strategy:
             # For editing - keep it minimal
@@ -531,92 +535,91 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
 
             user_prompt = f"""CREATE STRATEGY: {prompt}"""
 
-        
+
         # Add retry-specific guidance with error context
         if last_error:
-            user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT:"
-            user_prompt += f"\n- Previous attempt failed validation"
+            user_prompt += "\n\nIMPORTANT - RETRY ATTEMPT:"
+            user_prompt += "\n- Previous attempt failed validation"
             if last_error:
-                user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
-            user_prompt += f"\n- Focus on data type safety for pandas operations"
-            user_prompt += f"\n- Use pd.to_numeric() before .quantile() operations"
-            user_prompt += f"\n- Handle NaN values with .dropna() before statistical operations"
-            user_prompt += f"\n- Ensure proper error handling for edge cases"
-        
+                user_prompt += "\n- SPECIFIC ERROR: {last_error}"
+            user_prompt += "\n- Focus on data type safety for pandas operations"
+            user_prompt += "\n- Use pd.to_numeric() before .quantile() operations"
+            user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
+            user_prompt += "\n- Ensure proper error handling for edge cases"
+
         model_name = "o3"
         last_error = None
-        
-            
+
+
             #logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
-        
+
         response = ctx.conn.openai_client.responses.create(
             model=model_name,
             reasoning={"effort": "low"},
-            input=f"{user_prompt}",
-            instructions=f"{system_instruction}",
-            user=f"user:0",
-            metadata={"userID": str(user_id), "env": self.environment, "convID": conversationID, "msgID": messageID},
+            input=user_prompt,
+            instructions=system_instruction,
+            user="user:0",
+            metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversationID, "msgID": messageID},
             timeout=150.0  # 150 second timeout for other models
         )
-        
+
         strategy_code = response.output_text
         strategy_code = _extract_python_code(strategy_code)
-        
-        return strategy_code
-        
-    except Exception as e:
-        last_error = e
-        logger.warning(f"Model {model_name} failed: {e}")
-    
-        
 
-    
-def _extract_python_code(self, response: str) -> str:
+        return strategy_code
+
+    except Exception as e:
+        # Capture and log any unexpected exception with full traceback
+        capture_exception(logger, e)
+        raise ModelGenerationError(f"OpenAI API call failed: {str(e)}") from e
+
+
+
+
+def _extract_python_code(response: str) -> str:
     """Extract Python code from response, removing markdown formatting"""
     # Remove markdown code blocks
     code_block_pattern = r'```(?:python)?\s*(.*?)\s*```'
     matches = re.findall(code_block_pattern, response, re.DOTALL)
-    
+
     if matches:
         return matches[0].strip()
-    
+
     # If no code blocks found, return the response as-is
     return response.strip()
-    
+
 def _extract_description(strategy_code: str, prompt: str) -> str:
     """Extract or generate description from strategy code and prompt"""
     docstring_pattern = r'"""(.*?)"""'
     matches = re.findall(docstring_pattern, strategy_code, re.DOTALL)
-    
+
     if matches:
         description = matches[0].strip()
         # Clean up the description
         if len(description) > 200:
             description = description[:200] + "..."
         return description
-    
     # Fall back to generating description from prompt
     prompt_words = prompt.split()[:15]  # Increased from 10 to 15 words
     return f"Strategy: {' '.join(prompt_words)}{'...' if len(prompt.split()) > 15 else ''}"
-    
+
 def _generate_strategy_name(prompt: str) -> str:
     """Generate a strategy name"""
-    
+
     words = prompt.split()[:5]  # Increased from 4 to 5 words
     clean_words = []
-    
+
     skip_words = {'create', 'a', 'an', 'the', 'strategy', 'for', 'when', 'find', 'identify', 'that', 'this'}
-    
+
     for word in words:
         clean_word = re.sub(r'[^a-zA-Z0-9]', '', word)
         if clean_word.lower() not in skip_words and len(clean_word) > 1:
             clean_words.append(clean_word.title())
-    
+
     if not clean_words:
         clean_words = ['Custom']
-    
+
     # Generate base name and add timestamp to ensure uniqueness
     base_name = f"{' '.join(clean_words)} Strategy"
     timestamp_suffix = datetime.now().strftime("%m%d%H%M")
     return f"{base_name} {timestamp_suffix}"
-    

@@ -33,6 +33,7 @@ from src.alert import alert
 from src.generator import create_strategy
 from src.agent import python_agent
 from src.utils.context import Context, NoSubscribersException
+from src.utils.error_utils import capture_exception
 
 #from utils.context import ExecutionContext, NoSubscribersException
 
@@ -65,11 +66,11 @@ class Worker:
             'create_strategy': create_strategy,
             'python_agent': python_agent
         }
+        self._worker_start_time = time.time()
 
     def run(self):
         """Main queue processing loop with priority queue support"""
         logger.info("🎯 Strategy worker %s starting queue processing...", self.worker_id)
-        self._worker_start_time = time.time()
 
 
         while True:
@@ -105,29 +106,29 @@ class Worker:
 
             execution_context = Context(self.conn, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
             kwargs["ctx"] = execution_context
-            logger.debug("🔧 Executing %s with args: %s", task_type, kwargs)
+            logger.info("🔧 Executing %s with args: %s", task_type, kwargs)
 
             result = None
-            error = None
+            error_obj = None
+            status = "completed"
 
             try:
-                result = asyncio.run(func(**kwargs))
+                result = func(**kwargs)
                 status = "completed"
             except NoSubscribersException as e:
                 logger.warning("Task %s cancelled: %s", task_id, e)
                 status = "cancelled" # Special status for cancelled tasks
             except asyncio.TimeoutError as timeout_error:
-                logger.error("💥 Task %s timed out: %s", task_id, timeout_error)
+                error_obj = capture_exception(logger, timeout_error)
                 status = "error"
-                error = f"Task execution timed out: {str(timeout_error)}"
             except MemoryError as memory_error:
-                logger.error("💥 Task %s ran out of memory: %s", task_id, memory_error)
+                error_obj = capture_exception(logger, memory_error)
                 status = "error"
-                error = f"Task execution failed due to memory constraints: {str(memory_error)}"
             except Exception as exec_error:
-                error = f"Task execution failed: {str(exec_error)}"
+                error_obj = capture_exception(logger, exec_error)
+                status = "error"
             finally:
-                execution_context.publish_result(result, error) #publish result and stop heartbeat
+                execution_context.publish_result(result, error_obj, status) #publish result and stop heartbeat
                 execution_context.destroy() #stop heartbeat and context
 
 if __name__ == "__main__":

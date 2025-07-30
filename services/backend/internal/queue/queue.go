@@ -9,17 +9,94 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 )
 
+// parseError extracts structured error information from various error sources
+func parseError(errorSource interface{}) (*ErrorDetails, string) {
+	if errorSource == nil {
+		return nil, ""
+	}
+
+	// Try to parse as structured error object
+	if errorMap, ok := errorSource.(map[string]interface{}); ok {
+		errorDetails := &ErrorDetails{}
+
+		if errType, ok := errorMap["type"].(string); ok {
+			errorDetails.Type = errType
+		}
+		if errMsg, ok := errorMap["message"].(string); ok {
+			errorDetails.Message = errMsg
+		}
+		if errTrace, ok := errorMap["traceback"].(string); ok {
+			errorDetails.Traceback = errTrace
+		}
+
+		// Parse frames array if present
+		if framesInterface, ok := errorMap["frames"]; ok {
+			if framesArray, ok := framesInterface.([]interface{}); ok {
+				frames := make([]string, 0, len(framesArray))
+				for _, frame := range framesArray {
+					if frameStr, ok := frame.(string); ok {
+						frames = append(frames, frameStr)
+					}
+				}
+				errorDetails.Frames = frames
+			}
+		}
+
+		// Return structured error and formatted message
+		if errorDetails.Type != "" || errorDetails.Message != "" {
+			return errorDetails, fmt.Sprintf("%s: %s", errorDetails.Type, errorDetails.Message)
+		}
+	}
+
+	// Fall back to string error
+	if errorStr, ok := errorSource.(string); ok {
+		return nil, errorStr
+	}
+
+	return nil, ""
+}
+
+// logError logs error information with traceback and optional frame details
+func logError(taskID string, errorDetails *ErrorDetails, errorMsg string) {
+	if errorDetails != nil {
+		log.Printf("❌ Task %s failed with %s: %s", taskID, errorDetails.Type, errorDetails.Message)
+		if errorDetails.Traceback != "" {
+			log.Printf("📋 Task %s traceback:\n%s", taskID, errorDetails.Traceback)
+		}
+
+		// Optionally log individual frames for detailed debugging
+		if len(errorDetails.Frames) > 0 {
+			log.Printf("🔍 Task %s has %d traceback frames available for detailed analysis", taskID, len(errorDetails.Frames))
+			// Uncomment the following lines to print individual frames (useful for debugging):
+			// log.Printf("📝 Task %s detailed frames:", taskID)
+			// for i, frame := range errorDetails.Frames {
+			//     log.Printf("   Frame %d: %s", i+1, strings.TrimSpace(frame))
+			// }
+		}
+	} else if errorMsg != "" {
+		log.Printf("❌ Task %s failed: %s", taskID, errorMsg)
+	}
+}
+
+// ErrorDetails represents structured error information from the Python worker
+type ErrorDetails struct {
+	Type      string   `json:"type"`
+	Message   string   `json:"message"`
+	Traceback string   `json:"traceback"`
+	Frames    []string `json:"frames,omitempty"` // Individual traceback lines for programmatic access
+}
+
 // ResultUpdate represents a task status update
 type ResultUpdate struct {
-	TaskID    string                 `json:"task_id"`
-	Status    string                 `json:"status"` // queued|running|completed|error|cancelled
-	Data      map[string]interface{} `json:"data,omitempty"`
-	Error     string                 `json:"error,omitempty"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	TaskID       string                 `json:"task_id"`
+	Status       string                 `json:"status"` // queued|running|completed|error|cancelled
+	Data         map[string]interface{} `json:"data,omitempty"`
+	Error        string                 `json:"error,omitempty"`         // Legacy string error
+	ErrorDetails *ErrorDetails          `json:"error_details,omitempty"` // New structured error
+	UpdatedAt    time.Time              `json:"updated_at"`
 }
 
 // BacktestResult represents the result of a backtest task
@@ -37,7 +114,8 @@ type BacktestResult struct {
 	StrategyPrints            string             `json:"strategy_prints,omitempty"`
 	StrategyPlots             []StrategyPlotData `json:"strategy_plots,omitempty"`
 	ResponseImages            []string           `json:"response_images,omitempty"`
-	ErrorMessage              string             `json:"error_message,omitempty"`
+	ErrorMessage              string             `json:"error_message,omitempty"` // Legacy field
+	Error                     *ErrorDetails      `json:"error,omitempty"`         // New structured error
 }
 
 // StrategyPlotData represents plotly plot data
@@ -49,23 +127,26 @@ type StrategyPlotData struct {
 
 // ScreeningResult represents the result of a screening task
 type ScreeningResult struct {
-	Success   bool                     `json:"success"`
-	Instances []map[string]interface{} `json:"instances"`
-	Error     string                   `json:"error,omitempty"`
+	Success      bool                     `json:"success"`
+	Instances    []map[string]interface{} `json:"instances"`
+	Error        string                   `json:"error,omitempty"`         // Legacy string error
+	ErrorDetails *ErrorDetails            `json:"error_details,omitempty"` // New structured error
 }
 
 // AlertResult represents the result of an alert task
 type AlertResult struct {
 	Success      bool                     `json:"success"`
 	Instances    []map[string]interface{} `json:"instances"`
-	ErrorMessage string                   `json:"error_message,omitempty"`
+	ErrorMessage string                   `json:"error_message,omitempty"` // Legacy field
+	Error        *ErrorDetails            `json:"error,omitempty"`         // New structured error
 }
 
 // CreateStrategyResult represents the result of a strategy creation task
 type CreateStrategyResult struct {
-	Success  bool      `json:"success"`
-	Strategy *Strategy `json:"strategy,omitempty"`
-	Error    string    `json:"error,omitempty"`
+	Success      bool          `json:"success"`
+	Strategy     *Strategy     `json:"strategy,omitempty"`
+	Error        string        `json:"error,omitempty"`         // Legacy string error
+	ErrorDetails *ErrorDetails `json:"error_details,omitempty"` // New structured error
 }
 
 // Strategy represents a created strategy
@@ -86,13 +167,14 @@ type Strategy struct {
 
 // PythonAgentResult represents the result of a general python agent task
 type PythonAgentResult struct {
-	Success        bool     `json:"success"`
-	Result         []any    `json:"result"`
-	Prints         string   `json:"prints"`
-	Plots          []any    `json:"plots"`
-	ResponseImages []string `json:"responseImages"`
-	ExecutionID    string   `json:"executionID"`
-	Error          string   `json:"error,omitempty"`
+	Success        bool          `json:"success"`
+	Result         []any         `json:"result"`
+	Prints         string        `json:"prints"`
+	Plots          []any         `json:"plots"`
+	ResponseImages []string      `json:"responseImages"`
+	ExecutionID    string        `json:"executionID"`
+	Error          string        `json:"error,omitempty"`         // Legacy string error
+	ErrorDetails   *ErrorDetails `json:"error_details,omitempty"` // New structured error
 }
 
 // UnifiedMessage represents the new format from worker context system
@@ -101,14 +183,13 @@ type UnifiedMessage struct {
 	MessageType string                 `json:"message_type"` // update | heartbeat | result
 	Status      string                 `json:"status"`       // running | completed | error | cancelled | heartbeat
 	Data        map[string]interface{} `json:"data,omitempty"`
+	Error       interface{}            `json:"error,omitempty"` // Can be string or structured error object
 }
 
 // Handle provides control over a queued task
 type Handle struct {
-	Updates    <-chan ResultUpdate
-	Cancel     func() error
-	Await      func(ctx context.Context) (ResultUpdate, error)
-	AwaitTyped func(ctx context.Context, resultType interface{}) (interface{}, error)
+	Updates <-chan ResultUpdate
+	Cancel  func() error
 
 	// Internal fields for cleanup
 	taskID     string
@@ -117,11 +198,62 @@ type Handle struct {
 	conn       *data.Conn
 	updatesCh  chan ResultUpdate
 	cancelCh   chan struct{}
-	doneCh     chan struct{}
 	cancelOnce sync.Once
 	mu         sync.RWMutex
 	cancelled  bool
-	pubsub     *redis.PubSub
+}
+
+// Await waits for task completion and returns the typed result
+func (h *Handle) Await(ctx context.Context, resultType interface{}) (interface{}, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-h.cancelCh:
+			return nil, fmt.Errorf("task was cancelled")
+		case update := <-h.updatesCh:
+			// Only process terminal statuses
+			if update.Status == "completed" || update.Status == "error" || update.Status == "cancelled" {
+				// Handle error and cancelled cases
+				if update.Status == "error" {
+					// Log detailed error information
+					logError(update.TaskID, update.ErrorDetails, update.Error)
+
+					// Return appropriate error message
+					if update.ErrorDetails != nil {
+						return nil, fmt.Errorf("task failed with %s: %s", update.ErrorDetails.Type, update.ErrorDetails.Message)
+					}
+					return nil, fmt.Errorf("task failed: %s", update.Error)
+				}
+				if update.Status == "cancelled" {
+					return nil, fmt.Errorf("task was cancelled")
+				}
+
+				// Handle success case - unmarshal the data to the provided type
+				if update.Status == "completed" && update.Data != nil {
+					// Convert map to JSON and then unmarshal to the provided type
+					dataJSON, err := json.Marshal(update.Data)
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal result data: %w", err)
+					}
+
+					if err := json.Unmarshal(dataJSON, resultType); err != nil {
+						return nil, fmt.Errorf("failed to unmarshal result data to %T: %w", resultType, err)
+					}
+
+					return resultType, nil
+				}
+
+				return nil, fmt.Errorf("unexpected task status: %s", update.Status)
+			}
+			// Continue waiting for terminal status
+		}
+	}
+}
+
+// AwaitTyped is deprecated, use Await instead
+func (h *Handle) AwaitTyped(ctx context.Context, resultType interface{}) (interface{}, error) {
+	return h.Await(ctx, resultType)
 }
 
 // TaskData represents the structure of a task in the queue (matches worker expectation)
@@ -133,14 +265,6 @@ type TaskData struct {
 	Priority          string `json:"priority"`
 	StatusID          string `json:"status_id"`          // Unique ID for status updates
 	HeartbeatInterval int    `json:"heartbeat_interval"` // Heartbeat interval in seconds
-}
-
-// TaskAssignment represents a task currently assigned to a worker
-type TaskAssignment struct {
-	WorkerID  string `json:"worker_id"`
-	TaskID    string `json:"task_id"`
-	StartedAt string `json:"started_at"`
-	Status    string `json:"status"`
 }
 
 // WorkerHeartbeat represents a worker's heartbeat data
@@ -202,7 +326,6 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 	// Create handle with channels
 	updatesCh := make(chan ResultUpdate, 10) // Buffered channel for updates
 	cancelCh := make(chan struct{})
-	doneCh := make(chan struct{})
 
 	handle := &Handle{
 		Updates:   updatesCh,
@@ -212,7 +335,6 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 		conn:      conn,
 		updatesCh: updatesCh,
 		cancelCh:  cancelCh,
-		doneCh:    doneCh,
 	}
 
 	// Set up cancel function
@@ -222,72 +344,13 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 			handle.cancelled = true
 			handle.mu.Unlock()
 
-			// Unsubscribe from status updates to signal cancellation to worker
-			if handle.pubsub != nil {
-				handle.pubsub.Close()
-			}
-
 			close(cancelCh)
 		})
 		return nil
 	}
 
-	// Set up await function
-	handle.Await = func(ctx context.Context) (ResultUpdate, error) {
-		for {
-			select {
-			case <-ctx.Done():
-				return ResultUpdate{}, ctx.Err()
-			case <-cancelCh:
-				return ResultUpdate{TaskID: taskID, Status: "cancelled", UpdatedAt: time.Now()}, nil
-			case update := <-updatesCh:
-				if update.Status == "completed" || update.Status == "error" || update.Status == "cancelled" {
-					return update, nil
-				}
-				// Continue waiting for final status
-			case <-doneCh:
-				// Task monitoring completed, return error
-				return ResultUpdate{}, fmt.Errorf("task monitoring completed without final result")
-			}
-		}
-	}
-
-	// Set up typed await function
-	handle.AwaitTyped = func(ctx context.Context, resultType interface{}) (interface{}, error) {
-		result, err := handle.Await(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		// Handle error and cancelled cases
-		if result.Status == "error" {
-			return nil, fmt.Errorf("task failed: %s", result.Error)
-		}
-		if result.Status == "cancelled" {
-			return nil, fmt.Errorf("task was cancelled")
-		}
-
-		// Handle success case - unmarshal the data to the provided type
-		if result.Status == "completed" && result.Data != nil {
-			// Convert map to JSON and then unmarshal to the provided type
-			dataJSON, err := json.Marshal(result.Data)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal result data: %w", err)
-			}
-
-			if err := json.Unmarshal(dataJSON, resultType); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal result data to %T: %w", resultType, err)
-			}
-
-			return resultType, nil
-		}
-
-		return nil, fmt.Errorf("unexpected task status: %s", result.Status)
-	}
-
-	// Start monitoring goroutines
-	go handle.subscribeToUpdates(ctx, statusID)
-	go handle.watchdog(ctx, maxRetries, timeout, priority, statusID, 5) // Pass heartbeat interval
+	// Start unified event loop
+	go handle.eventLoop(ctx, maxRetries, timeout, priority, statusID, 5) // Pass heartbeat interval
 
 	// Send initial queued update
 	initialUpdate := ResultUpdate{
@@ -310,33 +373,49 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 // AwaitTypedResult provides a generic typed await method
 func AwaitTypedResult[T any](ctx context.Context, handle *Handle) (*T, error) {
 	var result T
-	_, err := handle.AwaitTyped(ctx, &result)
+	_, err := handle.Await(ctx, &result)
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-// subscribeToUpdates subscribes to Redis updates for this task using the new unified system
-func (h *Handle) subscribeToUpdates(ctx context.Context, statusID string) {
-	defer close(h.doneCh)
-	defer close(h.updatesCh)
-
+// eventLoop combines subscription and watchdog functionality in a single goroutine
+func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Duration, priority bool, statusID string, heartbeatInterval int) {
 	// Subscribe to unified task status channel
 	statusChannel := fmt.Sprintf("task_status:%s", statusID)
 	pubsub := h.conn.Cache.Subscribe(ctx, statusChannel)
-	h.pubsub = pubsub
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
 	log.Printf("🔔 Subscribed to status channel: %s", statusChannel)
 
-	for {
+	retryCount := 0
+	lastHeartbeat := time.Now()
+	taskStarted := false
+	var startTime time.Time
+
+	checkInterval := time.Duration(heartbeatInterval) * time.Second
+	heartbeatTimeout := time.Duration(heartbeatInterval*3) * time.Second
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	// Timer for waiting for the first message (assignment indicator)
+	const firstMsgTimeout = 60 * time.Second
+	startTimer := time.NewTimer(firstMsgTimeout)
+	defer startTimer.Stop()
+
+	for retryCount <= maxRetries {
 		select {
 		case <-ctx.Done():
 			return
 		case <-h.cancelCh:
 			return
+		case <-startTimer.C:
+			if !taskStarted {
+				log.Printf("⚠️ Task %s never produced a start message", h.taskID)
+				break // Break to retry logic
+			}
 		case msg := <-ch:
 			if msg == nil {
 				continue
@@ -356,23 +435,41 @@ func (h *Handle) subscribeToUpdates(ctx context.Context, statusID string) {
 			// Handle different message types
 			switch unifiedMsg.MessageType {
 			case "heartbeat":
-				// Just log heartbeat for debugging, don't send to user updates channel
+				// Update heartbeat timestamp
+				lastHeartbeat = time.Now()
 				log.Printf("💓 Heartbeat received for task %s", h.taskID)
 				continue
 
-			case "update":
+			case "progress":
 				// Status update from task execution
+				if unifiedMsg.Status == "running" && !taskStarted {
+					taskStarted = true
+					// Parse start time from message data or use current time
+					if ts, ok := unifiedMsg.Data["started_at"].(string); ok {
+						if parsedTime, err := time.Parse(time.RFC3339, ts); err == nil {
+							startTime = parsedTime
+						} else {
+							startTime = time.Now()
+						}
+					} else {
+						startTime = time.Now()
+					}
+					log.Printf("✅ Task %s started", h.taskID)
+					// Stop the first message timer since we've received the start signal
+					startTimer.Stop()
+				}
+				lastHeartbeat = time.Now()
+
 				resultUpdate := ResultUpdate{
 					TaskID:    h.taskID,
 					Status:    unifiedMsg.Status,
 					Data:      unifiedMsg.Data,
 					UpdatedAt: time.Now(),
 				}
-
-				// Send update to channel (non-blocking)
 				select {
 				case h.updatesCh <- resultUpdate:
 				default:
+					log.Printf("❌ Channel full, skipping update for task %s", h.taskID)
 					// Channel full, skip this update
 				}
 
@@ -385,11 +482,28 @@ func (h *Handle) subscribeToUpdates(ctx context.Context, statusID string) {
 					UpdatedAt: time.Now(),
 				}
 
-				// Handle error message if present
-				if errorMsg, exists := unifiedMsg.Data["error"]; exists {
-					if errorStr, ok := errorMsg.(string); ok {
-						resultUpdate.Error = errorStr
+				// Handle structured error information
+				var errorDetails *ErrorDetails
+				var errorStr string
+
+				// First check the unified message error field
+				if unifiedMsg.Error != nil {
+					errorDetails, errorStr = parseError(unifiedMsg.Error)
+				}
+
+				// Fall back to checking the Data field if no error found yet
+				if errorDetails == nil && errorStr == "" && unifiedMsg.Data != nil {
+					if errorObj, exists := unifiedMsg.Data["error"]; exists {
+						errorDetails, errorStr = parseError(errorObj)
 					}
+				}
+
+				resultUpdate.ErrorDetails = errorDetails
+				resultUpdate.Error = errorStr
+
+				// Log error details if this is an error status
+				if unifiedMsg.Status == "error" {
+					logError(h.taskID, errorDetails, errorStr)
 				}
 
 				// Send final update to channel (non-blocking)
@@ -399,199 +513,59 @@ func (h *Handle) subscribeToUpdates(ctx context.Context, statusID string) {
 					// Channel full, skip this update
 				}
 
-				// Stop monitoring if task is complete
+				// Task completed successfully
 				if unifiedMsg.Status == "completed" || unifiedMsg.Status == "error" || unifiedMsg.Status == "cancelled" {
 					return
 				}
-			}
-		}
-	}
-}
-
-// watchdog monitors the task for worker failures and handles retries
-func (h *Handle) watchdog(ctx context.Context, maxRetries int, timeout time.Duration, priority bool, statusID string, heartbeatInterval int) {
-	retryCount := 0
-
-	for retryCount <= maxRetries {
-		select {
-		case <-ctx.Done():
-			return
-		case <-h.cancelCh:
-			return
-		case <-h.doneCh:
-			return
-		default:
-		}
-
-		// Wait for task assignment (task to be picked up by worker)
-		assignment, err := h.waitForAssignment(ctx, 30*time.Second)
-		if err != nil {
-			if retryCount >= maxRetries {
-				h.markTaskAsFailed("failed to get task assignment after max retries")
-				return
-			}
-			retryCount++
-			continue
-		}
-
-		// Monitor worker health
-		if h.monitorWorkerHealth(ctx, assignment, timeout, statusID, heartbeatInterval) {
-			// Task completed successfully or was cancelled
-			return
-		}
-
-		// Worker died or task timed out
-		if retryCount >= maxRetries {
-			h.markTaskAsFailed(fmt.Sprintf("max retries (%d) exceeded", maxRetries))
-			return
-		}
-
-		log.Printf("🔄 Task %s worker %s failed, retrying (%d/%d)", h.taskID, assignment.WorkerID, retryCount+1, maxRetries)
-		retryCount++
-
-		// Requeue the task
-		if err := h.requeueTask(ctx, retryCount, "worker failure or timeout", priority, statusID, heartbeatInterval); err != nil {
-			log.Printf("❌ Failed to requeue task %s: %v", h.taskID, err)
-			h.markTaskAsFailed(fmt.Sprintf("failed to requeue: %v", err))
-			return
-		}
-	}
-}
-
-// waitForAssignment waits for the task to be assigned to a worker
-func (h *Handle) waitForAssignment(ctx context.Context, timeout time.Duration) (*TaskAssignment, error) {
-	assignmentKey := fmt.Sprintf("task_assignment:%s", h.taskID)
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-h.cancelCh:
-			return nil, fmt.Errorf("task cancelled")
-		default:
-		}
-
-		assignmentJSON, err := h.conn.Cache.Get(ctx, assignmentKey).Result()
-		if err == nil {
-			var assignment TaskAssignment
-			if err := json.Unmarshal([]byte(assignmentJSON), &assignment); err == nil {
-				return &assignment, nil
-			}
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	return nil, fmt.Errorf("timeout waiting for task assignment")
-}
-
-// monitorWorkerHealth monitors the assigned worker's health via the unified messaging system
-func (h *Handle) monitorWorkerHealth(ctx context.Context, assignment *TaskAssignment, timeout time.Duration, statusID string, heartbeatInterval int) bool {
-	checkInterval := time.Duration(heartbeatInterval) * time.Second
-	heartbeatTimeout := time.Duration(heartbeatInterval*3) * time.Second // 3 missed heartbeats = failure
-
-	// Parse start time
-	startTime, err := time.Parse(time.RFC3339, assignment.StartedAt)
-	if err != nil {
-		log.Printf("⚠️ Invalid start time for task %s: %v", h.taskID, err)
-		return false
-	}
-
-	ticker := time.NewTicker(checkInterval)
-	defer ticker.Stop()
-
-	lastHeartbeat := time.Now() // Initialize to now
-	taskStarted := false
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-h.cancelCh:
-			return true // Cancelled by user
-		case <-h.doneCh:
-			return true // Task completed
-
-		case update := <-h.updatesCh:
-			// Monitor updates from the subscription
-			if update.Status == "running" {
-				taskStarted = true
-				lastHeartbeat = time.Now()
-				log.Printf("✅ Task %s started, heartbeat monitoring active", h.taskID)
-			}
-			// Update heartbeat time for any update (including heartbeats)
-			lastHeartbeat = time.Now()
-
-			// Check if task completed
-			if update.Status == "completed" || update.Status == "error" || update.Status == "cancelled" {
-				return true
 			}
 
 		case <-ticker.C:
 			now := time.Now()
 
-			// Check if task has been running too long
-			if now.Sub(startTime) > timeout {
-				log.Printf("⏰ Task %s timed out after %v", h.taskID, timeout)
-				return false
-			}
-
-			// Only check heartbeats after task has started
+			// Only perform timeout checks if task has started
 			if taskStarted {
+				// Check if task has been running too long
+				if now.Sub(startTime) > timeout {
+					log.Printf("⏰ Task %s timed out after %v", h.taskID, timeout)
+					break // Break to retry logic
+				}
+
 				// Check if we've missed heartbeats
 				if now.Sub(lastHeartbeat) > heartbeatTimeout {
 					log.Printf("💀 Task %s missed heartbeats - last heartbeat %v ago", h.taskID, now.Sub(lastHeartbeat))
-					return false
+					break // Break to retry logic
 				}
 			} else {
-				// Check if task assignment still exists (task may have started but we missed the update)
-				assignmentKey := fmt.Sprintf("task_assignment:%s", h.taskID)
-				exists, err := h.conn.Cache.Exists(ctx, assignmentKey).Result()
-				if err != nil || exists == 0 {
-					// Assignment removed, task likely completed
-					return true
-				}
-
 				// If task hasn't started after reasonable time, consider it failed
-				if now.Sub(startTime) > 2*time.Minute {
+				if now.Sub(time.Now().Add(-firstMsgTimeout)) > 2*time.Minute {
 					log.Printf("⚠️ Task %s never started after 2 minutes", h.taskID)
-					return false
+					break // Break to retry logic
 				}
 			}
 		}
 	}
-}
 
-// isWorkerAlive checks if a worker is still sending heartbeats
-func (h *Handle) isWorkerAlive(ctx context.Context, workerID string) bool {
-	heartbeatKey := fmt.Sprintf("worker_heartbeat:%s", workerID)
-	heartbeatJSON, err := h.conn.Cache.Get(ctx, heartbeatKey).Result()
-	if err != nil {
-		return false
+	// Worker died or task timed out - retry logic
+	if retryCount >= maxRetries {
+		failureReason := fmt.Sprintf("max retries (%d) exceeded", maxRetries)
+		h.markTaskAsFailed(failureReason)
+		log.Printf("❌ Task %s permanently failed after %d retries", h.taskID, maxRetries)
+		return
 	}
 
-	var heartbeat WorkerHeartbeat
-	if err := json.Unmarshal([]byte(heartbeatJSON), &heartbeat); err != nil {
-		return false
+	log.Printf("🔄 Task %s failed, retrying (%d/%d)", h.taskID, retryCount+1, maxRetries)
+	retryCount++
+
+	// Requeue the task
+	if err := h.requeueTask(ctx, retryCount, "worker failure or timeout", priority, statusID, heartbeatInterval); err != nil {
+		log.Printf("❌ Failed to requeue task %s (retry %d): %v", h.taskID, retryCount, err)
+		h.markTaskAsFailed(fmt.Sprintf("failed to requeue: %v", err))
+		return
 	}
 
-	// Parse heartbeat timestamp
-	var heartbeatTime time.Time
-	heartbeatTime, err = time.Parse(time.RFC3339, heartbeat.Timestamp)
-	if err != nil {
-		// Try alternative formats
-		heartbeatTime, err = time.Parse("2006-01-02T15:04:05.000000", heartbeat.Timestamp)
-		if err != nil {
-			heartbeatTime, err = time.Parse("2006-01-02T15:04:05", heartbeat.Timestamp[:19])
-			if err != nil {
-				return false
-			}
-		}
-	}
-
-	// Check if heartbeat is recent (within 15 seconds)
-	return time.Since(heartbeatTime) <= 15*time.Second
+	// Reset task state for retry
+	taskStarted = false
+	startTimer.Reset(firstMsgTimeout)
 }
 
 // requeueTask requeues the task with updated retry information
@@ -640,10 +614,6 @@ func (h *Handle) requeueTask(ctx context.Context, retryCount int, reason string,
 		return fmt.Errorf("failed to push task to queue: %w", err)
 	}
 
-	// Clear task assignment
-	assignmentKey := fmt.Sprintf("task_assignment:%s", h.taskID)
-	h.conn.Cache.Del(ctx, assignmentKey)
-
 	log.Printf("🔄 Task %s requeued (retry %d)", h.taskID, retryCount)
 	return nil
 }
@@ -665,7 +635,8 @@ func (h *Handle) markTaskAsFailed(reason string) {
 		// Channel full or closed
 	}
 
-	log.Printf("❌ Task %s marked as failed: %s", h.taskID, reason)
+	// Log the watchdog failure
+	log.Printf("❌ Task %s marked as failed by watchdog: %s", h.taskID, reason)
 }
 
 // Convenience wrapper functions for common task types

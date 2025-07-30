@@ -525,7 +525,7 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:         wrapWithContext(strategy.RunScreening),
+			Function:         strategy.RunScreening,
 			StatusMessage:    "Running screener",
 			UserSpecificTool: false,
 		},

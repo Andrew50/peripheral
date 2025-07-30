@@ -42,7 +42,7 @@ type ScreeningResult struct {
 // AlertArgs contains arguments for strategy alerts
 
 // RunScreening executes a complete strategy screening using the new worker architecture
-func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args ScreeningArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -62,8 +62,8 @@ func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("strategy not found or access denied")
 	}
 
-	// Call the worker's run_screener function
-	result, err := callWorkerScreening(context.Background(), conn, args.StrategyID, args.Universe, args.Limit)
+	// Call the worker's run_screener function with the passed context
+	result, err := callWorkerScreening(ctx, conn, args.StrategyID, args.Universe, args.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}

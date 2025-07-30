@@ -286,7 +286,7 @@ func initPriceAlerts(conn *data.Conn) error {
 		return fmt.Errorf("iterating price alert rows: %w", err)
 	}
 
-	log.Printf("Finished initializing %d price alerts", getPriceAlertCount())
+	//log.Printf("Finished initializing %d price alerts", getPriceAlertCount())
 	return nil
 }
 
@@ -333,7 +333,7 @@ func initStrategyAlerts(conn *data.Conn) error {
 		return fmt.Errorf("iterating strategy alert rows: %w", err)
 	}
 
-	log.Printf("Finished initializing %d strategy alerts", getStrategyAlertCount())
+	//log.Printf("Finished initializing %d strategy alerts", getStrategyAlertCount())
 	return nil
 }
 
@@ -434,11 +434,11 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert) error {
 	// Generate unique task ID
 	taskID := fmt.Sprintf("strategy_alert_%d_%d", strategy.StrategyID, time.Now().UnixNano())
-	log.Printf("Executing strategy alert %d (task: %s)", strategy.StrategyID, taskID)
+	//log.Printf("Executing strategy alert %d (task: %s)", strategy.StrategyID, taskID)
 	// Log the configured universe for additional debugging
-	log.Printf("Strategy alert %d universe string: %s", strategy.StrategyID, strategy.Universe)
+	//log.Printf("Strategy alert %d universe string: %s", strategy.StrategyID, strategy.Universe)
 	// Log the alert threshold as well for completeness
-	log.Printf("Strategy alert %d alert threshold: %.2f", strategy.StrategyID, strategy.Threshold)
+	//log.Printf("Strategy alert %d alert threshold: %.2f", strategy.StrategyID, strategy.Threshold)
 
 	// Prepare strategy alert task payload
 	task := map[string]interface{}{
@@ -475,10 +475,10 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 				}
 			}
 			task["args"].(map[string]interface{})["universe"] = universe
-			log.Printf("Strategy alert %d: using specific universe with %d symbols", strategy.StrategyID, len(universe))
+			//log.Printf("Strategy alert %d: using specific universe with %d symbols", strategy.StrategyID, len(universe))
 		} else {
 			task["args"].(map[string]interface{})["universe"] = nil
-			log.Printf("Strategy alert %d: empty universe string, using default universe", strategy.StrategyID)
+			//log.Printf("Strategy alert %d: empty universe string, using default universe", strategy.StrategyID)
 		}
 	}
 

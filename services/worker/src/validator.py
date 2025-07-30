@@ -224,28 +224,36 @@ def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]
             'min_bars': 1,      # default
             'line_number': getattr(call_node, 'lineno', 0)
         }
+        filters_node = None  # NEW
         # Extract positional arguments
         if len(call_node.args) >= 1:
             # First arg is timeframe
             timeframe = _extract_string_value(call_node.args[0])
             if timeframe:
                 call_info['timeframe'] = timeframe
+        # Adjusted positional index handling for min_bars & filters
+        if len(call_node.args) >= 3:
+            # In old signature: (timeframe, columns, min_bars, filters, ...)
+            min_bars_candidate = _extract_int_value(call_node.args[2])
+            if min_bars_candidate is not None:
+                call_info['min_bars'] = min_bars_candidate
         if len(call_node.args) >= 4:
-            # Fourth arg is min_bars (timeframe, security_ids, columns, min_bars)
-            min_bars = _extract_int_value(call_node.args[3])
-            if min_bars is not None:
-                call_info['min_bars'] = min_bars
+            # Fourth positional arg may be filters dict
+            filters_node = call_node.args[3]
         # Extract keyword arguments
         for kw in call_node.keywords:
             if kw.arg == 'timeframe':
-                timeframe = _extract_string_value(kw.value)
-                if timeframe:
-                    call_info['timeframe'] = timeframe
+                timeframe_kw = _extract_string_value(kw.value)
+                if timeframe_kw:
+                    call_info['timeframe'] = timeframe_kw
             elif kw.arg == 'min_bars':
-                min_bars = _extract_int_value(kw.value)
-                if min_bars is not None:
-                    call_info['min_bars'] = min_bars
-
+                min_bars_kw = _extract_int_value(kw.value)
+                if min_bars_kw is not None:
+                    call_info['min_bars'] = min_bars_kw
+            elif kw.arg == 'filters':
+                filters_node = kw.value
+        # Analyze filters for ticker info
+        call_info['filter_analysis'] = _analyze_filters_ast(filters_node)
         return call_info
 
     except ValueError as e:
@@ -305,7 +313,37 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
         logger.debug("_extract_int_value: %s", e)
     return None
 
-def validate_strategy(ctx: Context, code: str) -> bool:
+def _analyze_filters_ast(filters_node: Optional[ast.AST]) -> Dict[str, Any]:
+    """Analyze filters AST node to extract ticker information."""
+    filter_analysis = {
+        "has_tickers": False,
+        "specific_tickers": []
+    }
+    if filters_node is None:
+        return filter_analysis
+    try:
+        if isinstance(filters_node, ast.Dict):
+            tickers = set()
+            for key, value in zip(filters_node.keys, filters_node.values):
+                key_str = _extract_string_value(key)
+                if key_str in ['tickers', 'ticker']:
+                    if isinstance(value, ast.List):
+                        for elem in value.elts:
+                            ticker = _extract_string_value(elem)
+                            if ticker:
+                                tickers.add(ticker.upper())
+                    elif isinstance(value, (ast.Constant, ast.Str)):
+                        ticker = _extract_string_value(value)
+                        if ticker:
+                            tickers.add(ticker.upper())
+            if tickers:
+                filter_analysis["has_tickers"] = True
+                filter_analysis["specific_tickers"] = sorted(list(tickers))
+    except Exception as e:
+        logger.debug("Error analyzing filters AST: %s", e)
+    return filter_analysis
+
+def validate_strategy(ctx: Context, code: str) -> Tuple[bool, str]:
     """
     Comprehensive code validation including:
     1. Syntax compilation check
@@ -313,18 +351,23 @@ def validate_strategy(ctx: Context, code: str) -> bool:
     3. DataFrame strategy compliance
     4. Function signature validation
     5. Return value structure validation
+    
+    Returns:
+        Tuple of (is_valid, error_message)
     """
     try:
         validate_code(code)
-        _,_,_,_,error = execute_strategy(ctx,code,"validation")
-        return error is None
+        
+        # Use the proper validation execution function
+        is_valid, error_message = execute_validation(ctx, code)
+        return is_valid, error_message
 
     except (SyntaxError, ValidationError) as e:
         logger.warning("Code failed validation: %s", e)
-        raise
+        return False, str(e)
     except ValueError as e:
         logger.error("Unexpected error during validation: %s", e)
-        return False
+        return False, str(e)
 def validate_code(code: str) -> bool:
     """
     Validate code syntax and structure
@@ -597,14 +640,15 @@ def execute_validation(
     get_bar_data_function_calls = extract_get_bar_data_calls(strategy_code)
     tickers_in_strategy_code = get_all_tickers_from_calls(get_bar_data_function_calls)
 
-    symbols_for_validation = tickers_in_strategy_code if len(tickers_in_strategy_code) <= 2 else tickers_in_strategy_code[:2]
-    if not symbols_for_validation:
-        raise ValueError("Validation failed: no tickers extracted from strategy code; cannot validate without ticker filters")
+    # Use up to two tickers for fast validation if any were found
+    symbols_for_validation = (tickers_in_strategy_code[:2]
+                             if tickers_in_strategy_code else ['AAPL', 'MSFT'])
 
-    # execute with single symbol and single output timestep
+    # execute with optional symbol subset (can be None)
     _, _, _, _, error = execute_strategy(
         ctx,
         strategy_code,
+        strategy_id=-1,
         symbols=symbols_for_validation,
         start_date=None,
         end_date=None

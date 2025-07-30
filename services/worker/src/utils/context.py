@@ -20,7 +20,7 @@ class Context():
     It is used to publish progress updates, results, and heartbeats to the Redis pubsub system.
     """
 
-    def __init__(self, conn: Conn, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str):
+    def __init__(self, conn: Conn, task_id: str, status_id: str, heartbeat_interval: int, queue_type: str, priority: str, worker_id: str, skip_heartbeat: bool = False):
         self.conn = conn
         self.start_time = time.time()
         self.task_id = task_id
@@ -31,33 +31,26 @@ class Context():
         self.priority = priority
         self.worker_id = worker_id
         self._cancellation_event = threading.Event()
-        self._start_heartbeat()
-        try:
-            self.publish_update("running", {"worker_id": self.worker_id, "queue_type": queue_type, "priority": priority, "started_at": datetime.utcnow().isoformat()})
-        except NoSubscribersException:
-            logger.warning(f"Task {self.task_id} has no subscribers on startup, signalling cancellation.")
-            self._cancellation_event.set()
+        if not skip_heartbeat:
+            self._start_heartbeat()
+            self.publish_progress("running", {"worker_id": self.worker_id, "queue_type": queue_type, "priority": priority, "started_at": datetime.utcnow().isoformat()})
+            #try:
+            #except NoSubscribersException:
+                #logger.warning("Task %s has no subscribers on startup, signalling cancellation.", self.task_id)
+                #self._cancellation_event.set()
 
-    def publish_update(self, message: str, data: Dict[str, Any] = None):
+    def publish_progress(self, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks using unified messaging"""
-        try:
-            # Calculate elapsed time since task initialization
-            elapsed_time = time.time() - self.task_start_time
-            
-            # Prepare data payload with elapsed time
-            update_data = data.copy() if data else {}
-            update_data['elapsed_time'] = round(elapsed_time, 2)
-            
-            self._publish_status(
-                message_type="update",
-                status=message,
-                data=update_data
-            )
-        except Exception as e:
-            logger.error(f"❌ Failed to publish progress for {self.task_id}: {e}")
-            logger.error(f"📄 Full traceback: {traceback.format_exc()}")
-            if isinstance(e, NoSubscribersException):
-                raise
+        elapsed_time = time.time() - self.task_start_time
+
+        update_data = data.copy() if data else {}
+        update_data['elapsed_time'] = round(elapsed_time, 2)
+
+        self._publish_update(
+            message_type="progress",
+            status=message,
+            data=update_data
+        )
 
     def _start_heartbeat(self):
         """Start the asynchronous heartbeat thread"""
@@ -67,7 +60,7 @@ class Context():
 
 
     # all status updates go through here
-    def _publish_status(self, message_type: str, status: str, data: Dict[str, Any], error: str = None):
+    def _publish_update(self, message_type: str, status: str, data: Dict[str, Any], error: Dict[str, str] = None):
         """Publish status update"""
         elapsed_time = time.time() - self.task_start_time
         subscribers = self.conn.redis_client.publish(f"task_status:{self.status_id}", json.dumps({
@@ -85,27 +78,27 @@ class Context():
         """Asynchronous heartbeat loop - runs in separate thread"""
 
         while not self._heartbeat_stop_event.is_set():
-            try:
-                self.publish_update("heartbeat", {})
+            #try:
+            self._publish_update("heartbeat", "heartbeat", {})
 
-            except NoSubscribersException:
-                logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
-                self._cancellation_event.set()
-                break  # Stop heartbeat thread
-            except Exception as e:
-                logger.error("❌ Heartbeat thread error: %s", e)
+            #except NoSubscribersException:
+            #logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
+            #self._cancellation_event.set()
+            #break  # Stop heartbeat thread
+            #except Exception as e:
+                #logger.error("❌ Heartbeat thread error: %s", e)
             self._heartbeat_stop_event.wait(self.heartbeat_interval)
 
-    def publish_result(self, results: Dict[str, Any], error: str = None):
+    def publish_result(self, results: Dict[str, Any], error: Dict[str, str] = None, status: str = "completed"):
         """Set task result in Redis and publish unified update"""
         # Calculate elapsed time since task initialization
         # Prepare data payload, include error if present
         payload = results.copy() if isinstance(results, dict) else {}
 
         try:
-            self._publish_status(
+            self._publish_update(
                 message_type="result",
-                status="completed",
+                status=status,
                 error=error,
                 data=payload,
             )
@@ -127,7 +120,7 @@ class Context():
         self.conn.redis_client.delete(f"task_heartbeats:{self.task_id}")
         self.conn.redis_client.delete(f"task_progress:{self.task_id}")
 
-    def check_for_cancellation(self):
-        """Check if task cancellation has been requested."""
-        if self._cancellation_event.is_set():
-            raise NoSubscribersException("Task cancelled due to no subscribers.")
+    #def check_for_cancellation(self):
+        #"""Check if task cancellation has been requested."""
+        #if self._cancellation_event.is_set():
+            #raise NoSubscribersException("Task cancelled due to no subscribers.")

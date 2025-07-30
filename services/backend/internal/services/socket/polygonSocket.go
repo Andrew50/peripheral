@@ -411,7 +411,7 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 	quitChanOnce = sync.Once{}
 
 	// Initialize OHLCV buffer with realtime enabled
-	log.Printf("📊 About to initialize OHLCV buffer...")
+	//log.Printf("📊 About to initialize OHLCV buffer...")
 	if err := InitOHLCVBuffer(conn); err != nil {
 		return fmt.Errorf("init OHLCV buffer: %w", err)
 	}

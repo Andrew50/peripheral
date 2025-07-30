@@ -11,6 +11,7 @@ import base64
 import logging
 import io
 import contextlib
+import math
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ import plotly.graph_objects as go
 from utils.plotlyToMatlab import plotly_to_matplotlib_png
 from utils.context import Context
 from utils.data_accessors import _get_bar_data, _get_general_data
+from utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
@@ -88,80 +90,70 @@ def execute_strategy(
     strategy_code: str, 
     strategy_id: int,
     version: int = None,
-    start_date: str = "2003-01-01",
-    end_date: str = dt.now().isoformat(),
+    start_date: datetime.datetime = datetime.datetime(2003, 1, 1),
+    end_date: datetime.datetime = datetime.datetime.now(),
     symbols: List[str] = None,
    # max_instances: int = 15000,
     #version: int = None # None means new strategy
-) -> Tuple[List[Dict], str, List[Dict], List[Dict], Exception]:
+) -> Tuple[List[Dict], str, List[Dict], List[Dict], Dict]:
     """Execute the strategy function with data accessor context"""
 
     # Create safe execution environment with data accessor functions
-    safe_globals = _create_safe_globals(ctx, start_date, end_date)
+    safe_globals = _create_safe_globals(ctx, start_date, end_date, symbols)
     safe_locals = {}
+    plots_collection = []
+    response_images = []
+    strategy_prints = ""
+    # Execute strategy code in restricted environment
+    # nolint B102 - exec necessary for strategy execution with proper sandboxing
+    exec(strategy_code, safe_globals, safe_locals)  # nosec  # noqa: S102 - exec necessary for strategy execution with proper sandboxing
 
+    strategy_func = safe_locals.get('strategy')
+    if not strategy_func or not callable(strategy_func):
+        raise ValueError("No strategy function found. Function must be named 'strategy'")
+
+    # Reset instance counter for this execution
+    TrackedList.reset_counter(max_instances=MAX_INSTANCES)
+
+    # Execute strategy function with proper error handling and stdout capture
+    #logger.info(f"Executing strategy function using data accessor approach")
+    
+    stdout_buffer = io.StringIO()
     try:
-        # Execute strategy code in restricted environment
-        # nolint B102 - exec necessary for strategy execution with proper sandboxing
-        exec(strategy_code, safe_globals, safe_locals)  # nosec  # noqa: S102 - exec necessary for strategy execution with proper sandboxing
+        # Capture stdout and plots during strategy execution
+        with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(strategy_id, version):
+            instances = strategy_func()
+    
+    except Exception as strategy_error:
+        error_obj = capture_exception(logger, strategy_error)
+        return [], "", [], [], error_obj
 
-        strategy_func = safe_locals.get('strategy')
-        if not strategy_func or not callable(strategy_func):
-            raise ValueError("No strategy function found. Function must be named 'strategy'")
+    strategy_prints = stdout_buffer.getvalue()
+    # Validate and clean instances
+    if not isinstance(instances, list):
+        logger.error("Strategy function must return a list, got %s", type(instances))
+        return [], "", [], [], "Strategy function must return a list"
+    # Filter out None instances and validate structure
+    valid_instances = []
+    for instance in instances:
+        if instance is not None and isinstance(instance, dict):
+            # Ensure required fields exist
+            if 'ticker' not in instance:
+                continue
+            if 'timestamp' not in instance:
+                instance['timestamp'] = dt.now().isoformat()
 
-        # Reset instance counter for this execution
-        TrackedList.reset_counter(max_instances=MAX_INSTANCES)
+            valid_instances.append(instance)
 
-        # Execute strategy function with proper error handling and stdout capture
-        #logger.info(f"Executing strategy function using data accessor approach")
-        strategy_prints = ""
-        try:
-            # Capture stdout and plots during strategy execution
-            stdout_buffer = io.StringIO()
-            with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(strategy_id, version) as (plots_collection, response_images):
-                instances = strategy_func()
-            strategy_prints = stdout_buffer.getvalue()
+    # Ensure all instances are JSON serializable
+    valid_instances = _ensure_json_serializable(valid_instances)
+
+    # these might be defined in the strategy code
+    return valid_instances, strategy_prints, plots_collection, response_images, None
 
 
-        #npylint: disable=W0713 - exec necessary for strategy execution with proper sandboxing
-        except Exception as strategy_error:
-            # Get detailed error information
-            #error_info = _get_detailed_error_info(strategy_error, strategy_code)
-            #detailed_error_msg = _format_detailed_error(error_info)
 
-            logger.error("Strategy function execution failed: %s", strategy_error)
-            #logger.error(detailed_error_msg)
-
-            # Return empty list and any captured output instead of crashing
-            return [], "", [], [], strategy_error
-
-        # Validate and clean instances
-        if not isinstance(instances, list):
-            logger.error("Strategy function must return a list, got %s", type(instances))
-            return [], "", [], [], "Strategy function must return a list"
-        # Filter out None instances and validate structure
-        valid_instances = []
-        for instance in instances:
-            if instance is not None and isinstance(instance, dict):
-                # Ensure required fields exist
-                if 'ticker' not in instance:
-                    continue
-                if 'timestamp' not in instance:
-                    instance['timestamp'] = dt.now().isoformat()
-
-                valid_instances.append(instance)
-
-        # Ensure all instances are JSON serializable
-        valid_instances = _ensure_json_serializable(valid_instances)
-
-        return valid_instances, strategy_prints, plots_collection, response_images, None
-
-    #npylint: disable=W0713 - exec necessary for strategy execution with proper sandboxing
-    except Exception as e:
-        logger.error("Strategy compilation or setup failed: %s", e)
-        return [], "", [], [], e
-
-def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIntersect: List[str] = None) -> Dict[str, Any]:
+def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIntersect: List[str]) -> Dict[str, Any]:
     """Create safe execution environment with data accessor functions"""
 
     # Initialize plots collection for this execution
@@ -248,6 +240,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
         'apply_drawdown_styling': apply_drawdown_styling,
         'apply_equity_curve_styling': apply_equity_curve_styling,
         # Math and datetime - make datetime module fully available
+        'math': math,
         'datetime': datetime,
         'dt': dt,
         'timedelta': timedelta,

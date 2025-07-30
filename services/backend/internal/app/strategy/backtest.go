@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 )
 
@@ -118,115 +117,6 @@ func (d *DateRangeField) UnmarshalJSON(data []byte) error {
 	}
 
 	return fmt.Errorf("date_range must be either string or []string")
-}
-
-// checkForActiveBacktests performs a comprehensive check for active backtests for a specific user
-func checkForActiveBacktests(ctx context.Context, conn *data.Conn, userID int) (bool, error) {
-	// Check both queues for waiting backtest tasks
-	queues := []string{"strategy_queue", "strategy_queue_priority"}
-
-	for _, queueName := range queues {
-		queueLen, err := conn.Cache.LLen(ctx, queueName).Result()
-		if err != nil {
-			return false, fmt.Errorf("error checking queue %s: %v", queueName, err)
-		}
-
-		if queueLen > 0 {
-			// Read all items in the queue
-			queueItems, err := conn.Cache.LRange(ctx, queueName, 0, queueLen-1).Result()
-			if err != nil {
-				return false, fmt.Errorf("error reading queue %s: %v", queueName, err)
-			}
-
-			// Check for backtest tasks for this user
-			for _, item := range queueItems {
-				var queuedTask map[string]interface{}
-				if err := json.Unmarshal([]byte(item), &queuedTask); err != nil {
-					continue // skip malformed
-				}
-
-				if queuedTask["task_type"] == "backtest" {
-					if args, ok := queuedTask["args"].(map[string]interface{}); ok {
-						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
-							// Check if this backtest belongs to the current user
-							queuedUserID, err := strconv.Atoi(userIDStr)
-							if err != nil {
-								continue
-							}
-
-							if queuedUserID == userID {
-								return true, nil // Found active backtest for this user
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Check task assignments for currently running backtest tasks
-	assignmentKeys, err := conn.Cache.Keys(ctx, "task_assignment:*").Result()
-	if err != nil {
-		return false, fmt.Errorf("error getting task assignment keys: %v", err)
-	}
-
-	for _, assignmentKey := range assignmentKeys {
-		assignmentJSON, err := conn.Cache.Get(ctx, assignmentKey).Result()
-		if err != nil {
-			continue // skip if assignment was deleted
-		}
-
-		var assignment map[string]interface{}
-		if err := json.Unmarshal([]byte(assignmentJSON), &assignment); err != nil {
-			continue // skip malformed
-		}
-
-		// Get the task result to check if it's a backtest for this user
-		taskID, ok := assignment["task_id"].(string)
-		if !ok {
-			continue
-		}
-
-		resultKey := fmt.Sprintf("task_result:%s", taskID)
-		resultJSON, err := conn.Cache.Get(ctx, resultKey).Result()
-		if err != nil {
-			continue // skip if result doesn't exist
-		}
-
-		var taskResult map[string]interface{}
-		if err := json.Unmarshal([]byte(resultJSON), &taskResult); err != nil {
-			continue // skip malformed
-		}
-
-		// Check if this is a backtest task
-		data, ok := taskResult["data"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Check original task data
-		if originalTask, exists := data["original_task"]; exists {
-			if taskMap, ok := originalTask.(map[string]interface{}); ok {
-				if taskType, ok := taskMap["task_type"].(string); ok && taskType == "backtest" {
-					// Check if this backtest belongs to the current user
-					if args, ok := taskMap["args"].(map[string]interface{}); ok {
-						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
-							assignedUserID, err := strconv.Atoi(userIDStr)
-							if err != nil {
-								continue
-							}
-
-							if assignedUserID == userID {
-								return true, nil // Found running backtest for this user
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return false, nil
 }
 
 // RunBacktest executes a complete strategy backtest using the new worker architecture
@@ -341,15 +231,6 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 		"version":     args.Version,
 		"start_date":  args.StartDate,
 		"end_date":    args.EndDate,
-	}
-
-	// Check for active backtests using comprehensive check
-	hasActiveBacktest, err := checkForActiveBacktests(ctx, conn, userID)
-	if err != nil {
-		return nil, fmt.Errorf("error checking for active backtests: %v", err)
-	}
-	if hasActiveBacktest {
-		return nil, fmt.Errorf("another backtest is already queued or running for your account. Please wait for it to complete before starting a new one")
 	}
 
 	// Queue the task using the new queue system
