@@ -595,7 +595,7 @@
 		justify-content: flex-end;
 		gap: 4px;
 		/* Provide a bit of breathing room above header */
-		padding: 0;
+		padding: 0 12px 0 0;
 		margin: 16px 0 10px 0;
 	}
 

@@ -242,7 +242,7 @@
 		<!-- Header -->
 		<div class="auth-header">
 			<h1 class="auth-title">
-				{mode === 'login' ? 'Sign into Peripheral' : 'Execute with Peripheral'}
+				{mode === 'login' ? 'Sign into Peripheral' : 'Keep the Market within your Peripheral'}
 			</h1>
 		</div>
 
