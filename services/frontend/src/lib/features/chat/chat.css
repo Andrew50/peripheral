@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
 .chat-container {
 	display: flex;
 	flex-direction: column;
@@ -1477,6 +1479,7 @@ button[data-ticker].ticker-button:hover,
 .public-viewing-notice {
 	padding: 1rem;
 	text-align: center;
+	font-family: 'Instrument Sans', sans-serif;
 	background: var(--ui-bg-secondary, #1a1a1a);
 	border-top: 1px solid var(--ui-border, #333);
 }

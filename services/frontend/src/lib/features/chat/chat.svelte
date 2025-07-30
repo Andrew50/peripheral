@@ -1897,10 +1897,10 @@
 		<!-- Public viewing message -->
 		<div class="public-viewing-notice">
 			<p>
-				You are viewing a shared conversation. <button
+				This is a shared conversation. <button
 					class="auth-link"
 					on:click={() => (window.location.href = '/signup')}>Sign up</button
-				> to start your own chat.
+				> for free to start your own chat.
 			</p>
 		</div>
 	{/if}
