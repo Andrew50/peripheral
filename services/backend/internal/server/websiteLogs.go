@@ -131,9 +131,23 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 			if req.Path == "/" { //removing logging for splash
 				return
 			}
-			err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, req.Path, *org))
-			if err != nil {
-				log.Printf("Failed to send Telegram message: %v", err)
+			if strings.HasPrefix(req.Path, "/share") {
+				// Extract conversation ID from path like "/share/conversation_id"
+				conversationID := strings.TrimPrefix(req.Path, "/share/")
+				var title string
+				err = conn.DB.QueryRow(context.Background(), `SELECT title FROM conversations WHERE conversation_id = $1`, conversationID).Scan(&title)
+				if err != nil {
+					log.Printf("Failed to get conversation title: %v", err)
+				}
+				err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited chat title: %s", *city, *region, *country, title))
+				if err != nil {
+					log.Printf("Failed to send Telegram message: %v", err)
+				}
+			} else {
+				err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited %s. Org: %s", *city, *region, *country, req.Path, *org))
+				if err != nil {
+					log.Printf("Failed to send Telegram message: %v", err)
+				}
 			}
 		}
 	}()
