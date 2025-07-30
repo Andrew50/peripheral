@@ -64,7 +64,15 @@
 				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents in realtime.<br />
 			</p>
 			<a href="/signup" class="hero-cta-button">
-				Get Started for Free
+				<div class="button-border-layer-1">
+					<div class="button-border-layer-2">
+						<div class="button-border-layer-3">
+							<div class="button-content">
+								Supercharge your trading →
+							</div>
+						</div>
+					</div>
+				</div>
 			</a>
 		</div>
 	</section>
@@ -229,27 +237,52 @@
 
 	.hero-cta-button {
 		display: inline-block;
-		background: white;
-		color: black;
 		text-decoration: none;
+		margin-top: 1rem;
+		padding: 4px;
+		border-radius: 58px;
+		border: 1px solid rgba(255, 255, 255, 0.04);
+		transition: all 0.3s ease;
+		background: transparent;
+	}
+
+	.button-border-layer-1 {
+		border-radius: 50px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		padding: 4px;
+		background: transparent;
+	}
+
+	.button-border-layer-2 {
+		border-radius: 42px;
+		border: 1px solid rgba(255, 255, 255, 0.20);
+		padding: 4px;
+		background: transparent;
+	}
+
+	.button-border-layer-3 {
+		border-radius: 40px;
+		background: linear-gradient(135deg, 
+			rgba(255, 255, 255, 0.95) 0%, 
+			rgba(240, 240, 240, 0.98) 100%);
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.button-content {
 		padding: 1rem 2rem;
-		border-radius: 2rem;
 		font-size: 1.1rem;
 		font-weight: 400;
 		font-family: 'Instrument Sans', sans-serif;
-		transition: all 0.3s ease;
-		box-shadow: 
-			0 4px 14px 0 rgba(255, 255, 255, 0.1),
-			0 2px 4px 0 rgba(0, 0, 0, 0.1);
-		margin-top: 1rem;
+		color: #1a1a1a;
+		text-align: center;
+		background: transparent;
+		border-radius: 40px;
+		transition: transform 0.3s ease;
 	}
 
-	.hero-cta-button:hover {
-		transform: translateY(-2px);
-		box-shadow: 
-			0 8px 25px 0 rgba(255, 255, 255, 0.2),
-			0 4px 8px 0 rgba(0, 0, 0, 0.15);
-		background: rgba(255, 255, 255, 0.95);
+	.hero-cta-button:hover  .button-content{
+		transform: scale(1.05);
 	}
 
 	.hero-cta-button:active {
