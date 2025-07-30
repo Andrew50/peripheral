@@ -209,10 +209,12 @@ def _getGeneralPythonSystemInstruction(ctx: Context, prompt: str) -> str:
     - You should style the plot to be visually appealing and informative, specifically focusing on the colors of the layout based on the data. E.g. positive data should be green, negative data should be red, etc.
     - Ensure to name ALL traces in the plot, otherwise the trace will say 'trace 0'.
     - Even if the user does not ask for a plot, you should consider including a plot if it would be useful to the user. Good visualizaions make the USER very satisfied.
-    - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+    - (Title Icons) For styling, include [TICKER] at the BEGINNING of the title to indicate the ticker icon should be displayed next to the title. ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
+    - Titles should be concise and to the point and should not include unecessary text like date ranges, etc.
     - If the plot refers to several tickers, do not include a title icon.
     - When the dataset has fewer than five distinct points, avoid oversized bar/line charts. Instead, reason about and produce a visualization that scales gracefully with small‑N data.
-    - Dates should always be in American format, and x-axis should be ordered chronologically from left to right.
+    - Dates should always be in American format, and dates should ALWAYS be chronologically ordered, from oldest on the left to the most recent on the right, unless the user specifically asks otherwise.
+    - Ensure that the data is properly ordered before plotting.
 
 
     **CRITICAL**:

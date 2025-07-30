@@ -418,11 +418,12 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - Almost always include plots in the strategy to help the user understand the data
         - Ensure to name ALL traces in the plot, otherwise the trace will say 'trace 0'.
         - ENSURE ALL (x,y,z) data is JSON serialisable. NEVER use pandas/numpy types (datetime64, int64, float64, timestamp) and np.ndarray, they cause JSON serialization errors
-        - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on separate line plots.
+        - Plot equity curve AND drawdown plot of the P/L and drawdown performance overtime on separate line plots. These should not be scatterplots.
         - For the drawdown plot, use apply_drawdown_styling(fig) to style the plot
         - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
         - Do NOT use timestamp as x-axis values. Use dates instead.
         - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title.
+        - Titles should be concise and to the point and should not include unecessary text like date ranges, etc.
         - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
         - If the plot refers to several tickers, do not include this.
         - Dates should always be in American format.
