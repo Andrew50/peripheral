@@ -4,14 +4,31 @@ import (
 	"backend/internal/data"
 	"backend/internal/services/socket"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// generateShortConversationID generates a shorter, URL-friendly conversation ID
+// Returns a 12-character hex string or falls back to UUID if random generation fails
+func generateShortConversationID() string {
+	// Generate 6 random bytes (48 bits) which gives us 12 hex characters
+	// This provides about 281 trillion possible combinations
+	bytes := make([]byte, 6)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to UUID if random generation fails
+		log.Printf("Failed to generate random bytes for conversation ID: %v", err)
+		return uuid.New().String()
+	}
+	return hex.EncodeToString(bytes)
+}
 
 // ConversationInfo represents a conversation in the list view
 type ConversationInfo struct {
@@ -68,8 +85,6 @@ type MessageCompletionData struct {
 
 // CreateConversation creates a new conversation in the database
 func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, title string) (string, error) {
-	conversationID := uuid.New().String()
-
 	query := `
 		INSERT INTO conversations (conversation_id, userId, title, created_at, updated_at, metadata, total_token_count, message_count)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -78,9 +93,21 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	now := time.Now()
 	var returnedID string
 
+	// Try with short ID first
+	conversationID := generateShortConversationID()
+
 	err := conn.DB.QueryRow(ctx, query,
 		conversationID, userID, title, now, now, "{}", 0, 0,
 	).Scan(&returnedID)
+
+	// If we get a unique constraint violation, retry with UUID
+	if err != nil && strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+		conversationID = generateShortConversationID()
+
+		err = conn.DB.QueryRow(ctx, query,
+			conversationID, userID, title, now, now, "{}", 0, 0,
+		).Scan(&returnedID)
+	}
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create conversation: %w", err)
