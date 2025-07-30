@@ -3,6 +3,9 @@ import type { Instance } from '$lib/utils/types/types';
 import { marked } from 'marked';
 import { queryChart } from '$lib/features/chart/interface';
 import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
+import { switchMobileTab } from '$lib/stores/mobileStore';
+import { isMobileDevice } from '$lib/utils/stores/device';
+import { get } from 'svelte/store';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore – types provided by the package at runtime; this line quiets TS until it is installed
 import DOMPurify from 'isomorphic-dompurify';
@@ -278,13 +281,33 @@ export function getContentChunkTextForCopy(
 	return '';
 }
 
+// Track the last ticker button click to prevent rapid successive calls
+let lastTickerClickTime = 0;
+const TICKER_CLICK_DEBOUNCE_MS = 100; // Prevent clicks within 100ms of each other
+
 // Function to handle clicks on ticker buttons
 export async function handleTickerButtonClick(event: MouseEvent) {
+	const now = Date.now();
+	
+	// Debounce check
+	if (now - lastTickerClickTime < TICKER_CLICK_DEBOUNCE_MS) {
+		event.preventDefault();
+		event.stopPropagation();
+		return; // Ignore rapid successive clicks
+	}
+	lastTickerClickTime = now;
+
+	// Prevent event bubbling
+	event.preventDefault();
+	event.stopPropagation();
+
 	const target = event.target as HTMLButtonElement; // Assert as Button Element
 	if (target && target.classList.contains('ticker-button')) {
 		const ticker = target.dataset.ticker;
 		const timestampMsStr = target.dataset.timestampMs; // Get the timestamp string
-
+		if (get(isMobileDevice)) {
+			switchMobileTab('chart');
+		}
 		if (ticker && timestampMsStr) {
 			const timestampMs = parseInt(timestampMsStr, 10); // Parse the timestamp
 
