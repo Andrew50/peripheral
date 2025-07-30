@@ -56,15 +56,16 @@ func CheckUsageAllowed(conn *data.Conn, userID int, usageType UsageType, credits
 
 	query := `
 		SELECT 
-			COALESCE(subscription_credits_remaining, 0),
-			COALESCE(purchased_credits_remaining, 0),
-			COALESCE(total_credits_remaining, 0),
-			COALESCE(active_alerts, 0),
-			COALESCE(alerts_limit, 0),
-			COALESCE(active_strategy_alerts, 0),
-			COALESCE(strategy_alerts_limit, 0)
-		FROM users 
-		WHERE userId = $1`
+			COALESCE(u.subscription_credits_remaining, 0),
+			COALESCE(u.purchased_credits_remaining, 0),
+			COALESCE(u.total_credits_remaining, 0),
+			COALESCE(u.active_alerts, 0),
+			COALESCE(sp.alerts_limit, 0),
+			COALESCE(u.active_strategy_alerts, 0),
+			COALESCE(sp.strategy_alerts_limit, 0)
+		FROM users u
+		LEFT JOIN subscription_products sp ON sp.product_key = u.subscription_plan
+		WHERE u.userId = $1`
 
 	err := conn.DB.QueryRow(ctx, query, userID).Scan(
 		&subscriptionCredits, &purchasedCredits, &totalCredits,
@@ -296,21 +297,22 @@ func GetUserUsageStats(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 
 	query := `
 		SELECT 
-			userId,
-			COALESCE(subscription_credits_remaining, 0) as subscription_credits_remaining,
-			COALESCE(purchased_credits_remaining, 0) as purchased_credits_remaining,
-			COALESCE(total_credits_remaining, 0) as total_credits_remaining,
-			COALESCE(subscription_credits_allocated, 0) as subscription_credits_allocated,
-			COALESCE(active_alerts, 0) as active_alerts,
-			COALESCE(alerts_limit, 0) as alerts_limit,
-			COALESCE(active_strategy_alerts, 0) as active_strategy_alerts,
-			COALESCE(strategy_alerts_limit, 0) as strategy_alerts_limit,
-			COALESCE(current_period_start, CURRENT_TIMESTAMP) as current_period_start,
-			COALESCE(last_limit_reset, CURRENT_TIMESTAMP) as last_limit_reset,
-			subscription_plan,
-			COALESCE(subscription_status, 'inactive') as subscription_status
-		FROM users 
-		WHERE userId = $1`
+			u.userId,
+			COALESCE(u.subscription_credits_remaining, 0) as subscription_credits_remaining,
+			COALESCE(u.purchased_credits_remaining, 0) as purchased_credits_remaining,
+			COALESCE(u.total_credits_remaining, 0) as total_credits_remaining,
+			COALESCE(u.subscription_credits_allocated, 0) as subscription_credits_allocated,
+			COALESCE(u.active_alerts, 0) as active_alerts,
+			COALESCE(sp.alerts_limit, 0) as alerts_limit,
+			COALESCE(u.active_strategy_alerts, 0) as active_strategy_alerts,
+			COALESCE(sp.strategy_alerts_limit, 0) as strategy_alerts_limit,
+			COALESCE(u.current_period_start, CURRENT_TIMESTAMP) as current_period_start,
+			COALESCE(u.last_limit_reset, CURRENT_TIMESTAMP) as last_limit_reset,
+			u.subscription_plan,
+			COALESCE(u.subscription_status, 'inactive') as subscription_status
+		FROM users u
+		LEFT JOIN subscription_products sp ON sp.product_key = u.subscription_plan
+		WHERE u.userId = $1`
 
 	err := conn.DB.QueryRow(ctx, query, userID).Scan(
 		&usage.UserID,
@@ -348,39 +350,35 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, productKey string) er
 	defer cancel()
 
 	// Get the credits for the specified product
-	var creditsPerMonth, alertsLimit, strategyAlertsLimit int
+	var creditsPerMonth int
 
 	query := `
-		SELECT queries_limit, alerts_limit, strategy_alerts_limit
+		SELECT queries_limit 
 		FROM subscription_products 
 		WHERE product_key = $1`
 
 	err := conn.DB.QueryRow(ctx, query, productKey).Scan(
-		&creditsPerMonth, &alertsLimit, &strategyAlertsLimit,
+		&creditsPerMonth,
 	)
 
 	if err != nil {
 		// If product not found, use default Free plan limits
 		if productKey == "" || productKey == "Free" {
 			creditsPerMonth = 5
-			alertsLimit = 0
-			strategyAlertsLimit = 0
 		} else {
 			return fmt.Errorf("product '%s' not found in subscription_products table", productKey)
 		}
 	}
 
-	// Update the user's credit allocation and limits
+	// Update the user's credit allocation only (remove limits update)
 	updateQuery := `
 		UPDATE users SET 
 			subscription_credits_remaining = $2,
-			subscription_credits_allocated = $2,
-			alerts_limit = $3,
-			strategy_alerts_limit = $4
+			subscription_credits_allocated = $2
 		WHERE userId = $1`
 
 	res, err := conn.DB.Exec(ctx, updateQuery,
-		userID, creditsPerMonth, alertsLimit, strategyAlertsLimit)
+		userID, creditsPerMonth)
 	if err != nil {
 		return fmt.Errorf("error updating user credits: %v", err)
 	}
@@ -391,10 +389,10 @@ func UpdateUserCreditsForPlan(conn *data.Conn, userID int, productKey string) er
 		return fmt.Errorf("no rows updated when allocating credits (userID=%d, product=%s)", userID, productKey)
 	}
 
-	log.Printf("Allocated %d credits for user %d under product '%s' (alerts:%d, strategyAlerts:%d)", creditsPerMonth, userID, productKey, alertsLimit, strategyAlertsLimit)
+	log.Printf("Allocated %d credits for user %d under product '%s' (credits=%d)", creditsPerMonth, userID, productKey, creditsPerMonth)
 
-	log.Printf("Updated credits for user %d to product '%s': credits=%d, alerts=%d, strategy_alerts=%d",
-		userID, productKey, creditsPerMonth, alertsLimit, strategyAlertsLimit)
+	log.Printf("Updated credits for user %d to product '%s': credits=%d",
+		userID, productKey, creditsPerMonth)
 
 	return nil
 }
