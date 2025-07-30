@@ -33,11 +33,11 @@ class Context():
         self._cancellation_event = threading.Event()
         if not skip_heartbeat:
             self._start_heartbeat()
-            self.publish_progress("running", {"worker_id": self.worker_id, "queue_type": queue_type, "priority": priority, "started_at": datetime.utcnow().isoformat()})
-            #try:
-            #except NoSubscribersException:
-                #logger.warning("Task %s has no subscribers on startup, signalling cancellation.", self.task_id)
-                #self._cancellation_event.set()
+            try:
+                self.publish_progress("running", {"worker_id": self.worker_id, "queue_type": queue_type, "priority": priority, "started_at": datetime.utcnow().isoformat()})
+            except NoSubscribersException:
+                logger.warning("Task %s has no subscribers on startup, signalling cancellation.", self.task_id)
+                self._cancellation_event.set()
 
     def publish_progress(self, message: str, data: Dict[str, Any] = None):
         """Publish progress updates for long-running tasks using unified messaging"""
@@ -78,16 +78,16 @@ class Context():
         """Asynchronous heartbeat loop - runs in separate thread"""
 
         while not self._heartbeat_stop_event.is_set():
-            #try:
-            logger.info(f"💓 Heartbeat for task {self.task_id}")
-            self._publish_update("heartbeat", "heartbeat", {})
+            try:
+                logger.info(f"💓 Heartbeat for task {self.task_id}")
+                self._publish_update("heartbeat", "heartbeat", {})
 
-            #except NoSubscribersException:
-            #logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
-            #self._cancellation_event.set()
-            #break  # Stop heartbeat thread
-            #except Exception as e:
-                #logger.error("❌ Heartbeat thread error: %s", e)
+            except NoSubscribersException:
+                logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
+                self._cancellation_event.set()
+                break  # Stop heartbeat thread
+            except Exception as e:
+                logger.error("❌ Heartbeat thread error: %s", e)
             self._heartbeat_stop_event.wait(self.heartbeat_interval)
 
     def publish_result(self, results: Dict[str, Any], error: Dict[str, str] = None, status: str = "completed"):
@@ -121,7 +121,7 @@ class Context():
         self.conn.redis_client.delete(f"task_heartbeats:{self.task_id}")
         self.conn.redis_client.delete(f"task_progress:{self.task_id}")
 
-    #def check_for_cancellation(self):
-        #"""Check if task cancellation has been requested."""
-        #if self._cancellation_event.is_set():
-            #raise NoSubscribersException("Task cancelled due to no subscribers.")
+    def check_for_cancellation(self):
+        """Check if task cancellation has been requested."""
+        if self._cancellation_event.is_set():
+            raise NoSubscribersException("Task cancelled due to no subscribers.")

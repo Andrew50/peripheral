@@ -121,7 +121,7 @@ def execute_strategy(
     stdout_buffer = io.StringIO()
     try:
         # Capture stdout and plots during strategy execution
-        with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(strategy_id, version):
+        with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(plots_collection, response_images, strategy_id, version):
             instances = strategy_func()
     
     except Exception as strategy_error:
@@ -257,14 +257,12 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
     }
     return safe_globals
 
-def _plotly_capture_context(strategy_id=None, version=None):
+def _plotly_capture_context(plots_collection, response_images, strategy_id=None, version=None):
     """Context manager that temporarily patches plotly to capture plots
      instead of displaying them"""
     # Store original methods
     original_figure_show = go.Figure.show
     original_make_subplots = make_subplots
-    plots_collection = []
-    response_images = []
     plot_counter = 0
     # Create capture function
     def capture_plot(fig):

@@ -69,16 +69,19 @@ def backtest(ctx: Context, user_id: int = None, symbols: List[str] = None,
     positive_instances = sum(1 for i in instances  \
     if isinstance(i.get('score'), (int, float)) and i['score'] > 0)
 
+    summary = {
+        "total_instances": len(instances),
+        "positive_instances": positive_instances,
+        "date_range": [start_date.isoformat(), end_date.isoformat()],
+        "symbols_processed": len(symbols) if symbols else 0,
+        "execution_type": "backtest",
+    }
+
     return {
         "success": True,
         "strategy_id": strategy_id,
         "version": version,
-        "total_instances": len(instances),
-        "positive_instances": positive_instances,
-        # Convert datetime objects to ISO format strings for JSON serialization
-        "date_range": [start_date.isoformat(), end_date.isoformat()],
-        "symbols_processed": len(symbols) if symbols else 0,
-        "execution_type": "backtest",
+        "summary": summary,
         "instances": instances,
         "strategy_prints": strategy_prints,
         "strategy_plots": strategy_plots,

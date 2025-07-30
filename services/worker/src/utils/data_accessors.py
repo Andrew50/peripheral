@@ -172,20 +172,20 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
                     if result is not None:
                         all_results.append(result)
                 except Exception as exc:
-                    logger.error(f"❌ Batch {batch_num} generated an exception: {exc}")
+                    logger.error("❌ Batch %s generated an exception: %s", batch_num, exc)
 
         # Combine all batch results
         if all_results:
             # Concatenate DataFrames efficiently (no copies when possible)
             combined_result = pd.concat(all_results, ignore_index=True, copy=False)
-            logger.info(f"✅ Successfully combined {len(all_results)} batches into {len(combined_result)} total rows")
+            logger.info("✅ Successfully combined %s batches into %s total rows", len(all_results), len(combined_result))
             return combined_result
         else:
             logger.warning("No data returned from any batch")
             return pd.DataFrame()
 
     except Exception as e:
-        logger.error(f"Error in batched data fetching: {e}")
+        logger.error("Error in batched data fetching: %s", e)
         return pd.DataFrame()
 
 def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> List[str]:
