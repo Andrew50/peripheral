@@ -64,7 +64,7 @@
 	<meta property="og:image:height" content="630" />
 	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
-	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:url" content={`https://peripheral.io/invite/${inviteCode}`} />
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Peripheral" />
 
