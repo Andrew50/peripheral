@@ -2,11 +2,11 @@ package agent
 
 import (
 	"backend/internal/data"
+	"backend/internal/queue"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -52,163 +52,101 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	workerResult, err := callWorkerPythonAgentWithProgress(ctx, conn, userID, args, progressCallback)
+
+	// Extract context values
+	messageID, _ := ctx.Value("messageID").(string)
+	conversationID, _ := ctx.Value("conversationID").(string)
+
+	// Build args map for queue
+	queueArgs := map[string]interface{}{
+		"user_id":        userID,
+		"prompt":         args.Prompt,
+		"data":           args.Data,
+		"conversationID": conversationID,
+		"messageID":      messageID,
+	}
+
+	// Use standard queue with progress callback
+	handle, err := queue.QueuePythonAgent(ctx, conn, queueArgs)
 	if err != nil {
-		return nil, fmt.Errorf("error executing worker python agent: %v", err)
+		return nil, fmt.Errorf("error queuing python agent: %v", err)
 	}
-	var response RunPythonAgentResponse
-	if !workerResult.Success {
-		return nil, fmt.Errorf("python agent execution failed: %s", workerResult.ErrorMessage)
+
+	// Await result with progress callback
+	result, err := queue.AwaitTypedResult[queue.PythonAgentResult](ctx, handle, func(update queue.ResultUpdate) {
+		if progressCallback != nil && update.Status == "running" {
+			if message, ok := update.Data["message"].(string); ok {
+				progressCallback(message)
+			}
+		}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error waiting for python agent result: %v", err)
 	}
-	if workerResult.Result != nil {
-		response.Result = workerResult.Result
+
+	// Check for errors in the result
+	if !result.Success {
+		errorMsg := result.Error
+		if result.ErrorDetails != nil {
+			errorMsg = result.ErrorDetails.Message
+		}
+		return nil, fmt.Errorf("python agent execution failed: %s", errorMsg)
 	}
-	if workerResult.ExecutionID != "" {
-		response.ExecutionID = workerResult.ExecutionID
+
+	// Convert queue result to API response format
+	response := convertQueueResultToResponse(result)
+
+	// Cache the result
+	if err := SetPythonAgentResultToCache(ctx, conn, result.ExecutionID, &response); err != nil {
+		log.Printf("Error setting python agent result to cache: %v", err)
 	}
-	if workerResult.Prints != "" {
-		response.Prints = workerResult.Prints
+
+	// Clean data from plots for agent response
+	for i := range response.Plots {
+		response.Plots[i].Data = []map[string]any{}
 	}
-	if len(workerResult.Plots) > 0 {
-		// Convert PythonAgentPlotData to Plot with extraction
-		plots := make([]Plot, len(workerResult.Plots))
-		for i, plotData := range workerResult.Plots {
+
+	return response, nil
+}
+
+func convertQueueResultToResponse(result *queue.PythonAgentResult) RunPythonAgentResponse {
+	response := RunPythonAgentResponse{
+		ExecutionID: result.ExecutionID,
+		Prints:      result.Prints,
+	}
+
+	if result.Result != nil {
+		response.Result = result.Result
+	}
+
+	// Convert plots
+	if len(result.Plots) > 0 {
+		plots := make([]Plot, len(result.Plots))
+		for i, plotData := range result.Plots {
 			plots[i] = Plot{
 				PlotID:      plotData.PlotID,
 				TitleTicker: plotData.TitleTicker,
 			}
-			// Extract plot attributes from the full plotly data
 			extractPythonAgentPlotAttributes(&plots[i], plotData.Data)
 		}
 		response.Plots = plots
 	}
-	if len(workerResult.ResponseImages) > 0 {
-		responseImages := make([]ResponseImage, len(workerResult.ResponseImages))
-		for i, img := range workerResult.ResponseImages {
+
+	// Convert response images
+	if len(result.ResponseImages) > 0 {
+		responseImages := make([]ResponseImage, len(result.ResponseImages))
+		for i, img := range result.ResponseImages {
 			responseImages[i] = ResponseImage{
-				Data:   img, // img is now a string, not a struct
+				Data:   img,
 				Format: "png",
 			}
 		}
 		response.ResponseImages = responseImages
 	}
-	if err := SetPythonAgentResultToCache(ctx, conn, workerResult.ExecutionID, &response); err != nil {
-		log.Printf("Error setting python agent result to cache: %v", err)
-	}
-	for i := range response.Plots {
-		response.Plots[i].Data = []map[string]any{} //Cleaning data so that the agent doesn't see it
-	}
-	return response, nil
+
+	return response
 }
 
-type WorkerPythonAgentResult struct {
-	Success        bool                  `json:"success"`
-	Result         any                   `json:"result,omitempty"`
-	Prints         string                `json:"prints,omitempty"`
-	Plots          []PythonAgentPlotData `json:"plots,omitempty"`
-	ResponseImages []string              `json:"responseImages,omitempty"`
-	ExecutionID    string                `json:"executionID,omitempty"`
-	ErrorMessage   string                `json:"error,omitempty"`
-}
-
-func callWorkerPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunPythonAgentArgs, progressCallback ProgressCallback) (*WorkerPythonAgentResult, error) {
-	taskID := fmt.Sprintf("pythonAgent_%d_%d", userID, time.Now().UnixNano())
-	messageID, ok := ctx.Value("messageID").(string)
-	if !ok {
-		messageID = ""
-	}
-	conversationID, ok := ctx.Value("conversationID").(string)
-	if !ok {
-		conversationID = ""
-	}
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "general_python_agent",
-		"args": map[string]interface{}{
-			"user_id":        userID,
-			"prompt":         args.Prompt,
-			"data":           args.Data,
-			"conversationID": conversationID,
-			"messageID":      messageID,
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-	}
-	taskJSON, err := json.Marshal(task)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling task: %v", err)
-	}
-	conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON))
-	workerResult, err := waitForPythonAgentResultWithProgress(ctx, conn, taskID, 4*time.Minute, progressCallback)
-	if err != nil {
-		return nil, fmt.Errorf("error waiting for python agent result: %v", err)
-	}
-	return workerResult, nil
-}
-
-func waitForPythonAgentResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerPythonAgentResult, error) {
-	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer pubsub.Close()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ch := pubsub.Channel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return nil, fmt.Errorf("timeout waiting for python agent result")
-		case msg := <-ch:
-			if msg == nil {
-				continue
-			}
-			var taskUpdate map[string]interface{}
-			if err := json.Unmarshal([]byte(msg.Payload), &taskUpdate); err != nil {
-				log.Printf("Failed to unmarshal task update: %v", err)
-				continue
-			}
-			if taskUpdate["task_id"] == taskID {
-				status, _ := taskUpdate["status"].(string)
-				if status == "progress" {
-					// Handle progress updates
-					stage, _ := taskUpdate["stage"].(string)
-					message, _ := taskUpdate["message"].(string)
-					log.Printf("Python agent progress [%s]: %s", stage, message)
-
-					// Call progress callback if provided
-					if progressCallback != nil {
-						progressCallback(message)
-					}
-					continue
-				}
-				if status == "completed" || status == "failed" {
-					// Convert task result to WorkerBacktestResult
-					var result WorkerPythonAgentResult
-					if resultData, exists := taskUpdate["result"]; exists {
-						resultJSON, err := json.Marshal(resultData)
-						if err != nil {
-							return nil, fmt.Errorf("error marshaling task result: %v", err)
-						}
-						err = json.Unmarshal(resultJSON, &result)
-						if err != nil {
-							return nil, fmt.Errorf("error unmarshaling python agent result: %v", err)
-						}
-					}
-
-					if status == "failed" {
-						errorMsg, _ := taskUpdate["error_message"].(string)
-						result.Success = false
-						result.ErrorMessage = errorMsg
-					} else {
-						result.Success = true
-					}
-
-					return &result, nil
-				}
-			}
-		}
-	}
-}
 func SetPythonAgentResultToCache(ctx context.Context, conn *data.Conn, executionID string, result *RunPythonAgentResponse) error {
 	cacheKey := fmt.Sprintf("python_agent_result_%s", executionID)
 	cacheValue, err := json.Marshal(result)

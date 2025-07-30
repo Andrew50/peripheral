@@ -37,9 +37,8 @@ type OHLCVRecord struct {
 	Open      float64
 	High      float64
 	Low       float64
-
-	Close  float64
-	Volume int64
+	Close     float64
+	Volume    int64
 }
 
 type OHLCVBuffer struct {
@@ -110,7 +109,7 @@ func (b *OHLCVBuffer) verifyStagingTablesExist() error {
 func (b *OHLCVBuffer) ensureStagingTablesExist() error {
 	// First, try to verify existing tables
 	if err := b.verifyStagingTablesExist(); err != nil {
-		log.Printf("⚠️ Staging tables missing or inaccessible: %v", err)
+		//log.Printf("⚠️ Staging tables missing or inaccessible: %v", err)
 		log.Printf("🔧 Attempting to recreate staging tables...")
 
 		// Tables missing, try to create them

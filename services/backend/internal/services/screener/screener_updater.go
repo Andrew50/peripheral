@@ -27,7 +27,6 @@ import (
 	"context" // Added fmt import
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 )
@@ -69,7 +68,7 @@ func initialRefresh(conn *data.Conn) error {
 	}
 
 	for _, cmd := range refreshCommands {
-		log.Printf("Executing: %s", cmd)
+		//log.Printf("Executing: %s", cmd)
 		if _, err := conn.DB.Exec(ctx, cmd); err != nil {
 			// Log error but continue, some might fail if already running or not needed
 			log.Printf("⚠️  Initial refresh command failed for '%s': %v", cmd, err)
@@ -77,7 +76,7 @@ func initialRefresh(conn *data.Conn) error {
 	}
 
 	// Refresh static reference tables with mutex protection
-	log.Println("🔄 Refreshing static reference tables with mutex protection...")
+	//log.Println("🔄 Refreshing static reference tables with mutex protection...")
 	refreshStaticRefsDaily(conn)
 	refreshStaticRefs1m(conn)
 
@@ -101,7 +100,7 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
 	} // Add tickers with null maxdate to screener_stale table
-	log.Println("🔄 Adding active tickers to screener_stale table...")
+	//log.Println("🔄 Adding active tickers to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
 		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
@@ -122,7 +121,7 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	if err != nil {
 		log.Printf("⚠️  Failed to add stale tickers: %v. Continuing...", err)
 	} else {
-		log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
+		//log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
 	}
 	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
 	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
@@ -146,10 +145,10 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	var updateCount int
 	var totalDuration time.Duration
 
-	log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
-	log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
-	log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
-	log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
+	//log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
+	//log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
+	//log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
+	//log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
 
 	for {
 		if !IgnoreMarketHours {
@@ -249,11 +248,11 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	defer cancel()
 
 	// Log current working directory for debugging
-	if cwd, err := os.Getwd(); err == nil {
+	/*if cwd, err := os.Getwd(); err == nil {
 		log.Printf("📊 Current working directory: %s", cwd)
-	}
+	}*/
 
-	log.Printf("🔄 Updating screener values (timeout: %v)...", refreshTimeout)
+	//log.Printf("🔄 Updating screener values (timeout: %v)...", refreshTimeout)
 	start := time.Now()
 
 	// Execute the main query
@@ -293,7 +292,7 @@ func refreshStaticRefs1m(conn *data.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
+	//log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
 	start := time.Now()
 
 	// Apply aggressive vacuum settings for high-frequency update table
@@ -333,7 +332,7 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
+	//log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
 	start := time.Now()
 
 	// Apply aggressive vacuum settings for frequent update table

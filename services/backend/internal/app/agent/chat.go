@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -21,6 +22,26 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 )
+
+// Active chat cancellation management
+var (
+	activeChatMu   sync.RWMutex
+	activeChatCanc = make(map[int]context.CancelFunc) // key = userID
+)
+
+// registerChatCancel stores the cancel function for a user's active chat
+func registerChatCancel(userID int, cancel context.CancelFunc) {
+	activeChatMu.Lock()
+	activeChatCanc[userID] = cancel
+	activeChatMu.Unlock()
+}
+
+// clearChatCancel removes the cancel function for a user's chat
+func clearChatCancel(userID int) {
+	activeChatMu.Lock()
+	delete(activeChatCanc, userID)
+	activeChatMu.Unlock()
+}
 
 // Custom types for context keys to avoid collisions
 type contextKey string
@@ -133,32 +154,23 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
 	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
 	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
-	// ----- Acquire per-user chat lock ------------------------------------
-	lockKey := fmt.Sprintf("chat_lock:%d", userID)
-	locked, lockErr := conn.Cache.SetNX(ctx, lockKey, "1", 1*time.Minute).Result() // 1 min for testing lol
-	if lockErr != nil {
-		return nil, fmt.Errorf("error acquiring chat lock: %v", lockErr)
+
+	// replaced with activeChatMu
+	if userID != 0 {
+		// Check for existing active chat and cancel it before starting new one
+		activeChatMu.Lock()
+		if existingCancel, hasActiveChat := activeChatCanc[userID]; hasActiveChat {
+			fmt.Printf("duplicate chat detected for user %d, cancelling existing chat\n", userID)
+			existingCancel()               // Cancel the existing chat
+			delete(activeChatCanc, userID) // Clean up the map entry
+		}
+		activeChatMu.Unlock()
 	}
-	if !locked {
-		// User already has an active chat - but we'll continue anyway! 🚀
-		fmt.Printf("🎭 DUPLICATE CHAT DETECTED! 🎭 User %d is starting a new chat while another is in progress! 🔥💫 Let the chaos begin! 🎪\n", userID)
-		// Comment out the early return - let's allow concurrent chats for now
-		/*
-			return QueryResponse{
-				ContentChunks: []ContentChunk{{
-					Type:    "text",
-					Content: "You already have a chat in progress. Please wait for it to finish before starting a new one.",
-				}},
-				ConversationID: conversationID,
-				MessageID:      messageID,
-				Timestamp:      time.Now(),
-			}, nil
-		*/
-	}
-	// Ensure lock is released
-	defer func() {
-		_ = conn.Cache.Del(context.Background(), lockKey).Err()
-	}()
+
+	// Create cancellable context and register cancel function
+	ctx, cancel := context.WithCancel(ctx)
+	registerChatCancel(userID, cancel)
+	defer clearChatCancel(userID) // guarantees cleanup
 
 	var executor *Executor
 	var activeResults []ExecuteResult
@@ -455,6 +467,33 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			}, fmt.Errorf("model took too many turns to run")
 		}
 	}
+}
+
+// StopChatRequest cancels the active chat for this user if any
+func StopChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
+	if userID == 0 {
+		return map[string]interface{}{
+			"success": false,
+			"message": "No active chat found to cancel",
+		}, nil
+	}
+	activeChatMu.Lock()
+	cancel, ok := activeChatCanc[userID]
+	if ok {
+		cancel()
+		delete(activeChatCanc, userID)
+	}
+	activeChatMu.Unlock()
+
+	return map[string]interface{}{
+		"success": ok,
+		"message": func() string { // might want to return no message on cancellation
+			if ok {
+				return "Chat cancelled successfully"
+			}
+			return "No active chat found to cancel"
+		}(),
+	}, nil
 }
 
 // TableInstructionData holds the parameters for generating a table from cached data

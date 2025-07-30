@@ -32,7 +32,7 @@ env:
 jobs:
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       actions: read
       contents: read
@@ -436,7 +436,7 @@ jobs:
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
       contents: write
@@ -570,7 +570,7 @@ jobs:
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
@@ -712,7 +712,7 @@ jobs:
   worker-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
       contents: read
@@ -807,7 +807,7 @@ jobs:
   # Summary and reporting (updated to include format checks)
   lint-summary:
     name: Lint and Format Summary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
 
@@ -827,13 +827,13 @@ jobs:
           echo "✅ Frontend lint and security checks completed"
           echo "✅ Worker lint and security checks completed"
           echo ""
-          echo "🎯 Go and Python format checks enforce camelCase naming conventions"
+          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
           echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
           echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
           echo ""
           echo "📋 Summary:"
           echo "- Go: golangci-lint with revive rules for camelCase"
-          echo "- Python: Pylint with camelCase naming rules"
+          echo "- Python: Pylint with snake_case naming rules"
           echo "- Svelte/TS/JS: ESLint + Stylelint"
           echo "- YAML: yamllint for formatting consistency"
           echo "- SQL: SQLFluff with consistent formatting"

@@ -69,7 +69,7 @@
 	function getAlertIcon(alertType: string = 'default'): string {
 		return 'icon-movingcontext.svg';
 	}
- 
+
 	// Function to get the appropriate trending icon based on alert type
 	function getTrendingIcon(alertType: string = 'default'): string {
 		return 'icon-movingup.svg';
@@ -99,14 +99,16 @@
 							</p>
 						</div>
 						<div class="alert-buttons">
-							{#each $alertPopup.tickers as ticker}
-								<div class="alert-button">
-									<div class="trending-icon">
-										<img src={getTrendingIcon(getAlertType($alertPopup))} alt="Trending Icon" />
+							{#if $alertPopup.tickers && Array.isArray($alertPopup.tickers)}
+								{#each $alertPopup.tickers as ticker}
+									<div class="alert-button">
+										<div class="trending-icon">
+											<img src={getTrendingIcon(getAlertType($alertPopup))} alt="Trending Icon" />
+										</div>
+										<p class="alert-ticker">{ticker}</p>
 									</div>
-									<p class="alert-ticker">{ticker}</p>
-								</div>
-							{/each}
+								{/each}
+							{/if}
 						</div>
 					</div>
 				</div>
