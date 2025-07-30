@@ -144,14 +144,6 @@ const slowRedisTimeout = 1 * time.Second // Adjust the timeout as needed
 var tickerToSecurityID map[string]int
 var tickerToSecurityIDLock sync.RWMutex
 
-var polygonWSConn *polygonws.Client
-
-// Quit mechanism for clean shutdown
-var (
-	quitChan     chan struct{}
-	quitChanOnce sync.Once
-)
-
 const TimestampUpdateInterval = 2 * time.Second
 
 var (

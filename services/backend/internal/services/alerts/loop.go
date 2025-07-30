@@ -662,9 +662,8 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 
 	return nil
 }*/
-
 // Legacy functions for backward compatibility - these will be removed in future versions
-func priceAlertLoop(ctx context.Context, conn *data.Conn) {
+/*func priceAlertLoop(ctx context.Context, conn *data.Conn) {
 	ticker := time.NewTicker(priceAlertFrequency)
 	defer ticker.Stop()
 	for {
@@ -743,6 +742,7 @@ func processStrategyAlerts(conn *data.Conn) {
 	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed", processed, succeeded, failed)
 }
 
+
 func initPriceAlerts(conn *data.Conn) error {
 	ctx := context.Background()
 
@@ -794,11 +794,11 @@ func initStrategyAlerts(conn *data.Conn) error {
 
 	// Load active strategy alerts with configuration
 	query := `
-		SELECT strategyId, userId, name, 
+		SELECT strategyId, userId, name,
 		       COALESCE(alert_threshold, 0.0) as alert_threshold,
 		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe
-		FROM strategies 
-		WHERE alertactive = true 
+		FROM strategies
+		WHERE alertactive = true
 		ORDER BY strategyId
 	`
 	rows, err := conn.DB.Query(ctx, query)
@@ -853,7 +853,7 @@ func getStrategyAlertCount() int {
 		return true
 	})
 	return count
-}
+}*/
 
 // waitForStrategyAlertResult waits for a strategy alert result via Redis pubsub
 func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {

@@ -9,7 +9,6 @@ import (
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
 	"backend/internal/services/telegram"
-	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
 	"log"
@@ -21,15 +20,6 @@ import (
 )
 
 var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
-
-var (
-	polygonInitialized bool
-	polygonInitMutex   sync.Mutex
-	alertsInitialized  bool
-	alertsInitMutex    sync.Mutex
-	workerMonitor      *worker_monitor.WorkerMonitor
-	workerMonitorMutex sync.Mutex
-)
 
 // JobFunc represents a function that can be executed as a job
 type JobFunc func(conn *data.Conn) error
@@ -814,10 +804,10 @@ func startMarketHourServices(conn *data.Conn) error {
 	//now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
 
 	// First check: Verify we're within market service hours
-	/*if !isMarketHours(now) {
+	if !isMarketHours(now) {
 		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
 		return nil // Return nil to indicate this is expected behavior, not an error
-	}*/
+	}
 
 	// Second check: Verify OHLCV partial coverage is sufficient
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)

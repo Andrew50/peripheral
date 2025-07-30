@@ -592,6 +592,10 @@ jobs:
           # Using npm ci for reliable installs from package-lock.json
           npm ci
 
+          # Install packages required for Stylelint with Svelte
+          echo "Installing PostCSS for Stylelint..."
+          npm install --save-dev postcss postcss-html
+
           # Install additional test dependencies if not already in package.json as devDependencies
           echo "Ensuring testing libraries are available..."
           npm install --save-dev jest@29 @types/jest ts-jest@29 svelte-jester@2 @testing-library/svelte @testing-library/jest-dom jsdom
