@@ -745,7 +745,6 @@
 	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
 
-
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
 <div class="page-wrapper">
@@ -1071,7 +1070,7 @@
 			{/if}
 		</div>
 	</div>
-	
+
 	<SiteFooter />
 </div>
 
@@ -1444,29 +1443,10 @@
 		border-color: rgba(255, 255, 255, 0.05);
 	}
 
-	.credit-card.disabled h3,
-	.credit-card.disabled .amount,
-	.credit-card.disabled .label,
-	.credit-card.disabled .credit-description {
-		color: var(--landing-text-secondary);
-		opacity: 0.7;
-	}
-
-	.credit-card.disabled .popular-badge {
-		opacity: 0.5;
-	}
-
 	.credit-header {
 		text-align: center;
 		margin-bottom: 2rem;
 		flex-grow: 1;
-	}
-
-	.credit-header h3 {
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--landing-text-primary);
-		margin-bottom: 1rem;
 	}
 
 	.credit-amount {
@@ -1674,7 +1654,6 @@
 		transform: translateX(-50%);
 	}
 
-
 	.compare-table-container {
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-top: none;
@@ -1727,7 +1706,6 @@
 		position: relative;
 	}
 
-
 	.feature-header {
 		font-size: 1.5rem;
 		font-weight: 600;
@@ -1779,7 +1757,6 @@
 	.compare-row .feature-value:nth-last-child(1) {
 		font-size: 1.25rem;
 	}
-
 
 	/* Mobile responsiveness for compare table */
 	@media (max-width: 1024px) {

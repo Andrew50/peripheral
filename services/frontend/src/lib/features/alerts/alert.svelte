@@ -273,15 +273,16 @@
 			{#if alertTypeSelection === 'price'}
 				<!-- Price Alert Form -->
 				<div class="form-field">
-					<label>Ticker:</label>
-					<button class="ticker-selector" on:click={openTickerSelection}>
+					<label for="ticker-selector">Ticker:</label>
+					<button id="ticker-selector" class="ticker-selector" on:click={openTickerSelection}>
 						{newAlertTicker?.ticker || 'Select Ticker'}
 					</button>
 				</div>
 
 				<div class="form-field">
-					<label>Alert Price:</label>
+					<label for="price-input">Alert Price:</label>
 					<input
+						id="price-input"
 						type="number"
 						step="0.01"
 						min="0"
@@ -298,8 +299,8 @@
 			{:else if alertTypeSelection === 'strategy'}
 				<!-- Strategy Alert Form -->
 				<div class="form-field">
-					<label>Strategy:</label>
-					<select bind:value={selectedStrategy} class="strategy-selector">
+					<label for="strategy-selector">Strategy:</label>
+					<select id="strategy-selector" bind:value={selectedStrategy} class="strategy-selector">
 						<option value={null}>Select Strategy</option>
 						{#each $strategies || [] as strategy}
 							<option value={strategy}>{strategy.name}</option>
@@ -308,8 +309,9 @@
 				</div>
 
 				<div class="form-field">
-					<label>Threshold:</label>
+					<label for="threshold-input">Threshold:</label>
 					<input
+						id="threshold-input"
 						type="number"
 						step="0.01"
 						min="0"
@@ -504,7 +506,7 @@
 		color: #ffffff;
 	}
 
-	.universe-controls {
+	/*.universe-controls {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
@@ -540,5 +542,5 @@
 		outline: none;
 		border-color: rgba(255, 255, 255, 0.4);
 		background: rgba(255, 255, 255, 0.15);
-	}
+	}*/
 </style>

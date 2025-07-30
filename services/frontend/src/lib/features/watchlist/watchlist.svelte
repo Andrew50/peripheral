@@ -234,7 +234,7 @@
 		currentWatchlistId &&
 		$visibleWatchlistIds.length === 0
 	) {
-		initializeVisibleWatchlists($watchlists, currentWatchlistId);
+		initializeVisibleWatchlists($watchlists);
 	}
 	// Get all visible watchlists in their fixed positions
 	$: visibleWatchlists = $visibleWatchlistIds
@@ -607,36 +607,6 @@
 
 	:global(.body-table td:nth-child(2)) {
 		padding-left: clamp(4px, 0.5vw, 8px) !important;
-	}
-
-	/* Alert Settings button - shares base style with add-symbol-button */
-	.alert-settings-button {
-		padding: 6px 8px;
-		color: #ffffff;
-		font-size: 14px;
-		font-weight: 600;
-		background: transparent;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: background 0.2s ease;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 32px;
-		height: 32px;
-		flex-shrink: 0;
-	}
-
-	.alert-settings-button:hover {
-		background: rgba(255, 255, 255, 0.1);
-	}
-
-	.alert-settings-button .icon {
-		width: 20px;
-		height: 20px;
-		/* Make sure the PNG appears white regardless of original color */
-		filter: brightness(0) invert(1);
 	}
 
 	.add-symbol-button {

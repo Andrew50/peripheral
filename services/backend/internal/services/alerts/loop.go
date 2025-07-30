@@ -490,7 +490,7 @@ func (a *AlertService) getStrategyAlertCount() int {
 }
 
 // waitForStrategyAlertResult waits for a strategy alert result via Redis pubsub
-func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
+/*func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
 	defer func() {
@@ -661,7 +661,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	return nil
-}
+}*/
 
 // Legacy functions for backward compatibility - these will be removed in future versions
 func priceAlertLoop(ctx context.Context, conn *data.Conn) {

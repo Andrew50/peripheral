@@ -52,8 +52,6 @@ def test_bar_data_queries():
             "start_date": datetime(2023, 7, 17),
             "end_date": datetime(2023, 7, 17) + timedelta(days=1)
         },
-    ]
-    test_cases_d = [ 
         {
             "name": "Daily data - 2023-07-14 trading day - Short ticker list",
             "timeframe": "1d",
