@@ -534,8 +534,10 @@
 	width: 32px;
 	height: 32px;
 	position: absolute;
+	top: 0;
+	bottom: 0;
 	right: 0.5rem;
-	bottom: 0.8rem;
+	margin: auto 0;
 	background: white;
 	border: none;
 	border-radius: 50%;

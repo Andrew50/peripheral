@@ -35,7 +35,7 @@
 					stroke-linejoin="round"
 				/>
 			</svg>
-			<span class="banner-message"> For the best experience, try Peripheral on desktop. </span>
+			<span class="banner-message"> Peripheral is a computer-first app. For the best experience, try Peripheral on a computer.</span>
 		</div>
 		<button
 			class="dismiss-button"
