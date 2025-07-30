@@ -801,7 +801,7 @@ func initAggregates(conn *data.Conn) error {
 // startMarketHourServices starts alert loop, screener updater, and polygon websocket during market hours
 // First checks if current time is within market hours, then checks OHLCV coverage before starting services
 func startMarketHourServices(conn *data.Conn) error {
-	//now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
+	now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
 
 	// First check: Verify we're within market service hours
 	if !isMarketHours(now) {
