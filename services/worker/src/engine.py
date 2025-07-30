@@ -41,7 +41,6 @@ class TrackedList(list):
         cls._global_instance_count = 0
         cls._max_instances = max_instances
         cls._limit_reached = False
-        logger.debug("Reset instance counter, max_instances: %s", max_instances)
 
     @classmethod
     def is_limit_reached(cls):
@@ -116,7 +115,6 @@ def execute_strategy(
     TrackedList.reset_counter(max_instances=MAX_INSTANCES)
 
     # Execute strategy function with proper error handling and stdout capture
-    #logger.info(f"Executing strategy function using data accessor approach")
     
     stdout_buffer = io.StringIO()
     try:
@@ -285,7 +283,6 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
                 png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Strategy ID", strategy_id, version)
                 if png_base64:
                     response_images.append(png_base64)
-                    logger.debug("Generated PNG using matplotlib for plot %s", plot_id)
                 else:
                     logger.warning("Failed to generate PNG for plot %s", plot_id)
                     response_images.append(None)

@@ -2,6 +2,7 @@ import time
 import logging
 from utils.context import Context
 from utils.strategy_crud import fetch_strategy_code
+from utils.error_utils import capture_exception
 from engine import execute_strategy
 from validator import ValidationError
 from datetime import datetime, timedelta
@@ -32,7 +33,6 @@ async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
         )
 
         if error:
-            logger.error("🔔❌ Strategy alert execution failed: %s", error)
             return {
                 'success': False,
                 'error_message': str(error),
@@ -45,7 +45,7 @@ async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
         }
 
     except Exception as e:
-        logger.error("Error during alert processing: %s", e)
+        capture_exception(logger, e)
         return {
             'success': False,
             'instances': [],

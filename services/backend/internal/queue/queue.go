@@ -167,14 +167,14 @@ type Strategy struct {
 
 // PythonAgentResult represents the result of a general python agent task
 type PythonAgentResult struct {
-	Success        bool          `json:"success"`
-	Result         []any         `json:"result"`
-	Prints         string        `json:"prints"`
-	Plots          []any         `json:"plots"`
-	ResponseImages []string      `json:"responseImages"`
-	ExecutionID    string        `json:"executionID"`
-	Error          string        `json:"error,omitempty"`         // Legacy string error
-	ErrorDetails   *ErrorDetails `json:"error_details,omitempty"` // New structured error
+	Success        bool               `json:"success"`
+	Result         any                `json:"result"`
+	Prints         string             `json:"prints"`
+	Plots          []StrategyPlotData `json:"plots"`
+	ResponseImages []string           `json:"responseImages"`
+	ExecutionID    string             `json:"executionID"`
+	Error          string             `json:"error,omitempty"`         // Legacy string error
+	ErrorDetails   *ErrorDetails      `json:"error_details,omitempty"` // New structured error
 }
 
 // UnifiedMessage represents the new format from worker context system

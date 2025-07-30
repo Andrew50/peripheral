@@ -70,64 +70,12 @@ def fetch_multiple_strategy_codes(ctx: Context, userId: int, strategyIds: List[i
         return strategy_codes
 
 
-'''async def _fetch_existing_strategy(ctx: Context, user_id: int, strategy_id: int) -> Optional[Dict[str, Any]]:
-    """Fetch existing strategy for editing"""
-    conn = None
-    cursor = None
-    try:
-        #logger.info(f"📖 Fetching existing strategy (user_id: {user_id}, strategy_id: {strategy_id})")
-        
-        # Use connection manager if available, otherwise fallback to direct connection
-        ctx.conn.ensure_db_connection()
-        conn = ctx.conn.db_conn
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    
-        cursor.execute("""
-            SELECT strategyid, name, description, prompt, pythoncode
-            FROM strategies 
-            WHERE strategyid = %s AND userid = %s
-        """, (strategy_id, user_id))
-        
-        result = cursor.fetchone()
-        
-        if result:
-            #logger.info(f"✅ Found existing strategy: {result['name']}")
-            return {
-                'strategyId': result['strategyid'],
-                'name': result['name'],
-                'description': result['description'] or '',
-                'prompt': result['prompt'] or '',
-                'pythonCode': result['pythoncode'] or ''
-            }
-        else:
-            logger.warning(f"⚠️ No strategy found for user_id {user_id}, strategy_id {strategy_id}")
-            return None
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to fetch existing strategy: {e}")
-        logger.error(f"📄 Fetch strategy traceback: {traceback.format_exc()}")
-        return None
-    finally:
-        # Ensure connections are properly cleaned up
-        try:
-            if cursor:
-                cursor.close()
-                logger.debug("🔌 Database cursor closed")
-            # Only close connection if not using connection manager
-            #if conn and not self.conn:
-                #conn.close()
-                #logger.debug("🔌 Database connection closed")
-        except Exception as cleanup_error:
-            logger.warning(f"⚠️ Error during database cleanup: {cleanup_error}")
-
-'''
 def save_strategy(ctx: Context, user_id: int, name: str, description: str, prompt: str, 
                         python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
     """Save strategy to database with duplicate name handling"""
     conn = None
     cursor = None
     try:
-        #logger.info(f"💾 Saving strategy to database (user_id: {user_id}, strategy_id: {strategy_id})")
         
         # Use connection manager if available, otherwise fallback to direct connection
         ctx.conn.ensure_db_connection()
@@ -151,7 +99,6 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
             strategy_name = version_result['name']
             next_version = version_result['next_version']
             
-            #logger.info(f"Creating new version {next_version} of strategy '{strategy_name}' for user {user_id}")
             
             # Insert new row with incremented version (preserves old version)
             cursor.execute("""
@@ -163,7 +110,6 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
             """, (user_id, strategy_name, description, prompt, python_code, next_version))
         else:
             # Create new strategy - always start at version 1
-            #logger.info(f"Creating new strategy '{name}' version 1 for user {user_id}")
             
             cursor.execute("""
                 INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
@@ -176,7 +122,6 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
         result = cursor.fetchone()
         conn.commit()
         
-        #logger.info(f"✅ Strategy saved successfully with ID: {result['strategyid'] if result else 'None'}")
         
         if result:
             return {
@@ -203,10 +148,5 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
         try:
             if cursor:
                 cursor.close()
-                logger.debug("🔌 Database cursor closed")
-            # Only close connection if not using connection manager
-            #if conn and not self.conn:
-                #conn.close()
-                #logger.debug("🔌 Database connection closed")
         except Exception as cleanup_error:
             logger.warning("⚠️ Error during database cleanup: %s", cleanup_error) 

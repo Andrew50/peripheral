@@ -43,7 +43,6 @@ def _parse_filter_needs_response( response) -> Dict[str, bool]:
                 response_text = json_match.group(1)
 
         filter_needs = json.loads(response_text)
-        #logger.info(f"Filter needs determined: {filter_needs}")
         return filter_needs
     except (json.JSONDecodeError, AttributeError) as e:
         logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
@@ -500,9 +499,13 @@ def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, exi
         try:
             strategy_code = _generate_strategy_code(ctx, user_id, prompt, existing_strategy, last_validation_error, conversationID, messageID)
             if strategy_code:
-                valid, last_validation_error = validate_strategy(ctx, strategy_code)
+                valid, validation_error = validate_strategy(ctx, strategy_code)
                 if valid:
                     return strategy_code
+                else:
+                    # Store the detailed validation error for the next retry
+                    last_validation_error = validation_error
+                    logger.warning(f"Validation failed on attempt {attempt + 1}: {validation_error[:200]}...")
         except ModelGenerationError as e:
             capture_exception(logger, e)
             last_validation_error = str(e)
@@ -541,7 +544,9 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
             user_prompt += "\n\nIMPORTANT - RETRY ATTEMPT:"
             user_prompt += "\n- Previous attempt failed validation"
             if last_error:
-                user_prompt += "\n- SPECIFIC ERROR: {last_error}"
+                # Truncate error message if too long to avoid overwhelming the model
+                err_msg = (last_error[:1500] + "...") if len(last_error) > 1500 else last_error
+                user_prompt += f"\n- SPECIFIC ERROR:\n{err_msg}"
             user_prompt += "\n- Focus on data type safety for pandas operations"
             user_prompt += "\n- Use pd.to_numeric() before .quantile() operations"
             user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
@@ -551,7 +556,6 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
         last_error = None
 
 
-            #logger.info(f"🕐 Starting OpenAI API call with model {model_name} (timeout: 120s)")
 
         response = ctx.conn.openai_client.responses.create(
             model=model_name,

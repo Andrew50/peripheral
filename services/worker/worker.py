@@ -67,14 +67,14 @@ class Worker:
             'python_agent': python_agent
         }
         self._worker_start_time = time.time()
-        logger.info(f"🎯 Strategy worker {self.worker_id} started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("🎯 Strategy worker %s started at %s", self.worker_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
     def run(self):
         """Main queue processing loop with priority queue support"""
 
 
         while True:
-            logger.info(f"🔍 Waiting for task on {self.worker_id}")
+            logger.info("🔍 Waiting for task on %s", self.worker_id)
             task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
             if not task:
                 self.conn.check_connections()
@@ -117,7 +117,6 @@ class Worker:
                 result = func(**kwargs)
                 status = "completed"
             except NoSubscribersException as e:
-                logger.warning("Task %s cancelled: %s", task_id, e)
                 status = "cancelled" # Special status for cancelled tasks
             except asyncio.TimeoutError as timeout_error:
                 error_obj = capture_exception(logger, timeout_error)
@@ -129,7 +128,7 @@ class Worker:
                 error_obj = capture_exception(logger, exec_error)
                 status = "error"
             finally:
-                logger.info(f"💓 Publishing result for task {task_id} {status}")
+                logger.info("💓 Publishing result for task %s %s", task_id, status)
                 execution_context.publish_result(result, error_obj, status) #publish result and stop heartbeat
                 execution_context.destroy() #stop heartbeat and context
 

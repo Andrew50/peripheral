@@ -40,7 +40,6 @@ class Conn:
             self.environment = "dev"
         else:
             self.environment = "prod"
-        #logger.info(f"Environment initialized to: {self.environment}")
     def _init_openai_client(self):
         """Initialize OpenAI client"""
         api_key = os.getenv('OPENAI_API_KEY')
@@ -48,7 +47,6 @@ class Conn:
             raise ValueError("OPENAI_API_KEY environment variable is required")
 
         self.openai_client = OpenAI(api_key=api_key)
-        #logger.info("OpenAI client initialized successfully")
 
     def _init_gemini_client(self):
         """Initialize Gemini client"""
@@ -57,7 +55,6 @@ class Conn:
             raise ValueError("GEMINI_API_KEY environment variable is required")
 
         self.gemini_client = genai.Client(api_key=api_key)
-        #logger.info("Gemini client initialized successfully")
     def _init_redis(self) -> redis.Redis:
         """Initialize Redis connection"""
         redis_host = os.environ.get("REDIS_HOST", "cache")
@@ -77,7 +74,6 @@ class Conn:
         # Test connection
         try:
             client.ping()
-            #logger.info("✅ Redis connection established")
         except Exception as e:
             logger.error("❌ Redis connection failed: %s", e)
             raise
@@ -100,7 +96,6 @@ class Conn:
                 user=db_user,
                 password=db_password
             )
-            #logger.info("✅ Database connection established")
             return connection
         except Exception as e:
             logger.error("❌ Failed to connect to database: %s", e)
@@ -108,15 +103,12 @@ class Conn:
 
     def ensure_db_connection(self):
         """Ensure database connection is healthy, reconnect if needed"""
-        logger.debug("🔌 Testing database connection health")
         try:
             # Test the connection with a simple query
-            logger.debug("🔍 Executing connection test query: SELECT 1")
             with self.db_conn.cursor() as cursor:
                 try:
                     cursor.execute("SELECT 1")
-                    result = cursor.fetchone()
-                    logger.debug("✅ Connection test successful, result: %s", result)
+                    _ = cursor.fetchone()
                 except psycopg2.Error as test_error:
                     logger.error("❌ Database test query failed: %s", test_error, exc_info=True)
                     logger.error("🔍 PostgreSQL error details - Code: %s, SQLSTATE: %s", getattr(test_error, 'pgcode', 'N/A'), getattr(test_error, 'sqlstate', 'N/A'))
@@ -130,17 +122,13 @@ class Conn:
             try:
                 # Close existing connection if it exists
                 if hasattr(self, 'db_conn') and self.db_conn:
-                    logger.debug("🔌 Closing existing database connection")
                     try:
                         self.db_conn.close()
-                        logger.debug("✅ Existing connection closed successfully")
                     except Exception as close_error:
-                        logger.debug(f"⚠️ Error closing database connection (expected during reconnection): {close_error}")
+                        logger.warning("⚠️ Error closing database connection (expected during reconnection): %s", close_error)
 
                 # Establish new connection
-                logger.info("🔄 Establishing new database connection")
                 self.db_conn = self._init_database()
-                logger.info("✅ Database reconnection successful")
 
             except Exception as reconnect_error:
                 logger.error("❌ Failed to reconnect to database: %s", reconnect_error, exc_info=True)
@@ -156,9 +144,7 @@ class Conn:
                 logger.warning("🔄 Detected aborted transaction (pgcode: %s), attempting recovery", db_error.pgcode)
                 try:
                     # Try to rollback the transaction
-                    logger.debug("🔄 Attempting transaction rollback")
                     self.db_conn.rollback()
-                    logger.info("✅ Transaction rollback successful")
                 except Exception as rollback_error:
                     logger.warning("⚠️ Transaction rollback failed, forcing reconnection: %s", rollback_error)
                     # If rollback fails, force a reconnection
@@ -167,7 +153,6 @@ class Conn:
                     except Exception:
                         pass
                     self.db_conn = self._init_database()
-                    logger.info("✅ Forced database reconnection successful")
             else:
                 # For other database errors, don't automatically reconnect to avoid infinite loops
                 logger.error("❌ Database connection test failed with non-recoverable error")
@@ -198,7 +183,6 @@ class Conn:
                 cursor.execute("SELECT ...")
                 result = cursor.fetchall()  # Returns plain tuples
         """
-        logger.debug("🔄 Starting database transaction context")
 
         # Ensure connection is healthy before starting transaction
         try:
@@ -211,13 +195,11 @@ class Conn:
         try:
             # Start transaction by getting cursor with specified factory
             cursor = self.db_conn.cursor(cursor_factory=cursor_factory)
-            logger.debug("✅ Database transaction started successfully")
 
             yield cursor
 
             # If we get here, no exception occurred - commit the transaction
             self.db_conn.commit()
-            logger.debug("✅ Database transaction committed successfully")
 
         except psycopg2.Error as db_error:
             # Database error occurred - rollback transaction
@@ -226,7 +208,6 @@ class Conn:
 
             try:
                 self.db_conn.rollback()
-                logger.info("✅ Transaction rollback successful")
             except Exception as rollback_error:
                 logger.error("❌ Failed to rollback transaction: %s", rollback_error, exc_info=True)
                 # Force reconnection if rollback fails
@@ -245,7 +226,6 @@ class Conn:
 
             try:
                 self.db_conn.rollback()
-                logger.info("✅ Transaction rollback successful after non-database error")
             except Exception as rollback_error:
                 logger.warning(f"⚠️ Failed to rollback transaction after non-database error: {rollback_error}")
 
@@ -256,9 +236,8 @@ class Conn:
             if cursor:
                 try:
                     cursor.close()
-                    logger.debug("🔌 Database cursor closed")
                 except Exception as close_error:
-                    logger.debug("⚠️ Error closing cursor (non-critical): %s", close_error)
+                    logger.warning("⚠️ Error closing cursor (non-critical): %s", close_error)
 
     @contextmanager
     def get_connection(self):
@@ -288,13 +267,11 @@ class Conn:
         try:
             if hasattr(self, 'redis_client') and self.redis_client:
                 self.redis_client.close()
-                logger.info("🔌 Redis connection closed")
         except Exception as e:
             logger.error("Error closing Redis connection: %s", e)
 
         try:
             if hasattr(self, 'db_conn') and self.db_conn:
                 self.db_conn.close()
-                logger.info("🔌 Database connection closed")
         except Exception as e:
             logger.error("Error closing database connection: %s", e)

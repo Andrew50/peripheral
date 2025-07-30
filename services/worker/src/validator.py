@@ -21,9 +21,10 @@ import re
 import keyword
 import sys
 import traceback
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 from engine import execute_strategy
 from utils.context import Context
+from utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,9 @@ forbidden_attributes = {
 }
 
         # Strategy requirements - updated for data accessor approach
+# Allowed function entry points (main user-defined callable the engine will execute)
+ALLOWED_ENTRYPOINTS = {"strategy", "code"}
+
 required_instance_fields = {"ticker", "timestamp"}
 reserved_global_names = {"pd", "pandas", "np", "numpy", "datetime", "timedelta", "math",
                                      "get_bar_data", "get_general_data"}
@@ -202,9 +206,9 @@ def extract_min_bars_requirements(code: str) -> List[Dict[str, Any]]:
                         requirements.append(call_info)
 
     except SyntaxError as e:
-        logger.warning("Failed to parse strategy code for min_bars extraction: %s", e)
+        capture_exception(logger, e)
     except ValueError as e:
-        logger.error("Unexpected error extracting min_bars requirements: %s", e)
+        capture_exception(logger, e)
     return requirements
 
 def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]]:
@@ -257,7 +261,7 @@ def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]
         return call_info
 
     except ValueError as e:
-        logger.debug("Failed to extract parameters from get_bar_data call: %s", e)
+        capture_exception(logger, e)
         return None
 
 
@@ -285,9 +289,9 @@ def extract_get_bar_data_calls(strategy_code: str) -> List[Dict[str, Any]]:
                     if call_info:
                         calls.append(call_info)
     except SyntaxError as e:
-        logger.warning("Failed to parse strategy code for get_bar_data extraction: %s", e)
+        capture_exception(logger, e)
     except ValueError as e:
-        logger.warning("Error extracting get_bar_data calls: %s", e)
+        capture_exception(logger, e)
     return calls
 
 def _extract_string_value(node: ast.AST) -> Optional[str]:
@@ -298,7 +302,7 @@ def _extract_string_value(node: ast.AST) -> Optional[str]:
         elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
             return node.s
     except ValueError as e:
-        logger.debug("_extract_string_value: %s", e)
+        capture_exception(logger, e)
     return None
 
 def _extract_int_value(node: ast.AST) -> Optional[int]:
@@ -310,7 +314,7 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
             if isinstance(node.n, int):
                 return node.n
     except ValueError as e:
-        logger.debug("_extract_int_value: %s", e)
+        capture_exception(logger, e)
     return None
 
 def _analyze_filters_ast(filters_node: Optional[ast.AST]) -> Dict[str, Any]:
@@ -340,7 +344,7 @@ def _analyze_filters_ast(filters_node: Optional[ast.AST]) -> Dict[str, Any]:
                 filter_analysis["has_tickers"] = True
                 filter_analysis["specific_tickers"] = sorted(list(tickers))
     except Exception as e:
-        logger.debug("Error analyzing filters AST: %s", e)
+        capture_exception(logger, e)
     return filter_analysis
 
 def validate_strategy(ctx: Context, code: str) -> Tuple[bool, str]:
@@ -363,14 +367,19 @@ def validate_strategy(ctx: Context, code: str) -> Tuple[bool, str]:
         return is_valid, error_message
 
     except (SyntaxError, ValidationError) as e:
-        logger.warning("Code failed validation: %s", e)
+        capture_exception(logger, e)
         return False, str(e)
     except ValueError as e:
-        logger.error("Unexpected error during validation: %s", e)
+        capture_exception(logger, e)
         return False, str(e)
-def validate_code(code: str) -> bool:
+def validate_code(code: str, *, allow_none_return: bool = False, allowed_entrypoints: Optional[Set[str]] = None) -> bool:
     """
     Validate code syntax and structure
+    
+    Args:
+        code: Python code to validate
+        allow_none_return: If True, allows functions to return None or have no return statement
+        allowed_entrypoints: Set of allowed entry point function names. If None, uses default ALLOWED_ENTRYPOINTS
     """
     try:
         if not code or not code.strip():
@@ -379,24 +388,28 @@ def validate_code(code: str) -> bool:
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
-            logger.warning("Code compilation failed: %s", e)
+            capture_exception(logger, e)
             raise ValidationError("Syntax error in strategy code: " + str(e)) from e
         # Single AST walk for security and compliance
-        _analyze_ast(tree)
+        _analyze_ast(tree, allow_none_return=allow_none_return, allowed_entrypoints=allowed_entrypoints)
         _check_prohibited_patterns(code)
         return True
     except ValidationError as e:
-        logger.warning("Code failed validation: %s", e)
+        capture_exception(logger, e)
         raise
     except ValueError as e:
-        logger.error("Unexpected error during validation: %s", e)
+        capture_exception(logger, e)
         return False
 
 
 
-def _analyze_ast(tree: ast.AST) -> None:
+def _analyze_ast(tree: ast.AST, *, allow_none_return: bool = False, allowed_entrypoints: Optional[Set[str]] = None) -> None:
     """Single AST walk for security and compliance validation"""
-    strategy_functions = []
+    # Use provided entrypoints or default
+    entrypoints_to_check = allowed_entrypoints if allowed_entrypoints is not None else ALLOWED_ENTRYPOINTS
+    
+    # Collect user-defined entry point functions (either 'strategy' or 'code')
+    entrypoint_functions = []
 
     # Single pass through all nodes
     for node in ast.walk(tree):
@@ -409,7 +422,7 @@ def _analyze_ast(tree: ast.AST) -> None:
         # Collect function definitions for compliance checking
         if isinstance(node, ast.FunctionDef):
             if not node.name.startswith('_') and not node.name.startswith('__'):
-                # Check for legacy patterns and collect strategy functions
+                # Check for legacy patterns and collect entry point functions
                 if node.name == 'classify_symbol':
                     raise ValidationError(
                         "Old pattern function 'classify_symbol' is no longer supported. "
@@ -422,23 +435,24 @@ def _analyze_ast(tree: ast.AST) -> None:
                         "Use 'strategy()' with accessor functions instead."
                     )
 
-                # Only accept 'strategy' function name
-                if node.name == 'strategy':
-                    strategy_functions.append(node)
+                # Accept allowed entry point names
+                if node.name in entrypoints_to_check:
+                    entrypoint_functions.append(node)
 
-    # Strategy compliance checks
-    if not strategy_functions:
-        raise ValidationError("No 'strategy' function found. "
-        + "Must define a function named 'strategy'.")
+    # Entry point compliance checks
+    if not entrypoint_functions:
+        entrypoint_names = "', '".join(sorted(entrypoints_to_check))
+        raise ValidationError(f"No entry-point function found. Must define a function named '{entrypoint_names}'.")
 
-    if len(strategy_functions) > 1:
-        raise ValidationError("Only one 'strategy' function is allowed")
+    if len(entrypoint_functions) > 1:
+        entrypoint_names = "', '".join(sorted(entrypoints_to_check))
+        raise ValidationError(f"Only one entry-point function ('{entrypoint_names}') is allowed")
 
-    func_node = strategy_functions[0]
+    func_node = entrypoint_functions[0]
 
     # Validate function signature and body
     _validate_function_signature(func_node)
-    _validate_function_body(func_node)
+    _validate_function_body(func_node, allow_none_return=allow_none_return)
 
 
 
@@ -455,8 +469,12 @@ def _validate_function_signature(func_node: ast.FunctionDef) -> bool:
 
     return True
 
-def _validate_function_body(func_node: ast.FunctionDef) -> bool:
+def _validate_function_body(func_node: ast.FunctionDef, *, allow_none_return: bool = False) -> bool:
     """Validate function body follows strategy requirements"""
+
+    # Skip return validation if None returns are allowed (for general Python agent)
+    if allow_none_return:
+        return True
 
     # Check for return statements
     return_nodes = []
@@ -654,7 +672,9 @@ def execute_validation(
         end_date=None
     )
     if error:
-        return False, str(_get_detailed_error_info(error, strategy_code))
+        error_info = _get_detailed_error_info(error, strategy_code)
+        formatted_error = _format_detailed_error(error_info)
+        return False, formatted_error
     return True, ""
                
 def _get_detailed_error_info(error: Exception, strategy_code: str) -> Dict[str, Any]:

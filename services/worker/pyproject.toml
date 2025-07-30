@@ -58,7 +58,6 @@ disable = [
     "R0903", # too-few-public-methods
     "R0913", # too-many-arguments
     "C0111", # missing-docstring (from old .pylintrc)
-    "C0103", # invalid-name (from old .pylintrc)
     "C0302", # too-many-lines in module
     "R0914", # too-many-local-variables
     "R0917", # too-many-boolean-expressions
@@ -74,14 +73,14 @@ max-line-length = 150
 good-names = ["i", "j", "k", "ex", "Run", "_", "id", "db"]
 
 [tool.pylint.naming]
-variable-naming-style = "camelCase"
-function-naming-style = "camelCase"
-argument-naming-style = "camelCase"
-attr-naming-style = "camelCase"
-method-naming-style = "camelCase"
+variable-naming-style = "snake_case"
+function-naming-style = "snake_case"
+argument-naming-style = "snake_case"
+attr-naming-style = "snake_case"
+method-naming-style = "snake_case"
 class-naming-style = "PascalCase"
-const-naming-style = "camelCase"
-module-naming-style = "camelCase"
+const-naming-style = "snake_case"
+module-naming-style = "snake_case"
 
 [tool.pylint.basic]
 good-names = ["i", "j", "k", "ex", "Run", "_", "id", "db"]

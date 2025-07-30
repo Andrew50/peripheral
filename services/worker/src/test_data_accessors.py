@@ -41,7 +41,29 @@ def test_bar_data_queries():
     )
     
     # Define test cases
-    test_cases = [
+    test_cases = [ 
+        {
+            "name": "Daily data - 2023-07-15 weekend test - Short ticker list",
+            "timeframe": "1d",
+            "columns": ["ticker", "timestamp", "open", "close"],
+            "min_bars": 1,
+            "filters": {"tickers": ["AAPL", "MSFT", "GOOGL"]},
+            "extended_hours": False,
+            "start_date": datetime(2023, 7, 17),
+            "end_date": datetime(2023, 7, 17) + timedelta(days=1)
+        },
+    ]
+    test_cases_d = [ 
+        {
+            "name": "Daily data - 2023-07-14 trading day - Short ticker list",
+            "timeframe": "1d",
+            "columns": ["ticker", "timestamp", "open", "close"],
+            "min_bars": 1,
+            "filters": {"tickers": ["AAPL", "MSFT", "GOOGL"]},
+            "extended_hours": False,
+            "start_date": datetime(2023, 7, 14),
+            "end_date": datetime(2023, 7, 14) + timedelta(days=1)
+        },
         {
             "name": "Daily data - Recent 5 days - AAPL only",
             "timeframe": "1d",

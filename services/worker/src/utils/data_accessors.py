@@ -62,6 +62,9 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timefr
     Returns:
         numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
     """
+    logger.info("🔍 _get_bar_data called with: timeframe=%s, start_date=%s, end_date=%s, min_bars=%s, filters=%s", 
+                timeframe, start_date, end_date, min_bars, filters)
+    
         # Validate inputs
         # this should already be validated before  has been called
         # Extract tickers from filters if provided
@@ -73,12 +76,18 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timefr
                 tickers = [tickers]  # Convert single ticker to list
             else:
                 tickers = None
+    
+    logger.info("📊 Extracted tickers: %s", tickers)
+    
     # Check if we need to use batching (now with potentially corrected tickers)
     should_batch = _should_use_batching(tickers)
+    logger.info("⚖️ Should use batching: %s (tickers count: %s)", should_batch, len(tickers) if tickers else "None")
 
     if should_batch:
+        logger.info("📦 Using batched data retrieval")
         return _get_bar_data_batched(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
     else:
+        logger.info("🎯 Using single data retrieval")
         return _get_bar_data_single(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
 
 
@@ -86,19 +95,15 @@ def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False
     """Determine if batching should be used based on the request parameters"""
     # Never batch if aggregate_mode is explicitly enabled
     if aggregate_mode:
-        #logger.info("🔍 Aggregate mode enabled - disabling batching to provide all data at once")
         return False
     # Always batch when tickers=None (all securities)
     if tickers is None:
-        #logger.info("🔄 Batching enabled: fetching all securities")
         return True
     elif not tickers:  # Empty list case
-        #logger.info("🔄 Batching enabled: empty tickers list")
         return True
 
     # Batch when ticker list is large
     if len(tickers) > 250:
-        #logger.info(f"🔄 Batching enabled: {len(tickers)} tickers > 1000 limit")
         return True
 
     return False
@@ -107,6 +112,9 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
             min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
             start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> pd.DataFrame:
     """Get bar data using batching approach for large datasets with parallel processing"""
+    logger.info("📦 _get_bar_data_batched called with: timeframe=%s, start_date=%s, end_date=%s, min_bars=%s, filters=%s", 
+                timeframe, start_date, end_date, min_bars, filters)
+    
     try:
         batch_size = 1000
         all_results = []
@@ -121,18 +129,19 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
                 else:
                     tickers = None
 
+        logger.info("📊 Batching: extracted tickers=%s", tickers)
+
         # Get the universe of tickers to process
         if tickers is None:
             # Get all active tickers
-            #logger.info("🌍 Fetching universe of all active tickers for batching")
             universe_tickers = _get_all_active_tickers(ctx, filters)
             if not universe_tickers:
-                logger.warning("No active tickers found in universe")
+                logger.warning("⚠️ No active tickers found in universe")
                 return pd.DataFrame()
-            #logger.info(f"📊 Found {len(universe_tickers)} active tickers in universe")
+            logger.info("🌍 Retrieved %d active tickers from universe", len(universe_tickers))
         else:
             universe_tickers = tickers
-            #logger.info(f"📊 Processing {len(universe_tickers)} specified tickers")
+            logger.info("🎯 Using provided %d tickers", len(universe_tickers))
 
         # Create batches
         ticker_batches = []
@@ -140,8 +149,11 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
             batch_tickers = universe_tickers[i:i + batch_size]
             ticker_batches.append(batch_tickers)
 
+        logger.info("📦 Created %d batches of size %d", len(ticker_batches), batch_size)
+
         # Helper function to process a single batch
         def process_batch(batch_tickers, batch_num):
+            logger.info("🔄 Processing batch %d with %d tickers: %s", batch_num, len(batch_tickers), batch_tickers[:5])
             try:
                 # Create batch filters with tickers
                 batch_filters = filters.copy() if filters else {}
@@ -159,17 +171,16 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
                     end_date=end_date
                 )
                 if batch_result is not None and len(batch_result) > 0:
-                    logger.debug("✅ Batch %s returned %s rows", batch_num, len(batch_result))
+                    logger.info("✅ Batch %d returned %d rows", batch_num, len(batch_result))
                     return batch_result
                 else:
-                    logger.debug("⚠️ Batch %s returned no data", batch_num)
+                    logger.warning("⚠️ Batch %s returned no data", batch_num)
                     return None
             except ValueError as batch_error:
                 logger.error("❌ Error in batch %s: %s", batch_num, batch_error)
                 return None
 
         # Process batches in parallel using ThreadPoolExecutor
-        logger.info("🚀 Processing %d batches in parallel", len(ticker_batches))
         # Determine optimal number of workers based on batch count and system resources
         max_workers = min(len(ticker_batches), 10)  # Cap at 10 to avoid overwhelming the database
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -192,14 +203,15 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
         if all_results:
             # Concatenate DataFrames efficiently (no copies when possible)
             combined_result = pd.concat(all_results, ignore_index=True, copy=False)
-            logger.info("✅ Successfully combined %s batches into %s total rows", len(all_results), len(combined_result))
+            logger.info("🎉 Combined %d batch results into DataFrame with %d total rows", 
+                       len(all_results), len(combined_result))
             return combined_result
         else:
-            logger.warning("No data returned from any batch")
+            logger.warning("⚠️ No data returned from any batch")
             return pd.DataFrame()
 
     except Exception as e:
-        logger.error("Error in batched data fetching: %s", e)
+        logger.error("❌ Error in batched data fetching: %s", e)
         return pd.DataFrame()
 
 def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> List[str]:
@@ -394,6 +406,11 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
             select_columns.append(f"o.{col}")
             final_columns.append(col)
 
+    # Build column versions without the table alias (used when selecting from CTEs)
+    # Fix A: Re-use the already-aliased column names from final_columns
+    select_no_alias_columns = final_columns
+    select_no_alias_clause = ', '.join(select_no_alias_columns)
+
     # Build filters (tickers only). Date conditions for the windowing query are
     # added explicitly later to avoid contradictory clauses when we need both
     # “pre-roll” (< start_date) and "in-range" (>= start_date AND <= end_date)
@@ -449,9 +466,9 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
         )
         SELECT {final_select_clause}
         FROM (
-            SELECT {select_clause} FROM pre_bars WHERE rn_pre <= %s
+            SELECT {select_no_alias_clause} FROM pre_bars WHERE rn_pre <= %s
             UNION ALL
-            SELECT {select_clause} FROM in_range
+            SELECT {select_no_alias_clause} FROM in_range
         ) AS combined
         ORDER BY ticker, timestamp ASC"""
 
@@ -521,22 +538,28 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
     Returns:
         numpy.ndarray with columns: ticker, timestamp, open, high, low, close, volume
     """
-    realtime_mode = False
-    if start_date is None and end_date is None:
-        realtime_mode = True
+    logger.info("🎯 _get_bar_data_single called with: timeframe=%s, start_date=%s, end_date=%s, min_bars=%s, filters=%s", 
+                timeframe, start_date, end_date, min_bars, filters)
+    
+    # Validate date parameters
     if start_date is not None and end_date is None or start_date is None and end_date is not None:
         raise ValueError("start_date and end_date must be provided together")
 
+    # Determine execution modes independently
+    realtime_mode = (start_date is None and end_date is None)
+    
     # Parse timeframe to get bucket SQL and base table
     bucket_sql, base_table = _parse_timeframe(timeframe)
+    logger.info("📅 Parsed timeframe: bucket_sql='%s', base_table='%s'", bucket_sql, base_table)
 
     # Check if this is a direct table access (no aggregation needed)
-    # For now, we only support direct access to 1m and 1d tables
-    # All other timeframes will use aggregation
     needs_aggregation = not (
         (bucket_sql == "1 minute" and base_table == "ohlcv_1m") or
         (bucket_sql == "1 day" and base_table == "ohlcv_1d")
     )
+    
+    logger.info("🕒 Execution mode: %s", "realtime" if realtime_mode else "date-range")
+    logger.info("🔧 Needs aggregation: %s", needs_aggregation)
 
     # Default columns if not specified - include ticker by default
     if not columns:
@@ -546,245 +569,63 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
     allowed_columns = {"ticker", "timestamp", "open", "high",
     "low", "close", "volume", "transactions"}
     safe_columns = [col for col in columns if col in allowed_columns]
+    logger.info("📋 Columns: requested=%s, safe=%s", columns, safe_columns)
 
     if not safe_columns:
         # Return empty DataFrame with expected columns for consistency
         col_names = [c.split(' as ')[-1].split('.')[-1] for c in safe_columns]
         return pd.DataFrame(columns=col_names)
 
-    # Determine date range - check direct parameters first, then execution context
+    # Execute appropriate query based on the four execution modes
+    if needs_aggregation:
+        # Branch 1: Real-time mode, direct table access
+        logger.info("🎯 Branch 1: Real-time, direct table access")
+        query, params, _ = _build_direct_query(base_table, safe_columns, min_bars, filters, 
+                                          extended_hours, start_date, end_date, realtime_mode)
+        
+    else: 
+        query, params, _ = _build_direct_query(base_table, safe_columns, min_bars, filters, 
+                                          extended_hours, start_date, end_date, realtime_mode)
 
-    # Priority 1: Direct date parameters from function call
 
-    # Build the query based on aggregation needs and execution mode
-    if not realtime_mode:
-        # this means that both the start and end date, along with the min bars needs to fetched
-        # by selecting from the start date - min bars + 1 bars back to the end date
-        # Special backtest mode: use SQL windowing with aggregated data
-        agg_cte_sql, agg_params = _build_agg_cte(
-            bucket_sql, base_table, safe_columns, filters, extended_hours
-        )
+    # Execute query and process results (shared for all branches)
+    return _execute_and_process_query(ctx, query, params, safe_columns)
 
-        # Calculate how many pre-bars we need (min_bars - 1, but at least 0)
-        pre_bars_needed = max(min_bars - 1, 0)
 
-        # Build final columns for select - only requested columns
-        final_columns = []
-        select_columns = []
-        for col in safe_columns:
-            if col == "ticker":
-                final_columns.append("ticker")
-                select_columns.append("ticker")
-            elif col == "timestamp":
-                final_columns.append(f"{_ts_to_epoch('bucket_ts')} AS timestamp")
-                select_columns.append("bucket_ts")
-            else:
-                final_columns.append(col)
-                select_columns.append(col)
-
-        final_select_clause = ', '.join(final_columns)
-        union_select_clause = ', '.join(select_columns)
-
-        # Build backtest windowing query with pre-bars and in-range data
-        query = f"""WITH {agg_cte_sql},
-            pre_bars AS (
-                SELECT {union_select_clause}, ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY bucket_ts DESC) as rn_pre
-                FROM agg
-                WHERE bucket_ts < %s
-            ),
-            in_range AS (
-                SELECT {union_select_clause} FROM agg
-                WHERE bucket_ts >= %s AND bucket_ts <= %s
-            )
-            SELECT {final_select_clause}
-            FROM (
-                SELECT {union_select_clause} FROM pre_bars WHERE rn_pre <= %s
-                UNION ALL
-                SELECT {union_select_clause} FROM in_range
-            ) AS combined
-            ORDER BY ticker, bucket_ts ASC"""
-
-        # Parameters: agg_params + [start_date, start_date, end_date, pre_bars_needed]
-        params = (agg_params +
-        [_normalize_est(start_date),
-        _normalize_est(start_date),
-        _normalize_est(end_date),
-        pre_bars_needed])
-
-    elif needs_aggregation:
-        # Use TimescaleDB aggregation
-        agg_cte_sql, agg_params = _build_agg_cte(
-            bucket_sql, base_table, safe_columns, filters, extended_hours,
-            start_date, end_date
-        )
-
-        # Build final columns for select
-        final_columns = []
-        select_columns = []
-        for col in safe_columns:
-            if col == "ticker":
-                final_columns.append("ticker")
-                select_columns.append("ticker")
-            elif col == "timestamp":
-                final_columns.append(f"{_ts_to_epoch('bucket_ts')} AS timestamp")
-                select_columns.append("bucket_ts")
-            else:
-                final_columns.append(col)
-                select_columns.append(col)
-
-        final_select_clause = ', '.join(final_columns)
-        agg_select_clause = ', '.join(select_columns)
-
-        if realtime_mode:
-                # Use ROW_NUMBER to limit results per ticker
-            query = f"""WITH {agg_cte_sql},
-            ranked_data AS (
-    SELECT {agg_select_clause},
-    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY bucket_ts DESC) as rn,
-    COUNT(*) OVER (PARTITION BY ticker) as total_bars
-    FROM agg
-            )
-            SELECT {final_select_clause}
-            FROM ranked_data
-            WHERE rn <= %s AND total_bars >= %s
-            ORDER BY ticker, bucket_ts DESC"""
-
-            params = agg_params + [min_bars, min_bars]
-        else:
-                # Regular aggregated query
-            query = f"""WITH {agg_cte_sql}
-                SELECT {final_select_clause}
-                FROM agg
-                ORDER BY ticker, bucket_ts ASC"""
-
-            params = agg_params
-
-    else:
-        # Direct table access (no aggregation) - use existing logic with modifications
-        # Build column selection
-        select_columns = []
-        for col in safe_columns:
-            if col == "ticker":
-                select_columns.append("o.ticker")
-            elif col == "timestamp":
-                # Convert timestamptz to integer seconds since epoch for backward compatibility
-                select_columns.append(f"{_ts_to_epoch('o.timestamp')} AS timestamp")
-            elif col == "volume":
-                # Preserve raw volume (no scaling needed)
-                select_columns.append("o.volume AS volume")
-            elif col in ["open", "high", "low", "close"]:
-                # Keep OHLC values as raw bigint (will divide by 10000 in NumPy for better performance)
-                select_columns.append(f"o.{col} AS {col}")
-            else:
-                select_columns.append(f"o.{col}")
-
-        # Build filters - simplified since no securities table join
-        ticker_filter_parts = []
-        ticker_params = []
-
-        # Extract tickers from filters if provided
-        tickers = None
-        if filters and 'tickers' in filters:
-            tickers = filters['tickers']
-            if not isinstance(tickers, list):
-                if isinstance(tickers, str):
-                    tickers = [tickers]
-                else:
-                    tickers = None
-
-            # Handle ticker-specific filtering directly
-        if tickers is not None and len(tickers) > 0:
-            placeholders = ','.join(['%s'] * len(tickers))
-            ticker_filter_parts.append(f"o.ticker IN ({placeholders})")
-            ticker_params.extend(tickers)
-
-            # Note: Other security filters (sector, industry, market_cap, etc.) are not available
-            # in the OHLCV tables directly - they would need to be joined with securities table
-            # For now, we only support ticker filtering in direct table access mode
-
-        # Build date filter
-        date_filter_parts = []
-        date_params = []
-
-        if start_date:
-            date_filter_parts.append("o.timestamp >= %s")
-            date_params.append(_normalize_est(start_date))
-
-        if end_date:
-            date_filter_parts.append("o.timestamp <= %s")
-            date_params.append(_normalize_est(end_date))
-
-        # Add extended hours filtering for intraday timeframes
-        extended_hours_filter = ""
-        if base_table == "ohlcv_1m" and not extended_hours:
-            extended_hours_filter = f"""(
-                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
-                (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
-        EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
-            ) AND (
-                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
-            ) AND (
-                EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
-            )"""
-
-        # Combine all filters
-        all_filter_parts = ticker_filter_parts + date_filter_parts
-        if extended_hours_filter:
-            all_filter_parts.append(extended_hours_filter)
-
-        # Build WHERE clause - if no filters, use TRUE
-        if all_filter_parts:
-            where_clause = " AND ".join(all_filter_parts)
-        else:
-            where_clause = "TRUE"
-
-        all_params = ticker_params + date_params
-
-        # Build query based on execution mode
-        select_clause = ', '.join(select_columns)
-        from_clause = f"{base_table} o"  # No securities table join needed
-
-        if realtime_mode:
-            # Use ROW_NUMBER to limit results per ticker
-            query = f"""WITH ranked_data AS (
-        SELECT {select_clause},
-        ROW_NUMBER() OVER (PARTITION BY o.ticker ORDER BY o.timestamp DESC) as rn,
-        COUNT(*) OVER (PARTITION BY o.ticker) as total_bars
-        FROM {from_clause}
-        WHERE {where_clause}
-                )
-                SELECT {', '.join([col.split(' as ')[-1].split('.')[-1] for col in safe_columns])}
-                FROM ranked_data
-                WHERE rn <= %s AND total_bars >= %s
-                ORDER BY ticker, timestamp DESC"""
-
-            params = all_params + [min_bars, min_bars]
-        else:
-                # Regular direct query
-            query = f"""SELECT {select_clause} FROM {from_clause}
-            WHERE {where_clause} ORDER BY o.ticker, o.timestamp ASC"""
-            params = all_params
-
+def _execute_and_process_query(ctx: Context, query: str, params: List, safe_columns: List[str]) -> pd.DataFrame:
+    """Execute query and process results into DataFrame with price scaling"""
     # Execute query with fastest cursor (plain tuples)
     with ctx.conn.get_connection() as conn:
         cursor = conn.cursor(cursor_factory=None)  # Use plain cursor for maximum performance
+        logger.info("🗃️ Executing query with %d parameters", len(params))
+        logger.info("📝 Query: %s", query)
+        logger.info("🔢 Parameters: %s", params)
+        
         cursor.execute(query, params)
         results = cursor.fetchall()
         cursor.close()
+        
+    logger.info("📊 Query returned %d rows", len(results))
+    
     if not results:
         # Return empty DataFrame with expected columns for consistency
         col_names = [c.split(' as ')[-1].split('.')[-1] for c in safe_columns]
+        logger.info("⚠️ No results found, returning empty DataFrame with columns: %s", col_names)
         return pd.DataFrame(columns=col_names)
     
     # Create DataFrame directly from fetched tuples – fastest when columns are known
     col_names = [c.split(' as ')[-1].split('.')[-1] for c in safe_columns]
     df = pd.DataFrame(results, columns=col_names)
+    logger.info("✅ Created DataFrame with shape: %s, columns: %s", df.shape, list(df.columns))
     
     # Apply vectorized scaling to OHLC price columns (divide by 1000)
     price_columns = [col for col in ['open', 'high', 'low', 'close'] if col in df.columns]
     if price_columns:
         df[price_columns] = df[price_columns].astype(np.float64).div(1000.0)
+        logger.info("💰 Applied price scaling to columns: %s", price_columns)
     
+    logger.info("🎉 Returning DataFrame with %d rows for %d unique tickers", 
+                len(df), df['ticker'].nunique() if 'ticker' in df.columns else 0)
     return df
 
 
@@ -979,7 +820,6 @@ def _get_general_data(ctx: Context, columns: List[str] = None,
         # Handle ticker-specific filtering
         if tickers is not None and len(tickers) > 0:
             # Convert ticker symbols to security IDs and add to filter
-            #logger.info(f"Converting ticker symbols {tickers} to security IDs for general data")
             security_ids = _get_security_ids_from_tickers(tickers, filters)
             if not security_ids:
                 logger.warning("No security IDs found for provided tickers")
@@ -1194,65 +1034,70 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
     return cte_sql, cte_params
 
 def _normalize_est(dt: datetime):
-    """Return a timezone-aware datetime in America/New_York.
+    """Return a naive datetime, assuming input is already in Eastern time.
 
-    If the input is naive, assume it's already in Eastern time. If it has a
-    different tzinfo, convert it. No conversion to UTC is performed because
-    the DB stores market timestamps in EST/EDT.
+    If the input is naive, return it as-is since it's already in the correct timezone.
+    If it has tzinfo, convert it to Eastern time and then make it naive.
+    The DB expects naive datetimes that represent Eastern time.
     """
     if dt is None:
         return None
-    eastern = ZoneInfo("America/New_York")
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=eastern)
-    return dt.astimezone(eastern)
+        # Already naive, assume it's in Eastern time
+        logger.info("🕐 Using naive datetime as-is (assuming EST): %s", dt)
+        return dt
+    # Convert timezone-aware datetime to Eastern and make it naive
+    eastern = ZoneInfo("America/New_York")
+    result = dt.astimezone(eastern).replace(tzinfo=None)
+    logger.info("🕐 Converted timezone-aware datetime %s to naive EST: %s", dt, result)
+    return result
 
 def get_available_filter_values(ctx: Context) -> Dict[str, List[str]]:
-        """Get all available values for filter fields from the database"""
-        try:
-            with ctx.conn.get_connection() as conn:
-                cursor = conn.cursor()
+    """Get all available values for filter fields from the database"""
+    try:
+        with ctx.conn.get_connection() as conn:
+            cursor = conn.cursor()
 
-                filter_values = {}
+            filter_values = {}
 
-                # Get distinct sectors
-                cursor.execute("""
-                    SELECT DISTINCT sector
-                    FROM securities
-                    WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL
-                    ORDER BY sector
-                """)
-                filter_values['sectors'] = [row['sector'] for row in cursor.fetchall()]
+            # Get distinct sectors
+            cursor.execute("""
+                SELECT DISTINCT sector
+                FROM securities
+                WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL
+                ORDER BY sector
+            """)
+            filter_values['sectors'] = [row['sector'] for row in cursor.fetchall()]
 
-                # Get distinct industries
-                cursor.execute("""
-                    SELECT DISTINCT industry
-                    FROM securities
-                    WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL
-                    ORDER BY industry
-                """)
-                filter_values['industries'] = [row['industry'] for row in cursor.fetchall()]
+            # Get distinct industries
+            cursor.execute("""
+                SELECT DISTINCT industry
+                FROM securities
+                WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL
+                ORDER BY industry
+            """)
+            filter_values['industries'] = [row['industry'] for row in cursor.fetchall()]
 
-                # Get distinct primary exchanges
-                cursor.execute("""
-                    SELECT DISTINCT primary_exchange
-                    FROM securities
-                    WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL
-                    ORDER BY primary_exchange
-                """)
-                filter_values['primary_exchanges'] = [row['primary_exchange'] for row in cursor.fetchall()]
+            # Get distinct primary exchanges
+            cursor.execute("""
+                SELECT DISTINCT primary_exchange
+                FROM securities
+                WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL
+                ORDER BY primary_exchange
+            """)
+            filter_values['primary_exchanges'] = [row['primary_exchange'] for row in cursor.fetchall()]
 
-                cursor.close()
-                required_keys = ['sectors', 'industries', 'primary_exchanges']
-                for key in required_keys:
-                    if key not in filter_values or not filter_values[key]:
-                        raise ValueError(f"Database returned empty {key} list")
-                return filter_values
+            cursor.close()
+            required_keys = ['sectors', 'industries', 'primary_exchanges']
+            for key in required_keys:
+                if key not in filter_values or not filter_values[key]:
+                    raise ValueError(f"Database returned empty {key} list")
+            return filter_values
 
-        except Exception as e:
-            logger.error(f"Error fetching filter values: {e}")
-            return {
-                'sectors': [],
-                'industries': [],
-                'primary_exchanges': [],
-            }
+    except Exception as e:
+        logger.error(f"Error fetching filter values: {e}")
+        return {
+            'sectors': [],
+            'industries': [],
+            'primary_exchanges': [],
+        }

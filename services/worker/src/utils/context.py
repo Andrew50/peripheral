@@ -79,7 +79,6 @@ class Context():
 
         while not self._heartbeat_stop_event.is_set():
             try:
-                logger.info(f"💓 Heartbeat for task {self.task_id}")
                 self._publish_update("heartbeat", "heartbeat", {})
 
             except NoSubscribersException:
@@ -115,7 +114,6 @@ class Context():
             self._heartbeat_stop_event.set()
         if hasattr(self, '_heartbeat_thread'):
             self._heartbeat_thread.join(timeout=5)
-            #logger.info("💓 Stopped heartbeat thread")
         self.conn.redis_client.delete(f"task_status:{self.status_id}")
         self.conn.redis_client.delete(f"task_results:{self.task_id}")
         self.conn.redis_client.delete(f"task_heartbeats:{self.task_id}")
