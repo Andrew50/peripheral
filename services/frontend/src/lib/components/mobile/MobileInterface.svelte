@@ -71,34 +71,35 @@
         <MobileBanner on:dismiss={dismissMobileBanner} />
     {/if}
     
-    <!-- Mobile content area -->
-    <div class="mobile-content">
+    <!-- Persistent chart container - always rendered -->
+    <div class="persistent-chart-container" style="display: {$activeMobileTab === 'chart' ? 'flex' : 'none'}; flex-direction: column; height: 100%; flex: 1;">
+        <TopBar instance={$activeChartInstance || {}} />
+        <ChartContainer defaultChartData={data.defaultChartData} />
+    </div>
+    
+    <!-- Mobile content area for non-chart tabs -->
+    <div class="mobile-content" style="display: {$activeMobileTab !== 'chart' ? 'flex' : 'none'}; flex-direction: column;">
         {#if $activeMobileTab === 'agent'}
             <Query {isPublicViewing} {sharedConversationId} />
-        {:else if $activeMobileTab === 'chart'}
-            <div class="mobile-chart-wrapper">
-                <TopBar instance={$activeChartInstance || {}} />
-                <ChartContainer defaultChartData={data.defaultChartData} />
-            </div>
         {:else if $activeMobileTab === 'sidebar'}
             <div class="mobile-sidebar-wrapper">
                 <!-- Sidebar header with tabs -->
                 <div class="mobile-sidebar-header">
                     <!-- Mobile sidebar navigation -->
-                    <div class="mobile-sidebar-nav">
+                    <!-- <div class="mobile-sidebar-nav">
                         <button
                             class="mobile-sidebar-tab {$activeMenu === 'watchlist' ? 'active' : ''}"
                             on:click={() => changeMenu('watchlist')}
                         >
                             Watchlist
                         </button>
-                        <!-- <  button
+                        <  button
                             class="mobile-sidebar-tab {$activeMenu === 'alerts' ? 'active' : ''}"
                             on:click={() => changeMenu('alerts')}
                         >
                             Alerts
-                        </button> -->
-                    </div>
+                        </button>
+                    </div> -->
                     
                     {#if $activeMenu === 'alerts'}
                         <!-- Alert Controls -->
@@ -373,5 +374,10 @@
         flex-grow: 1;
         min-width: 0;
         gap: 0;
+    }
+
+    /* Persistent chart container */
+    .persistent-chart-container {
+        overflow: hidden;
     }
 </style> 
