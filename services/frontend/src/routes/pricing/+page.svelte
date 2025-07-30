@@ -923,18 +923,6 @@
 								{#each filteredPlans as plan}
 									<div class="plan-column">
 										<span class="feature-value">
-											{plan.multi_chart ? '✓' : '✗'}
-										</span>
-									</div>
-								{/each}
-							</div>
-							<div class="compare-row">
-								<div class="feature-column">
-									<span class="feature-name">Data Quality</span>
-								</div>
-								{#each filteredPlans as plan}
-									<div class="plan-column">
-										<span class="feature-value">
 											{plan.realtime_charts ? 'Realtime' : 'Delayed'}
 										</span>
 									</div>
