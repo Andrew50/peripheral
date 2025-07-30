@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 )
 
 // RunBacktestArgs represents arguments for backtesting (API compatibility)
@@ -226,8 +225,8 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunBacktestArgs, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Prepare backtest task arguments
 	taskArgs := map[string]interface{}{
-		"strategy_id": fmt.Sprintf("%d", args.StrategyID),
-		"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
+		"strategy_id": args.StrategyID, // Send as int, not string
+		"user_id":     userID,          // Send as int, not string
 		"version":     args.Version,
 		"start_date":  args.StartDate,
 		"end_date":    args.EndDate,
@@ -239,25 +238,23 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 		return nil, fmt.Errorf("error queuing backtest task: %v", err)
 	}
 
-	// Monitor progress and wait for result
-	go func() {
-		for update := range handle.Updates {
-			if progressCallback != nil {
-
-				// Convert status to message format expected by ProgressCallback
-				message := fmt.Sprintf("Status: %s", update.Status)
-				if update.Data != nil {
-					if msg, ok := update.Data["message"].(string); ok {
-						message = msg
-					}
+	// Create a progress callback wrapper that converts queue.ResultUpdate to the expected string format
+	var queueProgressCallback queue.ProgressCallback
+	if progressCallback != nil {
+		queueProgressCallback = func(update queue.ResultUpdate) {
+			// Convert status to message format expected by ProgressCallback
+			message := fmt.Sprintf("Status: %s", update.Status)
+			if update.Data != nil {
+				if msg, ok := update.Data["message"].(string); ok {
+					message = msg
 				}
-				progressCallback(message)
 			}
+			progressCallback(message)
 		}
-	}()
+	}
 
-	// Wait for result with timeout using typed await
-	result, err := queue.AwaitTypedResult[WorkerBacktestResult](ctx, handle)
+	// Wait for result with progress callbacks using the simplified API
+	result, err := queue.AwaitTypedResult[WorkerBacktestResult](ctx, handle, queueProgressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}
@@ -266,7 +263,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 }
 
 // waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
-func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
+/*func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
 	defer func() {
@@ -342,6 +339,7 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 		}
 	}
 }
+*/
 
 // convertWorkerInstancesToBacktestResults converts worker instances to API format
 func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestInstanceRow {

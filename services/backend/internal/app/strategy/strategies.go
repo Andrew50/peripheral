@@ -62,19 +62,31 @@ func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json
 		return nil, fmt.Errorf("strategy not found or access denied")
 	}
 
-	// Call the worker's run_screener function with the passed context
-	result, err := callWorkerScreening(ctx, conn, args.StrategyID, args.Universe, args.Limit)
+	// Build arguments for the new typed-queue screening task
+	qArgs := map[string]interface{}{
+		"user_id":      userID,
+		"strategy_ids": []string{fmt.Sprintf("%d", args.StrategyID)},
+	}
+	if len(args.Universe) > 0 {
+		qArgs["universe"] = args.Universe
+	}
+	/*if args.Limit > 0 {
+		qArgs["limit"] = args.Limit
+	}*/
+
+	// Submit task via the unified queue system
+	qResult, err := queue.QueueScreeningTyped(ctx, conn, qArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}
 
-	// Convert worker result to ScreeningResponse format for API compatibility
-	rankedResults := convertWorkerRankedResults(result.RankedResults)
+	// Convert instances returned by the worker to API compatible structure
+	rankedResults := convertScreeningInstances(qResult.Instances)
 
 	response := ScreeningResponse{
 		RankedResults: rankedResults,
-		Scores:        result.Scores,
-		UniverseSize:  result.UniverseSize,
+		Scores:        nil, // Worker currently doesn't supply aggregated scores
+		UniverseSize:  len(rankedResults),
 	}
 
 	log.Printf("Complete screening finished for strategy %d: %d opportunities found",
@@ -104,7 +116,7 @@ type WorkerRankedResult struct {
 }
 
 // callWorkerScreening calls the worker's run_screener function via Redis queue
-func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
+/*func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
 	// Set defaults
 	if limit == 0 {
 		limit = 100
@@ -224,6 +236,29 @@ func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningR
 		results[i] = ScreeningResult(wr)
 	}
 
+	return results
+}*/
+
+func convertScreeningInstances(instances []map[string]interface{}) []ScreeningResult {
+	results := make([]ScreeningResult, len(instances))
+	for i, inst := range instances {
+		sr := ScreeningResult{
+			Data: inst,
+		}
+		if v, ok := inst["symbol"].(string); ok {
+			sr.Symbol = v
+		}
+		if v, ok := inst["score"].(float64); ok {
+			sr.Score = v
+		}
+		if v, ok := inst["current_price"].(float64); ok {
+			sr.CurrentPrice = v
+		}
+		if v, ok := inst["sector"].(string); ok {
+			sr.Sector = v
+		}
+		results[i] = sr
+	}
 	return results
 }
 

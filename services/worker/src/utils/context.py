@@ -79,6 +79,7 @@ class Context():
 
         while not self._heartbeat_stop_event.is_set():
             #try:
+            logger.info(f"💓 Heartbeat for task {self.task_id}")
             self._publish_update("heartbeat", "heartbeat", {})
 
             #except NoSubscribersException:

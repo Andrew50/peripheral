@@ -100,7 +100,7 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
 	} // Add tickers with null maxdate to screener_stale table
-	log.Println("🔄 Adding active tickers to screener_stale table...")
+	//log.Println("🔄 Adding active tickers to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
 		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
@@ -121,7 +121,7 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	if err != nil {
 		log.Printf("⚠️  Failed to add stale tickers: %v. Continuing...", err)
 	} else {
-		log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
+		//log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
 	}
 	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
 	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
@@ -145,10 +145,10 @@ func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	var updateCount int
 	var totalDuration time.Duration
 
-	log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
-	log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
-	log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
-	log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
+	//log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
+	//log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
+	//log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
+	//log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
 
 	for {
 		if !IgnoreMarketHours {

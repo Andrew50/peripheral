@@ -203,8 +203,11 @@ type Handle struct {
 	cancelled  bool
 }
 
-// Await waits for task completion and returns the typed result
-func (h *Handle) Await(ctx context.Context, resultType interface{}) (interface{}, error) {
+// ProgressCallback is a function type for receiving progress updates
+type ProgressCallback func(update ResultUpdate)
+
+// Await waits for task completion and returns the typed result with optional progress callback
+func (h *Handle) Await(ctx context.Context, resultType interface{}, progressCallback ProgressCallback) (interface{}, error) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -212,6 +215,11 @@ func (h *Handle) Await(ctx context.Context, resultType interface{}) (interface{}
 		case <-h.cancelCh:
 			return nil, fmt.Errorf("task was cancelled")
 		case update := <-h.updatesCh:
+			// Call progress callback for non-terminal statuses
+			if progressCallback != nil && (update.Status == "running" || update.Status == "queued") {
+				progressCallback(update)
+			}
+
 			// Only process terminal statuses
 			if update.Status == "completed" || update.Status == "error" || update.Status == "cancelled" {
 				// Handle error and cancelled cases
@@ -253,7 +261,7 @@ func (h *Handle) Await(ctx context.Context, resultType interface{}) (interface{}
 
 // AwaitTyped is deprecated, use Await instead
 func (h *Handle) AwaitTyped(ctx context.Context, resultType interface{}) (interface{}, error) {
-	return h.Await(ctx, resultType)
+	return h.Await(ctx, resultType, nil)
 }
 
 // TaskData represents the structure of a task in the queue (matches worker expectation)
@@ -311,19 +319,7 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 		return nil, fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
-	// Determine queue name
-	queueName := "task_queue"
-	if priority {
-		queueName = "priority_task_queue"
-	}
-
-	// Push task to queue
-	err = conn.Cache.RPush(ctx, queueName, string(taskJSON)).Err()
-	if err != nil {
-		return nil, fmt.Errorf("failed to push task to queue %s: %w", queueName, err)
-	}
-
-	// Create handle with channels
+	// Create handle with channels BEFORE pushing to queue
 	updatesCh := make(chan ResultUpdate, 10) // Buffered channel for updates
 	cancelCh := make(chan struct{})
 
@@ -349,8 +345,33 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 		return nil
 	}
 
-	// Start unified event loop
-	go handle.eventLoop(ctx, maxRetries, timeout, priority, statusID, 5) // Pass heartbeat interval
+	// Create a channel to signal when subscription is ready
+	subscriptionReady := make(chan struct{})
+
+	// Start unified event loop BEFORE pushing to queue to ensure subscription is active
+	go handle.eventLoop(ctx, maxRetries, timeout, priority, statusID, 5, subscriptionReady) // Pass heartbeat interval and ready signal
+
+	// Wait for subscription to be established
+	select {
+	case <-subscriptionReady:
+		// Subscription is ready
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for subscription to be established")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// Determine queue name
+	queueName := "task_queue"
+	if priority {
+		queueName = "priority_task_queue"
+	}
+
+	// Push task to queue AFTER subscription is established
+	err = conn.Cache.RPush(ctx, queueName, string(taskJSON)).Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to push task to queue %s: %w", queueName, err)
+	}
 
 	// Send initial queued update
 	initialUpdate := ResultUpdate{
@@ -370,10 +391,10 @@ func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[s
 	return handle, nil
 }
 
-// AwaitTypedResult provides a generic typed await method
-func AwaitTypedResult[T any](ctx context.Context, handle *Handle) (*T, error) {
+// AwaitTypedResult provides a generic typed await method with optional progress callback
+func AwaitTypedResult[T any](ctx context.Context, handle *Handle, progressCallback ProgressCallback) (*T, error) {
 	var result T
-	_, err := handle.Await(ctx, &result)
+	_, err := handle.Await(ctx, &result, progressCallback)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +402,7 @@ func AwaitTypedResult[T any](ctx context.Context, handle *Handle) (*T, error) {
 }
 
 // eventLoop combines subscription and watchdog functionality in a single goroutine
-func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Duration, priority bool, statusID string, heartbeatInterval int) {
+func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Duration, priority bool, statusID string, heartbeatInterval int, subscriptionReady chan struct{}) {
 	// Subscribe to unified task status channel
 	statusChannel := fmt.Sprintf("task_status:%s", statusID)
 	pubsub := h.conn.Cache.Subscribe(ctx, statusChannel)
@@ -389,6 +410,11 @@ func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Dur
 
 	ch := pubsub.Channel()
 	log.Printf("🔔 Subscribed to status channel: %s", statusChannel)
+
+	// Signal that subscription is ready
+	if subscriptionReady != nil {
+		close(subscriptionReady)
+	}
 
 	retryCount := 0
 	lastHeartbeat := time.Now()
@@ -405,6 +431,7 @@ func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Dur
 	startTimer := time.NewTimer(firstMsgTimeout)
 	defer startTimer.Stop()
 
+retryLoop:
 	for retryCount <= maxRetries {
 		select {
 		case <-ctx.Done():
@@ -414,7 +441,7 @@ func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Dur
 		case <-startTimer.C:
 			if !taskStarted {
 				log.Printf("⚠️ Task %s never produced a start message", h.taskID)
-				break // Break to retry logic
+				break retryLoop // Break to retry logic
 			}
 		case msg := <-ch:
 			if msg == nil {
@@ -527,19 +554,19 @@ func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Dur
 				// Check if task has been running too long
 				if now.Sub(startTime) > timeout {
 					log.Printf("⏰ Task %s timed out after %v", h.taskID, timeout)
-					break // Break to retry logic
+					break retryLoop // Break to retry logic
 				}
 
 				// Check if we've missed heartbeats
 				if now.Sub(lastHeartbeat) > heartbeatTimeout {
 					log.Printf("💀 Task %s missed heartbeats - last heartbeat %v ago", h.taskID, now.Sub(lastHeartbeat))
-					break // Break to retry logic
+					break retryLoop // Break to retry logic
 				}
 			} else {
 				// If task hasn't started after reasonable time, consider it failed
 				if now.Sub(time.Now().Add(-firstMsgTimeout)) > 2*time.Minute {
 					log.Printf("⚠️ Task %s never started after 2 minutes", h.taskID)
-					break // Break to retry logic
+					break retryLoop // Break to retry logic
 				}
 			}
 		}
@@ -653,22 +680,22 @@ func QueueBacktestTyped(ctx context.Context, conn *data.Conn, args map[string]in
 		return nil, err
 	}
 
-	return AwaitTypedResult[BacktestResult](ctx, handle)
+	return AwaitTypedResult[BacktestResult](ctx, handle, nil)
 }
 
 // QueueScreening queues a screening task with default settings
 func QueueScreening(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "screening", args, false, 3, 5*time.Minute)
+	return QueueTask(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 }
 
 // QueueScreeningTyped queues a screening task and returns a typed result
 func QueueScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*ScreeningResult, error) {
-	handle, err := QueueTask(ctx, conn, "screening", args, false, 3, 5*time.Minute)
+	handle, err := QueueTask(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 	if err != nil {
 		return nil, err
 	}
 
-	return AwaitTypedResult[ScreeningResult](ctx, handle)
+	return AwaitTypedResult[ScreeningResult](ctx, handle, nil)
 }
 
 // QueueAlert queues an alert task with default settings
@@ -683,7 +710,7 @@ func QueueAlertTyped(ctx context.Context, conn *data.Conn, args map[string]inter
 		return nil, err
 	}
 
-	return AwaitTypedResult[AlertResult](ctx, handle)
+	return AwaitTypedResult[AlertResult](ctx, handle, nil)
 }
 
 // QueueCreateStrategy queues a strategy creation task with high priority
@@ -698,7 +725,7 @@ func QueueCreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[str
 		return nil, err
 	}
 
-	return AwaitTypedResult[CreateStrategyResult](ctx, handle)
+	return AwaitTypedResult[CreateStrategyResult](ctx, handle, nil)
 }
 
 // QueuePythonAgent queues a general python agent task with default settings
@@ -713,5 +740,5 @@ func QueuePythonAgentTyped(ctx context.Context, conn *data.Conn, args map[string
 		return nil, err
 	}
 
-	return AwaitTypedResult[PythonAgentResult](ctx, handle)
+	return AwaitTypedResult[PythonAgentResult](ctx, handle, nil)
 }

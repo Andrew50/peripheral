@@ -191,7 +191,7 @@ go func() {
 }()
 
 // Wait for typed result
-result, err := queue.AwaitTypedResult[queue.BacktestResult](ctx, handle)
+result, err := queue.AwaitTypedResult[queue.BacktestResult](ctx, handle, nil)
 if err != nil {
     return err
 }

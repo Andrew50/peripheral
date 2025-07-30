@@ -46,7 +46,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
             return {
                 'success': False,
                 'instances': [],
-                'error': error
+                'error_details': error
             }
             
         # Rank and limit results
@@ -54,8 +54,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
 
         return {
             'success': True,
-            'instances': ranked_results,
-            'error': None
+            'instances': ranked_results
         }
 
     except Exception as e:
@@ -63,7 +62,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
         return {
             'success': False,
             'instances': [],
-            'error': error_obj
+            'error_details': error_obj
         }
 
 
