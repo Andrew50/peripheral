@@ -21,6 +21,20 @@ from .context import Context
 
 logger = logging.getLogger(__name__)
 
+# Timezone constants and helpers
+TZ = "'America/New_York'"
+
+# NOTE: Timestamps coming from the DB are stored as timestamptz. `EXTRACT(EPOCH FROM
+# <timestamptz>)` already returns the number of seconds since 1970-01-01 **in UTC**.
+# We deliberately do *not* apply an additional `AT TIME ZONE` here because doing so
+# would introduce a *second* conversion and shift bars backwards by 4-5 h (ending
+# up a calendar day early when later interpreted in EST/EDT).  All downstream
+# code can convert the epoch integer into whatever timezone it needs.
+
+def _ts_to_epoch(expr: str) -> str:
+    """Return SQL snippet that extracts Unix epoch seconds from a timestamptz expr."""
+    return f"EXTRACT(EPOCH FROM {expr})::bigint"
+
 def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timeframe: str = "1d", columns: List[str] = None,
                     min_bars: int = 1, filters: Dict[str, any] = None,
                     extended_hours: bool = False) -> pd.DataFrame:
@@ -298,7 +312,7 @@ def _build_aggregated_query(bucket_sql: str, base_table: str, columns: List[str]
             final_columns.append("ticker")
             select_columns.append("ticker")
         elif col == "timestamp":
-            final_columns.append("EXTRACT(EPOCH FROM bucket_ts)::bigint AS timestamp")
+            final_columns.append(f"{_ts_to_epoch('bucket_ts')} AS timestamp")
             select_columns.append("bucket_ts")
         else:
             final_columns.append(col)
@@ -367,7 +381,7 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
             select_columns.append("o.ticker")
             final_columns.append("ticker")
         elif col == "timestamp":
-            select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
+            select_columns.append(f"{_ts_to_epoch('o.timestamp')} AS timestamp")
             final_columns.append("timestamp")
         elif col == "volume":
             select_columns.append("o.volume AS volume")
@@ -380,19 +394,21 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
             select_columns.append(f"o.{col}")
             final_columns.append(col)
 
-    # Build filters
-    filter_parts, params = _build_ticker_and_date_filters(filters, start_date, end_date)
+    # Build filters (tickers only). Date conditions for the windowing query are
+    # added explicitly later to avoid contradictory clauses when we need both
+    # “pre-roll” (< start_date) and "in-range" (>= start_date AND <= end_date)
+    filter_parts, params = _build_ticker_and_date_filters(filters)
 
     # Add extended hours filtering for minute data
     if base_table == "ohlcv_1m" and not extended_hours:
-        extended_hours_filter = """(
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) > 9 OR
-            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) = 9 AND
-                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE 'America/New_York')) >= 30)
+        extended_hours_filter = f"""(
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
+            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
+                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
         ) AND (
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) < 16
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
         ) AND (
-            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE 'America/New_York')) BETWEEN 1 AND 5
+            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
         )"""
         filter_parts.append(extended_hours_filter)
 
@@ -439,21 +455,30 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
         ) AS combined
         ORDER BY ticker, timestamp ASC"""
 
-        params = (params + params + params +  # Three copies of base filters
-                 [_normalize_est(start_date), _normalize_est(start_date),
-                  _normalize_est(end_date), pre_bars_needed])
+        # Parameter order must match placeholders:
+        #   1) base filter params for pre_bars
+        #   2) < start_date
+        #   3) base filter params for in_range
+        #   4) >= start_date, <= end_date, and rn_pre limit
+        params = (params +                     # pre_bars WHERE clause
+                 [_normalize_est(start_date)] +
+                 params +                     # in_range WHERE clause
+                 [_normalize_est(start_date), _normalize_est(end_date), pre_bars_needed])
 
     return query, params, columns
 
 
-def _build_ticker_and_date_filters(filters: Dict[str, any] = None,
-                                  start_date: Optional[datetime] = None,
-                                  end_date: Optional[datetime] = None) -> tuple[List[str], List]:
-    """Build common ticker and date filter parts for direct queries."""
-    filter_parts = []
-    params = []
+def _build_ticker_and_date_filters(filters: Dict[str, any] = None) -> tuple[List[str], List]:
+    """Build common ticker filter parts for direct queries.
 
-    # Extract and handle ticker filters
+    Date constraints are applied by the calling query builder (e.g. pre-roll vs in-range)
+    to avoid contradictory conditions. This helper now concerns itself **only** with
+    ticker lists that may come from the caller-supplied `filters` dict.
+    """
+    filter_parts: List[str] = []
+    params: List = []
+
+    # Handle ticker filtering, if provided
     if filters and 'tickers' in filters:
         tickers = filters['tickers']
         if not isinstance(tickers, list):
@@ -462,19 +487,10 @@ def _build_ticker_and_date_filters(filters: Dict[str, any] = None,
             else:
                 tickers = None
 
-        if tickers is not None and len(tickers) > 0:
+        if tickers:
             placeholders = ','.join(['%s'] * len(tickers))
             filter_parts.append(f"o.ticker IN ({placeholders})")
             params.extend(tickers)
-
-    # Add date filters (only used in aggregated queries, but kept for consistency)
-    if start_date:
-        filter_parts.append("o.timestamp >= %s")
-        params.append(_normalize_est(start_date))
-
-    if end_date:
-        filter_parts.append("o.timestamp <= %s")
-        params.append(_normalize_est(end_date))
 
     return filter_parts, params
 
@@ -560,7 +576,7 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
                 final_columns.append("ticker")
                 select_columns.append("ticker")
             elif col == "timestamp":
-                final_columns.append("EXTRACT(EPOCH FROM bucket_ts)::bigint AS timestamp")
+                final_columns.append(f"{_ts_to_epoch('bucket_ts')} AS timestamp")
                 select_columns.append("bucket_ts")
             else:
                 final_columns.append(col)
@@ -610,7 +626,7 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
                 final_columns.append("ticker")
                 select_columns.append("ticker")
             elif col == "timestamp":
-                final_columns.append("EXTRACT(EPOCH FROM bucket_ts)::bigint AS timestamp")
+                final_columns.append(f"{_ts_to_epoch('bucket_ts')} AS timestamp")
                 select_columns.append("bucket_ts")
             else:
                 final_columns.append(col)
@@ -652,7 +668,7 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
                 select_columns.append("o.ticker")
             elif col == "timestamp":
                 # Convert timestamptz to integer seconds since epoch for backward compatibility
-                select_columns.append("EXTRACT(EPOCH FROM o.timestamp)::bigint AS timestamp")
+                select_columns.append(f"{_ts_to_epoch('o.timestamp')} AS timestamp")
             elif col == "volume":
                 # Preserve raw volume (no scaling needed)
                 select_columns.append("o.volume AS volume")
@@ -701,14 +717,14 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
         # Add extended hours filtering for intraday timeframes
         extended_hours_filter = ""
         if base_table == "ohlcv_1m" and not extended_hours:
-            extended_hours_filter = """(
-                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) > 9 OR
-                (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) = 9 AND
-        EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE 'America/New_York')) >= 30)
+            extended_hours_filter = f"""(
+                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
+                (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
+        EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
             ) AND (
-                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) < 16
+                EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
             ) AND (
-                EXTRACT(DOW FROM (o.timestamp AT TIME ZONE 'America/New_York')) BETWEEN 1 AND 5
+                EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
             )"""
 
         # Combine all filters
@@ -1128,14 +1144,14 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
     extended_hours_filter = ""
     if base_table == "ohlcv_1m" and not extended_hours:
         # Filter to regular trading hours only (9:30 AM to 4:00 PM ET)
-        extended_hours_filter = """(
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) > 9 OR
-            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) = 9 AND
-                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE 'America/New_York')) >= 30)
+        extended_hours_filter = f"""(
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
+            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
+                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
         ) AND (
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE 'America/New_York')) < 16
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
         ) AND (
-            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE 'America/New_York')) BETWEEN 1 AND 5
+            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
         )"""
     # Combine all filters
     all_filter_parts = ticker_filter_parts + date_filter_parts
@@ -1149,7 +1165,7 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
     all_params = ticker_params + date_params
 
     # Build select columns based on what's actually requested
-    select_parts = ["o.ticker", "time_bucket(%s, o.timestamp AT TIME ZONE 'America/New_York') AS bucket_ts"]
+    select_parts = ["o.ticker", f"time_bucket(%s, o.timestamp AT TIME ZONE {TZ}) AT TIME ZONE {TZ} AS bucket_ts"]
     
     # Only include OHLCV columns that are requested
     if 'open' in columns:
