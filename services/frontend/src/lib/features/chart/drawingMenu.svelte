@@ -695,22 +695,4 @@
 		width: 100%;
 		min-height: 1px;
 	}
-
-	.alert-info {
-		padding: 8px 0 0 0;
-		text-align: center;
-	}
-
-	.alert-price {
-		font-size: 14px;
-		font-weight: bold;
-		color: #ffb74d; /* Orange color matching alert lines */
-		margin-bottom: 4px;
-	}
-
-	.alert-instruction {
-		font-size: 11px;
-		color: #ccc;
-		font-style: italic;
-	}
 </style>

@@ -739,12 +739,25 @@ jobs:
       - name: Install dependencies
         working-directory: services/worker
         run: |
+          # -----------------------------
+          # OLD system-wide installation (now disabled because Debian 12 marks the
+          # root environment as "externally-managed", see PEP 668). Keeping for
+          # easy rollback:
           # python -m pip install --upgrade pip
           # pip install -r requirements.txt
-          
-          # Use system Python3 for self-hosted runner
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt
+          #
+          # NEW: create an isolated virtual environment so we can safely install
+          # anything we need without hitting the externally-managed restriction.
+          # -----------------------------
+          python3 -m venv .venv
+          # Add the venv to PATH for the *rest of the job* so subsequent steps
+          # pick up flake8, isort, mypy, etc. from the venv without having to
+          # reference the full path each time.
+          echo "$(pwd)/.venv/bin" >> "$GITHUB_PATH"
+
+          # Upgrade pip inside venv and install deps
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
 
       - name: Import sorting check with isort
         working-directory: services/worker

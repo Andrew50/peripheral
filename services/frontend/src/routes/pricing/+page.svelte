@@ -1457,17 +1457,6 @@
 		margin-bottom: 1rem;
 	}
 
-	.credit-amount .amount {
-		font-size: 2.5rem;
-		font-weight: 700;
-		color: var(--landing-text-primary);
-	}
-
-	.credit-amount .label {
-		font-size: 1rem;
-		color: var(--landing-text-secondary);
-	}
-
 	.credit-description {
 		color: var(--landing-text-secondary);
 		font-size: 0.9375rem;

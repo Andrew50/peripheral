@@ -890,6 +890,5 @@ func stopServicesJob(_ *data.Conn) error {
 	alerts.StopAlertLoop()
 	_ = socket.StopPolygonWS()
 	_ = screener.StopScreenerUpdaterLoop()
-	stopWorkerMonitor()
 	return nil
 }
