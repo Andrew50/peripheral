@@ -183,7 +183,7 @@
 		if (plan.realtime_charts) {
 			features.push('Realtime data');
 		} else {
-			features.push('Delayed data');
+			features.push('Realtime Derived');
 		}
 
 		// 3. Strategy screening - simplified to just "Realtime strategy screening"
