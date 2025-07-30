@@ -49,11 +49,51 @@ export async function GET({ params }: { params: { id: string } }) {
 		// ---------- 3) Load background image -----------
 		let backgroundImageBase64 = '';
 		try {
-			const backgroundImagePath = path.join(process.cwd(), 'static', 'opengraph-background.png');
-			const backgroundImageBuffer = await fs.readFile(backgroundImagePath);
-			backgroundImageBase64 = `data:image/png;base64,${backgroundImageBuffer.toString('base64')}`;
+			// Use the same URL-based approach that other components use
+			// This works in both development and production with SvelteKit's static file serving
+			const backgroundImageUrl = '/opengraph-background.png';
+			
+			// In server context, we need to construct the full URL
+			const baseUrl = process.env.ORIGIN || 'http://localhost:5173';
+			const fullImageUrl = new URL(backgroundImageUrl, baseUrl);
+			
+			const response = await fetch(fullImageUrl);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch background image: ${response.status} ${response.statusText}`);
+			}
+			
+			const backgroundImageBuffer = await response.arrayBuffer();
+			backgroundImageBase64 = `data:image/png;base64,${Buffer.from(backgroundImageBuffer).toString('base64')}`;
 		} catch (error) {
-			console.warn('Could not load background image, falling back to gradient:', error);
+			console.warn('Fetch failed, trying filesystem fallback:', error);
+			
+			// Fallback: try reading from filesystem (for environments where fetch doesn't work)
+			try {
+				// In production, static files are typically in build/client/
+				// In development, they're in static/
+				const possiblePaths = [
+					path.join(process.cwd(), 'build', 'client', 'opengraph-background.png'),
+					path.join(process.cwd(), 'static', 'opengraph-background.png')
+				];
+				
+				let backgroundImageBuffer: Buffer | null = null;
+				for (const imagePath of possiblePaths) {
+					try {
+						backgroundImageBuffer = await fs.readFile(imagePath);
+						break;
+					} catch {
+						// Continue to next path
+					}
+				}
+				
+				if (backgroundImageBuffer) {
+					backgroundImageBase64 = `data:image/png;base64,${backgroundImageBuffer.toString('base64')}`;
+				} else {
+					throw new Error('Could not find background image file');
+				}
+			} catch (fallbackError) {
+				console.warn('Could not load background image, falling back to gradient:', fallbackError);
+			}
 		}
 
 		// ---------- 4) Render SVG via Satori -----------
