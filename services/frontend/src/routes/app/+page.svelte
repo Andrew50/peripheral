@@ -795,7 +795,7 @@
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = window.innerWidth*0.3;
+		const maxLeftSidebarWidth = window.innerWidth*0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
