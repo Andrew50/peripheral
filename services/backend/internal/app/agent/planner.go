@@ -225,7 +225,7 @@ func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt st
 	if systemPromptFile == "" {
 		systemPromptFile = "defaultSystemPrompt"
 	}
-	systemPrompt, err = getSystemInstruction(systemPromptFile)
+	systemPrompt, err = GetSystemInstruction(systemPromptFile)
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
@@ -510,7 +510,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	client := conn.OpenAIClient
 
-	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
@@ -911,7 +911,7 @@ func appendCurrentTimeToPrompt(prompt string) string {
 
 //deprecate gemini
 /*func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
-	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}

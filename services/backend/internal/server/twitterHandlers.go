@@ -16,12 +16,10 @@ import (
 	"time"
 
 	"backend/internal/app/agent"
-	"backend/internal/app/helpers"
 	"backend/internal/services/plotly"
 	"backend/internal/services/socket"
 	"backend/internal/services/twitter"
 
-	"github.com/dghubble/oauth1"
 	"github.com/go-redis/redis/v8"
 	"google.golang.org/genai"
 )
@@ -96,9 +94,9 @@ func verifyTwitterWebhookConfiguration(conn *data.Conn) error {
 	// Check if it's between 6 AM (6) and 9 PM (21) - market hours
 	if currentHour >= 6 && currentHour < 21 {
 
-		return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+		return updateTwitterNewsWebhookPollingFrequency(conn, 60, true)
 	} else {
-		return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+		return updateTwitterNewsWebhookPollingFrequency(conn, 60, false)
 	}
 }
 func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookRequest) error {
@@ -161,7 +159,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 		}
 
 		// Verify the X-API-Key header for request authenticity
-		twitterAPIKey := r.Header.Get("X-API-Key")
+		/*twitterAPIKey := r.Header.Get("X-API-Key")
 		if twitterAPIKey == "" {
 			log.Printf("Twitter webhook request missing X-API-Key header")
 			http.Error(w, "Missing API key", http.StatusUnauthorized)
@@ -172,7 +170,7 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Twitter webhook request with invalid API key: %s", twitterAPIKey)
 			http.Error(w, "Invalid API key", http.StatusUnauthorized)
 			return
-		}
+		}*/
 
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
@@ -239,7 +237,9 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 
 // processTwitterWebhookEvent processes the extracted tweet data
 func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitter.ExtractedTweetData) error {
-	fmt.Println("queueTwitterWebhookEvent extractedTweets", tweets)
+	fmt.Println("queueTwitterWebhookEvent ruletag", ruleTag, "extractedTweets", tweets)
+	fmt.Println("tweets", tweets)
+	fmt.Println("ruleTag", ruleTag)
 	for _, tweet := range tweets {
 		if ruleTag == "Main Twitter" {
 			processTweet(conn, tweet)
@@ -247,6 +247,9 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 			if err := twitter.HandleTweetForReply(conn, tweet); err != nil {
 				log.Printf("Warning: failed to handle tweet for reply: %v", err)
 			}
+		} else if ruleTag == "Ask Peripheral" {
+			fmt.Println("Processing @Ask Peripheral tweet", tweet)
+			twitter.GenerateAskPeripheralTweet(conn, tweet)
 		}
 	}
 	return nil
@@ -281,7 +284,7 @@ func processTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) {
 		return
 	}
 	fmt.Println("Peripheral tweet", peripheralContentToTweet)
-	SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
+	twitter.SendTweetToPeripheralTwitterAccount(conn, peripheralContentToTweet)
 
 }
 
@@ -290,19 +293,14 @@ type AgentPeripheralTweet struct {
 	Plot interface{} `json:"plot" jsonschema:"required"`
 }
 
-type FormattedPeripheralTweet struct {
-	Text  string `json:"text"`
-	Image string `json:"image"`
-}
-
-func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweetData) (FormattedPeripheralTweet, error) { // to implement don't forget
+func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweetData) (twitter.FormattedPeripheralTweet, error) { // to implement don't forget
 
 	prompt := tweet.Text
 	fmt.Println("Starting Creating a Periphearl tweet from prompt", prompt)
 
 	agentResult, err := agent.RunGeneralAgent[AgentPeripheralTweet](conn, 0, "TweetBreakingHeadlineSystemPrompt", "TweetCraftFinalSystemPrompt", prompt, "o4-mini", "medium")
 	if err != nil {
-		return FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
+		return twitter.FormattedPeripheralTweet{}, fmt.Errorf("error running general agent for tweet generation: %w", err)
 	}
 	/*agentResult := AgentPeripheralTweet{
 		Text: prompt,
@@ -334,38 +332,11 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweet
 	agentResult.Plot = samplePlot*/
 
 	var base64PNG string
-	// Test Plotly rendering if plot data exists
-	if agentResult.Plot != nil {
-		if plotMap, ok := agentResult.Plot.(map[string]interface{}); ok {
-			if titleTicker, exists := plotMap["titleTicker"].(string); exists && titleTicker != "" {
-				titleIcon, _ := helpers.GetIcon(conn, titleTicker)
-				plotMap["titleIcon"] = titleIcon
-			}
-			if _, hasData := plotMap["data"]; hasData {
-
-				// Create renderer
-				renderer, err := plotly.New()
-				if err != nil {
-					log.Printf("Failed to create Plotly renderer: %v", err)
-				} else {
-					defer renderer.Close()
-
-					// Render the plot
-					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-					defer cancel()
-
-					base64PNG, err = renderer.RenderPlot(ctx, agentResult.Plot, nil)
-					if err != nil {
-						log.Printf("Failed to render plot: %v", err)
-					}
-
-					//saveImageToContainer(base64PNG)
-
-				}
-			}
-		}
+	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, false)
+	if err != nil {
+		log.Printf("🚨 ERROR rendering Twitter plot: %v", err)
 	}
-	formattedPeripheralTweet := FormattedPeripheralTweet{
+	formattedPeripheralTweet := twitter.FormattedPeripheralTweet{
 		Text:  agentResult.Text,
 		Image: base64PNG,
 	}
@@ -492,143 +463,3 @@ func storeTweet(conn *data.Conn, tweet twitter.ExtractedTweetData) {
 		log.Printf("Error storing tweet: %v", err)
 	}*/
 }
-
-func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPeripheralTweet) { // TODO: Implement plot rendering and image upload
-	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
-	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
-	client := cfg.Client(oauth1.NoContext, token)
-	payload := map[string]any{"text": tweet.Text}
-
-	if tweet.Image != "" {
-		imageID, err := UploadImageToTwitter(conn, tweet.Image)
-		if err != nil {
-			log.Printf("Error uploading image: %v", err)
-			return
-		}
-		payload["media"] = map[string]any{"media_ids": []string{imageID}}
-	}
-	body, _ := json.Marshal(payload)
-
-	req, err := http.NewRequest("POST", "https://api.x.com/2/tweets", bytes.NewBuffer(body))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error sending tweet: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated { // 201 on success
-		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
-		return
-	}
-	fmt.Println("Tweet sent successfully")
-}
-
-func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
-	cfg := oauth1.NewConfig(conn.XAPIKey, conn.XAPISecretKey)
-	token := oauth1.NewToken(conn.XAccessToken, conn.XAccessSecret)
-	client := cfg.Client(oauth1.NoContext, token)
-
-	// Create JSON payload with base64 image data
-	payload := map[string]any{
-		"media":          image, // base64 string as-is
-		"media_category": "tweet_image",
-		"media_type":     "image/png",
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("error marshaling payload: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", "https://api.x.com/2/media/upload", bytes.NewBuffer(body))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		return "", fmt.Errorf("error creating request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Error sending request: %v", err)
-		return "", fmt.Errorf("error sending request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		return "", fmt.Errorf("error reading response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK { // 200 on success for v1.1 API
-		log.Printf("X API returned %d — check rate limit or perms. Response: %s", resp.StatusCode, string(responseBody))
-		return "", fmt.Errorf("x api returned status %d: %s", resp.StatusCode, string(responseBody))
-	}
-
-	// Parse the JSON response (v1.1 API format)
-	var uploadResponse struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-		Errors []struct {
-			Detail string `json:"detail,omitempty"`
-			Status int    `json:"status,omitempty"`
-			Title  string `json:"title,omitempty"`
-			Type   string `json:"type,omitempty"`
-		} `json:"errors"`
-	}
-
-	if err := json.Unmarshal(responseBody, &uploadResponse); err != nil {
-		log.Printf("Error parsing response JSON: %v", err)
-		return "", fmt.Errorf("error parsing response JSON: %w", err)
-	}
-
-	// Check for errors in the response
-	if len(uploadResponse.Errors) > 0 {
-		log.Printf("X API returned errors: %+v", uploadResponse.Errors)
-		return "", fmt.Errorf("x api error: %s", uploadResponse.Errors[0].Detail)
-	}
-
-	// Check if we got a media ID
-	if uploadResponse.Data.ID == "" {
-		log.Printf("No media ID in response: %s", string(responseBody))
-		return "", fmt.Errorf("no media ID returned in response")
-	}
-
-	fmt.Printf("Image uploaded successfully with ID: %s\n", uploadResponse.Data.ID)
-	return uploadResponse.Data.ID, nil
-}
-
-// saveImageToContainer saves base64 image data to container filesystem for debugging
-/*
-func saveImageToContainer(base64Data string) {
-	if base64Data == "" {
-		return
-	}
-
-	// Decode base64 data
-	data, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		log.Printf("Failed to decode base64 image: %v", err)
-		return
-	}
-
-	// Use fixed filename
-	filename := "/tmp/peripheral_plot.png"
-
-	// Write to file
-	err = os.WriteFile(filename, data, 0644)
-	if err != nil {
-		log.Printf("Failed to save image to %s: %v", filename, err)
-		return
-	}
-
-	log.Printf("✅ Plot image saved to container at: %s", filename)
-	fmt.Printf("🚀 One-liner: docker cp $(docker ps --format 'table {{.Names}}' | grep backend | head -n1):/tmp/peripheral_plot.png ~/Desktop/ && open ~/Desktop/peripheral_plot.png\n")
-}*/

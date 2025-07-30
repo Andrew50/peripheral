@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
 .chat-container {
 	display: flex;
 	flex-direction: column;
@@ -1357,7 +1359,7 @@ button[data-ticker].ticker-button:hover,
 	margin: 0;
 	font-size: 0.9rem;
 	font-weight: 500;
-	color: var(--text-primary, #fff);
+	color: #e9e9f9;
 }
 
 .share-modal-header .close-btn {
@@ -1387,7 +1389,7 @@ button[data-ticker].ticker-button:hover,
 
 .share-description {
 	margin: 0 0 1rem 0;
-	color: var(--text-secondary, #aaa);
+	color: #e9e9f9;
 	font-size: 0.8rem;
 	line-height: 1.4;
 }
@@ -1477,6 +1479,7 @@ button[data-ticker].ticker-button:hover,
 .public-viewing-notice {
 	padding: 1rem;
 	text-align: center;
+	font-family: 'Instrument Sans', sans-serif;
 	background: var(--ui-bg-secondary, #1a1a1a);
 	border-top: 1px solid var(--ui-border, #333);
 }
@@ -1531,4 +1534,37 @@ button[data-ticker].ticker-button:hover,
 	100% {
 		opacity: 0;
 	}
+}
+
+.upgrade-prompt {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 0.75rem;
+	padding: 1.5rem;
+	width: 100%;
+	max-width: 100%;
+}
+
+.upgrade-prompt p {
+	margin: 0;
+	color: #ffffff;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	max-width: 400px;
+}
+
+.upgrade-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	gap: 0.5rem;
+	color: white;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: none;
 }

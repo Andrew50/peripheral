@@ -323,10 +323,11 @@ func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, 
 	}
 	return isPublic, userID, title, nil
 }
-func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, string, error) {
+func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, string, string, error) {
 	var isPublic bool
 	var userID int
 	var title string
+	var plot string
 	var firstUserMessage sql.NullString
 	var firstAssistantMessage string
 	var contentChunksJSON []byte
@@ -345,6 +346,7 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 			c.is_public,
 			c.userid,
 			c.title,
+			c.plot,
 			fm1.query as first_query,
 			COALESCE(fm2.content_chunks, '[]'::jsonb) as first_content_chunks
 		FROM conversations c
@@ -356,16 +358,17 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		&isPublic,
 		&userID,
 		&title,
+		&plot,
 		&firstUserMessage,
 		&contentChunksJSON,
 	)
 	if err != nil {
-		return false, 0, "", "", "", err
+		return false, 0, "", "", "", "", err
 	}
 
 	// If not public, return early
 	if !isPublic {
-		return false, 0, "", "", "", fmt.Errorf("conversation is not public")
+		return false, 0, "", "", "", "", fmt.Errorf("conversation is not public")
 	}
 
 	// Extract text from content_chunks
@@ -404,7 +407,7 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		firstUserMessageStr = firstUserMessage.String
 	}
 
-	return isPublic, userID, title, firstUserMessageStr, firstAssistantMessage, nil
+	return isPublic, userID, title, plot, firstUserMessageStr, firstAssistantMessage, nil
 }
 
 type GetPublicConversationRequest struct {
@@ -482,6 +485,7 @@ type ConversationSnippetResponse struct {
 	Title         string `json:"title"`
 	FirstQuery    string `json:"first_query"`
 	FirstResponse string `json:"first_response"`
+	Plot          string `json:"plot"`
 }
 
 func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
@@ -495,7 +499,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 	}
 
 	// Use the updated function to get conversation preview data
-	isPublic, _, title, firstUserMessage, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
+	isPublic, _, title, plot, firstUserMessage, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
 	if !isPublic {
 		return nil, fmt.Errorf("conversation not public")
 	}
@@ -507,6 +511,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 		Title:         title,
 		FirstQuery:    firstUserMessage,
 		FirstResponse: firstResponse,
+		Plot:          plot,
 	}, nil
 }
 

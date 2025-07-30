@@ -96,7 +96,6 @@
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
 
 	let lastSidebarMenu: Menu | null = null;
-	let sidebarWidth = 0;
 	const sidebarMenus: Menu[] = ['watchlist', 'alerts'];
 
 	// ─── Alert tabs ────────────────────────────────────────────────────────────
@@ -147,11 +146,9 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerHeight = 500; // Initial height
-	const MIN_TICKER_HEIGHT = 100;
-	const MAX_TICKER_HEIGHT = 600;
-
-	// Add left sidebar state variables next to the other state variables
+	let tickerInfoContainerHeight = 500; // Initial height
+	const MIN_TICKER_INFO_CONTAINER_HEIGHT = 100;
+	const MAX_TICKER_INFO_CONTAINER_HEIGHT = 600;
 
 	// Calendar state
 	let calendarVisible = false;
@@ -199,11 +196,11 @@
 
 	// Sync store values with CSS custom properties
 	$: if (browser && $leftMenuWidth !== undefined) {
-		document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
+		document.documentElement.style.setProperty('--left-sidebar-width', `${$leftMenuWidth}px`);
 	}
 
 	$: if (browser && $menuWidth !== undefined) {
-		document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
+		document.documentElement.style.setProperty('--right-sidebar-width', `${$menuWidth}px`);
 	}
 
 	// Add a reactive statement to handle window events
@@ -332,16 +329,15 @@
 			'--sidebar-buttons-width',
 			`${SIDEBAR_BUTTONS_WIDTH}px`
 		);
-
-		// Initialize CSS custom properties for sidebar widths if not already set
-		if (!getComputedStyle(document.documentElement).getPropertyValue('--left')) {
-			document.documentElement.style.setProperty('--left', `${$leftMenuWidth}px`);
-		}
-		if (!getComputedStyle(document.documentElement).getPropertyValue('--right')) {
-			document.documentElement.style.setProperty('--right', `${$menuWidth}px`);
-		}
-
 		initStores();
+		// Initialize CSS custom properties for sidebar widths if not already set
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--left-sidebar-width')) {
+			document.documentElement.style.setProperty('--left-sidebar-width', `${$leftMenuWidth}px`);
+		}
+		if (!getComputedStyle(document.documentElement).getPropertyValue('--right-sidebar-width')) {
+			document.documentElement.style.setProperty('--right-sidebar-width', `${$menuWidth}px`);
+		}
+
 		// Async initialization function
 		async function init() {
 			// Check for Stripe checkout success session_id parameter
@@ -438,13 +434,13 @@
 	});
 
 	// Sidebar resizing
-	let minWidth = 120; // Reduced from 150 to 120 (smaller minimum)
+	let minWidth = 120; // Default minimum width, will be updated in browser
 
-	function startResize(event: PointerEvent) {
+	function startRightSidebarResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
 		const start = parseInt(
-			getComputedStyle(document.documentElement).getPropertyValue('--right'),
+			getComputedStyle(document.documentElement).getPropertyValue('--right-sidebar-width'),
 			10
 		);
 
@@ -453,25 +449,26 @@
 		const onMove = (ev: PointerEvent) => {
 			const delta = startX - ev.clientX; // inverse for right sidebar!
 			let newWidth = Math.max(start + delta, 0);
+			const dynamicMinWidth = window.innerWidth * 0.10; // Calculate minimum width dynamically
 
 			// Handle collapsing logic
-			if (newWidth < minWidth && lastSidebarMenu !== null) {
+			if (newWidth < dynamicMinWidth && lastSidebarMenu !== null) {
 				lastSidebarMenu = null;
 				menuWidth.set(0);
-				document.documentElement.style.setProperty('--right', '0px');
+				document.documentElement.style.setProperty('--right-sidebar-width', '0px');
 			}
 			// Restore state if dragging back
-			else if (newWidth >= minWidth && lastSidebarMenu) {
+			else if (newWidth >= dynamicMinWidth && lastSidebarMenu) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				lastSidebarMenu = null;
 				menuWidth.set(newWidth);
-				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
 			}
 			// Normal resize
-			else if (newWidth >= minWidth) {
+			else if (newWidth >= dynamicMinWidth) {
 				newWidth = Math.min(newWidth, maxSidebarWidth);
 				menuWidth.set(newWidth);
-				document.documentElement.style.setProperty('--right', `${newWidth}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${newWidth}px`);
 			}
 		};
 
@@ -714,13 +711,13 @@
 		event.preventDefault();
 		sidebarResizing = true;
 		document.body.style.cursor = 'ns-resize';
-		document.addEventListener('mousemove', handleSidebarResize);
+		document.addEventListener('mousemove', handleRightSidebarMenusResize);
 		document.addEventListener('mouseup', stopSidebarResize);
-		document.addEventListener('touchmove', handleSidebarResize);
+		document.addEventListener('touchmove', handleRightSidebarMenusResize);
 		document.addEventListener('touchend', stopSidebarResize);
 	}
 
-	function handleSidebarResize(event: MouseEvent | TouchEvent) {
+	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) { // for tickerinfo/quote 
 		if (!sidebarResizing) return;
 
 		let currentY;
@@ -736,10 +733,10 @@
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
-		tickerHeight = Math.min(Math.max(newHeight, MIN_TICKER_HEIGHT), MAX_TICKER_HEIGHT);
+		tickerInfoContainerHeight = Math.min(Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT), MAX_TICKER_INFO_CONTAINER_HEIGHT);
 
 		// Update the CSS variable
-		document.documentElement.style.setProperty('--ticker-height', `${tickerHeight}px`);
+		document.documentElement.style.setProperty('--ticker-info-container-height', `${tickerInfoContainerHeight}px`);
 	}
 
 	function stopSidebarResize() {
@@ -747,9 +744,9 @@
 
 		sidebarResizing = false;
 		document.body.style.cursor = '';
-		document.removeEventListener('mousemove', handleSidebarResize);
+		document.removeEventListener('mousemove', handleRightSidebarMenusResize);
 		document.removeEventListener('mouseup', stopSidebarResize);
-		document.removeEventListener('touchmove', handleSidebarResize);
+		document.removeEventListener('touchmove', handleRightSidebarMenusResize);
 		document.removeEventListener('touchend', stopSidebarResize);
 	}
 
@@ -776,32 +773,29 @@
 	function handleKeyboardResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startResize(new PointerEvent('pointerdown'));
+			startRightSidebarResize(new PointerEvent('pointerdown'));
 		}
 	}
 
 	function handleKeyboardLeftResize(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			startLeftResize(new PointerEvent('pointerdown'));
+			startLeftSidebarResize(new PointerEvent('pointerdown'));
 		}
 	}
 
 	// Left sidebar resizing
-	function startLeftResize(event: PointerEvent) {
+	function startLeftSidebarResize(event: PointerEvent) {
 		event.preventDefault();
 		const startX = event.clientX;
 		const start = parseInt(
-			getComputedStyle(document.documentElement).getPropertyValue('--left'),
+			getComputedStyle(document.documentElement).getPropertyValue('--left-sidebar-width'),
 			10
 		);
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = Math.min(
-			window.innerWidth * 0.4,
-			window.innerWidth - SIDEBAR_BUTTONS_WIDTH
-		);
+		const maxLeftSidebarWidth = window.innerWidth*0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -810,7 +804,7 @@
 			);
 
 			// Update CSS custom property
-			document.documentElement.style.setProperty('--left', `${newWidth}px`);
+			document.documentElement.style.setProperty('--left-sidebar-width', `${newWidth}px`);
 
 			// Update store for other components
 			leftMenuWidth.set(newWidth);
@@ -830,12 +824,12 @@
 	function toggleLeftSidebar() {
 		if ($leftMenuWidth > 0) {
 			leftMenuWidth.set(0);
-			document.documentElement.style.setProperty('--left', '0px');
+			document.documentElement.style.setProperty('--left-sidebar-width', '0px');
 		} else {
 			// Set to 30% of screen width when opening
 			const width = window.innerWidth * 0.3;
 			leftMenuWidth.set(width);
-			document.documentElement.style.setProperty('--left', `${width}px`);
+			document.documentElement.style.setProperty('--left-sidebar-width', `${width}px`);
 		}
 	}
 	function toggleMainSidebar(menuName: Menu) {
@@ -843,7 +837,7 @@
 			// If clicking the same menu, close it
 			lastSidebarMenu = null;
 			menuWidth.set(0);
-			document.documentElement.style.setProperty('--right', '0px');
+			document.documentElement.style.setProperty('--right-sidebar-width', '0px');
 			changeMenu('none');
 		} else {
 			// Open new menu
@@ -852,7 +846,7 @@
 			if ($menuWidth === 0) {
 				const width = 180;
 				menuWidth.set(width);
-				document.documentElement.style.setProperty('--right', `${width}px`);
+				document.documentElement.style.setProperty('--right-sidebar-width', `${width}px`);
 			}
 			changeMenu(menuName);
 		}
@@ -1042,7 +1036,7 @@
 							role="separator"
 							aria-orientation="vertical"
 							aria-label="Resize left panel"
-							on:pointerdown={startLeftResize}
+							on:pointerdown={startLeftSidebarResize}
 							on:keydown={handleKeyboardLeftResize}
 							tabindex="0"
 						/>
@@ -1107,7 +1101,7 @@
 							role="separator"
 							aria-orientation="vertical"
 							aria-label="Resize sidebar"
-							on:pointerdown={startResize}
+							on:pointerdown={startRightSidebarResize}
 							on:keydown={handleKeyboardResize}
 							tabindex="0"
 						/>
@@ -1170,7 +1164,7 @@
 								></div>
 
 								<!-- Quote section now on bottom -->
-								<div class="ticker-info-container" style="height: {tickerHeight}px">
+								<div class="ticker-info-container" style="height: {tickerInfoContainerHeight}px">
 									<Quote />
 								</div>
 							</div>
@@ -1316,7 +1310,7 @@
 					on:click={() => (window.location.href = '/')}
 					aria-label="Go to home page"
 				>
-					<img src="/atlantis_logo_transparent.png" alt="Logo" class="bottom-logo" />
+					<img src="/favicon.png" alt="Logo" class="bottom-logo" />
 				</button>
 			</div>
 		</div>
@@ -1368,8 +1362,10 @@
 
 <style>
 	:root {
-		--left: 300px;
-		--right: 300px;
+		--left-sidebar-width: 0px;
+		--right-sidebar-width: 0px;
+		--left-gutter: clamp(0px, var(--left-sidebar-width), 4px);
+		--right-gutter: clamp(0px, var(--right-sidebar-width), 4px);
 		--gutter: 4px;
 	}
 
@@ -1385,6 +1381,7 @@
 		align-items: center;
 		justify-content: center;
 		border-bottom: 4px solid var(--c1);
+		border-left: 4px solid var(--c1);
 		z-index: 11; /* above top bar */
 	}
 
@@ -1421,7 +1418,7 @@
 		display: grid;
 		height: 100%;
 		width: 100%;
-		grid-template-columns: var(--left) var(--gutter) 1fr var(--gutter) var(--right);
+		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(--right-sidebar-width);
 		grid-template-areas: 'left g1 center g2 right';
 	}
 
@@ -1439,9 +1436,14 @@
 		grid-area: right;
 		overflow: hidden;
 	}
-	.resizer-left,
+	.resizer-left {
+		width: var(--left-gutter);
+		cursor: ew-resize;
+		background: transparent;
+		z-index: 10; /* sit above charts for easy grab */
+	}
 	.resizer-right {
-		width: var(--gutter);
+		width: var(--right-gutter);
 		cursor: ew-resize;
 		background: transparent;
 		z-index: 10; /* sit above charts for easy grab */

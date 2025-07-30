@@ -15,6 +15,125 @@ import (
 	"github.com/polygon-io/client-go/websocket/models"
 )
 
+// PolygonSocketService encapsulates the polygon websocket connection and its state
+type PolygonSocketService struct {
+	conn      *data.Conn
+	wsClient  *polygonws.Client
+	isRunning bool
+	stopChan  chan struct{}
+	mutex     sync.RWMutex
+	streamWg  sync.WaitGroup
+}
+
+// Global instance of the service
+var polygonService *PolygonSocketService
+var serviceInitMutex sync.Mutex
+
+// GetPolygonService returns the singleton instance of PolygonSocketService
+func GetPolygonService() *PolygonSocketService {
+	serviceInitMutex.Lock()
+	defer serviceInitMutex.Unlock()
+
+	if polygonService == nil {
+		polygonService = &PolygonSocketService{
+			stopChan: make(chan struct{}),
+		}
+	}
+	return polygonService
+}
+
+// Start initializes and starts the polygon websocket connection (idempotent)
+func (p *PolygonSocketService) Start(conn *data.Conn, useAlerts bool) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if p.isRunning {
+		log.Printf("⚠️ Polygon WebSocket already running")
+		return nil
+	}
+
+	log.Printf("🚀 Starting Polygon WebSocket service")
+	p.conn = conn
+
+	// Initialize ticker to security ID map
+	if err := initTickerToSecurityIDMap(conn); err != nil {
+		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
+	}
+
+	// Initialize OHLCV buffer with realtime enabled
+	log.Printf("📊 About to initialize OHLCV buffer...")
+	if err := InitOHLCVBuffer(conn); err != nil {
+		return fmt.Errorf("init OHLCV buffer: %w", err)
+	}
+
+	// Create new websocket client
+	var err error
+	p.wsClient, err = polygonws.New(polygonws.Config{
+		APIKey: conn.PolygonKey,
+		Feed:   polygonws.RealTime,
+		Market: polygonws.Stocks,
+	})
+	if err != nil {
+		return fmt.Errorf("error initializing polygonWS connection: %v", err)
+	}
+
+	if err := p.wsClient.Connect(); err != nil {
+		return fmt.Errorf("error connecting to polygonWS: %v", err)
+	}
+
+	// Create new stop channel for this session
+	p.stopChan = make(chan struct{})
+	p.isRunning = true
+
+	// Start the data streaming goroutine
+	p.streamWg.Add(1)
+	go p.streamPolygonDataToRedis()
+
+	log.Printf("✅ Polygon WebSocket connected and streaming started")
+	return nil
+}
+
+// Stop gracefully shuts down the polygon websocket connection (idempotent)
+func (p *PolygonSocketService) Stop() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if !p.isRunning {
+		log.Printf("⚠️ Polygon WebSocket is not running")
+		return nil
+	}
+
+	log.Printf("🛑 Stopping Polygon WebSocket service")
+
+	// Signal the streaming goroutine to stop
+	close(p.stopChan)
+
+	// Close the websocket connection
+	if p.wsClient != nil {
+		p.wsClient.Close()
+	}
+
+	p.isRunning = false
+
+	// Wait for the streaming goroutine to finish
+	p.streamWg.Wait()
+
+	// Stop OHLCV buffer if it exists
+	if ohlcvBuffer != nil {
+		ohlcvBuffer.Stop()
+	}
+
+	log.Printf("✅ Polygon WebSocket service stopped")
+	return nil
+}
+
+// IsRunning returns whether the service is currently running
+func (p *PolygonSocketService) IsRunning() bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.isRunning
+}
+
 var nextDispatchTimes = struct {
 	sync.RWMutex
 	times map[string]time.Time
@@ -179,28 +298,30 @@ func broadcastTimestamp() {
 	timestampMutex.Unlock()
 }
 
-// StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
-func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client, quit <-chan struct{}) {
+// streamPolygonDataToRedis is the new method that properly handles shutdown
+func (p *PolygonSocketService) streamPolygonDataToRedis() {
+	defer p.streamWg.Done()
+
 	// Start the batched stale-ticker flusher (only once per process)
 	fmt.Println("Starting stale flusher")
-	staleFlusherOnce.Do(func() { startStaleFlusher(conn) })
+	staleFlusherOnce.Do(func() { startStaleFlusher(p.conn) })
 
-	err := polygonWS.Subscribe(polygonws.StocksQuotes)
+	err := p.wsClient.Subscribe(polygonws.StocksQuotes)
 	if err != nil {
 		log.Printf("❌ Error subscribing to StocksQuotes: %v", err)
 		return
 	}
-	err = polygonWS.Subscribe(polygonws.StocksTrades)
+	err = p.wsClient.Subscribe(polygonws.StocksTrades)
 	if err != nil {
 		log.Printf("❌ Error subscribing to StocksTrades: %v", err)
 		return
 	}
-	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
+	err = p.wsClient.Subscribe(polygonws.StocksMinAggs)
 	if err != nil {
 		log.Printf("❌ Error subscribing to StocksMinAggs: %v", err)
 		return
 	}
-	err = polygonWS.Subscribe(polygonws.StocksSecAggs)
+	err = p.wsClient.Subscribe(polygonws.StocksSecAggs)
 	if err != nil {
 		log.Printf("❌ Error subscribing to StocksSecAggs: %v", err)
 		return
@@ -212,16 +333,17 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client, quit
 
 	for {
 		select {
-		case <-quit:
-			log.Printf("🛑 StreamPolygonDataToRedis received quit signal")
+		case <-p.stopChan:
+			log.Printf("📡 Polygon data streaming stopped by stop signal")
 			return
 		case <-timestampTicker.C:
 			broadcastTimestamp()
-		case out, ok := <-polygonWS.Output():
+		case out, ok := <-p.wsClient.Output():
 			if !ok {
-				log.Printf("🛑 polygonWS output channel closed – exiting")
+				log.Printf("📡 Polygon WebSocket output channel closed, stopping stream")
 				return
 			}
+
 			var symbol string
 			var timestamp int64
 
@@ -384,7 +506,6 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client, quit
 				}
 				broadcastToChannel(channelName, string(jsonData))
 			}
-
 		}
 	}
 }
@@ -400,57 +521,19 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client, quit
 */
 
 // StartPolygonWS performs operations related to StartPolygonWS functionality.
-func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
-	log.Printf("🚀 StartPolygonWS called")
-	if err := initTickerToSecurityIDMap(conn); err != nil {
-		return fmt.Errorf("failed to initialize ticker to security ID map: %v", err)
-	}
-
-	// Initialize quit channel for clean shutdown
-	quitChan = make(chan struct{})
-	quitChanOnce = sync.Once{}
-
-	// Initialize OHLCV buffer with realtime enabled
-	//log.Printf("📊 About to initialize OHLCV buffer...")
-	if err := InitOHLCVBuffer(conn); err != nil {
-		return fmt.Errorf("init OHLCV buffer: %w", err)
-	}
-
-	var err error
-	polygonWSConn, err = polygonws.New(polygonws.Config{
-		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
-		Feed:   polygonws.RealTime,
-		Market: polygonws.Stocks,
-	})
-	if err != nil {
-		return fmt.Errorf("error initializing polygonWS connection: %v", err)
-	}
-
-	if err := polygonWSConn.Connect(); err != nil {
-		return fmt.Errorf("error connecting to polygonWS: %v", err)
-	}
-
-	log.Printf("✅ Polygon WebSocket connected, starting data stream...")
-	go StreamPolygonDataToRedis(conn, polygonWSConn, quitChan)
-	return nil
+// This is now a wrapper around the service-based approach
+func StartPolygonWS(conn *data.Conn, useAlerts bool) error {
+	log.Printf("🚀 StartPolygonWS called (using service-based approach)")
+	service := GetPolygonService()
+	return service.Start(conn, useAlerts)
 }
 
 // StopPolygonWS performs operations related to StopPolygonWS functionality.
+// This is now a wrapper around the service-based approach
 func StopPolygonWS() error {
-	if polygonWSConn == nil {
-		fmt.Println("polygon websocket connection is not initialized")
-		return fmt.Errorf("polygon websocket connection is not initialized")
-	}
-
-	// Signal the streaming goroutine to quit
-	quitChanOnce.Do(func() { close(quitChan) })
-
-	if ohlcvBuffer != nil {
-		ohlcvBuffer.Stop()
-	}
-
-	polygonWSConn.Close()
-	return nil
+	log.Printf("🛑 StopPolygonWS called (using service-based approach)")
+	service := GetPolygonService()
+	return service.Stop()
 }
 
 // initTickerToSecurityIDMap initializes the map of ticker symbols to security IDs

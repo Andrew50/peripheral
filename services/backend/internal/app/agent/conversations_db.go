@@ -4,14 +4,31 @@ import (
 	"backend/internal/data"
 	"backend/internal/services/socket"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// generateShortConversationID generates a shorter, URL-friendly conversation ID
+// Returns a 12-character hex string or falls back to UUID if random generation fails
+func generateShortConversationID() string {
+	// Generate 6 random bytes (48 bits) which gives us 12 hex characters
+	// This provides about 281 trillion possible combinations
+	bytes := make([]byte, 6)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to UUID if random generation fails
+		log.Printf("Failed to generate random bytes for conversation ID: %v", err)
+		return uuid.New().String()
+	}
+	return hex.EncodeToString(bytes)
+}
 
 // ConversationInfo represents a conversation in the list view
 type ConversationInfo struct {
@@ -68,8 +85,6 @@ type MessageCompletionData struct {
 
 // CreateConversation creates a new conversation in the database
 func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, title string) (string, error) {
-	conversationID := uuid.New().String()
-
 	query := `
 		INSERT INTO conversations (conversation_id, userId, title, created_at, updated_at, metadata, total_token_count, message_count)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -78,9 +93,21 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	now := time.Now()
 	var returnedID string
 
+	// Try with short ID first
+	conversationID := generateShortConversationID()
+
 	err := conn.DB.QueryRow(ctx, query,
 		conversationID, userID, title, now, now, "{}", 0, 0,
 	).Scan(&returnedID)
+
+	// If we get a unique constraint violation, retry with UUID
+	if err != nil && strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+		conversationID = generateShortConversationID()
+
+		err = conn.DB.QueryRow(ctx, query,
+			conversationID, userID, title, now, now, "{}", 0, 0,
+		).Scan(&returnedID)
+	}
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create conversation: %w", err)
@@ -248,7 +275,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 			created_at, completed_at, status, token_count, message_order
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $2)
+			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $15)
 		)`
 
 	_, err = tx.Exec(ctx, query,
@@ -266,6 +293,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 		message.CompletedAt,
 		message.Status,
 		message.TokenCount,
+		conversationID, // Add conversationID again for the subquery
 	)
 
 	if err != nil {
@@ -501,11 +529,12 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		}
 		return nil, fmt.Errorf("failed to update pending message: %w", err)
 	}
-
-	// Invalidate cache for this conversation since the message was updated
-	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
-		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
-	}
+	go func() {
+		// Invalidate cache for this conversation since the message was updated
+		if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+			fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
+		}
+	}()
 
 	return &messageData, nil
 }
@@ -688,6 +717,35 @@ func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversat
 	}
 
 	return nil
+}
+
+func UpdateConversationPlot(ctx context.Context, conn *data.Conn, conversationID string, plotData string) error {
+	// Determine if plot data is provided
+	hasPlot := plotData != ""
+
+	querySQL := `
+		UPDATE conversations 
+		SET 
+			plot = $2,
+			has_plot = $3,
+			updated_at = $4
+		WHERE conversation_id = $1`
+
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, plotData, hasPlot, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update conversation plot: %w", err)
+	}
+
+	return nil
+}
+
+func HasConversationPlot(ctx context.Context, conn *data.Conn, conversationID string) (bool, error) {
+	var hasPlot bool
+	err := conn.DB.QueryRow(ctx, "SELECT has_plot FROM conversations WHERE conversation_id = $1", conversationID).Scan(&hasPlot)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if conversation has plot: %w", err)
+	}
+	return hasPlot, nil
 }
 
 // ValidateMessageForEdit ensures the message can be edited

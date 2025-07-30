@@ -936,7 +936,43 @@ var (
 				},
 			},
 			Function:      wrapWithContext(screener.GetScreenerData),
-			StatusMessage: "Screening stocks...",
+			StatusMessage: "Screening stocks",
+		},
+		"getFredSeries": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getFredSeries",
+				Description: "Searches for FRED series based on a keyword.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"keyword": {Type: genai.TypeString, Description: "The keyword to search for."},
+					},
+					Required: []string{"keyword"},
+				},
+			},
+			Function:         wrapWithContext(GetFredSeries),
+			StatusMessage:    "Searching for FRED series",
+			UserSpecificTool: false,
+		},
+		"getFredSeriesData": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getFredSeriesData",
+				Description: "Get series observations from FRED.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"series_id":  {Type: genai.TypeString, Description: "The series id to get data for."},
+						"start_date": {Type: genai.TypeString, Description: "The start date to get data for. Defaults to 1 year ago. Format: YYYY-MM-DD"},
+						"end_date":   {Type: genai.TypeString, Description: "The end date to get data for. Defaults to today. Format: YYYY-MM-DD"},
+						"units":      {Type: genai.TypeString, Description: "The units to get data for. Options: chg, ch1 (change from 1 yr ago), pch (percent change), pc1 (percent change from 1 yr ago), pca (compounded annual rate of change). Defaults to none."},
+						"frequency":  {Type: genai.TypeString, Description: "(Optional) Indicates the frequency to aggregate values to. Values: d, w, bw, m, q, a. Defaults to empty."},
+					},
+					Required: []string{"series_id"},
+				},
+			},
+			Function:         wrapWithContext(GetFredSeriesData),
+			StatusMessage:    "Getting FRED series data",
+			UserSpecificTool: false,
 		},
 		// [END SCREENER TOOLS]
 		// [MODEL HELPERS]

@@ -104,6 +104,7 @@
 	z-index: 2;
 	flex-shrink: 0;
 	max-width: min(600px, calc(100vw - var(--sidebar-buttons-width, 45px)));
+	border-left: 4px solid var(--c1);
 	/* 600px max with button bar */
 }
 
@@ -286,7 +287,7 @@
 	flex-shrink: 0;
 	border-top: 1px solid var(--c3);
 	background: #121212;
-	height: var(--ticker-height);
+	height: var(--ticker-info-container-height);
 	overflow-y: auto;
 	overflow-x: hidden;
 	/* Remove padding to let Quote component handle its own spacing */
@@ -498,7 +499,6 @@
 	flex-direction: column;
 	position: relative;
 	flex-shrink: 0;
-	max-width: min(800px, calc(100vw - 60px));
 }
 
 /* Add right position for left sidebar handle */

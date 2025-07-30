@@ -159,6 +159,15 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
+	// Handle invite marking within the transaction before committing
+	if invite != nil {
+		// Mark invite as used within the transaction
+		if err := data.MarkInviteUsedTx(ctx, tx, invite.Code); err != nil {
+			log.Printf("ERROR: Failed to mark invite %s as used in transaction: %v", invite.Code, err)
+			return nil, fmt.Errorf("failed to process invite: %v", err)
+		}
+	}
+
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
 		log.Printf("ERROR: Failed to commit signup transaction: %v", err)
@@ -212,11 +221,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 			}
 		}
 
-		// Mark invite as used
-		if err := data.MarkInviteUsed(conn, invite.Code); err != nil {
-			log.Printf("ERROR: Failed to mark invite %s as used: %v", invite.Code, err)
-			// Continue even if this fails, as it's not critical for user signup
-		}
+		// Note: Invite is already marked as used within the signup transaction
 
 		// For trial users, we might want to allocate different credits or skip the free plan
 		// For now, we'll still allocate free plan credits as a baseline
@@ -403,8 +408,9 @@ func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 // GoogleCallback performs operations related to GoogleCallback functionality.
 func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
-		Code  string `json:"code"`
-		State string `json:"state"`
+		Code       string `json:"code"`
+		State      string `json:"state"`
+		InviteCode string `json:"inviteCode,omitempty"` // Optional invite code
 	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
@@ -432,6 +438,24 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		return nil, fmt.Errorf("failed decoding user info: %v", err)
 	}
 
+	// Handle invite code if provided
+	var invite *data.Invite
+	if args.InviteCode != "" {
+		log.Printf("Processing Google signup with invite code: %s", args.InviteCode)
+
+		// Verify the invite code is valid and unused
+		invite, err = data.GetInviteByCode(conn, args.InviteCode)
+		if err != nil {
+			log.Printf("ERROR: Invalid invite code %s: %v", args.InviteCode, err)
+			return nil, fmt.Errorf("invalid invite code")
+		}
+
+		if invite.Used {
+			log.Printf("ERROR: Invite code %s already used", args.InviteCode)
+			return nil, fmt.Errorf("invite code already used")
+		}
+	}
+
 	// Check if user exists, if not create new user
 	var userID int
 	var authType string
@@ -442,9 +466,35 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 
 	if err != nil {
 		// User doesn't exist, create new user with auth_type='google'
-		err = conn.DB.QueryRow(context.Background(),
-			"INSERT INTO users (password, email, google_id, profile_picture, auth_type) VALUES ($1, $2, $3, $4, $5) RETURNING userId",
-			"", googleUser.Email, googleUser.ID, googleUser.Picture, "google").Scan(&userID)
+		// Start a transaction for the Google user creation process
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		tx, err := conn.DB.Begin(ctx)
+		if err != nil {
+			log.Printf("ERROR: Failed to start Google user creation transaction: %v", err)
+			return nil, fmt.Errorf("error starting transaction: %v", err)
+		}
+
+		// Ensure transaction is either committed or rolled back
+		var txClosed bool
+		defer func() {
+			if !txClosed && tx != nil {
+				log.Println("Rolling back Google user creation transaction due to error")
+				_ = tx.Rollback(context.Background())
+			}
+		}()
+
+		var inviteCodeVal string
+		if invite != nil {
+			inviteCodeVal = invite.Code
+		} else {
+			inviteCodeVal = ""
+		}
+
+		err = tx.QueryRow(ctx,
+			"INSERT INTO users (password, email, google_id, profile_picture, auth_type, invite_code_used) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')) RETURNING userId",
+			"", googleUser.Email, googleUser.ID, googleUser.Picture, "google", inviteCodeVal).Scan(&userID)
 		if err != nil {
 			log.Printf("ERROR: Failed to create Google user: %v", err)
 
@@ -462,10 +512,79 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 			return nil, fmt.Errorf("failed to create user: %v", err)
 		}
 
-		// Allocate free plan credits for the newly created Google user
-		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
-			log.Printf("ERROR: Failed to allocate free credits for Google user %d: %v", userID, err)
-			return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+		// Handle invite marking within the transaction before committing
+		if invite != nil {
+			// Mark invite as used within the transaction
+			if err := data.MarkInviteUsedTx(ctx, tx, invite.Code); err != nil {
+				log.Printf("ERROR: Failed to mark invite %s as used in Google transaction: %v", invite.Code, err)
+				return nil, fmt.Errorf("failed to process invite: %v", err)
+			}
+		}
+
+		// Commit the transaction
+		if err := tx.Commit(ctx); err != nil {
+			log.Printf("ERROR: Failed to commit Google user creation transaction: %v", err)
+			return nil, fmt.Errorf("error committing Google user creation transaction: %v", err)
+		}
+		txClosed = true
+
+		// Handle invite-based trial subscription or regular free plan
+		if invite != nil {
+			log.Printf("Creating trial subscription for Google user %d with invite %s for plan %s", userID, invite.Code, invite.PlanName)
+
+			// Get the Stripe price ID for the plan (defaulting to monthly billing for trials)
+			priceID, err := pricing.GetStripePriceIDForProduct(conn, invite.PlanName, "monthly")
+			if err != nil {
+				log.Printf("ERROR: Failed to get price ID for plan %s: %v", invite.PlanName, err)
+				return nil, fmt.Errorf("invalid plan in invite: %v", err)
+			}
+
+			// Create trial subscription via Stripe
+			customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, googleUser.Email, invite.TrialDays)
+			if err != nil {
+				log.Printf("ERROR: Failed to create trial subscription for Google user %d: %v", userID, err)
+				// Note: User is already created, so we continue but log the error
+			} else {
+				log.Printf("Created trial subscription %s for Google user %d", subscription.ID, userID)
+
+				// Persist Stripe identifiers and initial trial status in our database
+				ctxStripe, cancelStripe := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancelStripe()
+
+				_, dbErr := conn.DB.Exec(ctxStripe, `
+					UPDATE users
+					SET stripe_customer_id     = $1,
+					    stripe_subscription_id = $2,
+					    subscription_status    = 'trialing',
+					    subscription_plan      = $3,
+					    invite_code_used       = $4,
+					    updated_at             = CURRENT_TIMESTAMP
+					WHERE userId = $5`,
+					customer.ID,
+					subscription.ID,
+					invite.PlanName,
+					invite.Code,
+					userID,
+				)
+				if dbErr != nil {
+					log.Printf("ERROR: Failed to persist Stripe IDs for trial Google user %d: %v", userID, dbErr)
+				}
+			}
+
+			// Note: Invite is already marked as used within the Google user creation transaction
+
+			// For trial users, we might want to allocate different credits or skip the free plan
+			// For now, we'll still allocate free plan credits as a baseline
+			if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+				log.Printf("ERROR: Failed to allocate free credits for trial Google user %d: %v", userID, err)
+				// Continue, as trial subscription is the main benefit
+			}
+		} else {
+			// Allocate free plan credits for the newly created Google user
+			if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+				log.Printf("ERROR: Failed to allocate free credits for Google user %d: %v", userID, err)
+				return nil, fmt.Errorf("failed to allocate free credits: %v", err)
+			}
 		}
 
 		log.Printf("Created new Google user with ID: %d", userID)
@@ -491,6 +610,57 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 			return nil, fmt.Errorf("failed to update user: %v", err)
 		}
 		log.Printf("Linked Google account to existing user ID: %d", userID)
+
+		// Handle invite code for existing user linking Google account
+		if invite != nil {
+			log.Printf("Processing invite %s for existing user %d linking Google account", invite.Code, userID)
+
+			// Get the Stripe price ID for the plan (defaulting to monthly billing for trials)
+			priceID, err := pricing.GetStripePriceIDForProduct(conn, invite.PlanName, "monthly")
+			if err != nil {
+				log.Printf("ERROR: Failed to get price ID for plan %s: %v", invite.PlanName, err)
+				return nil, fmt.Errorf("invalid plan in invite: %v", err)
+			}
+
+			// Create trial subscription via Stripe
+			customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, googleUser.Email, invite.TrialDays)
+			if err != nil {
+				log.Printf("ERROR: Failed to create trial subscription for existing user %d: %v", userID, err)
+				// Note: User linking is already complete, so we continue but log the error
+			} else {
+				log.Printf("Created trial subscription %s for existing user %d", subscription.ID, userID)
+
+				// Persist Stripe identifiers and initial trial status in our database
+				ctxStripe, cancelStripe := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancelStripe()
+
+				_, dbErr := conn.DB.Exec(ctxStripe, `
+					UPDATE users
+					SET stripe_customer_id     = $1,
+					    stripe_subscription_id = $2,
+					    subscription_status    = 'trialing',
+					    subscription_plan      = $3,
+					    invite_code_used       = $4,
+					    updated_at             = CURRENT_TIMESTAMP
+					WHERE userId = $5`,
+					customer.ID,
+					subscription.ID,
+					invite.PlanName,
+					invite.Code,
+					userID,
+				)
+				if dbErr != nil {
+					log.Printf("ERROR: Failed to persist Stripe IDs for existing user %d: %v", userID, dbErr)
+				}
+			}
+
+			// Mark invite as used (non-transactional for existing user linking)
+			if err := data.MarkInviteUsed(conn, invite.Code); err != nil {
+				log.Printf("ERROR: Failed to mark invite %s as used: %v", invite.Code, err)
+				// This is a critical error for existing user linking - the invite should be marked as used
+				return nil, fmt.Errorf("failed to mark invite as used: %v", err)
+			}
+		}
 	}
 
 	// Create JWT token

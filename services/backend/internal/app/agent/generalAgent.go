@@ -29,13 +29,13 @@ type ExecutionPlan struct {
 
 func RunGeneralAgent[T any](conn *data.Conn, userID int, additionalSystemPromptFile string, finalSystemPromptFile string, prompt string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
-	systemPrompt, err := getSystemInstruction("generalAgentSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("generalAgentSystemPrompt")
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)
 	}
 	var additionalSystemPrompt string
 	if additionalSystemPromptFile != "" {
-		additionalSystemPrompt, err = getSystemInstruction(additionalSystemPromptFile)
+		additionalSystemPrompt, err = GetSystemInstruction(additionalSystemPromptFile)
 		if err != nil {
 			return zeroResult, fmt.Errorf("error getting additional system instruction: %w", err)
 		}
@@ -152,7 +152,7 @@ func _buildGeneralAgentPlanningPromptWithResults(query string, activeResults []E
 func _generalAgentGenerateFinalResponse[T any](ctx context.Context, conn *data.Conn, userID int, query string, systemPromptFile string, activeResults []ExecuteResult, accumulatedThoughts []string, finalModel string, finalModelThinkingEffort string) (T, error) {
 	var zeroResult T
 	client := conn.OpenAIClient
-	systemPrompt, err := getSystemInstruction(systemPromptFile)
+	systemPrompt, err := GetSystemInstruction(systemPromptFile)
 	if err != nil {
 		return zeroResult, fmt.Errorf("error getting system instruction: %w", err)
 	}

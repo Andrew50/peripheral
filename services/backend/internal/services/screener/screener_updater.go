@@ -31,16 +31,203 @@ import (
 	"time"
 )
 
+// ScreenerUpdaterService encapsulates the screener updater and its state
+type ScreenerUpdaterService struct {
+	conn      *data.Conn
+	isRunning bool
+	stopChan  chan struct{}
+	mutex     sync.RWMutex
+	wg        sync.WaitGroup
+	loc       *time.Location
+}
+
+// Global instance of the service
+var screenerService *ScreenerUpdaterService
+var serviceInitMutex sync.Mutex
+
+// GetScreenerService returns the singleton instance of ScreenerUpdaterService
+func GetScreenerService() *ScreenerUpdaterService {
+	serviceInitMutex.Lock()
+	defer serviceInitMutex.Unlock()
+
+	if screenerService == nil {
+		loc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			log.Fatalf("❌ cannot load ET timezone: %v", err)
+		}
+
+		screenerService = &ScreenerUpdaterService{
+			stopChan: make(chan struct{}),
+			loc:      loc,
+		}
+	}
+	return screenerService
+}
+
+// Start initializes and starts the screener updater service (idempotent)
+func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.isRunning {
+		log.Printf("⚠️ Screener updater already running")
+		return nil
+	}
+
+	log.Printf("🚀 Starting Screener updater service")
+	s.conn = conn
+
+	// Optimize database connection settings for better performance
+	if err := optimizeDatabaseConnection(conn); err != nil {
+		log.Printf("⚠️  Failed to optimize database connection: %v", err)
+	}
+
+	// Add tickers with null maxdate to screener_stale table
+	log.Println("🔄 Adding active tickers to screener_stale table...")
+	insertStaleQuery := `
+		INSERT INTO screener_stale (ticker, last_update_time, stale)
+		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
+		FROM securities
+		WHERE active = TRUE
+		ON CONFLICT (ticker) DO UPDATE SET
+			last_update_time = EXCLUDED.last_update_time,
+			stale = EXCLUDED.stale;
+	`
+
+	// Perform initial data refresh on startup
+	if err := initialRefresh(conn); err != nil {
+		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
+	}
+
+	_, err := conn.DB.Exec(context.Background(), insertStaleQuery)
+	if err != nil {
+		log.Printf("⚠️  Failed to add stale tickers: %v. Continuing...", err)
+	} else {
+		log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
+	}
+
+	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
+	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
+	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
+	if err != nil {
+		return err
+	}
+
+	// Create new stop channel for this session
+	s.stopChan = make(chan struct{})
+	s.isRunning = true
+
+	// Start the updater loop goroutine
+	s.wg.Add(1)
+	go s.runUpdaterLoop()
+
+	log.Printf("✅ Screener updater service started")
+	return nil
+}
+
+// Stop gracefully shuts down the screener updater service (idempotent)
+func (s *ScreenerUpdaterService) Stop() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if !s.isRunning {
+		log.Printf("⚠️ Screener updater is not running")
+		return nil
+	}
+
+	log.Printf("🛑 Stopping Screener updater service")
+
+	// Signal the updater goroutine to stop
+	close(s.stopChan)
+
+	s.isRunning = false
+
+	// Wait for the updater goroutine to finish
+	s.wg.Wait()
+
+	log.Printf("✅ Screener updater service stopped")
+	return nil
+}
+
+// IsRunning returns whether the service is currently running
+func (s *ScreenerUpdaterService) IsRunning() bool {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.isRunning
+}
+
+// runUpdaterLoop is the main updater loop that runs in a goroutine
+func (s *ScreenerUpdaterService) runUpdaterLoop() {
+	defer s.wg.Done()
+
+	// Create tickers for different refresh intervals
+	screenerTicker := time.NewTicker(refreshInterval)
+	staticRefs1mTicker := time.NewTicker(staticRefs1mInterval)
+	staticRefsDailyTicker := time.NewTicker(staticRefsDailyInterval)
+	latestBarViewsTicker := time.NewTicker(latestBarViewsInterval)
+
+	defer screenerTicker.Stop()
+	defer staticRefs1mTicker.Stop()
+	defer staticRefsDailyTicker.Stop()
+	defer latestBarViewsTicker.Stop()
+
+	// Add counters for monitoring
+	var updateCount int
+	var totalDuration time.Duration
+
+	log.Printf("🚀 Screener updater loop started with optimized static refs refresh (Migration 78)")
+	log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
+	log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
+	log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
+
+	for {
+		select {
+		case <-s.stopChan:
+			log.Printf("📡 Screener updater loop stopped by stop signal")
+			return
+
+		case <-screenerTicker.C:
+			updateStart := time.Now()
+			updateStaleScreenerValues(s.conn)
+			updateDuration := time.Since(updateStart)
+
+			updateCount++
+			totalDuration += updateDuration
+
+			if updateCount%10 == 0 {
+				avgDuration := totalDuration / time.Duration(updateCount)
+				log.Printf("📊 Screener update stats: %d updates, avg duration: %v", updateCount, avgDuration)
+			}
+
+		case <-staticRefs1mTicker.C:
+			// Refresh static_refs_1m every minute during market hours (4am-8pm ET, weekdays)
+			if isMarketHours(time.Now(), s.loc) {
+				go refreshStaticRefs1m(s.conn)
+			}
+
+		case <-staticRefsDailyTicker.C:
+			// Refresh static_refs every 5 minutes during regular market hours (9:30am-4pm ET, weekdays)
+			if isRegularMarketHours(time.Now(), s.loc) {
+				go refreshStaticRefsDaily(s.conn)
+			}
+
+		case <-latestBarViewsTicker.C:
+			// Refresh latest bar materialized views every 30 seconds (CRITICAL for screener performance)
+			if isMarketHours(time.Now(), s.loc) {
+				go refreshLatestBarViews(s.conn)
+			}
+		}
+	}
+}
+
 const (
 	refreshInterval         = 60 * time.Second   // full screener top-off frequency (fallback)
 	refreshTimeout          = 600 * time.Second  // per-refresh SQL timeout (increased from 60s)
 	staticRefsTimeout       = 1200 * time.Second // timeout for static refs functions (increased due to more computation)
-	extendedCloseHour       = 20                 // 8 PM Eastern – hard stop
 	maxTickersPerBatch      = 0                  // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
 	staticRefs1mInterval    = 1 * time.Minute    // refresh static_refs_1m every minute (was 5 minutes)
 	staticRefsDailyInterval = 5 * time.Minute    // refresh static_refs every 5 minutes (was 20 minutes)
 	latestBarViewsInterval  = 30 * time.Second   // refresh latest bar materialized views every 30 seconds (CRITICAL)
-	IgnoreMarketHours       = false              // ignore market hours ==== REMOVE THIS BEFORE PR
 	useAnalysis             = false              // enable performance analysis
 )
 
@@ -50,6 +237,21 @@ var (
 	preMarketCaggMu     sync.Mutex // guards cagg_pre_market refresh
 	extendedHoursCaggMu sync.Mutex // guards cagg_extended_hours refresh
 )
+
+// Legacy function maintained for backward compatibility
+// StartScreenerUpdaterLoop starts the screener updater service
+func StartScreenerUpdaterLoop(conn *data.Conn) error {
+	log.Printf("🚀 StartScreenerUpdaterLoop called (using service-based approach)")
+	service := GetScreenerService()
+	return service.Start(conn)
+}
+
+// StopScreenerUpdaterLoop stops the screener updater service
+func StopScreenerUpdaterLoop() error {
+	log.Printf("🛑 StopScreenerUpdaterLoop called (using service-based approach)")
+	service := GetScreenerService()
+	return service.Stop()
+}
 
 // initialRefresh performs a one-time refresh of all aggregates and static data at startup
 func initialRefresh(conn *data.Conn) error {
@@ -87,111 +289,6 @@ func initialRefresh(conn *data.Conn) error {
 
 	log.Printf("✅ Initial data refresh completed in %v", time.Since(start))
 	return nil
-}
-
-func StartScreenerUpdaterLoop(conn *data.Conn) error {
-
-	loc, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		log.Fatalf("❌ cannot load ET timezone: %v", err)
-	}
-
-	// Optimize database connection settings for better performance
-	if err := optimizeDatabaseConnection(conn); err != nil {
-		log.Printf("⚠️  Failed to optimize database connection: %v", err)
-	} // Add tickers with null maxdate to screener_stale table
-	//log.Println("🔄 Adding active tickers to screener_stale table...")
-	insertStaleQuery := `
-		INSERT INTO screener_stale (ticker, last_update_time, stale)
-		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
-		FROM securities
-		WHERE active = TRUE
-		ON CONFLICT (ticker) DO UPDATE SET
-			last_update_time = EXCLUDED.last_update_time,
-			stale = EXCLUDED.stale;
-	`
-
-	// Perform initial data refresh on startup
-	// enable before pr
-	if err := initialRefresh(conn); err != nil {
-		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
-	} //might want to re-enable this before pr
-
-	_, err = conn.DB.Exec(context.Background(), insertStaleQuery)
-	if err != nil {
-		log.Printf("⚠️  Failed to add stale tickers: %v. Continuing...", err)
-	} else {
-		//log.Println("✅ Successfully added tickers with null maxdate to screener_stale table")
-	}
-	screenerRefreshCmd := fmt.Sprintf("SELECT refresh_screener(%d);", maxTickersPerBatch)
-	log.Printf("Executing initial screener refresh: %s", screenerRefreshCmd)
-	_, err = conn.DB.Exec(context.Background(), screenerRefreshCmd)
-	if err != nil {
-		return err
-	}
-
-	// Create tickers for different refresh intervals
-	screenerTicker := time.NewTicker(refreshInterval)
-	staticRefs1mTicker := time.NewTicker(staticRefs1mInterval)
-	staticRefsDailyTicker := time.NewTicker(staticRefsDailyInterval)
-	latestBarViewsTicker := time.NewTicker(latestBarViewsInterval)
-
-	defer screenerTicker.Stop()
-	defer staticRefs1mTicker.Stop()
-	defer staticRefsDailyTicker.Stop()
-	defer latestBarViewsTicker.Stop()
-
-	// Add counters for monitoring
-	var updateCount int
-	var totalDuration time.Duration
-
-	//log.Printf("🚀 Screener updater started with optimized static refs refresh (Migration 78)")
-	//log.Printf("📊 Consolidated from 11 continuous aggregates to 2 (pre-market + extended-hours only)")
-	//log.Printf("📅 Static refs 1m: every %v during market hours (4am-8pm ET, weekdays) - now includes ranges & volume", staticRefs1mInterval)
-	//log.Printf("📅 Static refs daily: every %v during regular market hours (9:30am-4pm ET, weekdays) - now includes moving averages & volatility", staticRefsDailyInterval)
-
-	for {
-		if !IgnoreMarketHours {
-			now := time.Now().In(loc)
-			if now.Hour() >= extendedCloseHour {
-				log.Println("🌙 Post‑market closed — stopping screener updater")
-				return nil
-			}
-		}
-
-		select {
-		case <-screenerTicker.C:
-			updateStart := time.Now()
-			updateStaleScreenerValues(conn)
-			updateDuration := time.Since(updateStart)
-
-			updateCount++
-			totalDuration += updateDuration
-
-			if updateCount%10 == 0 {
-				avgDuration := totalDuration / time.Duration(updateCount)
-				log.Printf("📊 Screener update stats: %d updates, avg duration: %v", updateCount, avgDuration)
-			}
-
-		case <-staticRefs1mTicker.C:
-			// Refresh static_refs_1m every minute during market hours (4am-8pm ET, weekdays)
-			if isMarketHours(time.Now(), loc) {
-				go refreshStaticRefs1m(conn)
-			}
-
-		case <-staticRefsDailyTicker.C:
-			// Refresh static_refs every 5 minutes during regular market hours (9:30am-4pm ET, weekdays)
-			if isRegularMarketHours(time.Now(), loc) {
-				go refreshStaticRefsDaily(conn)
-			}
-
-		case <-latestBarViewsTicker.C:
-			// Refresh latest bar materialized views every 30 seconds (CRITICAL for screener performance)
-			if isMarketHours(time.Now(), loc) {
-				go refreshLatestBarViews(conn)
-			}
-		}
-	}
 }
 
 // optimizeDatabaseConnection applies performance optimizations to the database connection

@@ -588,7 +588,7 @@ func RunIntradayAgent(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	if err != nil {
 		return Plan{}, fmt.Errorf("error creating gemini client: %w", err)
 	}
-	systemPrompt, err := getSystemInstruction("IntradayAgentPrompt")
+	systemPrompt, err := GetSystemInstruction("IntradayAgentPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %v", err)
 	}

@@ -390,6 +390,9 @@
 			setTimeout(() => {
 				scrollToRow(selectedRowIndex, false);
 			}, 0);
+		} else if (matchIndex === -1) {
+			// No match found, clear selection
+			selectedRowIndex = -1;
 		}
 	}
 	onMount(() => {
@@ -702,8 +705,7 @@
 	}
 
 	.th-content {
-		display: flex;
-		align-items: center;
+		align-items: right;
 		justify-content: space-between;
 	}
 

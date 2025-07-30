@@ -9,6 +9,7 @@ import (
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
 	"backend/internal/services/telegram"
+	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
 	"log"
@@ -26,6 +27,8 @@ var (
 	polygonInitMutex   sync.Mutex
 	alertsInitialized  bool
 	alertsInitMutex    sync.Mutex
+	workerMonitor      *worker_monitor.WorkerMonitor
+	workerMonitorMutex sync.Mutex
 )
 
 // JobFunc represents a function that can be executed as a job
@@ -211,14 +214,6 @@ func initUserTelegramBotJob(conn *data.Conn) error {
 
 // startPolygonWebSocketInternal is the internal implementation for starting polygon websocket
 func startPolygonWebSocketInternal(conn *data.Conn) error {
-	polygonInitMutex.Lock()
-	defer polygonInitMutex.Unlock()
-
-	if polygonInitialized {
-		log.Printf("⚠️ Polygon WebSocket already running")
-		return nil
-	}
-
 	// Set up critical alert callback for socket package before starting WebSocket
 	socket.SetCriticalAlertCallback(alerts.LogCriticalAlert)
 
@@ -226,7 +221,6 @@ func startPolygonWebSocketInternal(conn *data.Conn) error {
 	if err != nil {
 		return err
 	}
-	polygonInitialized = true
 	return nil
 }
 
@@ -236,7 +230,7 @@ var (
 		{
 			Name:           "SyncPricingFromStripe",
 			Function:       syncPricingFromStripeJob,
-			Schedule:       []TimeOfDay{{Hour: 4, Minute: 0}}, // Run at 4:00 AM daily
+			Schedule:       []TimeOfDay{{Hour: 2, Minute: 0}}, // Run at 2:00 AM daily
 			RunOnInit:      true,
 			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
 			RetryOnFailure: true,
@@ -263,38 +257,10 @@ var (
 			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
 		},
-		// COMMENTED OUT: Aggregates initialization disabled, legacy code
-		/*
-			{
-				Name:           "InitAggregates",
-				Function:       initAggregates,
-				Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
-				RunOnInit:      true,
-				SkipOnWeekends: true,
-			},
-		*/
 		{
-			Name:           "StartScreenerUpdater",
-			Function:       startScreenerUpdater,               // Uses partial coverage guard
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 45}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-			RetryOnFailure: true,
-			MaxRetries:     100,             // Retry until partial coverage is achieved
-			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
-		},
-		{
-			Name: "StartAlertLoop",
-
-			Function:       startAlertLoop,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "StartPolygonWebSocket",
-			Function:       startPolygonWebSocket,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
+			Name:           "StartMarketHourServices",
+			Function:       startMarketHourServices,
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 59}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
 			RetryOnFailure: true,
@@ -312,7 +278,7 @@ var (
 			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "StopServices",
+			Name:           "StopMarketHourServices",
 			Function:       stopServicesJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
 			RunOnInit:      false,
@@ -395,6 +361,18 @@ var (
 func isWeekend(now time.Time) bool {
 	weekday := now.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
+}
+
+// isMarketHours checks if the given time is within market service hours (3:00 AM - 8:00 PM ET, weekdays)
+func isMarketHours(now time.Time) bool {
+	// Skip weekends
+	if isWeekend(now) {
+		return false
+	}
+
+	hour := now.Hour()
+	// Market service hours: 4:00 AM to 8:00 PM ET with 1 minute buffer
+	return (hour >= 4 || (hour == 3 && now.Minute() >= 59)) && hour < 20
 }
 
 // NewScheduler creates a new job scheduler
@@ -532,8 +510,6 @@ func (s *JobScheduler) Start() chan struct{} {
 				ticker.Stop()
 				queueStatusTicker.Stop()
 				// Stop alert loop and polygon websocket when scheduler stops
-				stopAlertLoop()
-				stopPolygonWebSocket()
 				s.mutex.Lock()
 				s.IsRunning = false
 				s.mutex.Unlock()
@@ -832,105 +808,88 @@ func initAggregates(conn *data.Conn) error {
 }
 */
 
-// startAlertLoop starts the alert loop if not already running
-func startAlertLoop(conn *data.Conn) error {
-	alertsInitMutex.Lock()
-	defer alertsInitMutex.Unlock()
+// startMarketHourServices starts alert loop, screener updater, and polygon websocket during market hours
+// First checks if current time is within market hours, then checks OHLCV coverage before starting services
+func startMarketHourServices(conn *data.Conn) error {
+	//now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
 
-	if !alertsInitialized {
-		err := alerts.StartAlertLoop(conn)
-		if err != nil {
-			//log.Printf("Failed to start alert loop: %v", err)
-			return err
+	// First check: Verify we're within market service hours
+	/*if !isMarketHours(now) {
+		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
+		return nil // Return nil to indicate this is expected behavior, not an error
+	}*/
+
+	// Second check: Verify OHLCV partial coverage is sufficient
+	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
+	if err != nil {
+		log.Printf("❌ Failed to check OHLCV partial coverage for market hour services: %v", err)
+		return err
+	}
+
+	if !hasCoverage {
+		log.Printf("⏳ Market hour services blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry")
+		return fmt.Errorf("OHLCV partial coverage not yet sufficient for market hour services")
+	}
+
+	log.Printf("🚀 Starting market hour services - time and OHLCV coverage checks passed")
+
+	// Start all services concurrently
+	var wg sync.WaitGroup
+	errChan := make(chan error, 3)
+
+	// Start alert loop
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := alerts.StartAlertLoop(conn); err != nil {
+			errChan <- fmt.Errorf("failed to start alert loop: %w", err)
 		}
-		alertsInitialized = true
-	}
-	// Log that alert loop is already running
+	}()
 
+	// Start screener updater
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := screener.StartScreenerUpdaterLoop(conn); err != nil {
+			errChan <- fmt.Errorf("failed to start screener updater: %w", err)
+		}
+	}()
+
+	// Start polygon websocket
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := startPolygonWebSocketInternal(conn); err != nil {
+			errChan <- fmt.Errorf("failed to start polygon websocket: %w", err)
+		}
+	}()
+
+	// Wait for all services to start
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		for _, err := range errors {
+			log.Printf("❌ %v", err)
+		}
+		return fmt.Errorf("failed to start %d market hour service(s)", len(errors))
+	}
+
+	log.Printf("✅ All market hour services started successfully")
 	return nil
 }
 
-// startScreenerUpdater starts the screener updater if partial coverage is sufficient
-// Returns an error if coverage is insufficient, triggering job retry
-func startScreenerUpdater(conn *data.Conn) error {
-
-	// Check if OHLCV partial coverage is sufficient (2 months back)
-	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
-	if err != nil {
-		log.Printf("❌ Failed to check OHLCV partial coverage for screener: %v", err)
-		return err
-	}
-
-	if !hasCoverage {
-		log.Printf("⏳ Screener updater blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
-		return fmt.Errorf("OHLCV partial coverage not yet sufficient for screener updater")
-	}
-
-	// Partial coverage is sufficient, start the screener updater
-	log.Printf("🚀 Starting screener updater - OHLCV partial coverage is sufficient")
-	err = screener.StartScreenerUpdaterLoop(conn)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("✅ Screener updater started successfully")
-	return nil
-}
-
-// startPolygonWebSocket starts the Polygon WebSocket if partial coverage is sufficient
-// Returns an error if coverage is insufficient, triggering job retry
-func startPolygonWebSocket(conn *data.Conn) error {
-
-	// Check if OHLCV partial coverage is sufficient (2 months back)
-	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
-	if err != nil {
-		log.Printf("❌ Failed to check OHLCV partial coverage for Polygon WebSocket: %v", err)
-		return err
-	}
-
-	if !hasCoverage {
-		log.Printf("⏳ Polygon WebSocket blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry in 10 minutes")
-		return fmt.Errorf("OHLCV partial coverage not yet sufficient for Polygon WebSocket")
-	}
-
-	// Partial coverage is sufficient, start the Polygon WebSocket
-	err = startPolygonWebSocketInternal(conn)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("✅ Polygon WebSocket started successfully")
-	return nil
-}
-
-// Stop function for alert loop
-func stopAlertLoop() {
-	alertsInitMutex.Lock()
-	defer alertsInitMutex.Unlock()
-
-	if alertsInitialized {
-		alerts.StopAlertLoop()
-		alertsInitialized = false
-	}
-}
-
-// stopPolygonWebSocket stops the Polygon WebSocket if it's running
-func stopPolygonWebSocket() {
-	polygonInitMutex.Lock()
-	defer polygonInitMutex.Unlock()
-
-	if polygonInitialized {
-		// if err := socket.StopPolygonWS(); err != nil {
-		// 	//log.Printf("Failed to stop Polygon WebSocket: %v", err)
-		// }
-		_ = socket.StopPolygonWS() // Assign to blank identifier if error is intentionally ignored
-		polygonInitialized = false
-	}
-}
-
-// stopServicesJob stops alert loop and polygon websocket as a scheduled job
+// stopServicesJob stops alert loop, polygon websocket, and screener updater as a scheduled job
 func stopServicesJob(_ *data.Conn) error {
-	stopAlertLoop()
-	stopPolygonWebSocket()
+	alerts.StopAlertLoop()
+	_ = socket.StopPolygonWS()
+	_ = screener.StopScreenerUpdaterLoop()
+	stopWorkerMonitor()
 	return nil
 }

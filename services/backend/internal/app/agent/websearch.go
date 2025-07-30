@@ -44,7 +44,7 @@ func AgentRunWebSearch(ctx context.Context, conn *data.Conn, userID int, rawArgs
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
 	go socket.SendAgentStatusUpdate(userID, "WebSearchQuery", args.Query)
-	systemPrompt, err := getSystemInstruction("webSearchPrompt")
+	systemPrompt, err := GetSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
@@ -79,7 +79,7 @@ func _openaiWebSearch(ctx context.Context, conn *data.Conn, userID int, systemPr
 			{
 				OfWebSearchPreview: &responses.WebSearchToolParam{
 					Type:              "web_search_preview",
-					SearchContextSize: "medium",
+					SearchContextSize: "high",
 				},
 			},
 		},
@@ -111,7 +111,7 @@ func RunWebSearchGemini(conn *data.Conn, _ int, rawArgs json.RawMessage) (interf
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error unmarshalling args: %w", err)
 	}
-	systemPrompt, err := getSystemInstruction("webSearchPrompt")
+	systemPrompt, err := GetSystemInstruction("webSearchPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting search system instruction: %w", err)
 	}
@@ -303,7 +303,7 @@ func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 }
 
 func _getTwitterSearchSystemPrompt() (string, error) {
-	prompt, err := getSystemInstruction("twitterSearchPrompt")
+	prompt, err := GetSystemInstruction("twitterSearchPrompt")
 	if err != nil {
 		return "", fmt.Errorf("error getting twitter search system prompt: %w", err)
 	}
