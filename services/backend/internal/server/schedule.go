@@ -804,6 +804,7 @@ func startMarketHourServices(conn *data.Conn) error {
 	now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
 
 	// First check: Verify we're within market service hours
+
 	if !isMarketHours(now) {
 		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
 		return nil // Return nil to indicate this is expected behavior, not an error
