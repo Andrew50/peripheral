@@ -918,12 +918,28 @@
 							</div>
 							<div class="compare-row">
 								<div class="feature-column">
-									<span class="feature-name">Equity Data</span>
+									<span class="feature-name">Deployed Agents</span>
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
 										<span class="feature-value">
-											{plan.realtime_charts ? 'Realtime' : 'Delayed'}
+											{plan.strategy_alerts_limit > 0 ? plan.strategy_alerts_limit : '0'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Realtime Data</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{#if plan.realtime_charts}
+												✓
+											{:else}
+												✓<sup class="footnote-ref">1</sup>
+											{/if}
 										</span>
 									</div>
 								{/each}
@@ -941,33 +957,18 @@
 									</div>
 								{/each}
 							</div>
-
 							<div class="compare-row">
 								<div class="feature-column">
-									<span class="feature-name">Deployed Agents</span>
+									<span class="feature-name">Intraday Backtesting</span>
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
 										<span class="feature-value">
-											{plan.strategy_alerts_limit > 0 ? plan.strategy_alerts_limit : '0'}
+											{plan.multi_chart ? '✓' : '✗'}
 										</span>
 									</div>
 								{/each}
 							</div>
-
-							<div class="compare-row">
-								<div class="feature-column">
-									<span class="feature-name">Price & News Alerts</span>
-								</div>
-								{#each filteredPlans as plan}
-									<div class="plan-column">
-										<span class="feature-value">
-											{plan.alerts_limit > 0 ? plan.alerts_limit : '0'}
-										</span>
-									</div>
-								{/each}
-							</div>
-
 							<div class="compare-row">
 								<div class="feature-column">
 									<span class="feature-name">Watchlist Alerts</span>
@@ -980,10 +981,21 @@
 									</div>
 								{/each}
 							</div>
-
 							<div class="compare-row">
 								<div class="feature-column">
-									<span class="feature-name">Sub-minute Charts</span>
+									<span class="feature-name">Multi-chart Views</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.multi_chart ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Second-interval Charts</span>
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
@@ -993,15 +1005,14 @@
 									</div>
 								{/each}
 							</div>
-
 							<div class="compare-row">
 								<div class="feature-column">
-									<span class="feature-name">Multi-chart Views</span>
+									<span class="feature-name">Price & News Alerts</span>
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
 										<span class="feature-value">
-											{plan.multi_chart ? '✓' : '✗'}
+											{plan.alerts_limit > 0 ? plan.alerts_limit : '0'}
 										</span>
 									</div>
 								{/each}
@@ -1755,6 +1766,13 @@
 	.feature-value:has-text('✗') {
 		color: rgba(245, 249, 255, 0.4);
 		font-size: 1.25rem;
+	}
+
+	.footnote-ref {
+		font-size: 0.75rem;
+		color: rgba(245, 249, 255, 0.7);
+		margin-left: 2px;
+		font-weight: 400;
 	}
 
 	/* Style checkmarks and x marks */
