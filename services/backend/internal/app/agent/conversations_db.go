@@ -275,7 +275,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 			created_at, completed_at, status, token_count, message_order
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $2)
+			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $15)
 		)`
 
 	_, err = tx.Exec(ctx, query,
@@ -293,6 +293,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 		message.CompletedAt,
 		message.Status,
 		message.TokenCount,
+		conversationID, // Add conversationID again for the subquery
 	)
 
 	if err != nil {
