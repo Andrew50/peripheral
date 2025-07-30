@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/invopop/jsonschema"
@@ -24,12 +25,9 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		return nil
 	}
 
-	// Remove @askperipheral mentions (case insensitive)
-	tweetText = strings.ReplaceAll(tweetText, "@AskPeripheral ", "")
-	tweetText = strings.ReplaceAll(tweetText, "@askPeripheral ", "")
-	tweetText = strings.ReplaceAll(tweetText, "@askperipheral ", "")
-	tweetText = strings.ReplaceAll(tweetText, "@PeripheralIO ", "")
-	tweetText = strings.ReplaceAll(tweetText, "@peripheralio ", "")
+	// Remove all @mentions at the beginning of the tweet
+	mentionRegex := regexp.MustCompile(`^(@\w+\s*)+`)
+	tweetText = mentionRegex.ReplaceAllString(tweetText, "")
 
 	// Clean up extra whitespace
 	tweetText = strings.TrimSpace(tweetText)
