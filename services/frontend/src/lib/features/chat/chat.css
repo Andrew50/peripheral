@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
 .chat-container {
 	display: flex;
 	flex-direction: column;
@@ -532,8 +534,10 @@
 	width: 32px;
 	height: 32px;
 	position: absolute;
+	top: 0;
+	bottom: 0;
 	right: 0.5rem;
-	bottom: 0.8rem;
+	margin: auto 0;
 	background: white;
 	border: none;
 	border-radius: 50%;
@@ -1477,6 +1481,7 @@ button[data-ticker].ticker-button:hover,
 .public-viewing-notice {
 	padding: 1rem;
 	text-align: center;
+	font-family: 'Instrument Sans', sans-serif;
 	background: var(--ui-bg-secondary, #1a1a1a);
 	border-top: 1px solid var(--ui-border, #333);
 }
@@ -1531,4 +1536,37 @@ button[data-ticker].ticker-button:hover,
 	100% {
 		opacity: 0;
 	}
+}
+
+.upgrade-prompt {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 0.75rem;
+	padding: 1.5rem;
+	width: 100%;
+	max-width: 100%;
+}
+
+.upgrade-prompt p {
+	margin: 0;
+	color: #ffffff;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	max-width: 400px;
+}
+
+.upgrade-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	gap: 0.5rem;
+	color: white;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: none;
 }

@@ -63,6 +63,11 @@
 	// Configure marked to make links open in a new tab
 	const renderer = new marked.Renderer();
 
+	// Override del renderer to disable strikethrough formatting
+	renderer.del = function({ tokens }) {
+		return this.parser.parseInline(tokens); // Return plain text instead of wrapped in <del> tags
+	};
+
 	marked.setOptions({
 		renderer,
 		breaks: true,
@@ -119,6 +124,9 @@
 	// Processing state
 	let isProcessingMessage = false;
 
+	// Usage limit state
+	let showUpgradePrompt = false;
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
@@ -165,7 +173,7 @@
 		currentConversationTitle = 'New Chat';
 		isCurrentConversationPublic = false;
 
-		// Clear current chat and context items
+		// Clear current chat and context item
 		messagesStore.set([]);
 		contextItems.set([]); // Clear context items when creating new conversation
 
@@ -187,6 +195,7 @@
 		// Clear initial suggestions and fetch new ones for empty chat
 		initialSuggestions = [];
 		fetchInitialSuggestions();
+		showUpgradePrompt = false;
 	}
 
 	async function switchToConversation(
@@ -210,6 +219,7 @@
 		currentConversationTitle = title;
 		isCurrentConversationPublic = isConversationPublic;
 		showConversationDropdown = false;
+		showUpgradePrompt = false;
 
 		// Clear current messages and context items immediately
 		messagesStore.set([]);
@@ -696,14 +706,22 @@
 
 				// Try to clean up pending message on backend for network errors
 				await cleanupPendingMessage(currentProcessingQuery);
-
-				const errorMessage: Message = {
-					message_id: errorMessageId,
-					content: 'Error: ' + getFriendlyErrorMessage(error),
-					sender: 'assistant',
-					timestamp: new Date(),
-					status: 'error'
-				};
+				
+				let errorMessage: Message;
+				
+				if (error.message === 'USAGE_LIMIT_REACHED') {
+					// Show upgrade prompt and set friendly error message
+					showUpgradePrompt = true;
+					return;
+				} else {
+					errorMessage = {
+						message_id: errorMessageId,
+						content: 'Error: ' + getFriendlyErrorMessage(error),
+						sender: 'assistant',
+						timestamp: new Date(),
+						status: 'error'
+					};
+				}
 
 				messagesStore.update((current) => [...current, errorMessage]);
 			}
@@ -734,13 +752,21 @@
 
 			// Add error message if we have a loading message
 			if (loadingMessage) {
-				const errorMessage: Message = {
-					message_id: errorMessageId,
-					content: 'Error: ' + getFriendlyErrorMessage(error),
-					sender: 'assistant',
-					timestamp: new Date(),
-					status: 'error'
-				};
+				let errorMessage: Message;
+				
+				if (error.message === 'USAGE_LIMIT_REACHED') {
+					// Show upgrade prompt and set friendly error message
+					showUpgradePrompt = true;
+					return;
+				} else {
+					errorMessage = {
+						message_id: errorMessageId,
+						content: 'Error: ' + getFriendlyErrorMessage(error),
+						sender: 'assistant',
+						timestamp: new Date(),
+						status: 'error'
+					};
+				}
 
 				messagesStore.update((current) => [...current, errorMessage]);
 			}
@@ -1288,11 +1314,11 @@
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->
 				<p class="capabilities-text">
-					Chat is a powerful interface for analyzing market data, filings, news, backtesting
-					strategies, and more. It can answer questions and perform tasks.
+					Peripheral Agent analyzes market data, filings, breaking news, backtests
+					strategies and event driven research, and more.
 				</p>
 				<p class="suggestions-header">
-					Ask Peripheral a question or to perform a task to get started.
+					Ask Peripheral Agent a question or to perform a task to get started.
 				</p>
 			</div>
 		{:else}
@@ -1748,6 +1774,21 @@
 					{/if}
 				</div>
 			{/each}
+			
+			<!-- Upgrade prompt displayed as part of chat when usage limit is reached -->
+			{#if showUpgradePrompt && !isPublicViewing}
+				<div class="message-wrapper assistant">
+					<div class="upgrade-prompt">
+						<p>You've reached your query limit. Upgrade to continue using Peripheral Agent without interruption.</p>
+						<button 
+							class="upgrade-btn"
+							on:click={() => window.location.href = '/pricing'}
+						>
+							View Plans
+						</button>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</div>
 
@@ -1856,10 +1897,10 @@
 		<!-- Public viewing message -->
 		<div class="public-viewing-notice">
 			<p>
-				You are viewing a shared conversation. <button
+				This is a shared conversation. <button
 					class="auth-link"
 					on:click={() => (window.location.href = '/signup')}>Sign up</button
-				> to start your own chat.
+				> for free to start your own chat.
 			</p>
 		</div>
 	{/if}

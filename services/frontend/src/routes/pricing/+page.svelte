@@ -179,12 +179,11 @@
 		if (plan.queries_limit > 0) {
 			features.push(`${plan.queries_limit} queries/mo`);
 		}
-
 		// 2. Data quality - based on realtime_charts
 		if (plan.realtime_charts) {
 			features.push('Realtime data');
 		} else {
-			features.push('Delayed data');
+			features.push('Realtime Derived');
 		}
 
 		// 3. Strategy screening - simplified to just "Realtime strategy screening"
@@ -194,7 +193,7 @@
 
 		// 4. Number of active strategies
 		if (plan.strategy_alerts_limit > 0) {
-			features.push(`${plan.strategy_alerts_limit} active strategies`);
+			features.push(`${plan.strategy_alerts_limit} deployed agents`);
 		}
 
 		// 5. Number of active alerts
@@ -745,6 +744,8 @@
 	<meta property="article:author" content="Peripheral" />
 	<meta name="theme-color" content="#0a0a0a" />
 </svelte:head>
+
+
 <SiteHeader {isAuthenticated} />
 <!-- Use landing page design system -->
 <div class="page-wrapper">
@@ -886,6 +887,140 @@
 					</div>
 				</div>
 
+				<!-- Compare Plans Section -->
+				<div class="compare-section">
+					<div class="compare-table-container">
+						<div class="compare-table">
+							<!-- Header Row with Plan Names -->
+							<div class="compare-row header-row">
+								<div class="feature-column">
+									<span class="feature-header">Compare Plans</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<div class="plan-name">{getPlanDisplayName(plan)}</div>
+									</div>
+								{/each}
+							</div>
+
+							<!-- Feature Rows -->
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Monthly Queries</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.queries_limit > 0 ? plan.queries_limit.toLocaleString() : 'Unlimited'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Deployed Agents</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.strategy_alerts_limit > 0 ? plan.strategy_alerts_limit : '0'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Realtime Data</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{#if plan.realtime_charts}
+												✓
+											{:else}
+												✓<sup class="footnote-ref">1</sup>
+											{/if}
+										</span>
+									</div>
+								{/each}
+							</div>
+
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Strategy Screening</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.strategy_alerts_limit > 0 ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Intraday Backtesting</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.multi_chart ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Watchlist Alerts</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.watchlist_alerts ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Multi-chart Views</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.multi_chart ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Second-interval Charts</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.sub_minute_charts ? '✓' : '✗'}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<div class="compare-row">
+								<div class="feature-column">
+									<span class="feature-name">Price & News Alerts</span>
+								</div>
+								{#each filteredPlans as plan}
+									<div class="plan-column">
+										<span class="feature-value">
+											{plan.alerts_limit > 0 ? plan.alerts_limit : '0'}
+										</span>
+									</div>
+								{/each}
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<!-- Query Products Section -->
 				<!-- <div class="credits-section">
 					<div class="credits-header">
@@ -936,6 +1071,7 @@
 			{/if}
 		</div>
 	</div>
+	
 	<SiteFooter />
 </div>
 
@@ -1382,7 +1518,7 @@
 	.billing-slider {
 		position: relative;
 		display: flex;
-		background: var(--color-dark);
+		background: #2e2e2e;
 		border-radius: 28px;
 		padding: 4px;
 		/* Increased bottom margin for extra space before plan cards */
@@ -1427,7 +1563,7 @@
 		border-radius: 28px;
 		transition: transform 0.2s ease;
 		z-index: 1;
-		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+		box-shadow: 0 2px 8px rgba(197, 198, 199, 0.3);
 	}
 
 	.billing-slider.yearly .slider-background {
@@ -1525,6 +1661,204 @@
 			padding: 0.625rem 1rem;
 			font-size: 0.8125rem;
 			min-width: 90px;
+		}
+	}
+
+	/* Compare Plans Section */
+	.compare-section {
+		margin: 4rem 0;
+		width: 55vw;
+		max-width: none;
+		position: relative;
+		left: 50%;
+		transform: translateX(-50%);
+	}
+
+
+	.compare-table-container {
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-top: none;
+		border-radius: 0 0 16px 16px;
+		overflow: hidden;
+		backdrop-filter: blur(10px);
+	}
+
+	.compare-table {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.compare-row {
+		display: grid;
+		grid-template-columns: 2fr repeat(var(--plan-count, 3), 1fr);
+		min-height: 60px;
+		align-items: center;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.compare-row:last-child {
+		border-bottom: none;
+	}
+
+	.header-row {
+		min-height: 65px;
+		position: sticky;
+		z-index: 10;
+		align-items: start;
+		padding-top: 1rem;
+	}
+
+	.feature-column {
+		padding: 0.25rem 1.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.plan-column {
+		padding: 0.25rem 1rem;
+		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.25rem;
+		position: relative;
+	}
+
+
+	.feature-header {
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: #f5f9ff;
+	}
+
+	.plan-name {
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #f5f9ff;
+	}
+
+	.plan-price-small {
+		font-size: 0.875rem;
+		color: rgba(245, 249, 255, 0.7);
+		font-weight: 500;
+	}
+
+	.feature-name {
+		font-size: 1rem;
+		font-weight: 500;
+		color: #f5f9ff;
+	}
+
+	.feature-value {
+		font-size: 1rem;
+		font-weight: 500;
+		color: #f5f9ff;
+	}
+
+	.feature-value:has-text('✓') {
+		color: var(--landing-success, #22c55e);
+		font-size: 1.25rem;
+	}
+
+	.feature-value:has-text('✗') {
+		color: rgba(245, 249, 255, 0.4);
+		font-size: 1.25rem;
+	}
+
+	.footnote-ref {
+		font-size: 0.75rem;
+		color: rgba(245, 249, 255, 0.7);
+		margin-left: 2px;
+		font-weight: 400;
+	}
+
+	/* Style checkmarks and x marks */
+	.compare-row .feature-value:nth-last-child(1) {
+		font-size: 1.25rem;
+	}
+
+
+	/* Mobile responsiveness for compare table */
+	@media (max-width: 1024px) {
+		.compare-section {
+			width: 85vw;
+			margin: 3rem auto 1.5rem auto;
+		}
+
+		.compare-row {
+			grid-template-columns: 1.5fr repeat(var(--plan-count, 3), 1fr);
+		}
+
+		.feature-column {
+			padding: 0.75rem 1rem;
+		}
+
+		.plan-column {
+			padding: 0.75rem 0.5rem;
+		}
+
+		.plan-name {
+			font-size: 1.1rem;
+		}
+
+		.plan-price-small {
+			font-size: 0.8125rem;
+		}
+
+		.feature-name {
+			font-size: 0.9375rem;
+		}
+
+		.feature-value {
+			font-size: 0.9375rem;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.compare-section {
+			width: 95vw;
+			margin: 2rem auto 1rem auto;
+		}
+
+		.compare-table-container {
+			margin: 0 1rem;
+		}
+
+		.compare-row {
+			grid-template-columns: 1fr;
+			min-height: auto;
+		}
+
+		.feature-column {
+			border-right: none;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+			padding: 0rem;
+			padding-bottom: 0;
+			text-align: center;
+		}
+
+		.plan-column {
+			padding: 0.5rem;
+			padding-bottom: 0;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		}
+
+		/* Show plan names inline with features on mobile */
+		.feature-column::after {
+			content: '';
+			display: block;
+			margin-top: 1rem;
+		}
+
+		.plan-column::before {
+			content: attr(data-plan-name);
+			font-size: 1rem;
+			font-weight: 600;
+			color: #f5f9ff;
+			margin-bottom: 0.5rem;
 		}
 	}
 </style>

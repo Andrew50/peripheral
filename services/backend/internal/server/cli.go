@@ -808,7 +808,7 @@ func createInvite(planName string, trialDays int) {
 
 	// Print the invite code and link
 	fmt.Printf("Invite created successfully!\n")
-	fmt.Printf("Code: %s\n", invite.Code)
+	fmt.Printf("Link: https://peripheral.io/invite/%s\n", invite.Code)
 	fmt.Printf("Plan Name: %s\n", invite.PlanName)
 	fmt.Printf("Trial Days: %d\n", invite.TrialDays)
 }

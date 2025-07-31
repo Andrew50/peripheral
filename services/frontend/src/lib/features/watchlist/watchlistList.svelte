@@ -10,8 +10,9 @@
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
 	import StreamCellV2 from '$lib/utils/stream/streamCellV2.svelte';
 	import { getColumnStore } from '$lib/utils/stream/streamHub';
+	import { isMobileDevice } from '$lib/utils/stores/device';
 	import '$lib/styles/glass.css';
-
+	import { switchMobileTab } from '$lib/stores/mobileStore';
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
 	// Define WatchlistItem to match what's used in watchlist.svelte
@@ -29,7 +30,6 @@
 		icon?: string;
 	}
 
-	let longPressTimer: ReturnType<typeof setTimeout>;
 	export let list: Writable<WatchlistItem[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: WatchlistItem) => {};
@@ -301,7 +301,9 @@
 		force: number | null = null
 	) {
 		const button = force !== null ? force : event.button;
-
+		if($isMobileDevice) {
+			switchMobileTab('chart');
+		}
 		event.preventDefault();
 		event.stopPropagation();
 		if (button === 0) {
@@ -315,21 +317,7 @@
 		}
 	}
 
-	function handleTouchStart(
-		event: TouchEvent & { currentTarget: EventTarget & HTMLTableRowElement },
-		watch: WatchlistItem,
-		i: number
-	) {
-		event.preventDefault(); // Prevent default touch behavior
-		const target = event.currentTarget as HTMLElement;
-		longPressTimer = setTimeout(() => {
-			clickHandler(new MouseEvent('mousedown'), watch, i, 2);
-		}, 600);
-	}
 
-	function handleTouchEnd() {
-		clearTimeout(longPressTimer);
-	}
 
 	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	// Use original column name 'Ticker'
@@ -432,7 +420,7 @@
 
 </script>
 
-<div class="table-container">
+<div class="table-container" class:mobile={$isMobileDevice}>
 	{#if isLoading}
 		<div class="loading">Loading...</div>
 	{:else if loadError}
@@ -479,9 +467,7 @@
 						{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
 							<tr
 								class="default-tr {rowClass(watch)}"
-								on:mousedown={(event) => clickHandler(event, watch, i)}
-								on:touchstart={(event) => handleTouchStart(event, watch, i)}
-								on:touchend={handleTouchEnd}
+								on:click={(event) => clickHandler(event, watch, i)}
 								id="row-{i}"
 								class:selected={i === selectedRowIndex}
 								on:contextmenu={(event) => {
@@ -934,5 +920,38 @@
 
 	tbody tr.selected::after {
 		opacity: 0;
+	}
+
+	/* Mobile-specific styles - make rows taller and wider for better touch targets */
+	.table-container.mobile th,
+	.table-container.mobile td {
+		padding: clamp(8px, 1.2vw, 12px) clamp(6px, 1vw, 10px);
+		font-size: clamp(0.8rem, 0.9rem, 1rem);
+		line-height: 1.4;
+	}
+
+	/* Mobile ticker icons - make them bigger for better visibility */
+	.table-container.mobile .ticker-icon,
+	.table-container.mobile .default-ticker-icon {
+		width: clamp(22px, 3vw, 28px);
+		height: clamp(22px, 3vw, 28px);
+		margin-right: clamp(4px, 0.6vw, 6px);
+	}
+
+	.table-container.mobile .default-ticker-icon {
+		font-size: clamp(0.6rem, 0.4rem + 0.4vw, 0.8rem);
+		font-weight: 600;
+	}
+
+	/* Mobile delete button - make it more visible and easier to tap */
+	.table-container.mobile .delete-button {
+		opacity: 0.6;
+		width: 22px;
+		height: 22px;
+	}
+
+	.table-container.mobile .delete-button svg {
+		width: 13px;
+		height: 13px;
 	}
 </style>

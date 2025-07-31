@@ -83,6 +83,7 @@
 </section>
 
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
   .chip-section {
     width: 100%;
     display: flex;
@@ -92,12 +93,12 @@
   }
 
   .chip-title {
-    font-size: clamp(2rem, 4vw, 3rem);
-    font-weight: 800;
+    font-size: clamp(3rem, 7vw, 4rem);
+    font-weight: 500;
     margin: 0;
     color: #ffffff;
     position: relative;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   .chip-rows {
@@ -145,7 +146,7 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
     flex-shrink: 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   .chip:hover {

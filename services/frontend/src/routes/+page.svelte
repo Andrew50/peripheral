@@ -19,18 +19,11 @@
 	// Subsections data
 	const subsections = [
 		{
-			title: 'Transform ideas into edge in minutes',
+			title: 'Backtest trading ideas',
 			description:
 				'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
 			content: '',
 			image: '/query_glass.png'
-		},
-		{
-			title: 'Never miss a trade.',
-			description:
-				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
-			content: '',
-			image: '/alert_glass.png'
 		},
 		{
 			title: 'Analysis now, not after the trade',
@@ -38,6 +31,13 @@
 				'In dynamic, fast-moving markets, every second counts. Our agent analyzes headlines, fundamental events, and data 100% faster than ChatGPT and Perplexity.',
 			content: '',
 			image: '/splash-speed-color.png'
+		},
+		{
+			title: 'Never miss a trade.',
+			description:
+				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
+			content: '',
+			image: '/alert_glass.png'
 		},
 		{
 			title: 'Frictionless trading.',
@@ -58,20 +58,30 @@
 	<section class="hero-title-section">
 		<div class="hero-title-container">
 			<h1 class="hero-title">
-				The <span class="gradient-text">Intelligent</span> Trading Terminal
+				The Intelligent Trading Terminal
 			</h1>
 			<p class="hero-subtitle">
-				Peripheral enables you to envision and execute your trading ideas.<br />
+				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents in realtime.<br />
 			</p>
 			<a href="/signup" class="hero-cta-button">
-				Get Started for Free
+				<div class="button-border-layer-1">
+					<div class="button-border-layer-2">
+						<div class="button-border-layer-3">
+							<div class="button-content">
+								Supercharge your trading →
+							</div>
+						</div>
+					</div>
+				</div>
 			</a>
 		</div>
 	</section>
-
+	<ChipSection />
 	<main class="landing-container">
 	<!-- Subsections moved to be directly below title -->
 	<section class="subsections-section">
+		<h2 class="features-title">Features</h2>
+		
 		<div class="subsections-content">
 			{#each subsections as subsection, index}
 				<div class="subsection" class:reverse={index % 2 === 0} class:frictionless={index === 3} class:speed-analysis={index === 2} class:never-miss={index === 1}>
@@ -93,7 +103,6 @@
 -->
 	
 	<!-- Ideas Chips Section -->
-	<ChipSection />
 	<!-- Footer -->
 	<SiteFooter />
 </main>
@@ -131,6 +140,7 @@
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
 
 
 	/* Critical global styles - applied immediately to prevent layout shift */
@@ -173,8 +183,7 @@
 		background: transparent;
 		color: var(--color-dark);
 		font-family:
-			'Geist',
-			'Inter',
+			'Instrument Sans',
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -188,7 +197,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 14rem 0.5rem 17rem 0.5rem;
+		padding: 14rem 0.5rem 12rem 0.5rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
@@ -206,7 +215,7 @@
 
 	.hero-title {
 		font-size: clamp(4.05rem, 6vw, 7.5rem);
-		font-weight: 800;
+		font-weight: 400;
 		margin: 0 0 1rem 0;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
@@ -223,72 +232,63 @@
 		line-height: 1.6;
 		margin-top: 0;
 		font-weight: 400;
-		font-family: 'Geist', 'Inter', sans-serif;
+		font-family: 'Instrument Sans', sans-serif;
 	}
 
 	.hero-cta-button {
 		display: inline-block;
-		background: white;
-		color: black;
 		text-decoration: none;
-		padding: 1rem 2rem;
-		border-radius: 2rem;
-		font-size: 1.1rem;
-		font-weight: 600;
-		font-family: 'Geist', 'Inter', sans-serif;
-		transition: all 0.3s ease;
-		box-shadow: 
-			0 4px 14px 0 rgba(255, 255, 255, 0.1),
-			0 2px 4px 0 rgba(0, 0, 0, 0.1);
 		margin-top: 1rem;
+		padding: 4px;
+		border-radius: 58px;
+		border: 1px solid rgba(255, 255, 255, 0.04);
+		transition: all 0.3s ease;
+		background: transparent;
 	}
 
-	.hero-cta-button:hover {
-		transform: translateY(-2px);
-		box-shadow: 
-			0 8px 25px 0 rgba(255, 255, 255, 0.2),
-			0 4px 8px 0 rgba(0, 0, 0, 0.15);
-		background: rgba(255, 255, 255, 0.95);
+	.button-border-layer-1 {
+		border-radius: 50px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		padding: 4px;
+		background: transparent;
+	}
+
+	.button-border-layer-2 {
+		border-radius: 42px;
+		border: 1px solid rgba(255, 255, 255, 0.20);
+		padding: 4px;
+		background: transparent;
+	}
+
+	.button-border-layer-3 {
+		border-radius: 40px;
+		background: linear-gradient(135deg, 
+			rgba(255, 255, 255, 0.95) 0%, 
+			rgba(240, 240, 240, 0.98) 100%);
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.button-content {
+		padding: 1rem 2rem;
+		font-size: 1.1rem;
+		font-weight: 400;
+		font-family: 'Instrument Sans', sans-serif;
+		color: #1a1a1a;
+		text-align: center;
+		background: transparent;
+		border-radius: 40px;
+		transition: transform 0.3s ease;
+	}
+
+	.hero-cta-button:hover  .button-content{
+		transform: scale(1.05);
 	}
 
 	.hero-cta-button:active {
 		transform: translateY(0);
 	}
 
-	.gradient-text {
-		background: linear-gradient(
-			135deg,
-			#3b82f6 0%,
-			#6366f1 25%,
-			#8b5cf6 50%,
-			#ec4899 75%,
-			#f59e0b 100%
-		);
-		background-size: 200% 200%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		-webkit-text-fill-color: transparent;
-		animation: gradient-shift 8s ease infinite;
-		font-size: 1em;
-		font-family: 'Geist', 'Inter', sans-serif;
-		font-weight: 800;
-	}
-
-	@keyframes gradient-shift {
-		0%,
-		100% {
-			background-position: 0% 50%;
-		}
-		25% {
-			background-position: 100% 50%;
-		}
-		50% {
-			background-position: 100% 100%;
-		}
-		75% {
-			background-position: 0% 100%;
-		}
-	}
 
 	/* Subsections Section */
 	.subsections-section {
@@ -297,6 +297,16 @@
 		padding: 6rem 2rem;
 		width: 100%;
 		flex-shrink: 0;
+	}
+
+	.features-title {
+		font-size: clamp(3rem, 7vw, 4rem);
+		font-weight: 400;
+		margin: 0 0 4rem 0;
+		color: #f5f9ff;
+		line-height: 1.2;
+		text-align: center;
+		letter-spacing: -0.02em;
 	}
 
 	.subsections-content {
@@ -328,8 +338,8 @@
 	}
 
 	.subsection-title {
-		font-size: clamp(2rem, 5vw, 2.5rem);
-		font-weight: 700;
+		font-size: clamp(3rem, 7vw, 3.5rem);
+		font-weight: 400;
 		margin: 0 0 1.5rem 0;
 		color: #f5f9ff;
 		line-height: 1.2;
@@ -346,30 +356,13 @@
 
 	.subsection-description {
 		font-size: 1.2rem;
-		color: var(--color-primary);
-		font-weight: 500;
+		color: #f5f9ff;
+		font-weight: 400;
 		margin-bottom: 1.5rem;
 		line-height: 1.5;
 	}
 
-	/* Specific styling for Frictionless Trading section */
-	.subsection.frictionless .subsection-title {
-		color: white;
-	}
 
-	.subsection.frictionless .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Analysis at the speed of now section */
-	.subsection.speed-analysis .subsection-description {
-		color: white;
-	}
-
-	/* Specific styling for Never miss a trade section */
-	.subsection.never-miss .subsection-description {
-		color: white;
-	}
 
 	.subsection-content {
 		font-size: 1rem;
@@ -396,16 +389,11 @@
 
 	/* Make query_glass.png bigger */
 	.subsection:first-child .subsection-image {
-		max-width: 1000px;
+		max-width: 1200px;
 	}
 	
 	.subsection:first-child .subsection-image img {
-		max-width: 1000px;
-	}
-
-	/* Make the study.png image white (first subsection) */
-	.subsection:first-child .subsection-image img {
-		filter: brightness(0) invert(1);
+		max-width: 1200px;
 	}
 
 	/* Responsive Design */

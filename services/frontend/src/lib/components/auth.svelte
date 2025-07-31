@@ -24,6 +24,7 @@
 	let errorMessage = writable('');
 	let loading = false;
 	let isLoaded = false;
+	let inviteValidation = { isValid: false, planName: '', trialDays: 0, validated: false };
 
 	// Deep linking parameters
 	let redirectPlan: string | null = null;
@@ -55,6 +56,11 @@
 			const urlParams = new URLSearchParams(window.location.search);
 			redirectPlan = urlParams.get('plan');
 			redirectType = urlParams.get('redirect');
+
+			// Validate invite code if present
+			if (inviteCode && inviteCode.trim() !== '' && mode === 'signup') {
+				validateInviteCode(inviteCode.trim());
+			}
 		}
 	});
 
@@ -139,6 +145,12 @@
 		inputRefs[index]?.select();
 	}
 
+	// Watch for changes to inviteCode and validate
+	$: if (inviteCode && inviteCode.trim() !== '' && mode === 'signup' && browser) {
+		validateInviteCode(inviteCode.trim());
+	}
+
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			if (mode === 'login') {
@@ -215,12 +227,22 @@
 	}
 
 	async function signUp(email: string, password: string) {
+		// Prevent signup if invite code is present but invalid
+		if (
+			inviteCode &&
+			inviteCode.trim() !== '' &&
+			(!inviteValidation.validated || !inviteValidation.isValid)
+		) {
+			errorMessage.set('Please wait for invite code validation or use a valid invite code');
+			return;
+		}
+
 		loading = true;
 		try {
 			const signupData: any = { email: email, password: password };
 
-			// Include invite code if provided
-			if (inviteCode && inviteCode.trim() !== '') {
+			// Include invite code if provided and valid
+			if (inviteCode && inviteCode.trim() !== '' && inviteValidation.isValid) {
 				signupData.inviteCode = inviteCode.trim();
 			}
 
@@ -282,6 +304,11 @@
 				sessionStorage.setItem('redirectType', redirectType);
 			}
 
+			// Store invite code for after Google auth
+			if (inviteCode && inviteCode.trim() !== '') {
+				sessionStorage.setItem('inviteCode', inviteCode.trim());
+			}
+
 			// Pass the current origin to the backend
 			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
 				redirectOrigin: currentOrigin
@@ -300,6 +327,44 @@
 		}
 	}
 
+	async function validateInviteCode(code: string) {
+		if (inviteValidation.validated && inviteValidation.isValid) {
+			return; // Already validated successfully
+		}
+
+		try {
+			const response = await publicRequest<{ code: string; planName: string; trialDays: number }>(
+				'validateInvite',
+				{ code }
+			);
+			inviteValidation = {
+				isValid: true,
+				planName: response.planName,
+				trialDays: response.trialDays,
+				validated: true
+			};
+			// Clear any previous error messages
+			errorMessage.set('');
+		} catch (error) {
+			let displayError = 'Invalid invite code';
+			if (typeof error === 'string') {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
+			}
+
+			inviteValidation = {
+				isValid: false,
+				planName: '',
+				trialDays: 0,
+				validated: true
+			};
+			errorMessage.set(displayError);
+		}
+	}
+
 	// Exported method to set invite code from parent component
 	export function setInviteCode(code: string) {
 		inviteCode = code;
@@ -315,12 +380,71 @@
 				{#if mode === 'login'}
 				 Sign into Peripheral
 				{:else if mode === 'signup'}
-				 Execute with Peripheral
+				 Keep the Market within your Peripheral
 				{:else}
 					 Verify Email Address
 				{/if}
 			</h1>
 		</div>
+
+		<!-- Invite Code Status (only show in signup mode with invite) -->
+		{#if mode === 'signup' && inviteCode && inviteCode.trim() !== ''}
+			<div class="invite-status">
+				{#if inviteValidation.validated}
+					{#if inviteValidation.isValid}
+						<div class="invite-valid">
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M20 6L9 17L4 12"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Valid invite for {inviteValidation.planName} ({inviteValidation.trialDays} day trial)
+						</div>
+					{:else}
+						<div class="invite-invalid">
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M18 6L6 18"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path
+									d="M6 6L18 18"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Invalid invite code
+						</div>
+					{/if}
+				{:else}
+					<div class="invite-validating">
+						<div class="mini-loader"></div>
+						Validating invite code...
+					</div>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- Auth Form -->
 		<form
@@ -745,12 +869,60 @@
 		text-decoration: underline;
 	}
 
+	/* Invite Status */
+	.invite-status {
+		width: 100%;
+		margin-bottom: 1.5rem;
+		text-align: center;
+	}
+
+	.invite-valid,
+	.invite-invalid,
+	.invite-validating {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-radius: 8px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		backdrop-filter: blur(10px);
+	}
+
+	.invite-valid {
+		background: rgba(34, 197, 94, 0.1);
+		border: 1px solid rgba(34, 197, 94, 0.3);
+		color: #22c55e;
+	}
+
+	.invite-invalid {
+		background: rgba(239, 68, 68, 0.1);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		color: #ef4444;
+	}
+
+	.invite-validating {
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		color: rgba(255, 255, 255, 0.8);
+	}
+
 	/* Loader */
 	.loader {
 		width: 20px;
 		height: 20px;
 		border: 2px solid rgba(0, 0, 0, 0.3);
 		border-top: 2px solid #000000;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+
+	.mini-loader {
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top: 2px solid rgba(255, 255, 255, 0.8);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}

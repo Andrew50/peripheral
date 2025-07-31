@@ -50,7 +50,7 @@
 
 	<!-- Twitter Card meta tags -->
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:site" content="@AskPeripheral" />
 	<meta name="twitter:title" content={data.meta.title} />
 	<meta name="twitter:description" content="The new best way to trade." />
 	<meta name="twitter:image" content={data.meta.ogImageUrl} />

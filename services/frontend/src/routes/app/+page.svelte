@@ -67,6 +67,9 @@
 	// Import mobile device detection
 	import { isMobileDevice } from '$lib/utils/stores/device';
 
+	// Import mobile interface component
+	import MobileInterface from '$lib/components/mobile/MobileInterface.svelte';
+
 	// Debug logging for interface selection
 	$: if (browser && $isMobileDevice !== undefined) {
 		console.log('📱 [interface] Device detection result:', {
@@ -88,9 +91,6 @@
 	} from '$lib/features/chart/interface';
 
 	import { newPriceAlert } from '$lib/features/alerts/interface';
-
-	// Import mobile banner component
-	import MobileBanner from '$lib/components/mobileBanner.svelte';
 
 	//type Menu = 'none' | 'watchlist' | 'alerts' | 'study' | 'news';
 	type Menu = 'none' | 'watchlist' | 'alerts' | 'news';
@@ -152,27 +152,6 @@
 
 	// Calendar state
 	let calendarVisible = false;
-
-	// Mobile banner state
-	let showMobileBanner = false;
-	const MOBILE_BANNER_STORAGE_KEY = 'atlantis-mobile-banner-dismissed';
-
-	// Initialize mobile banner visibility based on device and dismissal state
-	$: if (browser && $isMobileDevice !== undefined) {
-		if ($isMobileDevice) {
-			const dismissed = localStorage.getItem(MOBILE_BANNER_STORAGE_KEY);
-			showMobileBanner = !dismissed;
-		} else {
-			showMobileBanner = false;
-		}
-	}
-
-	function dismissMobileBanner() {
-		showMobileBanner = false;
-		if (browser) {
-			localStorage.setItem(MOBILE_BANNER_STORAGE_KEY, 'true');
-		}
-	}
 
 	// Get shared conversation ID from server-side layout data
 	$: layoutData = $page.data;
@@ -550,7 +529,11 @@
 	}
 
 	function handleCalendar() {
-		calendarVisible = true;
+		if (calendarVisible) {
+			calendarVisible = false;
+		} else {
+			calendarVisible = true;
+		}
 	}
 
 	function handlePause() {
@@ -795,7 +778,7 @@
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = window.innerWidth*0.3;
+		const maxLeftSidebarWidth = window.innerWidth*0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -1006,15 +989,12 @@
 		on:close={hideAuthModal}
 	/>
 
-	{#if $isMobileDevice}
-		<!-- Mobile-only full-screen chat interface -->
-		<div class="mobile-chat-container">
-			<!-- Mobile banner at the top -->
-			{#if showMobileBanner}
-				<MobileBanner on:dismiss={dismissMobileBanner} />
-			{/if}
-			<Query isPublicViewing={$isPublicViewingStore} {sharedConversationId} />
-		</div>
+		{#if $isMobileDevice}
+		<MobileInterface 
+			{data} 
+			{sharedConversationId} 
+			isPublicViewing={$isPublicViewingStore} 
+		/>
 	{:else}
 		<!-- Desktop interface -->
 
@@ -1524,16 +1504,7 @@
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 	}
 
-	/* Mobile full-screen chat container */
-	.mobile-chat-container {
-		position: fixed;
-		inset: 0; /* top:0; right:0; bottom:0; left:0; */
-		z-index: 9999; /* above everything */
-		background: #121212; /* match site background so it feels native */
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-	}
+
 
 	.center-section {
 		display: flex;
@@ -1615,16 +1586,5 @@
 		color: #ffffff;
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
-	}
-
-	/* Mobile full-screen chat container */
-	.mobile-chat-container {
-		position: fixed;
-		inset: 0; /* top:0; right:0; bottom:0; left:0; */
-		z-index: 9999; /* above everything */
-		background: #121212; /* match site background so it feels native */
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
 	}
 </style>

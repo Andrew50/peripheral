@@ -505,6 +505,7 @@ class StrategyGenerator:
             - For the equity curve plot, use apply_equity_curve_styling(fig) to style the plot
             - Do NOT use timestamp as x-axis values. Use dates instead.
             - (Title Icons) For styling, include [TICKER] at the VERY BEGINNING of the title to indicate the ticker who's company icon should be displayed next to the title. 
+            - Titles should be concise and to the point and should not include unecessary text like date ranges, etc.
             - ENSURE that this a singular stock ticker, like AAPL, not a spread or other complex instrument.
             - If the plot refers to several tickers, do not include this.
             - Dates should always be in American format. 
