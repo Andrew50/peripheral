@@ -30,6 +30,18 @@ env:
   NODE_VERSION: '18'
 
 jobs:
+  # Determine the UID/GID of the runner user to avoid permission issues with containers
+  determine-runner-user:
+    runs-on: self-hosted
+    outputs:
+      uid: ${{ steps.ids.outputs.uid }}
+      gid: ${{ steps.ids.outputs.gid }}
+    steps:
+      - id: ids
+        run: |
+          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
     runs-on: self-hosted
@@ -432,10 +444,11 @@ jobs:
   #         fi
 
   backend-lint-security:
-    needs: [check-workflow-conditions]
+    needs: [check-workflow-conditions, determine-runner-user]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
+      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
@@ -566,10 +579,11 @@ jobs:
           fi
 
   frontend-lint-security:
-    needs: [check-workflow-conditions]
+    needs: [check-workflow-conditions, determine-runner-user]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
+      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
