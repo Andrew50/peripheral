@@ -29,7 +29,7 @@ ALTER TABLE strategies
 -- Update schema version
 INSERT INTO schema_versions (version, description)
 VALUES (
-    88,
+    90,
     'Drop queries_limit, alerts_limit, and strategy_alerts_limit columns from users table - limits now queried from subscription_products. Add min_timeframe, alert_last_trigger_at, and alert_universe_full to strategies'
 ) ON CONFLICT (version) DO NOTHING;
 

@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_strategies_user_name_version ON strategies(userId
 -- Update schema version
 INSERT INTO schema_versions (version, description)
 VALUES (
-    87,
+    89,
     'Add unique constraint on (userId, name, version) to strategies table'
 ) ON CONFLICT (version) DO NOTHING;
 
