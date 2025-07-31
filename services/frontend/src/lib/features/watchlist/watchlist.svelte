@@ -11,7 +11,6 @@
 	} from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 	import WatchlistList from './watchlistList.svelte';
-	import { showAuthModal } from '$lib/stores/authModal';
 	import {
 		addInstanceToWatchlist as addToWatchlist,
 		addMultipleInstancesToWatchlist,
