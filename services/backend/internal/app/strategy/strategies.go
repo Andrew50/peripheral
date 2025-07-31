@@ -1,7 +1,6 @@
 package strategy
 
 import (
-	"backend/internal/app/limits"
 	"backend/internal/data"
 	"backend/internal/queue"
 	"context"
@@ -9,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"backend/internal/app/limits"
 )
 
 // CreateStrategyFromPromptArgs contains the user's natural language prompt
@@ -323,6 +324,13 @@ func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, 
 		return nil, fmt.Errorf("strategy creation succeeded but strategy object is nil")
 	}
 
+	// Sync strategy universe to Redis for per-ticker alert processing
+	// This happens after the strategy is created to ensure the universe is available
+	if err := syncStrategyUniverseToRedis(conn, result.Strategy.StrategyID); err != nil {
+		log.Printf("⚠️ Failed to sync strategy %d universe to Redis: %v", result.Strategy.StrategyID, err)
+		// Don't fail the operation for Redis sync errors, just log them
+	}
+
 	return CreateStrategyFromPromptResult{
 		StrategyID: result.Strategy.StrategyID,
 		Name:       result.Strategy.Name,
@@ -496,6 +504,13 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	log.Printf("Strategy %d alert configuration updated - active: %v, threshold: %v, universe: %v",
 		args.StrategyID, args.Active, args.Threshold, args.Universe)
 
+	// Sync strategy universe to Redis for per-ticker alert processing
+	// This happens after the database update to ensure consistency
+	if err := syncStrategyUniverseToRedis(conn, args.StrategyID); err != nil {
+		log.Printf("⚠️ Failed to sync strategy %d universe to Redis: %v", args.StrategyID, err)
+		// Don't fail the operation for Redis sync errors, just log them
+	}
+
 	return map[string]interface{}{
 		"success":        true,
 		"strategyId":     args.StrategyID,
@@ -503,6 +518,31 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		"alertThreshold": args.Threshold,
 		"alertUniverse":  args.Universe,
 	}, nil
+}
+
+// syncStrategyUniverseToRedis syncs a strategy's universe from the database to Redis
+func syncStrategyUniverseToRedis(conn *data.Conn, strategyID int) error {
+	ctx := context.Background()
+
+	// Query the strategy's alert_universe_full from the database
+	var alertUniverseFull []string
+	query := `SELECT COALESCE(alert_universe_full, ARRAY[]::TEXT[]) FROM strategies WHERE strategyId = $1`
+	err := conn.DB.QueryRow(ctx, query, strategyID).Scan(&alertUniverseFull)
+	if err != nil {
+		return fmt.Errorf("failed to query strategy %d universe: %w", strategyID, err)
+	}
+
+	// Only sync to Redis if we have a non-empty universe (global strategies are not stored)
+	if len(alertUniverseFull) > 0 {
+		if err := data.SetStrategyUniverse(conn, strategyID, alertUniverseFull); err != nil {
+			return fmt.Errorf("failed to set strategy %d universe in Redis: %w", strategyID, err)
+		}
+		log.Printf("📝 Synced strategy %d universe to Redis: %d tickers", strategyID, len(alertUniverseFull))
+	} else {
+		log.Printf("📝 Strategy %d has global universe, not syncing to Redis", strategyID)
+	}
+
+	return nil
 }
 
 type DeleteStrategyArgs struct {

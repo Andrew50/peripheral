@@ -77,13 +77,14 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 	log.Printf("🚀 Starting Screener updater service")
 	s.conn = conn
 
+	// Add logging before optimizing the database connection
+	log.Printf("🔄 Calling optimizeDatabaseConnection")
 	// Optimize database connection settings for better performance
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
 	}
 
 	// Add tickers with null maxdate to screener_stale table
-	log.Println("🔄 Adding active tickers to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
 		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
@@ -94,6 +95,8 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 			stale = EXCLUDED.stale;
 	`
 
+	// Add logging before performing initial data refresh
+	log.Printf("🔄 Calling initialRefresh")
 	// Perform initial data refresh on startup
 	if err := initialRefresh(conn); err != nil {
 		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
@@ -113,6 +116,8 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 		return err
 	}
 
+	// Add logging before starting the updater loop
+	log.Printf("🔄 Starting updater loop")
 	// Create new stop channel for this session
 	s.stopChan = make(chan struct{})
 	s.isRunning = true
@@ -270,7 +275,7 @@ func initialRefresh(conn *data.Conn) error {
 	}
 
 	for _, cmd := range refreshCommands {
-		//log.Printf("Executing: %s", cmd)
+		log.Printf("🔄 Executing: %s", cmd)
 		if _, err := conn.DB.Exec(ctx, cmd); err != nil {
 			// Log error but continue, some might fail if already running or not needed
 			log.Printf("⚠️  Initial refresh command failed for '%s': %v", cmd, err)

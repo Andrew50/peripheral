@@ -137,6 +137,7 @@ type ScreeningResult struct {
 type AlertResult struct {
 	Success      bool                     `json:"success"`
 	Instances    []map[string]interface{} `json:"instances"`
+	UsedSymbols  []string                 `json:"used_symbols,omitempty"`  // Tickers actually accessed during execution
 	ErrorMessage string                   `json:"error_message,omitempty"` // Legacy field
 	Error        *ErrorDetails            `json:"error,omitempty"`         // New structured error
 }

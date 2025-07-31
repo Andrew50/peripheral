@@ -122,6 +122,12 @@ func bucketStart(t time.Time, tf string) (time.Time, error) {
 	}
 }
 
+// isPerTickerThrottleEnabled checks if the per-ticker throttling feature is enabled
+func isPerTickerThrottleEnabled() bool {
+	return true
+	//return strings.ToLower(os.Getenv("PER_TICKER_THROTTLE")) == "true"
+}
+
 // AlertService encapsulates the alert system and its state
 type AlertService struct {
 	conn           *data.Conn
@@ -189,10 +195,12 @@ func (a *AlertService) Start(conn *data.Conn) error {
 	a.isRunning = true
 
 	// Start the alert processing goroutines
-	a.wg.Add(2)
+	a.wg.Add(4) // Adding one more for cleanup scheduling
 	log.Printf("🚀 Starting price alert loop")
 	go a.priceAlertLoop()
 	go a.strategyAlertLoop()
+	go a.metricsLoop() // Metrics logging goroutine
+	go a.cleanupLoop() // New cleanup scheduling goroutine
 
 	log.Printf("✅ Alert service started")
 	return nil
@@ -272,25 +280,25 @@ type StrategyAlert struct {
 var (
 	priceAlertFrequency    = time.Second * 1
 	strategyAlertFrequency = time.Minute * 1
-	// Legacy global variables for backward compatibility - these will be removed in future versions
-	priceAlerts    sync.Map // DEPRECATED: use service instance instead
-	strategyAlerts sync.Map // DEPRECATED: use service instance instead
-	//ctx            context.Context    // DEPRECATED: use service instance instead
-	//cancel         context.CancelFunc // DEPRECATED: use service instance instead
-	//mu             sync.Mutex         // DEPRECATED: use service instance instead
+	// Legacy global variables for backward compatibility - DEPRECATED in Stage 3
+	// TODO: Remove these in next major version after per-ticker throttling is stable
+	priceAlerts    sync.Map // DEPRECATED: use AlertService instance instead
+	strategyAlerts sync.Map // DEPRECATED: use AlertService instance instead
 )
 
-// Legacy wrapper functions for backward compatibility
+// Legacy wrapper functions for backward compatibility - DEPRECATED in Stage 3
 // StartAlertLoop starts the alert service (wrapper around service-based approach)
+// DEPRECATED: Use GetAlertService().Start() directly. Will be removed in next major version.
 func StartAlertLoop(conn *data.Conn) error { //entrypoint
-	log.Printf("🚀 StartAlertLoop called (using service-based approach)")
+	log.Printf("⚠️ DEPRECATED: StartAlertLoop called - use GetAlertService().Start() directly")
 	service := GetAlertService()
 	return service.Start(conn)
 }
 
 // StopAlertLoop stops the alert service (wrapper around service-based approach)
+// DEPRECATED: Use GetAlertService().Stop() directly. Will be removed in next major version.
 func StopAlertLoop() {
-	log.Printf("🛑 StopAlertLoop called (using service-based approach)")
+	log.Printf("⚠️ DEPRECATED: StopAlertLoop called - use GetAlertService().Stop() directly")
 	service := GetAlertService()
 	_ = service.Stop()
 }
@@ -436,6 +444,121 @@ func (a *AlertService) strategyAlertLoop() {
 	}
 }
 
+// metricsLoop logs Redis operation metrics periodically
+func (a *AlertService) metricsLoop() {
+	defer a.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute) // Log every 5 minutes
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-a.stopChan:
+			log.Printf("📡 Metrics loop stopped by stop signal")
+			return
+		case <-ticker.C:
+			// Use enhanced metrics if per-ticker throttling is enabled
+			if isPerTickerThrottleEnabled() {
+				detailedMetrics := data.GetDetailedAlertMetrics(a.conn)
+				log.Printf("📊 Enhanced Redis metrics - Ticker updates: %v, Universe updates: %v, Total tracked: %v",
+					detailedMetrics["ticker_updates"], detailedMetrics["universe_updates"], detailedMetrics["total_ticker_updates"])
+				log.Printf("📊 Per-ticker throttling - Strategy runs: %v, Skipped (no update): %v, Skipped (bucket dup): %v",
+					detailedMetrics["strategy_runs"], detailedMetrics["skipped_no_update"], detailedMetrics["skipped_bucket_dup"])
+				log.Printf("📊 Advanced operations - Cleanup ops: %v, Lua intersections: %v, Universe discoveries: %v",
+					detailedMetrics["cleanup_operations"], detailedMetrics["lua_intersections"], detailedMetrics["universe_discoveries"])
+
+				// Log universe size distribution for performance analysis
+				a.logUniverseSizeMetrics()
+			} else {
+				// Legacy metrics for backward compatibility
+				metrics := data.GetAlertMetrics()
+				log.Printf("📊 Redis metrics - Ticker updates: %d, Universe updates: %d",
+					metrics["ticker_updates"], metrics["universe_updates"])
+				log.Printf("📊 Per-ticker throttling - Strategy runs: %d, Skipped (no update): %d, Skipped (bucket dup): %d",
+					metrics["strategy_runs"], metrics["skipped_no_update"], metrics["skipped_bucket_dup"])
+			}
+		}
+	}
+}
+
+// cleanupLoop performs periodic Redis cleanup operations
+func (a *AlertService) cleanupLoop() {
+	defer a.wg.Done()
+
+	// Run cleanup daily at 2 AM
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	// Run initial cleanup after 1 hour to avoid startup congestion
+	initialDelay := time.NewTimer(1 * time.Hour)
+	defer initialDelay.Stop()
+
+	for {
+		select {
+		case <-a.stopChan:
+			log.Printf("📡 Cleanup loop stopped by stop signal")
+			return
+		case <-initialDelay.C:
+			// First cleanup run
+			a.performCleanup()
+		case <-ticker.C:
+			// Daily cleanup runs
+			a.performCleanup()
+		}
+	}
+}
+
+// performCleanup executes Redis cleanup operations
+func (a *AlertService) performCleanup() {
+	log.Printf("🧹 Starting Redis cleanup operations")
+
+	// Clean up ticker updates older than 90 days (handles longest possible bucket timeframes)
+	maxDays := 90
+	if err := data.CleanupTickerUpdates(a.conn, maxDays); err != nil {
+		log.Printf("⚠️ Failed to cleanup ticker updates: %v", err)
+	}
+
+	// Log current Redis data sizes for monitoring
+	if tickerCount, err := data.GetTickerUpdateCount(a.conn); err == nil {
+		log.Printf("📊 Post-cleanup: %d ticker updates tracked in Redis", tickerCount)
+	}
+
+	log.Printf("✅ Redis cleanup operations completed")
+}
+
+// logUniverseSizeMetrics logs universe size distribution for performance analysis
+func (a *AlertService) logUniverseSizeMetrics() {
+	var small, medium, large, xlarge int
+	var totalUniverse int
+
+	a.strategyAlerts.Range(func(_, value interface{}) bool {
+		alert := value.(StrategyAlert)
+		if size, err := data.GetUniverseSize(a.conn, alert.StrategyID); err == nil {
+			totalUniverse += size
+			switch {
+			case size <= 10:
+				small++
+			case size <= 100:
+				medium++
+			case size <= 1000:
+				large++
+			default:
+				xlarge++
+			}
+		}
+		return true
+	})
+
+	activeStrategies := a.getStrategyAlertCount()
+	if activeStrategies > 0 {
+		avgUniverse := totalUniverse / activeStrategies
+		log.Printf("📈 Universe distribution - Small (≤10): %d, Medium (≤100): %d, Large (≤1000): %d, XLarge (>1000): %d",
+			small, medium, large, xlarge)
+		log.Printf("📈 Average universe size: %d tickers across %d active strategies",
+			avgUniverse, activeStrategies)
+	}
+}
+
 // processPriceAlerts processes all active price alerts
 func (a *AlertService) processPriceAlerts() {
 	var wg sync.WaitGroup
@@ -464,6 +587,19 @@ func (a *AlertService) processStrategyAlerts() {
 	})
 	log.Printf("📊 Processing %d active strategy alerts: [%s]", len(activeAlerts), strings.Join(activeAlerts, ", "))
 
+	// Check if per-ticker throttling is enabled
+	usePerTickerThrottle := isPerTickerThrottleEnabled()
+	if usePerTickerThrottle {
+		log.Printf("🎯 Using per-ticker throttling mode")
+		a.processStrategyAlertsPerTicker()
+	} else {
+		log.Printf("🎯 Using legacy throttling mode")
+		a.processStrategyAlertsLegacy()
+	}
+}
+
+// processStrategyAlertsLegacy implements the original strategy-level throttling
+func (a *AlertService) processStrategyAlertsLegacy() {
 	var wg sync.WaitGroup
 	var processed, succeeded, failed, skipped int
 	var mu sync.Mutex
@@ -499,7 +635,7 @@ func (a *AlertService) processStrategyAlerts() {
 			}
 
 			log.Printf("Processing strategy alert %d: %s (threshold: %.2f)", alert.StrategyID, alert.Name, alert.Threshold)
-			if err := executeStrategyAlert(context.Background(), a.conn, alert); err != nil {
+			if err := executeStrategyAlert(context.Background(), a.conn, alert, nil); err != nil {
 				log.Printf("Error processing strategy alert %d: %v", alert.StrategyID, err)
 				mu.Lock()
 				processed++
@@ -517,6 +653,240 @@ func (a *AlertService) processStrategyAlerts() {
 	})
 	wg.Wait()
 	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed, %d skipped", processed, succeeded, failed, skipped)
+}
+
+// intersectClientSide performs client-side intersection of two ticker slices
+func intersectClientSide(updatedTickers, strategyUniverse []string) []string {
+	updatedSet := make(map[string]bool)
+	for _, ticker := range updatedTickers {
+		updatedSet[ticker] = true
+	}
+
+	var result []string
+	for _, ticker := range strategyUniverse {
+		if updatedSet[ticker] {
+			result = append(result, ticker)
+		}
+	}
+	return result
+}
+
+// processStrategyAlertsPerTicker implements per-ticker throttling using Redis data
+func (a *AlertService) processStrategyAlertsPerTicker() {
+	now := time.Now()
+
+	var wg sync.WaitGroup
+	var processed, succeeded, failed, skippedNoUpdate, skippedBucketDup int
+	var mu sync.Mutex
+
+	a.strategyAlerts.Range(func(_, value interface{}) bool {
+		alert := value.(StrategyAlert)
+		wg.Add(1)
+		go func(alert StrategyAlert) {
+			defer wg.Done()
+			// DEBUG: start evaluation
+			log.Printf("🔎 Evaluating strategy %d '%s': universe='%s', lastTrigger=%v, minTimeframe='%s'",
+				alert.StrategyID, alert.Name, alert.Universe, alert.LastTrigger, alert.MinTimeframe)
+
+			// Skip strategies with invalid timeframes
+			if alert.MinTimeframe == "" {
+				log.Printf("⚠️ Strategy %d (%s): no min_timeframe set, skipping per-ticker throttling",
+					alert.StrategyID, alert.Name)
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+
+			// Calculate current bucket
+			currBucket, err := bucketStart(now, alert.MinTimeframe)
+			if err != nil {
+				log.Printf("⚠️ Strategy %d (%s): invalid timeframe '%s', skipping: %v",
+					alert.StrategyID, alert.Name, alert.MinTimeframe, err)
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+			log.Printf("⌚ Strategy %d: computed bucket start = %v", alert.StrategyID, currBucket)
+
+			// Get tickers updated since current bucket start
+			updatedTickers, err := data.GetTickersUpdatedSince(a.conn, currBucket.UnixMilli())
+			if err != nil {
+				log.Printf("⚠️ Strategy %d (%s): failed GetTickersUpdatedSince: %v",
+					alert.StrategyID, alert.Name, err)
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+			log.Printf("📈 Strategy %d: %d tickers updated since bucket %v", alert.StrategyID, len(updatedTickers), currBucket)
+
+			// Check if this is a global strategy (no specific universe)
+			if alert.Universe == "all" || alert.Universe == "" {
+				// For global strategies, fall back to legacy throttling logic
+				if !alert.LastTrigger.IsZero() {
+					lastBucket, err := bucketStart(alert.LastTrigger, alert.MinTimeframe)
+					if err == nil && currBucket.Equal(lastBucket) {
+						log.Printf("⏩ Global strategy %d (%s) skipped - same bucket",
+							alert.StrategyID, alert.Name)
+						mu.Lock()
+						processed++
+						skippedBucketDup++
+						mu.Unlock()
+						data.IncrementSkippedBucketDup()
+						return
+					}
+				}
+
+				// Run global strategy without ticker filtering
+				log.Printf("🌍 Processing global strategy %d: %s", alert.StrategyID, alert.Name)
+				data.IncrementStrategyRuns()
+				if err := executeStrategyAlert(context.Background(), a.conn, alert, nil); err != nil {
+					log.Printf("Error processing global strategy %d: %v", alert.StrategyID, err)
+					mu.Lock()
+					processed++
+					failed++
+					mu.Unlock()
+				} else {
+					log.Printf("Successfully processed global strategy %d: %s", alert.StrategyID, alert.Name)
+					mu.Lock()
+					processed++
+					succeeded++
+					mu.Unlock()
+				}
+				return
+			}
+
+			// Get strategy universe from Redis
+			strategyUniverse, err := data.GetStrategyUniverse(a.conn, alert.StrategyID)
+			if err != nil {
+				log.Printf("⚠️ Strategy %d (%s): Redis SMEMBERS failed: %v",
+					alert.StrategyID, alert.Name, err)
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+			log.Printf("📊 Strategy %d: universe size from Redis = %d tickers", alert.StrategyID, len(strategyUniverse))
+
+			if len(strategyUniverse) == 0 {
+				log.Printf("⚠️ Strategy %d (%s): empty universe in Redis, skipping",
+					alert.StrategyID, alert.Name)
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+
+			// Find intersection of updated tickers and strategy universe
+			// Use Lua script for large universes to reduce network overhead
+			var changedTickers []string
+
+			const luaThreshold = 1000 // Use Lua script for universes > 1000 tickers
+			if len(strategyUniverse) > luaThreshold {
+				log.Printf("🔧 Strategy %d: using Lua script for large universe (%d tickers)",
+					alert.StrategyID, len(strategyUniverse))
+				luaResult, luaErr := data.IntersectTickersServerSide(a.conn, alert.StrategyID, currBucket.UnixMilli())
+				if luaErr != nil {
+					log.Printf("⚠️ Strategy %d: Lua intersection failed, falling back to client-side: %v",
+						alert.StrategyID, luaErr)
+					// Fall back to client-side intersection
+					changedTickers = intersectClientSide(updatedTickers, strategyUniverse)
+				} else {
+					changedTickers = luaResult
+					data.IncrementLuaIntersections()
+				}
+			} else {
+				// Client-side intersection for smaller universes
+				changedTickers = intersectClientSide(updatedTickers, strategyUniverse)
+			}
+			log.Printf("🤝 Strategy %d: %d changed tickers after intersection", alert.StrategyID, len(changedTickers))
+
+			if len(changedTickers) == 0 {
+				log.Printf("⏩ Strategy %d (%s) skipped - no universe tickers updated (%d universe, %d updated)",
+					alert.StrategyID, alert.Name, len(strategyUniverse), len(updatedTickers))
+				mu.Lock()
+				processed++
+				skippedNoUpdate++
+				mu.Unlock()
+				data.IncrementSkippedNoUpdate()
+				return
+			}
+
+			// Get last trigger buckets for changed tickers
+			lastBuckets, err := data.GetStrategyLastBuckets(a.conn, alert.StrategyID, changedTickers)
+			if err != nil {
+				log.Printf("⚠️ Strategy %d (%s): Redis HMGET last buckets failed: %v",
+					alert.StrategyID, alert.Name, err)
+				// Continue with execution - assume no previous triggers
+			}
+			log.Printf("🗂️ Strategy %d: last trigger buckets = %v", alert.StrategyID, lastBuckets)
+
+			// Filter out tickers that already triggered in current bucket
+			currBucketMs := currBucket.UnixMilli()
+			var finalTickers []string
+			for _, ticker := range changedTickers {
+				if lastBucketMs, exists := lastBuckets[ticker]; !exists || lastBucketMs != currBucketMs {
+					finalTickers = append(finalTickers, ticker)
+				}
+			}
+
+			if len(finalTickers) == 0 {
+				log.Printf("⏩ Strategy %d (%s) skipped - all changed tickers already triggered in bucket (%d changed, 0 final)",
+					alert.StrategyID, alert.Name, len(changedTickers))
+				mu.Lock()
+				processed++
+				skippedBucketDup++
+				mu.Unlock()
+				data.IncrementSkippedBucketDup()
+				return
+			}
+
+			// Execute strategy with filtered ticker list
+			log.Printf("🎯 Processing strategy %d: %s with %d tickers: %v",
+				alert.StrategyID, alert.Name, len(finalTickers), finalTickers)
+
+			data.IncrementStrategyRuns()
+			if err := executeStrategyAlert(context.Background(), a.conn, alert, finalTickers); err != nil {
+				log.Printf("Error processing strategy %d: %v", alert.StrategyID, err)
+				mu.Lock()
+				processed++
+				failed++
+				mu.Unlock()
+			} else {
+				log.Printf("Successfully processed strategy %d: %s", alert.StrategyID, alert.Name)
+
+				// Update last trigger buckets for successful execution
+				tickerBuckets := make(map[string]int64)
+				for _, ticker := range finalTickers {
+					tickerBuckets[ticker] = currBucketMs
+				}
+				if err := data.SetStrategyLastBuckets(a.conn, alert.StrategyID, tickerBuckets); err != nil {
+					log.Printf("⚠️ Strategy %d: failed to update last buckets: %v", alert.StrategyID, err)
+				}
+
+				mu.Lock()
+				processed++
+				succeeded++
+				mu.Unlock()
+			}
+		}(alert)
+		return true
+	})
+	wg.Wait()
+	log.Printf("Per-ticker strategy alert summary: %d total, %d succeeded, %d failed, %d skipped (no update), %d skipped (bucket dup)",
+		processed, succeeded, failed, skippedNoUpdate, skippedBucketDup)
 }
 
 // initPriceAlerts initializes price alerts from the database
@@ -622,6 +992,12 @@ func (a *AlertService) initStrategyAlerts() error {
 
 		// Also store in legacy global map for backward compatibility
 		strategyAlerts.Store(alert.StrategyID, alert)
+
+		// Sync strategy universe to Redis for per-ticker alert processing
+		if err := a.syncStrategyUniverseToRedis(alert.StrategyID); err != nil {
+			log.Printf("⚠️ Failed to sync strategy %d universe to Redis: %v", alert.StrategyID, err)
+			// Don't fail initialization for Redis sync errors
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -651,371 +1027,30 @@ func (a *AlertService) getStrategyAlertCount() int {
 	return count
 }
 
-// waitForStrategyAlertResult waits for a strategy alert result via Redis pubsub
-/*func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
-	// Subscribe to task updates
-	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer func() {
-		if err := pubsub.Close(); err != nil {
-			fmt.Printf("error closing pubsub: %v\n", err)
-		}
-	}()
+// syncStrategyUniverseToRedis syncs a strategy's universe from the database to Redis
+func (a *AlertService) syncStrategyUniverseToRedis(strategyID int) error {
+	ctx := context.Background()
 
-	// Create timeout context
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ch := pubsub.Channel()
-	log.Printf("Listening for updates on worker_task_updates channel for task %s", taskID)
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			log.Printf("Timeout waiting for strategy alert result for task %s", taskID)
-			return nil, fmt.Errorf("timeout waiting for strategy alert result")
-		case msg := <-ch:
-			if msg == nil {
-				continue
-			}
-
-			var taskUpdate map[string]interface{}
-			err := json.Unmarshal([]byte(msg.Payload), &taskUpdate)
-			if err != nil {
-				log.Printf("Failed to unmarshal task update: %v", err)
-				continue
-			}
-
-			if taskUpdate["task_id"] == taskID {
-				status, _ := taskUpdate["status"].(string)
-				log.Printf("Received update for task %s: status=%s", taskID, status)
-
-				if status == "completed" || status == "failed" {
-					// Convert task result to WorkerStrategyAlertResult
-					var result WorkerStrategyAlertResult
-					if resultData, exists := taskUpdate["result"]; exists {
-						resultJSON, err := json.Marshal(resultData)
-						if err != nil {
-							return nil, fmt.Errorf("error marshaling task result: %v", err)
-						}
-
-						err = json.Unmarshal(resultJSON, &result)
-						if err != nil {
-							return nil, fmt.Errorf("error unmarshaling strategy alert result: %v", err)
-						}
-					}
-
-					if status == "failed" {
-						errorMsg := "unknown error"
-						if result.ErrorMessage != "" {
-							errorMsg = result.ErrorMessage
-						} else if errorData, exists := taskUpdate["error_message"]; exists {
-							if errorStr, ok := errorData.(string); ok {
-								errorMsg = errorStr
-							}
-						}
-						log.Printf("Strategy alert task %s failed: %s", taskID, errorMsg)
-						return nil, fmt.Errorf("strategy alert execution failed: %s", errorMsg)
-					}
-
-					log.Printf("Strategy alert task %s completed successfully", taskID)
-					return &result, nil
-				}
-			}
-		}
-	}
-}
-
-// executeStrategyAlert submits a strategy alert task and waits for results
-func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert) error {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("strategy_alert_%d_%d", strategy.StrategyID, time.Now().UnixNano())
-	log.Printf("Executing strategy alert %d (task: %s)", strategy.StrategyID, taskID)
-
-	// Prepare strategy alert task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "alert",
-		"args": map[string]interface{}{
-			"strategy_id": fmt.Sprintf("%d", strategy.StrategyID),
-			"user_id":     fmt.Sprintf("%d", strategy.UserID),
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Convert task to JSON
-	taskJSON, err := json.Marshal(task)
+	// Query the strategy's alert_universe_full from the database
+	var alertUniverseFull []string
+	query := `SELECT COALESCE(alert_universe_full, ARRAY[]::TEXT[]) FROM strategies WHERE strategyId = $1`
+	err := a.conn.DB.QueryRow(ctx, query, strategyID).Scan(&alertUniverseFull)
 	if err != nil {
-		return fmt.Errorf("error marshaling task: %v", err)
+		return fmt.Errorf("failed to query strategy %d universe: %w", strategyID, err)
 	}
 
-	// Submit task to Redis worker queue
-	log.Printf("Submitting strategy alert task %s to Redis queue", taskID)
-	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
-	if err != nil {
-		return fmt.Errorf("error submitting task to queue: %v", err)
-	}
-
-	// Wait for result with 2 minute timeout
-	log.Printf("Waiting for strategy alert result for task %s (timeout: 2 minutes)", taskID)
-	result, err := waitForStrategyAlertResult(ctx, conn, taskID, 2*time.Minute)
-	if err != nil {
-		return fmt.Errorf("error waiting for strategy alert result: %v", err)
-	}
-
-	// If the strategy alert was successful, log it
-	if result.Success {
-		// Create a descriptive message
-		numMatches := len(result.Matches)
-		var message string
-		if numMatches > 0 {
-			message = fmt.Sprintf("Strategy '%s' triggered with %d matching securities", strategy.Name, numMatches)
-			log.Printf("Strategy alert %d triggered: %s", strategy.StrategyID, message)
-		} else {
-			message = fmt.Sprintf("Strategy '%s' executed successfully", strategy.Name)
-			log.Printf("Strategy alert %d executed successfully with no matches", strategy.StrategyID)
+	// Only sync to Redis if we have a non-empty universe (global strategies are not stored)
+	if len(alertUniverseFull) > 0 {
+		if err := data.SetStrategyUniverse(a.conn, strategyID, alertUniverseFull); err != nil {
+			return fmt.Errorf("failed to set strategy %d universe in Redis: %w", strategyID, err)
 		}
-
-		// Prepare additional data for the payload
-		additionalData := map[string]interface{}{
-			"execution_mode":    result.ExecutionMode,
-			"execution_time_ms": result.ExecutionTimeMs,
-			"num_matches":       numMatches,
-		}
-
-		// Add match details if available (limit to prevent huge payloads)
-		if numMatches > 0 && numMatches <= 50 {
-			matches := make([]map[string]interface{}, 0, len(result.Matches))
-			for _, match := range result.Matches {
-				matchData := map[string]interface{}{
-					"symbol": match.Symbol,
-				}
-				if match.Score != 0 {
-					matchData["score"] = match.Score
-				}
-				if match.CurrentPrice != 0 {
-					matchData["current_price"] = match.CurrentPrice
-				}
-				if match.Sector != "" {
-					matchData["sector"] = match.Sector
-				}
-				matches = append(matches, matchData)
-			}
-			additionalData["matches"] = matches
-
-			// Log a sample of the matches
-			sampleSize := 3
-			if numMatches < sampleSize {
-				sampleSize = numMatches
-			}
-			log.Printf("Strategy alert %d sample matches: %+v", strategy.StrategyID, result.Matches[:sampleSize])
-		} else if numMatches > 50 {
-			additionalData["matches_note"] = fmt.Sprintf("Too many matches (%d) to include details", numMatches)
-			log.Printf("Strategy alert %d has too many matches (%d) to log details", strategy.StrategyID, numMatches)
-		}
-
-		err = LogStrategyAlert(conn, strategy.UserID, strategy.StrategyID, strategy.Name, message, additionalData)
-		if err != nil {
-			log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
-			// Don't fail the entire alert processing if logging fails
-		}
+		log.Printf("📝 Synced strategy %d universe to Redis: %d tickers", strategyID, len(alertUniverseFull))
 	} else {
-		log.Printf("Strategy alert %d execution completed but marked as not successful", strategy.StrategyID)
+		log.Printf("📝 Strategy %d has global universe, not syncing to Redis", strategyID)
 	}
 
 	return nil
-}*/
-// Legacy functions for backward compatibility - these will be removed in future versions
-/*func priceAlertLoop(ctx context.Context, conn *data.Conn) {
-	ticker := time.NewTicker(priceAlertFrequency)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			processPriceAlerts(conn)
-		}
-	}
 }
-
-func strategyAlertLoop(ctx context.Context, conn *data.Conn) {
-	ticker := time.NewTicker(strategyAlertFrequency)
-	defer ticker.Stop()
-	log.Printf("Starting strategy alert loop with frequency: %v", strategyAlertFrequency)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Strategy alert loop stopped due to context cancellation")
-			return
-		case <-ticker.C:
-			log.Printf("Processing strategy alerts - checking %d active alerts", getStrategyAlertCount())
-			startTime := time.Now()
-			processStrategyAlerts(conn)
-			duration := time.Since(startTime)
-			log.Printf("Strategy alert processing completed in %v", duration)
-		}
-	}
-}
-
-func processPriceAlerts(conn *data.Conn) {
-	var wg sync.WaitGroup
-	priceAlerts.Range(func(_, value interface{}) bool {
-		alert := value.(PriceAlert)
-		wg.Add(1)
-		go func(a PriceAlert) {
-			defer wg.Done()
-			if err := processPriceAlert(conn, a); err != nil {
-				//log.Printf("Error processing price alert %d: %v", a.AlertID, err)
-			}
-		}(alert)
-		return true
-	})
-	wg.Wait()
-}
-
-func processStrategyAlerts(conn *data.Conn) {
-	var wg sync.WaitGroup
-	var processed, succeeded, failed int
-	var mu sync.Mutex
-
-	strategyAlerts.Range(func(_, value interface{}) bool {
-		alert := value.(StrategyAlert)
-		wg.Add(1)
-		go func(a StrategyAlert) {
-			defer wg.Done()
-			log.Printf("Processing strategy alert %d: %s (threshold: %.2f)", a.StrategyID, a.Name, a.Threshold)
-			if err := executeStrategyAlert(context.Background(), conn, a); err != nil {
-				log.Printf("Error processing strategy alert %d: %v", a.StrategyID, err)
-				mu.Lock()
-				processed++
-				failed++
-				mu.Unlock()
-			} else {
-				log.Printf("Successfully processed strategy alert %d: %s", a.StrategyID, a.Name)
-				mu.Lock()
-				processed++
-				succeeded++
-				mu.Unlock()
-			}
-		}(alert)
-		return true
-	})
-	wg.Wait()
-	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed", processed, succeeded, failed)
-}
-
-
-func initPriceAlerts(conn *data.Conn) error {
-	ctx := context.Background()
-
-	// Load active price alerts
-	query := `
-        SELECT alertId, userId, price, direction, securityId
-        FROM alerts
-        WHERE active = true
-    `
-	rows, err := conn.DB.Query(ctx, query)
-	if err != nil {
-		return fmt.Errorf("querying active price alerts: %w", err)
-	}
-	defer rows.Close()
-
-	priceAlerts = sync.Map{}
-	for rows.Next() {
-		var alert PriceAlert
-		err := rows.Scan(
-			&alert.AlertID,
-			&alert.UserID,
-			&alert.Price,
-			&alert.Direction,
-			&alert.SecurityID,
-		)
-		if err != nil {
-			return fmt.Errorf("scanning price alert row: %w", err)
-		}
-
-		ticker, err := postgres.GetTicker(conn, *alert.SecurityID, time.Now())
-		if err != nil {
-			return fmt.Errorf("getting ticker: %w", err)
-		}
-		alert.Ticker = &ticker
-
-		priceAlerts.Store(alert.AlertID, alert)
-	}
-
-	if err = rows.Err(); err != nil {
-		return fmt.Errorf("iterating price alert rows: %w", err)
-	}
-
-	//log.Printf("Finished initializing %d price alerts", getPriceAlertCount())
-	return nil
-}
-
-func initStrategyAlerts(conn *data.Conn) error {
-	ctx := context.Background()
-
-	// Load active strategy alerts with configuration
-	query := `
-		SELECT strategyId, userId, name,
-		       COALESCE(alert_threshold, 0.0) as alert_threshold,
-		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe
-		FROM strategies
-		WHERE alertactive = true
-		ORDER BY strategyId
-	`
-	rows, err := conn.DB.Query(ctx, query)
-	if err != nil {
-		return fmt.Errorf("querying active strategy alerts: %w", err)
-	}
-	defer rows.Close()
-
-	strategyAlerts = sync.Map{}
-	for rows.Next() {
-		var alert StrategyAlert
-		var alertUniverse []string
-		err := rows.Scan(&alert.StrategyID, &alert.UserID, &alert.Name, &alert.Threshold, &alertUniverse)
-		if err != nil {
-			return fmt.Errorf("scanning strategy alert row: %w", err)
-		}
-		alert.Active = true
-
-		// Convert universe array to string representation
-		if len(alertUniverse) == 0 {
-			alert.Universe = "all"
-		} else {
-			// For now, store as comma-separated string; could be enhanced later
-			alert.Universe = fmt.Sprintf("%v", alertUniverse)
-		}
-
-		strategyAlerts.Store(alert.StrategyID, alert)
-	}
-
-	if err = rows.Err(); err != nil {
-		return fmt.Errorf("iterating strategy alert rows: %w", err)
-	}
-
-	//log.Printf("Finished initializing %d strategy alerts", getStrategyAlertCount())
-	return nil
-}
-
-// Helper functions to get alert counts
-func getPriceAlertCount() int {
-	count := 0
-	priceAlerts.Range(func(_, _ interface{}) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-func getStrategyAlertCount() int {
-	count := 0
-	strategyAlerts.Range(func(_, _ interface{}) bool {
-		count++
-		return true
-	})
-	return count
-}*/
 
 // waitForStrategyAlertResult waits for a strategy alert result via Redis pubsub
 /*func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
@@ -1092,39 +1127,46 @@ func getStrategyAlertCount() int {
 }*/
 
 // executeStrategyAlert submits a strategy alert task and waits for results
-func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert) error {
+func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert, tickers []string) error {
 	// Prepare arguments expected by the Python worker (see services/worker/src/alert.py)
 	args := map[string]interface{}{
 		"strategy_id": strategy.StrategyID,
 		"user_id":     strategy.UserID,
 	}
 
-	// Convert the Universe string into a slice of symbols if it is not the special "all" keyword.
-	if strategy.Universe != "" && strategy.Universe != "all" {
-		var symbols []string
-		if strings.HasPrefix(strategy.Universe, "[") && strings.HasSuffix(strategy.Universe, "]") {
-			// Universe is in array representation like "[AAPL MSFT TSLA]" – split on whitespace
-			universeStr := strings.Trim(strategy.Universe, "[]")
-			if universeStr != "" {
-				symbols = strings.Fields(universeStr)
-			}
-		} else {
-			// Assume comma-separated list
-			parts := strings.Split(strategy.Universe, ",")
-			for _, p := range parts {
-				if sym := strings.TrimSpace(p); sym != "" {
-					symbols = append(symbols, sym)
+	// Use provided tickers if available (per-ticker throttling mode), otherwise parse universe
+	if tickers != nil && len(tickers) > 0 {
+		args["symbols"] = tickers
+		log.Printf("🎯 Strategy %d (%s): submitting alert task with per-ticker filtered symbols (%d): %v",
+			strategy.StrategyID, strategy.Name, len(tickers), tickers)
+	} else {
+		// Convert the Universe string into a slice of symbols if it is not the special "all" keyword.
+		if strategy.Universe != "" && strategy.Universe != "all" {
+			var symbols []string
+			if strings.HasPrefix(strategy.Universe, "[") && strings.HasSuffix(strategy.Universe, "]") {
+				// Universe is in array representation like "[AAPL MSFT TSLA]" – split on whitespace
+				universeStr := strings.Trim(strategy.Universe, "[]")
+				if universeStr != "" {
+					symbols = strings.Fields(universeStr)
+				}
+			} else {
+				// Assume comma-separated list
+				parts := strings.Split(strategy.Universe, ",")
+				for _, p := range parts {
+					if sym := strings.TrimSpace(p); sym != "" {
+						symbols = append(symbols, sym)
+					}
 				}
 			}
-		}
-		if len(symbols) > 0 {
-			args["symbols"] = symbols
-			log.Printf("🎯 Strategy %d (%s): submitting alert task with %d symbols: %v", strategy.StrategyID, strategy.Name, len(symbols), symbols)
+			if len(symbols) > 0 {
+				args["symbols"] = symbols
+				log.Printf("🎯 Strategy %d (%s): submitting alert task with %d symbols: %v", strategy.StrategyID, strategy.Name, len(symbols), symbols)
+			} else {
+				log.Printf("🎯 Strategy %d (%s): submitting alert task with default universe (no symbols filter)", strategy.StrategyID, strategy.Name)
+			}
 		} else {
 			log.Printf("🎯 Strategy %d (%s): submitting alert task with default universe (no symbols filter)", strategy.StrategyID, strategy.Name)
 		}
-	} else {
-		log.Printf("🎯 Strategy %d (%s): submitting alert task with default universe (no symbols filter)", strategy.StrategyID, strategy.Name)
 	}
 
 	log.Printf("🚀 Strategy %d (%s): queuing alert task with args: %+v", strategy.StrategyID, strategy.Name, args)
@@ -1136,6 +1178,35 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	log.Printf("📥 Strategy %d (%s): received result - Success: %t, Instances: %d", strategy.StrategyID, strategy.Name, result.Success, len(result.Instances))
+
+	// Process used_symbols for universe discovery if available
+	if len(result.UsedSymbols) > 0 {
+		log.Printf("🔍 Strategy %d (%s): worker reported %d used symbols: %v",
+			strategy.StrategyID, strategy.Name, len(result.UsedSymbols), result.UsedSymbols)
+
+		// Update strategy universe in Redis with discovered symbols
+		if err := data.SetStrategyUniverse(conn, strategy.StrategyID, result.UsedSymbols); err != nil {
+			log.Printf("⚠️ Strategy %d: failed to update discovered universe in Redis: %v", strategy.StrategyID, err)
+		} else {
+			data.IncrementUniverseDiscoveries()
+			log.Printf("📝 Strategy %d: updated Redis universe with %d discovered symbols",
+				strategy.StrategyID, len(result.UsedSymbols))
+		}
+
+		// Optionally update database for persistence (could be done async)
+		go func() {
+			ctx := context.Background()
+			_, updateErr := conn.DB.Exec(ctx,
+				`UPDATE strategies SET alert_universe_full = $1 WHERE strategyid = $2`,
+				result.UsedSymbols, strategy.StrategyID)
+			if updateErr != nil {
+				log.Printf("⚠️ Strategy %d: failed to update discovered universe in database: %v",
+					strategy.StrategyID, updateErr)
+			} else {
+				log.Printf("💾 Strategy %d: updated database universe with discovered symbols", strategy.StrategyID)
+			}
+		}()
+	}
 
 	if !result.Success {
 		// Prefer structured error details if available
