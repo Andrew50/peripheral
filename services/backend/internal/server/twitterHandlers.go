@@ -334,7 +334,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweet
 	agentResult.Plot = samplePlot*/
 
 	var base64PNG string
-	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, false)
+	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, true)
 	if err != nil {
 		log.Printf("🚨 ERROR rendering Twitter plot: %v", err)
 	}
