@@ -9,16 +9,21 @@
 	import { browser } from '$app/environment';
 
 	import { subscriptionStatus } from '$lib/utils/stores/stores';
+	import { isMobileDevice } from '$lib/utils/stores/device';
 
 	export let instance: Instance;
-	export let handleCalendar: () => void;
+	export let handleCalendar: (() => void) | undefined = undefined;
 
 	const commonTimeframes = ['1', '1h', '1d', '1w'];
+	// Filter timeframes for mobile (exclude 1w)
+	$: displayTimeframes = $isMobileDevice 
+		? commonTimeframes.filter(tf => tf !== '1w')
+		: commonTimeframes;
 	let countdown = writable('--');
 	let countdownInterval: ReturnType<typeof setInterval>;
 	// Helper computed value to check if current timeframe is custom
 	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
-
+	
 	// TopBar handler functions
 	function handleTickerClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
@@ -206,7 +211,7 @@
 		<div class="divider"></div>
 
 		<!-- Add common timeframe buttons -->
-		{#each commonTimeframes as tf}
+		{#each displayTimeframes as tf}
 			<button
 				class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe === tf
 					? 'active'
@@ -243,35 +248,37 @@
 			{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
 		</button>
 
-		<!-- Divider -->
-		<div class="divider"></div>
+		{#if handleCalendar}
+			<!-- Divider -->
+			<div class="divider"></div>
 
-		<!-- Calendar button for timestamp selection -->
-		<button
-			class="calendar-button metadata-button"
-			on:click={handleCalendar}
-			title="Go to Date"
-			aria-label="Go to Date"
-		>
-			<svg
-				viewBox="0 0 24 24"
-				width="16"
-				height="16"
-				fill="none"
-				xmlns="http://www.w3.org/2000/svg"
+			<!-- Calendar button for timestamp selection -->
+			<button
+				class="calendar-button metadata-button"
+				on:click={handleCalendar}
+				title="Go to Date"
+				aria-label="Go to Date"
 			>
-				<path
-					d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
-					stroke="currentColor"
-					stroke-width="1.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-		</button>
+				<svg
+					viewBox="0 0 24 24"
+					width="16"
+					height="16"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
 
-		<!-- Divider -->
-		<div class="divider"></div>
+			<!-- Divider -->
+			<div class="divider"></div>
+		{/if}
 
 		<!-- Countdown -->
 		<!-- <div class="countdown-container">

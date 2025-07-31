@@ -560,8 +560,14 @@
 	// Add helper function to safely manage document event listener
 	function addDocumentListener() {
 		if (!isDocumentListenerActive && browser) {
-			document.body.removeEventListener('mousedown', handleOutsideClick); // Remove any existing
-			document.body.addEventListener('mousedown', handleOutsideClick);
+			// Remove any existing listeners
+			document.removeEventListener('mousedown', handleOutsideClick, true);
+			document.removeEventListener('touchstart', handleOutsideClick, true);
+			
+			// Add multiple event types to ensure we catch interactions
+			document.addEventListener('mousedown', handleOutsideClick, true);	
+			document.addEventListener('touchstart', handleOutsideClick, true);
+			
 			document.body.setAttribute('data-input-click-listener', 'true');
 			isDocumentListenerActive = true;
 		}
@@ -569,7 +575,8 @@
 
 	function removeDocumentListener() {
 		if (isDocumentListenerActive && browser) {
-			document.body.removeEventListener('mousedown', handleOutsideClick);
+			document.removeEventListener('mousedown', handleOutsideClick, true);
+			document.removeEventListener('touchstart', handleOutsideClick, true);
 			document.body.removeAttribute('data-input-click-listener');
 			isDocumentListenerActive = false;
 		}
@@ -666,7 +673,7 @@
 	});
 
 	// Handle clicks outside the input window to cancel it
-	function handleOutsideClick(event: MouseEvent) {
+	function handleOutsideClick(event: Event) {
 		if (!componentActive || !browser) return;
 
 		const inputWindow = document.getElementById('input-window');
@@ -674,6 +681,8 @@
 
 		// If we clicked outside the input window, cancel the input
 		if (inputWindow && !inputWindow.contains(target)) {
+			event.preventDefault();
+			event.stopPropagation();
 			inputQuery.update((v) => ({ ...v, status: 'cancelled' }));
 		}
 	}
