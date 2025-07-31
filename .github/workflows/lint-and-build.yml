@@ -460,6 +460,7 @@ jobs:
       GOPATH: ${{ github.workspace }}/.go
       GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
       GOCACHE: ${{ github.workspace }}/.go/cache
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
@@ -502,6 +503,8 @@ jobs:
           echo "Cleaning Go caches..."
           go clean -cache
           go clean -modcache
+          # Ensure staticcheck cache directory exists and is writable
+          mkdir -p "$XDG_CACHE_HOME/staticcheck"
           echo "Re-tidying modules..."
           go mod tidy
           echo "Running go vet..."
