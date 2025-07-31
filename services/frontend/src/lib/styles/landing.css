@@ -5,9 +5,9 @@
 :root {
 	/* Landing page primary color palette */
 	--color-dark: #1a1a1a;
-	--color-primary: #666666;
-	--color-accent: #999999;
-	--color-light: #cccccc;
+	--color-primary: #666;
+	--color-accent: #999;
+	--color-light: #ccc;
 
 	/* Shared sizing variables referenced across the landing page */
 	--pill-size: 40px;
@@ -17,23 +17,22 @@
 	/* Hero widget sizing & colours */
 	--hero-widget-h: clamp(320px, 55vw, 600px);
 	--hero-widget-background-color: #ededf1;
-
 	--landing-bg-primary: #0a0b0d;
 	--landing-bg-secondary: #111827;
 	--landing-text-primary: #f9fafb;
 	--landing-text-secondary: #9ca3af;
 	--landing-text-muted: #6b7280;
-	--landing-accent-blue: #666666;
-	--landing-accent-blue-hover: #555555;
-	--landing-accent-blue-light: #777777;
+	--landing-accent-blue: #666;
+	--landing-accent-blue-hover: #555;
+	--landing-accent-blue-light: #777;
 	--landing-success: #22c55e;
 	--landing-error: #ef4444;
-	--landing-border: rgba(255, 255, 255, 0.1);
-	--landing-border-focus: rgba(102, 102, 102, 0.5);
-	--landing-glass-bg: rgba(255, 255, 255, 0.03);
-	--landing-glass-border: rgba(255, 255, 255, 0.08);
-	--landing-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-	--landing-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.2);
+	--landing-border: rgb(255 255 255 / 10%);
+	--landing-border-focus: rgb(102 102 102 / 50%);
+	--landing-glass-bg: rgb(255 255 255 / 3%);
+	--landing-glass-border: rgb(255 255 255 / 8%);
+	--landing-shadow: 0 20px 40px rgb(0 0 0 / 30%);
+	--landing-shadow-sm: 0 4px 12px rgb(0 0 0 / 20%);
 }
 
 /* Global Resets */
@@ -53,7 +52,7 @@
 	background: var(--landing-bg-primary);
 	color: var(--landing-text-primary);
 	font-family:
-		'Inter',
+		Inter,
 		-apple-system,
 		BlinkMacSystemFont,
 		'Segoe UI',
@@ -83,7 +82,7 @@
 .landing-orb-1 {
 	width: 400px;
 	height: 400px;
-	background: radial-gradient(circle, rgba(102, 102, 102, 0.4) 0%, transparent 70%);
+	background: radial-gradient(circle, rgb(102 102 102 / 40%) 0%, transparent 70%);
 	top: -200px;
 	left: -200px;
 	animation-delay: 0s;
@@ -92,7 +91,7 @@
 .landing-orb-2 {
 	width: 600px;
 	height: 600px;
-	background: radial-gradient(circle, rgba(153, 153, 153, 0.3) 0%, transparent 70%);
+	background: radial-gradient(circle, rgb(153 153 153 / 30%) 0%, transparent 70%);
 	top: 40%;
 	right: -300px;
 	animation-delay: -10s;
@@ -101,7 +100,7 @@
 .landing-orb-3 {
 	width: 500px;
 	height: 500px;
-	background: radial-gradient(circle, rgba(119, 119, 119, 0.2) 0%, transparent 70%);
+	background: radial-gradient(circle, rgb(119 119 119 / 20%) 0%, transparent 70%);
 	bottom: -250px;
 	left: 20%;
 	animation-delay: -5s;
@@ -155,7 +154,7 @@
 	border-color: var(--landing-border-focus);
 	box-shadow:
 		var(--landing-shadow),
-		0 0 0 1px rgba(59, 130, 246, 0.2);
+		0 0 0 1px rgb(59 130 246 / 20%);
 }
 
 .landing-glass-card.small {
@@ -175,7 +174,7 @@
 	transition: all 0.3s ease;
 	text-decoration: none;
 	background: transparent;
-	font-family: 'Inter', sans-serif;
+	font-family: Inter, sans-serif;
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5rem;
@@ -191,7 +190,7 @@
 .landing-button.primary:hover {
 	background: var(--landing-accent-blue-hover);
 	transform: translateY(-1px);
-	box-shadow: 0 4px 12px rgba(102, 102, 102, 0.3);
+	box-shadow: 0 4px 12px rgb(102 102 102 / 30%);
 }
 
 .landing-button.secondary {
@@ -201,7 +200,7 @@
 
 .landing-button.secondary:hover {
 	color: var(--landing-text-primary);
-	background: rgba(255, 255, 255, 0.1);
+	background: rgb(255 255 255 / 10%);
 }
 
 .landing-button.outline {
@@ -211,7 +210,7 @@
 }
 
 .landing-button.outline:hover {
-	background: rgba(102, 102, 102, 0.1);
+	background: rgb(102 102 102 / 10%);
 	transform: translateY(-1px);
 }
 
@@ -234,12 +233,12 @@
 /* Form System */
 .landing-input {
 	border: 1px solid var(--landing-border);
-	background: rgba(255, 255, 255, 0.05);
+	background: rgb(255 255 255 / 5%);
 	color: var(--landing-text-primary);
 	padding: 0.875rem 1rem;
 	border-radius: 8px;
 	font-size: 0.95rem;
-	font-family: 'Inter', sans-serif;
+	font-family: Inter, sans-serif;
 	width: 100%;
 	box-sizing: border-box;
 	transition: all 0.2s ease;
@@ -253,8 +252,8 @@
 .landing-input:focus {
 	outline: none;
 	border-color: var(--landing-border-focus);
-	background: rgba(255, 255, 255, 0.08);
-	box-shadow: 0 0 0 3px rgba(102, 102, 102, 0.1);
+	background: rgb(255 255 255 / 8%);
+	box-shadow: 0 0 0 3px rgb(102 102 102 / 10%);
 }
 
 .landing-input:disabled {
@@ -275,7 +274,7 @@
 .landing-title {
 	font-size: clamp(2.5rem, 6vw, 4rem);
 	font-weight: 700;
-	margin: 0 0 1rem 0;
+	margin: 0 0 1rem;
 	color: var(--landing-text-primary);
 	line-height: 1.1;
 	letter-spacing: -0.02em;
@@ -291,14 +290,14 @@
 .landing-text-error {
 	color: var(--landing-error);
 	font-size: 0.875rem;
-	font-family: 'Inter', sans-serif;
+	font-family: Inter, sans-serif;
 	text-align: center;
 }
 
 .landing-text-success {
 	color: var(--landing-success);
 	font-size: 0.875rem;
-	font-family: 'Inter', sans-serif;
+	font-family: Inter, sans-serif;
 	text-align: center;
 }
 
@@ -320,7 +319,7 @@
 	left: 0;
 	right: 0;
 	z-index: 1000;
-	background: rgba(10, 11, 13, 0.8);
+	background: rgb(10 11 13 / 80%);
 	backdrop-filter: blur(20px);
 	border-bottom: 1px solid var(--landing-border);
 	transition: all 0.3s ease;
@@ -393,7 +392,7 @@
 		#f59e0b 100%
 	);
 	background-size: 200% 200%;
-	-webkit-background-clip: text;
+	background-clip: text;
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: landing-gradient-shift 8s ease infinite;
@@ -419,7 +418,7 @@
 }
 
 /* Responsive Design */
-@media (max-width: 768px) {
+@media (width <= 768px) {
 	.landing-header-content {
 		padding: 1rem;
 	}
@@ -438,7 +437,7 @@
 	}
 }
 
-@media (max-width: 480px) {
+@media (width <= 480px) {
 	.landing-container {
 		padding: 1rem;
 	}
@@ -448,7 +447,7 @@
 .landing-loader {
 	width: 20px;
 	height: 20px;
-	border: 2px solid rgba(255, 255, 255, 0.3);
+	border: 2px solid rgb(255 255 255 / 30%);
 	border-top: 2px solid var(--landing-text-primary);
 	border-radius: 50%;
 	animation: landing-spin 1s linear infinite;

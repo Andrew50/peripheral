@@ -343,11 +343,11 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 
 	// Prepare strategy creation task arguments
 	args := map[string]interface{}{
-		"user_id":        userID,
-		"prompt":         prompt,
-		"strategy_id":    strategyID,
-		"conversationID": conversationID,
-		"messageID":      messageID,
+		"user_id":         userID,
+		"prompt":          prompt,
+		"strategy_id":     strategyID,
+		"conversation_id": conversationID,
+		"message_id":      messageID,
 	}
 
 	// Queue the task using the new typed queue system and return result directly

@@ -25,6 +25,7 @@ from typing import List, Dict, Any, Optional, Tuple, Set
 from engine import execute_strategy
 from utils.context import Context
 from utils.error_utils import capture_exception
+from utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 
@@ -655,8 +656,9 @@ def execute_validation(
     Returns:
         Dict with validation result (success/error only)
     """
-    get_bar_data_function_calls = extract_get_bar_data_calls(strategy_code)
-    tickers_in_strategy_code = get_all_tickers_from_calls(get_bar_data_function_calls)
+    # Extract tickers using the shared ticker extractor
+    ticker_extraction = extract_tickers(strategy_code)
+    tickers_in_strategy_code = ticker_extraction["all_tickers"]
 
     # Use up to two tickers for fast validation if any were found
     symbols_for_validation = (tickers_in_strategy_code[:2]
@@ -766,21 +768,7 @@ def _format_detailed_error(error_info: Dict[str, Any]) -> str:
     return '\n'.join(formatted)
 
 
-def get_all_tickers_from_calls(get_bar_data_function_calls: List[Dict[str, Any]]) -> List[str]:
-    """
-    Extract all unique tickers from all get_bar_data calls
-    
-    Returns:
-        List of unique ticker symbols found in filters
-    """
-    all_tickers = set()
-
-    for call in get_bar_data_function_calls:
-        analysis = call.get("filter_analysis", {})
-        if analysis.get("has_tickers"):
-            specific_tickers = analysis.get("specific_tickers", [])
-            all_tickers.update(specific_tickers)
-    return sorted(list(all_tickers))
+# Note: get_all_tickers_from_calls function removed - now using shared utils.ticker_extractor.extract_tickers
 
 def get_max_timeframe_and_min_bars(get_bar_data_function_calls: List[Dict[str, Any]]) -> Tuple[Optional[str], int]:
     """

@@ -59,11 +59,11 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 
 	// Build args map for queue
 	queueArgs := map[string]interface{}{
-		"user_id":        userID,
-		"prompt":         args.Prompt,
-		"data":           args.Data,
-		"conversationID": conversationID,
-		"messageID":      messageID,
+		"user_id":         userID,
+		"prompt":          args.Prompt,
+		"data":            args.Data,
+		"conversation_id": conversationID,
+		"message_id":      messageID,
 	}
 
 	// Use standard queue with progress callback

@@ -16,6 +16,7 @@ from utils.strategy_crud import fetch_strategy_code, save_strategy
 from utils.error_utils import capture_exception
 from utils.errors import ModelGenerationError
 from utils.data_accessors import get_available_filter_values
+from utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 
@@ -507,6 +508,13 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
     min_timeframe = _detect_min_timeframe(strategy_code)
     logger.info("Detected minimum timeframe for strategy: %s", min_timeframe)
 
+    # Extract ticker universe from the generated strategy code
+    ticker_extraction = extract_tickers(strategy_code)
+    alert_universe_full = ticker_extraction["all_tickers"]
+    is_global_strategy = ticker_extraction["has_global"]
+    
+    logger.info("Extracted ticker universe: %s (global: %s)", alert_universe_full, is_global_strategy)
+
     description = _extract_description(strategy_code, prompt)
     if is_edit:
         name = existing_strategy.get('name', 'Strategy')
@@ -521,7 +529,8 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
         prompt=prompt,
         python_code=strategy_code,
         strategy_id=strategy_id if is_edit else None,
-        min_timeframe=min_timeframe
+        min_timeframe=min_timeframe,
+        alert_universe_full=alert_universe_full if not is_global_strategy else None
     )
 
     return {
