@@ -213,7 +213,7 @@
     }
 
     .mobile-bottom-nav {
-        height: 70px;
+        height: 60px;
         background: #121212;
         border-top: 4px solid var(--c1);
         display: flex;
@@ -230,7 +230,7 @@
         border: none;
         color: rgba(255, 255, 255, 0.5);
         cursor: pointer;
-        padding: 8px 4px 6px 4px;
+        padding: 4px;
         transition: all 0.2s ease;
         font-size: 14px;
         font-family: 'Instrument Sans', sans-serif;
@@ -243,17 +243,17 @@
     }
 
     .mobile-nav-tab svg {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
     }
     .mobile-nav-tab svg.watchlist-icon {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
     }
 
     .mobile-nav-tab svg.chart-icon {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
     }
 
     /* Mobile chart wrapper */
