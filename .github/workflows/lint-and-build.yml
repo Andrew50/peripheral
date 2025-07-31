@@ -459,6 +459,7 @@ jobs:
       # Use a workspace-local GOPATH so the non-root UID can write to it
       GOPATH: ${{ github.workspace }}/.go
       GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
+      GOCACHE: ${{ github.workspace }}/.go/cache
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
@@ -474,7 +475,7 @@ jobs:
         with:
           path: |
             ${{ env.GOPATH }}/pkg/mod
-            ~/.cache/go-build
+            ${{ env.GOCACHE }}
             ~/.cache/golangci-lint # Cache for golangci-lint
             ${{ env.GOPATH }}/bin
           key: ${{ runner.os }}-go-${{ hashFiles('services/backend/go.sum') }}
