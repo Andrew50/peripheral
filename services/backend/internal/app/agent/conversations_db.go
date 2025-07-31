@@ -3,6 +3,7 @@ package agent
 import (
 	"backend/internal/data"
 	"backend/internal/services/socket"
+	"backend/internal/services/telegram"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -398,6 +399,14 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	if err != nil {
 		return "", "", fmt.Errorf("failed to save message to database: %w", err)
 	}
+	go func() {
+		var email string
+		err := conn.DB.QueryRow(ctx, "SELECT email from users where userid = $1", userID).Scan(&email)
+		if err != nil {
+			log.Printf("Failed to get user email: %v", err)
+		}
+		telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s sent query: %s", email, query))
+	}()
 
 	return conversationID, messageID, nil
 }
