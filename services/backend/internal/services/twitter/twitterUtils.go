@@ -76,7 +76,10 @@ func SendTweetReplyToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPe
 	if resp.StatusCode != http.StatusCreated { // 201 on success
 		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
 		if resp.StatusCode == http.StatusTooManyRequests {
-			telegram.SendTelegramAskPeripheralTweets(replyToTweetID, tweet.Text, tweet.Image)
+			err = telegram.SendTelegramAskPeripheralTweets(replyToTweetID, tweet.Text, tweet.Image)
+			if err != nil {
+				log.Printf("Failed to send Telegram message: %v", err)
+			}
 		}
 		return
 	}

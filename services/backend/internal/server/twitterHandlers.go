@@ -249,7 +249,9 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 			}
 		} else if ruleTag == "Ask Peripheral" {
 			fmt.Println("Processing @Ask Peripheral tweet", tweet)
-			twitter.GenerateAskPeripheralTweet(conn, tweet)
+			if err := twitter.GenerateAskPeripheralTweet(conn, tweet); err != nil {
+				log.Printf("Error generating Ask Peripheral tweet: %v", err)
+			}
 		}
 	}
 	return nil

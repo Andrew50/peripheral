@@ -4,12 +4,12 @@ Centralized connection management for Redis and Database connections
 """
 
 import os
-import json
 import logging
+from contextlib import contextmanager
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
-from datetime import datetime
+
 import redis
 from openai import OpenAI
 from google import genai
@@ -227,7 +227,7 @@ class Conn:
             try:
                 self.db_conn.rollback()
             except Exception as rollback_error:
-                logger.warning(f"⚠️ Failed to rollback transaction after non-database error: {rollback_error}")
+                logger.warning("⚠️ Failed to rollback transaction after non-database error: %s", rollback_error)
 
             raise  # Re-raise the original error
 

@@ -1,9 +1,8 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple
 import ast
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
-from typing import Any, Dict, List, Optional, Tuple
 
 
 
@@ -61,7 +60,7 @@ def _extract_string_value(node: ast.AST) -> Optional[str]:
     try:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
-        elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+        if isinstance(node, ast.Str):  # Python < 3.8 compatibility
             return node.s
     except Exception as e:
         logger.warning("_extract_string_value: %s", e)
@@ -72,7 +71,7 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
     try:
         if isinstance(node, ast.Constant) and isinstance(node.value, int):
             return node.value
-        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+        if isinstance(node, ast.Num):  # Python < 3.8 compatibility
             if isinstance(node.n, int):
                 return node.n
     except Exception as e:
