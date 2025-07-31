@@ -456,7 +456,8 @@ jobs:
       checks: write
       pull-requests: read
     env:
-      GOPATH: /go # Assuming standard GOPATH in container, or adjust as per your image
+      # Use a workspace-local GOPATH so the non-root UID can write to it
+      GOPATH: ${{ github.workspace }}/.go
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
