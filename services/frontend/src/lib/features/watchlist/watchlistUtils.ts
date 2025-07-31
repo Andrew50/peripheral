@@ -207,7 +207,7 @@ export function addInstanceToWatchlist(
 ) {
 	console.log('addInstanceToWatchlist', securityId, currentWatchlistId);
 	if (get(isPublicViewing)) {
-		showAuthModal('watchlists', 'signup');
+		window.location.href = '/signup';
 		return;
 	}
 
@@ -304,7 +304,7 @@ export function addInstanceToWatchlist(
 export function addMultipleInstancesToWatchlist(currentWatchlistId?: number) {
 	console.log('addMultipleInstancesToWatchlist', currentWatchlistId);
 	if (get(isPublicViewing)) {
-		showAuthModal('watchlists', 'signup');
+		window.location.href = '/signup';
 		return;
 	}
 

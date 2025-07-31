@@ -720,6 +720,9 @@
 			}
 			queuedLoad = null;
 
+			// Initialize legend with latest bar data
+			_refreshLegendWithLatestCandleData();
+
 			// Fix the SMA data type issues
 			const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
 			const sma10Data = smaResults.get(10);
