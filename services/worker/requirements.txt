@@ -31,7 +31,6 @@ tqdm>=4.65.0
 
 # Development tools (optional)
 black>=23.0.0
-watchdog>=3.0.0  # For hot reload file monitoring
 flake8>=6.0.0  # Code style checker
 pylint>=3.0.0  # Comprehensive linting
 mypy>=1.0.0  # Static type checking

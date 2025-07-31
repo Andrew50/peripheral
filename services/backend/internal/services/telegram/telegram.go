@@ -71,7 +71,6 @@ func SendTelegramUserUsageMessage(msg string) error {
 			return fmt.Errorf("failed to initialize Telegram bot: %w", err)
 		}
 	}
-	fmt.Println("Sending Telegram message to chat ID:", userChatID)
 	recipient := telebot.ChatID(userChatID)
 	_, err := telegramUserNotificationBot.Send(recipient, msg)
 	if err != nil {

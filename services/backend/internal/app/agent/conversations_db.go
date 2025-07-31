@@ -3,6 +3,7 @@ package agent
 import (
 	"backend/internal/data"
 	"backend/internal/services/socket"
+	"backend/internal/services/telegram"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -398,6 +399,14 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	if err != nil {
 		return "", "", fmt.Errorf("failed to save message to database: %w", err)
 	}
+	go func() {
+		var email string
+		err := conn.DB.QueryRow(ctx, "SELECT email from users where userid = $1", userID).Scan(&email)
+		if err != nil {
+			log.Printf("Failed to get user email: %v", err)
+		}
+		telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s sent query: %s", email, query))
+	}()
 
 	return conversationID, messageID, nil
 }
@@ -615,15 +624,24 @@ func CancelPendingMessage(conn *data.Conn, userID int, args json.RawMessage) (in
 	var request struct {
 		ConversationID string `json:"conversation_id"`
 		Query          string `json:"query"`
+		MessageID      string `json:"message_id,omitempty"` // Optional message ID
 	}
 
 	if err := json.Unmarshal(args, &request); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
 
-	// Delete the pending message
-	if err := DeletePendingMessageInConversation(context.Background(), conn, userID, request.ConversationID, request.Query); err != nil {
-		return nil, fmt.Errorf("error cancelling pending message: %w", err)
+	// If we have a message ID, use MarkPendingMessageAsError to preserve the row
+	// Otherwise fall back to deletion for backward compatibility
+	if request.MessageID != "" {
+		if err := MarkPendingMessageAsError(context.Background(), conn, userID, request.ConversationID, request.MessageID, "Request cancelled"); err != nil {
+			return nil, fmt.Errorf("error marking pending message as error: %w", err)
+		}
+	} else {
+		// Fallback to deletion when no message ID is provided
+		if err := DeletePendingMessageInConversation(context.Background(), conn, userID, request.ConversationID, request.Query); err != nil {
+			return nil, fmt.Errorf("error cancelling pending message: %w", err)
+		}
 	}
 
 	return map[string]interface{}{

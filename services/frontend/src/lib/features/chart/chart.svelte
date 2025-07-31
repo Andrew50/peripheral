@@ -2622,8 +2622,6 @@
 	{/if}
 </div>
 
-<!-- Why Moving Popup -->
-<!-- <WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} /> -->
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
@@ -2719,15 +2717,16 @@
 <style>
 	.event-info {
 		position: absolute;
-		background: rgba(37, 37, 37, 0.8);
+		background: rgb(37 37 37 / 80%);
 		border: none;
 		border-radius: 8px;
-		padding: 8px 10px 10px 10px;
+		padding: 8px 10px 10px;
 		z-index: 1000;
+
 		/* Width and max-height now set via inline styles for dynamic sizing */
 		min-width: 200px;
 		overflow-y: auto;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 4px 12px rgb(0 0 0 / 50%);
 		word-wrap: break-word;
 		hyphens: auto;
 	}
@@ -2742,6 +2741,7 @@
 		margin-bottom: 8px;
 		position: relative;
 	}
+
 	.close-button {
 		background: transparent;
 		border: none;
@@ -2751,9 +2751,11 @@
 		padding: 4px;
 		transition: color 0.2s;
 	}
+
 	.close-button:hover {
 		color: #fff;
 	}
+
 	.event-row {
 		display: flex;
 		flex-direction: column;
@@ -2764,9 +2766,11 @@
 		text-decoration: none;
 		transition: background 0.2s;
 	}
+
 	.event-row:hover {
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 	}
+
 	.event-type {
 		font-size: 0.95rem;
 		color: #fff;
@@ -2774,22 +2778,26 @@
 		word-wrap: break-word;
 		line-height: 1.3;
 	}
+
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
 		line-height: 1.2;
 	}
+
 	.dividend-details {
 		display: flex;
 		flex-direction: column;
 		gap: 0.2rem;
 	}
+
 	.event-actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: flex-start;
 	}
+
 	/* Sleek button and filing styles */
 	.btn {
 		display: inline-flex;
@@ -2804,32 +2812,39 @@
 			background-color 0.2s ease,
 			color 0.2s ease;
 	}
+
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);
 		color: #fff;
 		border: none;
 	}
+
 	.btn-primary:hover {
 		background-color: var(--accent-color-dark, #336ecf);
 	}
+
 	.btn-secondary {
 		background-color: transparent;
 		color: var(--text-primary, #fff);
 		border: 1px solid var(--accent-color, #3a8bf7);
 	}
+
 	.btn-secondary:hover {
 		background-color: var(--accent-color, #3a8bf7);
 		color: #fff;
 	}
+
 	.btn-tertiary {
 		background-color: transparent;
 		color: var(--text-secondary, #aaa);
 		border: 1px solid var(--ui-border, #444);
 	}
+
 	.btn-tertiary:hover {
-		background-color: rgba(255, 255, 255, 0.1);
+		background-color: rgb(255 255 255 / 10%);
 		color: #fff;
 	}
+
 	.filing-row {
 		display: flex;
 		flex-direction: column;
@@ -2837,6 +2852,7 @@
 		padding: 0.5rem 0;
 		border-bottom: 1px solid #444;
 	}
+
 	.filing-info .event-type {
 		font-size: 1rem;
 		font-weight: 600;
@@ -2844,12 +2860,14 @@
 		word-wrap: break-word;
 		line-height: 1.2;
 	}
+
 	.filing-row .event-actions {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
 		gap: 0.4rem;
 	}
+
 	.btn-sm {
 		padding: 0.15rem 0.3rem;
 		font-size: 0.7rem;
@@ -2858,11 +2876,8 @@
 
 	.chart-switching-overlay {
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.4);
+		inset: 0;
+		background: rgb(0 0 0 / 40%);
 		z-index: 500; /* Above chart but below legend and UI elements */
 		opacity: 0;
 		animation: fadeInOverlay 0.2s ease-out forwards;
@@ -2873,10 +2888,12 @@
 		from {
 			opacity: 0;
 		}
+
 		to {
 			opacity: 1;
 		}
 	}
+
 	/* Chart logo styles positioned at bottom right where axes meet */
 	.chart-logo-container {
 		position: absolute;
@@ -2913,7 +2930,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: rgba(255, 255, 255, 0.8);
+		color: rgb(255 255 255 / 80%);
 		font-size: 10px;
 		font-weight: bold;
 		font-family: monospace;

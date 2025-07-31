@@ -292,6 +292,7 @@ function initStoresWithAuth() {
 
 			privateRequest<Strategy[]>('getStrategies', {})
 				.then((v: Strategy[]) => {
+					console.log(v)
 					if (!v) {
 						strategies.set([]);
 						return;

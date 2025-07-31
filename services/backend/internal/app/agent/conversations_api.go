@@ -419,7 +419,6 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-	fmt.Println("Getting public conversation for conversationID:", args.ConversationID)
 	var isPublic bool
 	var userID int
 	var title string
@@ -585,6 +584,7 @@ func RetryMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{
 	if status == "pending" {
 		return nil, fmt.Errorf("cannot retry a message that is currently being processed")
 	}
+	// Allow retrying error messages as well as completed ones
 
 	// Archive all messages after this one (preserve them for logging with retry reason)
 	archiveSQL := `UPDATE conversation_messages SET archived = TRUE, archive_reason = $1 WHERE conversation_id = $2 AND message_order >= $3 AND archived = FALSE`

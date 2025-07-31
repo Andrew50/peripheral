@@ -349,7 +349,7 @@
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 10px;
 		background: transparent;
 		border-radius: 6px;
@@ -363,26 +363,26 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.metadata-button:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.metadata-button:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 	}
 
 	/* Specific style adjustments for symbol button */
 	.symbol.metadata-button {
 		font-size: 14px;
 		line-height: 20px;
-		color: #ffffff;
+		color: #fff;
 		padding: 6px 12px;
 		gap: 4px;
 	}
@@ -415,11 +415,11 @@
 	}
 
 	.timeframe-preset-button.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 	/* Styles for the custom timeframe '...' button */
@@ -434,11 +434,11 @@
 	}
 
 	.timeframe-custom-button.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 	/* Calendar button styles */
@@ -463,16 +463,16 @@
 	.divider {
 		width: 1px;
 		height: 28px;
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		margin: 0 6px;
 		flex-shrink: 0;
 	}
 
 	/* Upgrade button styles */
 	.upgrade-button {
-		background: #cccccc;
-		color: #333333 !important;
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: #ccc;
+		color: #333 !important;
+		border: 1px solid rgb(255 255 255 / 20%);
 		transition: all 0.2s ease;
 		padding: 2px 6px;
 		border-radius: 6px;
@@ -490,8 +490,9 @@
 	}
 
 	.upgrade-button:hover {
-		background: #ffffff;
+		background: #fff;
 	}
+
 	.upgrade-icon {
 		width: 20px;
 		height: 20px;

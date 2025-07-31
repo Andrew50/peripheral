@@ -601,12 +601,12 @@
 	.drawing-menu {
 		/* Position will be set dynamically via inline styles */
 		z-index: 9000;
-		background-color: rgba(20, 20, 20, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background-color: rgb(20 20 20 / 90%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 6px;
 		padding: 10px;
 		width: 200px;
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 4px 8px rgb(0 0 0 / 30%);
 		overflow: auto; /* Add scrolling if content becomes too large */
 	}
 
@@ -625,7 +625,7 @@
 
 	.delete-button {
 		width: 100%;
-		background-color: rgba(220, 53, 69, 0.7);
+		background-color: rgb(220 53 69 / 70%);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -636,7 +636,7 @@
 	}
 
 	.delete-button:hover {
-		background-color: rgba(220, 53, 69, 1);
+		background-color: rgb(220 53 69 / 100%);
 	}
 
 	.price-input-container {
@@ -646,9 +646,9 @@
 	.price-input,
 	.line-width-select {
 		width: 100%;
-		background-color: rgba(30, 30, 30, 0.7);
+		background-color: rgb(30 30 30 / 70%);
 		color: white;
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
 		padding: 5px;
 		font-size: 12px;
@@ -684,7 +684,7 @@
 	.preview-section {
 		margin-top: 10px;
 		padding: 8px;
-		background-color: rgba(0, 0, 0, 0.3);
+		background-color: rgb(0 0 0 / 30%);
 		border-radius: 4px;
 		display: flex;
 		align-items: center;
@@ -694,23 +694,5 @@
 	.line-preview {
 		width: 100%;
 		min-height: 1px;
-	}
-
-	.alert-info {
-		padding: 8px 0 0 0;
-		text-align: center;
-	}
-
-	.alert-price {
-		font-size: 14px;
-		font-weight: bold;
-		color: #ffb74d; /* Orange color matching alert lines */
-		margin-bottom: 4px;
-	}
-
-	.alert-instruction {
-		font-size: 11px;
-		color: #ccc;
-		font-style: italic;
 	}
 </style>

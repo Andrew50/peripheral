@@ -105,6 +105,7 @@
 	let currentWebSocketCancel: (() => void) | null = null;
 	let requestCancelled = false;
 	let currentProcessingQuery = ''; // Track the query currently being processed
+	let currentProcessingMessageId = ''; // Track the message ID currently being processed
 
 	// Message editing state
 	let editingMessageId = '';
@@ -786,6 +787,7 @@
 			currentWebSocketCancel = null;
 			requestCancelled = false;
 			currentProcessingQuery = ''; // Clear the processing query
+			currentProcessingMessageId = ''; // Clear the processing message ID
 		}
 	}
 
@@ -796,7 +798,8 @@
 			if (conversationIdToUse && query) {
 				await privateRequest('cancelPendingMessage', {
 					conversation_id: conversationIdToUse,
-					query: query
+					query: query,
+					message_id: currentProcessingMessageId || '' // Include message ID if available
 				});
 			}
 		} catch (cleanupError) {
@@ -822,6 +825,13 @@
 				currentAbortController.abort();
 			}
 
+			// Cancel server-side chat processing
+			try {
+				await privateRequest('stopChat', {});
+			} catch (e) {
+				console.warn('stopChat failed:', e);
+			}
+
 			// Clean up pending message on backend using the tracked query
 			if (currentProcessingQuery) {
 				await cleanupPendingMessage(currentProcessingQuery);
@@ -835,6 +845,7 @@
 
 			isLoading = false;
 			currentAbortController = null;
+			currentProcessingMessageId = ''; // Clear the processing message ID
 		}
 	}
 
@@ -1204,6 +1215,23 @@
 		}
 
 		try {
+			// Check if we have a conversation ID - if not, treat as new chat
+			if (!currentConversationId) {
+				console.warn(
+					'No conversation ID found for retry - treating as new chat since the original likely never got processed'
+				);
+
+				// Set the input value and context from the user message
+				inputValue.set(userMessage.content);
+				contextItems.update((currentItems) => {
+					return userMessage.contextItems || [];
+				});
+
+				await tick();
+				handleSubmit();
+				return;
+			}
+
 			// Always use backend retry API
 			const response = await privateRequest('retryMessage', {
 				conversation_id: currentConversationId,
@@ -1263,6 +1291,9 @@
 		if (!currentConversationId && conversationId) {
 			currentConversationId = conversationId;
 		}
+
+		// Track the current processing message ID for cleanup purposes
+		currentProcessingMessageId = messageId;
 	}
 
 	// Helper to translate technical error messages into user-friendly text

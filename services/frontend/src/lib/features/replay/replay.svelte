@@ -85,7 +85,7 @@
 		flex-wrap: wrap;
 		gap: clamp(0.5rem, 1vw, 0.75rem);
 		padding: clamp(0.75rem, 2vw, 1rem);
-		background: var(--ui-bg-secondary, rgba(30, 41, 59, 0.5));
+		background: var(--ui-bg-secondary, rgb(30 41 59 / 50%));
 		border-radius: clamp(4px, 0.5vw, 6px);
 		align-items: center;
 	}
@@ -94,15 +94,15 @@
 		padding: clamp(0.375rem, 1vw, 0.5rem) clamp(0.75rem, 1.5vw, 1rem);
 		border-radius: clamp(4px, 0.5vw, 6px);
 		font-size: clamp(0.875rem, 1vw, 1rem);
-		background: var(--ui-bg-primary, rgba(20, 30, 45, 0.7));
+		background: var(--ui-bg-primary, rgb(20 30 45 / 70%));
 		color: var(--text-primary, white);
-		border: 1px solid var(--ui-border, rgba(59, 130, 246, 0.2));
+		border: 1px solid var(--ui-border, rgb(59 130 246 / 20%));
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
 
 	.replay-button:hover {
-		background: var(--ui-bg-hover, rgba(40, 50, 70, 0.7));
+		background: var(--ui-bg-hover, rgb(40 50 70 / 70%));
 		transform: translateY(-1px);
 	}
 
@@ -116,12 +116,12 @@
 		width: clamp(3rem, 6vw, 4rem);
 		padding: clamp(0.25rem, 0.5vw, 0.375rem);
 		border-radius: clamp(3px, 0.4vw, 4px);
-		border: 1px solid var(--ui-border, rgba(59, 130, 246, 0.2));
-		background: var(--ui-bg-primary, rgba(20, 30, 45, 0.7));
+		border: 1px solid var(--ui-border, rgb(59 130 246 / 20%));
+		background: var(--ui-bg-primary, rgb(20 30 45 / 70%));
 		color: var(--text-primary, white);
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.replay-controls {
 			flex-direction: column;
 			align-items: stretch;

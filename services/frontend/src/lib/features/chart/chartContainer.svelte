@@ -66,10 +66,10 @@
 
 	/* Add responsive focus indicator for accessibility */
 	.chart-container:focus {
-		box-shadow: inset 0 0 0 clamp(1px, 0.2vw, 2px) var(--ui-accent, rgba(59, 130, 246, 0.5));
+		box-shadow: inset 0 0 0 clamp(1px, 0.2vw, 2px) var(--ui-accent, rgb(59 130 246 / 50%));
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		/* Adjust for smaller screens if needed */
 		.chart-container {
 			overflow: hidden;

@@ -2,11 +2,11 @@
 
 :root {
 	--glass-radius: 36px;
-	--glass-bg: rgba(30, 30, 30, 0.25);
-	--glass-border: rgba(255, 255, 255, 0.08);
-	--glass-highlight: rgba(255, 255, 255, 0.15);
-	--glass-shade: rgba(255, 255, 255, 0.03);
-	--glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+	--glass-bg: rgb(30 30 30 / 25%);
+	--glass-border: rgb(255 255 255 / 8%);
+	--glass-highlight: rgb(255 255 255 / 15%);
+	--glass-shade: rgb(255 255 255 / 3%);
+	--glass-shadow: 0 4px 16px rgb(0 0 0 / 25%);
 	--glass-blur: blur(8px) saturate(120%);
 }
 
@@ -17,7 +17,6 @@
 	border: 1px solid var(--glass-border);
 	border-radius: var(--glass-radius);
 	backdrop-filter: var(--glass-blur);
-	-webkit-backdrop-filter: var(--glass-blur);
 	box-shadow:
 		var(--glass-shadow),
 		inset 0 1px 0 var(--glass-highlight),
@@ -33,9 +32,9 @@
 	border-radius: inherit;
 	background: linear-gradient(
 		to bottom,
-		rgba(255, 255, 255, 0.06) 0%,
-		rgba(255, 255, 255, 0.02) 30%,
-		rgba(255, 255, 255, 0) 60%
+		rgb(255 255 255 / 6%) 0%,
+		rgb(255 255 255 / 2%) 30%,
+		rgb(255 255 255 / 0%) 60%
 	);
 	pointer-events: none;
 	z-index: 0;
@@ -66,39 +65,40 @@
 
 /* Glass with different opacity levels */
 .glass--light {
-	--glass-bg: rgba(30, 30, 30, 0.25);
+	--glass-bg: rgb(30 30 30 / 25%);
 }
 
 .glass--medium {
-	--glass-bg: rgba(30, 30, 30, 0.45);
+	--glass-bg: rgb(30 30 30 / 45%);
 }
 
 .glass--dark {
-	--glass-bg: rgba(30, 30, 30, 0.65);
+	--glass-bg: rgb(30 30 30 / 65%);
 }
 
 /* Glass for light themes */
 .glass--light-theme {
-	--glass-bg: rgba(255, 255, 255, 0.45);
-	--glass-border: rgba(0, 0, 0, 0.12);
-	--glass-highlight: rgba(255, 255, 255, 0.8);
-	--glass-shade: rgba(0, 0, 0, 0.06);
-	--glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+	--glass-bg: rgb(255 255 255 / 45%);
+	--glass-border: rgb(0 0 0 / 12%);
+	--glass-highlight: rgb(255 255 255 / 80%);
+	--glass-shade: rgb(0 0 0 / 6%);
+	--glass-shadow: 0 8px 32px rgb(0 0 0 / 15%);
 }
 
 .glass--light-theme::before {
 	background: linear-gradient(
 		to bottom,
-		rgba(255, 255, 255, 0.2) 0%,
-		rgba(255, 255, 255, 0.08) 30%,
-		rgba(255, 255, 255, 0) 60%
+		rgb(255 255 255 / 20%) 0%,
+		rgb(255 255 255 / 8%) 30%,
+		rgb(255 255 255 / 0%) 60%
 	);
 }
 
 /* Responsive glass adjustments */
-@media (max-width: 768px) {
+@media (width <= 768px) {
 	.glass--responsive {
 		--glass-radius: 12px;
+
 		border-radius: var(--glass-radius);
 	}
 

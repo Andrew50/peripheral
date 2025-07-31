@@ -183,13 +183,13 @@
 		left: 10px;
 		padding: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: #ffffff;
+		color: #fff;
 		z-index: 5;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
 		user-select: none;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		background: transparent;
 		border: none;
 	}
@@ -219,11 +219,11 @@
 	.label {
 		font-size: 12px;
 		line-height: 16px;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-weight: 500;
 		min-width: 35px;
 		flex-shrink: 0;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.value {
@@ -236,12 +236,12 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
-		color: #ffffff;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		color: #fff;
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 	}
 
 	/* Ensure legend stays within chart bounds */
-	@media (max-width: 400px) {
+	@media (width <= 400px) {
 		.legend {
 			width: calc(100% - 20px);
 			min-width: 260px;

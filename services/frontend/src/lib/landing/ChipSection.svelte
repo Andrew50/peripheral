@@ -84,6 +84,7 @@
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
+
   .chip-section {
     width: 100%;
     display: flex;
@@ -96,7 +97,7 @@
     font-size: clamp(3rem, 7vw, 4rem);
     font-weight: 500;
     margin: 0;
-    color: #ffffff;
+    color: #fff;
     position: relative;
     font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -138,7 +139,7 @@
     gap: 0.4rem;
     padding: 0.4rem 0.7rem;
     background: white;
-    border: 1px solid rgba(11, 46, 51, 0.15);
+    border: 1px solid rgb(11 46 51 / 15%);
     border-radius: 9999px;
     font-size: 0.95rem;
     color: black;
@@ -150,7 +151,7 @@
   }
 
   .chip:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 8%);
   }
 
   .chip-icon {
@@ -167,6 +168,7 @@
     0% {
       transform: translateX(0);
     }
+
     100% {
       transform: translateX(-50%);
     }
@@ -176,13 +178,14 @@
     0% {
       transform: translateX(-50%);
     }
+
     100% {
       transform: translateX(0);
     }
   }
 
   /* Responsive: slower animation and smaller chips on mobile */
-  @media (max-width: 768px) {
+  @media (width <= 768px) {
     .chip-rows {
       gap: 0.8rem; /* Reduced gap for more rows */
     }

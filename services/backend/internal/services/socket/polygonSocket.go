@@ -350,7 +350,9 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 				symbol = msg.Symbol
 				timestamp = msg.Timestamp
 			default:
-				log.Printf("⚠️ Unknown message type received: %T", msg)
+				if msg != nil {
+					log.Printf("⚠️ Unknown message type received: %T", msg)
+				}
 				continue
 			}
 
@@ -381,6 +383,11 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 
 					// Mark ticker as stale for screener refresh
 					flagTickerStale(symbol)
+					// Mark ticker as updated for alert processing
+					if err := markTickerUpdatedForAlerts(p.conn, symbol, msg.EndTimestamp); err != nil {
+						// Log error but don't fail the entire trade processing
+						log.Printf("⚠️ Failed to mark ticker %s as updated for alerts: %v", symbol, err)
+					}
 				} else {
 					//log.Printf("📊 Skipping EquityAgg for %s (duration=%dms, need 1000ms)",
 					//msg.Symbol, msg.EndTimestamp-msg.StartTimestamp)
@@ -548,4 +555,11 @@ func initTickerToSecurityIDMap(conn *data.Conn) error {
 		return err
 	}
 	return nil
+}
+
+// markTickerUpdatedForAlerts marks a ticker as updated for alert processing
+func markTickerUpdatedForAlerts(conn *data.Conn, ticker string, timestampNanos int64) error {
+	// Convert nanosecond timestamp to milliseconds for Redis storage
+	timestampMs := timestampNanos / 1000000
+	return data.MarkTickerUpdated(conn, ticker, timestampMs)
 }

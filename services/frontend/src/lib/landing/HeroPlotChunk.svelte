@@ -184,7 +184,7 @@
 	}
 
 	/* Mobile adjustments for hero plots */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.hero-plot-content {
 			min-height: 200px;
 			height: 200px;
@@ -196,7 +196,7 @@
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.hero-plot-content {
 			min-height: 180px;
 			height: 180px;

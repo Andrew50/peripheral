@@ -577,8 +577,7 @@
 
 	.table-body {
 		flex-grow: 1;
-		overflow-y: auto;
-		overflow-x: hidden;
+		overflow: hidden auto;
 		width: 100%;
 	}
 
@@ -651,14 +650,14 @@
 	}
 
 	.table-body::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.2);
+		background-color: rgb(255 255 255 / 20%);
 		border-radius: 3px;
 		border: 1px solid transparent;
 		background-clip: content-box;
 	}
 
 	.table-body::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.4);
+		background-color: rgb(255 255 255 / 40%);
 	}
 
 	/* Body cells */
@@ -717,11 +716,8 @@
 	table.sorting::after {
 		content: '';
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.05);
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
 		pointer-events: none;
 	}
 
@@ -751,14 +747,14 @@
 		border: none;
 		border-radius: 6px;
 		cursor: pointer;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 500;
 		transition: all 0.2s ease;
 	}
 
 	.error button:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
 	}
 
 	.ticker-icon {
@@ -797,6 +793,7 @@
 		align-items: center;
 		justify-content: center;
 	}
+
 	.flag-icon svg {
 		width: 16px;
 		height: 16px;
@@ -804,6 +801,7 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
+
 	/* First column (Flag column) - minimize left space */
 	th:first-child,
 	td:first-child {
@@ -881,7 +879,7 @@
 	}
 
 	.delete-button:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 10%);
 		color: var(--text-secondary);
 	}
 
@@ -896,15 +894,15 @@
 		content: '';
 		position: absolute;
 		bottom: -1px;
-		left: 0px;
-		right: 0px;
+		left: 0;
+		right: 0;
 		height: 1px;
-		background: rgba(255, 255, 255, 0.08);
+		background: rgb(255 255 255 / 8%);
 		border-radius: 0.5px;
 	}
 
 	tbody tr:hover {
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 		border-radius: 6px;
 	}
 

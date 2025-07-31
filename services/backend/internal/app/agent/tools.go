@@ -525,7 +525,7 @@ var (
 					Required: []string{"strategyId"},
 				},
 			},
-			Function:         wrapWithContext(strategy.RunScreening),
+			Function:         strategy.RunScreening,
 			StatusMessage:    "Running screener",
 			UserSpecificTool: false,
 		},
@@ -672,7 +672,7 @@ var (
 		"getStrategies": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStrategies",
-				Description: "Retrieves all strategy names and ids for the current user. Use this to fetch unknown strategy ids.",
+				Description: "Retrieves all strategies for the current user, including strategy names, ids, and alert configuration (AlertActive, alertThreshold, alertUniverse). Use this to fetch unknown strategy ids or to get strategy alert information.",
 				Parameters: &genai.Schema{
 					Type:       genai.TypeObject,
 					Properties: map[string]*genai.Schema{},
@@ -798,20 +798,15 @@ var (
 		"getAlerts": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getAlerts",
-				Description: "Get current alerts for the user. Can filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types.",
+				Description: "Get current price alerts for the user. For strategy alerts, use getStrategies instead.",
 				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"alertType": {
-							Type:        genai.TypeString,
-							Description: "Optional. Filter by alert type: 'price' for price alerts, 'strategy' for strategy alerts, or 'all' for both types. Defaults to 'all'.",
-						},
-					},
-					Required: []string{},
+					Type:       genai.TypeObject,
+					Properties: map[string]*genai.Schema{},
+					Required:   []string{},
 				},
 			},
 			Function:         wrapWithContext(alerts.GetAlerts),
-			StatusMessage:    "Fetching alerts",
+			StatusMessage:    "Fetching price alerts",
 			UserSpecificTool: true,
 		},
 		"getAlertLogs": {
