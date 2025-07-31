@@ -15,15 +15,15 @@ import threading
 import time
 from datetime import datetime
 
-from agent import python_agent
-from backtest import backtest
-from screen import screen
-from alert import alert
-from generator import create_strategy
-from utils.conn import Conn
-from utils.context import Context, NoSubscribersException
-from utils.error_utils import capture_exception
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+from src.agent import python_agent
+from src.backtest import backtest
+from src.screen import screen
+from src.alert import alert
+from src.generator import create_strategy
+from src.utils.conn import Conn
+from src.utils.context import Context, NoSubscribersException
+from src.utils.error_utils import capture_exception
 
 # Configure logging
 logging.basicConfig(
