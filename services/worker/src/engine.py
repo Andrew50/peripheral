@@ -27,7 +27,7 @@ from utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
-MAX_INSTANCES = 15000
+MAX_INSTANCES = 15000  # noqa: C0103
 
 class TrackedList(list):
     """List that tracks total instances across all TrackedList objects"""
@@ -105,7 +105,7 @@ def execute_strategy(
     strategy_prints = ""
     # Execute strategy code in restricted environment
     # nolint B102 - exec necessary for strategy execution with proper sandboxing
-    exec(strategy_code, safe_globals, safe_locals)  # nosec  # noqa: S102 - exec necessary for strategy execution with proper sandboxing
+    exec(strategy_code, safe_globals, safe_locals)  # nosec  # noqa: S102  # noqa: W0122
 
     strategy_func = safe_locals.get('strategy')
     if not strategy_func or not callable(strategy_func):
@@ -122,7 +122,7 @@ def execute_strategy(
         with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(plots_collection, response_images, strategy_id, version):
             instances = strategy_func()
     
-    except Exception as strategy_error:
+    except Exception as strategy_error:  # noqa: W0718 - broad exception caught intentionally
         error_obj = capture_exception(logger, strategy_error)
         return [], "", [], [], error_obj
 
@@ -151,7 +151,7 @@ def execute_strategy(
 
 
 
-def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIntersect: List[str]) -> Dict[str, Any]:
+def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_intersect: List[str]) -> Dict[str, Any]:
     """Create safe execution environment with data accessor functions"""
 
     # Initialize plots collection for this execution
@@ -161,7 +161,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
         """Apply custom styling for drawdown plots with red line and shaded fill"""
         # Update all traces to use red line with shaded fill
         fig.update_traces(
-            line=dict(color='rgb(255, 77, 77)', width=2),
+            line={"color": "rgb(255, 77, 77)", "width": 2},
             fill='tozeroy',
             fillcolor='rgba(255, 77, 77, 0.4)'
         )
@@ -172,7 +172,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
         fig.update_traces(
             fill=None,  # Remove any fill
             fillcolor=None,
-            line=dict(width=2)
+            line={"width": 2}
         )
         # For each trace, determine the predominant color based on final value
         # or split into positive/negative segments if needed
@@ -184,7 +184,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
                     final_value = y_values[-1]
                     color = 'rgb(0, 150, 255)' if final_value >= 0 else 'rgb(255, 77, 77)'
                     # Update the trace color
-                    fig.data[i].update(line=dict(color=color, width=2))
+                    fig.data[i].update(line={"color": color, "width": 2})
         return fig
     
     def get_bar_data(timeframe, min_bars, columns=None, filters=None, 
@@ -193,8 +193,8 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbolsIn
     def get_general_data(columns=None, filters=None):
         #if the execution is called with a certain set of symboles then we need to intersect that with each get bar data call
         # this will cause references to statuc symbols to possibly fail like if you are referencing spy in a strategy not returning spy
-        if symbolsIntersect :
-            filters['symbols'] = symbolsIntersect.intersection(filters['symbols'])
+        if symbols_intersect:
+            filters['symbols'] = symbols_intersect.intersection(filters['symbols'])
         return _get_general_data(ctx, columns, filters)
     
 

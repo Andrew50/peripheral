@@ -2,7 +2,7 @@ import { get, writable } from 'svelte/store';
 import type { Instance, Watchlist } from '$lib/utils/types/types';
 import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 import { queryInstanceInput } from '$lib/components/input/input.svelte';
-import { showAuthModal } from '$lib/stores/authModal';
+//import { showAuthModal } from '$lib/stores/authModal';
 import {
 	currentWatchlistItems,
 	flagWatchlistId,

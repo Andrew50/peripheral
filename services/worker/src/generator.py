@@ -5,26 +5,19 @@ Generates trading strategies from natural language using OpenAI o3 and validates
 
 import json
 import logging
-from datetime import datetime, time
+from datetime import datetime
 from typing import Dict, Any, Optional
 import re
-import time
-import threading
-import traceback as _tb
-from contextlib import contextmanager
 
-from openai import OpenAI
-from google import genai
 from google.genai import types
-from validator import ValidationError, validate_strategy
-from engine import execute_strategy
+from validator import validate_strategy
 from utils.context import Context
 from utils.strategy_crud import fetch_strategy_code, save_strategy
 from utils.error_utils import capture_exception
 from utils.errors import ModelGenerationError
+from utils.data_accessors import get_available_filter_values
 
 logger = logging.getLogger(__name__)
-from utils.data_accessors import get_available_filter_values
 
 
 
@@ -45,7 +38,7 @@ def _parse_filter_needs_response( response) -> Dict[str, bool]:
         filter_needs = json.loads(response_text)
         return filter_needs
     except (json.JSONDecodeError, AttributeError) as e:
-        logger.warning(f"Failed to parse filter needs JSON: {e}, response: {response.text}")
+        logger.warning("Failed to parse filter needs JSON: %s, response: %s", e, response.text)
         # Default to needing all filters if parsing fails
         return {"sectors": True, "industries": True, "primary_exchanges": True}
 
@@ -56,7 +49,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
             types.Part.from_text(text=prompt),
         ])
     ]
-    generateContentConfig = types.GenerateContentConfig(
+    generate_content_config = types.GenerateContentConfig(
         thinking_config = types.ThinkingConfig(
             thinking_budget=0
         ),
@@ -70,7 +63,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
     response = ctx.conn.gemini_client.models.generate_content(
         model="gemini-2.5-flash-lite-preview-06-17",
         contents=contents,
-        config=generateContentConfig,
+        config=generate_content_config,
     )
 
     # Parse the JSON response to determine which filters are needed
@@ -444,7 +437,7 @@ def _get_system_instruction(ctx, prompt: str) -> str:
 
         Generate clean, robust Python code."""
 
-def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversationID: str = None, messageID: str = None) -> Dict[str, Any]:
+def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
 
 
     # Check if this is an edit operation
@@ -452,14 +445,16 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
     existing_strategy = None
 
     if is_edit:
-        existing_strategy = fetch_strategy_code(user_id, strategy_id)
-        if not existing_strategy:
+        result = fetch_strategy_code(ctx, user_id, strategy_id)
+        if not result:
             return {
                 "success": False,
                 "error": f"Strategy {strategy_id} not found for user {user_id}"
             }
+        # Unpack fetched strategy code into dict for consistent access
+        existing_strategy = {"pythonCode": result[0], "version": result[1]}
 
-    strategy_code= _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversationID, messageID, max_retries=2)
+    strategy_code = _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversation_id, message_id, max_retries=2)
 
     if not strategy_code:
         return {
@@ -491,36 +486,32 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
 
 
 
-def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversationID: str = None, messageID: str = None, max_retries: int = 2) -> str:
+def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversation_id: str = None, message_id: str = None, max_retries: int = 2) -> str:
     """Generate strategy with validation retry logic"""
 
     last_validation_error = None
 
     for attempt in range(max_retries + 1):
         try:
-            strategy_code = _generate_strategy_code(ctx, user_id, prompt, existing_strategy, last_validation_error, conversationID, messageID)
+            strategy_code = _generate_strategy_code(ctx, user_id, prompt, existing_strategy, last_validation_error, conversation_id, message_id)
             if strategy_code:
                 valid, validation_error = validate_strategy(ctx, strategy_code)
                 if valid:
                     return strategy_code
-                else:
-                    # Store the detailed validation error for the next retry
-                    last_validation_error = validation_error
-                    logger.warning(f"Validation failed on attempt {attempt + 1}: {validation_error[:200]}...")
+                # Store the detailed validation error for the next retry
+                last_validation_error = validation_error
+                logger.warning("Validation failed on attempt %s: %s...", attempt + 1, validation_error[:200])
         except ModelGenerationError as e:
             capture_exception(logger, e)
             last_validation_error = str(e)
-        except Exception as e:
-            # Catch-all for any other exceptions (including ValidationError)
-            capture_exception(logger, e)
-            last_validation_error = str(e)
+      
         if attempt == max_retries:
             break
 
     return ""
 
 
-def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None,  last_error: Optional[str] = None, conversationID: str = None, messageID: str = None) -> str:
+def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None,  last_error: Optional[str] = None, conversation_id: str = None, message_id: str = None) -> str:
     """
     Generate strategy code using OpenAI with optimized prompts
     """
@@ -564,7 +555,7 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
             input=user_prompt,
             instructions=system_instruction,
             user="user:0",
-            metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversationID, "msgID": messageID},
+            metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
             timeout=150.0  # 150 second timeout for other models
         )
 

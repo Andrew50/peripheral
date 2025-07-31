@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 # Add the src directory to the path so we can import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# pylint: disable=wrong-import-position, import-outside-toplevel
 from utils.conn import Conn
 from utils.context import Context
 from utils.data_accessors import _get_bar_data
@@ -19,6 +20,7 @@ from utils.data_accessors import _get_bar_data
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def test_bar_data_queries():
     """Test _get_bar_data with various parameters"""
@@ -141,7 +143,7 @@ def test_bar_data_queries():
                 
                 # Print first few rows
                 print("   First 3 rows:")
-                for idx, row in df.head(3).iterrows():
+                for _, row in df.head(3).iterrows():
                     row_str = ", ".join([f"{col}: {row[col]}" for col in df.columns])
                     print(f"     {row_str}")
                 

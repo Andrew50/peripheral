@@ -1,12 +1,10 @@
-import time
 import logging
+from typing import Any, Dict, List
+
+from engine import execute_strategy
 from utils.context import Context
 from utils.strategy_crud import fetch_strategy_code
 from utils.error_utils import capture_exception
-from engine import execute_strategy
-from validator import ValidationError
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 

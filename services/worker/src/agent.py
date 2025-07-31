@@ -21,13 +21,13 @@ from google.genai import types
 
 logger = logging.getLogger(__name__)
 
-def _getGeneralPythonSystemInstruction(ctx: Context, prompt: str) -> str:
+def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
     contents = [
         types.Content(role="user", parts=[
             types.Part.from_text(text=prompt),
         ])
     ]
-    generateContentConfig = types.GenerateContentConfig(
+    generate_content_config = types.GenerateContentConfig(
         thinking_config = types.ThinkingConfig(
             thinking_budget=0
         ),
@@ -41,7 +41,7 @@ def _getGeneralPythonSystemInstruction(ctx: Context, prompt: str) -> str:
     response = ctx.conn.gemini_client.models.generate_content(
         model="gemini-2.5-flash-lite-preview-06-17",
         contents=contents,
-        config=generateContentConfig,
+        config=generate_content_config,
     )
 
     # Parse the JSON response to determine which filters are needed
@@ -237,138 +237,121 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
     execution_serial = int(time.time())  # Seconds timestamp
     execution_id = f"{user_id}_{execution_serial}"
 
-    try:
 
-        system_instruction = _getGeneralPythonSystemInstruction(ctx, prompt)
-        user_prompt = f"""{prompt}""" + f"\nData: {data}"
+    system_instruction = _get_general_python_system_instruction(ctx, prompt)
+    user_prompt = f"""{prompt}""" + f"\nData: {data}"
 
-        last_error = None
-        python_code = None
+    last_error = None
+    python_code = None
 
-        # Retry loop for both validation and execution errors
-        for attempt_count in range(3):
-            logger.info("🔍 Attempt %s of 3", attempt_count + 1)
-            if attempt_count > 0:
-                user_prompt = str(prompt)  # Reset to original prompt
-                user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attempt_count + 1}:"
-                user_prompt += "\n- Previous attempt failed"
-                if last_error:
-                    user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
-                user_prompt += "\n- Focus on data type safety for pandas operations"
-                user_prompt += "\n- Use pd.to_numeric() before .quantile() operations"
-                user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
-                user_prompt += "\n- Ensure proper error handling for edge cases"
-                user_prompt += "\n- Verify all imports are properly used"
-                user_prompt += "\n- Make sure all variables are defined before use"
+    # Retry loop for both validation and execution errors
+    for attempt_count in range(3):
+        logger.info("🔍 Attempt %s of 3", attempt_count + 1)
+        if attempt_count > 0:
+            user_prompt = str(prompt)  # Reset to original prompt
+            user_prompt += f"\n\nIMPORTANT - RETRY ATTEMPT {attempt_count + 1}:"
+            user_prompt += "\n- Previous attempt failed"
+            if last_error:
+                user_prompt += f"\n- SPECIFIC ERROR: {last_error}"
+            user_prompt += "\n- Focus on data type safety for pandas operations"
+            user_prompt += "\n- Use pd.to_numeric() before .quantile() operations"
+            user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
+            user_prompt += "\n- Ensure proper error handling for edge cases"
+            user_prompt += "\n- Verify all imports are properly used"
+            user_prompt += "\n- Make sure all variables are defined before use"
 
 
-            try:
-                # Generate code
-                openai_response = ctx.conn.openai_client.responses.create(
-                    model="o4-mini",
-                    reasoning={"effort": "low"},
-                    input=user_prompt,
-                    instructions=system_instruction,
-                    user="user:0",
-                    metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
-                    timeout=120.0  # 2 minute timeout for other models
-                )
-                python_code = _extract_python_code(openai_response.output_text)
+        try:
+            # Generate code
+            openai_response = ctx.conn.openai_client.responses.create(
+                model="o4-mini",
+                reasoning={"effort": "low"},
+                input=user_prompt,
+                instructions=system_instruction,
+                user="user:0",
+                metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
+                timeout=120.0  # 2 minute timeout for other models
+            )
+            python_code = _extract_python_code(openai_response.output_text)
 
-                # Validate code
-                is_valid = validate_code(python_code, allow_none_return=True, allowed_entrypoints={"code"})
-                if not is_valid:
-                    last_error = "Code failed security validation"
-                    continue
-
-                # Execute code
-
-                python_sandbox = PythonSandbox(create_default_config(), execution_id=execution_id)
-                result = await python_sandbox.execute_code(ctx,python_code)
-
-                # Check if execution was successful
-                if not result.success:
-                    last_error = result.error
-                    capture_exception(logger, Exception(result.error))
-                    if result.error_details and result.error_details.get('full_traceback'):
-                        logger.error("🔍 Sandbox traceback:\n%s", result.error_details['full_traceback'])
-
-                    # Add more specific error context if available
-                    if result.error_details:
-                        error_context = []
-                        if result.error_details.get('line_number'):
-                            error_context.append(f"Line {result.error_details['line_number']}")
-                        if result.error_details.get('error_type'):
-                            error_context.append(f"Error type: {result.error_details['error_type']}")
-                        if result.error_details.get('code_context'):
-                            error_context.append(f"Code context:\n{result.error_details['code_context']}")
-
-                        if error_context:
-                            last_error = f"{result.error}\n\nDetailed context:\n" + "\n".join(error_context)
-
-                    continue
-
-                # Success! Return results
-
-                # Save successful execution to database in background (non-blocking)
-                asyncio.create_task(_save_agent_python_code(
-                    ctx=ctx,
-                    user_id=user_id,
-                    prompt=prompt,
-                    python_code=python_code,
-                    execution_id=execution_id,
-                    result=result.result,
-                    prints=result.prints,
-                    plots=result.plots,
-                    response_images=result.response_images,
-                    error_message=None
-                ))
-
-                return result.result, result.prints, result.plots, result.response_images, execution_id, None
-
-            except Exception as e:
-                capture_exception(logger, e)
-                last_error = str(e)
-                logger.error("🔍 Exception: %s", e)
+            # Validate code
+            is_valid = validate_code(python_code, allow_none_return=True, allowed_entrypoints={"code"})
+            if not is_valid:
+                last_error = "Code failed security validation"
                 continue
 
-        # If we get here, all attempts failed
-        final_error = Exception(f"Failed to generate and execute valid Python code after 3 attempts. Last error: {last_error}")
+            # Execute code
+
+            python_sandbox = PythonSandbox(create_default_config(), execution_id=execution_id)
+            result = await python_sandbox.execute_code(ctx,python_code)
+
+            # Check if execution was successful
+            if not result.success:
+                last_error = result.error
+                capture_exception(logger, Exception(result.error))
+                if result.error_details and result.error_details.get('full_traceback'):
+                    logger.error("🔍 Sandbox traceback:\n%s", result.error_details['full_traceback'])
+
+                # Add more specific error context if available
+                if result.error_details:
+                    error_context = []
+                    if result.error_details.get('line_number'):
+                        error_context.append(f"Line {result.error_details['line_number']}")
+                    if result.error_details.get('error_type'):
+                        error_context.append(f"Error type: {result.error_details['error_type']}")
+                    if result.error_details.get('code_context'):
+                        error_context.append(f"Code context:\n{result.error_details['code_context']}")
+
+                    if error_context:
+                        last_error = f"{result.error}\n\nDetailed context:\n" + "\n".join(error_context)
+
+                continue
+
+            # Success! Return results
+
+            # Save successful execution to database in background (non-blocking)
+            asyncio.create_task(_save_agent_python_code(
+                ctx=ctx,
+                user_id=user_id,
+                prompt=prompt,
+                python_code=python_code,
+                execution_id=execution_id,
+                result=result.result,
+                prints=result.prints,
+                plots=result.plots,
+                response_images=result.response_images,
+                error_message=None
+            ))
+
+            return result.result, result.prints, result.plots, result.response_images, execution_id, None
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            capture_exception(logger, e)
+            last_error = str(e)
+            logger.error("🔍 Exception: %s", e)
+            continue
+
+    # If we get here, all attempts failed
+    final_error = Exception(f"Failed to generate and execute valid Python code after 3 attempts. Last error: {last_error}")
+
+    # Save failed execution to database with error info in background (non-blocking)
+    asyncio.create_task(_save_agent_python_code(
+        ctx=ctx,
+        user_id=user_id,
+        prompt=prompt,
+        python_code=python_code if python_code else "",
+        execution_id=execution_id,
+        result=None,
+        prints="",
+        plots=[],
+        response_images=[],
+        error_message=str(final_error)
+    ))
+
+    return [], "", [], [], execution_id, final_error
 
         # Save failed execution to database with error info in background (non-blocking)
-        asyncio.create_task(_save_agent_python_code(
-            ctx=ctx,
-            user_id=user_id,
-            prompt=prompt,
-            python_code=python_code if python_code else "",
-            execution_id=execution_id,
-            result=None,
-            prints="",
-            plots=[],
-            response_images=[],
-            error_message=str(final_error)
-        ))
-
-        return [], "", [], [], execution_id, final_error
-
-    except Exception as e:
-        capture_exception(logger, e)
-
-        # Save failed execution to database with error info in background (non-blocking)
-        asyncio.create_task(_save_agent_python_code(
-            ctx=ctx,
-            user_id=user_id,
-            prompt=prompt,
-            python_code=python_code if 'python_code' in locals() else "",
-            execution_id=execution_id,
-            result=None,
-            prints="",
-            plots=[],
-            response_images=[],
-            error_message=str(e)
-        ))
-
-        return [], "", [], [], execution_id, e
+   
 
 def _extract_python_code(response: str) -> str:
     """Extract Python code from response, removing markdown formatting"""
@@ -421,16 +404,13 @@ async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, pytho
         return False
     finally:
         # Ensure connections are properly cleaned up
-        try:
-            if cursor:
-                cursor.close()
-        except Exception as cleanup_error:
-            logger.warning("⚠️ Error during database cleanup for execution %s: %s", execution_id, cleanup_error)
+        if cursor:
+            cursor.close()
 
     return False
 
 def python_agent(ctx: Context, user_id: int = None,
-                                    prompt: str = None, data: str = None, conversation_id: str = None, message_id: str = None, **kwargs) -> Dict[str, Any]:
+                                    prompt: str = None, data: str = None, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
 # Initialize defaults to avoid scope issues
     result, prints, plots, response_images = [], "", [], []
     execution_id = None  # Initialize to avoid UnboundLocalError

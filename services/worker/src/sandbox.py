@@ -4,28 +4,28 @@ A domain-agnostic Python code execution environment with security, plotting, and
 """
 
 import asyncio
-import logging
-import pandas as pd
-import numpy as np
-from datetime import datetime as dt, timedelta
 import base64
-import datetime
-from typing import Any, Dict, List, Optional, Union, Tuple
-import json
-import time
-import io
 import contextlib
-import plotly
-import traceback
-import linecache
-import sys
+import datetime
+import io
+import json
+import logging
 import math
+import sys
+import time
+import traceback
 from dataclasses import dataclass
-from utils.plotlyToMatlab import plotly_to_matplotlib_png
-import plotly.graph_objects as go
+from datetime import datetime as dt, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import plotly
 import plotly.express as px
+import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-# Updated import to reflect new function names in utils.data_accessors
+
+from utils.plotlyToMatlab import plotly_to_matplotlib_png
 from utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
 from utils.context import Context
 from utils.error_utils import capture_exception
@@ -247,7 +247,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
 
-        def capture_plot(fig, *args, **kwargs):
+        def capture_plot(fig, *_args, **_kwargs):
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter

@@ -299,7 +299,7 @@ def _extract_string_value(node: ast.AST) -> Optional[str]:
     try:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
-        elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+        if isinstance(node, ast.Str):  # Python < 3.8 compatibility
             return node.s
     except ValueError as e:
         capture_exception(logger, e)
@@ -310,7 +310,7 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
     try:
         if isinstance(node, ast.Constant) and isinstance(node.value, int):
             return node.value
-        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+        if isinstance(node, ast.Num):  # Python < 3.8 compatibility
             if isinstance(node.n, int):
                 return node.n
     except ValueError as e:
@@ -343,7 +343,7 @@ def _analyze_filters_ast(filters_node: Optional[ast.AST]) -> Dict[str, Any]:
             if tickers:
                 filter_analysis["has_tickers"] = True
                 filter_analysis["specific_tickers"] = sorted(list(tickers))
-    except Exception as e:
+    except (ValueError, SyntaxError, AttributeError) as e:  # pylint: disable=broad-exception-caught
         capture_exception(logger, e)
     return filter_analysis
 

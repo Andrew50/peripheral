@@ -73,9 +73,8 @@ def _rank_screening_results(instances: List[Dict]) -> List[Dict]:
     def sort_key(instance):
         if 'score' in instance:
             return instance['score']
-        else:
-            # Use timestamp for sorting if no score - more recent = higher priority
-            return instance.get('timestamp', 0)
+        # Use timestamp for sorting if no score - more recent = higher priority
+        return instance.get('timestamp', 0)
 
     sorted_instances = sorted(instances, key=sort_key, reverse=True)
     return sorted_instances

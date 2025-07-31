@@ -8,14 +8,18 @@ import os
 import sys
 import logging
 from datetime import datetime, timedelta
+import traceback
 
 # Add the src directory to the path so we can import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Local imports after sys.path modification
+# pylint: disable=wrong-import-position
 from utils.conn import Conn
 from utils.context import Context
 from validator import validate_strategy
 from engine import execute_strategy
+# pylint: enable=wrong-import-position
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -82,7 +86,7 @@ def strategy():
         # Validate the strategy
         is_valid, error_message = validate_strategy(ctx, test_strategy)
         
-        print(f"\nValidation Results:")
+        print("\nValidation Results:")
         print(f"Is Valid: {is_valid}")
         if error_message:
             print(f"Error Message: {error_message}")
@@ -90,11 +94,11 @@ def strategy():
             print("No errors found!")
         
         # Execute strategy with date range (1 year ago to 2 days ago)
-        print(f"\n--- First run (1y-ago → 2d-ago) ---")
+        print("\n--- First run (1y-ago → 2d-ago) ---")
         one_year_ago = datetime.now() - timedelta(days=365)
         two_days_ago = datetime.now() - timedelta(days=2)
         
-        instances1, prints1, plots1, images1, err1 = execute_strategy(
+        instances1, prints1, _plots1, _images1, err1 = execute_strategy(
             ctx,
             test_strategy,
             strategy_id=1,
@@ -117,8 +121,8 @@ def strategy():
                 print(f"Strategy output: {prints1}")
         
         # Execute strategy with no date constraints
-        print(f"\n--- Second run (no date limits) ---")
-        instances2, prints2, plots2, images2, err2 = execute_strategy(
+        print("\n--- Second run (no date limits) ---")
+        instances2, prints2, _plots2, _images2, err2 = execute_strategy(
             ctx,
             test_strategy,
             strategy_id=1,
@@ -140,9 +144,8 @@ def strategy():
             if prints2:
                 print(f"Strategy output: {prints2}")
             
-    except Exception as e:
-        print(f"Exception during validation: {e}")
-        import traceback
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        # import moved to module top
         traceback.print_exc()
     
     finally:
