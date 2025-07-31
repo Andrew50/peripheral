@@ -22,7 +22,7 @@ from .context import Context
 logger = logging.getLogger(__name__)
 
 # Timezone constants and helpers
-TZ = "'America/New_York'"
+tz = "'America/New_York'"
 
 # NOTE: Timestamps coming from the DB are stored as timestamptz. `EXTRACT(EPOCH FROM
 # <timestamptz>)` already returns the number of seconds since 1970-01-01 **in UTC**.
@@ -86,9 +86,8 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timefr
     if should_batch:
         logger.info("📦 Using batched data retrieval")
         return _get_bar_data_batched(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
-    else:
-        logger.info("🎯 Using single data retrieval")
-        return _get_bar_data_single(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
+    logger.info("🎯 Using single data retrieval")
+    return _get_bar_data_single(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
 
 
 def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
@@ -99,7 +98,7 @@ def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False
     # Always batch when tickers=None (all securities)
     if tickers is None:
         return True
-    elif not tickers:  # Empty list case
+    if not tickers:  # Empty list case
         return True
 
     # Batch when ticker list is large
@@ -173,9 +172,8 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
                 if batch_result is not None and len(batch_result) > 0:
                     logger.info("✅ Batch %d returned %d rows", batch_num, len(batch_result))
                     return batch_result
-                else:
-                    logger.warning("⚠️ Batch %s returned no data", batch_num)
-                    return None
+                logger.warning("⚠️ Batch %s returned no data", batch_num)
+                return None
             except ValueError as batch_error:
                 logger.error("❌ Error in batch %s: %s", batch_num, batch_error)
                 return None
@@ -419,13 +417,13 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
     # Add extended hours filtering for minute data
     if base_table == "ohlcv_1m" and not extended_hours:
         extended_hours_filter = f"""(
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
-            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
-                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) > 9 OR
+            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) = 9 AND
+                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {tz})) >= 30)
         ) AND (
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) < 16
         ) AND (
-            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
+            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {tz})) BETWEEN 1 AND 5
         )"""
         filter_parts.append(extended_hours_filter)
 
@@ -985,13 +983,13 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
     if base_table == "ohlcv_1m" and not extended_hours:
         # Filter to regular trading hours only (9:30 AM to 4:00 PM ET)
         extended_hours_filter = f"""(
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) > 9 OR
-            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) = 9 AND
-                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {TZ})) >= 30)
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) > 9 OR
+            (EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) = 9 AND
+                EXTRACT(MINUTE FROM (o.timestamp AT TIME ZONE {tz})) >= 30)
         ) AND (
-            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {TZ})) < 16
+            EXTRACT(HOUR FROM (o.timestamp AT TIME ZONE {tz})) < 16
         ) AND (
-            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {TZ})) BETWEEN 1 AND 5
+            EXTRACT(DOW FROM (o.timestamp AT TIME ZONE {tz})) BETWEEN 1 AND 5
         )"""
     # Combine all filters
     all_filter_parts = ticker_filter_parts + date_filter_parts
@@ -1005,7 +1003,7 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
     all_params = ticker_params + date_params
 
     # Build select columns based on what's actually requested
-    select_parts = ["o.ticker", f"time_bucket(%s, o.timestamp AT TIME ZONE {TZ}) AT TIME ZONE {TZ} AS bucket_ts"]
+    select_parts = ["o.ticker", f"time_bucket(%s, o.timestamp AT TIME ZONE {tz}) AT TIME ZONE {tz} AS bucket_ts"]
     
     # Only include OHLCV columns that are requested
     if 'open' in columns:

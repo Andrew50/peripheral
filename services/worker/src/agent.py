@@ -9,14 +9,13 @@ import asyncio
 import json
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
-from validator import ValidationError
+from google.genai import types
+from validator import validate_code
 from utils.context import Context
 from utils.data_accessors import get_available_filter_values
 from utils.error_utils import capture_exception
 from sandbox import PythonSandbox, create_default_config
 from generator import _parse_filter_needs_response
-from validator import validate_code
-from google.genai import types
 
 
 logger = logging.getLogger(__name__)
@@ -114,11 +113,11 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
     - market_cap_min: float (e.g., 1000000000 for $1B minimum)
     - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-    FILTER EXAMPLES:{f'''
-    - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
-    - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-    - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else ""}{f'''
-    - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else ""}
+    FILTER EXAMPLES:{'''
+    - Technology stocks: filters={"sector": "Technology"}''' if sectors_str else ""}{'''
+    - Large cap healthcare: filters={"sector": "Healthcare", "market_cap_min": 10000000000}''' if sectors_str else ""}{'''
+    - NASDAQ biotech: filters={"industry": "Biotechnology", "primary_exchange": "NASDAQ"}''' if industries_str and exchanges_str else ""}{'''
+    - Biotechnology stocks: filters={"industry": "Biotechnology"}''' if industries_str else ""}
     - Small cap stocks: filters={{"market_cap_max": 2000000000}}
     - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 
@@ -372,42 +371,35 @@ async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, pytho
     """Save Python agent execution to database"""
     conn = None
     cursor = None
-    try:
-        # Use connection manager if available, otherwise fallback to direct connection
-        ctx.conn.ensure_db_connection()
-        conn = ctx.conn.db_conn
-        cursor = conn.cursor()
+    # Use connection manager if available, otherwise fallback to direct connection
+    
+    ctx.conn.ensure_db_connection()
+    conn = ctx.conn.db_conn
+    cursor = conn.cursor()
 
-        # Convert complex objects to JSON strings for storage
-        result_json = json.dumps(result) if result is not None else None
-        plots_json = json.dumps(plots) if plots is not None else None
-        response_images_json = json.dumps(response_images) if response_images is not None else None
+    # Convert complex objects to JSON strings for storage
+    result_json = json.dumps(result) if result is not None else None
+    plots_json = json.dumps(plots) if plots is not None else None
+    response_images_json = json.dumps(response_images) if response_images is not None else None
 
-        # Insert the execution record
-        cursor.execute("""
-            INSERT INTO python_agent_execs (
-                userid, prompt, python_code, execution_id, result, prints,
-                plots, response_images, error_message, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id, prompt, python_code, execution_id, result_json,
-            prints, plots_json, response_images_json, error_message
-        ))
+    # Insert the execution record
+    cursor.execute("""
+        INSERT INTO python_agent_execs (
+            userid, prompt, python_code, execution_id, result, prints,
+            plots, response_images, error_message, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """, (
+        user_id, prompt, python_code, execution_id, result_json,
+        prints, plots_json, response_images_json, error_message
+    ))
 
-        conn.commit()
-        return True
+    conn.commit()
+    if cursor:
+        cursor.close()
+    return True
 
-    except Exception as e:
-        # Since this runs in background, we log errors but don't raise them
-        capture_exception(logger, e)
-        # Don't raise - this is a background task and shouldn't affect user experience
-        return False
-    finally:
-        # Ensure connections are properly cleaned up
-        if cursor:
-            cursor.close()
 
-    return False
+
 
 def python_agent(ctx: Context, user_id: int = None,
                                     prompt: str = None, data: str = None, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
@@ -415,53 +407,61 @@ def python_agent(ctx: Context, user_id: int = None,
     result, prints, plots, response_images = [], "", [], []
     execution_id = None  # Initialize to avoid UnboundLocalError
 
-    try:
-        # Validate input parameters
-        if user_id is None:
-            raise ValueError("user_id is required for general Python agent")
-        if not prompt or not prompt.strip():
-            raise ValueError("prompt is required for general Python agent")
+    #try:
+    # Validate input parameters
+    if user_id is None:
+        raise ValueError("user_id is required for general Python agent")
+    if not prompt or not prompt.strip():
+        raise ValueError("prompt is required for general Python agent")
 
-        # Publish progress update
-        #if task_id:
-            #ctx.publish_progress(task_id, "initializing", "Starting general Python agent execution...")
+    # Publish progress update
+    #if task_id:
+        #ctx.publish_progress(task_id, "initializing", "Starting general Python agent execution...")
 
-        # Execute with timeout
-        result, prints, plots, response_images, execution_id, error = asyncio.run(
-            start_general_python_agent(
-                ctx=ctx,
-                user_id=user_id,
-                prompt=prompt,
-                data=data,
-                conversation_id=conversation_id,
-                message_id=message_id
-            )
+    # Execute with timeout
+    result, prints, plots, response_images, execution_id, error = asyncio.run(
+        start_general_python_agent(
+            ctx=ctx,
+            user_id=user_id,
+            prompt=prompt,
+            data=data,
+            conversation_id=conversation_id,
+            message_id=message_id
         )
+    )
 
-        # Check if there was an error
-        if error:
-            #logger.error("❌ General Python agent execution FAILED for task %s: %s", task_id, error)
-            raise error
-
-
-        return {
-            "success": True,
-            "result": result,
-            "prints": prints,
-            "plots": plots,
-            "responseImages": response_images,
-            "executionID": execution_id,
-        }
-
-    except Exception as e:
-        capture_exception(logger, e)
-
+    # Check if there was an error
+    if error:
+        #logger.error("❌ General Python agent execution FAILED for task %s: %s", task_id, error)
         return {
             "success": False,
-            "error": str(e),
+            "error": str(error),
             "result": result,
             "prints": prints,
             "plots": plots,
             "responseImages": response_images,
             "executionID": execution_id,
         }
+
+
+    return {
+        "success": True,
+        "result": result,
+        "prints": prints,
+        "plots": plots,
+        "responseImages": response_images,
+        "executionID": execution_id,
+    }
+
+    #except Exception as e:
+        #capture_exception(logger, e)
+
+        #return {
+            #"success": False,
+            #"error": str(e),
+            #"result": result,
+            #"prints": prints,
+            #"plots": plots,
+            #"responseImages": response_images,
+            #"executionID": execution_id,
+        #}

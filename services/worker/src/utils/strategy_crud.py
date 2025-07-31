@@ -9,9 +9,9 @@ from psycopg2.extras import RealDictCursor
 logger = logging.getLogger(__name__)
 
 
-def fetch_strategy_code(ctx: Context, userId: int, strategyId: int, version: int = None) -> Tuple[str, int]:
-    if not strategyId:
-        raise ValueError("strategyId is required")
+def fetch_strategy_code(ctx: Context, user_id: int, strategy_id: int, version: int = None) -> Tuple[str, int]:
+    if not strategy_id:
+        raise ValueError("strategy_id is required")
 
     with ctx.conn.transaction() as cursor:
         result = None
@@ -20,7 +20,7 @@ def fetch_strategy_code(ctx: Context, userId: int, strategyId: int, version: int
         if version is not None:
             cursor.execute(
                 "SELECT pythonCode, version FROM strategies WHERE userId = %s AND strategyId = %s AND version = %s AND is_active = true",
-                (userId, strategyId, version)
+                (user_id, strategy_id, version)
             )
             result = cursor.fetchone()
 
@@ -28,44 +28,50 @@ def fetch_strategy_code(ctx: Context, userId: int, strategyId: int, version: int
         if not result:
             cursor.execute(
                 "SELECT pythonCode, version FROM strategies WHERE userId = %s AND strategyId = %s AND is_active = true ORDER BY version DESC LIMIT 1",
-                (userId, strategyId)
+                (user_id, strategy_id)
             )
             result = cursor.fetchone()
             if version is not None and result:
-                logger.warning(f"Requested version {version} not found for strategy_id {strategyId}, using latest version {result.get('version')}")
+                logger.warning(
+                    "Requested version %s not found for strategy_id %s, using latest version %s",
+                    version, strategy_id, result.get("version")
+                )
 
         if not result:
-            raise ValueError(f"Strategy not found for strategyId: {strategyId}")
+            raise ValueError(f"Strategy not found for strategy_id: {strategy_id}")
 
         pythoncode = result.get('pythoncode')
         version_fetched = result.get('version')
         if not pythoncode:
-            raise ValueError(f"Strategy has no Python code for strategyId: {strategyId}")
+            raise ValueError(f"Strategy has no Python code for strategy_id: {strategy_id}")
 
         return pythoncode, version_fetched
 
 
 #TODO: add version
-def fetch_multiple_strategy_codes(ctx: Context, userId: int, strategyIds: List[int]) -> Dict[int, str]:
-    if not strategyIds:
+def fetch_multiple_strategy_codes(ctx: Context, user_id: int, strategy_ids: List[int]) -> Dict[int, str]:
+    if not strategy_ids:
         raise ValueError("strategy_ids is required")
 
-    if len(strategyIds) != len(set(strategyIds)):
+    if len(strategy_ids) != len(set(strategy_ids)):
         raise ValueError("strategy_ids must be unique")
 
     with ctx.conn.transaction() as cursor:
         cursor.execute(
             "SELECT strategyId, pythonCode FROM strategies WHERE userId = %s AND strategyId = ANY(%s) AND is_active = true",
-            (userId, strategyIds)
+            (user_id, strategy_ids)
         )
         rows = cursor.fetchall()
         strategy_codes = {
             row.get('strategyId'): row.get('pythonCode')
             for row in rows if row.get('pythonCode')
         }
-        missing = set(strategyIds) - set(strategy_codes.keys())
+        missing = set(strategy_ids) - set(strategy_codes.keys())
         if missing:
-            logger.warning(f"Strategies not found or missing Python code: {missing}")
+            logger.warning(
+                "Strategies not found or missing Python code: %s",
+                missing
+            )
             raise ValueError(f"Strategies not found or missing Python code: {missing}")
         return strategy_codes
 
@@ -95,7 +101,7 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
             version_result = cursor.fetchone()
             
             if not version_result:
-                raise Exception(f"Strategy {strategy_id} not found for user {user_id}")
+                raise ValueError(f"Strategy {strategy_id} not found for user {user_id}")
             
             strategy_name = version_result['name']
             next_version = version_result['next_version']
@@ -139,8 +145,7 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
                 'minTimeframe': result['min_timeframe'],
                 'alertUniverseFull': result['alert_universe_full']
             }
-        else:
-            raise Exception("Failed to save strategy - no result returned")
+        raise ValueError("Failed to save strategy - no result returned")
             
     except Exception as e:
         logger.error("❌ Failed to save strategy: %s", e)

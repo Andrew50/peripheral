@@ -27,7 +27,7 @@ from utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
-MAX_INSTANCES = 15000  # noqa: C0103
+max_instances = 15000 
 
 class TrackedList(list):
     """List that tracks total instances across all TrackedList objects"""
@@ -36,7 +36,7 @@ class TrackedList(list):
     _limit_reached = False
 
     @classmethod
-    def reset_counter(cls, max_instances=MAX_INSTANCES):
+    def reset_counter(cls, max_instances=max_instances):
         """Reset global counter for new strategy execution"""
         cls._global_instance_count = 0
         cls._max_instances = max_instances
@@ -104,7 +104,7 @@ def execute_strategy(
     response_images = []
     strategy_prints = ""
     # Execute strategy code in restricted environment
-    # nolint B102 - exec necessary for strategy execution with proper sandboxing
+    # pylint: disable=exec-used  # nolint B102 - exec necessary for strategy execution with proper sandboxing
     exec(strategy_code, safe_globals, safe_locals)  # nosec  # noqa: S102  # noqa: W0122
 
     strategy_func = safe_locals.get('strategy')
@@ -112,7 +112,7 @@ def execute_strategy(
         raise ValueError("No strategy function found. Function must be named 'strategy'")
 
     # Reset instance counter for this execution
-    TrackedList.reset_counter(max_instances=MAX_INSTANCES)
+    TrackedList.reset_counter(max_instances=max_instances)
 
     # Execute strategy function with proper error handling and stdout capture
     
@@ -122,7 +122,7 @@ def execute_strategy(
         with contextlib.redirect_stdout(stdout_buffer), _plotly_capture_context(plots_collection, response_images, strategy_id, version):
             instances = strategy_func()
     
-    except Exception as strategy_error:  # noqa: W0718 - broad exception caught intentionally
+    except Exception as strategy_error:  # pylint: disable=broad-exception-caught
         error_obj = capture_exception(logger, strategy_error)
         return [], "", [], [], error_obj
 

@@ -144,7 +144,7 @@ def strategy():
             if prints2:
                 print(f"Strategy output: {prints2}")
             
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught
         # import moved to module top
         traceback.print_exc()
     

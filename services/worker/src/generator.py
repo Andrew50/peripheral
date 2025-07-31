@@ -46,18 +46,17 @@ def _detect_min_timeframe(code: str) -> str:
         # Convert to minutes
         if not unit or unit == 'm':  # minutes (no unit means minutes)
             return value
-        elif unit == 'h':  # hours
+        if unit == 'h':  # hours
             return value * 60
-        elif unit == 'd':  # days
+        if unit == 'd':  # days
             return value * 1440
-        elif unit == 'w':  # weeks
+        if unit == 'w':  # weeks
             return value * 10080
-        elif unit == 'q':  # quarters (3 months = ~90 days)
+        if unit == 'q':  # quarters (3 months = ~90 days)
             return value * 129600
-        elif unit == 'y':  # years (365 days)
+        if unit == 'y':  # years (365 days)
             return value * 525600
-        else:
-            return 1440  # Default fallback
+        return 1440  # Default fallback
     
     # Return the timeframe with the smallest duration
     return min(matches, key=tf_as_minutes)
@@ -184,12 +183,12 @@ def _get_system_instruction(ctx, prompt: str) -> str:
         - market_cap_min: float (e.g., 1000000000 for $1B minimum)
         - market_cap_max: float (e.g., 10000000000 for $10B maximum)
 
-        FILTER EXAMPLES:{f'''
-        - Technology stocks: filters={{"sector": "Technology"}}''' if sectors_str else ""}{f'''
-        - Large cap healthcare: filters={{"sector": "Healthcare", "market_cap_min": 10000000000}}''' if sectors_str else ""}{f'''
-        - NASDAQ biotech: filters={{"industry": "Biotechnology", "primary_exchange": "NASDAQ"}}''' if industries_str and exchanges_str else f'''
-        - Biotechnology stocks: filters={{"industry": "Biotechnology"}}''' if industries_str else f'''
-        - NASDAQ stocks: filters={{"primary_exchange": "NASDAQ"}}''' if exchanges_str else ""}
+        FILTER EXAMPLES:{'''
+        - Technology stocks: filters={"sector": "Technology"}''' if sectors_str else ""}{'''
+        - Large cap healthcare: filters={"sector": "Healthcare", "market_cap_min": 10000000000}''' if sectors_str else ""}{'''
+        - NASDAQ biotech: filters={"industry": "Biotechnology", "primary_exchange": "NASDAQ"}''' if industries_str and exchanges_str else '''
+        - Biotechnology stocks: filters={"industry": "Biotechnology"}''' if industries_str else '''
+        - NASDAQ stocks: filters={"primary_exchange": "NASDAQ"}''' if exchanges_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
 

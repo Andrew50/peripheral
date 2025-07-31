@@ -3,39 +3,27 @@
 Strategy Worker
 Executes trading strategies via Redis queue for backtesting and screening
 """
+# pylint: disable=import-error
 
-import json
-import sys
-import traceback
-import datetime
-import time
 import os
+import sys
+
 import asyncio
-import redis
-import signal
+import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List
-
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from validator import ValidationError
-from concurrent.futures import ThreadPoolExecutor
 import threading
-from agent import python_agent
-from utils.conn import Conn
-from src.backtest import backtest
-from src.screen import screen
-from src.alert import alert
-from src.generator import create_strategy
-from src.agent import python_agent
-from src.utils.context import Context, NoSubscribersException
-from src.utils.error_utils import capture_exception
+import time
+from datetime import datetime
 
-#from utils.context import ExecutionContext, NoSubscribersException
+from agent import python_agent
+from backtest import backtest
+from screen import screen
+from alert import alert
+from generator import create_strategy
+from utils.conn import Conn
+from utils.context import Context, NoSubscribersException
+from utils.error_utils import capture_exception
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Configure logging
 logging.basicConfig(
@@ -116,7 +104,7 @@ class Worker:
             try:
                 result = func(**kwargs)
                 status = "completed"
-            except NoSubscribersException as e:
+            except NoSubscribersException:
                 status = "cancelled" # Special status for cancelled tasks
             except asyncio.TimeoutError as timeout_error:
                 error_obj = capture_exception(logger, timeout_error)
@@ -124,7 +112,7 @@ class Worker:
             except MemoryError as memory_error:
                 error_obj = capture_exception(logger, memory_error)
                 status = "error"
-            except Exception as exec_error:
+            except Exception as exec_error: # pylint: disable=broad-exception-caught
                 error_obj = capture_exception(logger, exec_error)
                 status = "error"
             finally:

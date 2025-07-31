@@ -458,6 +458,7 @@ jobs:
     env:
       # Use a workspace-local GOPATH so the non-root UID can write to it
       GOPATH: ${{ github.workspace }}/.go
+      GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
