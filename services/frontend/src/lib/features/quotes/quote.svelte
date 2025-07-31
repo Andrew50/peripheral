@@ -375,7 +375,7 @@
 	}
 
 	.content {
-		padding: 0 clamp(0.2rem, 0.4vw, 0.4rem) clamp(0.5rem, 1vw, 1rem) clamp(0.2rem, 0.4vw, 0.4rem);
+		padding: 0 clamp(0.2rem, 0.4vw, 0.4rem) clamp(0.5rem, 1vw, 1rem);
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: var(--ui-border) transparent;
@@ -387,10 +387,12 @@
 	.content::-webkit-scrollbar {
 		width: 4px;
 	}
+
 	.content::-webkit-scrollbar-thumb {
 		background-color: var(--ui-border);
 		border-radius: 2px;
 	}
+
 	.content::-webkit-scrollbar-track {
 		background: transparent;
 	}
@@ -489,7 +491,7 @@
 		height: 0;
 		border-left: 10px solid transparent;
 		border-right: 10px solid transparent;
-		border-bottom: 16px solid #ff4444;
+		border-bottom: 16px solid #f44;
 		cursor: pointer;
 		transition: transform 0.15s ease;
 		position: relative;
@@ -520,7 +522,7 @@
 		font-weight: 500;
 		white-space: nowrap;
 		border: 1px solid var(--ui-border);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
 		opacity: 0;
 		visibility: hidden;
 		transition:
@@ -540,7 +542,7 @@
 	}
 
 	.add-to-watchlist-button {
-		color: #ffffff;
+		color: #fff;
 		width: clamp(28px, 4vw, 32px);
 		height: clamp(28px, 4vw, 32px);
 		display: flex;
@@ -548,7 +550,7 @@
 		justify-content: center;
 		font-size: clamp(1rem, 0.7rem + 0.6vw, 1.2rem);
 		font-weight: 300;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		background: transparent;
 		border: none;
 		border-radius: 6px;
@@ -559,8 +561,8 @@
 	}
 
 	.add-to-watchlist-button:hover {
-		background: rgba(255, 255, 255, 0.2);
-		color: #ffffff;
+		background: rgb(255 255 255 / 20%);
+		color: #fff;
 		transform: scale(1.05);
 	}
 
@@ -568,7 +570,7 @@
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		margin-left: 0px;
+		margin-left: 0;
 		margin-top: 12px;
 		align-self: stretch;
 	}
@@ -589,7 +591,7 @@
 		color: var(--text-secondary);
 		line-height: 1.2;
 		font-weight: 500;
-		margin: 4px 0 0 0;
+		margin: 4px 0 0;
 		margin-left: 8px;
 		padding: 0;
 		word-break: break-word;
@@ -670,14 +672,14 @@
 	}
 
 	.detail-item .label {
-		color: #ffffff;
+		color: #fff;
 		margin-right: 8px;
 		white-space: nowrap;
 		font-weight: 500;
 	}
 
 	.detail-item .value {
-		color: #ffffff;
+		color: #fff;
 		text-align: right;
 		font-weight: 500;
 	}
@@ -707,11 +709,11 @@
 	.why-moving {
 		margin-top: clamp(4px, 1vw, 8px);
 		padding: clamp(8px, 1.2vw, 12px);
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 		backdrop-filter: blur(6px);
-		border: 1px solid rgba(255, 255, 255, 0.12);
+		border: 1px solid rgb(255 255 255 / 12%);
 		border-radius: 8px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
 		text-align: left;
 	}
 
@@ -723,7 +725,7 @@
 	}
 
 	/* Responsive adjustments */
-	@media (max-width: 1400px) {
+	@media (width <= 1400px) {
 		.quote-key-metrics {
 			gap: clamp(1px, 0.2vw, 2px);
 			padding: clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) clamp(8px, 1.5vw, 10px) 8px;
@@ -752,7 +754,7 @@
 		}
 	}
 
-	@media (max-width: 1000px) {
+	@media (width <= 1000px) {
 		.main-price-row {
 			gap: clamp(3px, 0.6vw, 5px);
 		}
@@ -767,7 +769,7 @@
 		}
 	}
 
-	@media (max-width: 600px) {
+	@media (width <= 600px) {
 		.main-price-row {
 			flex-direction: column;
 			align-items: flex-start;

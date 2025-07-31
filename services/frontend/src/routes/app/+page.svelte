@@ -1036,7 +1036,9 @@
 							<!-- Bottom windows container -->
 							<div
 								class="bottom-windows-container"
-								style="--bottom-height: {bottomWindowsHeight}px"
+								style="
+
+--bottom-height: {bottomWindowsHeight}px"
 							>
 								{#each bottomWindows as w}
 									<div class="bottom-window">
@@ -1406,6 +1408,7 @@
 		grid-area: left;
 		overflow: hidden;
 	}
+
 	.center-section {
 		grid-area: center;
 		display: flex;
@@ -1416,21 +1419,25 @@
 		grid-area: right;
 		overflow: hidden;
 	}
+
 	.resizer-left {
 		width: var(--left-gutter);
 		cursor: ew-resize;
 		background: transparent;
 		z-index: 10; /* sit above charts for easy grab */
 	}
+
 	.resizer-right {
 		width: var(--right-gutter);
 		cursor: ew-resize;
 		background: transparent;
 		z-index: 10; /* sit above charts for easy grab */
 	}
+
 	.resizer-left {
 		grid-area: g1;
 	}
+
 	.resizer-right {
 		grid-area: g2;
 	}
@@ -1468,7 +1475,7 @@
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 12px;
 		background: transparent;
 		border-radius: 6px;
@@ -1481,27 +1488,27 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.sidebar-header .watchlist-tab:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 	}
 
 	.sidebar-header .watchlist-tab:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.sidebar-header .watchlist-tab.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 
@@ -1552,7 +1559,7 @@
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 12px;
 		background: transparent;
 		border-radius: 6px;
@@ -1565,26 +1572,26 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.sidebar-header .watchlist-tab:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 	}
 
 	.sidebar-header .watchlist-tab:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.sidebar-header .watchlist-tab.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 </style>

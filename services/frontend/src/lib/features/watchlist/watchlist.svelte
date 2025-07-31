@@ -364,7 +364,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 12px 2px 12px;
+		padding: 0 12px 2px;
 		width: 100%;
 		gap: 8px;
 	}
@@ -380,10 +380,10 @@
 
 	.watchlist-tab {
 		padding: 4px 16px;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 13px;
 		font-weight: normal;
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 		border: none;
 		border-radius: 8px 8px 0 0;
 		cursor: pointer;
@@ -396,13 +396,13 @@
 	}
 
 	.watchlist-tab:hover {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.9);
+		background: rgb(255 255 255 / 10%);
+		color: rgb(255 255 255 / 90%);
 	}
 
 	.watchlist-tab.active {
-		background: rgba(255, 255, 255, 0.2);
-		color: #ffffff;
+		background: rgb(255 255 255 / 20%);
+		color: #fff;
 		font-weight: normal;
 	}
 
@@ -412,10 +412,10 @@
 
 	.more-button {
 		padding: 4px 8px;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 16px;
 		font-weight: 600;
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 		border: none;
 		border-radius: 8px;
 		cursor: pointer;
@@ -427,8 +427,8 @@
 	}
 
 	.more-button:hover {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.9);
+		background: rgb(255 255 255 / 10%);
+		color: rgb(255 255 255 / 90%);
 	}
 
 	.watchlist-dropdown {
@@ -442,9 +442,9 @@
 
 	.dropdown-select {
 		width: 100%;
-		background: rgba(0, 0, 0, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+		background: rgb(0 0 0 / 90%);
+		border: 1px solid rgb(255 255 255 / 30%);
+		box-shadow: 0 4px 12px rgb(0 0 0 / 50%);
 	}
 
 	.new-watchlist-section {
@@ -460,23 +460,23 @@
 		min-width: 0;
 		padding: 8px 12px;
 		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
-		color: #ffffff;
+		border: 1px solid rgb(255 255 255 / 20%);
+		background: rgb(0 0 0 / 30%);
+		color: #fff;
 		font-size: 14px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		transition: all 0.2s ease;
 	}
 
 	.new-watchlist-input:focus {
-		border-color: rgba(255, 255, 255, 0.6);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		border-color: rgb(255 255 255 / 60%);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 10%);
 		outline: none;
 	}
 
 	.new-watchlist-input::placeholder {
-		color: rgba(255, 255, 255, 0.6);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		color: rgb(255 255 255 / 60%);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.new-watchlist-buttons {
@@ -486,17 +486,17 @@
 
 	.utility-button {
 		padding: 6px 8px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 14px;
 		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		min-width: 28px;
 		height: 32px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -504,16 +504,16 @@
 	}
 
 	.utility-button:hover {
-		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.4);
+		background: rgb(255 255 255 / 20%);
+		border-color: rgb(255 255 255 / 40%);
 	}
 
 	.add-symbol-button {
 		padding: 6px 8px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 14px;
 		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		min-width: 32px;
 		height: 32px;
 		display: flex;
@@ -528,7 +528,7 @@
 	}
 
 	.add-symbol-button:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 10%);
 	}
 
 	.feature-container {
@@ -545,34 +545,34 @@
 	:global(.default-select) {
 		padding: 8px 12px;
 		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
-		color: #ffffff;
+		border: 1px solid rgb(255 255 255 / 20%);
+		background: rgb(0 0 0 / 30%);
+		color: #fff;
 		font-size: 14px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		transition: all 0.2s ease;
 	}
 
 	:global(.default-select:hover) {
-		border-color: rgba(255, 255, 255, 0.4);
+		border-color: rgb(255 255 255 / 40%);
 	}
 
 	:global(.default-select:focus) {
-		border-color: rgba(255, 255, 255, 0.6);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+		border-color: rgb(255 255 255 / 60%);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 10%);
 		outline: none;
 	}
 
 	:global(.default-select option) {
-		background: rgba(0, 0, 0, 0.9);
-		color: #ffffff;
+		background: rgb(0 0 0 / 90%);
+		color: #fff;
 		padding: 8px;
 	}
 
 	:global(.default-select optgroup) {
 		font-weight: 600;
-		color: rgba(255, 255, 255, 0.7);
-		background: rgba(0, 0, 0, 0.9);
+		color: rgb(255 255 255 / 70%);
+		background: rgb(0 0 0 / 90%);
 	}
 
 	/* New style for the list container */
@@ -580,6 +580,7 @@
 		flex-grow: 1; /* Take remaining vertical space */
 		overflow: visible; /* Remove scrolling from this container */
 		min-height: 0; /* Necessary for flex-grow in some cases */
+
 		/* Match padding pattern used in alerts container */
 		background: transparent;
 		border: none;
@@ -594,9 +595,10 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 4px;
+
 		/* Provide a bit of breathing room above header */
 		padding: 0 12px 0 0;
-		margin: 16px 0 10px 0;
+		margin: 16px 0 10px;
 	}
 
 	/* Adjust left padding of first data column (Ticker) to match Alerts list */
@@ -610,10 +612,10 @@
 
 	.add-symbol-button {
 		padding: 6px 8px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 14px;
 		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		min-width: 32px;
 		height: 32px;
 		display: flex;

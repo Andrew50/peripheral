@@ -197,7 +197,7 @@
 	.hero-title-section {
 		position: relative;
 		z-index: 20;
-		padding: 14rem 0.5rem 12rem 0.5rem;
+		padding: 14rem 0.5rem 12rem;
 		background: transparent;
 		width: 100%;
 		display: flex;
@@ -216,18 +216,18 @@
 	.hero-title {
 		font-size: clamp(4.05rem, 6vw, 7.5rem);
 		font-weight: 400;
-		margin: 0 0 1rem 0;
+		margin: 0 0 1rem;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
 		color: #f5f9ff;
 		text-shadow:
-			0 2px 12px rgba(0, 0, 0, 0.2),
-			0 1px 0 rgba(255, 255, 255, 0.01);
+			0 2px 12px rgb(0 0 0 / 20%),
+			0 1px 0 rgb(255 255 255 / 1%);
 	}
 
 	.hero-subtitle {
 		font-size: clamp(1.1rem, 3vw, 1.5rem);
-		color: rgba(245, 249, 255, 0.85);
+		color: rgb(245 249 255 / 85%);
 		margin-bottom: 1.5rem;
 		line-height: 1.6;
 		margin-top: 0;
@@ -241,21 +241,21 @@
 		margin-top: 1rem;
 		padding: 4px;
 		border-radius: 58px;
-		border: 1px solid rgba(255, 255, 255, 0.04);
+		border: 1px solid rgb(255 255 255 / 4%);
 		transition: all 0.3s ease;
 		background: transparent;
 	}
 
 	.button-border-layer-1 {
 		border-radius: 50px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		border: 1px solid rgb(255 255 255 / 8%);
 		padding: 4px;
 		background: transparent;
 	}
 
 	.button-border-layer-2 {
 		border-radius: 42px;
-		border: 1px solid rgba(255, 255, 255, 0.20);
+		border: 1px solid rgb(255 255 255 / 20%);
 		padding: 4px;
 		background: transparent;
 	}
@@ -263,8 +263,8 @@
 	.button-border-layer-3 {
 		border-radius: 40px;
 		background: linear-gradient(135deg, 
-			rgba(255, 255, 255, 0.95) 0%, 
-			rgba(240, 240, 240, 0.98) 100%);
+			rgb(255 255 255 / 95%) 0%, 
+			rgb(240 240 240 / 98%) 100%);
 		padding: 0;
 		overflow: hidden;
 	}
@@ -302,7 +302,7 @@
 	.features-title {
 		font-size: clamp(3rem, 7vw, 4rem);
 		font-weight: 400;
-		margin: 0 0 4rem 0;
+		margin: 0 0 4rem;
 		color: #f5f9ff;
 		line-height: 1.2;
 		text-align: center;
@@ -340,7 +340,7 @@
 	.subsection-title {
 		font-size: clamp(3rem, 7vw, 3.5rem);
 		font-weight: 400;
-		margin: 0 0 1.5rem 0;
+		margin: 0 0 1.5rem;
 		color: #f5f9ff;
 		line-height: 1.2;
 	}
@@ -397,7 +397,7 @@
 	}
 
 	/* Responsive Design */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.hero-title-section {
 			padding: 2rem 1rem;
 			min-height: 100vh;
@@ -431,7 +431,7 @@
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.hero-title-section {
 			padding: 1.5rem 1rem;
 			min-height: 100vh;

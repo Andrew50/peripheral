@@ -304,7 +304,7 @@
 	:global(.dropdown-container select:focus) {
 		outline: none;
 		border-color: var(--ui-accent);
-		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); /* Subtle focus ring */
+		box-shadow: 0 0 0 2px rgb(59 130 246 / 30%); /* Subtle focus ring */
 	}
 
 	/* Date range controls layout */
@@ -350,7 +350,7 @@
 	input[type='date']:focus {
 		outline: none;
 		border-color: var(--ui-accent); /* Highlight border on focus */
-		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); /* Subtle focus ring */
+		box-shadow: 0 0 0 2px rgb(59 130 246 / 30%); /* Subtle focus ring */
 	}
 
 	/* Run button styling - uses action-button class */
@@ -388,7 +388,7 @@
 		display: inline-block;
 		width: 1em; /* Relative size */
 		height: 1em;
-		border: 2px solid rgba(255, 255, 255, 0.3); /* Lighter border */
+		border: 2px solid rgb(255 255 255 / 30%); /* Lighter border */
 		border-radius: 50%;
 		border-top-color: var(--f1); /* White top border */
 		animation: spin 0.8s linear infinite;
@@ -452,6 +452,7 @@
 	/* Ensure the List component inside fits well */
 	:global(.results-container .list-component) {
 		/* Adjust if List component has a different class */
+
 		/* Add specific styles if needed, e.g., removing internal borders/backgrounds */
 		border: none;
 		background: none;
@@ -460,7 +461,7 @@
 	/* Error message container */
 	.error-container {
 		padding: 0.75rem 1rem;
-		background-color: rgba(239, 68, 68, 0.1); /* Red background tint */
+		background-color: rgb(239 68 68 / 10%); /* Red background tint */
 		border: 1px solid var(--c5); /* Red border */
 		border-radius: 6px;
 	}

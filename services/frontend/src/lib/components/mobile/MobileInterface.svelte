@@ -264,7 +264,7 @@
 		justify-content: space-between;
 		background: none;
 		border: none;
-		color: rgba(255, 255, 255, 0.5);
+		color: rgb(255 255 255 / 50%);
 		cursor: pointer;
 		padding: 4px;
 		transition: all 0.2s ease;
@@ -275,13 +275,14 @@
 	}
 
 	.mobile-nav-tab.active {
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.mobile-nav-tab svg {
 		width: 24px;
 		height: 24px;
 	}
+
 	.mobile-nav-tab svg.watchlist-icon {
 		width: 24px;
 		height: 24px;
@@ -350,11 +351,11 @@
 */
 
 	.mobile-alert-tabs {
-		padding: 0 0 8px 0;
+		padding: 0 0 8px;
 	}
 
 	.mobile-watchlist-tabs {
-		padding: 0 0 8px 0;
+		padding: 0 0 8px;
 	}
 
 	.mobile-sidebar-content {
@@ -381,7 +382,7 @@
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 12px;
 		background: transparent;
 		border-radius: 6px;
@@ -394,20 +395,20 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.watchlist-tab:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.watchlist-tab.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 	.alert-tab-container {

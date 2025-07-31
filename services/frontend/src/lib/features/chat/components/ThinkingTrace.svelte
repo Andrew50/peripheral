@@ -622,8 +622,8 @@
 
 <style>
 	.thinking-trace {
-		margin: 0.75rem 0 0 0;
-		border: 1px solid rgba(255, 255, 255, 0.4);
+		margin: 0.75rem 0 0;
+		border: 1px solid rgb(255 255 255 / 40%);
 		border-radius: 1rem;
 		padding: 0.75rem;
 	}
@@ -647,18 +647,18 @@
 		font-size: 0.9rem;
 		font-weight: 500;
 		flex: 1;
-		background: #ffffff linear-gradient(
+		background: #fff linear-gradient(
 			to right, 
-			#ffffff 0%, 
+			#fff 0%, 
 			var(--shimmer-contrast) 40%, 
 			var(--shimmer-contrast) 60%, 
-			#ffffff 100%
+			#fff 100%
 		);
 		background-size: 50% 200%;
 		background-position: -100% 0;
 		background-repeat: no-repeat;
 		background-clip: text;
-		-webkit-background-clip: text;
+		background-clip: text;
 		animation: loading-text-highlight 3s infinite linear;
 		animation-delay: 0.3s;
 		display: flex;
@@ -670,6 +670,7 @@
 		0% {
 			background-position: -100% 0;
 		}
+
 		100% {
 			background-position: 200% 0;
 		}
@@ -696,7 +697,7 @@
 		border: none;
 		padding: 0.25rem;
 		cursor: pointer;
-		color: #ffffff;
+		color: #fff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -783,7 +784,7 @@
 		border-radius: 1rem;
 		font-size: 0.75rem;
 		color: var(--text-primary);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border: 1px solid rgb(255 255 255 / 20%);
 		position: relative;
 		overflow: hidden;
 	}
@@ -809,6 +810,7 @@
 		from {
 			width: 0;
 		}
+
 		to {
 			width: 100%;
 		}
@@ -828,6 +830,7 @@
 			opacity: 0;
 			transform: translateY(10px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateY(0);
@@ -864,7 +867,7 @@
 
 	.citation-item {
 		padding: 0.5rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
 		cursor: pointer;
 		transition: background-color 0.2s ease;
 		width: 100%;
@@ -884,13 +887,13 @@
 	}
 
 	.citation-item:hover {
-		background-color: rgba(255, 255, 255, 0.05);
+		background-color: rgb(255 255 255 / 5%);
 	}
 
 	.citation-item:focus {
 		outline: 1px solid var(--c-blue);
 		outline-offset: -1px;
-		background-color: rgba(255, 255, 255, 0.05);
+		background-color: rgb(255 255 255 / 5%);
 	}
 
 	.citation-title {
@@ -928,8 +931,8 @@
 		border-radius: 50%;
 		flex-shrink: 0;
 		margin-right: 0.5rem;
-		background-color: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background-color: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 	}
 
 	/* Watchlist inline table styles */
@@ -946,7 +949,7 @@
 		gap: 0.25rem;
 		margin-bottom: 0.5rem;
 		font-size: 0.75rem;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.watchlist-header .watchlist-icon {
@@ -977,15 +980,15 @@
 
 	.watchlist-table-header {
 		display: flex;
-		background: rgba(255, 255, 255, 0.02);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 2%);
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
 		padding: 0.4rem;
 	}
 
 	.watchlist-header-cell {
 		font-size: 0.8rem;
 		font-weight: 500;
-		color: #ffffff;
+		color: #fff;
 		opacity: 1;
 		text-transform: none;
 	}
@@ -1011,7 +1014,7 @@
 	.watchlist-row {
 		display: flex;
 		padding: 0.4rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
 		transition: background-color 0.2s ease;
 	}
 
@@ -1020,7 +1023,7 @@
 	}
 
 	.watchlist-row:hover {
-		background: rgba(255, 255, 255, 0.02);
+		background: rgb(255 255 255 / 2%);
 	}
 
 	.watchlist-row-reveal {
@@ -1034,6 +1037,7 @@
 			opacity: 0;
 			transform: translateY(-10px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateY(0);
@@ -1044,6 +1048,7 @@
 		from {
 			max-height: 40px;
 		}
+
 		to {
 			max-height: 400px;
 		}
@@ -1123,12 +1128,12 @@
 	}
 
 	.watchlist-table-body::-webkit-scrollbar-thumb {
-		background-color: rgba(255, 255, 255, 0.1);
+		background-color: rgb(255 255 255 / 10%);
 		border-radius: 2px;
 	}
 
 	.watchlist-table-body::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(255, 255, 255, 0.2);
+		background-color: rgb(255 255 255 / 20%);
 	}
 
 	/* Chart styles */
@@ -1150,11 +1155,12 @@
 		width: 100%;
 		height: 100%; /* Subtract header height */
 	}
+
 	.chart-legend {
 		position: relative;
 		background: none;
 		overflow: hidden;
-		color: hsl(0, 0%, 0%);
+		color: hsl(0deg 0% 0%);
 		padding: 4px 6px;
 		border-radius: 4px;
 		font-size: 0.4rem;
@@ -1162,6 +1168,7 @@
 		gap: 0.4rem;
 		pointer-events: none;
 	}
+
 	.chart-legend .ticker {
 		font-weight: 600;
 	}

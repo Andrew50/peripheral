@@ -279,7 +279,7 @@
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 10px;
 		background: transparent;
 		border-radius: 6px;
@@ -292,28 +292,28 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.watchlist-tab:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 	}
 
 	.watchlist-tab:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	/* Active state similar to timeframe-preset-button.active */
 	.watchlist-tab.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 	/* Adjust radius to keep tab top corners rounded and flat bottom */
@@ -324,32 +324,33 @@
 
 	.dropdown-wrapper {
 		position: relative;
+
 		/* Push the dropdown to the far right within the flex container */
 		margin-left: auto;
 	}
 
 	.dropdown-select {
 		min-width: 150px;
-		background: rgba(0, 0, 0, 0.9);
+		background: rgb(0 0 0 / 90%);
 		border: 1px solid transparent;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		color: rgba(255, 255, 255, 0.9);
+		box-shadow: 0 4px 12px rgb(0 0 0 / 50%);
+		color: rgb(255 255 255 / 90%);
 		font-size: 13px;
 		padding: 6px 10px;
 		border-radius: 6px;
 		cursor: pointer;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.dropdown-select:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.dropdown-select:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.new-watchlist-section {
@@ -365,10 +366,10 @@
 		min-width: 0;
 		padding: 8px 12px;
 		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.3);
-		color: #ffffff;
+		border: 1px solid rgb(255 255 255 / 20%);
+		background: rgb(0 0 0 / 30%);
+		color: #fff;
 		font-size: 14px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 50%);
 	}
 </style>

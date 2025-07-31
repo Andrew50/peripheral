@@ -545,17 +545,17 @@
 	}
 
 	.content-container {
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: rgb(0 0 0 / 50%);
+		border: 1px solid rgb(255 255 255 / 30%);
 		border-radius: 0.75rem;
 		overflow-y: auto;
 		padding: 1rem;
 		height: auto;
 		max-height: 50vh;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 8px 32px rgb(0 0 0 / 50%);
 		backdrop-filter: var(--backdrop-blur);
 		scrollbar-width: thin;
-		scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+		scrollbar-color: rgb(255 255 255 / 30%) transparent;
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
@@ -569,18 +569,18 @@
 	}
 
 	.calendar-title {
-		color: #ffffff;
+		color: #fff;
 		font-size: 0.875rem;
 		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		opacity: 0.9;
 	}
 
 	.close-button {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 0.375rem;
-		color: #ffffff;
+		color: #fff;
 		font-size: 1rem;
 		line-height: 1;
 		padding: 0.25rem 0.5rem;
@@ -594,7 +594,7 @@
 	}
 
 	.close-button:hover {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 	}
 
 	.calendar-inputs {
@@ -610,39 +610,39 @@
 	}
 
 	.input-label {
-		color: #ffffff;
+		color: #fff;
 		font-size: 0.75rem;
 		font-weight: 600;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		opacity: 0.8;
 	}
 
 	.date-input,
 	.time-input {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 30%);
 		border-radius: 0.375rem;
 		padding: 0.5rem;
-		color: #ffffff;
+		color: #fff;
 		font-size: 0.875rem;
 		font-weight: 500;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 	}
 
 	.date-input:focus,
 	.time-input:focus {
 		outline: none;
 		border-color: #4a80f0;
-		box-shadow: 0 0 0 2px rgba(74, 128, 240, 0.2);
+		box-shadow: 0 0 0 2px rgb(74 128 240 / 20%);
 	}
 
 	.date-input::placeholder {
-		color: rgba(255, 255, 255, 0.5);
+		color: rgb(255 255 255 / 50%);
 	}
 
 	.calendar-container {
-		background: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.15);
+		background: rgb(0 0 0 / 20%);
+		border: 1px solid rgb(255 255 255 / 15%);
 		border-radius: 0.5rem;
 		padding: 0.75rem;
 	}
@@ -655,11 +655,11 @@
 	}
 
 	.nav-button {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 0.375rem;
 		padding: 0.375rem;
-		color: #ffffff;
+		color: #fff;
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -668,7 +668,7 @@
 	}
 
 	.nav-button:hover {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 	}
 
 	.nav-button svg {
@@ -679,18 +679,18 @@
 	.calendar-nav-title {
 		background: transparent;
 		border: none;
-		color: #ffffff;
+		color: #fff;
 		font-size: 0.9rem;
 		font-weight: 600;
 		cursor: pointer;
 		padding: 0.375rem 0.75rem;
 		border-radius: 0.375rem;
 		transition: background-color 0.15s ease;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 	}
 
 	.calendar-nav-title:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 10%);
 	}
 
 	.calendar-weekdays {
@@ -702,11 +702,11 @@
 
 	.calendar-weekdays span {
 		text-align: center;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 0.625rem;
 		font-weight: 600;
 		padding: 0.25rem 0;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.calendar-days {
@@ -720,7 +720,7 @@
 		border: 1px solid transparent;
 		border-radius: 0.25rem;
 		padding: 0.25rem;
-		color: #ffffff;
+		color: #fff;
 		cursor: pointer;
 		font-size: 0.75rem;
 		font-weight: 500;
@@ -732,19 +732,19 @@
 	}
 
 	.day-button.other-month {
-		color: rgba(255, 255, 255, 0.3);
+		color: rgb(255 255 255 / 30%);
 		cursor: not-allowed;
 	}
 
 	.day-button.current-month:hover {
-		background: rgba(255, 255, 255, 0.1);
-		border-color: rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 10%);
+		border-color: rgb(255 255 255 / 30%);
 	}
 
 	.day-button.selected {
 		background: #4a80f0;
 		border-color: #4a80f0;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
 	}
 
@@ -756,7 +756,7 @@
 
 	.day-button.selected.today {
 		background: #4a80f0;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.calendar-months,
@@ -768,11 +768,11 @@
 
 	.month-button,
 	.year-button {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 0.375rem;
 		padding: 0.5rem 0.375rem;
-		color: #ffffff;
+		color: #fff;
 		cursor: pointer;
 		font-size: 0.75rem;
 		font-weight: 500;
@@ -782,15 +782,15 @@
 
 	.month-button:hover,
 	.year-button:hover {
-		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.4);
+		background: rgb(255 255 255 / 20%);
+		border-color: rgb(255 255 255 / 40%);
 	}
 
 	.month-button.selected,
 	.year-button.selected {
 		background: #4a80f0;
 		border-color: #4a80f0;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
 	}
 
@@ -811,19 +811,19 @@
 	}
 
 	.action-button.cancel {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		color: #ffffff;
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 30%);
+		color: #fff;
 	}
 
 	.action-button.cancel:hover {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 	}
 
 	.action-button.confirm {
 		background: #4a80f0;
 		border: 1px solid #4a80f0;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.action-button.confirm:hover {
@@ -831,7 +831,7 @@
 		border-color: #3a70e0;
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.popup-container.calendar-popup {
 			width: min(350px, 90vw);
 		}

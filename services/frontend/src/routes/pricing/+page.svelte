@@ -1113,8 +1113,8 @@
 		background: transparent;
 		color: var(--color-dark);
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -1157,12 +1157,12 @@
 	.error-message {
 		margin: 1.25rem 0;
 		padding: 1rem 1.25rem;
-		background-color: rgba(239, 68, 68, 0.1);
+		background-color: rgb(239 68 68 / 10%);
 		color: #ef4444;
 		border-radius: 8px;
 		font-size: 0.9375rem;
 		text-align: center;
-		border: 1px solid rgba(239, 68, 68, 0.2);
+		border: 1px solid rgb(239 68 68 / 20%);
 	}
 
 	.feedback-message {
@@ -1176,15 +1176,15 @@
 	}
 
 	.feedback-message.success {
-		background-color: rgba(34, 197, 94, 0.1);
+		background-color: rgb(34 197 94 / 10%);
 		color: #22c55e;
-		border: 1px solid rgba(34, 197, 94, 0.2);
+		border: 1px solid rgb(34 197 94 / 20%);
 	}
 
 	.feedback-message.error {
-		background-color: rgba(239, 68, 68, 0.1);
+		background-color: rgb(239 68 68 / 10%);
 		color: #ef4444;
-		border: 1px solid rgba(239, 68, 68, 0.2);
+		border: 1px solid rgb(239 68 68 / 20%);
 	}
 
 	@keyframes slideIn {
@@ -1192,6 +1192,7 @@
 			opacity: 0;
 			transform: translateY(-10px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateY(0);
@@ -1209,7 +1210,7 @@
 		margin-top: 2rem;
 	}
 
-	@media (max-width: 1024px) {
+	@media (width <= 1024px) {
 		.plans-grid {
 			grid-template-columns: 1fr;
 			max-width: 450px;
@@ -1222,7 +1223,7 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		border: 2px solid rgba(255, 255, 255, 0.8);
+		border: 2px solid rgb(255 255 255 / 80%);
 		border-radius: 24px;
 	}
 
@@ -1233,19 +1234,19 @@
 	/* Conservative current plan highlighting - subtle visual indicators */
 	.plan-card.current-plan {
 		border-color: #f5f9ff;
-		background: rgba(34, 197, 94, 0.02);
+		background: rgb(34 197 94 / 2%);
 		position: relative;
 	}
 
 	/* Free plan styling - visible border */
 	.plan-card.free-plan {
-		border: 2px solid rgba(255, 255, 255, 0.6);
+		border: 2px solid rgb(255 255 255 / 60%);
 	}
 
 	/* Canceling plan styling */
 	.plan-card.canceling-plan {
 		border-color: var(--landing-warning, #f59e0b);
-		background: rgba(245, 158, 11, 0.02);
+		background: rgb(245 158 11 / 2%);
 		position: relative;
 	}
 
@@ -1259,14 +1260,15 @@
 		background: var(--landing-warning, #f59e0b);
 		border-radius: 8px 8px 0 0;
 	}
+
 	.popular-badge {
 		position: absolute;
 		top: -14px;
 		left: 50%;
 		transform: translateX(-50%);
 		background: #f5f9ff;
-		color: #000000;
-		font-family: 'Geist', 'Inter', sans-serif;
+		color: #000;
+		font-family: Geist, Inter, sans-serif;
 		font-size: 0.875rem;
 		font-weight: 600;
 		padding: 0.3rem 0.875rem;
@@ -1365,12 +1367,12 @@
 
 	/* Button modifications for current plan state */
 	.landing-button.current {
-		background: rgba(34, 197, 94, 0.2);
+		background: rgb(34 197 94 / 20%);
 		color: var(--landing-success);
-		border: 1px solid rgba(34, 197, 94, 0.3);
+		border: 1px solid rgb(34 197 94 / 30%);
 	}
 
-	@media (max-width: 640px) {
+	@media (width <= 640px) {
 		.pricing-content {
 			padding: 0 1rem;
 		}
@@ -1405,7 +1407,7 @@
 		margin-top: 2rem;
 	}
 
-	@media (max-width: 1024px) {
+	@media (width <= 1024px) {
 		.credits-grid {
 			grid-template-columns: 1fr;
 			max-width: 450px;
@@ -1433,14 +1435,14 @@
 
 	.credit-card.disabled {
 		opacity: 0.6;
-		background: rgba(255, 255, 255, 0.02);
-		border-color: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 2%);
+		border-color: rgb(255 255 255 / 5%);
 		cursor: not-allowed;
 	}
 
 	.credit-card.disabled:hover {
 		transform: none;
-		border-color: rgba(255, 255, 255, 0.05);
+		border-color: rgb(255 255 255 / 5%);
 	}
 
 	.credit-header {
@@ -1490,10 +1492,12 @@
 		background: #2e2e2e;
 		border-radius: 28px;
 		padding: 4px;
+
 		/* Increased bottom margin for extra space before plan cards */
 		margin: 0 auto 0.5rem; /* keep slight separation; subtitle will add its own spacing */
 		width: fit-content;
 		overflow: hidden;
+
 		/* Shrink slider by 10% */
 		transform: scale(0.9);
 		transform-origin: center;
@@ -1510,15 +1514,15 @@
 		font-size: 0.9375rem;
 		font-weight: 500;
 		color: #f5f9ff;
-		font-family: 'Geist', 'Inter', sans-serif;
+		font-family: Geist, Inter, sans-serif;
 		line-height: 1.5;
 	}
 
 	/* Enlarge the hero title specifically for the pricing page */
 	.pricing-hero .landing-title {
-		margin: 6rem 0 0 0;
+		margin: 6rem 0 0;
 		font-size: clamp(3rem, 7vw, 4.5rem);
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 		color: #f5f9ff;
 	}
 
@@ -1532,7 +1536,7 @@
 		border-radius: 28px;
 		transition: transform 0.2s ease;
 		z-index: 1;
-		box-shadow: 0 2px 8px rgba(197, 198, 199, 0.3);
+		box-shadow: 0 2px 8px rgb(197 198 199 / 30%);
 	}
 
 	.billing-slider.yearly .slider-background {
@@ -1551,7 +1555,7 @@
 		transition: all 0.2s ease;
 		border-radius: 16px;
 		min-width: 120px;
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 		color: #f5f9ff;
 		display: flex;
 		align-items: center;
@@ -1559,8 +1563,9 @@
 		text-align: center;
 		white-space: nowrap;
 	}
+
 	.slider-option.active {
-		color: #000000;
+		color: #000;
 	}
 
 	/* Subscribe Button Styles – visually consistent with slider options */
@@ -1568,14 +1573,14 @@
 		position: relative;
 		z-index: 1;
 		background: none;
-		border: 2px solid rgba(255, 255, 255, 0.3);
+		border: 2px solid rgb(255 255 255 / 30%);
 		padding: 0.875rem 2rem;
 		font-size: 1rem;
 		font-weight: 600;
 		cursor: pointer;
 		border-radius: 24px;
 		min-width: 120px;
-		font-family: 'Geist', 'Inter', sans-serif;
+		font-family: Geist, Inter, sans-serif;
 		color: #f5f9ff;
 		display: flex;
 		align-items: center;
@@ -1587,8 +1592,8 @@
 	}
 
 	.subscribe-button:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.1);
-		border-color: rgba(255, 255, 255, 0.4);
+		background: rgb(255 255 255 / 10%);
+		border-color: rgb(255 255 255 / 40%);
 		transform: translateY(-1px);
 	}
 
@@ -1600,7 +1605,7 @@
 	/* Pro plan subscribe button overrides */
 	.subscribe-button.pro {
 		background: #f5f9ff;
-		color: #000000;
+		color: #000;
 		border: 2px solid transparent;
 	}
 
@@ -1614,9 +1619,9 @@
 
 	/* Greyed-out styling for disabled/current subscribe buttons (Free plan, downgrade) */
 	.subscribe-button.current {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.7);
-		border-color: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 10%);
+		color: rgb(255 255 255 / 70%);
+		border-color: rgb(255 255 255 / 15%);
 		cursor: not-allowed;
 	}
 
@@ -1625,7 +1630,7 @@
 		color: var(--landing-success);
 	}
 
-	@media (max-width: 640px) {
+	@media (width <= 640px) {
 		.slider-option {
 			padding: 0.625rem 1rem;
 			font-size: 0.8125rem;
@@ -1644,7 +1649,7 @@
 	}
 
 	.compare-table-container {
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		border: 1px solid rgb(255 255 255 / 10%);
 		border-top: none;
 		border-radius: 0 0 16px 16px;
 		overflow: hidden;
@@ -1662,7 +1667,7 @@
 		grid-template-columns: 2fr repeat(var(--plan-count, 3), 1fr);
 		min-height: 60px;
 		align-items: center;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		border-bottom: 1px solid rgb(255 255 255 / 8%);
 	}
 
 	.compare-row:last-child {
@@ -1709,7 +1714,7 @@
 
 	.plan-price-small {
 		font-size: 0.875rem;
-		color: rgba(245, 249, 255, 0.7);
+		color: rgb(245 249 255 / 70%);
 		font-weight: 500;
 	}
 
@@ -1731,13 +1736,13 @@
 	}
 
 	.feature-value:has-text('✗') {
-		color: rgba(245, 249, 255, 0.4);
+		color: rgb(245 249 255 / 40%);
 		font-size: 1.25rem;
 	}
 
 	.footnote-ref {
 		font-size: 0.75rem;
-		color: rgba(245, 249, 255, 0.7);
+		color: rgb(245 249 255 / 70%);
 		margin-left: 2px;
 		font-weight: 400;
 	}
@@ -1748,10 +1753,10 @@
 	}
 
 	/* Mobile responsiveness for compare table */
-	@media (max-width: 1024px) {
+	@media (width <= 1024px) {
 		.compare-section {
 			width: 85vw;
-			margin: 3rem auto 1.5rem auto;
+			margin: 3rem auto 1.5rem;
 		}
 
 		.compare-row {
@@ -1783,10 +1788,10 @@
 		}
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.compare-section {
 			width: 95vw;
-			margin: 2rem auto 1rem auto;
+			margin: 2rem auto 1rem;
 		}
 
 		.compare-table-container {
@@ -1800,8 +1805,8 @@
 
 		.feature-column {
 			border-right: none;
-			border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-			padding: 0rem;
+			border-bottom: 1px solid rgb(255 255 255 / 8%);
+			padding: 0;
 			padding-bottom: 0;
 			text-align: center;
 		}
@@ -1809,7 +1814,7 @@
 		.plan-column {
 			padding: 0.5rem;
 			padding-bottom: 0;
-			border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+			border-bottom: 1px solid rgb(255 255 255 / 5%);
 		}
 
 		/* Show plan names inline with features on mobile */

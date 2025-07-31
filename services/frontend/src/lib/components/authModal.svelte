@@ -95,11 +95,8 @@
 <style>
 	.auth-modal-overlay {
 		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.75);
+		inset: 0;
+		background: rgb(0 0 0 / 75%);
 		backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
@@ -113,6 +110,7 @@
 		from {
 			opacity: 0;
 		}
+
 		to {
 			opacity: 1;
 		}
@@ -123,6 +121,7 @@
 			opacity: 0;
 			transform: translateY(20px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateY(0);
@@ -141,23 +140,23 @@
 
 	.auth-modal-content {
 		background: #121212;
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		border: 1px solid rgb(255 255 255 / 10%);
 		border-radius: 16px;
 		position: relative;
 		width: 100%;
 		overflow: hidden;
 		box-shadow:
-			0 20px 25px -5px rgba(0, 0, 0, 0.3),
-			0 10px 10px -5px rgba(0, 0, 0, 0.2);
+			0 20px 25px -5px rgb(0 0 0 / 30%),
+			0 10px 10px -5px rgb(0 0 0 / 20%);
 	}
 
 	.close-button {
 		position: absolute;
 		top: 1rem;
 		right: 1rem;
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 		border: none;
-		color: rgba(255, 255, 255, 0.4);
+		color: rgb(255 255 255 / 40%);
 		cursor: pointer;
 		padding: 0.5rem;
 		border-radius: 50%;
@@ -173,15 +172,15 @@
 	}
 
 	.close-button:hover {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.8);
+		background: rgb(255 255 255 / 10%);
+		color: rgb(255 255 255 / 80%);
 		opacity: 1;
 		transform: scale(1.02);
 	}
 
 	.feature-header {
 		background: linear-gradient(135deg, var(--ui-bg-secondary) 0%, var(--ui-bg-primary) 100%);
-		padding: 2rem 2rem 1.5rem 2rem;
+		padding: 2rem 2rem 1.5rem;
 		text-align: center;
 		position: relative;
 	}
@@ -198,13 +197,13 @@
 	}
 
 	.feature-header h2 {
-		color: #ffffff;
+		color: #fff;
 		font-size: 1.5rem;
 		font-weight: 700;
 		margin: 0;
 		letter-spacing: -0.02em;
-		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-		font-family: 'Inter', sans-serif;
+		text-shadow: 0 2px 4px rgb(0 0 0 / 30%);
+		font-family: Inter, sans-serif;
 		transition: all 0.2s ease;
 	}
 
@@ -244,17 +243,17 @@
 	/* Minimal overrides - base styles are now standardized */
 	.auth-wrapper :global(.error) {
 		color: #ef4444;
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 	}
 
 	/* Responsive adjustments */
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.auth-modal-overlay {
 			padding: 1rem;
 		}
 
 		.feature-header {
-			padding: 1.5rem 1.5rem 1rem 1.5rem;
+			padding: 1.5rem 1.5rem 1rem;
 		}
 
 		.feature-header h2 {

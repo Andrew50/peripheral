@@ -288,6 +288,7 @@
 <style>
 	.popup-container {
 		width: clamp(180px, 30vw, 220px);
+
 		/* Glass effect now provided by global .glass classes */
 		display: flex;
 		flex-direction: column;

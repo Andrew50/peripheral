@@ -779,11 +779,8 @@
 	table.sorting::after {
 		content: '';
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.05);
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
 		pointer-events: none;
 	}
 
@@ -834,7 +831,7 @@
 	}
 
 	.trade-details h4 {
-		margin: 0 0 6px 0;
+		margin: 0 0 6px;
 		color: var(--text-secondary);
 		font-size: 0.9em;
 	}
@@ -937,7 +934,7 @@
 	}
 
 	h4 {
-		margin: 20px 0 10px 0;
+		margin: 20px 0 10px;
 		color: var(--text-secondary);
 	}
 
@@ -984,6 +981,7 @@
 		align-items: center;
 		justify-content: center;
 	}
+
 	.flag-icon svg {
 		width: 16px;
 		height: 16px;
@@ -991,11 +989,12 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
+
 	/* Sticky Last column (Delete Button) */
 	th:last-child,
 	td:last-child {
 		position: sticky;
-		right: 0px; /* Stick to the very edge */
+		right: 0; /* Stick to the very edge */
 		z-index: 1; /* Above non-sticky cells */
 		background-color: inherit; /* Inherit row/header background */
 		width: 30px; /* Minimal width for button */
@@ -1004,6 +1003,7 @@
 		text-align: center;
 		vertical-align: middle;
 	}
+
 	th:last-child {
 		z-index: 3; /* Above tbody cells and sort overlay */
 		background-color: var(--ui-bg-element); /* Ensure header BG */
@@ -1023,6 +1023,7 @@
 		align-items: center;
 		justify-content: center;
 	}
+
 	.delete-button:hover {
 		color: var(--negative-hover, red); /* Darker red on hover */
 	}
@@ -1032,6 +1033,7 @@
 	}
 
 	/* Adjust background for sticky columns on hover/select */
+
 	/* Assuming .selected class is used for row selection */
 	tr:hover th:last-child,
 	tr:hover td:last-child {

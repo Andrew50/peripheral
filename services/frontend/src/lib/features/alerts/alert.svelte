@@ -380,16 +380,16 @@
 	}
 
 	.add-alert-form {
-		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 5%);
+		border: 1px solid rgb(255 255 255 / 10%);
 		border-radius: 8px;
 		padding: 16px;
 		margin-bottom: 16px;
 	}
 
 	.add-alert-form h4 {
-		margin: 0 0 16px 0;
-		color: #ffffff;
+		margin: 0 0 16px;
+		color: #fff;
 		font-size: 14px;
 		font-weight: 600;
 	}
@@ -401,7 +401,7 @@
 	.form-field label {
 		display: block;
 		margin-bottom: 4px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 12px;
 		font-weight: 500;
 	}
@@ -409,10 +409,10 @@
 	.ticker-selector {
 		width: 100%;
 		padding: 8px 12px;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 13px;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -420,24 +420,24 @@
 	}
 
 	.ticker-selector:hover {
-		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 15%);
+		border-color: rgb(255 255 255 / 30%);
 	}
 
 	.price-input {
 		width: 100%;
 		padding: 8px 12px;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 13px;
 	}
 
 	.price-input:focus {
 		outline: none;
-		border-color: rgba(255, 255, 255, 0.4);
-		background: rgba(255, 255, 255, 0.15);
+		border-color: rgb(255 255 255 / 40%);
+		background: rgb(255 255 255 / 15%);
 	}
 
 	.form-buttons {
@@ -459,17 +459,17 @@
 	}
 
 	.cancel-button {
-		background: rgba(255, 255, 255, 0.1);
-		color: #ffffff;
+		background: rgb(255 255 255 / 10%);
+		color: #fff;
 	}
 
 	.cancel-button:hover {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 	}
 
 	.save-button {
 		background: #089981;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.save-button:hover:not(:disabled) {
@@ -477,8 +477,8 @@
 	}
 
 	.save-button:disabled {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.5);
+		background: rgb(255 255 255 / 10%);
+		color: rgb(255 255 255 / 50%);
 		cursor: not-allowed;
 	}
 
@@ -487,26 +487,26 @@
 	.threshold-input {
 		width: 100%;
 		padding: 8px 12px;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
-		color: #ffffff;
+		color: #fff;
 		font-size: 13px;
 	}
 
 	.strategy-selector:focus,
 	.threshold-input:focus {
 		outline: none;
-		border-color: rgba(255, 255, 255, 0.4);
-		background: rgba(255, 255, 255, 0.15);
+		border-color: rgb(255 255 255 / 40%);
+		background: rgb(255 255 255 / 15%);
 	}
 
 	.strategy-selector option {
 		background: #1a1a1a;
-		color: #ffffff;
+		color: #fff;
 	}
 
-	/*.universe-controls {
+	/* .universe-controls {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
@@ -542,5 +542,5 @@
 		outline: none;
 		border-color: rgba(255, 255, 255, 0.4);
 		background: rgba(255, 255, 255, 0.15);
-	}*/
+	} */
 </style>

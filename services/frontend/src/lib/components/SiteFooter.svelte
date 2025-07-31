@@ -110,40 +110,43 @@
 	
 	.tagline-section {
 		width: 100vw;
-		padding: 4rem 0 8rem 0;
+		padding: 4rem 0 8rem;
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		background: none;
 	}
+
 	.tagline-inner {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 	}
+
 	.tagline-text {
 		font-size: clamp(2.5rem, 7vw, 5rem);
 		font-weight: 700;
-		color: #ffffff;
+		color: #fff;
 		text-align: center;
 		margin: 0;
 		letter-spacing: -0.04em;
 		line-height: 1.1;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
 			Roboto,
 			sans-serif;
 	}
+
 	.tagline {
 		margin-top: 3rem;
 		font-size: 1.2rem;
 		padding: 1.1rem 2.5rem;
 		background: #f5f9ff;
-		color: #000000;
+		color: #000;
 		border: 1px solid transparent;
 		border-radius: 999px;
 		font-weight: 600;
@@ -157,26 +160,28 @@
 		white-space: nowrap;
 		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
+
 	.tagline:hover {
 		transform: translateY(-3px);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 8px 24px rgb(0 0 0 / 15%);
 	}
 
 	.tagline-pretext {
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--color-primary);
-		margin: 0 0 0.5rem 0;
+		margin: 0 0 0.5rem;
 		text-align: center;
 	}
+
 	.landing-footer {
 		position: relative;
 		z-index: 10;
-		background: #000000;
+		background: #000;
 		width: 100vw;
 		left: 50%;
 		transform: translateX(-50%);
-		padding: 3rem 0 2rem 0;
+		padding: 3rem 0 2rem;
 		flex-shrink: 0;
 		margin-top: auto;
 		margin-bottom: 0;
@@ -204,7 +209,7 @@
 		color: var(--color-light);
 		font-size: 1.1rem;
 		font-weight: 400;
-		margin: 0 0 1rem 0;
+		margin: 0 0 1rem;
 		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 
@@ -222,7 +227,7 @@
 	.footer-links button {
 		background: none;
 		border: none;
-		color: #ffffff;
+		color: #fff;
 		cursor: pointer;
 		font-size: 0.9rem;
 		padding: 0;
@@ -236,7 +241,7 @@
 
 	.footer-bottom {
 		text-align: left;
-		color: rgba(255, 255, 255, 0.3);
+		color: rgb(255 255 255 / 30%);
 		font-size: 0.9rem;
 		display: flex;
 		flex-direction: column;
@@ -259,13 +264,13 @@
 		font-size: clamp(4rem, 14vw, 12rem);
 		font-weight: 900;
 		color: #f5f9ff;
-		padding: 0.5rem 0 0 0;
+		padding: 0.5rem 0 0;
 		margin-bottom: 0;
 		line-height: 1;
 		letter-spacing: -0.06em;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -315,14 +320,14 @@
 	}
 
 	/* Responsive Design */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.footer-content {
 			flex-direction: column;
 			align-items: stretch;
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.footer-content {
 			flex-direction: column;
 		}
