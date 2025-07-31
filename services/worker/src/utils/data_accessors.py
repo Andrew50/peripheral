@@ -4,18 +4,16 @@ Provides efficient data access functions for strategy execution.
 These functions replace the previous approach of passing large DataFrames to strategies.
 """
 
-import re
 import logging
-import threading
-from decimal import Decimal
+import re
 from datetime import datetime
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from zoneinfo import ZoneInfo
+
 import numpy as np
 import pandas as pd
-import psycopg2
-from zoneinfo import ZoneInfo
-from psycopg2.extras import RealDictCursor, NamedTupleCursor
+from psycopg2.extras import RealDictCursor
 
 from .context import Context
 
@@ -114,149 +112,149 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
     logger.info("📦 _get_bar_data_batched called with: timeframe=%s, start_date=%s, end_date=%s, min_bars=%s, filters=%s", 
                 timeframe, start_date, end_date, min_bars, filters)
     
-    try:
-        batch_size = 1000
-        all_results = []
+    #try:
+    batch_size = 1000
+    all_results = []
 
-        # Extract tickers from filters
-        tickers = None
-        if filters and 'tickers' in filters:
-            tickers = filters['tickers']
-            if not isinstance(tickers, list):
-                if isinstance(tickers, str):
-                    tickers = [tickers]
-                else:
-                    tickers = None
+    # Extract tickers from filters
+    tickers = None
+    if filters and 'tickers' in filters:
+        tickers = filters['tickers']
+        if not isinstance(tickers, list):
+            if isinstance(tickers, str):
+                tickers = [tickers]
+            else:
+                tickers = None
 
-        logger.info("📊 Batching: extracted tickers=%s", tickers)
+    logger.info("📊 Batching: extracted tickers=%s", tickers)
 
-        # Get the universe of tickers to process
-        if tickers is None:
-            # Get all active tickers
-            universe_tickers = _get_all_active_tickers(ctx, filters)
-            if not universe_tickers:
-                logger.warning("⚠️ No active tickers found in universe")
-                return pd.DataFrame()
-            logger.info("🌍 Retrieved %d active tickers from universe", len(universe_tickers))
-        else:
-            universe_tickers = tickers
-            logger.info("🎯 Using provided %d tickers", len(universe_tickers))
-
-        # Create batches
-        ticker_batches = []
-        for i in range(0, len(universe_tickers), batch_size):
-            batch_tickers = universe_tickers[i:i + batch_size]
-            ticker_batches.append(batch_tickers)
-
-        logger.info("📦 Created %d batches of size %d", len(ticker_batches), batch_size)
-
-        # Helper function to process a single batch
-        def process_batch(batch_tickers, batch_num):
-            logger.info("🔄 Processing batch %d with %d tickers: %s", batch_num, len(batch_tickers), batch_tickers[:5])
-            try:
-                # Create batch filters with tickers
-                batch_filters = filters.copy() if filters else {}
-                batch_filters['tickers'] = batch_tickers
-
-                # Get data for this batch using the single method
-                batch_result = _get_bar_data_single(
-                    ctx,
-                    timeframe=timeframe,
-                    columns=columns,
-                    min_bars=min_bars,
-                    filters=batch_filters,
-                    extended_hours=extended_hours,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-                if batch_result is not None and len(batch_result) > 0:
-                    logger.info("✅ Batch %d returned %d rows", batch_num, len(batch_result))
-                    return batch_result
-                logger.warning("⚠️ Batch %s returned no data", batch_num)
-                return None
-            except ValueError as batch_error:
-                logger.error("❌ Error in batch %s: %s", batch_num, batch_error)
-                return None
-
-        # Process batches in parallel using ThreadPoolExecutor
-        # Determine optimal number of workers based on batch count and system resources
-        max_workers = min(len(ticker_batches), 10)  # Cap at 10 to avoid overwhelming the database
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all batch processing tasks
-            future_to_batch = {
-                executor.submit(process_batch, batch_tickers, i + 1): i + 1
-                for i, batch_tickers in enumerate(ticker_batches)
-            }
-            # Collect results as they complete
-            for future in as_completed(future_to_batch):
-                batch_num = future_to_batch[future]
-                try:
-                    result = future.result()
-                    if result is not None:
-                        all_results.append(result)
-                except Exception as exc:
-                    logger.error("❌ Batch %s generated an exception: %s", batch_num, exc)
-
-        # Combine all batch results
-        if all_results:
-            # Concatenate DataFrames efficiently (no copies when possible)
-            combined_result = pd.concat(all_results, ignore_index=True, copy=False)
-            logger.info("🎉 Combined %d batch results into DataFrame with %d total rows", 
-                       len(all_results), len(combined_result))
-            return combined_result
-        else:
-            logger.warning("⚠️ No data returned from any batch")
+    # Get the universe of tickers to process
+    if tickers is None:
+        # Get all active tickers
+        universe_tickers = _get_all_active_tickers(ctx, filters)
+        if not universe_tickers:
+            logger.warning("⚠️ No active tickers found in universe")
             return pd.DataFrame()
+        logger.info("🌍 Retrieved %d active tickers from universe", len(universe_tickers))
+    else:
+        universe_tickers = tickers
+        logger.info("🎯 Using provided %d tickers", len(universe_tickers))
 
-    except Exception as e:
-        logger.error("❌ Error in batched data fetching: %s", e)
-        return pd.DataFrame()
+    # Create batches
+    ticker_batches = []
+    for i in range(0, len(universe_tickers), batch_size):
+        batch_tickers = universe_tickers[i:i + batch_size]
+        ticker_batches.append(batch_tickers)
+
+    logger.info("📦 Created %d batches of size %d", len(ticker_batches), batch_size)
+
+    # Helper function to process a single batch
+    def process_batch(batch_tickers, batch_num):
+        logger.info("🔄 Processing batch %d with %d tickers: %s", batch_num, len(batch_tickers), batch_tickers[:5])
+        try:
+            # Create batch filters with tickers
+            batch_filters = filters.copy() if filters else {}
+            batch_filters['tickers'] = batch_tickers
+
+            # Get data for this batch using the single method
+            batch_result = _get_bar_data_single(
+                ctx,
+                timeframe=timeframe,
+                columns=columns,
+                min_bars=min_bars,
+                filters=batch_filters,
+                extended_hours=extended_hours,
+                start_date=start_date,
+                end_date=end_date
+            )
+            if batch_result is not None and len(batch_result) > 0:
+                logger.info("✅ Batch %d returned %d rows", batch_num, len(batch_result))
+                return batch_result
+            logger.warning("⚠️ Batch %s returned no data", batch_num)
+            return None
+        except ValueError as batch_error:
+            logger.error("❌ Error in batch %s: %s", batch_num, batch_error)
+            return None
+
+    # Process batches in parallel using ThreadPoolExecutor
+    # Determine optimal number of workers based on batch count and system resources
+    max_workers = min(len(ticker_batches), 10)  # Cap at 10 to avoid overwhelming the database
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all batch processing tasks
+        future_to_batch = {
+            executor.submit(process_batch, batch_tickers, i + 1): i + 1
+            for i, batch_tickers in enumerate(ticker_batches)
+        }
+        # Collect results as they complete
+        for future in as_completed(future_to_batch):
+            batch_num = future_to_batch[future]
+            #try:
+            result = future.result()
+            if result is not None:
+                all_results.append(result)
+            #except Exception as exc:  # pylint: disable=broad-except
+                #logger.error("❌ Batch %s generated an exception: %s", batch_num, exc)
+
+    # Combine all batch results
+    if all_results:
+        # Concatenate DataFrames efficiently (no copies when possible)
+        combined_result = pd.concat(all_results, ignore_index=True, copy=False)
+        logger.info("🎉 Combined %d batch results into DataFrame with %d total rows", 
+                    len(all_results), len(combined_result))
+        return combined_result
+
+    logger.warning("⚠️ No data returned from any batch")
+    return pd.DataFrame()
+
+    #except Exception as exc:  # pylint: disable=broad-except
+        #logger.error("❌ Error in batched data fetching: %s", exc)
+        #return pd.DataFrame()
 
 def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> List[str]:
     """Get list of all active tickers with optional filtering"""
-    try:
-        # Build filter conditions for active securities
-        filter_parts = ["maxdate IS NULL", "active = true"]
-        params = []
-        # Apply additional filters if provided (excluding tickers which is handled separately)
-        if filters:
-            if 'sector' in filters:
-                filter_parts.append("sector = %s")
-                params.append(filters['sector'])
-            if 'industry' in filters:
-                filter_parts.append("industry = %s")
-                params.append(filters['industry'])
-            if 'primary_exchange' in filters:
-                filter_parts.append("primary_exchange = %s")
-                params.append(filters['primary_exchange'])
-            if 'market_cap_min' in filters:
-                filter_parts.append("market_cap >= %s")
-                params.append(filters['market_cap_min'])
-            if 'market_cap_max' in filters:
-                filter_parts.append("market_cap <= %s")
-                params.append(filters['market_cap_max'])
-            if 'total_employees_min' in filters:
-                filter_parts.append("total_employees >= %s")
-                params.append(filters['total_employees_min'])
-            if 'total_employees_max' in filters:
-                filter_parts.append("total_employees <= %s")
-                params.append(filters['total_employees_max'])
-            if 'weighted_shares_outstanding_min' in filters:
-                filter_parts.append("weighted_shares_outstanding >= %s")
-                params.append(filters['weighted_shares_outstanding_min'])
-            if 'weighted_shares_outstanding_max' in filters:
-                filter_parts.append("weighted_shares_outstanding <= %s")
-                params.append(filters['weighted_shares_outstanding_max'])
-        where_clause = " AND ".join(filter_parts)
-        # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
-        query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"  # nosec B608
-        with ctx.conn.transaction() as cursor:
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-        return [row['ticker'] for row in results if row and row['ticker']]  # Filter out None tickers
-    except Exception as e:
-        logger.error("Error fetching active tickers: %s", e)
-        return []
+    #try:
+    # Build filter conditions for active securities
+    filter_parts = ["maxdate IS NULL", "active = true"]
+    params = []
+    # Apply additional filters if provided (excluding tickers which is handled separately)
+    if filters:
+        if 'sector' in filters:
+            filter_parts.append("sector = %s")
+            params.append(filters['sector'])
+        if 'industry' in filters:
+            filter_parts.append("industry = %s")
+            params.append(filters['industry'])
+        if 'primary_exchange' in filters:
+            filter_parts.append("primary_exchange = %s")
+            params.append(filters['primary_exchange'])
+        if 'market_cap_min' in filters:
+            filter_parts.append("market_cap >= %s")
+            params.append(filters['market_cap_min'])
+        if 'market_cap_max' in filters:
+            filter_parts.append("market_cap <= %s")
+            params.append(filters['market_cap_max'])
+        if 'total_employees_min' in filters:
+            filter_parts.append("total_employees >= %s")
+            params.append(filters['total_employees_min'])
+        if 'total_employees_max' in filters:
+            filter_parts.append("total_employees <= %s")
+            params.append(filters['total_employees_max'])
+        if 'weighted_shares_outstanding_min' in filters:
+            filter_parts.append("weighted_shares_outstanding >= %s")
+            params.append(filters['weighted_shares_outstanding_min'])
+        if 'weighted_shares_outstanding_max' in filters:
+            filter_parts.append("weighted_shares_outstanding <= %s")
+            params.append(filters['weighted_shares_outstanding_max'])
+    where_clause = " AND ".join(filter_parts)
+    # Safe: filter_parts contains only hardcoded strings, all user input is parameterized
+    query = f"SELECT ticker FROM securities WHERE {where_clause} ORDER BY ticker"  # nosec B608
+    with ctx.conn.transaction() as cursor:
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+    return [row['ticker'] for row in results if row and row['ticker']]  # Filter out None tickers
+    #except Exception as exc:  # pylint: disable=broad-except
+        #logger.error("Error fetching active tickers: %s", exc)
+        #return []
 
 
 def _build_query(timeframe: str, columns: List[str], min_bars: int,
@@ -299,9 +297,9 @@ def _build_query(timeframe: str, columns: List[str], min_bars: int,
     if needs_aggregation:
         return _build_aggregated_query(bucket_sql, base_table, safe_columns, min_bars, filters,
                                      extended_hours, start_date, end_date, realtime_mode)
-    else:
-        return _build_direct_query(base_table, safe_columns, min_bars, filters,
-                                 extended_hours, start_date, end_date, realtime_mode)
+
+    return _build_direct_query(base_table, safe_columns, min_bars, filters,
+                               extended_hours, start_date, end_date, realtime_mode)
 
 
 def _build_aggregated_query(bucket_sql: str, base_table: str, columns: List[str], min_bars: int,
@@ -629,84 +627,84 @@ def _execute_and_process_query(ctx: Context, query: str, params: List, safe_colu
 
 def _get_security_ids_from_tickers(ctx: Context, tickers: List[str], filters: Dict[str, any] = None) -> List[int]:
     """Convert ticker symbols to security IDs with optional filtering"""
-    try:
-        if not tickers:
-            return []
-
-        # Build filter conditions
-        filter_parts = ["maxdate IS NULL"]
-        params = []
-
-        # Add ticker filter
-        placeholders = ','.join(['%s'] * len(tickers))
-        filter_parts.append(f"ticker IN ({placeholders})")
-        params.extend(tickers)
-
-        # Apply additional filters if provided
-        if filters:
-            if 'sector' in filters:
-                filter_parts.append("sector = %s")
-                params.append(filters['sector'])
-
-            if 'industry' in filters:
-                filter_parts.append("industry = %s")
-                params.append(filters['industry'])
-
-            #if 'market' in filters:
-            #    filter_parts.append("market = %s")
-            #    params.append(filters['market'])
-
-            if 'primary_exchange' in filters:
-                filter_parts.append("primary_exchange = %s")
-                params.append(filters['primary_exchange'])
-
-            if 'market_cap_min' in filters:
-                filter_parts.append("market_cap >= %s")
-                params.append(filters['market_cap_min'])
-
-            if 'market_cap_max' in filters:
-                filter_parts.append("market_cap <= %s")
-                params.append(filters['market_cap_max'])
-
-            if 'total_employees_min' in filters:
-                filter_parts.append("total_employees >= %s")
-                params.append(filters['total_employees_min'])
-
-            if 'total_employees_max' in filters:
-                filter_parts.append("total_employees <= %s")
-                params.append(filters['total_employees_max'])
-
-            if 'weighted_shares_outstanding_min' in filters:
-                filter_parts.append("weighted_shares_outstanding >= %s")
-                params.append(filters['weighted_shares_outstanding_min'])
-
-            if 'weighted_shares_outstanding_max' in filters:
-                filter_parts.append("weighted_shares_outstanding <= %s")
-                params.append(filters['weighted_shares_outstanding_max'])
-
-            if 'active' in filters:
-                filter_parts.append("active = %s")
-                params.append(filters['active'])
-            else:
-                # Default to active if not explicitly specified
-                filter_parts.append("active = true")
-        else:
-            # Default to active if no filters provided
-            filter_parts.append("active = true")
-
-        where_clause = " AND ".join(filter_parts)
-        # nosec B608: Safe - query built from validated components, all values parameterized
-        query = f"SELECT securityid FROM securities WHERE {where_clause}"  # nosec B608
-
-        with ctx.conn.transaction() as cursor:
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-
-        return [row['securityid'] for row in results]
-
-    except Exception as e:
-        logger.error("Error converting tickers to security IDs: %s", e)
+    #try:
+    if not tickers:
         return []
+
+    # Build filter conditions
+    filter_parts = ["maxdate IS NULL"]
+    params = []
+
+    # Add ticker filter
+    placeholders = ','.join(['%s'] * len(tickers))
+    filter_parts.append(f"ticker IN ({placeholders})")
+    params.extend(tickers)
+
+    # Apply additional filters if provided
+    if filters:
+        if 'sector' in filters:
+            filter_parts.append("sector = %s")
+            params.append(filters['sector'])
+
+        if 'industry' in filters:
+            filter_parts.append("industry = %s")
+            params.append(filters['industry'])
+
+        #if 'market' in filters:
+        #    filter_parts.append("market = %s")
+        #    params.append(filters['market'])
+
+        if 'primary_exchange' in filters:
+            filter_parts.append("primary_exchange = %s")
+            params.append(filters['primary_exchange'])
+
+        if 'market_cap_min' in filters:
+            filter_parts.append("market_cap >= %s")
+            params.append(filters['market_cap_min'])
+
+        if 'market_cap_max' in filters:
+            filter_parts.append("market_cap <= %s")
+            params.append(filters['market_cap_max'])
+
+        if 'total_employees_min' in filters:
+            filter_parts.append("total_employees >= %s")
+            params.append(filters['total_employees_min'])
+
+        if 'total_employees_max' in filters:
+            filter_parts.append("total_employees <= %s")
+            params.append(filters['total_employees_max'])
+
+        if 'weighted_shares_outstanding_min' in filters:
+            filter_parts.append("weighted_shares_outstanding >= %s")
+            params.append(filters['weighted_shares_outstanding_min'])
+
+        if 'weighted_shares_outstanding_max' in filters:
+            filter_parts.append("weighted_shares_outstanding <= %s")
+            params.append(filters['weighted_shares_outstanding_max'])
+
+        if 'active' in filters:
+            filter_parts.append("active = %s")
+            params.append(filters['active'])
+        else:
+            # Default to active if not explicitly specified
+            filter_parts.append("active = true")
+    else:
+        # Default to active if no filters provided
+        filter_parts.append("active = true")
+
+    where_clause = " AND ".join(filter_parts)
+    # nosec B608: Safe - query built from validated components, all values parameterized
+    query = f"SELECT securityid FROM securities WHERE {where_clause}"  # nosec B608
+
+    with ctx.conn.transaction() as cursor:
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+
+    return [row['securityid'] for row in results]
+
+    #except Exception as exc:  # pylint: disable=broad-except
+        #logger.error("Error converting tickers to security IDs: %s", exc)
+        #return []
 
 def _get_general_data(ctx: Context, columns: List[str] = None,
             filters: Dict[str, any] = None) -> pd.DataFrame:
@@ -728,142 +726,142 @@ def _get_general_data(ctx: Context, columns: List[str] = None,
         pandas.DataFrame with columns: ticker, name, sector, industry, primary_exchange,
             active, description, cik, market_cap, etc.
     """
-    try:
-        # Extract tickers from filters if provided
-        tickers = None
-        if filters and 'tickers' in filters:
-            tickers = filters['tickers']
-            if not isinstance(tickers, list):
-                if isinstance(tickers, str):
-                    tickers = [tickers]  # Convert single ticker to list
-                else:
-                    tickers = None
-
-        # Default columns if not specified - include ticker by default
-        if columns is None:
-            columns = ["ticker", "name", "sector", "industry", "primary_exchange",
-            "active", "description", "cik"]
-
-        # Validate columns against allowed set
-        allowed_columns = {
-            "securityid", "ticker", "name", "sector", "industry", "market",
-            "primary_exchange", "active", "description", "cik",
-            "market_cap", "share_class_shares_outstanding", "share_class_figi",
-            "total_employees", "weighted_shares_outstanding"
-        }
-        safe_columns = [col for col in columns if col in allowed_columns]
-
-        if not safe_columns:
-            return pd.DataFrame()
-
-        # Always include securityid for internal processing, but include ticker for user access
-        internal_columns = safe_columns.copy()
-        if "securityid" not in internal_columns:
-            internal_columns = ["securityid"] + internal_columns
-        if "ticker" not in internal_columns and "ticker" in allowed_columns:
-            internal_columns.append("ticker")
-
-        # Build the query with filters
-        filter_parts = ["maxdate IS NULL"]
-        params = []
-
-        # Apply filters if provided
-        if filters:
-            if 'sector' in filters:
-                filter_parts.append("sector = %s")
-                params.append(filters['sector'])
-
-            if 'industry' in filters:
-                filter_parts.append("industry = %s")
-                params.append(filters['industry'])
-
-            if 'primary_exchange' in filters:
-                filter_parts.append("primary_exchange = %s")
-                params.append(filters['primary_exchange'])
-
-            if 'market_cap_min' in filters:
-                filter_parts.append("market_cap >= %s")
-                params.append(filters['market_cap_min'])
-
-            if 'market_cap_max' in filters:
-                filter_parts.append("market_cap <= %s")
-                params.append(filters['market_cap_max'])
-
-            if 'total_employees_min' in filters:
-                filter_parts.append("total_employees >= %s")
-                params.append(filters['total_employees_min'])
-
-            if 'total_employees_max' in filters:
-                filter_parts.append("total_employees <= %s")
-                params.append(filters['total_employees_max'])
-
-            if 'weighted_shares_outstanding_min' in filters:
-                filter_parts.append("weighted_shares_outstanding >= %s")
-                params.append(filters['weighted_shares_outstanding_min'])
-
-            if 'weighted_shares_outstanding_max' in filters:
-                filter_parts.append("weighted_shares_outstanding <= %s")
-                params.append(filters['weighted_shares_outstanding_max'])
-
-            if 'active' in filters:
-                filter_parts.append("active = %s")
-                params.append(filters['active'])
+    #try:
+    # Extract tickers from filters if provided
+    tickers = None
+    if filters and 'tickers' in filters:
+        tickers = filters['tickers']
+        if not isinstance(tickers, list):
+            if isinstance(tickers, str):
+                tickers = [tickers]  # Convert single ticker to list
             else:
-                # Default to active if not explicitly specified
-                filter_parts.append("active = true")
+                tickers = None
+
+    # Default columns if not specified - include ticker by default
+    if columns is None:
+        columns = ["ticker", "name", "sector", "industry", "primary_exchange",
+        "active", "description", "cik"]
+
+    # Validate columns against allowed set
+    allowed_columns = {
+        "securityid", "ticker", "name", "sector", "industry", "market",
+        "primary_exchange", "active", "description", "cik",
+        "market_cap", "share_class_shares_outstanding", "share_class_figi",
+        "total_employees", "weighted_shares_outstanding"
+    }
+    safe_columns = [col for col in columns if col in allowed_columns]
+
+    if not safe_columns:
+        return pd.DataFrame()
+
+    # Always include securityid for internal processing, but include ticker for user access
+    internal_columns = safe_columns.copy()
+    if "securityid" not in internal_columns:
+        internal_columns = ["securityid"] + internal_columns
+    if "ticker" not in internal_columns and "ticker" in allowed_columns:
+        internal_columns.append("ticker")
+
+    # Build the query with filters
+    filter_parts = ["maxdate IS NULL"]
+    params = []
+
+    # Apply filters if provided
+    if filters:
+        if 'sector' in filters:
+            filter_parts.append("sector = %s")
+            params.append(filters['sector'])
+
+        if 'industry' in filters:
+            filter_parts.append("industry = %s")
+            params.append(filters['industry'])
+
+        if 'primary_exchange' in filters:
+            filter_parts.append("primary_exchange = %s")
+            params.append(filters['primary_exchange'])
+
+        if 'market_cap_min' in filters:
+            filter_parts.append("market_cap >= %s")
+            params.append(filters['market_cap_min'])
+
+        if 'market_cap_max' in filters:
+            filter_parts.append("market_cap <= %s")
+            params.append(filters['market_cap_max'])
+
+        if 'total_employees_min' in filters:
+            filter_parts.append("total_employees >= %s")
+            params.append(filters['total_employees_min'])
+
+        if 'total_employees_max' in filters:
+            filter_parts.append("total_employees <= %s")
+            params.append(filters['total_employees_max'])
+
+        if 'weighted_shares_outstanding_min' in filters:
+            filter_parts.append("weighted_shares_outstanding >= %s")
+            params.append(filters['weighted_shares_outstanding_min'])
+
+        if 'weighted_shares_outstanding_max' in filters:
+            filter_parts.append("weighted_shares_outstanding <= %s")
+            params.append(filters['weighted_shares_outstanding_max'])
+
+        if 'active' in filters:
+            filter_parts.append("active = %s")
+            params.append(filters['active'])
         else:
-            # Default to active if no filters provided
+            # Default to active if not explicitly specified
             filter_parts.append("active = true")
+    else:
+        # Default to active if no filters provided
+        filter_parts.append("active = true")
 
-        # Handle ticker-specific filtering
-        if tickers is not None and len(tickers) > 0:
-            # Convert ticker symbols to security IDs and add to filter
-            security_ids = _get_security_ids_from_tickers(tickers, filters)
-            if not security_ids:
-                logger.warning("No security IDs found for provided tickers")
-                return pd.DataFrame()
-
-            # Use converted security IDs
-            placeholders = ','.join(['%s'] * len(security_ids))
-            filter_parts.append(f"securityid IN ({placeholders})")
-            params.extend(security_ids)
-
-        # Build final query
-        where_clause = " AND ".join(filter_parts)
-        select_clause = ', '.join(internal_columns)
-        # nosec B608: Safe - columns validated against allowlist, all values parameterized
-        query = f"SELECT {select_clause} FROM securities WHERE {where_clause} ORDER BY securityid"  # nosec B608
-
-        with ctx.conn.get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-
-            cursor.close()
-
-        if not results:
+    # Handle ticker-specific filtering
+    if tickers is not None and len(tickers) > 0:
+        # Convert ticker symbols to security IDs and add to filter
+        security_ids = _get_security_ids_from_tickers(tickers, filters)
+        if not security_ids:
+            logger.warning("No security IDs found for provided tickers")
             return pd.DataFrame()
 
-        # Convert to DataFrame
-        df = pd.DataFrame(results)
+        # Use converted security IDs
+        placeholders = ','.join(['%s'] * len(security_ids))
+        filter_parts.append(f"securityid IN ({placeholders})")
+        params.extend(security_ids)
 
-        # Filter to only requested columns for the final result
-        final_columns = [col for col in safe_columns if col in df.columns]
-        if final_columns:
-            df = df[final_columns]
+    # Build final query
+    where_clause = " AND ".join(filter_parts)
+    select_clause = ', '.join(internal_columns)
+    # nosec B608: Safe - columns validated against allowlist, all values parameterized
+    query = f"SELECT {select_clause} FROM securities WHERE {where_clause} ORDER BY securityid"  # nosec B608
 
-        # IMPORTANT: Don't set ticker as index if it was explicitly requested as a column
-        # Strategies need ticker as a column to iterate over results
-        # Only set securityid as index if it was explicitly requested
-        if "securityid" in safe_columns and "securityid" in df.columns:
-            df.set_index("securityid", inplace=True)
+    with ctx.conn.get_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        return df
+        cursor.execute(query, params)
+        results = cursor.fetchall()
 
-    except Exception as e:
-        logger.error(f"Error in get_general_data: {e}")
+        cursor.close()
+
+    if not results:
         return pd.DataFrame()
+
+    # Convert to DataFrame
+    df = pd.DataFrame(results)
+
+    # Filter to only requested columns for the final result
+    final_columns = [col for col in safe_columns if col in df.columns]
+    if final_columns:
+        df = df[final_columns]
+
+    # IMPORTANT: Don't set ticker as index if it was explicitly requested as a column
+    # Strategies need ticker as a column to iterate over results
+    # Only set securityid as index if it was explicitly requested
+    if "securityid" in safe_columns and "securityid" in df.columns:
+        df.set_index("securityid", inplace=True)
+
+    return df
+
+    #except Exception as e:
+        #logger.error(f"Error in get_general_data: {e}")
+        #return pd.DataFrame()
 
 
 
@@ -1052,50 +1050,50 @@ def _normalize_est(dt: datetime):
 
 def get_available_filter_values(ctx: Context) -> Dict[str, List[str]]:
     """Get all available values for filter fields from the database"""
-    try:
-        with ctx.conn.get_connection() as conn:
-            cursor = conn.cursor()
+    #try:
+    with ctx.conn.get_connection() as conn:
+        cursor = conn.cursor()
 
-            filter_values = {}
+        filter_values = {}
 
-            # Get distinct sectors
-            cursor.execute("""
-                SELECT DISTINCT sector
-                FROM securities
-                WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL
-                ORDER BY sector
-            """)
-            filter_values['sectors'] = [row['sector'] for row in cursor.fetchall()]
+        # Get distinct sectors
+        cursor.execute("""
+            SELECT DISTINCT sector
+            FROM securities
+            WHERE maxdate IS NULL AND active = true AND sector IS NOT NULL
+            ORDER BY sector
+        """)
+        filter_values['sectors'] = [row['sector'] for row in cursor.fetchall()]
 
-            # Get distinct industries
-            cursor.execute("""
-                SELECT DISTINCT industry
-                FROM securities
-                WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL
-                ORDER BY industry
-            """)
-            filter_values['industries'] = [row['industry'] for row in cursor.fetchall()]
+        # Get distinct industries
+        cursor.execute("""
+            SELECT DISTINCT industry
+            FROM securities
+            WHERE maxdate IS NULL AND active = true AND industry IS NOT NULL
+            ORDER BY industry
+        """)
+        filter_values['industries'] = [row['industry'] for row in cursor.fetchall()]
 
-            # Get distinct primary exchanges
-            cursor.execute("""
-                SELECT DISTINCT primary_exchange
-                FROM securities
-                WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL
-                ORDER BY primary_exchange
-            """)
-            filter_values['primary_exchanges'] = [row['primary_exchange'] for row in cursor.fetchall()]
+        # Get distinct primary exchanges
+        cursor.execute("""
+            SELECT DISTINCT primary_exchange
+            FROM securities
+            WHERE maxdate IS NULL AND active = true AND primary_exchange IS NOT NULL
+            ORDER BY primary_exchange
+        """)
+        filter_values['primary_exchanges'] = [row['primary_exchange'] for row in cursor.fetchall()]
 
-            cursor.close()
-            required_keys = ['sectors', 'industries', 'primary_exchanges']
-            for key in required_keys:
-                if key not in filter_values or not filter_values[key]:
-                    raise ValueError(f"Database returned empty {key} list")
-            return filter_values
+        cursor.close()
+        required_keys = ['sectors', 'industries', 'primary_exchanges']
+        for key in required_keys:
+            if key not in filter_values or not filter_values[key]:
+                raise ValueError(f"Database returned empty {key} list")
+        return filter_values
 
-    except Exception as e:
-        logger.error(f"Error fetching filter values: {e}")
-        return {
-            'sectors': [],
-            'industries': [],
-            'primary_exchanges': [],
-        }
+#except Exception as exc:  # pylint: disable=broad-except
+        #logger.error("Error fetching filter values: %s", exc)
+        #return {
+            #'sectors': [],
+            #'industries': [],
+            #'primary_exchanges': [],
+        #}

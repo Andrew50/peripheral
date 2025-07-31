@@ -36,7 +36,8 @@ class Conn:
     def _init_environment(self):
         """Initialize environment variables"""
         self.environment = os.getenv('ENVIRONMENT')
-        if self.environment == "dev" or self.environment == "development" or self.environment == "":
+        # Treat empty ENVIRONMENT or common dev variants uniformly
+        if self.environment in ("dev", "development", ""):
             self.environment = "dev"
         else:
             self.environment = "prod"
@@ -74,8 +75,8 @@ class Conn:
         # Test connection
         try:
             client.ping()
-        except Exception as e:
-            logger.error("❌ Redis connection failed: %s", e)
+        except redis.exceptions.RedisError as redis_error:  # Narrow catch to Redis-specific errors
+            logger.error("❌ Redis connection failed: %s", redis_error)
             raise
 
         return client
@@ -97,8 +98,8 @@ class Conn:
                 password=db_password
             )
             return connection
-        except Exception as e:
-            logger.error("❌ Failed to connect to database: %s", e)
+        except psycopg2.Error as db_error:  # Narrow catch to PostgreSQL-specific errors
+            logger.error("❌ Failed to connect to database: %s", db_error)
             raise
 
     def ensure_db_connection(self):
@@ -124,13 +125,13 @@ class Conn:
                 if hasattr(self, 'db_conn') and self.db_conn:
                     try:
                         self.db_conn.close()
-                    except Exception as close_error:
+                    except psycopg2.Error as close_error:  # Narrow catch to PostgreSQL errors when closing
                         logger.warning("⚠️ Error closing database connection (expected during reconnection): %s", close_error)
 
                 # Establish new connection
                 self.db_conn = self._init_database()
 
-            except Exception as reconnect_error:
+            except psycopg2.Error as reconnect_error:  # Narrow catch during reconnection attempt
                 logger.error("❌ Failed to reconnect to database: %s", reconnect_error, exc_info=True)
                 raise  # Re-raise to let caller handle the failed reconnection
 
@@ -145,12 +146,12 @@ class Conn:
                 try:
                     # Try to rollback the transaction
                     self.db_conn.rollback()
-                except Exception as rollback_error:
+                except psycopg2.Error as rollback_error:  # Narrow catch for rollback issues
                     logger.warning("⚠️ Transaction rollback failed, forcing reconnection: %s", rollback_error)
                     # If rollback fails, force a reconnection
                     try:
                         self.db_conn.close()
-                    except Exception:
+                    except psycopg2.Error:  # Ignore specific PG errors when closing before reconnection
                         pass
                     self.db_conn = self._init_database()
             else:
@@ -208,14 +209,14 @@ class Conn:
 
             try:
                 self.db_conn.rollback()
-            except Exception as rollback_error:
+            except psycopg2.Error as rollback_error:  # Narrow catch for rollback issues
                 logger.error("❌ Failed to rollback transaction: %s", rollback_error, exc_info=True)
                 # Force reconnection if rollback fails
                 try:
                     self.db_conn.close()
                     self.db_conn = self._init_database()
                     logger.warning("⚠️ Forced database reconnection after rollback failure")
-                except Exception as reconnect_error:
+                except psycopg2.Error as reconnect_error:  # Narrow catch when forcing reconnection
                     logger.error("❌ Failed to reconnect after rollback failure: %s", reconnect_error, exc_info=True)
 
             raise  # Re-raise the original database error
@@ -226,7 +227,7 @@ class Conn:
 
             try:
                 self.db_conn.rollback()
-            except Exception as rollback_error:
+            except psycopg2.Error as rollback_error:  # Narrow catch for rollback issues
                 logger.warning("⚠️ Failed to rollback transaction after non-database error: %s", rollback_error)
 
             raise  # Re-raise the original error
@@ -236,7 +237,7 @@ class Conn:
             if cursor:
                 try:
                     cursor.close()
-                except Exception as close_error:
+                except psycopg2.Error as close_error:  # Narrow catch when closing cursor
                     logger.warning("⚠️ Error closing cursor (non-critical): %s", close_error)
 
     @contextmanager
@@ -251,15 +252,15 @@ class Conn:
         # Quick Redis ping - this is very fast
         try:
             self.redis_client.ping()
-        except Exception as e:
-            logger.error("Redis connection lost, reconnecting: %s", e)
+        except redis.exceptions.RedisError as redis_error:  # Redis-specific failures
+            logger.error("Redis connection lost, reconnecting: %s", redis_error)
             self.redis_client = self._init_redis()
 
         # Lightweight DB connection check to prevent stale connections
         try:
             self.ensure_db_connection()
-        except Exception as e:
-            logger.error("Database connection check failed: %s", e)
+        except (psycopg2.Error, AttributeError) as db_check_error:  # Specific expected failures
+            logger.error("Database connection check failed: %s", db_check_error)
             # Don't raise here to avoid interrupting the worker loop
 
     def close_connections(self):
@@ -267,11 +268,11 @@ class Conn:
         try:
             if hasattr(self, 'redis_client') and self.redis_client:
                 self.redis_client.close()
-        except Exception as e:
-            logger.error("Error closing Redis connection: %s", e)
+        except redis.exceptions.RedisError as redis_error:  # Redis-specific close errors
+            logger.error("Error closing Redis connection: %s", redis_error)
 
         try:
             if hasattr(self, 'db_conn') and self.db_conn:
                 self.db_conn.close()
-        except Exception as e:
-            logger.error("Error closing database connection: %s", e)
+        except psycopg2.Error as db_error:  # PostgreSQL-specific close errors
+            logger.error("Error closing database connection: %s", db_error)

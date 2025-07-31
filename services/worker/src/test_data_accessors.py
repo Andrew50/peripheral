@@ -157,7 +157,7 @@ def test_bar_data_queries():
             else:
                 print("⚠️  No data returned")
                 
-        except Exception as e:
+        except ValueError as e:
             print(f"❌ Error: {e}")
             import traceback
             print(f"   Traceback: {traceback.format_exc()}")
