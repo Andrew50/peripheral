@@ -1,4 +1,5 @@
 
+import { logout } from '$lib/auth';
 
 export let base_url: string;
 const pollInterval = 300; // Poll every 100ms
@@ -90,7 +91,7 @@ export async function uploadRequest<T>(
 	});
 
 	if (response.status === 401) {
-		window.location.href = '/login';
+		logout('/login');
 		throw new Error('Authentication failed');
 	}
 	if (!response.ok) {
@@ -174,9 +175,9 @@ export async function privateRequest<T>(
 
 
 	if (response.status === 401) {
-		// Redirect to login page for authentication errors
+		// Clear auth state and redirect to login page for authentication errors
 		console.warn('Authentication required for:', func);
-		window.location.href = '/login';
+		logout('/login');
 		throw new Error('Authentication required');
 	} else if (response.ok) {
 		const result = (await response.json()) as T;
@@ -246,7 +247,7 @@ export async function queueRequest<T>(
 	}).catch();
 
 	if (response.status === 401) {
-		window.location.href = '/login';
+		logout('/login');
 	} else if (!response.ok) {
 		const errorMessage = await response.text();
 		console.error('Error queuing task:', errorMessage);
@@ -324,7 +325,7 @@ export async function streamingChatRequest<T>(
 	});
 
 	if (response.status === 401) {
-		window.location.href = '/login';
+		logout('/login');
 		throw new Error('Authentication required');
 	} else if (!response.ok) {
 		const errorMessage = await response.text();
