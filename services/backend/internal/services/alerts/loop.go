@@ -11,9 +11,116 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 )
+
+// bucketStart calculates the start time of the bucket that contains the given time
+// for the specified timeframe, using calendar-aligned boundaries
+func bucketStart(t time.Time, tf string) (time.Time, error) {
+	if tf == "" {
+		return time.Time{}, fmt.Errorf("empty timeframe")
+	}
+
+	re := regexp.MustCompile(`^(\d+)([mhdwqy]?)$`)
+	matches := re.FindStringSubmatch(strings.ToLower(tf))
+	if matches == nil {
+		return time.Time{}, fmt.Errorf("invalid timeframe format: %s", tf)
+	}
+
+	n, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid number in timeframe: %s", tf)
+	}
+
+	unit := matches[2]
+	switch unit {
+	case "", "m": // minutes (no unit means minutes)
+		dur := time.Duration(n) * time.Minute
+		return t.UTC().Truncate(dur), nil
+	case "h": // hours
+		dur := time.Duration(n) * time.Hour
+		return t.UTC().Truncate(dur), nil
+	case "d": // days - align to midnight ET
+		etLoc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to load ET timezone: %w", err)
+		}
+		et := t.In(etLoc)
+		y, m, d := et.Date()
+		// For multi-day periods, align to epoch and find the correct bucket
+		if n > 1 {
+			epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, etLoc)
+			daysSinceEpoch := int(et.Sub(epoch).Hours() / 24)
+			bucketNumber := daysSinceEpoch / n
+			bucketStart := epoch.AddDate(0, 0, bucketNumber*n)
+			return bucketStart, nil
+		}
+		return time.Date(y, m, d, 0, 0, 0, 0, etLoc), nil
+	case "w": // weeks - align to Monday midnight ET
+		etLoc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to load ET timezone: %w", err)
+		}
+		et := t.In(etLoc)
+		// Find the Monday of this week
+		daysFromMonday := int(et.Weekday()-time.Monday) % 7
+		if daysFromMonday < 0 {
+			daysFromMonday += 7
+		}
+		monday := et.AddDate(0, 0, -daysFromMonday)
+		y, m, d := monday.Date()
+		weekStart := time.Date(y, m, d, 0, 0, 0, 0, etLoc)
+
+		// For multi-week periods, align to epoch
+		if n > 1 {
+			epoch := time.Date(1970, 1, 5, 0, 0, 0, 0, etLoc) // Jan 5, 1970 was a Monday
+			weeksSinceEpoch := int(weekStart.Sub(epoch).Hours() / (24 * 7))
+			bucketNumber := weeksSinceEpoch / n
+			return epoch.AddDate(0, 0, bucketNumber*n*7), nil
+		}
+		return weekStart, nil
+	case "q": // quarters - align to quarter start (Jan/Apr/Jul/Oct 1st) midnight ET
+		etLoc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to load ET timezone: %w", err)
+		}
+		et := t.In(etLoc)
+		y, m, _ := et.Date()
+		// Find quarter start month (1, 4, 7, 10)
+		quarterStartMonth := ((int(m)-1)/3)*3 + 1
+		quarterStart := time.Date(y, time.Month(quarterStartMonth), 1, 0, 0, 0, 0, etLoc)
+
+		// For multi-quarter periods
+		if n > 1 {
+			quartersSinceEpoch := (y-1970)*4 + (quarterStartMonth-1)/3
+			bucketNumber := quartersSinceEpoch / n
+			bucketYear := 1970 + (bucketNumber*n)/4
+			bucketQuarter := ((bucketNumber * n) % 4)
+			bucketMonth := bucketQuarter*3 + 1
+			return time.Date(bucketYear, time.Month(bucketMonth), 1, 0, 0, 0, 0, etLoc), nil
+		}
+		return quarterStart, nil
+	case "y": // years - align to January 1st midnight ET
+		etLoc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to load ET timezone: %w", err)
+		}
+		et := t.In(etLoc)
+		y, _, _ := et.Date()
+
+		// For multi-year periods
+		if n > 1 {
+			bucketYear := ((y-1970)/n)*n + 1970
+			return time.Date(bucketYear, 1, 1, 0, 0, 0, 0, etLoc), nil
+		}
+		return time.Date(y, 1, 1, 0, 0, 0, 0, etLoc), nil
+	default:
+		return time.Time{}, fmt.Errorf("unsupported timeframe unit: %s", unit)
+	}
+}
 
 // AlertService encapsulates the alert system and its state
 type AlertService struct {
@@ -152,12 +259,14 @@ type PriceAlert struct {
 
 // StrategyAlert represents an alert condition for a user-defined strategy.
 type StrategyAlert struct {
-	StrategyID int
-	UserID     int
-	Name       string
-	Threshold  float64
-	Universe   string
-	Active     bool
+	StrategyID   int
+	UserID       int
+	Name         string
+	Threshold    float64
+	Universe     string
+	Active       bool
+	MinTimeframe string
+	LastTrigger  time.Time
 }
 
 var (
@@ -356,7 +465,7 @@ func (a *AlertService) processStrategyAlerts() {
 	log.Printf("📊 Processing %d active strategy alerts: [%s]", len(activeAlerts), strings.Join(activeAlerts, ", "))
 
 	var wg sync.WaitGroup
-	var processed, succeeded, failed int
+	var processed, succeeded, failed, skipped int
 	var mu sync.Mutex
 
 	a.strategyAlerts.Range(func(_, value interface{}) bool {
@@ -364,6 +473,31 @@ func (a *AlertService) processStrategyAlerts() {
 		wg.Add(1)
 		go func(alert StrategyAlert) {
 			defer wg.Done()
+
+			// Check if we should skip this alert based on timeframe throttling
+			if !alert.LastTrigger.IsZero() && alert.MinTimeframe != "" {
+				currBucket, err := bucketStart(time.Now(), alert.MinTimeframe)
+				if err != nil {
+					log.Printf("⚠️ Strategy %d (%s): invalid timeframe '%s', skipping throttling: %v",
+						alert.StrategyID, alert.Name, alert.MinTimeframe, err)
+				} else {
+					lastBucket, err := bucketStart(alert.LastTrigger, alert.MinTimeframe)
+					if err != nil {
+						log.Printf("⚠️ Strategy %d (%s): error calculating last trigger bucket, skipping throttling: %v",
+							alert.StrategyID, alert.Name, err)
+					} else if currBucket.Equal(lastBucket) {
+						log.Printf("⏩ Strategy %d (%s) skipped - same bucket (current: %v, last trigger: %v)",
+							alert.StrategyID, alert.Name, currBucket.Format("2006-01-02 15:04:05 MST"),
+							alert.LastTrigger.Format("2006-01-02 15:04:05 MST"))
+						mu.Lock()
+						processed++
+						skipped++
+						mu.Unlock()
+						return
+					}
+				}
+			}
+
 			log.Printf("Processing strategy alert %d: %s (threshold: %.2f)", alert.StrategyID, alert.Name, alert.Threshold)
 			if err := executeStrategyAlert(context.Background(), a.conn, alert); err != nil {
 				log.Printf("Error processing strategy alert %d: %v", alert.StrategyID, err)
@@ -382,7 +516,7 @@ func (a *AlertService) processStrategyAlerts() {
 		return true
 	})
 	wg.Wait()
-	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed", processed, succeeded, failed)
+	log.Printf("Strategy alert processing summary: %d total, %d succeeded, %d failed, %d skipped", processed, succeeded, failed, skipped)
 }
 
 // initPriceAlerts initializes price alerts from the database
@@ -444,7 +578,9 @@ func (a *AlertService) initStrategyAlerts() error {
 	query := `
 		SELECT strategyId, userId, name, 
 		       COALESCE(alert_threshold, 0.0) as alert_threshold,
-		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe
+		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe,
+		       COALESCE(min_timeframe, '1d') as min_timeframe,
+		       alert_last_trigger_at
 		FROM strategies 
 		WHERE alertActive = true 
 		ORDER BY strategyId
@@ -462,11 +598,17 @@ func (a *AlertService) initStrategyAlerts() error {
 	for rows.Next() {
 		var alert StrategyAlert
 		var alertUniverse []string
-		err := rows.Scan(&alert.StrategyID, &alert.UserID, &alert.Name, &alert.Threshold, &alertUniverse)
+		var lastTrigger *time.Time
+		err := rows.Scan(&alert.StrategyID, &alert.UserID, &alert.Name, &alert.Threshold, &alertUniverse, &alert.MinTimeframe, &lastTrigger)
 		if err != nil {
 			return fmt.Errorf("scanning strategy alert row: %w", err)
 		}
 		alert.Active = true
+
+		// Handle nullable last trigger time
+		if lastTrigger != nil {
+			alert.LastTrigger = *lastTrigger
+		}
 
 		// Convert universe array to string representation
 		if len(alertUniverse) == 0 {
@@ -1054,6 +1196,20 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 		log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
 	} else {
 		log.Printf("📝 Strategy %d (%s): successfully logged alert to database", strategy.StrategyID, strategy.Name)
+	}
+
+	// Update last trigger time in database and in-memory
+	_, err = conn.DB.Exec(ctx,
+		`UPDATE strategies SET alert_last_trigger_at = NOW() WHERE strategyid = $1`,
+		strategy.StrategyID)
+	if err != nil {
+		log.Printf("Warning: failed to update last trigger time for strategy %d: %v", strategy.StrategyID, err)
+	} else {
+		// Update in-memory copy as well
+		service := GetAlertService()
+		strategy.LastTrigger = time.Now()
+		service.strategyAlerts.Store(strategy.StrategyID, strategy)
+		log.Printf("⏰ Strategy %d (%s): updated last trigger time", strategy.StrategyID, strategy.Name)
 	}
 
 	// Dispatch Telegram and WebSocket notifications (best-effort)

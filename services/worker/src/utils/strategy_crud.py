@@ -71,7 +71,7 @@ def fetch_multiple_strategy_codes(ctx: Context, userId: int, strategyIds: List[i
 
 
 def save_strategy(ctx: Context, user_id: int, name: str, description: str, prompt: str, 
-                        python_code: str, strategy_id: Optional[int] = None) -> Dict[str, Any]:
+                        python_code: str, strategy_id: Optional[int] = None, min_timeframe: Optional[str] = None) -> Dict[str, Any]:
     """Save strategy to database with duplicate name handling"""
     conn = None
     cursor = None
@@ -103,21 +103,21 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
             # Insert new row with incremented version (preserves old version)
             cursor.execute("""
                 INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
-                                        createdat, updated_at, alertactive, score, version)
-                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, %s)
+                                        createdat, updated_at, alertactive, score, version, min_timeframe)
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, %s, %s)
                 RETURNING strategyid, name, description, prompt, pythoncode, 
-                            createdat, updated_at, alertactive, version
-            """, (user_id, strategy_name, description, prompt, python_code, next_version))
+                            createdat, updated_at, alertactive, version, min_timeframe
+            """, (user_id, strategy_name, description, prompt, python_code, next_version, min_timeframe))
         else:
             # Create new strategy - always start at version 1
             
             cursor.execute("""
                 INSERT INTO strategies (userid, name, description, prompt, pythoncode, 
-                                        createdat, updated_at, alertactive, score, version)
-                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, 1)
+                                        createdat, updated_at, alertactive, score, version, min_timeframe)
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), false, 0, 1, %s)
                 RETURNING strategyid, name, description, prompt, pythoncode, 
-                            createdat, updated_at, alertactive, version
-            """, (user_id, name, description, prompt, python_code))
+                            createdat, updated_at, alertactive, version, min_timeframe
+            """, (user_id, name, description, prompt, python_code, min_timeframe))
         
         result = cursor.fetchone()
         conn.commit()
@@ -134,7 +134,8 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
                 'version': result['version'],
                 'createdAt': result['createdat'].isoformat() if result['createdat'] else None,
                 'updatedAt': result['updated_at'].isoformat() if result['updated_at'] else None,
-                'isAlertActive': result['alertactive']
+                'isAlertActive': result['alertactive'],
+                'minTimeframe': result['min_timeframe']
             }
         else:
             raise Exception("Failed to save strategy - no result returned")

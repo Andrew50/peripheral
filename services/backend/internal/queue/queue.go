@@ -151,18 +151,20 @@ type CreateStrategyResult struct {
 
 // Strategy represents a created strategy
 type Strategy struct {
-	StrategyID     int      `json:"strategyId"`
-	UserID         int      `json:"userId"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description"`
-	Prompt         string   `json:"prompt"`
-	PythonCode     string   `json:"pythonCode"`
-	Score          int      `json:"score,omitempty"`
-	Version        int      `json:"version,omitempty"`
-	CreatedAt      string   `json:"createdAt,omitempty"`
-	IsAlertActive  bool     `json:"isAlertActive,omitempty"`
-	AlertThreshold *float64 `json:"alertThreshold,omitempty"`
-	AlertUniverse  []string `json:"alertUniverse,omitempty"`
+	StrategyID         int      `json:"strategyId"`
+	UserID             int      `json:"userId"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	Prompt             string   `json:"prompt"`
+	PythonCode         string   `json:"pythonCode"`
+	Score              int      `json:"score,omitempty"`
+	Version            int      `json:"version,omitempty"`
+	CreatedAt          string   `json:"createdAt,omitempty"`
+	IsAlertActive      bool     `json:"isAlertActive,omitempty"`
+	AlertThreshold     *float64 `json:"alertThreshold,omitempty"`
+	AlertUniverse      []string `json:"alertUniverse,omitempty"`
+	MinTimeframe       string   `json:"minTimeframe,omitempty"`
+	AlertLastTriggerAt *string  `json:"alertLastTriggerAt,omitempty"`
 }
 
 // PythonAgentResult represents the result of a general python agent task

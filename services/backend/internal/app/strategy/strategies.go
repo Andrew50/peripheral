@@ -372,7 +372,9 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 		       COALESCE(createdat, NOW()) as createdat,
 		       alertactive as alertactive,
 		       alert_threshold,
-		       alert_universe
+		       alert_universe,
+		       COALESCE(min_timeframe, '') as min_timeframe,
+		       alert_last_trigger_at
 		FROM strategies WHERE userid = $1 ORDER BY createdat DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -383,6 +385,7 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 	for rows.Next() {
 		var strategy queue.Strategy
 		var createdAt time.Time
+		var alertLastTriggerAt *time.Time
 
 		if err := rows.Scan(
 			&strategy.StrategyID,
@@ -396,12 +399,21 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 			&strategy.IsAlertActive,
 			&strategy.AlertThreshold,
 			&strategy.AlertUniverse,
+			&strategy.MinTimeframe,
+			&alertLastTriggerAt,
 		); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
 		strategy.UserID = userID
 		strategy.CreatedAt = createdAt.Format(time.RFC3339)
+
+		// Convert alert_last_trigger_at to string if not null
+		if alertLastTriggerAt != nil {
+			triggerTime := alertLastTriggerAt.Format(time.RFC3339)
+			strategy.AlertLastTriggerAt = &triggerTime
+		}
+
 		strategies = append(strategies, strategy)
 	}
 
