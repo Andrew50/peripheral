@@ -5,9 +5,9 @@ Generates trading strategies from natural language using OpenAI o3 and validates
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional
-import re
 
 from google.genai import types
 from validator import validate_strategy
@@ -19,6 +19,47 @@ from utils.data_accessors import get_available_filter_values
 
 logger = logging.getLogger(__name__)
 
+# Regex to find get_bar_data calls with timeframe parameter
+_TIMEFRAME_RE = re.compile(
+    r"get_bar_data\s*\([\s\S]*?timeframe\s*=\s*[\"']([^\"']+)[\"']",
+    re.MULTILINE,
+)
+
+def _detect_min_timeframe(code: str) -> str:
+    """Extract the minimum timeframe from strategy code by parsing get_bar_data calls"""
+    matches = _TIMEFRAME_RE.findall(code)
+    if not matches:
+        return "1d"  # Default fallback
+    
+    def tf_as_minutes(tf: str) -> int:
+        """Convert timeframe string to minutes for comparison"""
+        # Parse using similar logic to data_accessors._parse_timeframe
+        pattern = r'^(\d+)([mhdwqy]?)$'
+        match = re.match(pattern, tf.lower())
+        if not match:
+            return 1440  # Default to 1 day in minutes
+        
+        value, unit = match.groups()
+        value = int(value)
+        
+        # Convert to minutes
+        if not unit or unit == 'm':  # minutes (no unit means minutes)
+            return value
+        elif unit == 'h':  # hours
+            return value * 60
+        elif unit == 'd':  # days
+            return value * 1440
+        elif unit == 'w':  # weeks
+            return value * 10080
+        elif unit == 'q':  # quarters (3 months = ~90 days)
+            return value * 129600
+        elif unit == 'y':  # years (365 days)
+            return value * 525600
+        else:
+            return 1440  # Default fallback
+    
+    # Return the timeframe with the smallest duration
+    return min(matches, key=tf_as_minutes)
 
 
 def _parse_filter_needs_response( response) -> Dict[str, bool]:
@@ -462,6 +503,10 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
             "error": "Failed to generate valid strategy code after retries"
         }
 
+    # Detect minimum timeframe from the generated strategy code
+    min_timeframe = _detect_min_timeframe(strategy_code)
+    logger.info("Detected minimum timeframe for strategy: %s", min_timeframe)
+
     description = _extract_description(strategy_code, prompt)
     if is_edit:
         name = existing_strategy.get('name', 'Strategy')
@@ -475,7 +520,8 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
         description=description,
         prompt=prompt,
         python_code=strategy_code,
-        strategy_id=strategy_id if is_edit else None
+        strategy_id=strategy_id if is_edit else None,
+        min_timeframe=min_timeframe
     )
 
     return {

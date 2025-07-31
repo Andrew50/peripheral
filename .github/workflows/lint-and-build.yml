@@ -589,8 +589,13 @@ jobs:
       - name: Install frontend dependencies
         working-directory: services/frontend
         run: |
+          # Clean install to avoid issues with cached/corrupted dependencies
+          echo "Performing a clean install of npm packages..."
+          rm -rf node_modules package-lock.json
+          npm install
+
           # Using npm ci for reliable installs from package-lock.json
-          npm ci
+          # npm ci
 
           # Install packages required for Stylelint with Svelte
           echo "Installing PostCSS for Stylelint..."

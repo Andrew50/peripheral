@@ -4,11 +4,17 @@
     ],
     "customSyntax": "postcss-html",
     "rules": {
+        "selector-pseudo-class-no-unknown": [
+            true,
+            {
+                "ignorePseudoClasses": [
+                    "global"
+                ]
+            }
+        ],
         "declaration-block-no-duplicate-properties": true,
         "declaration-block-no-redundant-longhand-properties": true,
         "no-duplicate-selectors": true,
-        "no-eol-whitespace": true,
-        "no-extra-semicolons": true,
         "selector-max-id": 0,
         "selector-max-universal": 1,
         "selector-no-qualifying-type": true
