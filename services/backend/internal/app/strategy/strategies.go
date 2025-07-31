@@ -1,30 +1,16 @@
 package strategy
 
 import (
-	"backend/internal/app/limits"
 	"backend/internal/data"
+	"backend/internal/queue"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
-)
 
-// Strategy represents a simplified strategy with natural language description and generated Python code
-type Strategy struct {
-	StrategyID     int      `json:"strategyId"`
-	UserID         int      `json:"userId"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description"` // Human-readable description
-	Prompt         string   `json:"prompt"`      // Original user prompt
-	PythonCode     string   `json:"pythonCode"`  // Generated Python classifier
-	Score          int      `json:"score,omitempty"`
-	Version        int      `json:"version,omitempty"`
-	CreatedAt      string   `json:"createdAt,omitempty"`
-	IsAlertActive  bool     `json:"isAlertActive,omitempty"`
-	AlertThreshold *float64 `json:"alertThreshold,omitempty"`
-	AlertUniverse  []string `json:"alertUniverse,omitempty"`
-}
+	"backend/internal/app/limits"
+)
 
 // CreateStrategyFromPromptArgs contains the user's natural language prompt
 type CreateStrategyFromPromptArgs struct {
@@ -57,7 +43,7 @@ type ScreeningResult struct {
 // AlertArgs contains arguments for strategy alerts
 
 // RunScreening executes a complete strategy screening using the new worker architecture
-func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args ScreeningArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
@@ -77,19 +63,31 @@ func RunScreening(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		return nil, fmt.Errorf("strategy not found or access denied")
 	}
 
-	// Call the worker's run_screener function
-	result, err := callWorkerScreening(context.Background(), conn, args.StrategyID, args.Universe, args.Limit)
+	// Build arguments for the new typed-queue screening task
+	qArgs := map[string]interface{}{
+		"user_id":      userID,
+		"strategy_ids": []string{fmt.Sprintf("%d", args.StrategyID)},
+	}
+	if len(args.Universe) > 0 {
+		qArgs["universe"] = args.Universe
+	}
+	/*if args.Limit > 0 {
+		qArgs["limit"] = args.Limit
+	}*/
+
+	// Submit task via the unified queue system
+	qResult, err := queue.QueueScreeningTyped(ctx, conn, qArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}
 
-	// Convert worker result to ScreeningResponse format for API compatibility
-	rankedResults := convertWorkerRankedResults(result.RankedResults)
+	// Convert instances returned by the worker to API compatible structure
+	rankedResults := convertScreeningInstances(qResult.Instances)
 
 	response := ScreeningResponse{
 		RankedResults: rankedResults,
-		Scores:        result.Scores,
-		UniverseSize:  result.UniverseSize,
+		Scores:        nil, // Worker currently doesn't supply aggregated scores
+		UniverseSize:  len(rankedResults),
 	}
 
 	log.Printf("Complete screening finished for strategy %d: %d opportunities found",
@@ -119,7 +117,7 @@ type WorkerRankedResult struct {
 }
 
 // callWorkerScreening calls the worker's run_screener function via Redis queue
-func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
+/*func callWorkerScreening(ctx context.Context, conn *data.Conn, strategyID int, universe []string, limit int) (*WorkerScreeningResult, error) {
 	// Set defaults
 	if limit == 0 {
 		limit = 100
@@ -240,6 +238,29 @@ func convertWorkerRankedResults(workerResults []WorkerRankedResult) []ScreeningR
 	}
 
 	return results
+}*/
+
+func convertScreeningInstances(instances []map[string]interface{}) []ScreeningResult {
+	results := make([]ScreeningResult, len(instances))
+	for i, inst := range instances {
+		sr := ScreeningResult{
+			Data: inst,
+		}
+		if v, ok := inst["symbol"].(string); ok {
+			sr.Symbol = v
+		}
+		if v, ok := inst["score"].(float64); ok {
+			sr.Score = v
+		}
+		if v, ok := inst["current_price"].(float64); ok {
+			sr.CurrentPrice = v
+		}
+		if v, ok := inst["sector"].(string); ok {
+			sr.Sector = v
+		}
+		results[i] = sr
+	}
+	return results
 }
 
 type CreateStrategyFromPromptResult struct {
@@ -303,6 +324,13 @@ func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, 
 		return nil, fmt.Errorf("strategy creation succeeded but strategy object is nil")
 	}
 
+	// Sync strategy universe to Redis for per-ticker alert processing
+	// This happens after the strategy is created to ensure the universe is available
+	if err := syncStrategyUniverseToRedis(conn, result.Strategy.StrategyID); err != nil {
+		log.Printf("⚠️ Failed to sync strategy %d universe to Redis: %v", result.Strategy.StrategyID, err)
+		// Don't fail the operation for Redis sync errors, just log them
+	}
+
 	return CreateStrategyFromPromptResult{
 		StrategyID: result.Strategy.StrategyID,
 		Name:       result.Strategy.Name,
@@ -310,18 +338,8 @@ func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, 
 	}, nil
 }
 
-// WorkerCreateStrategyResult represents the result from the Python worker
-type WorkerCreateStrategyResult struct {
-	Success  bool      `json:"success"`
-	Strategy *Strategy `json:"strategy,omitempty"`
-	Error    string    `json:"error,omitempty"`
-	TaskID   string    `json:"task_id,omitempty"`
-}
-
-// callWorkerCreateStrategy calls the worker's create_strategy function via Redis queue
-func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, prompt string, strategyID int) (*WorkerCreateStrategyResult, error) {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("create_strategy_%d_%d", userID, time.Now().UnixNano())
+// callWorkerCreateStrategy calls the worker's create_strategy function via the new queue system
+func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, prompt string, strategyID int) (*queue.CreateStrategyResult, error) {
 	messageID, ok := ctx.Value("messageID").(string)
 	if !ok {
 		messageID = ""
@@ -330,141 +348,25 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	if !ok {
 		conversationID = ""
 	}
-	// Prepare strategy creation task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "create_strategy",
-		"args": map[string]interface{}{
-			"user_id":        userID,
-			"prompt":         prompt,
-			"strategy_id":    strategyID,
-			"conversationID": conversationID,
-			"messageID":      messageID,
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
-		"priority":   "high", // Mark strategy creation as high priority
+
+	// Prepare strategy creation task arguments
+	args := map[string]interface{}{
+		"user_id":         userID,
+		"prompt":          prompt,
+		"strategy_id":     strategyID,
+		"conversation_id": conversationID,
+		"message_id":      messageID,
 	}
 
-	// Submit task to Redis queue
-	taskJSON, err := json.Marshal(task)
+	// Queue the task using the new typed queue system and return result directly
+	result, err := queue.QueueCreateStrategyTyped(ctx, conn, args)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling task: %v", err)
+		return nil, fmt.Errorf("error queuing strategy creation task: %v", err)
 	}
 
-	// Push task to PRIORITY worker queue for strategy creation/editing
-	err = conn.Cache.RPush(ctx, "strategy_queue_priority", string(taskJSON)).Err()
-	if err != nil {
-		return nil, fmt.Errorf("error submitting task to priority queue: %v", err)
-	}
-
-	log.Printf("Submitted strategy creation task %s to PRIORITY worker queue", taskID)
-
-	// Wait for result with timeout
-	result, err := waitForCreateStrategyResult(ctx, conn, taskID, 3*time.Minute)
-	if err != nil {
-		return nil, fmt.Errorf("error waiting for strategy creation result: %v", err)
-	}
+	log.Printf("Submitted strategy creation task to PRIORITY worker queue via new queue system")
 
 	return result, nil
-}
-
-// waitForCreateStrategyResult waits for a strategy creation result via Redis pubsub
-func waitForCreateStrategyResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerCreateStrategyResult, error) {
-	// Subscribe to task updates
-	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
-	defer func() {
-		if err := pubsub.Close(); err != nil {
-			fmt.Printf("error closing pubsub: %v\n", err)
-		}
-	}()
-
-	// Create timeout context
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ch := pubsub.Channel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return nil, fmt.Errorf("timeout waiting for strategy creation result")
-		case msg := <-ch:
-			if msg == nil {
-				continue
-			}
-
-			var taskUpdate map[string]interface{}
-			err := json.Unmarshal([]byte(msg.Payload), &taskUpdate)
-			if err != nil {
-				log.Printf("Failed to unmarshal task update: %v", err)
-				continue
-			}
-
-			if taskUpdate["task_id"] == taskID {
-				status, _ := taskUpdate["status"].(string)
-				if status == "completed" || status == "error" {
-					// Convert task result to WorkerCreateStrategyResult
-					var result WorkerCreateStrategyResult
-					result.TaskID = taskID
-
-					if status == "error" {
-						result.Success = false
-						if errorMsg, exists := taskUpdate["error_message"]; exists {
-							result.Error = fmt.Sprintf("%v", errorMsg)
-						} else if resultData, exists := taskUpdate["result"]; exists {
-							if resultMap, ok := resultData.(map[string]interface{}); ok {
-								if errorMsg, exists := resultMap["error"]; exists {
-									result.Error = fmt.Sprintf("%v", errorMsg)
-								}
-							}
-						}
-					} else {
-						// Parse successful result
-						if resultData, exists := taskUpdate["result"]; exists {
-							resultJSON, err := json.Marshal(resultData)
-							if err != nil {
-								return nil, fmt.Errorf("error marshaling task result: %v", err)
-							}
-
-							var workerResult map[string]interface{}
-							err = json.Unmarshal(resultJSON, &workerResult)
-							if err != nil {
-								return nil, fmt.Errorf("error unmarshaling worker result: %v", err)
-							}
-
-							if success, exists := workerResult["success"]; exists {
-								result.Success = success.(bool)
-							}
-
-							if result.Success {
-								if strategyData, exists := workerResult["strategy"]; exists {
-									// Convert strategy data to Strategy struct
-									strategyJSON, err := json.Marshal(strategyData)
-									if err != nil {
-										return nil, fmt.Errorf("error marshaling strategy data: %v", err)
-									}
-
-									var strategy Strategy
-									err = json.Unmarshal(strategyJSON, &strategy)
-									if err != nil {
-										return nil, fmt.Errorf("error unmarshaling strategy: %v", err)
-									}
-
-									result.Strategy = &strategy
-								}
-							} else {
-								if errorMsg, exists := workerResult["error"]; exists {
-									result.Error = fmt.Sprintf("%v", errorMsg)
-								}
-							}
-						}
-					}
-
-					return &result, nil
-				}
-			}
-		}
-	}
 }
 
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
@@ -476,19 +378,22 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 		       COALESCE(score, 0) as score,
 		       COALESCE(version, 1) as version,
 		       COALESCE(createdat, NOW()) as createdat,
-		       COALESCE(isalertactive, false) as isalertactive,
+		       alertactive as alertactive,
 		       alert_threshold,
-		       alert_universe
+		       alert_universe,
+		       COALESCE(min_timeframe, '') as min_timeframe,
+		       alert_last_trigger_at
 		FROM strategies WHERE userid = $1 ORDER BY createdat DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var strategies []Strategy
+	var strategies []queue.Strategy
 	for rows.Next() {
-		var strategy Strategy
+		var strategy queue.Strategy
 		var createdAt time.Time
+		var alertLastTriggerAt *time.Time
 
 		if err := rows.Scan(
 			&strategy.StrategyID,
@@ -502,12 +407,21 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 			&strategy.IsAlertActive,
 			&strategy.AlertThreshold,
 			&strategy.AlertUniverse,
+			&strategy.MinTimeframe,
+			&alertLastTriggerAt,
 		); err != nil {
 			return nil, fmt.Errorf("error scanning strategy: %v", err)
 		}
 
 		strategy.UserID = userID
 		strategy.CreatedAt = createdAt.Format(time.RFC3339)
+
+		// Convert alert_last_trigger_at to string if not null
+		if alertLastTriggerAt != nil {
+			triggerTime := alertLastTriggerAt.Format(time.RFC3339)
+			strategy.AlertLastTriggerAt = &triggerTime
+		}
+
 		strategies = append(strategies, strategy)
 	}
 
@@ -532,7 +446,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	var currentThreshold *float64
 	var currentUniverse []string
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT COALESCE(isalertactive, false), alert_threshold, alert_universe
+		SELECT COALESCE(alertactive, false), alert_threshold, alert_universe
 		FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`,
 		args.StrategyID, userID).Scan(&currentActive, &currentThreshold, &currentUniverse)
@@ -554,7 +468,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	// Update the alert status and configuration
 	_, err = conn.DB.Exec(context.Background(), `
 		UPDATE strategies 
-		SET isalertactive = $1, alert_threshold = $2, alert_universe = $3
+		SET alertactive = $1, alert_threshold = $2, alert_universe = $3
 		WHERE strategyid = $4 AND userid = $5`,
 		args.Active, args.Threshold, args.Universe, args.StrategyID, userID)
 
@@ -572,7 +486,7 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 			// If we can't record usage, rollback the alert activation
 			if _, rollbackErr := conn.DB.Exec(context.Background(), `
 				UPDATE strategies 
-				SET isalertactive = false, alert_threshold = $1, alert_universe = $2
+				SET alertactive = false, alert_threshold = $1, alert_universe = $2
 				WHERE strategyid = $3 AND userid = $4`,
 				currentThreshold, currentUniverse, args.StrategyID, userID); rollbackErr != nil {
 				log.Printf("Warning: failed to rollback strategy alert activation: %v", rollbackErr)
@@ -590,6 +504,13 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 	log.Printf("Strategy %d alert configuration updated - active: %v, threshold: %v, universe: %v",
 		args.StrategyID, args.Active, args.Threshold, args.Universe)
 
+	// Sync strategy universe to Redis for per-ticker alert processing
+	// This happens after the database update to ensure consistency
+	if err := syncStrategyUniverseToRedis(conn, args.StrategyID); err != nil {
+		log.Printf("⚠️ Failed to sync strategy %d universe to Redis: %v", args.StrategyID, err)
+		// Don't fail the operation for Redis sync errors, just log them
+	}
+
 	return map[string]interface{}{
 		"success":        true,
 		"strategyId":     args.StrategyID,
@@ -597,6 +518,31 @@ func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}
 		"alertThreshold": args.Threshold,
 		"alertUniverse":  args.Universe,
 	}, nil
+}
+
+// syncStrategyUniverseToRedis syncs a strategy's universe from the database to Redis
+func syncStrategyUniverseToRedis(conn *data.Conn, strategyID int) error {
+	ctx := context.Background()
+
+	// Query the strategy's alert_universe_full from the database
+	var alertUniverseFull []string
+	query := `SELECT COALESCE(alert_universe_full, ARRAY[]::TEXT[]) FROM strategies WHERE strategyId = $1`
+	err := conn.DB.QueryRow(ctx, query, strategyID).Scan(&alertUniverseFull)
+	if err != nil {
+		return fmt.Errorf("failed to query strategy %d universe: %w", strategyID, err)
+	}
+
+	// Only sync to Redis if we have a non-empty universe (global strategies are not stored)
+	if len(alertUniverseFull) > 0 {
+		if err := data.SetStrategyUniverse(conn, strategyID, alertUniverseFull); err != nil {
+			return fmt.Errorf("failed to set strategy %d universe in Redis: %w", strategyID, err)
+		}
+		log.Printf("📝 Synced strategy %d universe to Redis: %d tickers", strategyID, len(alertUniverseFull))
+	} else {
+		log.Printf("📝 Strategy %d has global universe, not syncing to Redis", strategyID)
+	}
+
+	return nil
 }
 
 type DeleteStrategyArgs struct {
@@ -612,7 +558,7 @@ func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (inter
 	// Check if the strategy has an active alert before deleting
 	var isAlertActive bool
 	err := conn.DB.QueryRow(context.Background(), `
-		SELECT COALESCE(isalertactive, false) 
+		SELECT COALESCE(alertactive, false) 
 		FROM strategies 
 		WHERE strategyid = $1 AND userid = $2`,
 		args.StrategyID, userID).Scan(&isAlertActive)

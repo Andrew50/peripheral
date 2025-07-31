@@ -31,13 +31,19 @@ func LogAlert(conn *data.Conn, userID int, alertType string, relatedID int, mess
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	// Determine ticker value for column
+	tickerValue := ""
+	if t, ok := payload["ticker"].(string); ok {
+		tickerValue = t
+	}
+
 	// Insert the log entry into the database
 	query := `
-		INSERT INTO alert_logs (user_id, alert_type, related_id, message, payload)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO alert_logs (user_id, alert_type, related_id, ticker, message, payload)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err = data.ExecWithRetry(context.Background(), conn.DB, query, userID, alertType, relatedID, message, string(payloadJSON))
+	_, err = data.ExecWithRetry(context.Background(), conn.DB, query, userID, alertType, relatedID, tickerValue, message, string(payloadJSON))
 	if err != nil {
 		return fmt.Errorf("failed to log alert: %w", err)
 	}

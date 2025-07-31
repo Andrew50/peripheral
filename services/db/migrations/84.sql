@@ -20,4 +20,5 @@ VALUES (
     'Update queries_limit for Free (5->15) and Plus (250->300) subscription products'
 ) ON CONFLICT (version) DO NOTHING;
 
+
 COMMIT; 

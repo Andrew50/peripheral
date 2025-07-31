@@ -84,16 +84,16 @@
 <style>
 	.quote-container {
 		font-family:
-			'Inter',
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
-			Segoe UI,
+			"Segoe UI",
 			Roboto,
 			Oxygen,
 			Ubuntu,
 			Cantarell,
-			Open Sans,
-			Helvetica Neue,
+			"Open Sans",
+			"Helvetica Neue",
 			sans-serif;
 		font-size: 14px;
 		color: var(--text-primary, white);
@@ -121,7 +121,7 @@
 	.ask:hover {
 		filter: brightness(1.15);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 	}
 
 	.price {
@@ -160,12 +160,12 @@
 
 	/* Update the bid-ask styles to be more subtle and elegant */
 	.bid {
-		background-color: rgba(102, 187, 106, 0.15);
+		background-color: rgb(102 187 106 / 15%);
 		color: var(--color-up, #66bb6a);
 	}
 
 	.ask {
-		background-color: rgba(239, 83, 80, 0.15);
+		background-color: rgb(239 83 80 / 15%);
 		color: var(--color-down, #ef5350);
 	}
 </style>

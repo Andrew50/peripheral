@@ -3,30 +3,22 @@
 
 BEGIN;
 
--- Drop the existing unique constraint on (userId, name)
-ALTER TABLE strategies DROP CONSTRAINT IF EXISTS strategies_userid_name_key;
+ALTER TABLE alert_logs ADD COLUMN IF NOT EXISTS ticker TEXT DEFAULT NULL;
 
--- Add new unique constraint on (userId, name, version) - only if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'strategies_userid_name_version_key' 
-        AND table_name = 'strategies'
-    ) THEN
-        ALTER TABLE strategies ADD CONSTRAINT strategies_userid_name_version_key 
-            UNIQUE (userId, name, version);
-    END IF;
-END $$;
+-- Drop unused strategy columns
+ALTER TABLE strategies DROP COLUMN IF EXISTS spec;
+ALTER TABLE strategies DROP COLUMN IF EXISTS libraries;
+ALTER TABLE strategies DROP COLUMN IF EXISTS data_prep_sql;
+ALTER TABLE strategies DROP COLUMN IF EXISTS execution_mode;
+ALTER TABLE strategies DROP COLUMN IF EXISTS timeout_seconds;
+ALTER TABLE strategies DROP COLUMN IF EXISTS memory_limit_mb;
+ALTER TABLE strategies DROP COLUMN IF EXISTS cpu_limit_cores;
+ALTER TABLE strategies DROP COLUMN IF EXISTS isalertactive;
 
--- Create index for efficient querying of strategy versions
-CREATE INDEX IF NOT EXISTS idx_strategies_user_name_version ON strategies(userId, name, version DESC);
-
--- Update schema version
 INSERT INTO schema_versions (version, description)
 VALUES (
     83,
     'Enable strategy versioning by changing unique constraint to (userId, name, version)'
 ) ON CONFLICT (version) DO NOTHING;
 
-COMMIT; 
+COMMIT;

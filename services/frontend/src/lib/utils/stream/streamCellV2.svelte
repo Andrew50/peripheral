@@ -134,41 +134,48 @@
 <style>
 	@keyframes flashGreen {
 		0% {
-			color: var(--positive, rgb(72, 225, 72));
+			color: var(--positive, rgb(72 225 72));
 		}
+
 		100% {
-			color: currentColor;
+			color: currentcolor;
 		}
 	}
+
 	@keyframes flashRed {
 		0% {
-			color: var(--negative, rgb(225, 72, 72));
+			color: var(--negative, rgb(225 72 72));
 		}
+
 		100% {
-			color: currentColor;
+			color: currentcolor;
 		}
 	}
 
 	.flash-up {
 		animation: flashGreen 0.5s ease-out forwards;
 	}
+
 	.flash-down {
 		animation: flashRed 0.5s ease-out forwards;
 	}
 
 	.diff.up {
-		color: var(--positive, rgb(72, 225, 72));
+		color: var(--positive, rgb(72 225 72));
 	}
+
 	.diff.down {
-		color: var(--negative, rgb(225, 72, 72));
+		color: var(--negative, rgb(225 72 72));
 	}
 
 	.positive {
-		color: var(--positive, rgb(72, 225, 72));
+		color: var(--positive, rgb(72 225 72));
 	}
+
 	.negative {
-		color: var(--negative, rgb(225, 72, 72));
+		color: var(--negative, rgb(225 72 72));
 	}
+
 	.neutral {
 		color: white;
 	}

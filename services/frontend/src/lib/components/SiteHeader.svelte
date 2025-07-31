@@ -179,8 +179,8 @@
 		width: 100%;
 		height: 100%;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -203,13 +203,13 @@
 	}
 
 	.logo-text {
-		color: #000000;
+		color: #000;
 		font-size: 1.25rem;
 		font-weight: 700;
 		margin: 0;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -220,7 +220,7 @@
 	}
 
 	.logo-text.transparent {
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.navigation {
@@ -239,8 +239,8 @@
 		text-decoration: none;
 		background: transparent;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -251,13 +251,13 @@
 	}
 
 	.nav-button.secondary {
-		color: #000000;
-		border: 1px solid #000000;
+		color: #000;
+		border: 1px solid #000;
 	}
 
 	.nav-button.primary {
-		background: rgb(0, 0, 0);
-		color: #ffffff;
+		background: rgb(0 0 0);
+		color: #fff;
 	}
 
 	.nav-button.primary:hover,
@@ -268,13 +268,13 @@
 
 	/* Transparent header styles */
 	.nav-button.secondary.transparent {
-		color: #ffffff;
-		border: 1px solid #ffffff;
+		color: #fff;
+		border: 1px solid #fff;
 	}
 
 	.nav-button.primary.transparent {
-		background: #ffffff;
-		color: #000000;
+		background: #fff;
+		color: #000;
 	}
 
 	.nav-button.primary.transparent:hover,
@@ -300,13 +300,13 @@
 	.hamburger-line {
 		width: 100%;
 		height: 1.5px;
-		background-color: #000000;
+		background-color: #000;
 		border-radius: 1px;
 		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.hamburger-menu.transparent .hamburger-line {
-		background-color: #ffffff;
+		background-color: #fff;
 	}
 
 	/* Sidebar */
@@ -316,7 +316,7 @@
 		left: 0;
 		width: 100vw;
 		height: 100vh;
-		background: rgba(0, 0, 0, 0.5);
+		background: rgb(0 0 0 / 50%);
 		z-index: 1999;
 	}
 
@@ -326,17 +326,18 @@
 		right: -100vw;
 		width: 100vw;
 		height: 100vh;
-		background: #ffffff;
+		background: #fff;
 		z-index: 2000;
 		transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+		box-shadow: -4px 0 20px rgb(0 0 0 / 10%);
 	}
 
 	/* Hide sidebar completely on desktop to prevent any flashing */
-	@media (min-width: 769px) {
+	@media (width >= 769px) {
 		.sidebar {
 			display: none !important;
 		}
+
 		.sidebar-overlay {
 			display: none !important;
 		}
@@ -350,7 +351,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 1.5rem 1.5rem 1rem 1.5rem;
+		padding: 1.5rem 1.5rem 1rem;
 		border-bottom: none;
 	}
 
@@ -384,8 +385,8 @@
 		text-decoration: none;
 		background: transparent;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -424,14 +425,14 @@
 		height: var(--header-h);
 		background: #f5f9ff;
 		backdrop-filter: blur(16px);
-		border: 1px solid rgba(255, 255, 255, 0.25);
+		border: 1px solid rgb(255 255 255 / 25%);
 		border-radius: 999px;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		z-index: 1050;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 20px rgb(0 0 0 / 10%);
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -471,7 +472,7 @@
 	}
 
 	/* Responsive tweaks */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		/* Mobile header becomes rectangle */
 		#site-header {
 			top: 0;
@@ -484,8 +485,8 @@
 			background: #f5f9ff;
 			backdrop-filter: blur(16px);
 			border: none;
-			border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+			border-bottom: 1px solid rgb(0 0 0 / 10%);
+			box-shadow: 0 2px 10px rgb(0 0 0 / 5%);
 		}
 
 		#site-header.transparent {

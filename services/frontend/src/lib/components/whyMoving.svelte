@@ -140,16 +140,17 @@
 	}
 
 	.wm-box {
-		background: rgba(255, 255, 255, 0.05) !important;
+		background: rgb(255 255 255 / 5%) !important;
 		backdrop-filter: blur(8px);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		border: 1px solid rgb(255 255 255 / 10%);
 	}
+
 	.wm-content {
 		padding: 0.5rem 0.75rem;
 		line-height: 1.3;
 		white-space: pre-wrap;
-		color: rgba(255, 255, 255, 0.98);
-		text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+		color: rgb(255 255 255 / 98%);
+		text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
 		font-weight: 500;
 		font-size: 0.75rem;
 		position: relative;
@@ -158,7 +159,7 @@
 
 	.wm-progress-container {
 		height: 3px;
-		background: rgba(255, 255, 255, 0.03);
+		background: rgb(255 255 255 / 3%);
 		overflow: hidden;
 		position: relative;
 		z-index: 1;
@@ -167,10 +168,11 @@
 	.wm-progress-bar {
 		height: 100%;
 		border-radius: var(--glass-radius); /* same corners as parent */
+
 		/* subtle inner bevel so it looks like liquid inside glass */
 		box-shadow:
-			inset 0 0 8px rgba(255, 255, 255, 0.4),
-			inset 0 1px 0 rgba(255, 255, 255, 0.6);
+			inset 0 0 8px rgb(255 255 255 / 40%),
+			inset 0 1px 0 rgb(255 255 255 / 60%);
 
 		/* shimmer animation */
 		background-size: 200% 100%;
@@ -179,15 +181,17 @@
 	}
 
 	/* Responsive design */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.wm-overlay {
 			padding-top: 60px;
 		}
+
 		.wm-box {
 			margin: 0 15px;
 			border-radius: 0.6rem;
 			max-width: min(90vw, 480px);
 		}
+
 		.wm-content {
 			padding: 0.4rem 0.6rem;
 			font-size: 0.7rem;

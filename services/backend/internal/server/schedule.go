@@ -9,7 +9,6 @@ import (
 	"backend/internal/services/socket"
 	"backend/internal/services/subscriptions"
 	"backend/internal/services/telegram"
-	"backend/internal/services/worker_monitor"
 	"context"
 	"fmt"
 	"log"
@@ -21,11 +20,6 @@ import (
 )
 
 var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
-
-var (
-	workerMonitor      *worker_monitor.WorkerMonitor
-	workerMonitorMutex sync.Mutex
-)
 
 // JobFunc represents a function that can be executed as a job
 type JobFunc func(conn *data.Conn) error
@@ -302,16 +296,6 @@ var (
 			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "StartWorkerMonitor",
-			Function:       startWorkerMonitor,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 55}}, // Start before other services
-			RunOnInit:      true,
-			SkipOnWeekends: false, // Monitor should run 24/7
-			RetryOnFailure: true,
-			MaxRetries:     2,
-			RetryDelay:     30 * time.Second,
-		},
-		{
 			Name:           "UpdateYearlySubscriptionCredits",
 			Function:       updateYearlySubscriptionCreditsJob,
 			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Daily at 4:05 AM ET
@@ -370,7 +354,7 @@ func isWeekend(now time.Time) bool {
 }
 
 // isMarketHours checks if the given time is within market service hours (3:00 AM - 8:00 PM ET, weekdays)
-func isMarketHours(now time.Time) bool {
+/*func isMarketHours(now time.Time) bool {
 	// Skip weekends
 	if isWeekend(now) {
 		return false
@@ -379,7 +363,7 @@ func isMarketHours(now time.Time) bool {
 	hour := now.Hour()
 	// Market service hours: 4:00 AM to 8:00 PM ET with 1 minute buffer
 	return (hour >= 4 || (hour == 3 && now.Minute() >= 59)) && hour < 20
-}
+}*/
 
 // NewScheduler creates a new job scheduler
 func NewScheduler(conn *data.Conn) (*JobScheduler, error) {
@@ -817,13 +801,11 @@ func initAggregates(conn *data.Conn) error {
 // startMarketHourServices starts alert loop, screener updater, and polygon websocket during market hours
 // First checks if current time is within market hours, then checks OHLCV coverage before starting services
 func startMarketHourServices(conn *data.Conn) error {
-	//now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
-
-	// First check: Verify we're within market service hours
-	/*if !isMarketHours(now) {
+	/*now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
+	if !isMarketHours(now) {
 		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
 		return nil // Return nil to indicate this is expected behavior, not an error
-	}*/
+	}*/ // TODO: RENABLE BEFOFRE PR
 
 	// Second check: Verify OHLCV partial coverage is sufficient
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
@@ -840,6 +822,7 @@ func startMarketHourServices(conn *data.Conn) error {
 	log.Printf("🚀 Starting market hour services - time and OHLCV coverage checks passed")
 
 	// Start all services concurrently
+
 	var wg sync.WaitGroup
 	errChan := make(chan error, 3)
 
@@ -848,7 +831,9 @@ func startMarketHourServices(conn *data.Conn) error {
 	go func() {
 		defer wg.Done()
 		if err := alerts.StartAlertLoop(conn); err != nil {
-			errChan <- fmt.Errorf("failed to start alert loop: %w", err)
+			err = fmt.Errorf("failed to start alert loop: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
 		}
 	}()
 
@@ -857,7 +842,9 @@ func startMarketHourServices(conn *data.Conn) error {
 	go func() {
 		defer wg.Done()
 		if err := screener.StartScreenerUpdaterLoop(conn); err != nil {
-			errChan <- fmt.Errorf("failed to start screener updater: %w", err)
+			err = fmt.Errorf("failed to start screener updater: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
 		}
 	}()
 
@@ -866,7 +853,9 @@ func startMarketHourServices(conn *data.Conn) error {
 	go func() {
 		defer wg.Done()
 		if err := startPolygonWebSocketInternal(conn); err != nil {
-			errChan <- fmt.Errorf("failed to start polygon websocket: %w", err)
+			err = fmt.Errorf("failed to start polygon websocket: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
 		}
 	}()
 
@@ -881,9 +870,6 @@ func startMarketHourServices(conn *data.Conn) error {
 	}
 
 	if len(errors) > 0 {
-		for _, err := range errors {
-			log.Printf("❌ %v", err)
-		}
 		return fmt.Errorf("failed to start %d market hour service(s)", len(errors))
 	}
 
@@ -896,34 +882,5 @@ func stopServicesJob(_ *data.Conn) error {
 	alerts.StopAlertLoop()
 	_ = socket.StopPolygonWS()
 	_ = screener.StopScreenerUpdaterLoop()
-	stopWorkerMonitor()
 	return nil
-}
-
-// startWorkerMonitor starts the worker monitoring service
-func startWorkerMonitor(conn *data.Conn) error {
-	workerMonitorMutex.Lock()
-	defer workerMonitorMutex.Unlock()
-
-	if workerMonitor == nil {
-		workerMonitor = worker_monitor.NewWorkerMonitor(conn)
-		workerMonitor.Start()
-		log.Println("✅ Worker monitor service started")
-	} else {
-		log.Println("⚠️ Worker monitor already running")
-	}
-
-	return nil
-}
-
-// stopWorkerMonitor stops the worker monitoring service
-func stopWorkerMonitor() {
-	workerMonitorMutex.Lock()
-	defer workerMonitorMutex.Unlock()
-
-	if workerMonitor != nil {
-		workerMonitor.Stop()
-		workerMonitor = nil
-		log.Println("✅ Worker monitor service stopped")
-	}
 }

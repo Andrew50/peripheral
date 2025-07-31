@@ -1,28 +1,38 @@
 :root {
 	/* Base UI Colors */
 	--c1: #2e2e2e;
+
 	/* a darker grey */
 	--c2: #1a1c21;
+
 	/* base - dark background */
 	--c3: #3b82f6;
+
 	/* accent - modern blue */
 	--c4: #374151;
+
 	/* separator - medium grey */
 	--c5: #ef4444;
+
 	/* error - modern red */
 	--c6: #22c55e;
+
 	/* success - modern green */
 
 	/* Hover States */
 	--c3-hover: #2563eb;
+
 	/* blue hover */
 	--c6-hover: #16a34a;
+
 	/* green hover */
 
 	/* Font Colors */
 	--f1: #f9fafb;
+
 	/* primary text - off white */
 	--f2: #9ca3af;
+
 	/* secondary text - light grey */
 
 	/* Additional Accents */
@@ -31,10 +41,10 @@
 	--accent-yellow: #eab308;
 
 	/* UI Theme Colors (reused by Svelte components) */
-	--ui-bg-primary: rgba(0, 0, 0, 0.85);
-	--ui-bg-secondary: rgba(0, 0, 0, 0.3);
-	--ui-bg-hover: rgba(255, 255, 255, 0.05);
-	--ui-bg-element: rgba(255, 255, 255, 0.03);
+	--ui-bg-primary: rgb(0 0 0 / 85%);
+	--ui-bg-secondary: rgb(0 0 0 / 30%);
+	--ui-bg-hover: rgb(255 255 255 / 5%);
+	--ui-bg-element: rgb(255 255 255 / 3%);
 	--ui-bg-highlight: #222;
 	--ui-border: #2e2e2e;
 	--ui-border-darker: #1a1a1a;
@@ -50,7 +60,6 @@
 	--color-up-strong: #43a047;
 	--color-down: #ef5350;
 	--color-down-strong: #e53935;
-
 	--backdrop-blur: blur(4px);
 }
 

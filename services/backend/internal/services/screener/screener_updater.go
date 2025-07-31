@@ -27,7 +27,6 @@ import (
 	"context" // Added fmt import
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 )
@@ -78,13 +77,14 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 	log.Printf("🚀 Starting Screener updater service")
 	s.conn = conn
 
+	// Add logging before optimizing the database connection
+	log.Printf("🔄 Calling optimizeDatabaseConnection")
 	// Optimize database connection settings for better performance
 	if err := optimizeDatabaseConnection(conn); err != nil {
 		log.Printf("⚠️  Failed to optimize database connection: %v", err)
 	}
 
 	// Add tickers with null maxdate to screener_stale table
-	log.Println("🔄 Adding active tickers to screener_stale table...")
 	insertStaleQuery := `
 		INSERT INTO screener_stale (ticker, last_update_time, stale)
 		SELECT DISTINCT ticker, '1970-01-01 00:00:00'::timestamp, true
@@ -95,6 +95,8 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 			stale = EXCLUDED.stale;
 	`
 
+	// Add logging before performing initial data refresh
+	log.Printf("🔄 Calling initialRefresh")
 	// Perform initial data refresh on startup
 	if err := initialRefresh(conn); err != nil {
 		log.Printf("⚠️  Initial data refresh failed: %v. Continuing...", err)
@@ -114,6 +116,8 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 		return err
 	}
 
+	// Add logging before starting the updater loop
+	log.Printf("🔄 Starting updater loop")
 	// Create new stop channel for this session
 	s.stopChan = make(chan struct{})
 	s.isRunning = true
@@ -225,7 +229,7 @@ const (
 	refreshInterval         = 60 * time.Second   // full screener top-off frequency (fallback)
 	refreshTimeout          = 600 * time.Second  // per-refresh SQL timeout (increased from 60s)
 	staticRefsTimeout       = 1200 * time.Second // timeout for static refs functions (increased due to more computation)
-	maxTickersPerBatch      = 0                  // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
+	maxTickersPerBatch      = 50000              // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
 	staticRefs1mInterval    = 1 * time.Minute    // refresh static_refs_1m every minute (was 5 minutes)
 	staticRefsDailyInterval = 5 * time.Minute    // refresh static_refs every 5 minutes (was 20 minutes)
 	latestBarViewsInterval  = 30 * time.Second   // refresh latest bar materialized views every 30 seconds (CRITICAL)
@@ -271,7 +275,7 @@ func initialRefresh(conn *data.Conn) error {
 	}
 
 	for _, cmd := range refreshCommands {
-		log.Printf("Executing: %s", cmd)
+		log.Printf("🔄 Executing: %s", cmd)
 		if _, err := conn.DB.Exec(ctx, cmd); err != nil {
 			// Log error but continue, some might fail if already running or not needed
 			log.Printf("⚠️  Initial refresh command failed for '%s': %v", cmd, err)
@@ -279,7 +283,7 @@ func initialRefresh(conn *data.Conn) error {
 	}
 
 	// Refresh static reference tables with mutex protection
-	log.Println("🔄 Refreshing static reference tables with mutex protection...")
+	//log.Println("🔄 Refreshing static reference tables with mutex protection...")
 	refreshStaticRefsDaily(conn)
 	refreshStaticRefs1m(conn)
 
@@ -346,11 +350,11 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	defer cancel()
 
 	// Log current working directory for debugging
-	if cwd, err := os.Getwd(); err == nil {
+	/*if cwd, err := os.Getwd(); err == nil {
 		log.Printf("📊 Current working directory: %s", cwd)
-	}
+	}*/
 
-	log.Printf("🔄 Updating screener values (timeout: %v)...", refreshTimeout)
+	//log.Printf("🔄 Updating screener values (timeout: %v)...", refreshTimeout)
 	start := time.Now()
 
 	// Execute the main query
@@ -390,7 +394,7 @@ func refreshStaticRefs1m(conn *data.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
+	//log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
 	start := time.Now()
 
 	// Apply aggressive vacuum settings for high-frequency update table
@@ -430,7 +434,7 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), staticRefsTimeout)
 	defer cancel()
 
-	log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
+	//log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
 	start := time.Now()
 
 	// Apply aggressive vacuum settings for frequent update table

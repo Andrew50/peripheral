@@ -455,8 +455,8 @@
 		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 		color: #f5f9ff;
 		font-family:
-			'Geist',
-			'Inter',
+			Geist,
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -473,7 +473,7 @@
 		width: 100%;
 		max-width: 550px;
 		margin: 0 auto;
-		padding: 16rem 2rem 2rem 2rem; /* Space for header */
+		padding: 16rem 2rem 2rem; /* Space for header */
 		background: transparent;
 	}
 
@@ -489,7 +489,7 @@
 		text-align: center;
 		font-size: 2rem;
 		font-weight: 700;
-		margin: 0 0 0.5rem 0;
+		margin: 0 0 0.5rem;
 		color: #f5f9ff;
 		line-height: 1.2;
 	}
@@ -506,10 +506,10 @@
 	.google-login-button {
 		width: 100%;
 		height: 52px;
-		background: rgba(255, 255, 255, 1);
+		background: rgb(255 255 255 / 100%);
 		border-radius: 12px;
-		color: #000000;
-		font-family: 'Inter', sans-serif;
+		color: #000;
+		font-family: Inter, sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -520,7 +520,7 @@
 	}
 
 	.google-login-button:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.9);
+		background: rgb(255 255 255 / 90%);
 		transform: translateY(-1px);
 	}
 
@@ -542,7 +542,7 @@
 		position: relative;
 		text-align: center;
 		margin: 1.5rem 0;
-		color: rgba(255, 255, 255, 0.6);
+		color: rgb(255 255 255 / 60%);
 		font-size: 0.875rem;
 		font-weight: 500;
 	}
@@ -556,25 +556,25 @@
 		width: 100%;
 		height: 52px;
 		padding: 0 1rem;
-		border: 1px solid rgba(255, 255, 255, 1);
+		border: 1px solid rgb(255 255 255 / 100%);
 		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 10%);
 		backdrop-filter: blur(10px);
-		color: #ffffff;
+		color: #fff;
 		font-size: 0.95rem;
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 		transition: all 0.3s ease;
 	}
 
 	.auth-input::placeholder {
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.auth-input:focus {
 		outline: none;
-		border-color: rgba(255, 255, 255, 0.6);
-		background: rgba(255, 255, 255, 0.15);
-		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+		border-color: rgb(255 255 255 / 60%);
+		background: rgb(255 255 255 / 15%);
+		box-shadow: 0 0 0 3px rgb(255 255 255 / 10%);
 	}
 
 	.auth-input:disabled {
@@ -587,12 +587,12 @@
 		width: 100%;
 		height: 52px;
 		background: #f5f9ff;
-		color: #000000;
+		color: #000;
 		border: none;
 		border-radius: 12px;
 		font-size: 0.95rem;
 		font-weight: 600;
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 		cursor: pointer;
 		transition: all 0.3s ease;
 		display: flex;
@@ -604,7 +604,7 @@
 	.submit-button:hover:not(:disabled) {
 		background: #e0e0e0;
 		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(11, 46, 51, 0.3);
+		box-shadow: 0 4px 12px rgb(11 46 51 / 30%);
 	}
 
 	.submit-button:disabled {
@@ -618,10 +618,10 @@
 		font-size: 0.875rem;
 		margin: 0.5rem 0;
 		text-align: center;
-		background: rgba(255, 107, 107, 0.1);
+		background: rgb(255 107 107 / 10%);
 		padding: 0.75rem;
 		border-radius: 8px;
-		border: 1px solid rgba(255, 107, 107, 0.3);
+		border: 1px solid rgb(255 107 107 / 30%);
 		backdrop-filter: blur(10px);
 	}
 
@@ -630,8 +630,8 @@
 		text-align: center;
 		margin-top: 1rem;
 		padding-top: 1rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.2);
-		color: rgba(255, 255, 255, 0.8);
+		border-top: 1px solid rgb(255 255 255 / 20%);
+		color: rgb(255 255 255 / 80%);
 		font-size: 0.875rem;
 	}
 
@@ -643,7 +643,7 @@
 	}
 
 	.auth-link:hover {
-		color: #ffffff;
+		color: #fff;
 		text-decoration: underline;
 	}
 
@@ -669,29 +669,29 @@
 	}
 
 	.invite-valid {
-		background: rgba(34, 197, 94, 0.1);
-		border: 1px solid rgba(34, 197, 94, 0.3);
+		background: rgb(34 197 94 / 10%);
+		border: 1px solid rgb(34 197 94 / 30%);
 		color: #22c55e;
 	}
 
 	.invite-invalid {
-		background: rgba(239, 68, 68, 0.1);
-		border: 1px solid rgba(239, 68, 68, 0.3);
+		background: rgb(239 68 68 / 10%);
+		border: 1px solid rgb(239 68 68 / 30%);
 		color: #ef4444;
 	}
 
 	.invite-validating {
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		color: rgba(255, 255, 255, 0.8);
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 30%);
+		color: rgb(255 255 255 / 80%);
 	}
 
 	/* Loader */
 	.loader {
 		width: 20px;
 		height: 20px;
-		border: 2px solid rgba(0, 0, 0, 0.3);
-		border-top: 2px solid #000000;
+		border: 2px solid rgb(0 0 0 / 30%);
+		border-top: 2px solid #000;
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
@@ -699,8 +699,8 @@
 	.mini-loader {
 		width: 16px;
 		height: 16px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top: 2px solid rgba(255, 255, 255, 0.8);
+		border: 2px solid rgb(255 255 255 / 30%);
+		border-top: 2px solid rgb(255 255 255 / 80%);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
@@ -709,13 +709,14 @@
 		0% {
 			transform: rotate(0deg);
 		}
+
 		100% {
 			transform: rotate(360deg);
 		}
 	}
 
 	/* Responsive Design */
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.auth-title {
 			font-size: 1.75rem;
 		}
@@ -739,14 +740,14 @@
 
 	/* Override chip styles for dark background */
 	:global(.auth-page .chip) {
-		background: rgba(255, 255, 255, 0.95) !important;
-		color: #000000 !important;
-		border: 1px solid rgba(255, 255, 255, 0.3) !important;
+		background: rgb(255 255 255 / 95%) !important;
+		color: #000 !important;
+		border: 1px solid rgb(255 255 255 / 30%) !important;
 	}
 
 	:global(.auth-page .chip:hover) {
-		background: rgba(255, 255, 255, 1) !important;
-		box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2) !important;
+		background: rgb(255 255 255 / 100%) !important;
+		box-shadow: 0 4px 16px rgb(255 255 255 / 20%) !important;
 	}
 
 	/* Ensure chip rows are visible */

@@ -29,20 +29,20 @@
 }
 
 /* Media queries for different screen sizes */
-@media (max-width: 480px) {
+@media (width <= 480px) {
 	:root {
 		font-size: 14px;
 	}
 }
 
-@media (min-width: 1921px) {
+@media (width >= 1921px) {
 	:root {
 		font-size: 18px;
 	}
 }
 
 /* High-DPI displays get slightly larger base font for readability */
-@media (min-resolution: 2dppx) {
+@media (resolution >= 2dppx) {
 	:root {
 		font-size: 17px;
 	}
@@ -225,7 +225,7 @@ textarea {
 	display: none;
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
 	.hide-on-mobile {
 		display: none;
 	}
@@ -288,15 +288,15 @@ textarea {
 }
 
 .responsive-shadow {
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 4px 8px rgb(0 0 0 / 20%);
 }
 
 .responsive-shadow-sm {
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 }
 
 .responsive-shadow-lg {
-	box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 8px 16px rgb(0 0 0 / 30%);
 }
 
 /* Responsive gaps */
@@ -357,7 +357,7 @@ textarea {
 	max-width: min(90vw, 1200px);
 }
 
-@media (max-width: 640px) {
+@media (width <= 640px) {
 	.width-half,
 	.width-third,
 	.width-quarter {

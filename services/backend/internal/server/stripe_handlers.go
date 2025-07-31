@@ -310,14 +310,15 @@ func GetUserUsage(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	log.Printf("Executing usage query for userID: %d", userID)
 	err := conn.DB.QueryRow(ctx, `
 		SELECT 
-			COALESCE(active_alerts, 0) as active_alerts,
-			COALESCE(alerts_limit, 0) as alerts_limit,
-			COALESCE(active_strategy_alerts, 0) as active_strategy_alerts,
-			COALESCE(strategy_alerts_limit, 0) as strategy_alerts_limit,
-			COALESCE(current_period_start, CURRENT_TIMESTAMP) as current_period_start,
-			COALESCE(last_limit_reset, CURRENT_TIMESTAMP) as last_limit_reset
-		FROM users 
-		WHERE userId = $1`, userID).Scan(&activeAlerts, &alertsLimit, &activeStrategyAlerts, &strategyAlertsLimit, &currentPeriodStart, &lastLimitReset)
+			COALESCE(u.active_alerts, 0) as active_alerts,
+			COALESCE(sp.alerts_limit, 0) as alerts_limit,
+			COALESCE(u.active_strategy_alerts, 0) as active_strategy_alerts,
+			COALESCE(sp.strategy_alerts_limit, 0) as strategy_alerts_limit,
+			COALESCE(u.current_period_start, CURRENT_TIMESTAMP) as current_period_start,
+			COALESCE(u.last_limit_reset, CURRENT_TIMESTAMP) as last_limit_reset
+		FROM users u
+		LEFT JOIN subscription_products sp ON sp.product_key = u.subscription_plan
+		WHERE u.userId = $1`, userID).Scan(&activeAlerts, &alertsLimit, &activeStrategyAlerts, &strategyAlertsLimit, &currentPeriodStart, &lastLimitReset)
 
 	if err != nil {
 		log.Printf("Error getting user usage for userID %d: %v", userID, err)
