@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
+def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
                     strategy_id: int = None) -> Dict[str, Any]:
     """Execute alert task using new accessor strategy engine"""
 
@@ -30,11 +30,11 @@ async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
             strategy_id=strategy_id,
             version=version,
             symbols=symbols,
+            start_date=None,
+            end_date=None,
         )
-        logger.info(f"Alert executed: {instances}")
 
         if error:
-            logger.error(f"Error executing alert: {error}")
             return {
                 'success': False,
                 'instances': [],
@@ -48,7 +48,6 @@ async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
         }
 
     except Exception as e:
-        logger.error(f"Error executing alert: {e}")
         error_obj = capture_exception(logger, e)
         return {
             'success': False,
