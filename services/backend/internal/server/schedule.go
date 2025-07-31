@@ -354,7 +354,7 @@ func isWeekend(now time.Time) bool {
 }
 
 // isMarketHours checks if the given time is within market service hours (3:00 AM - 8:00 PM ET, weekdays)
-/*func isMarketHours(now time.Time) bool {
+func isMarketHours(now time.Time) bool {
 	// Skip weekends
 	if isWeekend(now) {
 		return false
@@ -363,7 +363,7 @@ func isWeekend(now time.Time) bool {
 	hour := now.Hour()
 	// Market service hours: 4:00 AM to 8:00 PM ET with 1 minute buffer
 	return (hour >= 4 || (hour == 3 && now.Minute() >= 59)) && hour < 20
-}*/
+}
 
 // NewScheduler creates a new job scheduler
 func NewScheduler(conn *data.Conn) (*JobScheduler, error) {
@@ -801,11 +801,11 @@ func initAggregates(conn *data.Conn) error {
 // startMarketHourServices starts alert loop, screener updater, and polygon websocket during market hours
 // First checks if current time is within market hours, then checks OHLCV coverage before starting services
 func startMarketHourServices(conn *data.Conn) error {
-	/*now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
+	now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
 	if !isMarketHours(now) {
 		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
 		return nil // Return nil to indicate this is expected behavior, not an error
-	}*/ // TODO: RENABLE BEFOFRE PR
+	}
 
 	// Second check: Verify OHLCV partial coverage is sufficient
 	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
