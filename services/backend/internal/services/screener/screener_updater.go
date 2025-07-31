@@ -224,7 +224,7 @@ const (
 	refreshInterval         = 60 * time.Second   // full screener top-off frequency (fallback)
 	refreshTimeout          = 600 * time.Second  // per-refresh SQL timeout (increased from 60s)
 	staticRefsTimeout       = 1200 * time.Second // timeout for static refs functions (increased due to more computation)
-	maxTickersPerBatch      = 0                  // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
+	maxTickersPerBatch      = 50000              // max tickers to process per batch (0 = no limit), increased from 1 for better efficiency
 	staticRefs1mInterval    = 1 * time.Minute    // refresh static_refs_1m every minute (was 5 minutes)
 	staticRefsDailyInterval = 5 * time.Minute    // refresh static_refs every 5 minutes (was 20 minutes)
 	latestBarViewsInterval  = 30 * time.Second   // refresh latest bar materialized views every 30 seconds (CRITICAL)

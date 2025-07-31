@@ -42,13 +42,6 @@ jobs:
           echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
           echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
 
-      - name: Fix workspace permissions
-        run: |
-          echo "🛠  Resetting workspace ownership to ${{ steps.ids.outputs.uid }}:${{ steps.ids.outputs.gid }}..."
-          # Use sudo if available; otherwise try chown directly (runner may already be root)
-          sudo chown -R ${{ steps.ids.outputs.uid }}:${{ steps.ids.outputs.gid }} "${{ runner.workspace }}" 2>/dev/null || \
-          chown -R ${{ steps.ids.outputs.uid }}:${{ steps.ids.outputs.gid }} "${{ runner.workspace }}" || true
-
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
     runs-on: self-hosted
