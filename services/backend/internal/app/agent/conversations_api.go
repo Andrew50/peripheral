@@ -419,7 +419,6 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-	fmt.Println("Getting public conversation for conversationID:", args.ConversationID)
 	var isPublic bool
 	var userID int
 	var title string

@@ -139,7 +139,7 @@ func LogSplashScreenView(conn *data.Conn, args json.RawMessage) (interface{}, er
 				if err != nil {
 					log.Printf("Failed to get conversation title: %v", err)
 				}
-				err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited chat title: %s", *city, *region, *country, title))
+				err = telegram.SendTelegramUserUsageMessage(fmt.Sprintf("User from %s, %s, %s visited chat title: %s. Org: %s", *city, *region, *country, title, *org))
 				if err != nil {
 					log.Printf("Failed to send Telegram message: %v", err)
 				}
