@@ -763,6 +763,12 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
 
+      - name: Configure Python Path
+        working-directory: services/worker
+        run: |
+          echo "Adding src directory to PYTHONPATH for this job"
+          echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
+
       - name: Import sorting check with isort
         working-directory: services/worker
         run: |

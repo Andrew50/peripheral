@@ -31,23 +31,27 @@ async def alert(ctx: Context, user_id: int = None, symbols: List[str] = None,
             version=version,
             symbols=symbols,
         )
+        logger.info(f"Alert executed: {instances}")
 
         if error:
+            logger.error(f"Error executing alert: {error}")
             return {
                 'success': False,
-                'error_message': str(error),
+                'instances': [],
+                'error': error,
             }
 
         return {
             'success': True,
             'instances': instances,
-            'error_message': "",
+            'error': None,
         }
 
     except Exception as e:
-        capture_exception(logger, e)
+        logger.error(f"Error executing alert: {e}")
+        error_obj = capture_exception(logger, e)
         return {
             'success': False,
             'instances': [],
-            'error_message': str(e),
+            'error': error_obj,
         }

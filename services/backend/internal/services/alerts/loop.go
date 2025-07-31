@@ -3,7 +3,7 @@ package alerts
 import (
 	"backend/internal/data"
 	"backend/internal/data/postgres"
-	"encoding/json"
+	"backend/internal/queue"
 	"strings"
 
 	"backend/internal/app/limits"
@@ -59,17 +59,23 @@ func (a *AlertService) Start(conn *data.Conn) error {
 
 	// Initialize Telegram bot
 	err := InitTelegramBot()
+	log.Printf("🚀 Telegram bot initialized")
 	if err != nil {
 		return fmt.Errorf("failed to initialize Telegram bot: %w", err)
+
 	}
 
 	// Initialize price and strategy alerts
+	log.Printf("🚀 Initializing price alerts")
 	if err := a.initPriceAlerts(); err != nil {
 		return fmt.Errorf("failed to initialize price alerts: %w", err)
 	}
+	log.Printf("🚀 Initializing strategy alerts")
 	if err := a.initStrategyAlerts(); err != nil {
 		return fmt.Errorf("failed to initialize strategy alerts: %w", err)
 	}
+
+	log.Printf("🚀 Initializing alerts")
 
 	// Create new stop channel for this session
 	a.stopChan = make(chan struct{})
@@ -77,6 +83,7 @@ func (a *AlertService) Start(conn *data.Conn) error {
 
 	// Start the alert processing goroutines
 	a.wg.Add(2)
+	log.Printf("🚀 Starting price alert loop")
 	go a.priceAlertLoop()
 	go a.strategyAlertLoop()
 
@@ -157,11 +164,11 @@ var (
 	priceAlertFrequency    = time.Second * 1
 	strategyAlertFrequency = time.Minute * 1
 	// Legacy global variables for backward compatibility - these will be removed in future versions
-	priceAlerts    sync.Map           // DEPRECATED: use service instance instead
-	strategyAlerts sync.Map           // DEPRECATED: use service instance instead
-	ctx            context.Context    // DEPRECATED: use service instance instead
-	cancel         context.CancelFunc // DEPRECATED: use service instance instead
-	mu             sync.Mutex         // DEPRECATED: use service instance instead
+	priceAlerts    sync.Map // DEPRECATED: use service instance instead
+	strategyAlerts sync.Map // DEPRECATED: use service instance instead
+	//ctx            context.Context    // DEPRECATED: use service instance instead
+	//cancel         context.CancelFunc // DEPRECATED: use service instance instead
+	//mu             sync.Mutex         // DEPRECATED: use service instance instead
 )
 
 // Legacy wrapper functions for backward compatibility
@@ -329,7 +336,7 @@ func (a *AlertService) processPriceAlerts() {
 		go func(alert PriceAlert) {
 			defer wg.Done()
 			if err := processPriceAlert(a.conn, alert); err != nil {
-				//log.Printf("Error processing price alert %d: %v", alert.AlertID, err)
+				log.Printf("Error processing price alert %d: %v", alert.AlertID, err)
 			}
 		}(alert)
 		return true
@@ -339,6 +346,15 @@ func (a *AlertService) processPriceAlerts() {
 
 // processStrategyAlerts processes all active strategy alerts
 func (a *AlertService) processStrategyAlerts() {
+	// Log currently active strategy alerts
+	var activeAlerts []string
+	a.strategyAlerts.Range(func(_, value interface{}) bool {
+		alert := value.(StrategyAlert)
+		activeAlerts = append(activeAlerts, fmt.Sprintf("ID:%d(%s)", alert.StrategyID, alert.Name))
+		return true
+	})
+	log.Printf("📊 Processing %d active strategy alerts: [%s]", len(activeAlerts), strings.Join(activeAlerts, ", "))
+
 	var wg sync.WaitGroup
 	var processed, succeeded, failed int
 	var mu sync.Mutex
@@ -422,6 +438,7 @@ func (a *AlertService) initPriceAlerts() error {
 // initStrategyAlerts initializes strategy alerts from the database
 func (a *AlertService) initStrategyAlerts() error {
 	ctx := context.Background()
+	log.Printf("🚀 Initializing strategy alerts")
 
 	// Load active strategy alerts with configuration
 	query := `
@@ -429,16 +446,19 @@ func (a *AlertService) initStrategyAlerts() error {
 		       COALESCE(alert_threshold, 0.0) as alert_threshold,
 		       COALESCE(alert_universe, ARRAY[]::TEXT[]) as alert_universe
 		FROM strategies 
-		WHERE isAlertActive = true 
+		WHERE alertActive = true 
 		ORDER BY strategyId
 	`
 	rows, err := a.conn.DB.Query(ctx, query)
+	log.Printf("🚀 Querying active strategy alerts")
 	if err != nil {
+		log.Printf("🚀 Error querying active strategy alerts: %v", err)
 		return fmt.Errorf("querying active strategy alerts: %w", err)
 	}
 	defer rows.Close()
 
 	a.strategyAlerts = sync.Map{}
+	log.Printf("🚀 Iterating strategy alert rows")
 	for rows.Next() {
 		var alert StrategyAlert
 		var alertUniverse []string
@@ -856,7 +876,7 @@ func getStrategyAlertCount() int {
 }*/
 
 // waitForStrategyAlertResult waits for a strategy alert result via Redis pubsub
-func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
+/*func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration) (*WorkerStrategyAlertResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
 	defer func() {
@@ -927,157 +947,131 @@ func waitForStrategyAlertResult(ctx context.Context, conn *data.Conn, taskID str
 			}
 		}
 	}
-}
+}*/
 
 // executeStrategyAlert submits a strategy alert task and waits for results
 func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy StrategyAlert) error {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("strategy_alert_%d_%d", strategy.StrategyID, time.Now().UnixNano())
-	//log.Printf("Executing strategy alert %d (task: %s)", strategy.StrategyID, taskID)
-	// Log the configured universe for additional debugging
-	//log.Printf("Strategy alert %d universe string: %s", strategy.StrategyID, strategy.Universe)
-	// Log the alert threshold as well for completeness
-	//log.Printf("Strategy alert %d alert threshold: %.2f", strategy.StrategyID, strategy.Threshold)
-
-	// Prepare strategy alert task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "alert",
-		"args": map[string]interface{}{
-			"strategy_id": fmt.Sprintf("%d", strategy.StrategyID),
-			"user_id":     fmt.Sprintf("%d", strategy.UserID),
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
+	// Prepare arguments expected by the Python worker (see services/worker/src/alert.py)
+	args := map[string]interface{}{
+		"strategy_id": strategy.StrategyID,
+		"user_id":     strategy.UserID,
 	}
 
-	// Add universe parameter - convert "all" to nil to indicate default universe should be used
-	if strategy.Universe == "all" {
-		task["args"].(map[string]interface{})["universe"] = nil
-		log.Printf("Strategy alert %d: using default universe (converted 'all' to nil)", strategy.StrategyID)
-	} else {
-		// Parse universe string back to array if it's not "all"
-		// For now, assume it's a comma-separated string or array representation
-		if strategy.Universe != "" {
-			// Simple parsing - could be enhanced based on actual format
-			var universe []string
-			if strings.HasPrefix(strategy.Universe, "[") && strings.HasSuffix(strategy.Universe, "]") {
-				// Handle array representation like "[AAPL MSFT TSLA]"
-				universeStr := strings.Trim(strategy.Universe, "[]")
-				if universeStr != "" {
-					universe = strings.Fields(universeStr)
-				}
-			} else {
-				// Handle comma-separated format
-				universe = strings.Split(strategy.Universe, ",")
-				for i := range universe {
-					universe[i] = strings.TrimSpace(universe[i])
-				}
+	// Convert the Universe string into a slice of symbols if it is not the special "all" keyword.
+	if strategy.Universe != "" && strategy.Universe != "all" {
+		var symbols []string
+		if strings.HasPrefix(strategy.Universe, "[") && strings.HasSuffix(strategy.Universe, "]") {
+			// Universe is in array representation like "[AAPL MSFT TSLA]" – split on whitespace
+			universeStr := strings.Trim(strategy.Universe, "[]")
+			if universeStr != "" {
+				symbols = strings.Fields(universeStr)
 			}
-			task["args"].(map[string]interface{})["universe"] = universe
-			//log.Printf("Strategy alert %d: using specific universe with %d symbols", strategy.StrategyID, len(universe))
 		} else {
-			task["args"].(map[string]interface{})["universe"] = nil
-			//log.Printf("Strategy alert %d: empty universe string, using default universe", strategy.StrategyID)
+			// Assume comma-separated list
+			parts := strings.Split(strategy.Universe, ",")
+			for _, p := range parts {
+				if sym := strings.TrimSpace(p); sym != "" {
+					symbols = append(symbols, sym)
+				}
+			}
 		}
-	}
-
-	// Convert task to JSON
-	taskJSON, err := json.Marshal(task)
-	if err != nil {
-		return fmt.Errorf("error marshaling task: %v", err)
-	}
-
-	// Submit task to Redis worker queue
-	log.Printf("Submitting strategy alert task %s to Redis queue", taskID)
-	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
-	if err != nil {
-		return fmt.Errorf("error submitting task to queue: %v", err)
-	}
-
-	// Wait for result with 2 minute timeout
-	log.Printf("Waiting for strategy alert result for task %s (timeout: 2 minutes)", taskID)
-	result, err := waitForStrategyAlertResult(ctx, conn, taskID, 2*time.Minute)
-	if err != nil {
-		return fmt.Errorf("error waiting for strategy alert result: %v", err)
-	}
-
-	// If the strategy alert was successful, log it
-	if result.Success {
-		// Create a descriptive message
-		numMatches := len(result.Matches)
-		var message string
-		if numMatches > 0 {
-			message = fmt.Sprintf("Strategy '%s' triggered with %d matching securities", strategy.Name, numMatches)
-			log.Printf("Strategy alert %d triggered: %s", strategy.StrategyID, message)
+		if len(symbols) > 0 {
+			args["symbols"] = symbols
+			log.Printf("🎯 Strategy %d (%s): submitting alert task with %d symbols: %v", strategy.StrategyID, strategy.Name, len(symbols), symbols)
 		} else {
-			return nil
+			log.Printf("🎯 Strategy %d (%s): submitting alert task with default universe (no symbols filter)", strategy.StrategyID, strategy.Name)
 		}
-		// Extract matched tickers for logging
-		var hitTickers []string
-		for _, match := range result.Matches {
-			hitTickers = append(hitTickers, match.Symbol)
-		}
-		tickerCSV := strings.Join(hitTickers, ",")
-
-		// Prepare additional data for the payload, including comma-separated tickers
-		additionalData := map[string]interface{}{
-			"execution_mode":    result.ExecutionMode,
-			"execution_time_ms": result.ExecutionTimeMs,
-			"num_matches":       numMatches,
-			"ticker":            tickerCSV,
-		}
-
-		// Add match details if available (limit to prevent huge payloads)
-		if numMatches > 0 && numMatches <= 50 {
-			matches := make([]map[string]interface{}, 0, len(result.Matches))
-			for _, match := range result.Matches {
-				matchData := map[string]interface{}{
-					"symbol": match.Symbol,
-				}
-				if match.Score != 0 {
-					matchData["score"] = match.Score
-				}
-				if match.CurrentPrice != 0 {
-					matchData["current_price"] = match.CurrentPrice
-				}
-				if match.Sector != "" {
-					matchData["sector"] = match.Sector
-				}
-				matches = append(matches, matchData)
-			}
-			additionalData["matches"] = matches
-
-			// Log a sample of the matches
-			sampleSize := 3
-			if numMatches < sampleSize {
-				sampleSize = numMatches
-			}
-			log.Printf("Strategy alert %d sample matches: %+v", strategy.StrategyID, result.Matches[:sampleSize])
-		} else if numMatches > 50 {
-			additionalData["matches_note"] = fmt.Sprintf("Too many matches (%d) to include details", numMatches)
-			log.Printf("Strategy alert %d has too many matches (%d) to log details", strategy.StrategyID, numMatches)
-		}
-
-		err = LogStrategyAlert(conn, strategy.UserID, strategy.StrategyID, strategy.Name, message, additionalData)
-		if err != nil {
-			log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
-			// Don't fail the entire alert processing if logging fails
-		}
-		// Dispatch Telegram and WebSocket notifications for strategy alert
-		if err2 := SendTelegramMessage(message, chatID); err2 != nil {
-			log.Printf("Warning: failed to send Telegram message for strategy %d: %v", strategy.StrategyID, err2)
-		}
-		socket.SendAlertToUser(strategy.UserID, socket.AlertMessage{
-			AlertID:   strategy.StrategyID,
-			Timestamp: time.Now().Unix() * 1000,
-			Message:   message,
-			Channel:   "alert",
-			Type:      "strategy",
-			Tickers:   hitTickers,
-		})
 	} else {
-		log.Printf("Strategy alert %d execution completed but marked as not successful", strategy.StrategyID)
+		log.Printf("🎯 Strategy %d (%s): submitting alert task with default universe (no symbols filter)", strategy.StrategyID, strategy.Name)
 	}
+
+	log.Printf("🚀 Strategy %d (%s): queuing alert task with args: %+v", strategy.StrategyID, strategy.Name, args)
+	// Submit the alert task through the unified queue system and wait for the typed result.
+	result, err := queue.QueueAlertTyped(ctx, conn, args)
+	if err != nil {
+		log.Printf("❌ Strategy %d (%s): queue submission failed: %v", strategy.StrategyID, strategy.Name, err)
+		return fmt.Errorf("queue alert error: %w", err)
+	}
+
+	log.Printf("📥 Strategy %d (%s): received result - Success: %t, Instances: %d", strategy.StrategyID, strategy.Name, result.Success, len(result.Instances))
+
+	if !result.Success {
+		// Prefer structured error details if available
+		if result.Error != nil {
+			log.Printf("❌ Strategy %d (%s): task failed with structured error - Type: %s, Message: %s", strategy.StrategyID, strategy.Name, result.Error.Type, result.Error.Message)
+			return fmt.Errorf("alert task failed: %s: %s", result.Error.Type, result.Error.Message)
+		}
+		if result.ErrorMessage != "" {
+			log.Printf("❌ Strategy %d (%s): task failed with error message: %s", strategy.StrategyID, strategy.Name, result.ErrorMessage)
+			return fmt.Errorf("alert task failed: %s", result.ErrorMessage)
+		}
+		log.Printf("❌ Strategy %d (%s): task reported unsuccessful status without error details", strategy.StrategyID, strategy.Name)
+		return fmt.Errorf("alert task reported unsuccessful status without details")
+	}
+
+	numInstances := len(result.Instances)
+	if numInstances == 0 {
+		// Nothing matched – nothing to notify
+		log.Printf("📭 Strategy %d (%s): no instances matched, no notifications sent", strategy.StrategyID, strategy.Name)
+		return nil
+	}
+
+	// Build notification message & extract tickers for logging / payload
+	message := fmt.Sprintf("Strategy '%s' triggered with %d matching securities", strategy.Name, numInstances)
+
+	var hitTickers []string
+	for _, inst := range result.Instances {
+		if symRaw, ok := inst["symbol"]; ok {
+			if sym, ok := symRaw.(string); ok && sym != "" {
+				hitTickers = append(hitTickers, sym)
+				continue
+			}
+		}
+		if symRaw, ok := inst["ticker"]; ok {
+			if sym, ok := symRaw.(string); ok && sym != "" {
+				hitTickers = append(hitTickers, sym)
+			}
+		}
+	}
+
+	tickerCSV := strings.Join(hitTickers, ",")
+	log.Printf("🎉 Strategy %d (%s): %d instances matched, tickers: [%s]", strategy.StrategyID, strategy.Name, numInstances, tickerCSV)
+
+	additionalData := map[string]interface{}{
+		"num_matches": numInstances,
+		"ticker":      tickerCSV,
+	}
+
+	// Include full instances payload if the size is reasonable
+	if numInstances <= 50 {
+		additionalData["instances"] = result.Instances
+		log.Printf("📊 Strategy %d (%s): including full instances in log payload (%d instances)", strategy.StrategyID, strategy.Name, numInstances)
+	} else {
+		log.Printf("📊 Strategy %d (%s): too many instances (%d) to include in log payload", strategy.StrategyID, strategy.Name, numInstances)
+	}
+
+	if err := LogStrategyAlert(conn, strategy.UserID, strategy.StrategyID, strategy.Name, message, additionalData); err != nil {
+		log.Printf("Warning: failed to log strategy alert for strategy %d: %v", strategy.StrategyID, err)
+	} else {
+		log.Printf("📝 Strategy %d (%s): successfully logged alert to database", strategy.StrategyID, strategy.Name)
+	}
+
+	// Dispatch Telegram and WebSocket notifications (best-effort)
+	if err := SendTelegramMessage(message, chatID); err != nil {
+		log.Printf("Warning: failed to send Telegram message for strategy %d: %v", strategy.StrategyID, err)
+	} else {
+		log.Printf("📱 Strategy %d (%s): successfully sent Telegram notification", strategy.StrategyID, strategy.Name)
+	}
+
+	socket.SendAlertToUser(strategy.UserID, socket.AlertMessage{
+		AlertID:   strategy.StrategyID,
+		Timestamp: time.Now().Unix() * 1000,
+		Message:   message,
+		Channel:   "alert",
+		Type:      "strategy",
+		Tickers:   hitTickers,
+	})
+	log.Printf("🔔 Strategy %d (%s): sent WebSocket notification to user %d", strategy.StrategyID, strategy.Name, strategy.UserID)
 
 	return nil
 }
