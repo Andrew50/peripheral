@@ -849,7 +849,7 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running pylint comprehensive linting..."
-          pylint src/ worker.py hot_reload.py
+          pylint src/ worker.py
 
       - name: Security linting with bandit
         working-directory: services/worker
