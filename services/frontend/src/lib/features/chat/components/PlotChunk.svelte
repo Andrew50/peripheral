@@ -10,7 +10,8 @@
 	let chunkContainer: HTMLDivElement;
 	let copyImageFeedback = false;
 	let copyImageTimeout: ReturnType<typeof setTimeout> | null = null;
-
+	// Declare layout variable
+	let layout: any;
 	// Function to copy plot as image to clipboard
 	async function copyPlotImage() {
 		try {
@@ -740,8 +741,6 @@
 	// Check if any traces use secondary y-axis
 	$: hasSecondaryYAxis = plotData.data.some((trace: any) => trace.yaxis === 'y2');
 
-	// Declare layout variable
-	let layout: any;
 
 	// Merge layouts (user layout takes precedence, but handle dual y-axis)
 	// Destructure width and height out of plotData.layout to prevent them from overriding fillParent
