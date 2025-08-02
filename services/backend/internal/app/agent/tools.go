@@ -202,7 +202,7 @@ var (
 		"setHorizontalLine": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "setHorizontalLine",
-				Description: "Create a new horizontal line on the chart of a specified security ID at a specificed price.",
+				Description: "Create a new horizontal line on the chart of a specified security ID at a specified price.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
