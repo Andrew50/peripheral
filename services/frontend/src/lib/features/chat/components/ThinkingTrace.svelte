@@ -648,6 +648,7 @@
 		-webkit-text-fill-color: transparent;
 		font-size: 0.9rem;
 		font-weight: 500;
+		font-family: 'Instrument Sans', monospace;
 		flex: 1;
 		background: #fff linear-gradient(
 			to right, 
@@ -825,6 +826,8 @@
 
 	.web-search-chip .search-query {
 		font-weight: 300;
+		font-family: 'Instrument Sans', monospace;
+		color: #ffffff;
 	}
 
 	@keyframes fadeInUp {
@@ -900,8 +903,9 @@
 
 	.citation-title {
 		font-size: 0.75rem;
+		font-family: 'Instrument Sans', monospace;
 		font-weight: 500;
-		color: var(--text-primary);
+		color: #ffffff;
 		line-height: 1.3;
 		white-space: nowrap;
 		overflow: hidden;
@@ -912,7 +916,7 @@
 	.citation-url {
 		font-size: 0.7rem;
 		color: var(--text-secondary);
-		opacity: 0.7;
+		opacity: 0.8;
 		font-family: 'Instrument Sans', monospace;
 		flex-shrink: 0;
 		white-space: nowrap;
