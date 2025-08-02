@@ -49,6 +49,7 @@ jobs:
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           # Check if this is a push on a branch that has an open PR
           if [[ "${{ github.event_name }}" == "push" ]]; then
@@ -113,6 +114,7 @@ jobs:
 
       - id: get-last-success
         if: steps.check.outputs.should_run == 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
