@@ -208,7 +208,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 func determineIfFinanceTweet(conn *data.Conn, tweetText string) bool {
 	openAIClient := conn.OpenAIClient
 	model := "gpt-4.1-nano"
-	instructions := "Determine if the following tweet is asking a finance, investing, or stock market related question. Return true if it is, false if it is not. Be fairly lenient in your assessment, but ensure that if the tweet is asking something completely unrelated to finance, investing, or the stock market, that you return false. Your response should ALWAYS be either 'true' or 'false'."
+	instructions := "Determine if the following tweet is asking a finance, investing, or stock market related question. Return true if it is, false if it is not. Be fairly lenient in your assessment, but ensure that if the tweet is asking something completely unrelated to finance, investing, or the stock market, that you return false. Additionally, if the tweet is not a question, but rather a comment, then return false.Your response should ALWAYS be either 'true' or 'false'."
 	messages := []responses.ResponseInputItemUnionParam{}
 	messages = append(messages, responses.ResponseInputItemUnionParam{
 		OfMessage: &responses.EasyInputMessageParam{
