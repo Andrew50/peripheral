@@ -316,6 +316,8 @@
 </div>
 
 <style>
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
+
 	/* TopBar styles */
 	.top-bar {
 		height: 40px;
@@ -476,6 +478,7 @@
 		transition: all 0.2s ease;
 		padding: 2px 6px;
 		border-radius: 6px;
+		font-family: 'Instrument Sans', monospace;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
