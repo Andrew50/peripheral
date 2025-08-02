@@ -621,6 +621,8 @@
 {/if}
 
 <style>
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
+
 	.thinking-trace {
 		margin: 0.75rem 0 0;
 		border: 1px solid rgb(255 255 255 / 40%);
@@ -911,7 +913,7 @@
 		font-size: 0.7rem;
 		color: var(--text-secondary);
 		opacity: 0.7;
-		font-family: monospace;
+		font-family: 'Instrument Sans', monospace;
 		flex-shrink: 0;
 		white-space: nowrap;
 	}
