@@ -334,6 +334,47 @@ var (
 			StatusMessage:    "Fetching chart events",
 			UserSpecificTool: false,
 		},
+		"getDailySnapshot": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getDailySnapshot",
+				Description: "Get the current price (regular or extended hours), change, volume, OHLC, previous close for a specified stock.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"ticker": {
+							Type:        genai.TypeString,
+							Description: "The ticker symbol of the stock.",
+						},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			Function:         wrapWithContext(helpers.AgentGetTickerDailySnapshot),
+			StatusMessage:    "Getting market data",
+			UserSpecificTool: false,
+		},
+		"getLastPrice": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "getLastPrice",
+				Description: "Retrieves the last price (regular or extended hours) for a specified ticker symbol.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"tickers": {
+							Type:        genai.TypeArray,
+							Description: "The ticker symbols to get the last price for.",
+							Items: &genai.Schema{
+								Type: genai.TypeString,
+							},
+						},
+					},
+					Required: []string{"tickers"},
+				},
+			},
+			Function:         wrapWithContext(helpers.GetLastPrice),
+			StatusMessage:    "Getting current price of {ticker}",
+			UserSpecificTool: false,
+		},
 		// SEC Filing Tools
 		"getStockEdgarFilings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
@@ -406,7 +447,7 @@ var (
 			Function:      wrapWithContext(filings.GetFilingText),
 			StatusMessage: "Reading filing",
 		},*/
-		"getExhibitList": {
+		/*"getExhibitList": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getExhibitList",
 				Description: "Retrieves the list of exhibits for a specified SEC filing URL.",
@@ -437,9 +478,26 @@ var (
 			Function:         wrapWithContext(filings.GetExhibitContent),
 			StatusMessage:    "Reading Exhibit Content",
 			UserSpecificTool: false,
-		},
+		},*/
 		// <End SEC Filing Tools>
 		// <Backtest Tools>
+		"runPythonAgent": {
+			FunctionDeclaration: &genai.FunctionDeclaration{
+				Name:        "runPythonAgent",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Parameters: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
+						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
+					},
+					Required: []string{"prompt"},
+				},
+			},
+			Function:         RunPythonAgent,
+			StatusMessage:    "Running Python agent",
+			UserSpecificTool: false,
+		},
 		"runBacktest": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runBacktest",
@@ -527,64 +585,6 @@ var (
 			},
 			Function:         strategy.RunScreening,
 			StatusMessage:    "Running screener",
-			UserSpecificTool: false,
-		},
-		"runPythonAgent": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "runPythonAgent",
-				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
-						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
-					},
-					Required: []string{"prompt"},
-				},
-			},
-			Function:         RunPythonAgent,
-			StatusMessage:    "Running Python agent",
-			UserSpecificTool: false,
-		},
-		"getDailySnapshot": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getDailySnapshot",
-				Description: "Get the current price (regular or extended hours), change, volume, OHLC, previous close for a specified stock.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"ticker": {
-							Type:        genai.TypeString,
-							Description: "The ticker symbol of the stock.",
-						},
-					},
-					Required: []string{"ticker"},
-				},
-			},
-			Function:         wrapWithContext(helpers.AgentGetTickerDailySnapshot),
-			StatusMessage:    "Getting market data",
-			UserSpecificTool: false,
-		},
-		"getLastPrice": {
-			FunctionDeclaration: &genai.FunctionDeclaration{
-				Name:        "getLastPrice",
-				Description: "Retrieves the last price (regular or extended hours) for a specified ticker symbol.",
-				Parameters: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"tickers": {
-							Type:        genai.TypeArray,
-							Description: "The ticker symbols to get the last price for.",
-							Items: &genai.Schema{
-								Type: genai.TypeString,
-							},
-						},
-					},
-					Required: []string{"tickers"},
-				},
-			},
-			Function:         wrapWithContext(helpers.GetLastPrice),
-			StatusMessage:    "Getting current price of {ticker}",
 			UserSpecificTool: false,
 		},
 		/*"getPriceAtTime": {
