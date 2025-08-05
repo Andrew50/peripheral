@@ -157,9 +157,7 @@ func GetStrategyLastBuckets(conn *Conn, strategyID int, tickers []string) (map[s
 
 	// Convert tickers to interface{} slice for HMGET
 	fields := make([]string, len(tickers))
-	for i, ticker := range tickers {
-		fields[i] = ticker
-	}
+	copy(fields, tickers)
 
 	values, err := conn.Cache.HMGet(ctx, key, fields...).Result()
 	if err != nil {

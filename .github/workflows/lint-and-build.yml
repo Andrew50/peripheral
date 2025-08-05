@@ -606,11 +606,6 @@ jobs:
           fi
           echo "Final Go cache cleanup complete."
 
-      - name: Reset workspace ownership to runner
-        if: always()
-        run: |
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
-
   frontend-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
@@ -764,11 +759,6 @@ jobs:
             echo "❌ Frontend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Reset workspace ownership to runner
-        if: always()
-        run: |
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
-
   worker-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
@@ -893,39 +883,52 @@ jobs:
             echo "❌ Worker lint and security checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
-  # Summary and reporting (updated to include format checks)
-  lint-summary:
-    name: Lint and Format Summary
+# Summary and reporting (updated to include format checks)
+#  lint-summary:
+#    name: Lint and Format Summary
+#    runs-on: self-hosted
+#    needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
+#    if: always()
+#
+#    steps:
+#      - name: 📊 Generate Lint and Format Summary
+#        run: |
+#          echo "📊 Lint and Format Summary Report"
+#          echo "================================"
+#          echo ""
+#          echo "✅ Go format checks completed with camelCase enforcement"
+#          echo "✅ Python format checks completed with camelCase enforcement"
+#          echo "✅ Svelte/TS/JS format checks completed"
+#          echo "✅ YAML format checks completed"
+#          echo "✅ SQL format checks completed with consistent formatting"
+#          echo "✅ Backend lint and security checks completed"
+#          echo "✅ Frontend lint and security checks completed"
+#          echo "✅ Worker lint and security checks completed"
+#          echo ""
+#          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
+#          echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
+#          echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
+#          echo ""
+#          echo "📋 Summary:"
+#          echo "- Go: golangci-lint with revive rules for camelCase"
+#          echo "- Python: Pylint with snake_case naming rules"
+#          echo "- Svelte/TS/JS: ESLint + Stylelint"
+#          echo "- YAML: yamllint for formatting consistency"
+#          echo "- SQL: SQLFluff with consistent formatting"
+#          echo "- Backend: Full security and lint checks"
+#          echo "- Frontend: Full security and lint checks"
+#          echo "- Worker: Full security and lint checks"
+
+# Workspace permission reset (runs on host, not in container)
+  reset-workspace-permissions:
+    name: Reset workspace file ownership
     runs-on: self-hosted
     needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
 
-    
     steps:
-      - name: 📊 Generate Lint and Format Summary
+      - name: Change ownership of workspace back to runner user
         run: |
-          echo "📊 Lint and Format Summary Report"
-          echo "================================"
-          echo ""
-          echo "✅ Go format checks completed with camelCase enforcement"
-          echo "✅ Python format checks completed with camelCase enforcement"
-          echo "✅ Svelte/TS/JS format checks completed"
-          echo "✅ YAML format checks completed"
-          echo "✅ SQL format checks completed with consistent formatting"
-          echo "✅ Backend lint and security checks completed"
-          echo "✅ Frontend lint and security checks completed"
-          echo "✅ Worker lint and security checks completed"
-          echo ""
-          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
-          echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
-          echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
-          echo ""
-          echo "📋 Summary:"
-          echo "- Go: golangci-lint with revive rules for camelCase"
-          echo "- Python: Pylint with snake_case naming rules"
-          echo "- Svelte/TS/JS: ESLint + Stylelint"
-          echo "- YAML: yamllint for formatting consistency"
-          echo "- SQL: SQLFluff with consistent formatting"
-          echo "- Backend: Full security and lint checks"
-          echo "- Frontend: Full security and lint checks"
-          echo "- Worker: Full security and lint checks"
+          echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
+          echo "Done."
