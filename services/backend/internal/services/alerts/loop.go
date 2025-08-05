@@ -1135,7 +1135,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	// Use provided tickers if available (per-ticker throttling mode), otherwise parse universe
-	if tickers != nil && len(tickers) > 0 {
+	if len(tickers) > 0 {
 		args["symbols"] = tickers
 		log.Printf("🎯 Strategy %d (%s): submitting alert task with per-ticker filtered symbols (%d): %v",
 			strategy.StrategyID, strategy.Name, len(tickers), tickers)
