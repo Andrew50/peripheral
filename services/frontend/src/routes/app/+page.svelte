@@ -428,7 +428,7 @@
 		const onMove = (ev: PointerEvent) => {
 			const delta = startX - ev.clientX; // inverse for right sidebar!
 			let newWidth = Math.max(start + delta, 0);
-			const dynamicMinWidth = window.innerWidth * 0.10; // Calculate minimum width dynamically
+			const dynamicMinWidth = window.innerWidth * 0.1; // Calculate minimum width dynamically
 
 			// Handle collapsing logic
 			if (newWidth < dynamicMinWidth && lastSidebarMenu !== null) {
@@ -700,7 +700,8 @@
 		document.addEventListener('touchend', stopSidebarResize);
 	}
 
-	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) { // for tickerinfo/quote 
+	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) {
+		// for tickerinfo/quote
 		if (!sidebarResizing) return;
 
 		let currentY;
@@ -716,10 +717,16 @@
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
-		tickerInfoContainerHeight = Math.min(Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT), MAX_TICKER_INFO_CONTAINER_HEIGHT);
+		tickerInfoContainerHeight = Math.min(
+			Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT),
+			MAX_TICKER_INFO_CONTAINER_HEIGHT
+		);
 
 		// Update the CSS variable
-		document.documentElement.style.setProperty('--ticker-info-container-height', `${tickerInfoContainerHeight}px`);
+		document.documentElement.style.setProperty(
+			'--ticker-info-container-height',
+			`${tickerInfoContainerHeight}px`
+		);
 	}
 
 	function stopSidebarResize() {
@@ -778,7 +785,7 @@
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = window.innerWidth*0.4;
+		const maxLeftSidebarWidth = window.innerWidth * 0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -989,12 +996,8 @@
 		on:close={hideAuthModal}
 	/>
 
-		{#if $isMobileDevice}
-		<MobileInterface 
-			{data} 
-			{sharedConversationId} 
-			isPublicViewing={$isPublicViewingStore} 
-		/>
+	{#if $isMobileDevice}
+		<MobileInterface {data} {sharedConversationId} isPublicViewing={$isPublicViewingStore} />
 	{:else}
 		<!-- Desktop interface -->
 
@@ -1400,7 +1403,9 @@
 		display: grid;
 		height: 100%;
 		width: 100%;
-		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(--right-sidebar-width);
+		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(
+				--right-sidebar-width
+			);
 		grid-template-areas: 'left g1 center g2 right';
 	}
 
@@ -1510,8 +1515,6 @@
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
-
-
 
 	.center-section {
 		display: flex;
