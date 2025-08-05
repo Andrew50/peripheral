@@ -67,19 +67,9 @@ func broadcastTimestamp() {
 
 // StreamPolygonDataToRedis performs operations related to StreamPolygonDataToRedis functionality.
 func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
-	err := polygonWS.Subscribe(polygonws.StocksQuotes)
+	err := polygonWS.Subscribe(polygonws.BusinessFairMarketValue, "*")
 	if err != nil {
-		//log.Println("niv0: ", err)
-		return
-	}
-	err = polygonWS.Subscribe(polygonws.StocksTrades)
-	if err != nil {
-		//log.Println("Error subscribing to Polygon WebSocket: ", err)
-		return
-	}
-	err = polygonWS.Subscribe(polygonws.StocksMinAggs)
-	if err != nil {
-		//log.Println("Error subscribing to Polygon WebSocket: ", err)
+		//log.Println("Error subscribing to FMV stream: ", err)
 		return
 	}
 
@@ -96,17 +86,11 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 			var timestamp int64
 
 			switch msg := out.(type) {
-			case models.EquityAgg:
-				symbol = msg.Symbol
-				timestamp = msg.EndTimestamp
-			case models.EquityTrade:
-				symbol = msg.Symbol
-				timestamp = msg.Timestamp
-			case models.EquityQuote:
-				symbol = msg.Symbol
+			case models.FairMarketValue:
+				symbol = msg.Ticker
 				timestamp = msg.Timestamp
 			default:
-				//j//log.Println("Unknown message type received")
+				//log.Println("Unknown message type received")
 				continue
 			}
 
@@ -124,25 +108,23 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				//log.Printf("Symbol %s not found in tickerToSecurityID map\n", symbol)
 				continue
 			}
+
 			switch msg := out.(type) {
-			/*            case models.EquityAgg:
-			              alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
-			case models.EquityTrade:
+			case models.FairMarketValue:
 				channelNameType := getChannelNameType(msg.Timestamp)
 				fastChannelName := fmt.Sprintf("%d-fast-%s", securityID, channelNameType)
 				allChannelName := fmt.Sprintf("%d-all", securityID)
 				slowChannelName := fmt.Sprintf("%d-slow-%s", securityID, channelNameType)
 
 				data := TradeData{
-					//					Ticker:     msg.Symbol,
-					Price:      msg.Price,
-					Size:       msg.Size,
+					Price:      msg.FMV,
+					Size:       0,
 					Timestamp:  msg.Timestamp,
-					Conditions: msg.Conditions,
-					ExchangeID: int(msg.Exchange),
+					Conditions: nil,
+					ExchangeID: 0,
 					Channel:    fastChannelName,
 				}
-				//if alerts.IsAggsInitialized() {
+
 				if useAlerts {
 					if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
 						// Only log non-initialization errors to reduce noise
@@ -164,45 +146,21 @@ func StreamPolygonDataToRedis(conn *data.Conn, polygonWS *polygonws.Client) {
 				if err != nil {
 					fmt.Println("Error marshling JSON:", err)
 				} else {
-					//conn.Cache.Publish(context.Background(), channelName, string(jsonData))
 					broadcastToChannel(allChannelName, string(jsonData))
 				}
 				now := time.Now()
 				nextDispatchTimes.RLock()
-				nextDispatch, exists := nextDispatchTimes.times[msg.Symbol]
+				nextDispatch, exists := nextDispatchTimes.times[msg.Ticker]
 				nextDispatchTimes.RUnlock()
-				// Only append tick if aggregates are initialized
-				//////fmt.Println("debug: alerts.IsAggsInitialized()", alerts.IsAggsInitialized())
 
-				//}
 				if !exists || now.After(nextDispatch) {
 					data.Channel = slowChannelName
 					jsonData, _ = json.Marshal(data) // Handle potential error, though unlikely
-					//conn.Cache.Publish(context.Background(), slowChannelName, string(jsonData))
 					broadcastToChannel(slowChannelName, string(jsonData))
 					nextDispatchTimes.Lock()
-					nextDispatchTimes.times[msg.Symbol] = now.Add(slowRedisTimeout)
+					nextDispatchTimes.times[msg.Ticker] = now.Add(slowRedisTimeout)
 					nextDispatchTimes.Unlock()
 				}
-			case models.EquityQuote:
-				channelName := fmt.Sprintf("%d-quote", securityID)
-				if !hasListeners(channelName) {
-					break
-				}
-				data := QuoteData{
-					Timestamp: msg.Timestamp,
-					BidPrice:  msg.BidPrice,
-					AskPrice:  msg.AskPrice,
-					BidSize:   msg.BidSize,
-					AskSize:   msg.AskSize,
-					Channel:   channelName,
-				}
-				jsonData, err := json.Marshal(data)
-				if err != nil {
-					//fmt.Printf("io1nv %v\n", err)
-					continue
-				}
-				broadcastToChannel(channelName, string(jsonData))
 			}
 
 		}
@@ -229,7 +187,7 @@ func StartPolygonWS(conn *data.Conn, _useAlerts bool) error {
 	var err error
 	polygonWSConn, err = polygonws.New(polygonws.Config{
 		APIKey: "ogaqqkwU1pCi_x5fl97pGAyWtdhVLJYm",
-		Feed:   polygonws.RealTime,
+		Feed:   polygonws.BusinessFeed,
 		Market: polygonws.Stocks,
 	})
 	if err != nil {
