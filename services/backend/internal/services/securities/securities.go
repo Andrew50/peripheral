@@ -884,6 +884,7 @@ func processTickerEventsForNewListing(ctx context.Context, conn *data.Conn, tick
 	}
 
 	return nil
+
 }
 
 // processTickerEventsForExistingSecurity handles ticker change events for an existing security with a specific securityID

@@ -606,6 +606,11 @@ jobs:
           fi
           echo "Final Go cache cleanup complete."
 
+      - name: Reset workspace ownership to runner
+        if: always()
+        run: |
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
+
   frontend-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
@@ -758,6 +763,11 @@ jobs:
             echo "### Frontend CI Results ❌" >> $GITHUB_STEP_SUMMARY
             echo "❌ Frontend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Reset workspace ownership to runner
+        if: always()
+        run: |
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
 
   worker-lint-security:
     needs: [check-workflow-conditions]
