@@ -36,15 +36,17 @@ func GetAlertMetrics() map[string]int64 {
 	}
 }
 
-// Increment metrics functions for per-ticker throttling
+// IncrementStrategyRuns increments the count of strategy runs.
 func IncrementStrategyRuns() {
 	atomic.AddInt64(&strategyRuns, 1)
 }
 
+// IncrementSkippedNoUpdate increments the count of skipped runs due to no update.
 func IncrementSkippedNoUpdate() {
 	atomic.AddInt64(&skippedNoUpdate, 1)
 }
 
+// IncrementSkippedBucketDup increments the count of skipped runs due to duplicate buckets.
 func IncrementSkippedBucketDup() {
 	atomic.AddInt64(&skippedBucketDup, 1)
 }

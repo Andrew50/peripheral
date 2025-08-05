@@ -922,15 +922,15 @@ jobs:
 #          echo "- Worker: Full security and lint checks"
 
 # Workspace permission reset (runs on host, not in container)
-  reset-workspace-permissions:
-    name: Reset workspace file ownership
-    runs-on: self-hosted
-    needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
-    if: always()
-
-    steps:
-      - name: Change ownership of workspace back to runner user
-        run: |
-          echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
-          echo "Done."
+#  reset-workspace-permissions:
+#    name: Reset workspace file ownership
+#    runs-on: self-hosted
+#    needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
+#    if: always()
+#
+#    steps:
+#      - name: Change ownership of workspace back to runner user
+#        run: |
+#          echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
+#          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE"
+#          echo "Done."

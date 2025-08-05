@@ -16,6 +16,7 @@ import (
 type UsageType string
 
 const (
+	// UsageTypeCredits represents usage that consumes credits
 	UsageTypeCredits       UsageType = "credits"
 	UsageTypeAlert         UsageType = "alert"
 	UsageTypeStrategyAlert UsageType = "strategy_alert"
