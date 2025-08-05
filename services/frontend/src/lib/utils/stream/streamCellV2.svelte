@@ -54,7 +54,7 @@
 	// Handle price formatting and pulse effects
 	$: if (type === 'price' && data?.price !== undefined) {
 		// Skip processing if shouldUpdatePrice is false
-			handlePriceUpdate(data.price);
+		handlePriceUpdate(data.price);
 	}
 
 	function handlePriceUpdate(newPrice: number) {
@@ -132,7 +132,7 @@
 </div>
 
 <style>
-	@keyframes flashGreen {
+	@keyframes flash-green {
 		0% {
 			color: var(--positive, rgb(72 225 72));
 		}
@@ -142,7 +142,7 @@
 		}
 	}
 
-	@keyframes flashRed {
+	@keyframes flash-red {
 		0% {
 			color: var(--negative, rgb(225 72 72));
 		}
@@ -153,11 +153,11 @@
 	}
 
 	.flash-up {
-		animation: flashGreen 0.5s ease-out forwards;
+		animation: flash-green 0.5s ease-out forwards;
 	}
 
 	.flash-down {
-		animation: flashRed 0.5s ease-out forwards;
+		animation: flash-red 0.5s ease-out forwards;
 	}
 
 	.diff.up {
