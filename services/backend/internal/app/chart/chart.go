@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"backend/internal/data/polygon"
+	"backend/internal/services/socket" // added for condition code maps reuse
 
 	"github.com/polygon-io/client-go/rest/iter"
 	"github.com/polygon-io/client-go/rest/models"
@@ -114,7 +115,6 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	if timespan != "minute" && timespan != "second" && timespan != "hour" {
 		args.ExtendedHours = false
 	}
-
 	easternLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return nil, fmt.Errorf("issue loading eastern location: %v", err)
@@ -139,7 +139,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		query = `SELECT ticker, minDate, maxDate, false as has_earlier_data
                  FROM securities 
                  WHERE securityid = $1
-                 ORDER BY minDate DESC NULLS FIRST`
+                 ORDER BY maxDate DESC NULLS FIRST`
 		queryParams = []interface{}{args.SecurityID}
 		polyResultOrder = "desc"
 	case args.Direction == "backward":
@@ -478,8 +478,8 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 			}
 			if incompleteAgg.Open != 0 {
 				// Only add incomplete bar if it's within regular hours or daily+ timeframes
-				incompleteTs := time.Unix(int64(incompleteAgg.Timestamp), 0)
-				if (utils.IsTimestampRegularHours(incompleteTs)) ||
+				incompleteTS := time.Unix(int64(incompleteAgg.Timestamp), 0)
+				if (utils.IsTimestampRegularHours(incompleteTS)) ||
 					timespan == "day" || timespan == "week" || timespan == "month" {
 					barDataList = append(barDataList, incompleteAgg)
 				}
@@ -502,7 +502,7 @@ func GetChartData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 	// Log chart query in goroutine (even for failed requests)
 	go logChartQuery(conn, userID, args)
 
-	return nil, fmt.Errorf("no data found")
+	return nil, fmt.Errorf("no data found for %d, %s", args.SecurityID, tickerForIncompleteAggregate)
 }
 
 func reverse(data []GetChartDataResults) {
@@ -552,8 +552,6 @@ func requestIncompleteBar(
 		timestampStart = currentDayStart + (elapsed/(timeframeInSeconds*1000))*timeframeInSeconds*1000
 	} else {
 		// Daily or above
-		// Calculate the start of the current day but we don't need to store it in a variable
-		timestampStart = GetReferenceStartTime(timestampEnd, false, easternLocation)
 		switch timespan {
 		case "day":
 			timestampStart = GetReferenceStartTimeForDays(timestampEnd, multiplier, easternLocation)
@@ -760,12 +758,8 @@ func requestIncompleteBar(
 	// ------------------------
 	// 6) Single-pass aggregator
 	// ------------------------
-	tradeConditionsToSkipOhlc := map[int32]struct{}{
-		2: {}, 5: {}, 10: {}, 15: {}, 16: {}, 20: {}, 21: {}, 22: {}, 29: {}, 33: {}, 38: {}, 52: {}, 53: {},
-	}
-	tradeConditionsToSkipVolume := map[int32]struct{}{
-		15: {}, 16: {}, 38: {},
-	}
+	tradeConditionsToSkipOhlc := socket.TradeConditionsToSkipOhlc
+	tradeConditionsToSkipVolume := socket.TradeConditionsToSkipVolume
 
 	for _, cd := range combined {
 		// Only process data that's within the final time range
@@ -870,7 +864,7 @@ func fetchAggData(
 		agg := it.Item()
 		ts := time.Time(agg.Timestamp).In(easternLocation)
 
-		if !extendedHours {
+		if !extendedHours && timespan != "day" {
 			if !utils.IsTimestampRegularHours(ts) {
 				continue
 			}
@@ -908,11 +902,11 @@ func fetchTrades(
 		if it.Err() != nil {
 			return nil, it.Err()
 		}
-		tradeTs := time.Time(tr.ParticipantTimestamp).In(easternLocation)
-		if tradeTs.After(endTime) {
+		tradeTS := time.Time(tr.ParticipantTimestamp).In(easternLocation)
+		if tradeTS.After(endTime) {
 			break
 		}
-		if extendedHours || utils.IsTimestampRegularHours(tradeTs) {
+		if extendedHours || utils.IsTimestampRegularHours(tradeTS) {
 			trades = append(trades, tr)
 		}
 	}
@@ -1100,12 +1094,12 @@ func integrateChartEvents(
 		return
 	}
 
-	minTsSec := tempSortedBars[0].Timestamp
-	maxTsSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
+	minTSSec := tempSortedBars[0].Timestamp
+	maxTSSec := tempSortedBars[len(tempSortedBars)-1].Timestamp
 
 	// Validate timestamps before proceeding
-	if math.IsNaN(minTsSec) || math.IsNaN(maxTsSec) || math.IsInf(minTsSec, 0) || math.IsInf(maxTsSec, 0) {
-		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTsSec, maxTsSec)
+	if math.IsNaN(minTSSec) || math.IsNaN(maxTSSec) || math.IsInf(minTSSec, 0) || math.IsInf(maxTSSec, 0) {
+		////fmt.Printf("Warning: Invalid min/max timestamps after sorting: min=%f, max=%f. Cannot fetch events.\\n", minTSSec, maxTSSec)
 		return
 	}
 
@@ -1116,9 +1110,9 @@ func integrateChartEvents(
 	}
 
 	// Calculate time range in milliseconds for the API call
-	fromMs := int64(minTsSec * 1000)
+	fromMs := int64(minTSSec * 1000)
 	// Extend 'toMs' to cover the full duration of the last bar
-	toMs := int64((maxTsSec + float64(chartTimeframeInSeconds)) * 1000)
+	toMs := int64((maxTSSec + float64(chartTimeframeInSeconds)) * 1000)
 
 	// 2. Fetch Events
 	chartEvents, err := fetchChartEventsInRange(conn, userID, securityID, fromMs, toMs, includeSECFilings, true)
@@ -1165,7 +1159,7 @@ func logChartQuery(conn *data.Conn, userID int, args GetChartDataArgs) {
 	query := `
 		INSERT INTO chart_queries (
 			securityid, timeframe, timestamp, direction, bars, 
-			extended_hours, is_replay, include_sec_filings, user_id
+			extended_hours, is_replay, include_sec_filings, userid
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 

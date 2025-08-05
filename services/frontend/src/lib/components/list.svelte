@@ -62,7 +62,7 @@
 		return columnName
 			.replace(/_/g, ' ') // Replace underscores with spaces
 			.split(' ') // Split into words
-			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
 			.join(' '); // Join back with spaces
 	}
 
@@ -237,18 +237,19 @@
 				let valueB = b[dataKey];
 
 				// Keep timestamp handling as is
-				if (dataKey === 'timestamp' || dataKey === 'Timestamp') { // Check both cases just in case
+				if (dataKey === 'timestamp' || dataKey === 'Timestamp') {
+					// Check both cases just in case
 					const timeA = typeof valueA === 'number' ? valueA : 0;
 					const timeB = typeof valueB === 'number' ? valueB : 0;
 					return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
 				}
 				// Handle trade duration
-				if (dataKey === 'trade_duration' || dataKey === 'Trade Duration') { // Use original or potentially display name
+				if (dataKey === 'trade_duration' || dataKey === 'Trade Duration') {
+					// Use original or potentially display name
 					const durationA = typeof a.tradeDurationMillis === 'number' ? a.tradeDurationMillis : -1;
 					const durationB = typeof b.tradeDurationMillis === 'number' ? b.tradeDurationMillis : -1;
 					return sortDirection === 'asc' ? durationA - durationB : durationB - durationA;
 				}
-
 
 				// Generic number handling
 				if (typeof valueA === 'number' && typeof valueB === 'number') {
@@ -265,7 +266,6 @@
 			return sorted;
 		});
 	}
-
 
 	onMount(() => {
 		try {
@@ -432,10 +432,8 @@
 			return formatDuration(rawValue); // rawValue here is tradeDurationMillis
 		}
 
-
 		return rawValue?.toString() ?? 'N/A';
 	}
-
 
 	function getAllOrders(trade: ExtendedInstance): Trade[] {
 		return trade.trades || [];
@@ -463,7 +461,9 @@
 			iconCache.set(ticker, BLACK_PIXEL);
 			// Force the specific item in the list to use the black pixel
 			list.update((items: ExtendedInstance[]) =>
-				items.map((item: ExtendedInstance) => (item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item))
+				items.map((item: ExtendedInstance) =>
+					item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item
+				)
 			);
 		}
 	}
@@ -529,19 +529,20 @@
 					{#if expandable}
 						<th class="default-th expand-column" />
 					{/if}
-					<th class="default-th"></th> {#each columns as col} 
+					<th class="default-th"></th>
+					{#each columns as col}
 						<th
 							class="default-th"
 							data-type={col.toLowerCase().replace(/\s+/g, '-')}
 							class:sortable={col !== ''}
 							class:sorting={sortColumn === col}
-							class:sort-asc={sortColumn === col && sortDirection === 'asc'} 
+							class:sort-asc={sortColumn === col && sortDirection === 'asc'}
 							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
-							on:click={() => handleSort(col)} 
+							on:click={() => handleSort(col)}
 						>
 							<div class="th-content">
 								<span>{displayNames[col] || formatColumnHeader(col)}</span>
-								{#if sortColumn === col} 
+								{#if sortColumn === col}
 									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
 								{/if}
 							</div>
@@ -554,7 +555,7 @@
 				<tbody>
 					{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
 						<tr
-							class="default-tr {rowClass(watch)}" 
+							class="default-tr {rowClass(watch)}"
 							on:mousedown={(event) => clickHandler(event, watch, i)}
 							on:touchstart={(event) => handleTouchStart(event, watch, i)}
 							on:touchend={handleTouchEnd}
@@ -575,15 +576,23 @@
 							<td class="default-td">
 								{#if isFlagged(watch, $flagWatchlist)}
 									<span class="flag-icon">
-										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
 											<path d="M5 5v14"></path>
 											<path d="M19 5l-6 4 6 4-6 4"></path>
 										</svg>
 									</span>
 								{/if}
 							</td>
-							{#each columns as col} 
-								{#if col === 'Ticker'} 
+							{#each columns as col}
+								{#if col === 'Ticker'}
 									<td class="default-td">
 										{#if watch.icon && watch.icon !== BLACK_PIXEL}
 											<img
@@ -597,9 +606,9 @@
 												{watch.ticker.charAt(0).toUpperCase()}
 											</span>
 										{/if}
-                                        <span class="ticker-name">{watch.ticker}</span> 
+										<span class="ticker-name">{watch.ticker}</span>
 									</td>
-								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)} 
+								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
 									<td class="default-td">
 										<StreamCell
 											on:contextmenu={(event) => {
@@ -607,38 +616,39 @@
 												event.stopPropagation();
 											}}
 											instance={watch}
-											type={getStreamCellType(col)} 
+											type={getStreamCellType(col)}
 										/>
 									</td>
-								{:else if col === 'Timestamp'} 
+								{:else if col === 'Timestamp'}
 									<td
 										class="default-td"
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}>{UTCTimestampToESTString(watch.timestamp)}</td 
+										}}>{UTCTimestampToESTString(watch.timestamp)}</td
 									>
-								{:else if col === 'Trade Duration'} 
+								{:else if col === 'Trade Duration'}
 									<td
 										class="default-td"
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}>{formatDuration(watch.tradeDurationMillis)}</td 
+										}}>{formatDuration(watch.tradeDurationMillis)}</td
 									>
-								{:else} 
+								{:else}
 									<td
 										class="default-td"
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}>{formatValue(watch, col)}</td 
+										}}>{formatValue(watch, col)}</td
 									>
 								{/if}
 							{/each}
 							<td class="default-td">
 								<button
 									class="delete-button"
+									on:mousedown|stopPropagation
 									on:click={(event) => {
 										deleteRow(event, watch);
 									}}
@@ -649,40 +659,40 @@
 						</tr>
 						{#if expandable && expandedRows.has(i)}
 							<tr class="expanded-content">
-                                
 								<td colspan={columns.length + 1 + (expandable ? 1 : 0)}>
 									<div class="trade-details">
 										{#if typeof expandedContent === 'function'}
-                                             {@html expandedContent(watch)} 
-                                        {:else}
-                                            <h4>Trade Details</h4>
-                                            {#if getAllOrders(watch).length > 0}
-                                                <table>
-                                                    <thead>
-                                                        <tr class="defalt-tr">
-                                                            <th class="defalt-th">Time</th>
-                                                            <th class="defalt-th">Type</th>
-                                                            <th class="defalt-th">Price</th>
-                                                            <th class="defalt-th">Shares</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {#each getAllOrders(watch) as order, orderIndex (orderIndex)}
-                                                            <tr class="defalt-tr">
-                                                                <td class="defalt-td">{UTCTimestampToESTString(order.time)}</td>
-                                                                <td class={order.type.toLowerCase().replace(/\s+/g, '-')}
-                                                                    >{order.type}</td
-                                                                >
-                                                                <td class="defalt-td">{order.price}</td>
-                                                                <td class="defalt-td">{order.shares}</td>
-                                                            </tr>
-                                                        {/each}
-                                                    </tbody>
-                                                </table>
-                                            {:else}
-                                                <p>No trade details available.</p>
-                                            {/if}
-                                        {/if}
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+											{@html expandedContent(watch)}
+										{:else}
+											<h4>Trade Details</h4>
+											{#if getAllOrders(watch).length > 0}
+												<table>
+													<thead>
+														<tr class="defalt-tr">
+															<th class="defalt-th">Time</th>
+															<th class="defalt-th">Type</th>
+															<th class="defalt-th">Price</th>
+															<th class="defalt-th">Shares</th>
+														</tr>
+													</thead>
+													<tbody>
+														{#each getAllOrders(watch) as order, orderIndex (orderIndex)}
+															<tr class="defalt-tr">
+																<td class="defalt-td">{UTCTimestampToESTString(order.time)}</td>
+																<td class={order.type.toLowerCase().replace(/\s+/g, '-')}
+																	>{order.type}</td
+																>
+																<td class="defalt-td">{order.price}</td>
+																<td class="defalt-td">{order.shares}</td>
+															</tr>
+														{/each}
+													</tbody>
+												</table>
+											{:else}
+												<p>No trade details available.</p>
+											{/if}
+										{/if}
 									</div>
 								</td>
 							</tr>
@@ -769,11 +779,8 @@
 	table.sorting::after {
 		content: '';
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.05);
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
 		pointer-events: none;
 	}
 
@@ -824,7 +831,7 @@
 	}
 
 	.trade-details h4 {
-		margin: 0 0 6px 0;
+		margin: 0 0 6px;
 		color: var(--text-secondary);
 		font-size: 0.9em;
 	}
@@ -927,7 +934,7 @@
 	}
 
 	h4 {
-		margin: 20px 0 10px 0;
+		margin: 20px 0 10px;
 		color: var(--text-secondary);
 	}
 
@@ -974,6 +981,7 @@
 		align-items: center;
 		justify-content: center;
 	}
+
 	.flag-icon svg {
 		width: 16px;
 		height: 16px;
@@ -981,10 +989,12 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
+
 	/* Sticky Last column (Delete Button) */
-	th:last-child, td:last-child {
+	th:last-child,
+	td:last-child {
 		position: sticky;
-		right: 0px; /* Stick to the very edge */
+		right: 0; /* Stick to the very edge */
 		z-index: 1; /* Above non-sticky cells */
 		background-color: inherit; /* Inherit row/header background */
 		width: 30px; /* Minimal width for button */
@@ -993,10 +1003,11 @@
 		text-align: center;
 		vertical-align: middle;
 	}
-    th:last-child {
-        z-index: 3; /* Above tbody cells and sort overlay */
-        background-color: var(--ui-bg-element); /* Ensure header BG */
-     }
+
+	th:last-child {
+		z-index: 3; /* Above tbody cells and sort overlay */
+		background-color: var(--ui-bg-element); /* Ensure header BG */
+	}
 
 	.delete-button {
 		opacity: 0;
@@ -1007,22 +1018,25 @@
 		color: var(--negative);
 		font-size: 1.2em;
 		padding: 4px;
-        line-height: 1;
-        display: inline-flex; /* Helps center */
-        align-items: center;
-        justify-content: center;
+		line-height: 1;
+		display: inline-flex; /* Helps center */
+		align-items: center;
+		justify-content: center;
 	}
-    .delete-button:hover {
-        color: var(--negative-hover, red); /* Darker red on hover */
-    }
+
+	.delete-button:hover {
+		color: var(--negative-hover, red); /* Darker red on hover */
+	}
 
 	tr:hover .delete-button {
 		opacity: 1;
 	}
 
 	/* Adjust background for sticky columns on hover/select */
-    /* Assuming .selected class is used for row selection */
-    tr:hover th:last-child, tr:hover td:last-child {
-        background-color: var(--ui-bg-hover);
-    }
+
+	/* Assuming .selected class is used for row selection */
+	tr:hover th:last-child,
+	tr:hover td:last-child {
+		background-color: var(--ui-bg-hover);
+	}
 </style>

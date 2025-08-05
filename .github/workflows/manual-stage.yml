@@ -1,0 +1,96 @@
+name: Manual Deploy to Stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+      force-deploy-db:
+        description: 'Force Deploy DB'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-frontend:
+        description: 'Force Deploy Frontend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-backend:
+        description: 'Force Deploy Backend'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-cache:
+        description: 'Force Deploy Cache'
+        required: false
+        default: false
+        type: boolean      
+      force-deploy-worker:
+        description: 'Force Deploy Worker'
+        required: false
+        default: false
+        type: boolean      
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compute_manual_strategy:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build-manual-strategy.yml
+    with:
+      force-deploy-db: ${{ github.event.inputs.force-deploy-db == 'true' }}
+      force-deploy-frontend: ${{ github.event.inputs.force-deploy-frontend == 'true' }}
+      force-deploy-backend: ${{ github.event.inputs.force-deploy-backend == 'true' }}
+      force-deploy-cache: ${{ github.event.inputs.force-deploy-cache == 'true' }}
+      force-deploy-worker: ${{ github.event.inputs.force-deploy-worker == 'true' }}
+  deploy-stage:
+    needs:
+      - compute_manual_strategy
+    if:  needs.compute_manual_strategy.outputs.strategy != 'no-changes'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: 'stage'
+      target_branch: ${{ github.event.inputs.branch || github.ref_name }}
+      k8s_namespace: 'stage'
+      google_redirect_url: 'https://stage.peripheral.io/auth/google/callback'
+      ingress_host: 'stage.peripheral.io'
+      strategy: ${{ needs.compute_manual_strategy.outputs.strategy }}
+      services_changed: ${{ needs.compute_manual_strategy.outputs.services_changed }}      
+      skip_migrations: ${{ needs.compute_manual_strategy.outputs.skip_migrations == 'true' }}    
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      DB_ROOT_PASSWORD: ${{ secrets.STAGE_DB_ROOT_PASSWORD }}
+      REDIS_PASSWORD: ${{ secrets.STAGE_REDIS_PASSWORD }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
+      POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
+      GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.STAGE_JWT_SECRET }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.STAGE_CLOUDFLARE_TUNNEL_TOKEN }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_DEV_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_STAGE_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_DEV_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}

@@ -25,12 +25,13 @@ type TickData interface {
 
 // TradeData represents a structure for handling TradeData data.
 type TradeData struct {
-	Price      float64 `json:"price"`
-	Size       int64   `json:"size"`
-	Timestamp  int64   `json:"timestamp"`
-	ExchangeID int     `json:"exchange"`
-	Conditions []int32 `json:"conditions"`
-	Channel    string  `json:"channel"`
+	Price             float64 `json:"price"`
+	Size              int64   `json:"size"`
+	Timestamp         int64   `json:"timestamp"`
+	ExchangeID        int     `json:"exchange"`
+	Conditions        []int32 `json:"conditions"`
+	Channel           string  `json:"channel"`
+	ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
 }
 
 func (t TradeData) GetPrice() float64 {
@@ -84,6 +85,9 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 		totalSize := int64(0)
 		var lastTrade TradeData
 		conditionsMap := make(map[int32]bool)
+		var lastValidPrice float64
+		hasValidPrice := false
+
 		for _, tick := range ticks {
 			if trade, ok := tick.(*TradeData); ok {
 				totalSize += trade.Size
@@ -91,14 +95,27 @@ func aggregateTicks(ticks []TickData, baseDataType string) TickData {
 				for _, condition := range trade.Conditions {
 					conditionsMap[condition] = true
 				}
+				// Track the last valid price (not -1)
+				if trade.Price >= 0 {
+					lastValidPrice = trade.Price
+					hasValidPrice = true
+				}
 			}
 		}
+
 		uniqueConditions := make([]int32, 0, len(conditionsMap))
 		for condition := range conditionsMap {
 			uniqueConditions = append(uniqueConditions, condition)
 		}
+
+		// Use the last valid price if available, otherwise use the last trade's price
+		finalPrice := lastTrade.Price
+		if hasValidPrice {
+			finalPrice = lastValidPrice
+		}
+
 		aggregatedTrade := TradeData{
-			Price:      lastTrade.Price,
+			Price:      finalPrice,
 			Size:       totalSize,
 			Timestamp:  lastTrade.Timestamp,
 			ExchangeID: lastTrade.ExchangeID,
@@ -158,8 +175,8 @@ func getTradeData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime
 		}
 
 		for iter.Next() {
-			tradeTsMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
-			if tradeTsMillis > windowEndTime {
+			tradeTSMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
+			if tradeTSMillis > windowEndTime {
 				return tradeDataList, nil
 			}
 			if !utils.IsTimestampRegularHours(time.Time(iter.Item().ParticipantTimestamp)) {
@@ -226,8 +243,8 @@ func getQuoteData(conn *data.Conn, securityID int, timestamp int64, lengthOfTime
 		}
 		iter := polygon.GetQuote(conn.Polygon, ticker, windowStartTimeNanos, "asc", models.GTE, 30000)
 		for iter.Next() {
-			quoteTsMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
-			if quoteTsMillis > windowEndTime {
+			quoteTSMillis := int64(time.Time(iter.Item().ParticipantTimestamp).Unix()) * 1000
+			if quoteTSMillis > windowEndTime {
 				return quoteDataList, nil
 			}
 			// We do not exclude extended hours quotes
@@ -441,12 +458,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 			tradeTimestamp = tradeTime.UnixNano() / 1e6
 		}
 		data := TradeData{
-			Price:      price,
-			Size:       size,
-			Timestamp:  tradeTimestamp,
-			Conditions: conditions,
-			ExchangeID: trade.Exchange,
-			Channel:    channelName,
+			Price:             price,
+			Size:              size,
+			Timestamp:         tradeTimestamp,
+			Conditions:        conditions,
+			ExchangeID:        trade.Exchange,
+			Channel:           channelName,
+			ShouldUpdatePrice: true,
 		}
 		return json.Marshal(data)
 
@@ -462,11 +480,13 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, err
 			}
 			out := struct {
-				Price   float64 `json:"price"`
-				Channel string  `json:"channel"`
+				Price             float64 `json:"price"`
+				ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
+				Channel           string  `json:"channel"`
 			}{
-				Price:   prevCloseSlice[0].GetPrice(),
-				Channel: channelName,
+				Price:             prevCloseSlice[0].GetPrice(),
+				ShouldUpdatePrice: true,
+				Channel:           channelName,
 			}
 			return json.Marshal(out)
 		}
@@ -481,7 +501,7 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				return nil, err
 			}
 			referencePrice = prevCloseSlice[0].GetPrice()
-		} else {
+		} else { // IF EXTENDED HOURS
 			// Check if we're in after-hours (post 4:00 PM) or pre-market
 			easternLocation, err := time.LoadLocation("America/New_York")
 			if err != nil {
@@ -504,21 +524,24 @@ func getInitialStreamValue(conn *data.Conn, channelName string, timestamp int64)
 				}
 				referencePrice = closePrice
 			} else {
-				// Pre-market, use daily open
-				dailyOpen, err := polygon.GetDailyOpen(conn.Polygon, ticker, queryTime)
+				// Pre-market, use previous day's close (same as regular hours logic)
+				// This ensures consistent extended hours % calculation from previous session close
+				prevCloseSlice, err := getPrevCloseData(conn, securityID, queryTime.UnixNano()/1e6)
 				if err != nil {
-					return nil, fmt.Errorf("error getting daily open: %v", err)
+					return nil, fmt.Errorf("error getting previous close: %v", err)
 				}
-				referencePrice = dailyOpen
+				referencePrice = prevCloseSlice[0].GetPrice()
 			}
 		}
 
 		out := struct {
-			Price   float64 `json:"price"`
-			Channel string  `json:"channel"`
+			Price             float64 `json:"price"`
+			ShouldUpdatePrice bool    `json:"shouldUpdatePrice"`
+			Channel           string  `json:"channel"`
 		}{
-			Price:   referencePrice,
-			Channel: channelName,
+			Price:             referencePrice,
+			ShouldUpdatePrice: true,
+			Channel:           channelName,
 		}
 		return json.Marshal(out)
 	case "all":

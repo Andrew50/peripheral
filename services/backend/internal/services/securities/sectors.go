@@ -8,18 +8,19 @@ package securities
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-    "database/sql"
+	"time"
 
-	"backend/internal/data"           // your conn.go
+	"backend/internal/data" // your conn.go
+
 	"github.com/jackc/pgx/v4/pgxpool" // postgres
 )
-
 
 // ------------------------------------------------------------------- //
 //  Types                                                              //
@@ -37,7 +38,6 @@ type listing struct {
 	Sector   string `json:"sector"`   // e.g. "Technology"
 	Industry string `json:"industry"` // e.g. "Consumer Electronics"
 }
-
 
 // map[ticker] = (sector, industry)
 type meta struct{ Sector, Industry string }
@@ -78,8 +78,8 @@ func UpdateSectors(ctx context.Context, c *data.Conn) error {
 			continue
 		}
 
-		needsUpdate := (!s.CurrentSector.Valid || s.CurrentSector.String != meta.Sector) ||
-			(!s.CurrentIndustry.Valid || s.CurrentIndustry.String != meta.Industry)
+		needsUpdate := (!s.CurrentSector.Valid || s.CurrentSector.String == "" || s.CurrentSector.String != meta.Sector) ||
+			(!s.CurrentIndustry.Valid || s.CurrentIndustry.String == "" || s.CurrentIndustry.String != meta.Industry)
 
 		if !needsUpdate {
 			continue
@@ -107,19 +107,19 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	// each exchange has   <ex>/<ex>_full_ticker.json
 	// see repo README: https://github.com/rreichel3/US-Stock-Symbols
 	exchanges := []string{"nasdaq", "nyse", "amex"}
-	base      := "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/%s/%s_full_tickers.json"
+	base := "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/%s/%s_full_tickers.json"
 
 	out := make(map[string]meta, 15_000) // rough upper bound
 
 	for _, ex := range exchanges {
-		url  := fmt.Sprintf(base, ex, ex)
+		url := fmt.Sprintf(base, ex, ex)
 
-		body, err := fetch(ctx, url)
+		body, err := fetchWithRetry(ctx, url)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load github data for %s: %w", ex, err)
 		}
 
-		var lst []listing            // listing{Symbol, Sector, Industry}
+		var lst []listing // listing{Symbol, Sector, Industry}
 		if err := json.Unmarshal(body, &lst); err != nil {
 			return nil, fmt.Errorf("decode %s: %w", ex, err)
 		}
@@ -134,36 +134,56 @@ func buildMetaMap(ctx context.Context) (map[string]meta, error) {
 	return out, nil
 }
 
-func fetch(ctx context.Context, url string) ([]byte, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// fetchWithRetry performs HTTP requests with retry logic for handling timeouts
+func fetchWithRetry(ctx context.Context, url string) ([]byte, error) {
+	var err error
+	backoff := time.Second
+	for attempts := 1; attempts <= 3; attempts++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
+		req.Header.Set("Accept", "application/vnd.github.raw")
 
-	// Outgoing headers
-	req.Header.Set("User-Agent", "update_sectors/1.2 (+https://github.com/your-org)")
-	req.Header.Set("Accept", "application/vnd.github.raw") // forces raw view
+		resp, err := data.DoWithRetry(http.DefaultClient, req)
+		if err == nil {
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					fmt.Printf("Error closing response body: %v\n", err)
+				}
+			}()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+			}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
+			// GitHub sometimes base-64s large JSON blobs
+			if json.Valid(b) {
+				return b, nil
+			}
+			if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
+				return dec, nil
+			}
+			return nil, fmt.Errorf("unexpected payload from %s", url)
+		}
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		// Retry only on TLS handshake timeout or context deadline exceeded
+		if !strings.Contains(err.Error(), "TLS handshake timeout") &&
+			!strings.Contains(err.Error(), "context deadline exceeded") {
+			return nil, err
+		}
+		if attempts < 3 {
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			backoff *= 2
+		}
 	}
-
-	// GitHub sometimes base-64s large JSON blobs
-	if json.Valid(b) {
-		return b, nil
-	}
-	if dec, err := base64.StdEncoding.DecodeString(string(b)); err == nil && json.Valid(dec) {
-		return dec, nil
-	}
-	return nil, fmt.Errorf("unexpected payload from %s", url)
+	return nil, err
 }
 
 // ------------------------------------------------------------------- //
@@ -171,7 +191,7 @@ func fetch(ctx context.Context, url string) ([]byte, error) {
 // ------------------------------------------------------------------- //
 
 func applyUpdate(ctx context.Context, db *pgxpool.Pool, ticker string, m meta) error {
-	_, err := db.Exec(ctx,
+	_, err := data.ExecWithRetry(ctx, db, // switched to robust retry helper
 		`UPDATE securities
 		    SET sector = $1,
 		        industry = $2
@@ -179,4 +199,3 @@ func applyUpdate(ctx context.Context, db *pgxpool.Pool, ticker string, m meta) e
 		m.Sector, m.Industry, ticker)
 	return err
 }
-

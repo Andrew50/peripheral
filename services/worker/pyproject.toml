@@ -43,17 +43,53 @@ warn_unreachable = true
 strict_equality = true
 ignore_missing_imports = true
 
+[tool.pylint.master]
+ignore = ["tests", "__pycache__", ".git", "venv", "env", ".venv", ".env"]
+
 [tool.pylint.messages_control]
 disable = [
     "C0114", # missing-module-docstring
     "C0115", # missing-class-docstring
     "C0116", # missing-function-docstring
+    "C0301", # line-too-long
+    "C0303", # trailing-whitespace
+    "C0304", # missing-final-newline
+    "C0305", # trailing-newlines
     "R0903", # too-few-public-methods
     "R0913", # too-many-arguments
+    "C0111", # missing-docstring (from old .pylintrc)
+    "C0302", # too-many-lines in module
+    "R0914", # too-many-local-variables
+    "R0917", # too-many-boolean-expressions
+    "R0915", # too-many-statements
+    "R0912", # too-many-branches
+    "R0911", # too-many-return-statements
+    "R0902", # too-many-instance-attributes
+    "R1702", # too-many-nested-if-blocks
 ]
 
 [tool.pylint.format]
-max-line-length = 88
+max-line-length = 150
+good-names = ["i", "j", "k", "ex", "Run", "_", "id", "db"]
+
+[tool.pylint.naming]
+variable-naming-style = "snake_case"
+function-naming-style = "snake_case"
+argument-naming-style = "snake_case"
+attr-naming-style = "snake_case"
+method-naming-style = "snake_case"
+class-naming-style = "PascalCase"
+const-naming-style = "snake_case"
+module-naming-style = "snake_case"
+
+[tool.pylint.basic]
+good-names = ["i", "j", "k", "ex", "Run", "_", "id", "db"]
+
+[tool.pylint.similarities]
+min-similarity-lines = 4
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = false
 
 [tool.bandit]
 exclude_dirs = ["tests", "test_*.py", "*_test.py"]

@@ -9,6 +9,7 @@
 	background: var(--ui-bg-primary);
 	table-layout: fixed;
 	font-size: 0.8rem;
+
 	/* Smaller base font size */
 }
 
@@ -65,7 +66,6 @@
 	border-bottom: 1px solid var(--ui-border);
 	color: var(--text-primary);
 	background-color: var(--ui-bg-primary);
-	transition: background-color 0.2s;
 	width: 100%;
 }
 
@@ -85,12 +85,15 @@
 	width: 100%;
 	overflow-x: auto;
 	scrollbar-width: none;
+
 	/* Firefox */
 	-ms-overflow-style: none;
+
 	/* IE and Edge */
 	max-width: 100%;
 	padding-bottom: 2px;
 	padding-right: 8px;
+
 	/* Added padding to prevent content from touching the edge */
 }
 
@@ -145,44 +148,6 @@
 	padding: 0;
 	text-align: center;
 	flex: 0 0 24px;
-}
-
-/* Delete button column */
-.default-td:last-child {
-	position: sticky;
-	right: 8px;
-	width: 24px;
-	max-width: 24px;
-	padding: 0;
-	text-align: center;
-	z-index: 1;
-	background-color: var(--ui-bg-primary);
-}
-
-/* Update the header for delete column */
-.default-th:last-child {
-	position: sticky;
-	right: 8px;
-	background-color: var(--ui-bg-element);
-}
-
-/* Remove the specific hover state for last column since it will inherit from tr:hover */
-.default-tr:hover .default-td:last-child {
-	background-color: inherit;
-}
-
-/* Style for the delete button */
-.delete-button {
-	padding: 0;
-	font-size: 0.75rem;
-	line-height: 1;
-	width: 14px;
-	height: 14px;
-	min-width: 14px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	margin: 0 auto;
 }
 
 /* Ticker cell specific styling */

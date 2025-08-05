@@ -1,10 +1,15 @@
-FROM node:18-alpine as builder
+FROM node:18-alpine AS builder
 WORKDIR /app
+
+# Copy package files and install dependencies first (for better caching)
 COPY package*.json ./
-#RUN npm install --verbose
-#RUN npm install -g --unsafe-perm=true --allow-root
-#RUN npm install --force
 RUN npm install
-#COPY . .
-#USER node
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose the port that Vite uses
+EXPOSE 5173
+
+# Start the development server
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

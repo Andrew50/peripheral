@@ -3,12 +3,10 @@ kind: Ingress
 metadata:
   name: app-ingress
   annotations:
-    kubernetes.io/ingress.class: "ingress-nginx"
-
     # Timeouts - Increased for chat responses
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1200"  # Increased from 600 to 1200
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"  # Increased from 600 to 1200
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"    # Increased from 600 to 1200
     nginx.ingress.kubernetes.io/send-timeout: "1200"        # Increased from 600 to 1200
 
     # Increase body size for large uploads
@@ -17,7 +15,7 @@ metadata:
     # Buffers - Significantly increased for large chat responses
     nginx.ingress.kubernetes.io/proxy-buffer-size: "1m"     # Increased from 256k to 1MB
     nginx.ingress.kubernetes.io/proxy-buffers-number: "16"  # Increased from 8 to 16
-    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "2m" # Increased from 512k to 2MB
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "2m"  # Increased from 512k to 2MB
 
     # SSL redirect off (since Cloudflare is terminating SSL)
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
@@ -43,6 +41,20 @@ spec:
                 port:
                   number: 5058
           - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /billing/webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /webhook/twitterapi/v1
             pathType: Prefix
             backend:
               service:
@@ -80,6 +92,13 @@ spec:
                 name: backend
                 port:
                   number: 5058
+          - path: /billing/webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
           - path: /
             pathType: Prefix
             backend:
@@ -95,27 +114,25 @@ kind: Ingress
 metadata:
   name: websocket-ingress
   annotations:
-    kubernetes.io/ingress.class: "ingress-nginx"
-    
     # WebSocket optimized timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"     # 1 hour for long-running connections
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"     # 1 hour for long-running connections
     nginx.ingress.kubernetes.io/send-timeout: "3600"
-    
+
     # WebSocket specific settings
     nginx.ingress.kubernetes.io/enable-websocket: "true"
     nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
     nginx.ingress.kubernetes.io/websocket-timeout: "3600"
-    
+
     # Disable buffering for real-time communication
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-    
+
     # Connection optimization
     nginx.ingress.kubernetes.io/upstream-keepalive-connections: "1000"
     nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "3600"
-    
+
     # SSL redirect off
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 

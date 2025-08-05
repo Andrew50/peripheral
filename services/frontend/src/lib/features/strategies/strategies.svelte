@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { strategies } from '$lib/utils/stores/stores';
 	import '$lib/styles/global.css';
 
 	// Simple Strategy interface for the new prompt-based system
@@ -12,14 +13,13 @@
 		prompt: string;
 		pythonCode: string;
 		score?: number;
-		version?: string;
+		version?: number;
 		createdAt?: string;
 		isAlertActive?: boolean;
 	}
 
 	// Stores
 	const loading = writable(false);
-	const strategies = writable<Strategy[]>([]);
 	const creating = writable(false);
 	let newPrompt = '';
 
@@ -48,7 +48,8 @@
 		creating.set(true);
 		try {
 			const result = await privateRequest<Strategy>('createStrategyFromPrompt', {
-				prompt: newPrompt.trim()
+				query: newPrompt.trim(),
+				strategyId: -1 // -1 for new strategy
 			});
 
 			// Add the new strategy to the list
@@ -218,7 +219,7 @@ Examples:
 	}
 
 	.header h2 {
-		margin: 0 0 0.5rem 0;
+		margin: 0 0 0.5rem;
 		color: var(--text-primary, #333);
 		font-size: 2rem;
 		font-weight: 600;
@@ -236,11 +237,11 @@ Examples:
 		border-radius: 8px;
 		padding: 1.5rem;
 		margin-bottom: 2rem;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 	}
 
 	.create-section h3 {
-		margin: 0 0 1rem 0;
+		margin: 0 0 1rem;
 		color: var(--text-primary, #333);
 		font-size: 1.3rem;
 		font-weight: 600;
@@ -268,8 +269,8 @@ Examples:
 
 	textarea:focus {
 		outline: none;
-		border-color: var(--accent-blue, #0066cc);
-		box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+		border-color: var(--accent-blue, #06c);
+		box-shadow: 0 0 0 2px rgb(0 102 204 / 20%);
 	}
 
 	textarea:disabled {
@@ -279,7 +280,7 @@ Examples:
 
 	.create-btn {
 		align-self: flex-start;
-		background: var(--accent-blue, #0066cc);
+		background: var(--accent-blue, #06c);
 		color: white;
 		border: none;
 		padding: 0.75rem 1.5rem;
@@ -300,7 +301,7 @@ Examples:
 	}
 
 	.strategies-list h3 {
-		margin: 0 0 1rem 0;
+		margin: 0 0 1rem;
 		color: var(--text-primary, #333);
 		font-size: 1.3rem;
 		font-weight: 600;
@@ -333,12 +334,12 @@ Examples:
 		border-radius: 8px;
 		padding: 1.5rem;
 		margin-bottom: 1rem;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 		transition: box-shadow 0.2s;
 	}
 
 	.strategy-card:hover {
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 4px 8px rgb(0 0 0 / 15%);
 	}
 
 	.strategy-header {
@@ -415,7 +416,7 @@ Examples:
 		background: var(--ui-bg-secondary, #f8f9fa);
 		padding: 1rem;
 		border-radius: 6px;
-		border-left: 4px solid var(--accent-blue, #0066cc);
+		border-left: 4px solid var(--accent-blue, #06c);
 	}
 
 	.strategy-meta {
@@ -466,7 +467,7 @@ Examples:
 	}
 
 	/* Responsive design */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.strategies-container {
 			padding: 0.5rem;
 		}

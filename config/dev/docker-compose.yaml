@@ -13,23 +13,32 @@ services:
       - ../../services/backend/:/app
     networks:
       - compose_network
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword
       - DB_HOST=db
       - POSTGRES_DB=postgres
       - GEMINI_FREE_KEYS=${GEMINI_FREE_KEYS}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
       - POLYGON_API_KEY=${POLYGON_API_KEY}
-      - X_API_KEY=${X_API_KEY}
+      - GROK_API_KEY=${GROK_API_KEY}
       - TWITTER_API_IO_KEY=${TWITTER_API_IO_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - X_API_KEY=${X_API_KEY}
+      - X_API_SECRET=${X_API_SECRET}
+      - X_ACCESS_TOKEN=${X_ACCESS_TOKEN}
+      - X_ACCESS_SECRET=${X_ACCESS_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
-      #- GITHUB_TOKEN=${GITHUB_TOKEN}
+      - TELEGRAM_USER_NOTIFICATION_BOT_TOKEN=${TELEGRAM_USER_NOTIFICATION_BOT_TOKEN}
+      - TELEGRAM_BEN_TWEETS_BOT_TOKEN=${TELEGRAM_BEN_TWEETS_BOT_TOKEN}
+      - PGDATA=/home/postgres/pgdata/data
+      # - GITHUB_TOKEN=${GITHUB_TOKEN}
     platform: ${PLATFORM:-linux/amd64}
   db:
     build:
@@ -40,7 +49,7 @@ services:
     networks:
       - compose_network
     volumes:
-      - db:/var/lib/postgresql/data
+      - db:/home/postgres/pgdata/data
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
@@ -50,14 +59,18 @@ services:
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      timeout: 10s
+      retries: 120 # Allow up to 10 minutes (120×5 s) of failed checks
+      start_period: 1200s # Give Postgres up to ~20 minutes before health checks affect status
+    shm_size: 2g
     deploy:
       resources:
         limits:
           memory: 8g
           cpus: '4.0'
+    # Ensure Postgres receives a fast-shutdown signal and has ample time to finish
+    stop_signal: SIGINT # Fast shutdown -> abort current transactions, flush to disk
+    stop_grace_period: 1m # Wait 60 s before SIGKILL so Postgres can cleanly exit
   frontend:
     build:
       context: ../../services/frontend
@@ -68,11 +81,14 @@ services:
         condition: service_healthy
     volumes:
       - ../../services/frontend:/app
-      - ../../services/frontend/node_modules:/app/node_modules
       - /app/node_modules
+    env_file:
+      - .env
     environment:
-      - WATCHPACK_POLLING=true #enable polling
+      - WATCHPACK_POLLING=true # enable polling
       - BACKEND_URL=http://backend:5058
+      - VITE_ENVIRONMENT=development
+      - VITE_PUBLIC_STRIPE_KEY=${STRIPE_PUBLISHABLE_KEY}
     ports:
       - "5173:5173"
     restart: unless-stopped
@@ -117,6 +133,8 @@ services:
     restart: unless-stopped
     volumes:
       - ../../services/worker:/app
+    env_file:
+      - .env
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=devpassword

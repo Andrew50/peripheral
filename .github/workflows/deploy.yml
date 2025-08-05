@@ -11,10 +11,10 @@ on:
         description: 'Branch to deploy'
         required: true
         type: string
-        #      k8s_context:
-        #description: 'Kubernetes context to use'
-        #required: true
-        #type: string
+        # k8s_context:
+        # description: 'Kubernetes context to use'
+        # required: true
+        # type: string
       k8s_namespace:
         description: 'Kubernetes namespace to deploy to'
         required: true
@@ -27,10 +27,19 @@ on:
         description: 'Site Domain'
         required: true
         type: string
-#      public_base_url:
-#        description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
-#        required: true
-#        type: string
+      strategy:
+        required: false
+        type: string
+      services_changed:
+        required: false
+        type: string
+      skip_migrations:
+        required: false
+        type: boolean
+      # public_base_url:
+      #   description: 'Public base URL for the frontend (e.g., https://stage.example.com)'
+      #   required: true
+      #   type: string
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -42,7 +51,13 @@ on:
         required: true
       POLYGON_API_KEY:
         required: true
+      POLYGON_S3_KEY:
+        required: true
+      POLYGON_S3_SECRET:
+        required: true
       GEMINI_FREE_KEYS:
+        required: true
+      GEMINI_API_KEY:
         required: true
       GOOGLE_CLIENT_ID:
         required: true
@@ -52,21 +67,45 @@ on:
         required: true
       CLOUDFLARE_TUNNEL_TOKEN:
         required: true
-      TELEGRAM_BOT_TOKEN:
+      TELEGRAM_BOT_TOKEN_B64:
         required: true
-      TELEGRAM_CHAT_ID:
+      TELEGRAM_CHAT_ID_B64:
         required: true
-
+      OPENAI_API_KEY:
+        required: true
+      FRED_API_KEY:
+        required: true
+      GROK_API_KEY:
+        required: true
+      TWITTER_API_IO_KEY:
+        required: true
+      X_API_KEY:
+        required: true
+      X_API_SECRET:
+        required: true
+      X_ACCESS_TOKEN:
+        required: true
+      X_ACCESS_SECRET:
+        required: true
+      STRIPE_SECRET_KEY:
+        required: true
+      STRIPE_WEBHOOK_SECRET:
+        required: true
+      STRIPE_PUBLISHABLE_KEY:
+        required: true
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN:
+        required: true
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN:
+        required: true
 
 permissions:
   contents: read
   packages: write
   id-token: write
 
-
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
     # Removed the needs: [check-build] dependency
     if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
     env:
@@ -75,19 +114,35 @@ jobs:
       DB_ROOT_PASSWORD: ${{ secrets.DB_ROOT_PASSWORD }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_S3_KEY: ${{ secrets.POLYGON_S3_KEY }}
+      POLYGON_S3_SECRET: ${{ secrets.POLYGON_S3_SECRET }}
       GEMINI_FREE_KEYS: ${{ secrets.GEMINI_FREE_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_TOKEN_B64: ${{ secrets.TELEGRAM_BOT_TOKEN_B64 }}
+      TELEGRAM_CHAT_ID_B64: ${{ secrets.TELEGRAM_CHAT_ID_B64 }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      TWITTER_API_IO_KEY: ${{ secrets.TWITTER_API_IO_KEY }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
+      TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
       ENVIRONMENT: ${{ inputs.environment }}
       INGRESS_HOST: ${{ inputs.ingress_host }}
-      #PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
+      # PUBLIC_BASE_URL: ${{ inputs.public_base_url }}  #  PUBLIC_BASE_URL is currently not used, see documentation.
 
     steps:
       - name: Debug Event Information
@@ -134,13 +189,29 @@ jobs:
           echo "DB_ROOT_PASSWORD: [$(if [ -n "$DB_ROOT_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
           echo "REDIS_PASSWORD: [$(if [ -n "$REDIS_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
           echo "POLYGON_API_KEY: [$(if [ -n "$POLYGON_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_KEY: [$(if [ -n "$POLYGON_S3_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "POLYGON_S3_SECRET: [$(if [ -n "$POLYGON_S3_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "GEMINI_FREE_KEYS: [$(if [ -n "$GEMINI_FREE_KEYS" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GEMINI_API_KEY: [$(if [ -n "$GEMINI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_ID: [$(if [ -n "$GOOGLE_CLIENT_ID" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_CLIENT_SECRET: [$(if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "JWT_SECRET: [$(if [ -n "$JWT_SECRET" ]; then echo SET; else echo MISSING; fi)]"
           echo "CLOUDFLARE_TUNNEL_TOKEN: [$(if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
-          echo "TELEGRAM_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
-          echo "TELEGRAM_CHAT_ID: [$(if [ -n "$TELEGRAM_CHAT_ID" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BOT_TOKEN_B64: [$(if [ -n "$TELEGRAM_BOT_TOKEN_B64" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_CHAT_ID_B64: [$(if [ -n "$TELEGRAM_CHAT_ID_B64" ]; then echo SET; else echo MISSING; fi)]"
+          echo "OPENAI_API_KEY: [$(if [ -n "$OPENAI_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "FRED_API_KEY: [$(if [ -n "$FRED_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "GROK_API_KEY: [$(if [ -n "$GROK_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TWITTER_API_IO_KEY: [$(if [ -n "$TWITTER_API_IO_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_KEY: [$(if [ -n "$X_API_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_API_SECRET: [$(if [ -n "$X_API_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_TOKEN: [$(if [ -n "$X_ACCESS_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "X_ACCESS_SECRET: [$(if [ -n "$X_ACCESS_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_SECRET_KEY: [$(if [ -n "$STRIPE_SECRET_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_WEBHOOK_SECRET: [$(if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then echo SET; else echo MISSING; fi)]"
+          echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: [$(if [ -n "$TELEGRAM_USER_NOTIFICATION_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "TELEGRAM_BEN_TWEETS_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BEN_TWEETS_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 
@@ -150,9 +221,10 @@ jobs:
           DOCKER_TAG=$(echo "${TARGET_BRANCH}" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_.-]/-/g')
           echo "DOCKER_TAG=${DOCKER_TAG}" >> $GITHUB_ENV
           echo "Using Docker tag: $DOCKER_TAG"
-          SERVICES="backend frontend db cache worker"
-          echo "SERVICES=${SERVICES}" >> $GITHUB_ENV
-          echo "Using services: ${SERVICES}"
+
+          echo "SERVICES=${{ inputs.services_changed }}" >> $GITHUB_ENV
+          echo "Services to deploy: ${{ inputs.services_changed }}"   
+
           MINIKUBE_PROFILE="minikube-${ENVIRONMENT}"
           echo "MINIKUBE_PROFILE=${MINIKUBE_PROFILE}" >> $GITHUB_ENV
           echo "Using Minikube profile: ${MINIKUBE_PROFILE}"
@@ -175,9 +247,54 @@ jobs:
       - name: Update Kubernetes Secrets
         run: config/deploy/scripts/setup-configs.sh
 
+      - name: Copy Migrations to Database Pod
+        if: inputs.skip_migrations != true
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -l app=db -n "$K8S_NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp services/db/migrations/ $POD_NAME:/tmp/migrations/ -n "$K8S_NAMESPACE" -c db
+          kubectl cp services/db/scripts/migrate.sh $POD_NAME:/tmp/migrate.sh -n "$K8S_NAMESPACE" -c db
+
+      - name: Run Migrations
+        if: inputs.skip_migrations != true
+        env:
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          POD_NAME=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=db -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n "$K8S_NAMESPACE" $POD_NAME -c db -- bash -c "
+            chmod +x /tmp/migrate.sh
+            MIGRATIONS_DIR=/tmp/migrations DB_PORT_INT=5432 /tmp/migrate.sh
+          "
+
       - name: Deploy to Kubernetes
         run: config/deploy/scripts/deploy-to-k8s.sh
 
       - name: Cleanup
         if: always()
         run: config/deploy/scripts/cleanup.sh
+
+      - name: Send Telegram alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN_B64: ${{ env.TELEGRAM_BOT_TOKEN_B64 }}
+          TELEGRAM_CHAT_ID_B64: ${{ env.TELEGRAM_CHAT_ID_B64 }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN_B64" ] || [ -z "$TELEGRAM_CHAT_ID_B64" ]; then
+            echo "Telegram credentials missing; skipping alert."
+            exit 0
+          fi
+          BOT_TOKEN=$(echo "$TELEGRAM_BOT_TOKEN_B64" | base64 -d | tr -d '\n')
+          CHAT_ID=$(echo "$TELEGRAM_CHAT_ID_B64" | base64 -d | tr -d '\n')
+          MESSAGE="🚨 Deployment to *$ENVIRONMENT* failed on branch *$TARGET_BRANCH* in workflow *$WORKFLOW*.\nSee run: \
+          https://github.com/$REPO/actions/runs/$RUN_ID"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode=Markdown \
+            -d disable_web_page_preview=true

@@ -5,6 +5,9 @@ import (
 	"backend/internal/data/utils"
 	"container/list"
 	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +24,66 @@ var (
 	UserToClient            = make(map[int]*Client)
 	UserToClientMutex       sync.RWMutex
 )
+
+// extractDomain extracts the domain from a URL
+func extractDomain(rawURL string) string {
+	// Handle URLs that might not have protocol
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		rawURL = "https://" + rawURL
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// Fallback: simple string manipulation
+		cleaned := strings.TrimPrefix(rawURL, "https://")
+		cleaned = strings.TrimPrefix(cleaned, "http://")
+		parts := strings.Split(cleaned, "/")
+		if len(parts) > 0 {
+			return parts[0]
+		}
+		return ""
+	}
+
+	return parsedURL.Hostname()
+}
+
+// generateFaviconURL creates a Google favicon URL for the given domain
+func generateFaviconURL(domain string) string {
+	if domain == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://www.google.com/s2/favicons?sz=16&domain=%s", domain)
+}
+
+// processCitationsWithFavicons processes citations to add favicon URLs
+func processCitationsWithFavicons(citations []interface{}) []interface{} {
+	processedCitations := make([]interface{}, len(citations))
+
+	for i, citation := range citations {
+		// Convert to map for processing
+		if citationMap, ok := citation.(map[string]interface{}); ok {
+			// Create a copy to avoid modifying original
+			processed := make(map[string]interface{})
+			for k, v := range citationMap {
+				processed[k] = v
+			}
+
+			// Add favicon URL if URL exists
+			if urlStr, hasURL := processed["url"].(string); hasURL {
+				domain := extractDomain(urlStr)
+				if domain != "" {
+					processed["urlIcon"] = generateFaviconURL(domain)
+				}
+			}
+			processedCitations[i] = processed
+		} else {
+			// Keep original if not a map
+			processedCitations[i] = citation
+		}
+	}
+
+	return processedCitations
+}
 
 // ReplayData represents a structure for handling ReplayData data.
 type ReplayData struct {
@@ -50,6 +113,8 @@ type Client struct {
 	simulatedTimeStart    int64
 	accumulatedActiveTime time.Duration
 	lastTickTime          time.Time
+	// userID associated with this client connection
+	userID int
 }
 
 /*
@@ -75,12 +140,13 @@ func getChannelNameType(timestamp int64) string {
 
 // AlertMessage represents a structure for handling AlertMessage data.
 type AlertMessage struct {
-	AlertID    int    `json:"alertId"`
-	Timestamp  int64  `json:"timestamp"`
-	SecurityID int    `json:"securityId"`
-	Message    string `json:"message"`
-	Channel    string `json:"channel"`
-	Ticker     string `json:"ticker"`
+	AlertID    int      `json:"alertId"`
+	Timestamp  int64    `json:"timestamp"`
+	SecurityID int      `json:"securityId"`
+	Message    string   `json:"message"`
+	Channel    string   `json:"channel"`
+	Type       string   `json:"type"`
+	Tickers    []string `json:"tickers"`
 }
 
 // SendAlertToUser performs operations related to SendAlertToUser functionality.
@@ -95,29 +161,134 @@ func SendAlertToUser(userID int, alert AlertMessage) {
 			return
 		}
 		client.send <- jsonData
+		fmt.Println("Sent alert to user", alert.Message, userID)
 	}
 }
 
-// FunctionStatusUpdate represents a status update message sent to the client
+// SendAlertToAllUsers sends an alert to all connected users
+func SendAlertToAllUsers(alert AlertMessage) {
+	jsonData, err := json.Marshal(alert)
+	if err != nil {
+		fmt.Println("Error marshaling global alert:", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	defer UserToClientMutex.RUnlock()
+
+	userCount := 0
+	for _, client := range UserToClient {
+		if client != nil {
+			select {
+			case client.send <- jsonData:
+				userCount++
+			default:
+			}
+		}
+	}
+
+	fmt.Printf("Sent global alert to %d users: %s\n", userCount, alert.Message)
+}
+
+type ChatInitializationUpdate struct {
+	Type           string `json:"type"`
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+}
+
+func SendChatInitializationUpdate(userID int, messageID string, conversationID string) {
+	chatInitializationUpdate := ChatInitializationUpdate{
+		Type:           "ChatInitializationUpdate",
+		MessageID:      messageID,
+		ConversationID: conversationID,
+	}
+	jsonData, err := json.Marshal(chatInitializationUpdate)
+	if err != nil {
+		////fmt.Printf("Error marshaling chat initialization update: %v\n", err)
+		return
+	}
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+	if !ok {
+		////fmt.Printf("SendChatInitializationUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+	select {
+	case client.send <- jsonData:
+		////fmt.Printf("Sent chat initialization update to user %d: '%s'\n", userID, messageID)
+	default:
+		////fmt.Printf("SendChatInitializationUpdate: send channel blocked or closed for userID: %d. Dropping chat initialization update.\n", userID)
+	}
+}
+
+// AgentStatusUpdate represents a status update message sent to the client
 // during long-running backend operations (e.g., function tool execution).
-// It contains a user-friendly message describing the current step.
-type FunctionStatusUpdate struct {
-	Type        string `json:"type"` // Will be "function_status"
-	UserMessage string `json:"userMessage"`
+type AgentStatusUpdate struct {
+	MessageType string      `json:"messageType"`        // Always "AgentStatusUpdate"
+	Type        string      `json:"type"`               // Specific type like "FunctionUpdate", "WebSearch"
+	Headline    string      `json:"headline,omitempty"` // Headline for the update
+	Data        interface{} `json:"data,omitempty"`     // Additional structured data for specific types
 }
 
-// SendFunctionStatus sends a status update about a running function to a specific user.
-func SendFunctionStatus(userID int, userMessage string) {
-	// Use a default message if the specific one is empty
-	messageToSend := userMessage
-	if messageToSend == "" {
-		// Use a generic message instead of revealing the function name
-		messageToSend = "Processing..."
+// SendAgentStatusUpdate sends a status update about a running function to a specific user.
+func SendAgentStatusUpdate(userID int, statusType string, value interface{}) {
+	var data interface{}
+	var headline string
+	// Handle different status types
+	switch statusType {
+	case "WebSearchQuery":
+		headline = "Searching the web"
+
+		// For web searches, create structured data with query
+		data = map[string]interface{}{
+			"query": value,
+		}
+	case "WebSearchCitations":
+		// For WebSearchCitations, process citations with favicons
+		// Convert from JSON to process flexibly regardless of struct type
+		jsonBytes, err := json.Marshal(value)
+		if err == nil {
+			var citations []interface{}
+			if err := json.Unmarshal(jsonBytes, &citations); err == nil {
+				data = map[string]interface{}{
+					"citations": processCitationsWithFavicons(citations),
+				}
+			} else {
+				// Fallback if unmarshaling fails
+				data = map[string]interface{}{
+					"citations": value,
+				}
+			}
+		} else {
+			// Fallback if marshaling fails
+			data = map[string]interface{}{
+				"citations": value,
+			}
+		}
+	case "getWatchlistItems":
+		headline = "Reading watchlist"
+		data = value
+	case "newWatchlist":
+		headline = "Creating watchlist"
+		data = value
+	case "getDailySnapshot":
+		headline = "Analyzing data for " + value.(map[string]interface{})["ticker"].(string)
+		data = value
+	case "FunctionUpdate":
+		headline = value.(map[string]interface{})["headline"].(string)
+		data = value.(map[string]interface{})["message"]
+	default:
+		// For other types (like FunctionUpdate), use the value directly
+		headline = value.(string)
+		data = value
 	}
 
-	statusUpdate := FunctionStatusUpdate{
-		Type:        "function_status",
-		UserMessage: messageToSend,
+	statusUpdate := AgentStatusUpdate{
+		MessageType: "AgentStatusUpdate",
+		Headline:    headline,
+		Type:        statusType,
+		Data:        data,
 	}
 
 	jsonData, err := json.Marshal(statusUpdate)
@@ -131,7 +302,7 @@ func SendFunctionStatus(userID int, userMessage string) {
 	UserToClientMutex.RUnlock()
 
 	if !ok {
-		////fmt.Printf("SendFunctionStatus: client not found for userID: %d\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: client not found for userID: %d\n", userID)
 		return
 	}
 
@@ -142,14 +313,14 @@ func SendFunctionStatus(userID int, userMessage string) {
 	default:
 		// This might happen if the client's send buffer is full or the connection is closing.
 		// It's usually okay to just drop the status update in this case.
-		////fmt.Printf("SendFunctionStatus: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
+		////fmt.Printf("SendAgentStatusUpdate: send channel blocked or closed for userID: %d. Dropping status update.\n", userID)
 	}
 }
 
 // TitleUpdate represents a conversation title update message sent to the client
 // when the title is generated or updated asynchronously.
 type TitleUpdate struct {
-	Type           string `json:"type"` // Will be "title_update"
+	Type           string `json:"type"` // Will be "titleUpdate"
 	ConversationID string `json:"conversation_id"`
 	Title          string `json:"title"`
 }
@@ -157,7 +328,7 @@ type TitleUpdate struct {
 // SendTitleUpdate sends a title update for a conversation to a specific user.
 func SendTitleUpdate(userID int, conversationID string, title string) {
 	titleUpdate := TitleUpdate{
-		Type:           "title_update",
+		Type:           "titleUpdate",
 		ConversationID: conversationID,
 		Title:          title,
 	}
@@ -184,6 +355,180 @@ func SendTitleUpdate(userID int, conversationID string, title string) {
 	default:
 		// Drop the title update if the channel is full - it's not critical
 		////fmt.Printf("SendTitleUpdate: send channel blocked for userID: %d. Dropping title update.\n", userID)
+	}
+}
+
+// NEW: Dynamic update message types and broadcasting functions
+
+// WatchlistUpdate represents a watchlist update message sent to the client
+type WatchlistUpdate struct {
+	Type          string                 `json:"type"` // Will be "watchlist_update"
+	Action        string                 `json:"action"`
+	WatchlistID   *int                   `json:"watchlistId,omitempty"`
+	WatchlistName *string                `json:"watchlistName,omitempty"`
+	Item          map[string]interface{} `json:"item,omitempty"`
+	ItemID        *int                   `json:"itemId,omitempty"`
+}
+
+// HorizontalLineUpdate represents a horizontal line update message sent to the client
+type HorizontalLineUpdate struct {
+	Type       string                 `json:"type"` // Will be "horizontal_line_update"
+	Action     string                 `json:"action"`
+	SecurityID int                    `json:"securityId"`
+	Line       map[string]interface{} `json:"line"`
+}
+
+// AlertUpdate represents an alert update message sent to the client
+type AlertUpdate struct {
+	Type   string                 `json:"type"` // Will be "alert_update"
+	Action string                 `json:"action"`
+	Alert  map[string]interface{} `json:"alert"`
+}
+
+// StrategyUpdate represents a strategy update message sent to the client
+type StrategyUpdate struct {
+	Type     string                 `json:"type"` // Will be "strategy_update"
+	Action   string                 `json:"action"`
+	Strategy map[string]interface{} `json:"strategy"`
+}
+
+// SendWatchlistUpdate sends a watchlist update to a specific user
+func SendWatchlistUpdate(userID int, action string, watchlistID *int, watchlistName *string, item map[string]interface{}, itemID *int) {
+	fmt.Printf("📋 Sending watchlist update to user %d: %s\n", userID, action)
+
+	update := WatchlistUpdate{
+		Type:          "watchlist_update",
+		Action:        action,
+		WatchlistID:   watchlistID,
+		WatchlistName: watchlistName,
+		Item:          item,
+		ItemID:        itemID,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling watchlist update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendWatchlistUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent watchlist update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendWatchlistUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendHorizontalLineUpdate sends a horizontal line update to a specific user
+func SendHorizontalLineUpdate(userID int, action string, securityID int, line map[string]interface{}) {
+	fmt.Printf("📏 Sending horizontal line update to user %d: %s (securityID: %d)\n", userID, action, securityID)
+
+	update := HorizontalLineUpdate{
+		Type:       "horizontal_line_update",
+		Action:     action,
+		SecurityID: securityID,
+		Line:       line,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling horizontal line update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendHorizontalLineUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent horizontal line update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendHorizontalLineUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendAlertUpdate sends an alert update to a specific user
+func SendAlertUpdate(userID int, action string, alert map[string]interface{}) {
+	fmt.Printf("🔔 Sending alert update to user %d: %s\n", userID, action)
+
+	update := AlertUpdate{
+		Type:   "alert_update",
+		Action: action,
+		Alert:  alert,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling alert update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendAlertUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent alert update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendAlertUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
+	}
+}
+
+// SendStrategyUpdate sends a strategy update to a specific user
+func SendStrategyUpdate(userID int, action string, strategy map[string]interface{}) {
+	fmt.Printf("📊 Sending strategy update to user %d: %s\n", userID, action)
+
+	update := StrategyUpdate{
+		Type:     "strategy_update",
+		Action:   action,
+		Strategy: strategy,
+	}
+
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		fmt.Printf("❌ Error marshaling strategy update: %v\n", err)
+		return
+	}
+
+	UserToClientMutex.RLock()
+	client, ok := UserToClient[userID]
+	UserToClientMutex.RUnlock()
+
+	if !ok {
+		fmt.Printf("❌ SendStrategyUpdate: client not found for userID: %d\n", userID)
+		return
+	}
+
+	// Send the update non-blockingly
+	select {
+	case client.send <- jsonData:
+		fmt.Printf("✅ Sent strategy update to user %d: %s\n", userID, action)
+	default:
+		fmt.Printf("⚠️ SendStrategyUpdate: send channel blocked for userID: %d. Dropping update.\n", userID)
 	}
 }
 
@@ -397,14 +742,9 @@ func (c *Client) close() {
 		c.removeSubscribedChannel(channelName)
 	}
 
-	// Remove the client from the UserToClient map
+	// Remove the client from the UserToClient map using the stored userID
 	UserToClientMutex.Lock()
-	for userID, client := range UserToClient {
-		if client == c {
-			delete(UserToClient, userID)
-			break
-		}
-	}
+	delete(UserToClient, c.userID)
 	UserToClientMutex.Unlock()
 
 }
@@ -425,6 +765,8 @@ func HandleWebSocket(conn *data.Conn, ws *websocket.Conn, userID int) {
 		buffer:              10000,
 		loopRunning:         false,
 		subscribedChannels:  make(map[string]struct{}),
+		lastTickTime:        time.Time{},
+		userID:              userID,
 	}
 
 	// Store the client in the userToClient map

@@ -1,56 +1,96 @@
-import js from '@eslint/js';
-import ts from 'typescript-eslint';
-import svelte from 'eslint-plugin-svelte';
-import prettier from 'eslint-config-prettier';
-import globals from 'globals';
+import typescriptParser from '@typescript-eslint/parser';
+import typescriptPlugin from '@typescript-eslint/eslint-plugin';
+import sveltePlugin from 'eslint-plugin-svelte';
+import svelteParser from 'svelte-eslint-parser';
 
-/** @type {import('eslint').Linter.Config[]} */
 export default [
-	js.configs.recommended,
-	...ts.configs.recommended,
-	...svelte.configs['flat/recommended'],
-	prettier,
-	...svelte.configs['flat/prettier'],
-	{
-		languageOptions: {
-			globals: {
-				...globals.browser,
-				...globals.node
-			}
-		}
-	},
-	{
-		files: ['**/*.svelte'],
-		languageOptions: {
-			parserOptions: {
-				parser: ts.parser
-			}
-		}
-	},
-	{
-		ignores: [
-			'build/',
-			'.svelte-kit/',
-			'dist/',
-			'node_modules/',
-			'vite.config.ts.timestamp-*',
-			'**/*.min.js'
-		]
-	},
-	// Add temporary rule overrides to fix the CI pipeline
-	{
-		rules: {
-			// Disable the most common error types found in the codebase
-			'@typescript-eslint/no-unused-vars': 'off',
-			'@typescript-eslint/no-explicit-any': 'off',
-			'@typescript-eslint/no-unused-expressions': 'off',
-			'@typescript-eslint/no-unsafe-function-type': 'off',
-			'no-undef': 'off',
-			'svelte/valid-compile': 'off',
-			'svelte/no-at-html-tags': 'off',
-			'prefer-const': 'off',
-			'no-empty': 'off',
-			'no-import-assign': 'off'
-		}
-	}
-];
+    {
+        files: ['**/*.{js,ts,mjs,cjs}'],
+        languageOptions: {
+            parser: typescriptParser,
+            parserOptions: {
+                ecmaVersion: 'latest',
+                sourceType: 'module'
+            },
+            globals: {
+                console: 'readonly',
+                process: 'readonly',
+                Buffer: 'readonly',
+                __dirname: 'readonly',
+                __filename: 'readonly',
+                global: 'readonly',
+                window: 'readonly',
+                document: 'readonly',
+                navigator: 'readonly',
+                location: 'readonly'
+            }
+        },
+        plugins: {
+            '@typescript-eslint': typescriptPlugin
+        },
+        rules: {
+            // Enforce camelCase for all identifiers
+            /*camelcase: ['error', { properties: 'always' }],
+
+            // TypeScript naming conventions - enforce camelCase and disallow snake_case
+            '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase'] },
+                { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+                { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
+            ],*/
+
+            // Additional rules for code quality
+            'no-unused-vars': 'off',
+            '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+            'prefer-const': 'error',
+            'no-var': 'error',
+
+            // Basic recommended rules
+            ...typescriptPlugin.configs.recommended.rules
+        }
+    },
+    {
+        files: ['**/*.svelte'],
+        languageOptions: {
+            parser: svelteParser,
+            parserOptions: {
+                parser: typescriptParser,
+                extraFileExtensions: ['.svelte']
+            }
+        },
+        plugins: {
+            svelte: sveltePlugin,
+            '@typescript-eslint': typescriptPlugin
+        },
+        rules: {
+            ...sveltePlugin.configs.recommended.rules,
+            'svelte/no-at-html-tags': 'warn',
+            // Apply the same camelCase rules to Svelte files
+            /*camelcase: ['error', { properties: 'always' }],
+            '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'variableLike', format: ['camelCase'], leadingUnderscore: 'forbid', trailingUnderscore: 'forbid' },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase'] },
+                { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+                { selector: 'memberLike', modifiers: ['private'], format: ['camelCase'], leadingUnderscore: 'require' }
+            ]*/
+        }
+    },
+    {
+        ignores: [
+            '.svelte-kit/**',
+            'build/**',
+            'dist/**',
+            'node_modules/**',
+            '*.config.js',
+            '*.config.ts',
+            'vite.config.ts.timestamp-*'
+        ]
+    }
+]; 

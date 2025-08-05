@@ -35,7 +35,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 	}
 
 	// Get the system instruction
-	baseSystemInstruction, err := getSystemInstruction(systemPrompt)
+	baseSystemInstruction, err := GetSystemInstruction(systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
@@ -43,7 +43,7 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 	thinkingBudget := int32(1000)
 
 	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction)
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(baseSystemInstruction, true)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
@@ -73,9 +73,9 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 	responseText := ""
 	if len(result.Candidates) > 0 {
 		candidate := result.Candidates[0]
-		if candidate.Content != nil {
+		if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 			for _, part := range candidate.Content.Parts {
-				if part.Text != "" {
+				if part != nil && part.Text != "" {
 					responseText = part.Text
 					break
 				}
@@ -83,36 +83,44 @@ func getGeminiFunctionThinking(ctx context.Context, conn *data.Conn, systemPromp
 		}
 		seen := make(map[int]bool)
 		usedGroundingChunkIndices := []int{} // This will store the unique indices
-		if candidate.GroundingMetadata != nil {
+		if candidate != nil && candidate.GroundingMetadata != nil {
 			if len(candidate.GroundingMetadata.GroundingSupports) > 0 {
 				for _, groundingSupport := range candidate.GroundingMetadata.GroundingSupports {
-					// Iterate through the indices within this support
-					for _, index := range groundingSupport.GroundingChunkIndices {
-						// Append each index (casting if necessary, assuming int32 from proto)
-						currentIndex := int(index)
-						// Check if we've seen this index before adding
-						if !seen[currentIndex] {
-							seen[currentIndex] = true
-							// Correctly assign the result of append back to the slice
-							usedGroundingChunkIndices = append(usedGroundingChunkIndices, currentIndex)
+					if groundingSupport != nil && groundingSupport.GroundingChunkIndices != nil {
+						// Iterate through the indices within this support
+						for _, index := range groundingSupport.GroundingChunkIndices {
+							// Append each index (casting if necessary, assuming int32 from proto)
+							currentIndex := int(index)
+							// Check if we've seen this index before adding
+							if !seen[currentIndex] {
+								seen[currentIndex] = true
+								// Correctly assign the result of append back to the slice
+								usedGroundingChunkIndices = append(usedGroundingChunkIndices, currentIndex)
+							}
 						}
 					}
 				}
 			}
 		}
-		for _, index := range usedGroundingChunkIndices {
-			groundingChunk := candidate.GroundingMetadata.GroundingChunks[index]
-			if groundingChunk.Web != nil {
-				citations = append(citations, Citation{
-					Title: groundingChunk.Web.Title,
-					URL:   groundingChunk.Web.URI,
-				})
-			}
-			if groundingChunk.RetrievedContext != nil {
-				citations = append(citations, Citation{
-					Title: groundingChunk.RetrievedContext.Title,
-					URL:   groundingChunk.RetrievedContext.URI,
-				})
+		if candidate != nil && candidate.GroundingMetadata != nil && candidate.GroundingMetadata.GroundingChunks != nil {
+			for _, index := range usedGroundingChunkIndices {
+				if index >= 0 && index < len(candidate.GroundingMetadata.GroundingChunks) {
+					groundingChunk := candidate.GroundingMetadata.GroundingChunks[index]
+					if groundingChunk != nil {
+						if groundingChunk.Web != nil {
+							citations = append(citations, Citation{
+								Title: groundingChunk.Web.Title,
+								URL:   groundingChunk.Web.URI,
+							})
+						}
+						if groundingChunk.RetrievedContext != nil {
+							citations = append(citations, Citation{
+								Title: groundingChunk.RetrievedContext.Title,
+								URL:   groundingChunk.RetrievedContext.URI,
+							})
+						}
+					}
+				}
 			}
 		}
 	}

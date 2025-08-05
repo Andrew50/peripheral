@@ -324,7 +324,15 @@
 					event.preventDefault();
 				}}
 				list={trades}
-				columns={['timestamp', 'Ticker', 'trade_direction', 'status', 'openQuantity', 'closedPnL', 'tradeDurationMillis']}
+				columns={[
+					'timestamp',
+					'Ticker',
+					'trade_direction',
+					'status',
+					'openQuantity',
+					'closedPnL',
+					'tradeDurationMillis'
+				]}
 				displayNames={{
 					timestamp: 'Time',
 					Ticker: 'Ticker',
@@ -695,29 +703,49 @@
 	select,
 	input[type='date'],
 	input[type='text'] {
-		/* padding: 8px; */ /* Removed, now handled by rule above */
+		/* padding: 8px; */
+
+ /* Removed, now handled by rule above */
 		background-color: #333;
 		color: white;
 		border: 1px solid #444;
-		/* border-radius: 4px; */ /* Removed, now handled by rule above */
+
+		/* border-radius: 4px; */
+
+ /* Removed, now handled by rule above */
 		box-sizing: border-box; /* Keep for safety, though redundant */
+
 		/* Adjust padding for specific input types if needed */
 		padding-left: 8px; /* Add back some left padding for inputs */
-		padding-right: 8px;/* Add back some right padding for inputs */
+		padding-right: 8px; /* Add back some right padding for inputs */
 		text-align: left; /* Ensure input text isn't centered */
 	}
 
 	select option {
-		/* padding: 8px 15px; */ /* Removed, now handled by rule above */
-		/* border-radius: 4px; */ /* Removed, now handled by rule above */
+		/* padding: 8px 15px; */
+
+ /* Removed, now handled by rule above */
+
+		/* border-radius: 4px; */
+
+ /* Removed, now handled by rule above */
 		border: 1px solid #b71c1c; /* Add a darker red border */
 		cursor: pointer;
 		margin-left: 8px; /* Keep margin */
-		/* font-size: 0.9em; */ /* Removed, handled by inherit now */
+
+		/* font-size: 0.9em; */
+
+ /* Removed, handled by inherit now */
 		transition: background-color 0.2s ease; /* Add transition */
-		/* box-sizing: border-box; */ /* Removed, handled by rule above */
+
+		/* box-sizing: border-box; */
+
+ /* Removed, handled by rule above */
+
 		/* Height is now set in .filters-section button, input, select */
+
 		/* line-height should be inherited */
+
 		/* padding should be inherited */
 	}
 
@@ -736,7 +764,7 @@
 	}
 
 	.stat-card h3 {
-		margin: 0 0 10px 0;
+		margin: 0 0 10px;
 		font-size: 1.1em;
 		color: #888;
 	}
@@ -787,7 +815,7 @@
 	}
 
 	.trade-list h3 {
-		margin: 0 0 10px 0;
+		margin: 0 0 10px;
 		color: #888;
 		font-size: 1.1em;
 	}
@@ -833,11 +861,11 @@
 	}
 
 	.hourly-stats-table tr.profitable {
-		background-color: rgba(76, 175, 80, 0.1);
+		background-color: rgb(76 175 80 / 10%);
 	}
 
 	.hourly-stats-table tr:not(.profitable) {
-		background-color: rgba(244, 67, 54, 0.1);
+		background-color: rgb(244 67 54 / 10%);
 	}
 
 	.positive {
@@ -860,7 +888,7 @@
 	}
 
 	:global(.profitable) {
-		background: rgba(76, 175, 80, 0.1) !important;
+		background: rgb(76 175 80 / 10%) !important;
 	}
 
 	.delete-button {

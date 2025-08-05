@@ -19,7 +19,7 @@ func BuildPlanningPrompt(conn *data.Conn, userID int, query string, contextItems
 	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
 	if err == nil && activeConversationID != "" {
 		// Load conversation messages from database
-		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, activeConversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
@@ -150,21 +150,76 @@ func _buildConversationContext(messages []ChatMessage) string {
 		context.WriteString("Assistant: ")
 		if len(messages[i].ContentChunks) > 0 {
 			for _, chunk := range messages[i].ContentChunks {
-				// Safely handle different content types
-				switch v := chunk.Content.(type) {
-				case string:
-					context.WriteString(v)
-				case map[string]interface{}:
-					// For table data or other structured content, convert to a simple text representation
-					jsonData, err := json.Marshal(v)
-					if err == nil {
-						context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
-					} else {
-						context.WriteString("[Table data]")
+				switch chunk.Type {
+				case "table":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Table data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Table data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "backtest_table":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Backtest table data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Backtest table data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "plot":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Plot data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Plot data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "backtest_plot":
+					switch v := chunk.Content.(type) {
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Backtest plot data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Backtest plot data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
+				case "text":
+					switch v := chunk.Content.(type) {
+					case string:
+						context.WriteString(v)
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
 					}
 				default:
-					// Handle any other type by converting to string
-					context.WriteString(fmt.Sprintf("%v", v))
+					switch v := chunk.Content.(type) {
+					case string:
+						context.WriteString(v)
+					case map[string]interface{}:
+						jsonData, err := json.Marshal(v)
+						if err == nil {
+							context.WriteString(fmt.Sprintf("[Data: %s]", string(jsonData)))
+						} else {
+							context.WriteString("[Data issue]")
+						}
+					default:
+						context.WriteString(fmt.Sprintf("%v", v))
+					}
 				}
 			}
 		} else {
@@ -247,11 +302,11 @@ func getDefaultSystemPromptTokenCount(conn *data.Conn) {
 	if err != nil {
 		return
 	}
-	systemPrompt, err := getSystemInstruction("defaultSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("defaultSystemPrompt")
 	if err != nil {
 		return
 	}
-	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt, true)
 
 	CountTokensResponse, err := client.Models.CountTokens(context.Background(), planningModel, genai.Text(enhancedSystemPrompt), &genai.CountTokensConfig{})
 	if err != nil {
@@ -269,7 +324,7 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 
 	// Load conversation messages from database if conversationID is provided
 	if conversationID != "" {
-		messagesInterface, err := GetConversationMessages(ctx, conn, conversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
@@ -318,7 +373,6 @@ func BuildPlanningPromptWithConversationID(conn *data.Conn, userID int, conversa
 	sb.WriteString("<UserQuery>\n")
 	sb.WriteString(query)
 	sb.WriteString("\n</UserQuery>\n")
-
 	return sb.String(), nil
 }
 
@@ -342,7 +396,8 @@ func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int
 	// Add execution results
 	if len(results) > 0 {
 		sb.WriteString("\n<ExecutionResults>\n")
-		resultsJSON, err := json.Marshal(results)
+		cleanedResults := cleanExecuteResultsForPrompt(results)
+		resultsJSON, err := json.Marshal(cleanedResults)
 		if err != nil {
 			sb.WriteString(fmt.Sprintf("Error marshaling results: %v\n", err))
 		} else {
@@ -354,6 +409,96 @@ func BuildPlanningPromptWithResultsAndConversationID(conn *data.Conn, userID int
 	}
 
 	return sb.String(), nil
+}
+
+// cleanExecuteResultsForPrompt removes responseImages from ExecuteResults to prevent
+// large base64 image data from bloating planning prompts
+func cleanExecuteResultsForPrompt(results []ExecuteResult) []ExecuteResult {
+	// First pass: check if any results contain responseImages
+	needsCleaning := false
+	for _, result := range results {
+		if result.Result != nil && hasResponseImages(result.Result) {
+			needsCleaning = true
+			break
+		}
+	}
+
+	// Early return if no cleaning needed
+	if !needsCleaning {
+		return results
+	}
+
+	// Only create new slice when cleaning is actually needed
+	cleanedResults := make([]ExecuteResult, len(results))
+
+	for i, result := range results {
+		if result.Result != nil && hasResponseImages(result.Result) {
+			// Only clean results that actually need it
+			cleanedResults[i] = ExecuteResult{
+				FunctionName: result.FunctionName,
+				Args:         result.Args,
+				Error:        result.Error,
+				Result:       cleanResultOfResponseImages(result.Result),
+			}
+		} else {
+			// Preserve original object when no cleaning needed
+			cleanedResults[i] = result
+		}
+	}
+
+	return cleanedResults
+}
+
+// hasResponseImages quickly checks if a result contains responseImages without deep processing
+func hasResponseImages(result interface{}) bool {
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		_, hasImages := resultMap["responseImages"]
+		return hasImages
+	}
+
+	// For non-map types, try JSON conversion (less common case)
+	if jsonBytes, err := json.Marshal(result); err == nil {
+		var tempMap map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &tempMap); err == nil {
+			_, hasImages := tempMap["responseImages"]
+			return hasImages
+		}
+	}
+
+	return false
+}
+
+// cleanResultOfResponseImages removes responseImages from a result object
+func cleanResultOfResponseImages(result interface{}) interface{} {
+	// Try direct cast to map first
+	var resultMap map[string]interface{}
+	var ok bool
+
+	if resultMap, ok = result.(map[string]interface{}); ok {
+		// Direct cast succeeded
+	} else {
+		// If direct cast fails, convert through JSON marshaling
+		jsonBytes, err := json.Marshal(result)
+		if err != nil {
+			// If marshaling fails, return original result
+			return result
+		}
+
+		// Unmarshal back to map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &resultMap); err != nil {
+			// If unmarshaling fails, return original result
+			return result
+		}
+	}
+
+	// Create a new map without responseImages
+	cleanedResultMap := make(map[string]interface{})
+	for k, v := range resultMap {
+		if k != "responseImages" {
+			cleanedResultMap[k] = v
+		}
+	}
+	return cleanedResultMap
 }
 
 // </prompt.go>

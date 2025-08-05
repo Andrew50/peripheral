@@ -3,20 +3,21 @@ import type { PlotData } from './interface';
 /**
  * Type guard to check if content is PlotData
  */
-export function isPlotData(content: any): content is PlotData {
+export function isPlotData(content: unknown): content is PlotData {
 	return (
-		content &&
+		!!content &&
 		typeof content === 'object' &&
-		typeof content.chart_type === 'string' &&
-		['line', 'bar', 'scatter', 'histogram', 'heatmap'].includes(content.chart_type) &&
-		Array.isArray(content.data)
+		content !== null &&
+		typeof (content as PlotData).chart_type === 'string' &&
+		['line', 'bar', 'scatter', 'histogram', 'heatmap'].includes((content as PlotData).chart_type) &&
+		Array.isArray((content as PlotData).data)
 	);
 }
 
 /**
  * Get plot data safely with validation
  */
-export function getPlotData(content: any): PlotData | null {
+export function getPlotData(content: unknown): PlotData | null {
 	if (isPlotData(content)) {
 		return content;
 	}
@@ -80,7 +81,7 @@ export function validatePlotData(plotData: PlotData): string[] {
  */
 export function plotDataToText(plotData: PlotData): string {
 	let text = '';
-	
+
 	if (plotData.title) {
 		text += `${plotData.title}\n\n`;
 	}
@@ -95,19 +96,20 @@ export function plotDataToText(plotData: PlotData): string {
 		}
 
 		// Extract data based on chart type
-		if (trace.x && trace.y) {
+		if (trace.x && trace.y && Array.isArray(trace.x) && Array.isArray(trace.y)) {
 			// For x,y plots
 			const length = Math.min(trace.x.length, trace.y.length);
-			for (let i = 0; i < Math.min(length, 10); i++) { // Limit to first 10 points
+			for (let i = 0; i < Math.min(length, 10); i++) {
+				// Limit to first 10 points
 				text += `  ${trace.x[i]}, ${trace.y[i]}\n`;
 			}
 			if (length > 10) {
 				text += `  ... and ${length - 10} more points\n`;
 			}
-		} else if (trace.z) {
+		} else if (trace.z && Array.isArray(trace.z)) {
 			// For heatmaps
-			text += `  Heatmap data: ${trace.z.length} rows x ${trace.z[0]?.length || 0} columns\n`;
-		} else if (trace.x) {
+			text += `  Heatmap data: ${trace.z.length} rows x ${Array.isArray(trace.z[0]) ? trace.z[0].length : 0} columns\n`;
+		} else if (trace.x && Array.isArray(trace.x)) {
 			// For histograms or single-axis data
 			const length = trace.x.length;
 			for (let i = 0; i < Math.min(length, 10); i++) {
@@ -116,7 +118,7 @@ export function plotDataToText(plotData: PlotData): string {
 			if (length > 10) {
 				text += `  ... and ${length - 10} more values\n`;
 			}
-		} else if (trace.y) {
+		} else if (trace.y && Array.isArray(trace.y)) {
 			const length = trace.y.length;
 			for (let i = 0; i < Math.min(length, 10); i++) {
 				text += `  ${trace.y[i]}\n`;

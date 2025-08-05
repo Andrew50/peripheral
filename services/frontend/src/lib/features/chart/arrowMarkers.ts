@@ -5,12 +5,9 @@ import type {
 	CustomSeriesOptions,
 	PaneRendererCustomData,
 	CustomSeriesWhitespaceData,
-	DeepPartial,
-	SeriesOptionsCommon,
 	PriceLineSource
 } from 'lightweight-charts';
 import type { Time, CustomSeriesPricePlotValues } from 'lightweight-charts';
-import { ColorType } from 'lightweight-charts';
 
 // Define your custom data type for arrow markers.
 export interface ArrowMarker extends CustomData<Time> {
@@ -76,9 +73,8 @@ export class ArrowMarkersPaneView
 
 	renderer(): ICustomSeriesPaneRenderer {
 		return {
-			draw: (target, priceToCoordinate, visibleRange) => {
-				target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-					const { width, height } = mediaSize;
+			draw: (target, priceToCoordinate) => {
+				target.useMediaCoordinateSpace(({ context }) => {
 
 					if (this.markers.length === 0) {
 						return;

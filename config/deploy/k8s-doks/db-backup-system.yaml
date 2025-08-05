@@ -2,6 +2,48 @@
 # Includes automated backups twice daily and health monitoring
 
 ---
+# ServiceAccount for health monitor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+
+---
+# ClusterRole for health monitor (minimal permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+# ClusterRoleBinding for health monitor
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: db-health-monitor
+  labels:
+    app: db-health-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: db-health-monitor
+subjects:
+  - kind: ServiceAccount
+    name: db-health-monitor
+    namespace: default
+
+---
 # Persistent Volume Claim for Backups
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -27,6 +69,7 @@ metadata:
 spec:
   # Run at 6:00 AM and 6:00 PM every day
   schedule: "0 6,18 * * *"
+  suspend: true
   timeZone: "UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 5
@@ -59,7 +102,7 @@ spec:
                 - name: DB_HOST
                   value: "db"
                 - name: ENVIRONMENT
-                  value: "Development"
+                  value: ${ENVIRONMENT}
                 - name: TELEGRAM_BOT_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -72,6 +115,10 @@ spec:
                       name: telegram-secret
                       key: chat-id
                       optional: true
+                - name: K8S_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
               volumeMounts:
                 - name: backups-volume
                   mountPath: /backups
@@ -107,6 +154,7 @@ spec:
       labels:
         app: db-health-monitor
     spec:
+      serviceAccountName: db-health-monitor
       restartPolicy: Always
       containers:
         - name: health-monitor
@@ -129,8 +177,14 @@ spec:
               value: "60"
             - name: MAX_FAILURE_COUNT
               value: "3"
+            - name: STARTUP_GRACE_PERIOD
+              value: "300"
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: ENVIRONMENT
-              value: "Development"
+              value: ${ENVIRONMENT}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -151,14 +205,14 @@ spec:
               cpu: 50m
               memory: 128Mi
             limits:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 100m
+              memory: 256Mi
           livenessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                - "test -f /backups/health-monitor.log && test $(find /backups/health-monitor.log -mmin -5 | wc -l) -gt 0"
+                - "test -f /backups/health-monitor.log"
             initialDelaySeconds: 120
             periodSeconds: 300
             failureThreshold: 3
@@ -228,20 +282,21 @@ spec:
                   echo "=== Backup Verification Started ===" | tee -a /backups/verification.log
 
                   # Find the most recent backup
-                  LATEST_BACKUP=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c '%Y %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
+                  LATEST_BACKUP=$(find /backups -name "backup_*.sql.gz" -type f \
+                    -exec stat -c '%Y %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
 
                   if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP" ]; then
                     echo "Verifying backup: $LATEST_BACKUP" | tee -a /backups/verification.log
-                    
+
                     # Check file size
                     BACKUP_SIZE=$(stat -c%s "$LATEST_BACKUP")
                     echo "Backup size: $BACKUP_SIZE bytes" | tee -a /backups/verification.log
-                    
+
                     if [ "$BACKUP_SIZE" -lt 1000 ]; then
                       echo "ERROR: Backup file too small!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     # Test extraction
                     if gunzip -t "$LATEST_BACKUP"; then
                       echo "Backup compression integrity: OK" | tee -a /backups/verification.log
@@ -249,7 +304,7 @@ spec:
                       echo "ERROR: Backup compression corrupted!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     # Test SQL content
                     if gunzip -c "$LATEST_BACKUP" | head -20 | grep -q "PostgreSQL database dump"; then
                       echo "Backup content integrity: OK" | tee -a /backups/verification.log
@@ -257,7 +312,7 @@ spec:
                       echo "ERROR: Backup content invalid!" | tee -a /backups/verification.log
                       exit 1
                     fi
-                    
+
                     echo "=== Backup Verification Successful ===" | tee -a /backups/verification.log
                   else
                     echo "ERROR: No backup files found!" | tee -a /backups/verification.log
@@ -305,7 +360,8 @@ data:
 
     # Show current backup statistics
     BACKUP_COUNT=$(find /backups -name "backup_*.sql.gz" -type f | wc -l)
-    TOTAL_SIZE=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c%s {} \; | awk '{sum+=$1} END {print sum/1024/1024 " MB"}')
+    TOTAL_SIZE=$(find /backups -name "backup_*.sql.gz" -type f -exec stat -c%s {} \; \
+      | awk '{sum+=$1} END {print sum/1024/1024 " MB"}')
 
     echo "Current statistics: $BACKUP_COUNT backups, $TOTAL_SIZE total" | tee -a /backups/retention.log
     echo "=== Backup Retention Cleanup Completed ===" | tee -a /backups/retention.log

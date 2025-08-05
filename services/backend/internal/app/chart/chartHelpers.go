@@ -57,7 +57,7 @@ func GetRequestStartEndTime(
 	tradingMinutesPerDay := 960.0 // 16 hours * 60 minutes
 	tradingDurationPerDay := time.Duration(int(tradingMinutesPerDay)) * time.Minute
 	totalTradingDays := totalDuration / tradingDurationPerDay
-	totalTradingDays += 3 //overestimate cause weekends
+	totalTradingDays += 6 //overestimate cause weekends THIS FIXES HOLIDAYS CHANGE FROM 3-> 6
 	var queryStartTime, queryEndTime time.Time
 	if direction == "backward" {
 		queryStartTime = upperDate.AddDate(0, 0, -int(totalTradingDays))
@@ -88,9 +88,11 @@ func GetRequestStartEndTime(
 func GetTimeframeInSeconds(multiplier int, timeframe string) int64 {
 	if timeframe == "hour" {
 		return 60 * 60 * int64(multiplier)
-	} else if timeframe == "minute" {
+	}
+	if timeframe == "minute" {
 		return 60 * int64(multiplier)
-	} else if timeframe == "second" {
+	}
+	if timeframe == "second" {
 		return int64(multiplier)
 	}
 	if timeframe == "day" {
@@ -125,15 +127,20 @@ func GetTimeFrame(timeframeString string) (int, string, string, int, error) {
 	// add .toLower() or toUpper to not have to check two different cases
 	if identifier == "s" {
 		return num, "second", "s", 1, nil
-	} else if identifier == "h" {
+	}
+	if identifier == "h" {
 		return num, "hour", "m", 60, nil
-	} else if identifier == "d" {
+	}
+	if identifier == "d" {
 		return num, "day", "d", 1, nil
-	} else if identifier == "w" {
+	}
+	if identifier == "w" {
 		return num, "week", "d", 7, nil
-	} else if identifier == "m" {
+	}
+	if identifier == "m" {
 		return num, "month", "d", 30, nil
-	} else if identifier == "y" {
+	}
+	if identifier == "y" {
 		return num, "year", "d", 365, nil
 	}
 	return 0, "", "", 0, fmt.Errorf("incorrect timeframe passed")

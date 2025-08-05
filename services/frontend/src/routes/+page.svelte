@@ -1,421 +1,449 @@
 <script lang="ts">
-	import Header from '$lib/components/header.svelte';
-	import '$lib/styles/global.css';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	// Pricing preload removed - now handled directly in pricing page
+	import ChipSection from '$lib/landing/ChipSection.svelte';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import '$lib/styles/splash.css';
+	import { getAuthState, getCookie } from '$lib/auth';
 
 	if (browser) {
-		document.title = 'Atlantis';
+		document.title = 'Peripheral';
 	}
 
-	let email = '';
-	let isSubmitting = false;
-	let isSubmitted = false;
-	let errorMessage = '';
+	// Auth state - check immediately to prevent flash
+	let isAuthenticated = getAuthState();
 
-	async function handleSubmit(e: Event) {
-		e.preventDefault();
-		isSubmitting = true;
-		errorMessage = '';
 
-		try {
-			const response = await fetch('/api/waitlist', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({ email })
-			});
-
-			const data = await response.json();
-
-			if (response.ok) {
-				isSubmitted = true;
-				email = '';
-			} else if (response.status === 409) {
-				errorMessage = 'This email is already on the waitlist!';
-			} else {
-				errorMessage = data.error || 'Something went wrong. Please try again.';
-			}
-		} catch (error) {
-			errorMessage = 'Network error. Please check your connection and try again.';
-		} finally {
-			isSubmitting = false;
+	// Subsections data
+	const subsections = [
+		{
+			title: 'Backtest trading ideas',
+			description:
+				'Backtest trading strategies, analyze event or macro trading opportunities, or research investment portfolios in minutes, not days.',
+			content: '',
+			image: '/query_glass.png'
+		},
+		{
+			title: 'Analysis now, not after the trade',
+			description:
+				'In dynamic, fast-moving markets, every second counts. Our agent analyzes headlines, fundamental events, and data 100% faster than ChatGPT and Perplexity.',
+			content: '',
+			image: '/splash-speed-color.png'
+		},
+		{
+			title: 'Never miss a trade.',
+			description:
+				'Deploy strategies to receive alerts when they trigger in realtime. Our infrastructure delivers alerts down to minute resolution within five seconds of the event triggering.',
+			content: '',
+			image: '/alert_glass.png'
+		},
+		{
+			title: 'Frictionless trading.',
+			description:
+				'All the insights you need, before you ask. Our context aware terminal automatically surfaces the most relevant news, data, and insights about symbols you care about. Stay in the flow.',
+			content: '',
+			image: '/Group 10.png'
 		}
-	}
+	];
 
-	onMount(() => {
-		// Add animation class after mount
-		if (browser) {
-			document.body.classList.add('loaded');
-		}
-	});
 </script>
 
-<main class="main-container">
-	<div class="background-animation">
-		<!-- Static gradient background -->
-		<div class="static-gradient"></div>
-	</div>
+<SiteHeader {isAuthenticated} />
 
-	<Header />
-	
-	<section class="waitlist-section">
-		<div class="content-wrapper">
-			<div class="badge">COMING SOON</div>
-			
-			<h1 class="title">
-				<span class="gradient-text">Atlantis</span>
+<!-- Wrapper with unified gradient -->
+<div class="page-wrapper">
+	<!-- Title Section - Extracted from HeroAnimation -->
+	<section class="hero-title-section">
+		<div class="hero-title-container">
+			<h1 class="hero-title">
+				The Intelligent Trading Terminal
 			</h1>
-			
-			<p class="subtitle">
-				The new best way to trade.<br />
+			<p class="hero-subtitle">
+				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents in realtime.<br />
 			</p>
-
-			{#if !isSubmitted}
-				<form class="waitlist-form" on:submit={handleSubmit}>
-					<div class="form-group">
-						<input
-							type="email"
-							bind:value={email}
-							placeholder="Enter your email"
-							required
-							class="email-input"
-							disabled={isSubmitting}
-						/>
-						<button 
-							type="submit" 
-							class="submit-button"
-							disabled={isSubmitting || !email}
-						>
-							{isSubmitting ? 'Joining...' : 'Join Waitlist'}
-						</button>
+			<a href="/signup" class="hero-cta-button">
+				<div class="button-border-layer-1">
+					<div class="button-border-layer-2">
+						<div class="button-border-layer-3">
+							<div class="button-content">
+								Supercharge your trading →
+							</div>
+						</div>
 					</div>
-					{#if errorMessage}
-						<p class="error-message">{errorMessage}</p>
-					{/if}
-				</form>
-			{:else}
-				<div class="success-message">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="success-icon">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-					</svg>
-					<h3>You're on the list!</h3>
-					<p>We'll notify you when Atlantis is ready to launch.</p>
 				</div>
-			{/if}
-
+			</a>
 		</div>
 	</section>
+	<ChipSection />
+	<main class="landing-container">
+	<!-- Subsections moved to be directly below title -->
+	<section class="subsections-section">
+		<h2 class="features-title">Features</h2>
+		
+		<div class="subsections-content">
+			{#each subsections as subsection, index}
+				<div class="subsection" class:reverse={index % 2 === 0} class:frictionless={index === 3} class:speed-analysis={index === 2} class:never-miss={index === 1}>
+					<div class="subsection-text">
+						<h2 class="subsection-title">{subsection.title}</h2>
+						<p class="subsection-description">{subsection.description}</p>
+						<p class="subsection-content">{subsection.content}</p>
+					</div>
+					<div class="subsection-image">
+						<img src={subsection.image} alt={subsection.title} />
+					</div>
+				</div>
+			{/each}
+		</div>
+	</section>
+	
+	<!-- HeroAnimation moved below subsections 
+	<HeroAnimation {defaultKey} {chartsByKey} />
+-->
+	
+	<!-- Ideas Chips Section -->
+	<!-- Footer -->
+	<SiteFooter />
 </main>
+</div>
+<svelte:head>
+	<!-- Basic meta tags -->
+	<title>Peripheral</title>
+	<meta name="description" content="The intelligent trading terminal." />
+
+	<!-- Open Graph meta tags for Facebook, LinkedIn, etc. -->
+	<meta property="og:title" content="Peripheral.io" />
+	<meta property="og:image" content="/og-homepage.png" />
+	<meta property="og:description" content="The intelligent trading terminal." />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+	<meta property="og:url" content="https://peripheral.io" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Peripheral" />
+
+	<!-- Twitter Card meta tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:site" content="@peripheralio" />
+	<meta name="twitter:title" content="Peripheral.io" />
+	<meta name="twitter:description" content="The intelligent trading terminal." />
+	<meta name="twitter:image" content="/og-homepage.png" />
+	<meta name="twitter:image:alt" content="Peripheral | The Intelligent Trading Terminal" />
+
+	<!-- Additional meta tags for better sharing -->
+	<meta property="article:author" content="Peripheral" />
+	<meta name="theme-color" content="#0a0a0a" />
+</svelte:head>
 
 <style>
-	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+	@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
+	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
 
-	/* Scoped styles - no global body modifications */
-	.main-container {
-		position: relative;
-		width: 100vw;
-		height: 100vh;
-		margin: 0;
-		padding: 0;
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-		background: #0a0b0d;
-		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: #f9fafb;
+
+	/* Critical global styles - applied immediately to prevent layout shift */
+	:global(*) {
+		box-sizing: border-box;
 	}
 
-	/* Prevent scrolling on the body when this page is loaded */
+	:global(html) {
+		-ms-overflow-style: none; /* IE and Edge */
+	}
+
+
 	:global(body) {
-		overflow: hidden !important;
-		height: 100vh !important;
+		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-	/* Background animation container */
-	.background-animation {
-		position: fixed;
-		top: 0;
-		left: 0;
+
+	/* Override width restrictions from global landing styles - moved to top for immediate application */
+	:global(.landing-container) {
+		max-width: none !important;
+		width: 100% !important;
+		margin: 0 !important;
+		padding: 0 !important; /* remove side gutters */
+	}
+
+	.page-wrapper {
 		width: 100%;
-		height: 100%;
-		z-index: 0;
-		overflow: hidden;
-		background: #0a0b0d;
+		min-height: 100vh;
+		background: linear-gradient(
+			180deg,
+			#010022 0%,
+			#02175F 100%
+
+		);
 	}
 
-	/* Static gradient background */
-	.static-gradient {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background: 
-			radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
-			radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
-			radial-gradient(circle at 40% 60%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
-			linear-gradient(135deg, #0a0b0d 0%, #111827 50%, #0a0b0d 100%);
-		z-index: 0;
-		pointer-events: none;
-	}
-
-	/* Main content */
-	.waitlist-section {
+	.landing-container {
 		position: relative;
-		z-index: 10;
+		width: 100%;
+		background: transparent;
+		color: var(--color-dark);
+		font-family:
+			'Instrument Sans',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		display: flex;
 		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-		min-height: calc(100vh - 80px); /* Account for header */
-		padding: 2rem;
+		min-height: 100vh;
 	}
 
-	.content-wrapper {
-		max-width: 600px;
-		width: 100%;
-		text-align: center;
-		animation: fadeInUp 1s ease-out;
-		background: rgba(10, 11, 13, 0.6);
-		backdrop-filter: blur(20px);
-		border-radius: 2rem;
-		padding: 3rem;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-	}
-
-	@keyframes fadeInUp {
-		from {
-			opacity: 0;
-			transform: translateY(30px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	.badge {
-		display: inline-block;
-		padding: 0.375rem 1rem;
+	.hero-title-section {
+		position: relative;
+		z-index: 20;
+		padding: 14rem 0.5rem 12rem;
 		background: transparent;
-		border: 1px solid rgba(59, 130, 246, 0.2);
-		border-radius: 100px;
-		font-size: 0.75rem;
-		font-weight: 500;
-		letter-spacing: 1.5px;
-		color: #60a5fa;
-		margin-bottom: 2rem;
-		text-transform: uppercase;
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 60vh;
 	}
 
-	.title {
-		font-size: clamp(3rem, 8vw, 5rem);
-		font-weight: 700;
-		margin: 0 0 1rem 0;
+	.hero-title-container {
+		text-align: center;
+		max-width: 1800px;
+		margin: 0 auto;
+		padding: 0 1rem;
+	}
+
+	.hero-title {
+		font-size: clamp(4.05rem, 6vw, 7.5rem);
+		font-weight: 400;
+		margin: 0 0 1rem;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
+		color: #f5f9ff;
+		text-shadow:
+			0 2px 12px rgb(0 0 0 / 20%),
+			0 1px 0 rgb(255 255 255 / 1%);
 	}
 
-	.gradient-text {
-		display: inline-block;
-		font-size: clamp(3rem, 8vw, 5rem) !important;
-		font-weight: 700 !important;
-		background: linear-gradient(135deg, #3b82f6 0%, #6366f1 25%, #8b5cf6 50%, #ec4899 75%, #3b82f6 100%);
-		background-size: 200% 200%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		-webkit-text-fill-color: transparent;
-		animation: gradient-shift 8s ease infinite;
-	}
-
-	@keyframes gradient-shift {
-		0%, 100% {
-			background-position: 0% 50%;
-		}
-		25% {
-			background-position: 100% 50%;
-		}
-		50% {
-			background-position: 100% 100%;
-		}
-		75% {
-			background-position: 0% 100%;
-		}
-	}
-
-	.subtitle {
-		font-size: clamp(1.1rem, 3vw, 1.4rem);
-		color: #9ca3af;
-		margin-bottom: 3rem;
+	.hero-subtitle {
+		font-size: clamp(1.1rem, 3vw, 1.5rem);
+		color: rgb(245 249 255 / 85%);
+		margin-bottom: 1.5rem;
 		line-height: 1.6;
-		font-weight: 300;
+		margin-top: 0;
+		font-weight: 400;
+		font-family: 'Instrument Sans', sans-serif;
 	}
 
-	/* Form styles */
-	.waitlist-form {
-		margin-bottom: 3rem;
-	}
-
-	.form-group {
-		display: flex;
-		gap: 0.75rem;
-		max-width: 450px;
-		margin: 0 auto;
-		flex-wrap: wrap;
-		justify-content: center;
-	}
-
-	.email-input {
-		flex: 1;
-		min-width: 250px;
-		padding: 0.875rem 1.25rem;
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid rgba(255, 255, 255, 0.05);
-		border-radius: 0.5rem;
-		color: #fff;
-		font-size: 0.95rem;
+	.hero-cta-button {
+		display: inline-block;
+		text-decoration: none;
+		margin-top: 1rem;
+		padding: 4px;
+		border-radius: 58px;
+		border: 1px solid rgb(255 255 255 / 4%);
 		transition: all 0.3s ease;
-		backdrop-filter: blur(5px);
+		background: transparent;
 	}
 
-	.email-input::placeholder {
-		color: #6b7280;
-		font-weight: 300;
+	.button-border-layer-1 {
+		border-radius: 50px;
+		border: 1px solid rgb(255 255 255 / 8%);
+		padding: 4px;
+		background: transparent;
 	}
 
-	.email-input:focus {
-		outline: none;
-		border-color: rgba(59, 130, 246, 0.5);
-		background: rgba(255, 255, 255, 0.05);
-		box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+	.button-border-layer-2 {
+		border-radius: 42px;
+		border: 1px solid rgb(255 255 255 / 20%);
+		padding: 4px;
+		background: transparent;
 	}
 
-	.email-input:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.submit-button {
-		padding: 0.875rem 2rem;
-		background: #3b82f6;
-		border: none;
-		border-radius: 0.5rem;
-		color: #fff;
-		font-size: 0.95rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.3s ease;
-		white-space: nowrap;
-		position: relative;
+	.button-border-layer-3 {
+		border-radius: 40px;
+		background: linear-gradient(135deg, 
+			rgb(255 255 255 / 95%) 0%, 
+			rgb(240 240 240 / 98%) 100%);
+		padding: 0;
 		overflow: hidden;
 	}
 
-	.submit-button:before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: -100%;
+	.button-content {
+		padding: 1rem 2rem;
+		font-size: 1.1rem;
+		font-weight: 400;
+		font-family: 'Instrument Sans', sans-serif;
+		color: #1a1a1a;
+		text-align: center;
+		background: transparent;
+		border-radius: 40px;
+		transition: transform 0.3s ease;
+	}
+
+	.hero-cta-button:hover  .button-content{
+		transform: scale(1.05);
+	}
+
+	.hero-cta-button:active {
+		transform: translateY(0);
+	}
+
+
+	/* Subsections Section */
+	.subsections-section {
+		position: relative;
+		z-index: 10;
+		padding: 6rem 2rem;
 		width: 100%;
-		height: 100%;
-		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-		transition: left 0.5s ease;
+		flex-shrink: 0;
 	}
 
-	.submit-button:hover:not(:disabled):before {
-		left: 100%;
+	.features-title {
+		font-size: clamp(3rem, 7vw, 4rem);
+		font-weight: 400;
+		margin: 0 0 4rem;
+		color: #f5f9ff;
+		line-height: 1.2;
+		text-align: center;
+		letter-spacing: -0.02em;
 	}
 
-	.submit-button:hover:not(:disabled) {
-		background: #2563eb;
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+	.subsections-content {
+		width: 80vw;
+		max-width: 1400px;
+		margin: 0 auto;
+		padding: 0 2rem;
 	}
 
-	.submit-button:disabled {
-		opacity: 0.7;
-		cursor: not-allowed;
-		transform: none;
+	.subsection {
+		display: flex;
+		align-items: center;
+		gap: 20rem;
+		margin-bottom: 6rem;
+		padding: 3rem 0;
 	}
 
-	/* Success message */
-	.success-message {
-		background: rgba(34, 197, 94, 0.1);
-		border: 1px solid rgba(34, 197, 94, 0.3);
-		border-radius: 1rem;
-		padding: 2rem;
-		backdrop-filter: blur(10px);
-		animation: fadeIn 0.5s ease-out;
+	.subsection:last-child {
+		margin-bottom: 0;
 	}
 
-	.success-icon {
-		width: 3rem;
-		height: 3rem;
-		color: #22c55e;
-		margin-bottom: 1rem;
+	.subsection.reverse {
+		flex-direction: row-reverse;
 	}
 
-	.success-message h3 {
-		color: #22c55e;
-		margin: 0 0 0.5rem 0;
-		font-size: 1.5rem;
+	.subsection-text {
+		flex: 1;
+		max-width: 500px;
 	}
 
-	.success-message p {
-		color: #9ca3af;
-		margin: 0;
+	.subsection-title {
+		font-size: clamp(3rem, 7vw, 3.5rem);
+		font-weight: 400;
+		margin: 0 0 1.5rem;
+		color: #f5f9ff;
+		line-height: 1.2;
 	}
 
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: scale(0.95);
+	/* Specific styling for Transform ideas section (first subsection) */
+	.subsection:first-child .subsection-title {
+		color: white;
+	}
+
+	.subsection:first-child .subsection-description {
+		color: white;
+	}
+
+	.subsection-description {
+		font-size: 1.2rem;
+		color: #f5f9ff;
+		font-weight: 400;
+		margin-bottom: 1.5rem;
+		line-height: 1.5;
+	}
+
+
+
+	.subsection-content {
+		font-size: 1rem;
+		color: #f5f9ff;
+		line-height: 1.7;
+		opacity: 0.8;
+	}
+
+	.subsection-image {
+		flex: 1;
+		max-width: 700px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.subsection-image img {
+		width: 100%;
+		max-width: 400px;
+		height: auto;
+		image-rendering: -webkit-optimize-contrast;
+		-ms-interpolation-mode: bicubic;
+	}
+
+	/* Make query_glass.png bigger */
+	.subsection:first-child .subsection-image {
+		max-width: 1200px;
+	}
+	
+	.subsection:first-child .subsection-image img {
+		max-width: 1200px;
+	}
+
+	/* Responsive Design */
+	@media (width <= 768px) {
+		.hero-title-section {
+			padding: 2rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
 		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
-	}
 
-	/* Error message */
-	.error-message {
-		color: #ef4444;
-		margin-top: 1rem;
-		font-size: 0.875rem;
-	}
-
-
-
-	/* Mobile responsiveness */
-	@media (max-width: 640px) {
-		.waitlist-section {
-			padding: 1rem;
-		}
-
-		.form-group {
+		.subsection {
 			flex-direction: column;
-			gap: 1rem;
+			gap: 3rem;
+			margin-bottom: 4rem;
+			padding: 2rem 0;
 		}
 
-		.email-input {
-			min-width: 100%;
+		.subsection.reverse {
+			flex-direction: column;
 		}
 
-		.submit-button {
-			width: 100%;
+		.subsection-text {
+			max-width: 100%;
 		}
 
-
-
-		.badge {
-			font-size: 0.75rem;
-			padding: 0.375rem 0.75rem;
+		.subsection-image {
+			max-width: 100%;
+			order: 2;
 		}
 
-		.content-wrapper {
-			padding: 2rem;
+		.subsection-image img {
+			max-width: 350px;
+		}
+	}
+
+	@media (width <= 480px) {
+		.hero-title-section {
+			padding: 1.5rem 1rem;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.subsection {
+			gap: 1.5rem;
+			margin-bottom: 3rem;
+			padding: 1.5rem 0;
 		}
 	}
 </style>

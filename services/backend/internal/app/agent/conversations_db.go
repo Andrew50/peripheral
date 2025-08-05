@@ -3,30 +3,49 @@ package agent
 import (
 	"backend/internal/data"
 	"backend/internal/services/socket"
+	"backend/internal/services/telegram"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// ConversationSummary represents a conversation in the list view
-type ConversationSummary struct {
+// generateShortConversationID generates a shorter, URL-friendly conversation ID
+// Returns a 12-character hex string or falls back to UUID if random generation fails
+func generateShortConversationID() string {
+	// Generate 6 random bytes (48 bits) which gives us 12 hex characters
+	// This provides about 281 trillion possible combinations
+	bytes := make([]byte, 6)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to UUID if random generation fails
+		log.Printf("Failed to generate random bytes for conversation ID: %v", err)
+		return uuid.New().String()
+	}
+	return hex.EncodeToString(bytes)
+}
+
+// ConversationInfo represents a conversation in the list view
+type ConversationInfo struct {
 	ConversationID   string    `json:"conversation_id"`
 	Title            string    `json:"title"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	MessageCount     int       `json:"message_count"`
 	LastMessageQuery string    `json:"last_message_query,omitempty"`
+	IsPublic         bool      `json:"is_public"`
 }
 
 // VerifyConversationOwnership verifies that a user owns a conversation
 func VerifyConversationOwnership(conn *data.Conn, conversationID string, userID int) error {
 	var ownerID int
-	err := conn.DB.QueryRow(context.Background(), "SELECT user_id FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
+	err := conn.DB.QueryRow(context.Background(), "SELECT userId FROM conversations WHERE conversation_id = $1", conversationID).Scan(&ownerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("conversation not found")
@@ -67,19 +86,29 @@ type MessageCompletionData struct {
 
 // CreateConversation creates a new conversation in the database
 func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, title string) (string, error) {
-	conversationID := uuid.New().String()
-
 	query := `
-		INSERT INTO conversations (conversation_id, user_id, title, created_at, updated_at, metadata, total_token_count, message_count)
+		INSERT INTO conversations (conversation_id, userId, title, created_at, updated_at, metadata, total_token_count, message_count)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING conversation_id`
 
 	now := time.Now()
 	var returnedID string
 
+	// Try with short ID first
+	conversationID := generateShortConversationID()
+
 	err := conn.DB.QueryRow(ctx, query,
 		conversationID, userID, title, now, now, "{}", 0, 0,
 	).Scan(&returnedID)
+
+	// If we get a unique constraint violation, retry with UUID
+	if err != nil && strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+		conversationID = generateShortConversationID()
+
+		err = conn.DB.QueryRow(ctx, query,
+			conversationID, userID, title, now, now, "{}", 0, 0,
+		).Scan(&returnedID)
+	}
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create conversation: %w", err)
@@ -88,8 +117,8 @@ func CreateConversationInDB(ctx context.Context, conn *data.Conn, userID int, ti
 	return returnedID, nil
 }
 
-// GetConversationMessages retrieves all messages for a conversation
-func GetConversationMessages(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
+// GetConversationMessagesRaw retrieves all messages for a conversation
+func GetConversationMessagesRaw(ctx context.Context, conn *data.Conn, conversationID string, userID int) (interface{}, error) {
 	// First verify the user owns this conversation
 	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
 		return nil, err
@@ -247,7 +276,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 			created_at, completed_at, status, token_count, message_order
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $2)
+			(SELECT COALESCE(MAX(message_order), 0) + 1 FROM conversation_messages WHERE conversation_id = $15)
 		)`
 
 	_, err = tx.Exec(ctx, query,
@@ -265,6 +294,7 @@ func SaveConversationMessage(ctx context.Context, conn *data.Conn, conversationI
 		message.CompletedAt,
 		message.Status,
 		message.TokenCount,
+		conversationID, // Add conversationID again for the subquery
 	)
 
 	if err != nil {
@@ -300,7 +330,7 @@ func DeleteConversationInDB(conn *data.Conn, conversationID string, userID int) 
 	}
 
 	// Delete the conversation (messages will be deleted via CASCADE)
-	query := `DELETE FROM conversations WHERE conversation_id = $1 AND user_id = $2`
+	query := `DELETE FROM conversations WHERE conversation_id = $1 AND userid = $2`
 
 	result, err := conn.DB.Exec(context.Background(), query, conversationID, userID)
 	if err != nil {
@@ -356,8 +386,12 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 		}
 		conversationID = newConversationID
 
+		err = SetActiveConversationIDCached(ctx, conn, userID, conversationID)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to set active conversation ID: %w", err)
+		}
 		// Generate better title asynchronously and send via websocket
-		go generateTitleAsync(conn, userID, query, conversationID)
+		go generateConversationTitleAsync(conn, userID, query, conversationID)
 	}
 
 	// Save to database
@@ -365,12 +399,20 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 	if err != nil {
 		return "", "", fmt.Errorf("failed to save message to database: %w", err)
 	}
+	go func() {
+		var email string
+		err := conn.DB.QueryRow(ctx, "SELECT email from users where userid = $1", userID).Scan(&email)
+		if err != nil {
+			log.Printf("Failed to get user email: %v", err)
+		}
+		telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s sent query: %s", email, query))
+	}()
 
 	return conversationID, messageID, nil
 }
 
-// generateTitleAsync generates a title in the background and sends it via websocket
-func generateTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
+// generateConversationTitleAsync generates a title in the background and sends it via websocket
+func generateConversationTitleAsync(conn *data.Conn, userID int, query string, conversationID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -456,7 +498,8 @@ func UpdatePendingMessageToCompleted(ctx context.Context, conn *data.Conn, userI
 }
 
 // UpdatePendingMessageToCompletedInConversation updates a pending message to completed status in a specific conversation
-func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall, toolResults []ExecuteResult, suggestedQueries []string, tokenCount int) (*MessageCompletionData, error) {
+func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, contentChunks []ContentChunk, functionCalls []FunctionCall,
+	toolResults []ExecuteResult, suggestedQueries []string, tokenCount TokenCounts) (*MessageCompletionData, error) {
 	// Verify user owns the conversation
 	if err := VerifyConversationOwnership(conn, conversationID, userID); err != nil {
 		return nil, err
@@ -482,7 +525,7 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		functionCallsJSON,
 		toolResultsJSON,
 		suggestedQueriesJSON,
-		tokenCount,
+		tokenCount.TotalTokenCount,
 		now,
 		"completed",
 		conversationID,
@@ -495,11 +538,12 @@ func UpdatePendingMessageToCompletedInConversation(ctx context.Context, conn *da
 		}
 		return nil, fmt.Errorf("failed to update pending message: %w", err)
 	}
-
-	// Invalidate cache for this conversation since the message was updated
-	if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
-		fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
-	}
+	go func() {
+		// Invalidate cache for this conversation since the message was updated
+		if err := InvalidateConversationCache(ctx, conn, userID, conversationID); err != nil {
+			fmt.Printf("Warning: failed to invalidate conversation cache after completing message: %v\n", err)
+		}
+	}()
 
 	return &messageData, nil
 }
@@ -530,7 +574,7 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 			WHERE conversation_id = $1 AND archived = FALSE
 		),
 		updated_at = $2
-		WHERE conversation_id = $1 AND user_id = $3`
+		WHERE conversation_id = $1 AND userId = $3`
 
 	_, err = conn.DB.Exec(ctx, updateQuery, conversationID, time.Now(), userID)
 	if err != nil {
@@ -542,12 +586,12 @@ func DeletePendingMessageInConversation(ctx context.Context, conn *data.Conn, us
 }
 
 // MarkPendingMessageAsError marks a pending message as error status instead of deleting it
-func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, query string, errorMessage string) error {
+func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int, conversationID string, messageID string, errorMessage string) error {
 	// Update the database to mark as error
 	querySQL := `
 		UPDATE conversation_messages 
 		SET response_text = $1, completed_at = $2, status = $3
-		WHERE conversation_id = $4 AND query = $5 AND status = 'pending'`
+		WHERE conversation_id = $4 AND message_id = $5 AND status = 'pending'`
 
 	now := time.Now()
 	result, err := conn.DB.Exec(ctx, querySQL,
@@ -555,7 +599,7 @@ func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int,
 		now,
 		"error",
 		conversationID,
-		query,
+		messageID,
 	)
 
 	if err != nil {
@@ -564,7 +608,7 @@ func MarkPendingMessageAsError(ctx context.Context, conn *data.Conn, userID int,
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		return fmt.Errorf("no pending message found with query: %s in conversation: %s", query, conversationID)
+		return fmt.Errorf("no pending message found with message_id: %s in conversation: %s", messageID, conversationID)
 	}
 
 	// Invalidate cache for this conversation since the message was updated
@@ -580,15 +624,24 @@ func CancelPendingMessage(conn *data.Conn, userID int, args json.RawMessage) (in
 	var request struct {
 		ConversationID string `json:"conversation_id"`
 		Query          string `json:"query"`
+		MessageID      string `json:"message_id,omitempty"` // Optional message ID
 	}
 
 	if err := json.Unmarshal(args, &request); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
 
-	// Delete the pending message
-	if err := DeletePendingMessageInConversation(context.Background(), conn, userID, request.ConversationID, request.Query); err != nil {
-		return nil, fmt.Errorf("error cancelling pending message: %w", err)
+	// If we have a message ID, use MarkPendingMessageAsError to preserve the row
+	// Otherwise fall back to deletion for backward compatibility
+	if request.MessageID != "" {
+		if err := MarkPendingMessageAsError(context.Background(), conn, userID, request.ConversationID, request.MessageID, "Request cancelled"); err != nil {
+			return nil, fmt.Errorf("error marking pending message as error: %w", err)
+		}
+	} else {
+		// Fallback to deletion when no message ID is provided
+		if err := DeletePendingMessageInConversation(context.Background(), conn, userID, request.ConversationID, request.Query); err != nil {
+			return nil, fmt.Errorf("error cancelling pending message: %w", err)
+		}
 	}
 
 	return map[string]interface{}{
@@ -673,6 +726,35 @@ func UpdateConversationAfterEdit(ctx context.Context, conn *data.Conn, conversat
 	}
 
 	return nil
+}
+
+func UpdateConversationPlot(ctx context.Context, conn *data.Conn, conversationID string, plotData string) error {
+	// Determine if plot data is provided
+	hasPlot := plotData != ""
+
+	querySQL := `
+		UPDATE conversations 
+		SET 
+			plot = $2,
+			has_plot = $3,
+			updated_at = $4
+		WHERE conversation_id = $1`
+
+	_, err := conn.DB.Exec(ctx, querySQL, conversationID, plotData, hasPlot, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update conversation plot: %w", err)
+	}
+
+	return nil
+}
+
+func HasConversationPlot(ctx context.Context, conn *data.Conn, conversationID string) (bool, error) {
+	var hasPlot bool
+	err := conn.DB.QueryRow(ctx, "SELECT has_plot FROM conversations WHERE conversation_id = $1", conversationID).Scan(&hasPlot)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if conversation has plot: %w", err)
+	}
+	return hasPlot, nil
 }
 
 // ValidateMessageForEdit ensures the message can be edited

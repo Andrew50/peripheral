@@ -77,11 +77,11 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
-# Service-specific log directories
-services/*/logs/
-services/worker/logs/
-services/backend/logs/
-services/frontend/logs/
+# Service-specific log directories (deprecated - now using console logging)
+# services/*/logs/
+# services/worker/logs/
+# services/backend/logs/
+# services/frontend/logs/
 logs/
 
 # Runtime Data
@@ -211,3 +211,22 @@ temp/
 services/backend/tmp/build-errors.log
 services/backend/tmp/build-errors.log
 config/dev/.env
+services/worker/logs/worker.log
+
+# Merged patterns from services/.gitignore
+services/backend/app.log
+services/worker/__pycache__
+services/worker/core*
+services/db/backups
+services/worker/venv
+.github/tmp
+
+# Merged patterns from services/frontend/.gitignore
+.output
+.vercel
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+waitlist.json
+.env.*
+!.env.example
+!.env.test

@@ -20,11 +20,15 @@ import (
 	"backend/internal/app/chart"
 	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
+	"backend/internal/app/limits"
 	"backend/internal/app/screensaver"
 	"backend/internal/app/settings"
 	"backend/internal/app/strategy"
 	"backend/internal/app/watchlist"
+	alertsvc "backend/internal/services/alerts"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 )
 
 var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
@@ -40,6 +44,8 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getSecurityIDFromTickerTimestamp": helpers.GetSecurityIDFromTickerTimestamp,
 	"getTickerMenuDetails":             helpers.GetTickerMenuDetails,
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
+	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
+	"validateInvite":                   ValidateInvite,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -51,6 +57,11 @@ func wrapContextFunc(fn func(context.Context, *data.Conn, int, json.RawMessage) 
 	}
 }
 
+// Frontend server functions for /frontend/server endpoint (server-side frontend requests)
+var frontendServerFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, error){
+	"logSplashScreenView": LogSplashScreenView,
+}
+
 // Private functions for /private endpoint that use the old signature
 var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}, error){
 
@@ -60,6 +71,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getCurrentSecurityID":  helpers.GetCurrentSecurityID,
 	"getCurrentTicker":      helpers.GetCurrentTicker,
 	"getIcons":              helpers.GetIcons,
+	"getUserLastTickers":    helpers.GetUserLastTickers,
 	"getPrevClose":          helpers.GetPrevClose,
 	"getExchanges":          helpers.GetExchanges,
 
@@ -68,18 +80,11 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getEarningsText":       filings.GetEarningsText,
 	"getFilingText":         filings.GetFilingText,
 	"getChartData":          chart.GetChartData,
-	/*"getStudies":        chart.GetStudies,
-	"newStudy":          chart.NewStudy,
-	"saveStudy":         chart.SaveStudy,
-	"deleteStudy":       chart.DeleteStudy,
-	"getStudyEntry":     chart.GetStudyEntry,
-	"completeStudy":     chart.CompleteStudy,
-	"setStudyStrategy":  chart.SetStudyStrategy,*/
-	"getChartEvents":       chart.GetChartEvents,
-	"setHorizontalLine":    chart.SetHorizontalLine,
-	"getHorizontalLines":   chart.GetHorizontalLines,
-	"deleteHorizontalLine": chart.DeleteHorizontalLine,
-	"updateHorizontalLine": chart.UpdateHorizontalLine,
+	"getChartEvents":        chart.GetChartEvents,
+	"setHorizontalLine":     chart.SetHorizontalLine,
+	"getHorizontalLines":    chart.GetHorizontalLines,
+	"deleteHorizontalLine":  chart.DeleteHorizontalLine,
+	"updateHorizontalLine":  chart.UpdateHorizontalLine,
 
 	// --- screensavers ---------------------------------------------------------
 	"getScreensavers": screensaver.GetScreensavers,
@@ -101,6 +106,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getAlerts":    alerts.GetAlerts,
 	"getAlertLogs": alerts.GetAlertLogs,
 	"newAlert":     alerts.NewAlert,
+	"updateAlert":  alerts.UpdateAlert,
 	"deleteAlert":  alerts.DeleteAlert,
 
 	// --- trades / statistics --------------------------------------------------
@@ -112,9 +118,11 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"get_daily_trade_stats":  account.GetDailyTradeStats,
 
 	// --- strategy / back-testing ---------------------------------------------
-	"run_backtest":             wrapContextFunc(strategy.RunBacktest),
+	"run_backtest":  wrapContextFunc(strategy.RunBacktest),
+	"run_screening": wrapContextFunc(strategy.RunScreening),
+
 	"getStrategies":            strategy.GetStrategies,
-	"createStrategyFromPrompt": strategy.CreateStrategyFromPrompt,
+	"createStrategyFromPrompt": wrapContextFunc(strategy.CreateStrategyFromPrompt),
 	"setAlert":                 strategy.SetAlert,
 	"deleteStrategy":           strategy.DeleteStrategy,
 
@@ -123,6 +131,9 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 		// TODO: replace with real auth logic
 		return nil, nil
 	},
+	"deleteAccount": DeleteAccount,
+
+	// --- pricing / billing ----------------------------------------------------
 	"getUserConversation":        agent.GetUserConversation,
 	"getSuggestedQueries":        agent.GetSuggestedQueries,
 	"getInitialQuerySuggestions": agent.GetInitialQuerySuggestions,
@@ -137,17 +148,70 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"retryMessage":              agent.RetryMessage,
 	"getWhyMoving":              agent.GetWhyMoving,
 	"setConversationVisibility": agent.SetConversationVisibility,
+
+	// --- billing / stripe -----------------------------------------------------
+	"createCheckoutSession":           CreateCheckoutSession,
+	"createCreditCheckoutSession":     CreateCreditCheckoutSession,
+	"createCustomerPortal":            CreateCustomerPortal,
+	"getSubscriptionStatus":           GetSubscriptionStatus,
+	"getCombinedSubscriptionAndUsage": GetCombinedSubscriptionAndUsage,
+	"verifyCheckoutSession":           VerifyCheckoutSession,
+	"cancelSubscription":              CancelSubscription,
+	"reactivateSubscription":          ReactivateSubscription,
+
+	// --- usage credits and tracking -------------------------------------------
+	"getUserUsageStats": func(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+		return limits.GetUserUsageStats(conn, userID, rawArgs)
+	},
 }
 
 // Private functions that support context cancellation
 var privateFuncWithContext = map[string]func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error){
 	"getQuery": agent.GetChatRequest,
+	"stopChat": agent.StopChatRequest,
 }
 
 // Request represents a structure for handling Request data.
 type Request struct {
 	Function  string          `json:"func"`
 	Arguments json.RawMessage `json:"args"`
+}
+
+// StreamingChatRequest represents a streaming chat request
+type StreamingChatRequest struct {
+	Function  string          `json:"func"`
+	Arguments json.RawMessage `json:"args"`
+	StreamID  string          `json:"stream_id,omitempty"`
+}
+
+// StreamingResponse represents a streaming chat response chunk
+type StreamingResponse struct {
+	Type      string      `json:"type"`    // "progress", "partial", "complete", "error"
+	Content   interface{} `json:"content"` // Content varies by type
+	StreamID  string      `json:"stream_id"`
+	Timestamp time.Time   `json:"timestamp"`
+}
+
+// withPanicRecovery wraps an http.HandlerFunc, recovers from panics,
+// sends a critical alert, and returns HTTP 500.
+func withPanicRecovery(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				var err error
+				switch x := rec.(type) {
+				case error:
+					err = fmt.Errorf("panic: %w", x)
+				default:
+					err = fmt.Errorf("panic: %v", x)
+				}
+
+				_ = alertsvc.LogCriticalAlert(err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+		}()
+		h(w, r)
+	}
 }
 
 func addCORSHeaders(w http.ResponseWriter) {
@@ -159,16 +223,26 @@ func addCORSHeaders(w http.ResponseWriter) {
 func handleError(w http.ResponseWriter, err error, context string) bool {
 	if err != nil {
 		logMessage := fmt.Sprintf("%s: %v", context, err)
-		if context == "auth" {
-			http.Error(w, logMessage, http.StatusUnauthorized)
-		} else {
-			http.Error(w, logMessage, http.StatusBadRequest)
+		log.Println(logMessage)
+
+		// Only log a critical alert for non-auth related errors. Authentication
+		// failures (e.g. invalid or expired JWTs) are expected client errors and
+		// should not trigger pager duty alerts.
+		if context != "auth" {
+			_ = alertsvc.LogCriticalAlert(err)
 		}
+
+		// Decide public-facing message
+		status, msg := resolveAppError(err)
+		if context == "auth" {
+			status = http.StatusUnauthorized
+		}
+
+		http.Error(w, msg, status)
 		return true
 	}
 	return false
 }
-
 func publicHandler(conn *data.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addCORSHeaders(w)
@@ -215,9 +289,9 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 		if err != nil {
 			// Log the detailed error on the server
 			log.Printf("Public handler error [%s]: %v", req.Function, err)
-			// Send the specific error message back to the client
-			// Use StatusBadRequest for general input/logic errors from Login/Signup
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			// Map to safe client message
+			status, msg := resolveAppError(err)
+			http.Error(w, msg, status)
 			return
 		}
 
@@ -549,7 +623,271 @@ func HealthCheck() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// If you need DB ping logic, insert it here and flip OK accordingly.
-		_ = json.NewEncoder(w).Encode(status{OK: true})
+		if err := json.NewEncoder(w).Encode(status{OK: true}); err != nil {
+			http.Error(w, "Error encoding health check response", http.StatusInternalServerError)
+		}
+	}
+}
+
+// Add new streaming endpoint handler
+func streamingChatHandler(conn *data.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		// Validate JWT token
+		tokenString := r.Header.Get("Authorization")
+		userID, err := validateToken(tokenString)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Set headers for SSE
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// Parse request
+		var req StreamingChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sendSSEError(w, "Invalid request format", "")
+			return
+		}
+
+		// Generate stream ID if not provided
+		if req.StreamID == "" {
+			req.StreamID = generateStreamID()
+		}
+
+		// Only support getQuery for streaming
+		if req.Function != "getQuery" {
+			sendSSEError(w, "Streaming only supported for getQuery", req.StreamID)
+			return
+		}
+
+		// Create context with timeout for the entire operation
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+		defer cancel()
+
+		// Send initial progress
+		sendSSEProgress(w, "Starting chat processing...", req.StreamID)
+
+		// Start processing in goroutine
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Log the panic for debugging
+					log.Printf("Panic in streaming chat handler: %v", r)
+					// Send error response to client
+					sendSSEError(w, fmt.Sprintf("Internal server error: %v", r), req.StreamID)
+				}
+			}()
+
+			// Add additional validation before processing
+			if conn == nil {
+				sendSSEError(w, "Database connection is not available", req.StreamID)
+				return
+			}
+
+			// Process the chat request with progress updates
+			result, err := processStreamingChatRequest(ctx, conn, userID, req.Arguments, req.StreamID, w)
+			if err != nil {
+				log.Printf("Streaming chat request error: %v", err)
+				sendSSEError(w, err.Error(), req.StreamID)
+				return
+			}
+
+			// Send final result
+			sendSSEComplete(w, result, req.StreamID)
+		}()
+
+		// Keep connection alive with periodic pings
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sendSSEPing(w)
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+			}
+		}
+	}
+}
+
+// Helper functions for SSE
+func sendSSEProgress(w http.ResponseWriter, message, streamID string) {
+	response := StreamingResponse{
+		Type:      "progress",
+		Content:   map[string]string{"message": message},
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "progress", response)
+}
+
+func sendSSEComplete(w http.ResponseWriter, result interface{}, streamID string) {
+	response := StreamingResponse{
+		Type:      "complete",
+		Content:   result,
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "complete", response)
+}
+
+func sendSSEError(w http.ResponseWriter, errMsg, streamID string) {
+	response := StreamingResponse{
+		Type:      "error",
+		Content:   map[string]string{"error": errMsg},
+		StreamID:  streamID,
+		Timestamp: time.Now(),
+	}
+	sendSSEEvent(w, "error", response)
+}
+
+func sendSSEPing(w http.ResponseWriter) {
+	fmt.Fprintf(w, ": ping\n\n")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func sendSSEEvent(w http.ResponseWriter, eventType string, data interface{}) {
+	jsonData, _ := json.Marshal(data)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData))
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func generateStreamID() string {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes) // #nosec G104 - rand.Read from crypto/rand is documented to always succeed
+	if err != nil {
+		// This should never happen with crypto/rand, but handle it gracefully
+		panic("failed to generate random bytes for stream ID")
+	}
+	return hex.EncodeToString(bytes)
+}
+
+// Modified chat request processor with progress updates
+func processStreamingChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage, streamID string, w http.ResponseWriter) (interface{}, error) {
+	// Add nil pointer checks
+	if conn == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+	if w == nil {
+		return nil, fmt.Errorf("response writer is nil")
+	}
+
+	// Send progress updates during processing
+	sendSSEProgress(w, "Parsing chat request...", streamID)
+
+	var query agent.ChatRequest
+	if err := json.Unmarshal(args, &query); err != nil {
+		return nil, fmt.Errorf("error parsing request: %w", err)
+	}
+
+	sendSSEProgress(w, "Validating request...", streamID)
+
+	// Check Redis connectivity with better error handling
+	success, message := conn.TestRedisConnectivity(ctx, userID)
+	if !success {
+		return nil, fmt.Errorf("redis connectivity failed: %s", message)
+	}
+
+	sendSSEProgress(w, "Preparing conversation context...", streamID)
+
+	// Call the existing chat processing function with improved error handling
+	result, err := agent.GetChatRequest(ctx, conn, userID, args)
+
+	if err != nil {
+		return nil, fmt.Errorf("chat processing failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// validateFrontendAPIKey checks if the provided API key is valid for frontend server requests
+func validateFrontendAPIKey(apiKey string) bool {
+	// Use environment variable for the API key, fallback to a default for development
+	expectedKey := "williamsIsTheBestLiberalArtsCollege!1@" // TODO: Move to environment variable
+	return apiKey == expectedKey
+}
+
+// frontendServerHandler handles requests from frontend server-side code (like +page.server.ts)
+func frontendServerHandler(conn *data.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addCORSHeaders(w)
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		// Validate API key from header
+		apiKey := r.Header.Get("Peripheral-Frontend-Key")
+		if !validateFrontendAPIKey(apiKey) {
+			http.Error(w, "Invalid or missing API key", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate content type
+		contentType := r.Header.Get("Content-Type")
+		if contentType != "application/json" {
+			http.Error(w, "Unsupported Media Type", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		// Set security headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		// Read request body with size limit
+		bodySize := r.ContentLength
+		if bodySize > 1024*1024 { // 1MB limit
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		var req Request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&req)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Validate function exists
+		if _, exists := frontendServerFunc[req.Function]; !exists {
+			http.Error(w, "Unknown function", http.StatusUnauthorized)
+			return
+		}
+
+		// Execute function
+		result, err := frontendServerFunc[req.Function](conn, req.Arguments)
+		if err != nil {
+			log.Printf("Frontend server handler error [%s]: %v", req.Function, err)
+			status, msg := resolveAppError(err)
+			http.Error(w, msg, status)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetEscapeHTML(true)
+		if err := encoder.Encode(result); err != nil {
+			http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -558,23 +896,28 @@ func StartServer(conn *data.Conn) {
 	// Initialize chat handler for WebSocket
 	socket.SetChatHandler(agent.GetChatRequest)
 
-	http.HandleFunc("/public", publicHandler(conn))
-	http.HandleFunc("/private", privateHandler(conn))
-	http.HandleFunc("/ws", WSHandler(conn))
-	http.HandleFunc("/upload", privateUploadHandler(conn))
-	http.HandleFunc("/healthz", HealthCheck())
+	// Replace direct registrations with panic-recovered handlers
+	http.Handle("/public", withPanicRecovery(publicHandler(conn)))
+	http.Handle("/private", withPanicRecovery(privateHandler(conn)))
+	http.Handle("/frontend/server", withPanicRecovery(frontendServerHandler(conn)))
+	http.Handle("/streaming-chat", withPanicRecovery(streamingChatHandler(conn)))
+	http.Handle("/ws", withPanicRecovery(WSHandler(conn)))
+	http.Handle("/upload", withPanicRecovery(privateUploadHandler(conn)))
+	http.Handle("/healthz", withPanicRecovery(HealthCheck()))
+	http.Handle("/billing/webhook", withPanicRecovery(stripeWebhookHandler(conn)))
+	http.Handle("/webhook/twitterapi/v1", withPanicRecovery(twitterWebhookHandler(conn)))
 
 	server := &http.Server{
-		Addr:    ":5058",
-		Handler: http.DefaultServeMux, // Use DefaultServeMux since HandleFunc registers globally
-		// Good practice to set timeouts to prevent resource exhaustion.
+		Addr:         ":5058",
+		Handler:      http.DefaultServeMux,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 240 * time.Second,
+		WriteTimeout: 10 * time.Minute, // Increased for streaming
 		IdleTimeout:  240 * time.Second,
 	}
 
 	log.Println("debug: Server running on port 5058")
 	if err := server.ListenAndServe(); err != nil {
+		_ = alertsvc.LogCriticalAlert(err)
 		log.Fatal(err)
 	}
 }

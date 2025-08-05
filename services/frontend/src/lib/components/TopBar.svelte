@@ -1,72 +1,194 @@
 <script lang="ts">
-    import { queryInstanceInput } from '$lib/components/input/input.svelte';
-    import { queryChart } from '$lib/features/chart/interface';
-    import type { Instance } from '$lib/utils/types/types';
+	import { queryInstanceInput } from '$lib/components/input/input.svelte';
+	import { queryChart, activeChartInstance } from '$lib/features/chart/interface';
+	import type { Instance } from '$lib/utils/types/types';
+	import { streamInfo } from '$lib/utils/stores/stores';
+	import { timeframeToSeconds } from '$lib/utils/helpers/timestamp';
+	import { onMount, onDestroy } from 'svelte';
+	import { writable } from 'svelte/store';
+	import { browser } from '$app/environment';
 
-    export let instance: Instance;
+	import { subscriptionStatus } from '$lib/utils/stores/stores';
+	import { isMobileDevice } from '$lib/utils/stores/device';
 
-    const commonTimeframes = ['1', '1h', '1d', '1w'];
-    // Helper computed value to check if current timeframe is custom
+	export let instance: Instance;
+	export let handleCalendar: (() => void) | undefined = undefined;
+
+	const commonTimeframes = ['1', '1h', '1d', '1w'];
+	// Filter timeframes for mobile (exclude 1w)
+	$: displayTimeframes = $isMobileDevice 
+		? commonTimeframes.filter(tf => tf !== '1w')
+		: commonTimeframes;
+	let countdown = writable('--');
+	let countdownInterval: ReturnType<typeof setInterval>;
+	// Helper computed value to check if current timeframe is custom
 	$: isCustomTimeframe = instance?.timeframe && !commonTimeframes.includes(instance.timeframe);
-
-    // --- New Handlers for Buttons ---
-    function handleTickerClick(event: MouseEvent | TouchEvent) {
-        event.preventDefault();
-        event.stopPropagation(); // Prevent legend collapse toggle
-        queryInstanceInput([], ['ticker'], instance, 'ticker').then((v: Instance) => {
-            if (v) queryChart(v, true);
-        }).catch((error) => {
-            // Handle cancellation silently
-            if (error.message !== 'User cancelled input') {
-                console.error('Error in ticker input:', error);
-            }
-        });
-	}
-    function handleTickerKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' || event.key === ' ') {
-			event.preventDefault();
-			event.stopPropagation(); // Prevent legend collapse toggle
-			queryInstanceInput('any', ['ticker'], instance, 'ticker').then((v: Instance) => {
+	
+	// TopBar handler functions
+	function handleTickerClick(event: MouseEvent | TouchEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		queryInstanceInput(
+			[],
+			['ticker'],
+			$activeChartInstance || {},
+			'ticker',
+			'Symbol Search - TopBar'
+		)
+			.then((v: Instance) => {
 				if (v) queryChart(v, true);
-			}).catch((error) => {
-				// Handle cancellation silently
+			})
+			.catch((error) => {
 				if (error.message !== 'User cancelled input') {
 					console.error('Error in ticker input:', error);
 				}
 			});
+	}
+	function handleTickerKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			event.stopPropagation();
+			queryInstanceInput(
+				'any',
+				['ticker'],
+				$activeChartInstance || {},
+				'ticker',
+				'Symbol Search - TopBar'
+			)
+				.then((v: Instance) => {
+					if (v) queryChart(v, true);
+				})
+				.catch((error) => {
+					if (error.message !== 'User cancelled input') {
+						console.error('Error in ticker input:', error);
+					}
+				});
 		}
 	}
-    function handleSessionClick(event: MouseEvent | TouchEvent) {
+	function handleSessionClick(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
-		event.stopPropagation(); // Prevent legend collapse toggle
-		if (instance) {
-			const updatedInstance = { ...instance, extendedHours: !instance.extendedHours };
+		event.stopPropagation();
+		if ($activeChartInstance) {
+			const updatedInstance = {
+				...$activeChartInstance,
+				extendedHours: !$activeChartInstance.extendedHours
+			};
 			queryChart(updatedInstance, true);
 		}
 	}
-    // Function to handle clicking the "..." timeframe button
+	// Function to handle clicking the "..." timeframe button
 	function handleCustomTimeframeClick() {
-		// Start with empty input but force timeframe type
-		queryInstanceInput(['timeframe'], ['timeframe'], instance, 'timeframe').then((v: Instance) => {
-			if (v) queryChart(v, true);
-		}).catch((error) => {
-			// Handle cancellation silently
-			if (error.message !== 'User cancelled input') {
-				console.error('Error in timeframe input:', error);
-			}
-		});
+		queryInstanceInput(['timeframe'], ['timeframe'], $activeChartInstance || undefined, 'timeframe')
+			.then((v: Instance) => {
+				if (v) queryChart(v, true);
+			})
+			.catch((error) => {
+				if (error.message !== 'User cancelled input') {
+					console.error('Error in timeframe input:', error);
+				}
+			});
 	}
 
-    // Function to handle selecting a preset timeframe button
 	function selectTimeframe(newTimeframe: string) {
-		if (instance && instance.timeframe !== newTimeframe) {
-			const updatedInstance = { ...instance, timeframe: newTimeframe };
+		if ($activeChartInstance && $activeChartInstance.timeframe !== newTimeframe) {
+			const updatedInstance = { ...$activeChartInstance, timeframe: newTimeframe };
 			queryChart(updatedInstance, true);
 		}
 	}
+
+	function formatTime(seconds: number): string {
+		const years = Math.floor(seconds / (365 * 24 * 60 * 60));
+		const months = Math.floor((seconds % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
+		const weeks = Math.floor((seconds % (30 * 24 * 60 * 60)) / (7 * 24 * 60 * 60));
+		const days = Math.floor((seconds % (7 * 24 * 60 * 60)) / (24 * 60 * 60));
+		const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+		const minutes = Math.floor((seconds % (60 * 60)) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (years > 0) return `${years}y ${months}m`;
+		if (months > 0) return `${months}m ${weeks}w`;
+		if (weeks > 0) return `${weeks}w ${days}d`;
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs < 10 ? '0' : ''}${secs}s`;
+		return `${secs < 10 ? '0' : ''}${secs}s`;
+	}
+	function openPricingSettings() {
+		window.location.href = '/pricing';
+	}
+	function calculateCountdown() {
+		if (!instance?.timeframe) {
+			countdown.set('--');
+			return;
+		}
+
+		const currentTimeInSeconds = Math.floor($streamInfo.timestamp / 1000);
+		const chartTimeframeInSeconds = timeframeToSeconds(instance.timeframe);
+
+		let nextBarClose =
+			currentTimeInSeconds -
+			(currentTimeInSeconds % chartTimeframeInSeconds) +
+			chartTimeframeInSeconds;
+
+		// For daily timeframes, adjust to market close (4:00 PM EST)
+		if (instance.timeframe.includes('d')) {
+			const currentDate = new Date(currentTimeInSeconds * 1000);
+			const estOptions = { timeZone: 'America/New_York' };
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				...estOptions,
+				year: 'numeric',
+				month: 'numeric',
+				day: 'numeric'
+			});
+
+			const [month, day, year] = formatter.format(currentDate).split('/');
+
+			const marketCloseDate = new Date(
+				`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T16:00:00-04:00`
+			);
+
+			nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+
+			if (currentTimeInSeconds >= nextBarClose) {
+				marketCloseDate.setDate(marketCloseDate.getDate() + 1);
+
+				const dayOfWeek = marketCloseDate.getDay(); // 0 = Sunday, 6 = Saturday
+				if (dayOfWeek === 0) {
+					// Sunday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 1); // Move to Monday
+				} else if (dayOfWeek === 6) {
+					// Saturday
+					marketCloseDate.setDate(marketCloseDate.getDate() + 2); // Move to Monday
+				}
+
+				nextBarClose = Math.floor(marketCloseDate.getTime() / 1000);
+			}
+		}
+
+		const remainingTime = nextBarClose - currentTimeInSeconds;
+
+		if (remainingTime > 0) {
+			countdown.set(formatTime(remainingTime));
+		} else {
+			countdown.set('Bar Closed');
+		}
+	}
+
+	onMount(() => {
+		countdownInterval = setInterval(calculateCountdown, 1000);
+		calculateCountdown(); // Initial calculation
+	});
+
+	onDestroy(() => {
+		if (countdownInterval) {
+			clearInterval(countdownInterval);
+		}
+	});
 </script>
 
 <div class="top-bar">
+	<!-- Left side content -->
+	<div class="top-bar-left">
 		<button
 			class="symbol metadata-button"
 			on:click={handleTickerClick}
@@ -74,78 +196,162 @@
 			aria-label="Change ticker"
 		>
 			<svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
-				<path d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				<path
+					d="M21 21L16.514 16.506L21 21ZM19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
 			</svg>
-			{instance?.ticker || 'NaN'}
+			{$activeChartInstance?.ticker || 'NaN'}
 		</button>
-        
-        <!-- Divider -->
-        <div class="divider"></div>
-        
-        <!-- Add common timeframe buttons -->
-        {#each commonTimeframes as tf}
-            <button
-                class="timeframe-preset-button metadata-button {instance?.timeframe === tf ? 'active' : ''}"
-                on:click={() => selectTimeframe(tf)}
-                aria-label="Set timeframe to {tf}"
-                aria-pressed={instance?.timeframe === tf}
-            >
-                {tf}
-            </button>
-        {/each}
-        <!-- Button to open custom timeframe input -->
-        <button
-            class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
-            on:click={handleCustomTimeframeClick}
-            aria-label="Select custom timeframe"
-            aria-pressed={isCustomTimeframe ? 'true' : 'false'}
-        >
-            {#if isCustomTimeframe}
-                {instance.timeframe}
-            {:else}
-                ...
-            {/if}
-        </button>
-        
-        <!-- Divider -->
-        <div class="divider"></div>
 
-        <button
-                class="session-type metadata-button"
-                on:click={handleSessionClick}
-                aria-label="Toggle session type"
-            >
-            {instance?.extendedHours ? 'Extended' : 'Regular'}
-        </button>
+		<!-- Divider -->
+		<div class="divider"></div>
+
+		<!-- Add common timeframe buttons -->
+		{#each displayTimeframes as tf}
+			<button
+				class="timeframe-preset-button metadata-button {$activeChartInstance?.timeframe === tf
+					? 'active'
+					: ''}"
+				on:click={() => selectTimeframe(tf)}
+				aria-label="Set timeframe to {tf}"
+				aria-pressed={$activeChartInstance?.timeframe === tf}
+			>
+				{tf}
+			</button>
+		{/each}
+		<!-- Button to open custom timeframe input -->
+		<button
+			class="timeframe-custom-button metadata-button {isCustomTimeframe ? 'active' : ''}"
+			on:click={handleCustomTimeframeClick}
+			aria-label="Select custom timeframe"
+			aria-pressed={isCustomTimeframe ? 'true' : 'false'}
+		>
+			{#if isCustomTimeframe}
+				{$activeChartInstance?.timeframe}
+			{:else}
+				...
+			{/if}
+		</button>
+
+		<!-- Divider -->
+		<div class="divider"></div>
+
+		<button
+			class="session-type metadata-button"
+			on:click={handleSessionClick}
+			aria-label="Toggle session type"
+		>
+			{$activeChartInstance?.extendedHours ? 'Extended' : 'Regular'}
+		</button>
+
+		{#if handleCalendar}
+			<!-- Divider -->
+			<div class="divider"></div>
+
+			<!-- Calendar button for timestamp selection -->
+			<button
+				class="calendar-button metadata-button"
+				on:click={handleCalendar}
+				title="Go to Date"
+				aria-label="Go to Date"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					width="16"
+					height="16"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V8H19V19ZM7 10H12V15H7V10Z"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
+
+			<!-- Divider -->
+			<div class="divider"></div>
+		{/if}
+
+		<!-- Countdown -->
+		<!-- <div class="countdown-container">
+			<span class="countdown-label">Next Bar Close:</span>
+			<span class="countdown-value">{$countdown}</span>
+		</div> -->
+	</div>
+
+	<!-- Right side content -->
+	<div class="top-bar-right">
+		{#if browser && typeof window !== 'undefined' && sessionStorage.getItem('authToken') && $subscriptionStatus && !$subscriptionStatus.isActive && !$subscriptionStatus.loading}
+			<button
+				class="upgrade-button"
+				on:click={openPricingSettings}
+				title="Upgrade to Pro"
+				aria-label="Upgrade to Pro"
+			>
+				Try Plus
+				<svg
+					class="upgrade-icon"
+					viewBox="0 0 20 20"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						d="M4.78544 8.12311L12.8231 8.12311M12.8231 8.12311L12.8231 16.1608M12.8231 8.12311L3.1779 17.7683"
+						stroke="#333333"
+						stroke-width="1.3"
+						stroke-linecap="square"
+					/>
+				</svg>
+			</button>
+		{/if}
+	</div>
 </div>
 
 <style>
+	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
+
+	/* TopBar styles */
 	.top-bar {
 		height: 40px;
 		min-height: 40px;
-		background-color: #0F0F0F;
+		background-color: #121212;
 		display: flex;
-		justify-content: flex-start;
 		align-items: center;
 		padding: 0 10px;
-		gap: 4px;
 		flex-shrink: 0;
 		width: 100%;
 		z-index: 10;
 		border-bottom: 4px solid var(--c1);
-		position: absolute; /* Position absolutely */
-		top: 0;
-		left: 0;
-		right: 0;
 	}
 
+	.top-bar-left {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: 1;
+	}
+
+	.top-bar-right {
+		display: flex;
+		overflow: hidden;
+		align-items: center;
+		gap: 4px;
+	}
 
 	/* Base styles for metadata buttons */
 	.metadata-button {
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 18px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding: 6px 10px;
 		background: transparent;
 		border-radius: 6px;
@@ -159,36 +365,39 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.metadata-button:focus {
 		outline: none;
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
 	}
 
 	.metadata-button:hover {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		border-color: transparent;
-		color: #ffffff;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		color: #fff;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 	}
 
 	/* Specific style adjustments for symbol button */
 	.symbol.metadata-button {
 		font-size: 14px;
 		line-height: 20px;
-		color: #ffffff;
+		color: #fff;
 		padding: 6px 12px;
 		gap: 4px;
 	}
 
-	.search-icon {
-		opacity: 0.6;
+	.top-bar .search-icon {
+		opacity: 0.8;
 		transition: opacity 0.2s ease;
+		position: static;
+		padding: 0;
+		left: auto;
 	}
 
-	.symbol.metadata-button:hover .search-icon {
+	.top-bar .symbol.metadata-button:hover .search-icon {
 		opacity: 1;
 	}
 
@@ -200,19 +409,19 @@
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
-		margin-left: -2px; /* Reduce spacing between timeframe buttons */
+		margin-left: -2px;
 	}
 
 	.timeframe-preset-button:first-of-type {
-		margin-left: 0; /* Don't apply negative margin to first timeframe button */
+		margin-left: 0;
 	}
 
 	.timeframe-preset-button.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
 	}
 
 	/* Styles for the custom timeframe '...' button */
@@ -223,23 +432,74 @@
 		display: inline-flex;
 		justify-content: center;
 		align-items: center;
-		margin-left: -2px; /* Reduce spacing with preceding timeframe buttons */
+		margin-left: -2px;
 	}
 
 	.timeframe-custom-button.active {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 20%);
 		border-color: transparent;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 600;
-		box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
+	}
+
+	/* Calendar button styles */
+	.calendar-button {
+		padding: 6px 8px;
+		min-width: auto;
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.calendar-button svg {
+		opacity: 0.8;
+		transition: opacity 0.2s ease;
+	}
+
+	.calendar-button:hover svg {
+		opacity: 1;
 	}
 
 	/* Divider styles */
 	.divider {
 		width: 1px;
 		height: 28px;
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 		margin: 0 6px;
 		flex-shrink: 0;
 	}
-</style> 
+
+	/* Upgrade button styles */
+	.upgrade-button {
+		background: #ccc;
+		color: #333 !important;
+		border: 1px solid rgb(255 255 255 / 20%);
+		transition: all 0.2s ease;
+		padding: 2px 6px;
+		border-radius: 6px;
+		font-family: 'Instrument Sans', monospace;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 13px;
+		font-weight: 600 !important;
+		line-height: 18px;
+	}
+
+	.upgrade-button:hover {
+		background: #fff;
+	}
+
+	.upgrade-icon {
+		width: 20px;
+		height: 20px;
+		stroke-width: 2.5;
+		transform: translate(3px, -3.5px);
+	}
+</style>

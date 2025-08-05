@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   name: app-ingress
   annotations:
-    kubernetes.io/ingress.class: "ingress-nginx"
+    kubernetes.io/ingress.class: "nginx"
 
     # Timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
@@ -29,7 +29,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: ${INGRESS_HOST}
+    - host: peripheral.io  # ${INGRESS_HOST}
       http:
         paths:
           - path: /private
@@ -54,6 +54,20 @@ spec:
                 port:
                   number: 5058
           - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /billing/webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /webhook/twitterapi/v1
             pathType: Prefix
             backend:
               service:
@@ -67,7 +81,7 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    - host: www.${INGRESS_HOST}
+    - host: www.peripheral.io  # ${INGRESS_HOST}
       http:
         paths:
           - path: /private
@@ -92,6 +106,13 @@ spec:
                 port:
                   number: 5058
           - path: /upload
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5058
+          - path: /billing/webhook
             pathType: Prefix
             backend:
               service:

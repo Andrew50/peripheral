@@ -1,23 +1,31 @@
-<!-- account.svelte -->
+<!-- auth.svelte -->
 <script lang="ts">
-	import { publicRequest, privateRequest, base_url } from '$lib/utils/helpers/backend';
-	import '$lib/styles/global.css';
+	import { publicRequest } from '$lib/utils/helpers/backend';
 	import { browser } from '$app/environment';
-
-	import Header from '$lib/components/header.svelte';
+	import type { LoginResponse } from '$lib/auth';
+	import { setAuthCookies, setAuthSessionStorage } from '$lib/auth';
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
+	import '$lib/styles/splash.css';
+	import ChipSection from '$lib/landing/ChipSection.svelte';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 
 	const dispatch = createEventDispatcher();
 
-	export let loginMenu: boolean = false;
+	export let mode: 'login' | 'signup' = 'login';
+	export let modalMode: boolean = false;
+	export let inviteCode: string = '';
 	let email = '';
-	let username = '';
 	let password = '';
 	let errorMessage = writable('');
 	let loading = false;
-	let guestLoading = false;
+	let isLoaded = false;
+	let inviteValidation = { isValid: false, planName: '', trialDays: 0, validated: false };
+
+	// Deep linking parameters
+	let redirectPlan: string | null = null;
+	let redirectType: string | null = null;
 
 	// Update error message display
 	let errorMessageText = '';
@@ -25,60 +33,76 @@
 		errorMessageText = value;
 	});
 
-	// Add error handling for missing assets
-	let googleIconUrl = '/google-icon.svg';
-	let googleIconError = false;
+	// Clear error message and reset form when switching between login/signup
+	$: if (mode) {
+		errorMessage.set('');
+	}
+
+	onMount(() => {
+		if (browser) {
+			document.title = mode === 'login' ? 'Login | Peripheral' : 'Sign Up | Peripheral';
+			isLoaded = true;
+
+			// Check for redirect parameters
+			const urlParams = new URLSearchParams(window.location.search);
+			redirectPlan = urlParams.get('plan');
+			redirectType = urlParams.get('redirect');
+
+			// Validate invite code if present
+			if (inviteCode && inviteCode.trim() !== '' && mode === 'signup') {
+				validateInviteCode(inviteCode.trim());
+			}
+		}
+	});
+
+	// Watch for changes to inviteCode and validate
+	$: if (inviteCode && inviteCode.trim() !== '' && mode === 'signup' && browser) {
+		validateInviteCode(inviteCode.trim());
+	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			if (loginMenu) {
+			if (mode === 'login') {
 				signIn(email, password);
 			} else {
-				signUp(email, username, password);
+				signUp(email, password);
 			}
 		}
 	}
 
-	function handleGoogleIconError() {
-		googleIconError = true;
+	function handleToggleMode(event: Event) {
+		if (modalMode) {
+			event.preventDefault();
+			dispatch('toggleMode');
+		}
+		// If not in modal mode, let the default link behavior happen
 	}
+	// Handle successful authentication with deep linking
+	function handleAuthSuccess(user: LoginResponse) {
+		// Dispatch success event for modal usage
+		dispatch('authSuccess', { type: mode, user });
 
-	interface Login {
-		token: string;
-		settings: string;
-		profilePic: string;
-		username: string;
+		// Handle deep linking
+		if (redirectType === 'checkout' && redirectPlan) {
+			// Redirect to pricing page with plan parameter to trigger checkout
+			goto(`/pricing?upgrade=${redirectPlan}`);
+		} else {
+			// Default redirect to app
+			goto('/app');
+		}
 	}
 
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
-			// Block guest credentials when called directly from the login form
-			// This prevents users from manually entering guest credentials in the login form
-			// but still allows the guest login button to work via handleGuestLogin
-			const isDirectFormSubmission = !guestLoading;
-			if (isDirectFormSubmission && email === 'user' && password === 'pass') {
-				throw new Error('Please use the "Continue as Guest" button to access the guest account');
-			}
-
-			const r = await publicRequest<Login>('login', { email: email, password: password });
+			const r = await publicRequest<LoginResponse>('login', { email: email, password: password });
 			if (browser) {
-				// Remove any existing guest session cleanup event listener
-				window.removeEventListener('beforeunload', cleanupGuestAccount);
-
-				// Clear any guest session flags
-				sessionStorage.removeItem('isGuestSession');
-
-				// Set the regular session data
-				sessionStorage.setItem('authToken', r.token);
-				sessionStorage.setItem('profilePic', r.profilePic);
-				sessionStorage.setItem('username', r.username);
+				// Set auth data using centralized utilities
+				setAuthCookies(r.token, r.profilePic);
+				setAuthSessionStorage(r.token, r.profilePic);
 			}
-			
-			// Dispatch success event for modal usage
-			dispatch('authSuccess', { type: 'login', user: r });
-			
-			goto('/app');
+
+			handleAuthSuccess(r);
 		} catch (error) {
 			let displayError = 'Login failed. Please try again.';
 			if (typeof error === 'string') {
@@ -96,20 +120,30 @@
 		}
 	}
 
-	async function signUp(email: string, username: string, password: string) {
+	async function signUp(email: string, password: string) {
+		// Prevent signup if invite code is present but invalid
+		if (
+			inviteCode &&
+			inviteCode.trim() !== '' &&
+			(!inviteValidation.validated || !inviteValidation.isValid)
+		) {
+			errorMessage.set('Please wait for invite code validation or use a valid invite code');
+			return;
+		}
+
 		loading = true;
 		try {
-			// If this was a guest account, remove guest session cleanup
-			if (browser) {
-				window.removeEventListener('beforeunload', cleanupGuestAccount);
-				sessionStorage.removeItem('isGuestSession');
-				sessionStorage.removeItem('userId');
+			const signupData: any = { email: email, password: password };
+
+			// Include invite code if provided and valid
+			if (inviteCode && inviteCode.trim() !== '' && inviteValidation.isValid) {
+				signupData.inviteCode = inviteCode.trim();
 			}
 
-			await publicRequest('signup', { email: email, username: username, password: password });
+			await publicRequest('signup', signupData);
 			await signIn(email, password);
 		} catch (error) {
-            console.log(error)
+			console.log(error);
 			let displayError = 'Failed to create account. Please try again.';
 			if (typeof error === 'string') {
 				// Extract the core message sent from the backend
@@ -129,6 +163,17 @@
 			// Get and log the current origin
 			const currentOrigin = window.location.origin;
 
+			// Store redirect parameters for after Google auth
+			if (redirectPlan && redirectType) {
+				sessionStorage.setItem('redirectPlan', redirectPlan);
+				sessionStorage.setItem('redirectType', redirectType);
+			}
+
+			// Store invite code for after Google auth
+			if (inviteCode && inviteCode.trim() !== '') {
+				sessionStorage.setItem('inviteCode', inviteCode.trim());
+			}
+
 			// Pass the current origin to the backend
 			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
 				redirectOrigin: currentOrigin
@@ -147,504 +192,574 @@
 		}
 	}
 
-	/*async function handleGuestLogin() {
-		guestLoading = true;
-		try {
-			// Use the dedicated guestLogin endpoint instead of the regular login
-			const r = await publicRequest<Login>('guestLogin', {});
-
-			if (browser) {
-				sessionStorage.setItem('authToken', r.token);
-				sessionStorage.setItem('profilePic', r.profilePic || '');
-				sessionStorage.setItem('username', r.username);
-				// Mark this as a guest session to handle cleanup on page close
-				sessionStorage.setItem('isGuestSession', 'true');
-
-				// Set up event listener for page unload to delete the guest account
-				window.addEventListener('beforeunload', cleanupGuestAccount);
-			}
-			goto('/app');
-		} catch (error) {
-			if (error instanceof Error) {
-				errorMessage.set(error.message);
-			} else {
-				errorMessage.set('Guest login failed. Please try again.');
-			}
-		} finally {
-			guestLoading = false;
+	async function validateInviteCode(code: string) {
+		if (inviteValidation.validated && inviteValidation.isValid) {
+			return; // Already validated successfully
 		}
-	}*/
 
-	// Function to clean up guest account when page is closed
-	async function cleanupGuestAccount() {
 		try {
-			// Check if this is a guest session
-			const isGuest = sessionStorage.getItem('isGuestSession') === 'true';
-
-			if (isGuest) {
-				try {
-					// Use privateRequest with the keepalive option for page unload events
-					// This ensures the request completes even when the page is unloading
-					privateRequest(
-						'deleteAccount',
-						{ confirmation: 'DELETE' },
-						false, // verbose
-						true // keepalive
-					);
-				} catch (e) {
-					console.error('Error sending account deletion request:', e);
-				}
-
-				// Clear session storage
-				sessionStorage.removeItem('authToken');
-				sessionStorage.removeItem('profilePic');
-				sessionStorage.removeItem('username');
-				sessionStorage.removeItem('isGuestSession');
-			}
+			const response = await publicRequest<{ code: string; planName: string; trialDays: number }>(
+				'validateInvite',
+				{ code }
+			);
+			inviteValidation = {
+				isValid: true,
+				planName: response.planName,
+				trialDays: response.trialDays,
+				validated: true
+			};
+			// Clear any previous error messages
+			errorMessage.set('');
 		} catch (error) {
-			console.error('Error cleaning up guest account:', error);
+			let displayError = 'Invalid invite code';
+			if (typeof error === 'string') {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.replace(prefix, '');
+			} else if (error instanceof Error) {
+				const prefix = /^Server error: \d+ - /;
+				displayError = error.message.replace(prefix, '');
+			}
+
+			inviteValidation = {
+				isValid: false,
+				planName: '',
+				trialDays: 0,
+				validated: true
+			};
+			errorMessage.set(displayError);
 		}
+	}
+
+	// Exported method to set invite code from parent component
+	export function setInviteCode(code: string) {
+		inviteCode = code;
 	}
 </script>
 
-<div class="page-wrapper">
-	<Header />
+<div class="auth-page">
+	<!-- Main Auth Content -->
 	<div class="auth-container">
-		<div class="auth-card responsive-shadow responsive-border content-padding">
-			<h1>{loginMenu ? 'Welcome Back' : 'Create Account'}</h1>
-			<p class="subtitle fluid-text">
-				{loginMenu ? 'Sign in to access your account' : 'Start your trading journey today'}
-			</p>
+		<!-- Header -->
+		<div class="auth-header">
+			<h1 class="auth-title">
+				{mode === 'login' ? 'Sign into Peripheral' : 'Keep the Market within your Peripheral'}
+			</h1>
+		</div>
 
-			<div class="auth-buttons-container">
-				<button class="gsi-material-button responsive-shadow" on:click={handleGoogleLogin}>
-					<div class="gsi-material-button-state"></div>
-					<div class="gsi-material-button-content-wrapper">
-						<div class="gsi-material-button-icon">
+		<!-- Invite Code Status (only show in signup mode with invite) -->
+		{#if mode === 'signup' && inviteCode && inviteCode.trim() !== ''}
+			<div class="invite-status">
+				{#if inviteValidation.validated}
+					{#if inviteValidation.isValid}
+						<div class="invite-valid">
 							<svg
-								version="1.1"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
 								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 48 48"
-								xmlns:xlink="http://www.w3.org/1999/xlink"
-								style="display: block;"
 							>
 								<path
-									fill="#EA4335"
-									d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-								></path>
-								<path
-									fill="#4285F4"
-									d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-								></path>
-								<path
-									fill="#FBBC05"
-									d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-								></path>
-								<path
-									fill="#34A853"
-									d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-								></path>
-								<path fill="none" d="M0 0h48v48H0z"></path>
+									d="M20 6L9 17L4 12"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
 							</svg>
+							Valid invite for {inviteValidation.planName} ({inviteValidation.trialDays} day trial)
 						</div>
-						<span class="gsi-material-button-contents">Sign in with Google</span>
-						<span style="display: none;">Sign in with Google</span>
+					{:else}
+						<div class="invite-invalid">
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M18 6L6 18"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path
+									d="M6 6L18 18"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Invalid invite code
+						</div>
+					{/if}
+				{:else}
+					<div class="invite-validating">
+						<div class="mini-loader"></div>
+						Validating invite code...
 					</div>
-				</button>
+				{/if}
+			</div>
+		{/if}
 
-				<!--<button
-					class="guest-button responsive-shadow"
-					on:click={handleGuestLogin}
-					disabled={guestLoading}
+		<!-- Auth Form -->
+		<form
+			on:submit|preventDefault={() => {
+				if (mode === 'login') {
+					signIn(email, password);
+				} else {
+					signUp(email, password);
+				}
+			}}
+			class="auth-form"
+		>
+			<!-- Google Login Button -->
+			<div class="form-group">
+				<button
+					class="google-login-button"
+					on:click={handleGoogleLogin}
+					type="button"
+					disabled={loading}
 				>
-					{#if guestLoading}
-						<span class="loader"></span>
-					{:else}
-						Continue as Guest
-					{/if}
-				</button>-->
-			</div>
-
-			<div class="divider">
-				<span class="fluid-text">or continue with email</span>
-			</div>
-
-			<form
-				on:submit|preventDefault={() => {
-					if (loginMenu) {
-						signIn(email, password);
-					} else {
-						signUp(email, username, password);
-					}
-				}}
-				class="auth-form"
-			>
-				<div class="form-group">
-					<label for="email">Email</label>
-					<input
-						type="email"
-						id="email"
-						bind:value={email}
-						required
-						on:keydown={handleKeydown}
-						placeholder="your.email@example.com"
-						class="responsive-border"
-					/>
-				</div>
-
-				{#if !loginMenu}
-					<div class="form-group">
-						<label for="username">Display Name</label>
-						<input
-							type="text"
-							id="username"
-							bind:value={username}
-							required
-							on:keydown={handleKeydown}
-							placeholder="How others will see you"
-							class="responsive-border"
-						/>
+					<div class="google-icon">
+						<svg
+							version="1.1"
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 48 48"
+							xmlns:xlink="http://www.w3.org/1999/xlink"
+							style="display: block;"
+						>
+							<path
+								fill="#EA4335"
+								d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+							></path>
+							<path
+								fill="#4285F4"
+								d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+							></path>
+							<path
+								fill="#FBBC05"
+								d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+							></path>
+							<path
+								fill="#34A853"
+								d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+							></path>
+							<path fill="none" d="M0 0h48v48H0z"></path>
+						</svg>
 					</div>
-				{/if}
+					<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
+				</button>
+			</div>
 
-				<div class="form-group">
-					<label for="password">Password</label>
-					<input
-						type="password"
-						id="password"
-						bind:value={password}
-						required
-						on:keydown={handleKeydown}
-						class="responsive-border"
-					/>
-				</div>
+			<!-- Divider -->
+			<div class="auth-divider">
+				<span>OR</span>
+			</div>
 
-				{#if errorMessageText}
-					<p class="error fluid-text">{errorMessageText}</p>
-				{/if}
+			<!-- Email Input -->
+			<div class="form-group">
+				<input
+					type="email"
+					id="email"
+					bind:value={email}
+					required
+					on:keydown={handleKeydown}
+					placeholder="Email"
+					class="auth-input"
+					disabled={loading}
+				/>
+			</div>
 
-				<button type="submit" class="submit-button responsive-shadow" disabled={loading}>
+			<!-- Password Input -->
+			<div class="form-group">
+				<input
+					type="password"
+					id="password"
+					bind:value={password}
+					required
+					on:keydown={handleKeydown}
+					placeholder="Password"
+					class="auth-input"
+					disabled={loading}
+				/>
+			</div>
+
+			<!-- Error Message -->
+			{#if errorMessageText}
+				<p class="error-message">{errorMessageText}</p>
+			{/if}
+
+			<!-- Submit Button -->
+			<div class="form-group">
+				<button type="submit" class="submit-button" disabled={loading}>
 					{#if loading}
-						<span class="loader"></span>
+						<div class="loader"></div>
 					{:else}
-						{loginMenu ? 'Sign In' : 'Create Account'}
+						{mode === 'login' ? 'Sign In' : 'Create Account'}
 					{/if}
 				</button>
-			</form>
+			</div>
+		</form>
 
-			<!-- Only show the toggle when appropriate -->
-			{#if loginMenu}
-				<p class="toggle-auth fluid-text">
+		<!-- Toggle Auth Mode -->
+		<div class="auth-toggle">
+			{#if mode === 'login'}
+				<p>
 					Don't have an account?
-					<a href="/signup">Sign Up</a>
+					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
 				</p>
 			{:else}
-				<p class="toggle-auth fluid-text">
+				<p>
 					Already have an account?
-					<a href="/login">Sign In</a>
+					<a href="/login" on:click={handleToggleMode} class="auth-link">Sign In</a>
 				</p>
 			{/if}
 		</div>
 	</div>
+
+	<!-- Ideas Chips Section -->
+	<ChipSection />
+
+	<!-- Footer -->
+	<SiteFooter />
 </div>
 
 <style>
-	.page-wrapper {
-		min-height: 100vh;
-		min-width: 100vw;
-		background: var(--ui-bg-base);
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		overflow-y: auto;
-	}
-
-	.auth-container {
-		min-height: 100vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: clamp(1rem, 3vw, 2rem);
-		padding-top: calc(60px + clamp(1rem, 3vw, 2rem));
+	/* Critical global styles - applied immediately to prevent layout shift */
+	:global(*) {
 		box-sizing: border-box;
 	}
 
-	.auth-card {
-		background: var(--ui-bg-element-darker);
-		border: 1px solid var(--ui-border);
-		border-radius: clamp(8px, 1vw, 12px);
-		width: 100%;
-		margin: auto;
-		max-width: 450px;
+	:global(html) {
+		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
+		margin: 0;
+		padding: 0;
 	}
 
-	.auth-buttons-container {
+	:global(body) {
+		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
+		margin: 0;
+		padding: 0;
+	}
+
+	/* Apply the same gradient background as landing page */
+	.auth-page {
+		width: 100%;
+		min-height: 100vh;
+		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
+		color: #f5f9ff;
+		font-family:
+			Geist,
+			Inter,
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		position: relative;
+		overflow-x: hidden; /* Prevent horizontal scroll */
+	}
+
+	/* Auth-specific styles that build on splash system */
+	.auth-container {
 		width: 100%;
-		gap: clamp(1rem, 2vh, 1.5rem);
-		margin-bottom: clamp(1rem, 2vh, 1.5rem);
+		max-width: 550px;
+		margin: 0 auto;
+		padding: 16rem 2rem 2rem; /* Space for header */
+		background: transparent;
 	}
 
-	h1 {
-		color: var(--text-primary);
+	.auth-header {
 		text-align: center;
-		margin-bottom: clamp(0.25rem, 1vh, 0.5rem);
-		font-size: 1.5rem;
-		font-weight: 600;
-		text-transform: none;
-		letter-spacing: normal;
+		margin-bottom: 2.5rem;
+		width: 100%;
 	}
 
-	.subtitle {
-		color: var(--text-secondary);
+	.auth-title {
+		width: 100%;
+		display: block;
 		text-align: center;
-		margin-bottom: clamp(1.5rem, 3vh, 2rem);
-		font-size: 0.9rem;
+		font-size: 2rem;
+		font-weight: 700;
+		margin: 0 0 0.5rem;
+		color: #f5f9ff;
+		line-height: 1.2;
 	}
 
 	.auth-form {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(1rem, 2vh, 1.25rem);
+		gap: 1rem;
+		align-items: center;
+		width: 100%;
 	}
 
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: clamp(0.25rem, 0.5vh, 0.4rem);
-	}
-
-	label {
-		color: var(--text-primary);
-		font-size: 0.8rem;
+	/* Google Login Button */
+	.google-login-button {
+		width: 100%;
+		height: 52px;
+		background: rgb(255 255 255 / 100%);
+		border-radius: 12px;
+		color: #000;
+		font-family: Inter, sans-serif;
+		font-size: 0.95rem;
 		font-weight: 500;
-	}
-
-	input {
-		border: 1px solid var(--ui-border);
-		background: var(--ui-bg-element-darker);
-		color: var(--text-primary);
-		padding: clamp(0.6rem, 1.2vh, 0.75rem);
-		border-radius: clamp(4px, 0.5vw, 6px);
-		font-size: 0.875rem;
-	}
-
-	input:focus {
-		outline: none;
-		border-color: var(--accent-color);
-		box-shadow: 0 0 0 2px var(--accent-color-faded);
-	}
-
-	.submit-button {
-		background: var(--accent-color);
-		color: var(--text-on-accent, white);
-		padding: clamp(0.75rem, 1.5vh, 0.9rem);
-		border: none;
-		border-radius: clamp(4px, 0.5vw, 6px);
-		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
 	}
 
-	.submit-button:hover:not(:disabled) {
-		background: var(--accent-color-hover, #2563eb);
+	.google-login-button:hover:not(:disabled) {
+		background: rgb(255 255 255 / 90%);
 		transform: translateY(-1px);
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 	}
 
-	.submit-button:disabled {
-		background: var(--accent-color-disabled, #3b82f6);
+	.google-login-button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
 	}
 
-	.error {
-		color: var(--error-color, #ef4444);
-		text-align: center;
-		font-size: 0.8rem;
+	.google-icon {
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
-	.toggle-auth {
+	/* Divider */
+	.auth-divider {
+		position: relative;
 		text-align: center;
-		color: var(--text-secondary);
-		margin-top: clamp(1.5rem, 3vh, 2rem);
-		font-size: 0.85rem;
-	}
-
-	.toggle-auth a {
-		color: var(--accent-color);
+		margin: 1.5rem 0;
+		color: rgb(255 255 255 / 60%);
+		font-size: 0.875rem;
 		font-weight: 500;
-		text-decoration: none;
-		transition: color 0.2s ease;
 	}
 
-	.toggle-auth a:hover {
-		color: var(--accent-color-hover, #2563eb);
+	.form-group {
+		width: 100%;
+	}
+
+	/* Input styling */
+	.auth-input {
+		width: 100%;
+		height: 52px;
+		padding: 0 1rem;
+		border: 1px solid rgb(255 255 255 / 100%);
+		border-radius: 12px;
+		background: rgb(255 255 255 / 10%);
+		backdrop-filter: blur(10px);
+		color: #fff;
+		font-size: 0.95rem;
+		font-family: Inter, sans-serif;
+		transition: all 0.3s ease;
+	}
+
+	.auth-input::placeholder {
+		color: #fff;
+	}
+
+	.auth-input:focus {
+		outline: none;
+		border-color: rgb(255 255 255 / 60%);
+		background: rgb(255 255 255 / 15%);
+		box-shadow: 0 0 0 3px rgb(255 255 255 / 10%);
+	}
+
+	.auth-input:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	/* Submit button */
+	.submit-button {
+		width: 100%;
+		height: 52px;
+		background: #f5f9ff;
+		color: #000;
+		border: none;
+		border-radius: 12px;
+		font-size: 0.95rem;
+		font-weight: 600;
+		font-family: Inter, sans-serif;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-top: 0.5rem;
+	}
+
+	.submit-button:hover:not(:disabled) {
+		background: #e0e0e0;
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgb(11 46 51 / 30%);
+	}
+
+	.submit-button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	/* Error message */
+	.error-message {
+		color: #ff6b6b;
+		font-size: 0.875rem;
+		margin: 0.5rem 0;
+		text-align: center;
+		background: rgb(255 107 107 / 10%);
+		padding: 0.75rem;
+		border-radius: 8px;
+		border: 1px solid rgb(255 107 107 / 30%);
+		backdrop-filter: blur(10px);
+	}
+
+	/* Auth Toggle */
+	.auth-toggle {
+		text-align: center;
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid rgb(255 255 255 / 20%);
+		color: rgb(255 255 255 / 80%);
+		font-size: 0.875rem;
+	}
+
+	.auth-link {
+		color: #f5f9ff;
+		text-decoration: none;
+		font-weight: 600;
+		transition: all 0.3s ease;
+	}
+
+	.auth-link:hover {
+		color: #fff;
 		text-decoration: underline;
 	}
 
-	.gsi-material-button {
-		-moz-user-select: none;
-		-webkit-user-select: none;
-		-ms-user-select: none;
-		-webkit-appearance: none;
-		background-color: var(--ui-bg-element-darker, #131314);
-		background-image: none;
-		border: 1px solid var(--ui-border, #747775);
-		-webkit-border-radius: 4px;
-		border-radius: clamp(4px, 0.5vw, 6px);
-		-webkit-box-sizing: border-box;
-		box-sizing: border-box;
-		color: var(--text-primary, #e3e3e3);
-		cursor: pointer;
-		font-family: 'Roboto', arial, sans-serif;
-		height: clamp(36px, 5vh, 40px);
-		letter-spacing: 0.25px;
-		outline: none;
-		overflow: hidden;
-		padding: 0 clamp(8px, 1vw, 12px);
-		position: relative;
+	/* Invite Status */
+	.invite-status {
+		width: 100%;
+		margin-bottom: 1.5rem;
 		text-align: center;
-		-webkit-transition:
-			background-color 0.218s,
-			border-color 0.218s,
-			box-shadow 0.218s;
-		transition:
-			background-color 0.218s,
-			border-color 0.218s,
-			box-shadow 0.218s;
-		vertical-align: middle;
-		white-space: nowrap;
-		width: 100%;
-		max-width: 300px;
-		min-width: min-content;
 	}
 
-	.gsi-material-button .gsi-material-button-icon {
-		height: clamp(16px, 2vw, 20px);
-		margin-right: clamp(8px, 1vw, 12px);
-		min-width: clamp(16px, 2vw, 20px);
-		width: clamp(16px, 2vw, 20px);
-	}
-
-	.gsi-material-button .gsi-material-button-content-wrapper {
-		-webkit-align-items: center;
-		align-items: center;
+	.invite-valid,
+	.invite-invalid,
+	.invite-validating {
 		display: flex;
-		-webkit-flex-direction: row;
-		flex-direction: row;
-		-webkit-flex-wrap: nowrap;
-		flex-wrap: nowrap;
-		height: 100%;
-		justify-content: space-between;
-		position: relative;
-		width: 100%;
-	}
-
-	.gsi-material-button .gsi-material-button-contents {
-		-webkit-flex-grow: 1;
-		flex-grow: 1;
-		font-family: 'Roboto', arial, sans-serif;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-radius: 8px;
+		font-size: 0.875rem;
 		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		vertical-align: top;
+		backdrop-filter: blur(10px);
 	}
 
-	.gsi-material-button .gsi-material-button-state {
-		-webkit-transition: opacity 0.218s;
-		transition: opacity 0.218s;
-		bottom: 0;
-		left: 0;
-		opacity: 0;
-		position: absolute;
-		right: 0;
-		top: 0;
+	.invite-valid {
+		background: rgb(34 197 94 / 10%);
+		border: 1px solid rgb(34 197 94 / 30%);
+		color: #22c55e;
 	}
 
-	.gsi-material-button:disabled {
-		cursor: default;
-		background-color: rgba(var(--rgb-bg-element-darker), 0.6);
-		border-color: rgba(var(--rgb-border), 0.4);
+	.invite-invalid {
+		background: rgb(239 68 68 / 10%);
+		border: 1px solid rgb(239 68 68 / 30%);
+		color: #ef4444;
 	}
 
-	.gsi-material-button:disabled .gsi-material-button-state {
-		background-color: rgba(var(--rgb-text-primary), 0.1);
+	.invite-validating {
+		background: rgb(255 255 255 / 10%);
+		border: 1px solid rgb(255 255 255 / 30%);
+		color: rgb(255 255 255 / 80%);
 	}
 
-	.gsi-material-button:disabled .gsi-material-button-contents {
-		opacity: 0.4;
-	}
-
-	.gsi-material-button:disabled .gsi-material-button-icon {
-		opacity: 0.4;
-	}
-
-	.gsi-material-button:not(:disabled):active .gsi-material-button-state,
-	.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
-		background-color: var(--text-primary);
-		opacity: 0.12;
-	}
-
-	.gsi-material-button:not(:disabled):hover {
-		background-color: var(--ui-bg-element-hover);
-		border-color: var(--ui-border-hover);
-		-webkit-box-shadow:
-			0 1px 2px 0 rgba(0, 0, 0, 0.1),
-			0 1px 3px 1px rgba(0, 0, 0, 0.08);
-		box-shadow:
-			0 1px 2px 0 rgba(0, 0, 0, 0.1),
-			0 1px 3px 1px rgba(0, 0, 0, 0.08);
-	}
-
-	.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
-		background-color: var(--text-primary);
-		opacity: 0.08;
-	}
-
-	.divider {
-		display: flex;
-		align-items: center;
-		text-align: center;
-		margin: clamp(1rem, 2vh, 1.5rem) 0;
-	}
-
-	.divider::before,
-	.divider::after {
-		content: '';
-		flex: 1;
-		border-bottom: 1px solid var(--ui-border);
-	}
-
-	.divider span {
-		padding: 0 clamp(0.5rem, 1vw, 1rem);
-		color: var(--text-secondary);
-		font-size: 0.75rem;
-		text-transform: uppercase;
-	}
-
+	/* Loader */
 	.loader {
-		width: clamp(16px, 2vw, 18px);
-		height: clamp(16px, 2vw, 18px);
-		border: 2px solid rgba(var(--rgb-text-on-accent, 255, 255, 255), 0.7);
-		border-bottom-color: transparent;
+		width: 20px;
+		height: 20px;
+		border: 2px solid rgb(0 0 0 / 30%);
+		border-top: 2px solid #000;
 		border-radius: 50%;
-		display: inline-block;
-		animation: rotation 1s linear infinite;
+		animation: spin 1s linear infinite;
 	}
 
-	@keyframes rotation {
+	.mini-loader {
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgb(255 255 255 / 30%);
+		border-top: 2px solid rgb(255 255 255 / 80%);
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
 		0% {
 			transform: rotate(0deg);
 		}
+
 		100% {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* Responsive Design */
+	@media (width <= 480px) {
+		.auth-title {
+			font-size: 1.75rem;
+		}
+
+		.google-login-button,
+		.auth-input,
+		.submit-button {
+			height: 48px;
+			font-size: 0.9rem;
+		}
+	}
+
+	/* Ensure ChipSection is visible */
+	:global(.auth-page .chip-section) {
+		margin-top: 4rem;
+		width: 100%;
+		overflow: visible;
+		position: relative;
+		z-index: 10;
+	}
+
+	/* Override chip styles for dark background */
+	:global(.auth-page .chip) {
+		background: rgb(255 255 255 / 95%) !important;
+		color: #000 !important;
+		border: 1px solid rgb(255 255 255 / 30%) !important;
+	}
+
+	:global(.auth-page .chip:hover) {
+		background: rgb(255 255 255 / 100%) !important;
+		box-shadow: 0 4px 16px rgb(255 255 255 / 20%) !important;
+	}
+
+	/* Ensure chip rows are visible */
+	:global(.auth-page .chip-rows) {
+		width: 100%;
+		position: relative;
+	}
+
+	/* Ensure SiteFooter is at the bottom */
+	:global(.auth-page .landing-footer) {
+		margin-top: auto;
+		position: relative;
+		z-index: 10;
 	}
 </style>

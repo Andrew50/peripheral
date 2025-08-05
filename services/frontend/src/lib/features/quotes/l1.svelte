@@ -57,11 +57,9 @@
 		release();
 		currentSecurityId = null;
 	});
-
-
 </script>
 
-<div class="quote-container glass glass--small glass--medium">
+<div class="quote-container">
 	<!-- Bid section on the left -->
 	<div class="bid">
 		<div class="price">
@@ -85,14 +83,26 @@
 
 <style>
 	.quote-container {
-		font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue, sans-serif;
+		font-family:
+			Inter,
+			-apple-system,
+			BlinkMacSystemFont,
+			"Segoe UI",
+			Roboto,
+			Oxygen,
+			Ubuntu,
+			Cantarell,
+			"Open Sans",
+			"Helvetica Neue",
+			sans-serif;
 		font-size: 14px;
 		color: var(--text-primary, white);
 		width: 100%;
 		margin: 0 auto;
-		padding: 10px;
+		padding: 0 8px 0 0;
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
+		gap: 12px;
 	}
 
 	.bid,
@@ -102,8 +112,8 @@
 		align-items: center;
 		font-weight: 500;
 		transition: all 0.15s ease;
-		border-radius: 6px;
-		padding: 4px 10px;
+		border-radius: 4px;
+		padding: 1px 4px;
 		cursor: default;
 	}
 
@@ -111,17 +121,17 @@
 	.ask:hover {
 		filter: brightness(1.15);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 	}
 
 	.price {
-		margin-right: 5px;
+		margin-right: 3px;
 		font-weight: 600;
-		letter-spacing: 0.2px;
+		letter-spacing: 0.1px;
 	}
 
 	.size {
-		margin-left: 5px;
+		margin-left: 3px;
 		opacity: 0.9;
 	}
 
@@ -131,7 +141,7 @@
 	}
 
 	.value {
-		font-family: var(--font-mono, monospace);
+		font-family: inherit;
 		color: var(--text-primary, white);
 	}
 
@@ -150,12 +160,12 @@
 
 	/* Update the bid-ask styles to be more subtle and elegant */
 	.bid {
-		background-color: rgba(102, 187, 106, 0.15);
+		background-color: rgb(102 187 106 / 15%);
 		color: var(--color-up, #66bb6a);
 	}
 
 	.ask {
-		background-color: rgba(239, 83, 80, 0.15);
+		background-color: rgb(239 83 80 / 15%);
 		color: var(--color-down, #ef5350);
 	}
 </style>

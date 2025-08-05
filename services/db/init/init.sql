@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -------------
 INSERT INTO schema_versions (version, description)
 VALUES (
-        27,
-        'Schema version 27'
+        30,
+        'Schema version 30'
     ) ON CONFLICT (version) DO NOTHING;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -24,6 +24,29 @@ CREATE TABLE users (
     profile_picture TEXT,
     auth_type VARCHAR(20) DEFAULT 'password' -- 'password' for password-only auth, 'google' for Google-only auth, 'both' for users who can use either method
 );
+
+-- Insert system user with ID 0 for public/unauthenticated access
+-- This prevents foreign key constraint violations when logging public chart queries
+INSERT INTO users (userId, username, password, email, auth_type, settings)
+VALUES (
+    0, 
+    'public@atlantis.trading', 
+    'NO_PASSWORD', 
+    'public@atlantis.trading',
+    'system',
+    '{"description": "System user for public chart access and analytics"}'::json
+)
+ON CONFLICT (userId) DO NOTHING;
+
+-- Ensure the sequence doesn't conflict with the manually inserted ID 0
+-- Reset the sequence to start from 1 if it's currently at 0
+SELECT CASE 
+    WHEN last_value = 0 
+    THEN setval('users_userid_seq', 1, false)
+    ELSE setval('users_userid_seq', greatest(last_value, 1), true)
+END
+FROM users_userid_seq;
+
 CREATE INDEX idxUsers ON users (username, password);
 CREATE INDEX idxUserAuthType ON users(auth_type);
 CREATE TABLE securities (
@@ -48,6 +71,7 @@ CREATE TABLE securities (
     maxDate timestamp,
     cik bigint,
     total_shares bigint,
+    ticker_norm text GENERATED ALWAYS AS (upper(replace(ticker, '.', ''))) STORED,
     unique (ticker, minDate),
     unique (ticker, maxDate),
     unique (securityid, minDate),
@@ -56,6 +80,7 @@ CREATE TABLE securities (
 CREATE INDEX trgm_idx_securities_ticker ON securities USING gin (ticker gin_trgm_ops);
 CREATE INDEX trgm_idx_securities_name ON securities USING gin (name gin_trgm_ops);
 create index idxTickerDateRange on securities (ticker, minDate, maxDate);
+CREATE INDEX idx_securities_active ON securities (securityId) WHERE maxDate IS NULL;
 CREATE TABLE watchlists (
     watchlistId serial primary key,
     userId int references users(userId) on delete cascade,
@@ -75,8 +100,23 @@ create table strategies (
     strategyId serial primary key,
     userId int references users(userId) on delete cascade,
     name varchar(100) not null,
+    description TEXT,
+    prompt TEXT,
+    pythoncode TEXT,
     spec JSON,
     alertActive bool not null default false,
+    isalertactive BOOLEAN DEFAULT FALSE,
+    score INTEGER DEFAULT 0,
+    version VARCHAR(20) DEFAULT '1.0',
+    createdat TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    libraries JSONB DEFAULT '[]'::jsonb,
+    data_prep_sql TEXT,
+    execution_mode VARCHAR(20) DEFAULT 'python' CHECK (execution_mode IN ('python', 'hybrid', 'notebook')),
+    timeout_seconds INTEGER DEFAULT 300,
+    memory_limit_mb INTEGER DEFAULT 512,
+    cpu_limit_cores DECIMAL(3, 2) DEFAULT 1.0,
+    is_active BOOLEAN DEFAULT true,
     unique (userId, name)
 );
 CREATE INDEX idxStrategiesByUserId ON strategies(strategyId);
@@ -205,7 +245,7 @@ WHERE email IS NOT NULL;
 -- Create query_logs table
 CREATE TABLE IF NOT EXISTS query_logs (
     log_id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(userId),
+    userId INTEGER REFERENCES users(userId),
     query_text TEXT NOT NULL,
     context JSONB,
     -- Store the provided context items
@@ -223,13 +263,13 @@ CREATE TABLE IF NOT EXISTS query_logs (
     -- Store JSON array of function names called, if any
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_query_logs_user_id ON query_logs(user_id);
+CREATE INDEX idx_query_logs_userId ON query_logs(userId);
 CREATE INDEX idx_query_logs_timestamp ON query_logs(timestamp);
 -- Multiple Conversations Support (Migration 19)
 -- Main conversations table
 CREATE TABLE IF NOT EXISTS conversations (
     conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id INTEGER NOT NULL REFERENCES users(userid) ON DELETE CASCADE,
+    userId INTEGER NOT NULL REFERENCES users(userId) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -268,7 +308,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     UNIQUE(conversation_id, message_order)
 );
 -- Indexes for efficient querying
-CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_userId ON conversations(userId);
 CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id ON conversation_messages(conversation_id);
@@ -365,13 +405,13 @@ CREATE TABLE IF NOT EXISTS chart_queries (
     extended_hours BOOLEAN NOT NULL DEFAULT FALSE,
     is_replay BOOLEAN NOT NULL DEFAULT FALSE,
     include_sec_filings BOOLEAN NOT NULL DEFAULT FALSE,
-    user_id INTEGER REFERENCES users(userId) ON DELETE SET NULL,
+    userId INTEGER REFERENCES users(userId) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- Create indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid ON chart_queries(securityid);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_created_at ON chart_queries(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_chart_queries_user_id ON chart_queries(user_id);
+CREATE INDEX IF NOT EXISTS idx_chart_queries_userId ON chart_queries(userId);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_timeframe ON chart_queries(timeframe);
 CREATE INDEX IF NOT EXISTS idx_chart_queries_securityid_timeframe ON chart_queries(securityid, timeframe);
 COPY securities(securityid, ticker, figi, minDate, maxDate)

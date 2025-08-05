@@ -20,18 +20,32 @@ echo "Building ${#SERVICES_ARRAY[@]} services with optimizations..."
 # Start builds in parallel with limited concurrency
 build_service() {
   local srv="$1"
-  local dockerfile="services/${srv}/Dockerfile.prod"
+
+  local dockerfile 
+  local context
+
+  dockerfile="services/${srv}/Dockerfile.prod"
+  context="services/$srv"
   echo "Building $srv from $dockerfile..."
+  
+
+
+  # Prepare build args
+  build_args="--progress=plain --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $DOCKER_USERNAME/$srv:latest"
+  
+  # Add environment-specific build args for frontend
+  if [[ "$srv" == "frontend" ]]; then
+    build_args="$build_args --build-arg VITE_ENVIRONMENT=${ENVIRONMENT:-development}"
+    echo "Building frontend with VITE_ENVIRONMENT=${ENVIRONMENT:-development}"
+  fi
   
   # Use BuildKit with caching and optimizations
   docker build \
-    --progress=plain \
-    --build-arg BUILDKIT_INLINE_CACHE=1 \
-    --cache-from "$DOCKER_USERNAME/$srv:latest" \
+    $build_args \
     -t "$DOCKER_USERNAME/$srv:${DOCKER_TAG}" \
     -f "$dockerfile" \
-    "services/$srv"
-  
+    "$context"
+
   echo "✅ $srv build completed"
 }
 

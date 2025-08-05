@@ -3,12 +3,10 @@ package agent
 
 import (
 	"backend/internal/data"
-	"backend/internal/services/socket"
 	"context"
 
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sync"
 	"sync/atomic"
 
@@ -39,10 +37,12 @@ type Executor struct {
 	limiter         chan struct{}
 	functionCounter int64     // Thread-safe counter for result IDs
 	resultPool      sync.Pool // Pool for ExecuteResult slices
+	conversationID  string
+	messageID       string
 }
 
 // NewExecutor creates a new Executor
-func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *Executor {
+func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger, conversationID string, messageID string) *Executor {
 	if maxWorkers <= 0 {
 		maxWorkers = 5
 	}
@@ -56,6 +56,8 @@ func NewExecutor(conn *data.Conn, userID int, maxWorkers int, lg *zap.Logger) *E
 		maxWorkers:      maxWorkers,
 		limiter:         make(chan struct{}, maxWorkers),
 		functionCounter: 0,
+		conversationID:  conversationID,
+		messageID:       messageID,
 	}
 
 	// Initialize result pool for memory optimization
@@ -88,6 +90,21 @@ func (e *Executor) Execute(ctx context.Context, functionCalls []FunctionCall, pa
 	for i, fc := range functionCalls {
 		i, fc := i, fc // Capture loop variables
 		g.Go(func() error {
+			// Add panic recovery for each goroutine
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Panic recovered in executor goroutine: %v\n", r)
+					// Create an error result for the panic case
+					errorStr := fmt.Sprintf("panic occurred during execution: %v", r)
+					results[i] = ExecuteResult{
+						FunctionID:   atomic.AddInt64(&e.functionCounter, 1),
+						FunctionName: fc.Name,
+						Error:        &errorStr,
+						Args:         fc.Args,
+					}
+				}
+			}()
+
 			// Acquire semaphore
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -179,6 +196,21 @@ func (e *Executor) executeBatch(ctx context.Context, indices []int, results []Ex
 	for _, idx := range indices {
 		idx := idx // Capture loop variable
 		g.Go(func() error {
+			// Add panic recovery for each goroutine
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Panic recovered in executor batch goroutine: %v\n", r)
+					// Create an error result for the panic case
+					errorStr := fmt.Sprintf("panic occurred during batch execution: %v", r)
+					results[idx] = ExecuteResult{
+						FunctionID:   atomic.AddInt64(&e.functionCounter, 1),
+						FunctionName: functionCalls[idx].Name,
+						Error:        &errorStr,
+						Args:         functionCalls[idx].Args,
+					}
+				}
+			}()
+
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
@@ -220,12 +252,8 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 
 	var argsMap map[string]interface{}
 	_ = json.Unmarshal(fc.Args, &argsMap)
-	if tool.StatusMessage != "" {
-		socket.SendFunctionStatus(e.userID, formatStatusMessage(tool.StatusMessage, argsMap))
-	}
 	_, span := e.tracer.Start(ctx, fc.Name, trace.WithAttributes(attribute.String("agent.tool", fc.Name)))
 	defer span.End()
-
 	result, err := tool.Function(ctx, e.conn, e.userID, fc.Args)
 	if err != nil {
 		span.RecordError(err)
@@ -244,19 +272,6 @@ func (e *Executor) executeFunction(ctx context.Context, fc FunctionCall) (Execut
 		Result:       result,
 		Args:         argsMap,
 	}, nil
-}
-
-// formatStatusMessage replaces placeholders like {key} with values from the args map.
-func formatStatusMessage(message string, argsMap map[string]interface{}) string {
-	re := regexp.MustCompile(`{([^}]+)}`)
-	formattedMessage := re.ReplaceAllStringFunc(message, func(match string) string {
-		key := match[1 : len(match)-1] // Extract key from {key}
-		if val, ok := argsMap[key]; ok {
-			return fmt.Sprintf("%v", val) // Convert value to string
-		}
-		return match // Return original placeholder if key not found
-	})
-	return formattedMessage
 }
 
 // </executor.go>

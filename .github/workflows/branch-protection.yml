@@ -14,7 +14,8 @@ concurrency:
 jobs:
   check-source-branch:
     name: Verify Source Branch
-    runs-on: ubuntu-latest
+
+    runs-on: self-hosted
     outputs:
       branch_check_passed: ${{ steps.branch_check.outputs.passed }}
     steps:
@@ -22,17 +23,17 @@ jobs:
         id: branch_check
         run: |
           echo "Pull request from: $GITHUB_HEAD_REF to: $GITHUB_BASE_REF"
-          
+
           if [ "$GITHUB_HEAD_REF" != "main" ]; then
             echo "::error::Error: Pull requests to 'prod' are only allowed from 'main' branch"
             echo "Current source branch: $GITHUB_HEAD_REF"
             echo "passed=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          
+
           echo "passed=true" >> $GITHUB_OUTPUT
           echo "Source branch check passed: PR from 'main' to 'prod' is allowed"
-      
+
       - name: Provide instructions for branch protection setup
         run: |
           echo "IMPORTANT: Branch protection is now ENABLED"
@@ -43,4 +44,4 @@ jobs:
           echo "3. Enable 'Require pull requests before merging'"
           echo "4. Enable 'Require status checks to pass before merging'"
           echo "5. Search for and select 'Verify Source Branch' as a required status check"
-          echo "6. Save the branch protection rule" 
+          echo "6. Save the branch protection rule"

@@ -3,9 +3,9 @@
 	import Legend from './legend.svelte';
 	import Shift from './shift.svelte';
 	import DrawingMenu from './drawingMenu.svelte';
-	import WhyMoving from '$lib/components/whyMoving.svelte';
+	// import WhyMoving from '$lib/components/whyMoving.svelte';
 
-	import { chartRequest,privateRequest,publicRequest } from '$lib/utils/helpers/backend';
+	import { chartRequest, privateRequest, publicRequest } from '$lib/utils/helpers/backend';
 	import { type DrawingMenuProps, addHorizontalLine, drawingMenuProps } from './drawingMenu.svelte';
 	import type { Instance as CoreInstance, TradeData, QuoteData } from '$lib/utils/types/types';
 	import {
@@ -15,7 +15,14 @@
 		queryChart,
 		showExtendedHoursToggle
 	} from './interface';
-	import { streamInfo, settings, activeAlerts, isPublicViewing } from '$lib/utils/stores/stores';
+	import {
+		streamInfo,
+		settings,
+		activeAlerts,
+		isPublicViewing,
+		horizontalLines,
+		type HorizontalLine
+	} from '$lib/utils/stores/stores';
 	import type { ShiftOverlay, ChartEventDispatch, BarData, ChartQueryDispatch } from './interface';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryInstanceRightClick } from '$lib/components/rightClick.svelte';
@@ -36,14 +43,10 @@
 		HistogramData,
 		HistogramSeriesOptions,
 		LineStyleOptions,
-		LineWidth
+		LineWidth,
+		IPriceLine
 	} from 'lightweight-charts';
-	import {
-		calculateRVOL,
-		calculateSingleADR,
-		calculateVWAP,
-		calculateMultipleSMAs
-	} from './indicators';
+	import { calculateSingleADR, calculateVWAP, calculateMultipleSMAs } from './indicators';
 	import type { Writable } from 'svelte/store';
 	import { writable, get } from 'svelte/store';
 	import { onMount, onDestroy } from 'svelte';
@@ -57,7 +60,7 @@
 	import { addStream } from '$lib/utils/stream/interface';
 	import { ArrowMarkersPaneView, type ArrowMarker } from './arrowMarkers';
 	import { EventMarkersPaneView, type EventMarker } from './eventMarkers';
-	import { adjustEventsToTradingDays, handleScreenshot } from './chartHelpers';
+	import { adjustEventsToTradingDays, handleScreenshot, extendedHours } from './chartHelpers';
 	import { SessionHighlighting, createDefaultSessionHighlighter } from './sessionShade';
 	import {
 		type FilingContext,
@@ -149,7 +152,6 @@
 	let latestCrosshairPositionY = 0;
 	let chartEarliestDataReached = false;
 	let chartLatestDataReached = false;
-	let isLoadingChartData = false;
 	let lastChartQueryDispatchTime = 0;
 	let queuedLoad: Function | null = null;
 	let shiftDown = false;
@@ -180,6 +182,15 @@
 	});
 	export let chartId: number;
 	export let width: number;
+	export let defaultChartData: any = null;
+
+	// Reactive statement to handle width changes
+	$: if (chart && width) {
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (chartContainer) {
+			chart.resize(width, chartContainer.clientHeight);
+		}
+	}
 	let chartSecurityId: number;
 	let chartTimeframe: string;
 	let chartTimeframeInSeconds: number;
@@ -195,9 +206,10 @@
 		extendedHours: false
 	};
 	let isPanning = false;
-	const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
+	//const excludedConditions = new Set([2, 7, 10, 13, 15, 16, 20, 21, 22, 29, 33, 37]);
 	let mouseDownStartX = 0;
 	let mouseDownStartY = 0;
+	let lastFetchedSecurityId: number | null = null;
 	const DRAG_THRESHOLD = 3; // pixels of movement before considered a drag
 
 	// Type guards moved to a higher scope
@@ -211,24 +223,16 @@
 	const isHistogram = (data: any): data is HistogramData<Time> =>
 		data && typeof data === 'object' && 'value' in data;
 
-	// Add new interface for alert lines
-	interface AlertLine {
-		price: number;
-		line: any; // Use any for now since we don't have the full IPriceLine type
-		alertId: number;
-	}
+	// Alert lines are now defined in DrawingMenuProps interface
 
-	// Add new property to track alert lines
-	let alertLines: AlertLine[] = [];
-
+	// Alert lines are now managed in drawingMenuProps.alertLines
 
 	// State for quote line visibility
 	let isViewingLiveData = true; // Assume true initially
 	let lastQuoteData: QuoteData | null = null;
 
-	// Why Moving popup state (declare early to avoid TDZ)
-	let whyMovingTicker: string = '';
-	let whyMovingTrigger: number = 0;
+	// Track previous security ID to avoid unnecessary stream changes
+	let previousSecurityId: number | null = null;
 
 	let arrowSeries: any = null; // Initialize as null
 	let eventSeries: ISeriesApi<'Custom', Time, EventMarker>;
@@ -247,15 +251,53 @@
 
 	let sessionHighlighting: SessionHighlighting;
 
+	// Function to fetch detailed ticker information including logo
+	function fetchTickerDetails(securityId: number) {
+		if (lastFetchedSecurityId === securityId) return;
+
+		lastFetchedSecurityId = securityId;
+		publicRequest<Record<string, any>>('getTickerMenuDetails', {
+			securityId: securityId
+		})
+			.then((details) => {
+				if (lastFetchedSecurityId === securityId) {
+					// Update currentChartInstance with the detailed information
+					currentChartInstance = {
+						...currentChartInstance,
+						...details
+					};
+				}
+			})
+			.catch((error) => {
+				console.error('Chart component: Error fetching ticker details:', error);
+			});
+	}
+
 	// Add throttling variables for chart updates
 	let pendingBarUpdate: any = null;
 	let pendingVolumeUpdate: any = null;
+	let whyMovingTicker: string = '';
+	let whyMovingTrigger: number = 0;
 	let lastUpdateTime = 0;
 	const updateThrottleMs = 100;
 
+	// Helper function to convert viewport coordinates to chart-relative coordinates
+	function getRelativeMouseY(event: MouseEvent): number | null {
+		const chartContainer = document.getElementById(`chart_container-${chartId}`);
+		if (!chartContainer) return null;
+		const rect = chartContainer.getBoundingClientRect();
+		return event.clientY - rect.top;
+	}
+
 	let keyBuffer: string[] = []; // This is for catching key presses from the keyboard before the input system is active
 	let isInputActive = false; // Track if input window is active/initializing
-	let isChartSwitching = false; // Track chart switching overlay state
+	let isSwitchingTickers = false; // Track chart switching overlay state
+	let isLoadingAdditionalData = false; // Track if back or forward loading
+	let latestLoadToken = 0;
+	let activeTickerChangeRequestAbort: AbortController | null = null;
+
+	// Alert line dragging is now handled the same way as horizontal lines
+
 	// Add type definitions at the top
 	interface Alert {
 		alertType: string;
@@ -264,14 +306,8 @@
 		alertId: number;
 	}
 
-	interface IPriceLine {
-		price: number;
-		color: string;
-		lineWidth: number;
-		lineStyle: number;
-		axisLabelVisible: boolean;
-		title: string;
-	}
+	// Remove the local IPriceLine interface to use the one from lightweight-charts
+	// The lightweight-charts IPriceLine already has all the properties and methods we need
 
 	interface HorizontalLine {
 		id: number;
@@ -340,14 +376,6 @@
 		});
 	}
 
-	function extendedHours(timestamp: number): boolean {
-		// Convert timestamp to Eastern Time
-		const estTimestampSeconds = UTCSecondstoESTSeconds((timestamp / 1000) as UTCTimestamp);
-		const date = new Date(estTimestampSeconds * 1000);
-		const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
-		return minutes < 570 || minutes >= 960; // 9:30 AM - 4:00 PM EST
-	}
-
 	// Helper function to clear quote lines
 	function clearQuoteLines() {
 		if (bidLine && askLine) {
@@ -369,404 +397,464 @@
 		}
 	}
 
+	function processChartDataResponse(
+		response: { bars: BarData[]; isEarliestData: boolean },
+		inst: ChartQueryDispatch,
+		visibleRange: any
+	): void {
+		const barDataList = response.bars;
+		if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
+			queuedLoad = null;
+			return;
+		}
+		let newCandleData = barDataList.map((bar) => ({
+			time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+			open: bar.open,
+			high: bar.high,
+			low: bar.low,
+			close: bar.close
+		}));
+		let newVolumeData: any;
+		if (get(settings).dolvol) {
+			newVolumeData = barDataList.map((bar) => ({
+				time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+				value: (bar.volume * (bar.close + bar.open)) / 2,
+				color: bar.close > bar.open ? '#089981' : '#ef5350'
+			}));
+		} else {
+			newVolumeData = barDataList.map((bar) => ({
+				time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
+				value: bar.volume,
+				color: bar.close > bar.open ? '#089981' : '#ef5350'
+			}));
+		}
+		if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
+			const earliestCandleTime = chartCandleSeries.data()[0]?.time;
+			if (
+				typeof earliestCandleTime === 'number' &&
+				newCandleData[newCandleData.length - 1].time <= earliestCandleTime
+			) {
+				newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
+				newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
+			}
+		} else if (inst.requestType === 'loadAdditionalData' && inst.direction === 'forward') {
+			// Forward loading: append new data to existing data
+			const existingData = chartCandleSeries.data();
+			const existingVolumeData = chartVolumeSeries.data();
+
+			if (existingData.length > 0 && newCandleData.length > 0) {
+				const latestCandleTime = existingData[existingData.length - 1]?.time;
+
+				// Find the first new candle that comes after the latest existing candle
+				let startIndex = 0;
+				for (let i = 0; i < newCandleData.length; i++) {
+					if (typeof latestCandleTime === 'number' && newCandleData[i].time > latestCandleTime) {
+						startIndex = i;
+						break;
+					}
+				}
+				// Only append truly new data
+				if (startIndex < newCandleData.length) {
+					newCandleData = [...existingData, ...newCandleData.slice(startIndex)] as any;
+					newVolumeData = [...existingVolumeData, ...newVolumeData.slice(startIndex)] as any;
+				} else {
+					newCandleData = existingData as any;
+					newVolumeData = existingVolumeData as any;
+				}
+			}
+		} else if (inst.requestType === 'loadNewTicker') {
+			if (inst.includeLastBar == false && !$streamInfo.replayActive) {
+				newCandleData = newCandleData.slice(0, newCandleData.length - 1);
+				newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
+			}
+
+			// Only release streams if securityId is changing
+			const currentSecurityId =
+				typeof inst.securityId === 'string' ? parseInt(inst.securityId, 10) : inst.securityId;
+
+			if (previousSecurityId !== currentSecurityId) {
+				releaseFast();
+				releaseQuote();
+			}
+			drawingMenuProps.update((v) => ({
+				...v,
+				chartCandleSeries: chartCandleSeries,
+				securityId: Number(inst.securityId)
+			}));
+			for (const line of $drawingMenuProps.horizontalLines) {
+				chartCandleSeries.removePriceLine(line.line);
+			}
+			// CRITICAL: Clear the local lines array to prevent stale state during hot reloads
+			drawingMenuProps.update((v) => ({
+				...v,
+				horizontalLines: []
+			}));
+			if (!$isPublicViewing) {
+				privateRequest<HorizontalLine[]>('getHorizontalLines', {
+					securityId: inst.securityId
+				}).then((res: HorizontalLine[]) => {
+					if (res !== null && res.length > 0) {
+						// Update the store with the loaded lines - the reactive block will handle rendering
+						horizontalLines.update((lines) => {
+							// Remove existing lines for this security
+							const filteredLines = lines.filter(
+								(line) => line.securityId !== currentChartInstance.securityId
+							);
+
+							// Add the new lines
+							const newLines = res.map((line) => ({
+								id: line.id,
+								securityId: currentChartInstance.securityId,
+								price: line.price,
+								color: line.color || '#FFFFFF',
+								lineWidth: line.lineWidth || 1
+							}));
+
+							return [...filteredLines, ...newLines];
+						});
+
+						// Note: Removed the imperative addHorizontalLine loop here
+						// The reactive block will detect the store change and render the lines
+					}
+				});
+			}
+		}
+		// Check if we reach end of avaliable data
+		if (inst.timestamp == 0) {
+			chartLatestDataReached = true;
+		}
+		if (barDataList.length < (inst.bars ?? 0)) {
+			if (inst.direction == 'backward') {
+				chartEarliestDataReached = response.isEarliestData;
+			} else if (inst.direction == 'forward') {
+				chartLatestDataReached = true;
+			}
+		}
+		queuedLoad = () => {
+			// Add SEC filings request when loading new ticker
+			chartCandleSeries.setData(newCandleData);
+			chartVolumeSeries.setData(newVolumeData);
+			if (inst.direction == 'backward') {
+				if (
+					arrowSeries &&
+					inst &&
+					typeof inst === 'object' &&
+					'trades' in inst &&
+					Array.isArray(inst.trades)
+				) {
+					const markersByTime = new Map<
+						number,
+						{
+							entries: Array<{ price: number; isLong: boolean }>;
+							exits: Array<{ price: number; isLong: boolean }>;
+						}
+					>();
+
+					// Process all trades
+					inst.trades.forEach((trade: Trade) => {
+						const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
+						const roundedTime =
+							Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+
+						if (!markersByTime.has(roundedTime)) {
+							markersByTime.set(roundedTime, { entries: [], exits: [] });
+						}
+
+						// Determine if this is an entry or exit based on trade type
+						const isEntry = trade.type === 'Buy' || trade.type === 'Short';
+						const isLong = trade.type === 'Buy' || trade.type === 'Sell';
+
+						if (isEntry) {
+							markersByTime.get(roundedTime)?.entries.push({
+								price: trade.price,
+								isLong: isLong
+							});
+						} else {
+							markersByTime.get(roundedTime)?.exits.push({
+								price: trade.price,
+								isLong: isLong
+							});
+						}
+					});
+
+					// Convert to format for ArrowMarkersPaneView
+					const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
+						time: time as UTCTimestamp,
+						entries: data.entries,
+						exits: data.exits
+					}));
+					// Sort markers by timestamp (time) in ascending order
+					markers.sort((a, b) => a.time - b.time);
+
+					arrowSeries.setData(markers);
+				}
+			}
+			try {
+				const barsWithEvents = response.bars; // Use the original response with events
+				if (barsWithEvents.length > 0 && barsWithEvents) {
+					const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
+					barsWithEvents.forEach((bar) => {
+						if (bar.events && bar.events.length > 0) {
+							allEventsRaw.push(...bar.events);
+						}
+					});
+
+					// Check if new raw events exist
+					if (allEventsRaw && allEventsRaw.length > 0) {
+						const eventsByTime = new Map<
+							number,
+							Array<{
+								type: string;
+								title: string;
+								url?: string;
+								value?: string;
+								exDate?: string;
+								payoutDate?: string;
+							}>
+						>();
+
+						// Iterate through bars, using bar.time as the key
+						barsWithEvents.forEach((bar) => {
+							if (bar.events && bar.events.length > 0) {
+								const barTime = bar.time as number; // Already EST seconds
+
+								if (!eventsByTime.has(barTime)) {
+									eventsByTime.set(barTime, []);
+								}
+
+								// Process each event attached to this bar
+								bar.events.forEach((event) => {
+									// Parse the JSON string in event.value into an object
+									let valueObj: EventValue = {};
+									try {
+										valueObj = JSON.parse(event.value);
+									} catch (e) {
+										console.error('Failed to parse event value:', e, event.value);
+									}
+
+									// Create proper event object based on type and add to the map using barTime
+									if (event.type === 'sec_filing') {
+										eventsByTime.get(barTime)?.push({
+											type: 'sec_filing',
+											title: valueObj.type || 'SEC Filing',
+											url: valueObj.url
+										});
+									} else if (event.type === 'split') {
+										eventsByTime.get(barTime)?.push({
+											type: 'split',
+											title: `Split: ${valueObj.ratio || 'unknown'}`,
+											value: valueObj.ratio
+										});
+									} else if (event.type === 'dividend') {
+										const amount = typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
+										eventsByTime.get(barTime)?.push({
+											type: 'dividend',
+											title: `Dividend: $${amount}`,
+											value: amount,
+											exDate: valueObj.exDate || 'Unknown',
+											payoutDate: valueObj.payDate || 'Unknown'
+										});
+									}
+								});
+							}
+						});
+
+						// Process the newly fetched events
+						let newEventData: EventMarker[] = [];
+						eventsByTime.forEach((eventsList, time) => {
+							newEventData.push({
+								time: time as UTCTimestamp,
+								events: eventsList
+							});
+						});
+
+						// Get existing events ONLY if loading additional data
+						const existingEventData =
+							inst.requestType === 'loadAdditionalData'
+								? (eventSeries.data() as EventMarker[])
+								: [];
+
+						// Combine using a Map to handle potential overlaps/updates
+						const combinedEventsMap = new Map<number, EventMarker>();
+						existingEventData.forEach((event) =>
+							combinedEventsMap.set(event.time as number, event)
+						);
+						newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
+
+						let finalEventData = Array.from(combinedEventsMap.values());
+
+						// Sort the combined data by time
+						finalEventData.sort((a, b) => (a.time as number) - (b.time as number));
+
+						// Adjust events to trading days using the combined candle data
+						// Ensure newCandleData exists and is an array before spreading
+						const candleDataForAdjustment = Array.isArray(newCandleData) ? [...newCandleData] : [];
+
+						// Convert EventMarker[] to ChartEvent[] format expected by adjustEventsToTradingDays
+						const chartEvents = finalEventData.map((event) => ({
+							time: typeof event.time === 'number' ? event.time : Number(event.time),
+							events: event.events
+						}));
+
+						// Adjust the events and convert back to EventMarker format
+						const adjustedChartEvents = adjustEventsToTradingDays(
+							chartEvents,
+							candleDataForAdjustment
+						);
+
+						finalEventData = adjustedChartEvents.map((event) => ({
+							time: event.time as UTCTimestamp,
+							events: event.events
+						})) as EventMarker[];
+
+						// Set the final data
+						eventSeries.setData(finalEventData);
+					}
+				}
+			} catch (error) {
+				console.warn('Failed to process chart events from bars:', error);
+				// Avoid clearing events on error during additional load
+				if (inst.requestType !== 'loadAdditionalData') {
+					eventSeries.setData([]);
+				}
+			}
+			queuedLoad = null;
+
+			// Initialize legend with latest bar data
+			_refreshLegendWithLatestCandleData();
+
+			// Fix the SMA data type issues
+			const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
+			const sma10Data = smaResults.get(10);
+			const sma20Data = smaResults.get(20);
+
+			if (sma10Data) {
+				sma10Series.setData([...sma10Data] as Array<
+					WhitespaceData<Time> | { time: UTCTimestamp; value: number }
+				>);
+			}
+			if (sma20Data) {
+				sma20Series.setData([...sma20Data] as Array<
+					WhitespaceData<Time> | { time: UTCTimestamp; value: number }
+				>);
+			}
+
+			if (/^\d+$/.test(inst.timeframe ?? '')) {
+				vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
+			} else {
+				vwapSeries.setData([]);
+			}
+
+			// Only set up new streams if the securityId actually changed
+			const currentSecurityId =
+				typeof inst.securityId === 'string'
+					? parseInt(inst.securityId, 10)
+					: inst.securityId || null;
+
+			if (inst.requestType == 'loadNewTicker' && previousSecurityId !== currentSecurityId) {
+				releaseFast();
+				releaseQuote();
+				releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
+				releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
+				previousSecurityId = currentSecurityId;
+			}
+			// Hide chart switching overlay when loading completes
+			if (inst.requestType === 'loadNewTicker') {
+				isSwitchingTickers = false;
+			}
+			// Trigger Why Moving popup only for new ticker loads
+			if (inst.requestType === 'loadNewTicker') {
+				whyMovingTicker = inst.ticker ?? '';
+				whyMovingTrigger = Date.now();
+			}
+
+			// Apply time scale reset and right offset for new ticker loads after all data is processed
+			if (inst.requestType === 'loadNewTicker' && chart && inst.direction === 'backward') {
+				// Use requestAnimationFrame to ensure chart has processed the data
+				requestAnimationFrame(() => {
+					chart.timeScale().resetTimeScale();
+					if (inst.timestamp === 0) {
+						chart.timeScale().applyOptions({
+							rightOffset: 10 // Live data gets right margin
+						});
+					} else {
+						chart.timeScale().applyOptions({
+							rightOffset: 0 // Historical data gets no right margin
+						});
+					}
+				});
+			}
+		};
+		if (
+			inst.direction == 'backward' ||
+			inst.requestType == 'loadNewTicker' ||
+			inst.direction == 'forward'
+		) {
+			queuedLoad();
+		}
+	}
+
 	function backendLoadChartData(inst: ChartQueryDispatch): void {
+		if (!inst.ticker || !inst.timeframe || !inst.securityId) {
+			return;
+		}
 		if (inst.requestType === 'loadNewTicker') {
+			latestLoadToken++;
+			activeTickerChangeRequestAbort?.abort();
+			activeTickerChangeRequestAbort = new AbortController();
 			eventSeries.setData([]); // Clear events only when loading new ticker
 			pendingBarUpdate = null;
 			pendingVolumeUpdate = null;
 			bidLine.setData([]);
 			askLine.setData([]);
 			arrowSeries.setData([]);
+		} else if (inst.requestType === 'loadAdditionalData') {
+			isLoadingAdditionalData = true;
 		}
-		if (isLoadingChartData || !inst.ticker || !inst.timeframe || !inst.securityId) {
-			return;
-		}
+		const thisRequestTickerIncrementCount = latestLoadToken;
+		const signal = activeTickerChangeRequestAbort?.signal;
+
 		console.log('backendLoadChartData', inst);
 		const visibleRange = chart.timeScale().getVisibleRange();
-		isLoadingChartData = true;
 		lastChartQueryDispatchTime = Date.now();
 		if (
 			$streamInfo.replayActive &&
 			(inst.timestamp == 0 || (inst.timestamp ?? 0) > $streamInfo.timestamp)
 		) {
-			('adjusting to stream timestamp');
 			inst.timestamp = Math.floor($streamInfo.timestamp);
 		}
-		inst;
-		inst.extendedHours;
-		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>('getChartData', {
-			securityId: inst.securityId,
-			timeframe: inst.timeframe,
-			timestamp: inst.timestamp,
-			direction: inst.direction,
-			bars: inst.bars,
-			extendedhours: inst.extendedHours,
-			isreplay: $streamInfo.replayActive,
-			includeSECFilings: get(settings).showFilings
-		})
+		chartRequest<{ bars: BarData[]; isEarliestData: boolean }>(
+			'getChartData',
+			{
+				securityId: inst.securityId,
+				timeframe: inst.timeframe,
+				timestamp: inst.timestamp,
+				direction: inst.direction,
+				bars: inst.bars,
+				extendedhours: inst.extendedHours,
+				isreplay: $streamInfo.replayActive,
+				includeSECFilings: get(settings).showFilings
+			},
+			false,
+			false,
+			signal
+		)
 			.then((response) => {
-				const barDataList = response.bars;
-				if (!(Array.isArray(barDataList) && barDataList.length > 0)) {
-					isLoadingChartData = false;
-					queuedLoad = null;
-					return;
-				}
-				let newCandleData = barDataList.map((bar) => ({
-					time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-					open: bar.open,
-					high: bar.high,
-					low: bar.low,
-					close: bar.close
-				}));
-				let newVolumeData: any;
-				if (get(settings).dolvol) {
-					newVolumeData = barDataList.map((bar) => ({
-						time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-						value: (bar.volume * (bar.close + bar.open)) / 2,
-						color: bar.close > bar.open ? '#089981' : '#ef5350'
-					}));
-				} else {
-					newVolumeData = barDataList.map((bar) => ({
-						time: UTCSecondstoESTSeconds(bar.time as UTCTimestamp) as UTCTimestamp,
-						value: bar.volume,
-						color: bar.close > bar.open ? '#089981' : '#ef5350'
-					}));
-				}
-				if (inst.requestType === 'loadAdditionalData' && inst.direction === 'backward') {
-					const earliestCandleTime = chartCandleSeries.data()[0]?.time;
-					if (
-						typeof earliestCandleTime === 'number' &&
-						newCandleData[newCandleData.length - 1].time <= earliestCandleTime
-					) {
-						newCandleData = [...newCandleData.slice(0, -1), ...chartCandleSeries.data()] as any;
-						newVolumeData = [...newVolumeData.slice(0, -1), ...chartVolumeSeries.data()] as any;
-					}
-				} else if (inst.requestType === 'loadAdditionalData') {
-					const latestCandleTime =
-						chartCandleSeries.data()[chartCandleSeries.data().length - 1]?.time;
-					if (typeof latestCandleTime === 'number' && newCandleData[0].time >= latestCandleTime) {
-						newCandleData = [...chartCandleSeries.data(), ...newCandleData.slice(1)] as any;
-						newVolumeData = [...chartVolumeSeries.data(), ...newVolumeData.slice(1)] as any;
-					}
-				} else if (inst.requestType === 'loadNewTicker') {
-					if (inst.includeLastBar == false && !$streamInfo.replayActive) {
-						newCandleData = newCandleData.slice(0, newCandleData.length - 1);
-						newVolumeData = newVolumeData.slice(0, newVolumeData.length - 1);
-					}
-					releaseFast();
-					releaseQuote();
-					drawingMenuProps.update((v) => ({
-						...v,
-						chartCandleSeries: chartCandleSeries,
-						securityId: Number(inst.securityId)
-					}));
-					for (const line of $drawingMenuProps.horizontalLines) {
-						chartCandleSeries.removePriceLine(line.line);
-					}
-					if (!$isPublicViewing) {
-						privateRequest<HorizontalLine[]>('getHorizontalLines', {
-							securityId: inst.securityId
-						}).then((res: HorizontalLine[]) => {
-							if (res !== null && res.length > 0) {
-								for (const line of res) {
-									addHorizontalLine(
-										line.price,
-										currentChartInstance.securityId,
-										line.id,
-										line.color || '#FFFFFF',
-										(line.lineWidth || 1) as LineWidth
-									);
-								}
-							}
-						});
-					}
-				}
-				// Check if we reach end of avaliable data
-				if (inst.timestamp == 0) {
-					chartLatestDataReached = true;
-				}
-				if (barDataList.length < (inst.bars ?? 0)) {
-					if (inst.direction == 'backward') {
-						chartEarliestDataReached = response.isEarliestData;
-					} else if (inst.direction == 'forward') {
-						console.log('chartLatestDataReached');
-						chartLatestDataReached = true;
-					}
-				}
-				queuedLoad = () => {
-					// Add SEC filings request when loading new ticker
+				if (thisRequestTickerIncrementCount !== latestLoadToken) return;
 
-					if (inst.direction == 'forward') {
-						// Only set visible range if both from and to values are valid
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-
-						if (
-							visibleRange &&
-							typeof visibleRange.from === 'number' &&
-							typeof visibleRange.to === 'number'
-						) {
-							chart.timeScale().setVisibleRange({
-								from: visibleRange.from,
-								to: visibleRange.to
-							});
-						}
-					} else if (inst.direction == 'backward') {
-						chartCandleSeries.setData(newCandleData);
-						chartVolumeSeries.setData(newVolumeData);
-						if (
-							arrowSeries &&
-							inst &&
-							typeof inst === 'object' &&
-							'trades' in inst &&
-							Array.isArray(inst.trades)
-						) {
-							const markersByTime = new Map<
-								number,
-								{
-									entries: Array<{ price: number; isLong: boolean }>;
-									exits: Array<{ price: number; isLong: boolean }>;
-								}
-							>();
-
-							// Process all trades
-							inst.trades.forEach((trade: Trade) => {
-								const tradeTime = UTCSecondstoESTSeconds(trade.time / 1000);
-								const roundedTime =
-									Math.floor(tradeTime / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-
-								if (!markersByTime.has(roundedTime)) {
-									markersByTime.set(roundedTime, { entries: [], exits: [] });
-								}
-
-								// Determine if this is an entry or exit based on trade type
-								const isEntry = trade.type === 'Buy' || trade.type === 'Short';
-								const isLong = trade.type === 'Buy' || trade.type === 'Sell';
-
-								if (isEntry) {
-									markersByTime.get(roundedTime)?.entries.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								} else {
-									markersByTime.get(roundedTime)?.exits.push({
-										price: trade.price,
-										isLong: isLong
-									});
-								}
-							});
-
-							// Convert to format for ArrowMarkersPaneView
-							const markers = Array.from(markersByTime.entries()).map(([time, data]) => ({
-								time: time as UTCTimestamp,
-								entries: data.entries,
-								exits: data.exits
-							}));
-							// Sort markers by timestamp (time) in ascending order
-							markers.sort((a, b) => a.time - b.time);
-
-							arrowSeries.setData(markers);
-						}
-					}
-					try {
-						const barsWithEvents = response.bars; // Use the original response with events
-						if (barsWithEvents.length > 0 && barsWithEvents) {
-							const allEventsRaw: Array<{ timestamp: number; type: string; value: string }> = [];
-							barsWithEvents.forEach((bar) => {
-								if (bar.events && bar.events.length > 0) {
-									allEventsRaw.push(...bar.events);
-								}
-							});
-
-							// Check if new raw events exist
-							if (allEventsRaw && allEventsRaw.length > 0) {
-								const eventsByTime = new Map<
-									number,
-									Array<{
-										type: string;
-										title: string;
-										url?: string;
-										value?: string;
-										exDate?: string;
-										payoutDate?: string;
-									}>
-								>();
-
-								// Iterate through bars, using bar.time as the key
-								barsWithEvents.forEach((bar) => {
-									if (bar.events && bar.events.length > 0) {
-										const barTime = bar.time as number; // Already EST seconds
-
-										if (!eventsByTime.has(barTime)) {
-											eventsByTime.set(barTime, []);
-										}
-
-										// Process each event attached to this bar
-										bar.events.forEach((event) => {
-											// Parse the JSON string in event.value into an object
-											let valueObj: EventValue = {};
-											try {
-												valueObj = JSON.parse(event.value);
-											} catch (e) {
-												console.error('Failed to parse event value:', e, event.value);
-											}
-
-											// Create proper event object based on type and add to the map using barTime
-											if (event.type === 'sec_filing') {
-												eventsByTime.get(barTime)?.push({
-													type: 'sec_filing',
-													title: valueObj.type || 'SEC Filing',
-													url: valueObj.url
-												});
-											} else if (event.type === 'split') {
-												eventsByTime.get(barTime)?.push({
-													type: 'split',
-													title: `Split: ${valueObj.ratio || 'unknown'}`,
-													value: valueObj.ratio
-												});
-											} else if (event.type === 'dividend') {
-												const amount =
-													typeof valueObj.amount === 'string' ? valueObj.amount : '0.00';
-												eventsByTime.get(barTime)?.push({
-													type: 'dividend',
-													title: `Dividend: $${amount}`,
-													value: amount,
-													exDate: valueObj.exDate || 'Unknown',
-													payoutDate: valueObj.payDate || 'Unknown'
-												});
-											}
-										});
-									}
-								});
-
-								// Process the newly fetched events
-								let newEventData: EventMarker[] = [];
-								eventsByTime.forEach((eventsList, time) => {
-									newEventData.push({
-										time: time as UTCTimestamp,
-										events: eventsList
-									});
-								});
-
-								// Get existing events ONLY if loading additional data
-								const existingEventData =
-									inst.requestType === 'loadAdditionalData'
-										? (eventSeries.data() as EventMarker[])
-										: [];
-
-								// Combine using a Map to handle potential overlaps/updates
-								const combinedEventsMap = new Map<number, EventMarker>();
-								existingEventData.forEach((event) =>
-									combinedEventsMap.set(event.time as number, event)
-								);
-								newEventData.forEach((event) => combinedEventsMap.set(event.time as number, event)); // New events overwrite existing at the same time
-
-								let finalEventData = Array.from(combinedEventsMap.values());
-
-								// Sort the combined data by time
-								finalEventData.sort((a, b) => (a.time as number) - (b.time as number));
-
-								// Adjust events to trading days using the combined candle data
-								// Ensure newCandleData exists and is an array before spreading
-								const candleDataForAdjustment = Array.isArray(newCandleData)
-									? [...newCandleData]
-									: [];
-								finalEventData = adjustEventsToTradingDays(finalEventData, candleDataForAdjustment);
-
-								// Set the final data
-								eventSeries.setData(finalEventData);
-							}
-						}
-					} catch (error) {
-						console.warn('Failed to process chart events from bars:', error);
-						// Avoid clearing events on error during additional load
-						if (inst.requestType !== 'loadAdditionalData') {
-							eventSeries.setData([]);
-						}
-					}
-					queuedLoad = null;
-
-					// Fix the SMA data type issues
-					const smaResults = calculateMultipleSMAs(newCandleData, [10, 20]);
-					const sma10Data = smaResults.get(10);
-					const sma20Data = smaResults.get(20);
-
-					if (sma10Data) {
-						sma10Series.setData([...sma10Data] as Array<
-							WhitespaceData<Time> | { time: UTCTimestamp; value: number }
-						>);
-					}
-					if (sma20Data) {
-						sma20Series.setData([...sma20Data] as Array<
-							WhitespaceData<Time> | { time: UTCTimestamp; value: number }
-						>);
-					}
-
-					if (/^\d+$/.test(inst.timeframe ?? '')) {
-						vwapSeries.setData(calculateVWAP(newCandleData, newVolumeData));
-					} else {
-						vwapSeries.setData([]);
-					}
-					if (inst.requestType == 'loadNewTicker') {
-						chart.timeScale().resetTimeScale();
-						//chart.timeScale().fitContent();
-						if (currentChartInstance.timestamp === 0) {
-							chart.timeScale().applyOptions({
-								rightOffset: 10
-							});
-						} else {
-							chart.timeScale().applyOptions({
-								rightOffset: 0
-							});
-						}
-						releaseFast = addStream(inst, 'all', updateLatestChartBar) as () => void;
-						releaseQuote = addStream(inst, 'quote', updateLatestQuote) as () => void;
-					}
-					isLoadingChartData = false; // Ensure this runs after data is loaded
-
-					// Hide chart switching overlay when loading completes
-					if (inst.requestType === 'loadNewTicker') {
-						isChartSwitching = false;
-					}
-					// Trigger Why Moving popup only for new ticker loads
-					if (inst.requestType === 'loadNewTicker') {
-						whyMovingTicker = inst.ticker ?? '';
-						whyMovingTrigger = Date.now();
-					}
-				};
-				if (
-					inst.direction == 'backward' ||
-					inst.requestType == 'loadNewTicker' ||
-					(inst.direction == 'forward' && !isPanning) ||
-					(inst.direction == 'forward' && !isLoadingChartData)
-				) {
-					queuedLoad();
-					/*if (
-						inst.requestType === 'loadNewTicker' &&
-						!chartLatestDataReached &&
-						!$streamInfo.replayActive
-						) {
-						backendLoadChartData({
-							...currentChartInstance,
-							timestamp: ESTSecondstoUTCMillis(
-								chartCandleSeries.data()[chartCandleSeries.data().length - 1].time as UTCTimestamp
-							) as UTCTimestamp,
-							bars: 150, //+ 2*Math.floor(chart.getLogicalRange.to) - chartCandleSeries.data().length,
-							direction: 'forward',
-							requestType: 'loadAdditionalData',
-							includeLastBar: true
-						});
-					}*/
-				}
+				processChartDataResponse(response, inst, visibleRange);
 			})
-			.catch((error: string) => {
+			.catch((error: Error) => {
+				if (error?.name === 'AbortError' || thisRequestTickerIncrementCount !== latestLoadToken)
+					return;
 				console.error(error);
-
-				isLoadingChartData = false; // Ensure this runs after data is loaded
-
-				// Hide overlay on error
-				if (inst.requestType === 'loadNewTicker') {
-					isChartSwitching = false;
+				isLoadingAdditionalData = false;
+				isSwitchingTickers = false;
+			})
+			.finally(() => {
+				if (thisRequestTickerIncrementCount === latestLoadToken) {
+					isLoadingAdditionalData = false;
+					isSwitchingTickers = false;
 				}
 			});
 	}
@@ -785,53 +873,162 @@
 	// Create a horizontal line at the current crosshair position (Y-coordinate)
 
 	function handleMouseMove(event: MouseEvent) {
-		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine)
+		console.log('[DRAG-DEBUG] handleMouseMove called');
+		if (!chartCandleSeries || !$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			console.log('[DRAG-DEBUG] handleMouseMove early return', {
+				isDragging: $drawingMenuProps.isDragging,
+				selectedLine: !!$drawingMenuProps.selectedLine
+			});
 			return;
+		}
 
-		const price = chartCandleSeries.coordinateToPrice(event.clientY);
+		const relativeY = getRelativeMouseY(event);
+		if (relativeY === null) return;
+
+		const price = chartCandleSeries.coordinateToPrice(relativeY);
 		if (typeof price !== 'number' || price <= 0) return;
 
-		// Update the line position visually
+		console.log(
+			`[DRAG-DEBUG] handleMouseMove: dragging ${$drawingMenuProps.selectedLineType} to price ${price}`
+		);
+
+		// Update the line position visually with immediate feedback
+		// For alert lines, use orange color and line width 1
+		// For horizontal lines, use the stored color and width
+		const lineColor =
+			$drawingMenuProps.selectedLineType === 'alert'
+				? '#FFB74D'
+				: $drawingMenuProps.selectedLineColor;
+		const lineWidth =
+			$drawingMenuProps.selectedLineType === 'alert' ? 1 : $drawingMenuProps.selectedLineWidth;
+
+		console.log('[DRAG-DEBUG] handleMouseMove: applying options', { price, lineColor, lineWidth });
 		$drawingMenuProps.selectedLine.applyOptions({
-			price: price
+			price: price,
+			color: lineColor,
+			lineWidth: lineWidth
 		});
 
-		// Update the stored price in horizontalLines array
-		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
-		if (lineIndex !== -1) {
-			$drawingMenuProps.horizontalLines[lineIndex].price = price;
+		// Update the drawingMenuProps price for immediate feedback
+		drawingMenuProps.update((v) => ({ ...v, selectedLinePrice: price }));
+
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Update the stored price in local horizontalLines array (for immediate visual feedback)
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
+			if (lineIndex !== -1) {
+				$drawingMenuProps.horizontalLines[lineIndex].price = price;
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Update the stored price in alertLines array (for immediate visual feedback)
+			drawingMenuProps.update((props) => {
+				const alertIndex = props.alertLines.findIndex(
+					(alert) => alert.alertId === $drawingMenuProps.selectedLineId
+				);
+				if (alertIndex !== -1) {
+					props.alertLines[alertIndex].price = price;
+				}
+				return props;
+			});
 		}
 	}
 
 	function handleMouseUp() {
-		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) return;
-
-		const lineData = $drawingMenuProps.horizontalLines.find(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
-
-		if (lineData) {
-			// Update line position in backend
-			privateRequest<void>(
-				'updateHorizontalLine',
-				{
-					id: lineData.id,
-					price: lineData.price,
-					securityId: chartSecurityId
-				},
-				true
-			);
+		console.log(`[DRAG-DEBUG] handleMouseUp called for ${$drawingMenuProps.selectedLineType}`);
+		if (!$drawingMenuProps.isDragging || !$drawingMenuProps.selectedLine) {
+			return;
 		}
 
-		drawingMenuProps.update((v) => ({ ...v, isDragging: false }));
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Handle horizontal line update
+			const lineData = $drawingMenuProps.horizontalLines.find(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
+
+			if (lineData) {
+				// Update line position in backend
+				privateRequest<void>(
+					'updateHorizontalLine',
+					{
+						id: lineData.id,
+						price: lineData.price,
+						securityId: chartSecurityId
+					},
+					true
+				);
+
+				// Update the store - reactive block will handle chart updates
+				if (lineData.id > 0) {
+					horizontalLines.update((lines) =>
+						lines.map((line) =>
+							line.id === lineData.id ? { ...line, price: lineData.price } : line
+						)
+					);
+				}
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Handle alert update - lookup by alertId instead of line object reference
+			const alertData = $drawingMenuProps.alertLines.find(
+				(alert) => alert.alertId === $drawingMenuProps.selectedLineId
+			);
+
+			if (alertData) {
+				const newPrice = Math.round($drawingMenuProps.selectedLinePrice * 100) / 100;
+
+				// Update alert position in backend
+				privateRequest<void>(
+					'updateAlert',
+					{
+						alertId: alertData.alertId,
+						price: newPrice
+					},
+					true
+				).catch((error) => {
+					console.error('Failed to update alert price:', error);
+				});
+
+				// Update the alertLines array for immediate visual feedback
+				drawingMenuProps.update((props) => {
+					const alertIndex = props.alertLines.findIndex(
+						(alert) => alert.alertId === alertData.alertId
+					);
+					if (alertIndex !== -1) {
+						console.log(
+							`[DRAG-DEBUG] handleMouseUp: Updating alert line in store with new price ${newPrice}`
+						);
+						props.alertLines[alertIndex].price = newPrice;
+					}
+					return props;
+				});
+
+				// Update the activeAlerts store which will trigger a re-render
+				activeAlerts.update((alerts) => {
+					if (!alerts) return [];
+
+					return alerts.map((alert) =>
+						alert.alertId === alertData.alertId ? { ...alert, alertPrice: newPrice } : alert
+					);
+				});
+			}
+		}
+
+		drawingMenuProps.update((v) => ({
+			...v,
+			isDragging: false,
+			selectedLine: null,
+			selectedLineId: -1,
+			selectedLineType: null
+		}));
 		document.removeEventListener('mousemove', handleMouseMove);
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 
 	function startDragging(event: MouseEvent) {
-		if (!$drawingMenuProps.selectedLine) return;
+		console.log(`[DRAG-DEBUG] startDragging called for ${$drawingMenuProps.selectedLineType}`);
+		if (!$drawingMenuProps.selectedLine) {
+			return;
+		}
 
 		event.preventDefault();
 		event.stopPropagation();
@@ -842,26 +1039,32 @@
 	}
 
 	function determineClickedLine(event: MouseEvent) {
-		const mouseY = event.clientY;
-		const pixelBuffer = 5;
+		console.log('[DRAG-DEBUG] determineClickedLine called');
+		const relativeY = getRelativeMouseY(event);
+		if (relativeY === null) return false;
 
-		const upperPrice = chartCandleSeries.coordinateToPrice(mouseY - pixelBuffer) || 0;
-		const lowerPrice = chartCandleSeries.coordinateToPrice(mouseY + pixelBuffer) || 0;
+		const pixelBuffer = 5;
+		const upperPrice = chartCandleSeries.coordinateToPrice(relativeY - pixelBuffer) || 0;
+		const lowerPrice = chartCandleSeries.coordinateToPrice(relativeY + pixelBuffer) || 0;
 
 		if (upperPrice == 0 || lowerPrice == 0) return false;
 
-		// Only check regular horizontal lines, not alert lines
+		// First check regular horizontal lines
 		for (const line of $drawingMenuProps.horizontalLines) {
 			if (line.price <= upperPrice && line.price >= lowerPrice) {
+				console.log('[DRAG-DEBUG] Horizontal line clicked:', line);
 				drawingMenuProps.update((v: DrawingMenuProps) => ({
 					...v,
 					chartCandleSeries: chartCandleSeries,
 					selectedLine: line.line,
 					selectedLinePrice: line.price,
+					selectedLineColor: line.color,
+					selectedLineWidth: line.lineWidth,
 					clientX: event.clientX,
 					clientY: event.clientY,
-					active: false,
-					selectedLineId: line.id
+					active: false, // Keep false until mouseup to distinguish drag vs click
+					selectedLineId: line.id,
+					selectedLineType: 'horizontal'
 				}));
 
 				event.preventDefault();
@@ -870,11 +1073,37 @@
 			}
 		}
 
+		// Then check alert lines
+		for (const alertLine of $drawingMenuProps.alertLines) {
+			if (alertLine.price <= upperPrice && alertLine.price >= lowerPrice) {
+				console.log('[DRAG-DEBUG] Alert line clicked:', alertLine);
+				drawingMenuProps.update((v: DrawingMenuProps) => ({
+					...v,
+					chartCandleSeries: chartCandleSeries,
+					selectedLine: alertLine.line,
+					selectedLinePrice: alertLine.price,
+					selectedLineColor: '#FFB74D', // Orange color for alert lines
+					selectedLineWidth: 1, // Alert lines have fixed width
+					clientX: event.clientX,
+					clientY: event.clientY,
+					active: false, // Keep false until mouseup to distinguish drag vs click
+					selectedLineId: alertLine.alertId,
+					selectedLineType: 'alert'
+				}));
+
+				event.preventDefault();
+				event.stopPropagation();
+				return true;
+			}
+		}
+
+		// Clear selection if no line was clicked
 		setTimeout(() => {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
 				selectedLine: null,
 				selectedLineId: -1,
+				selectedLineType: null,
 				active: false
 			}));
 		}, 100);
@@ -889,7 +1118,7 @@
 		}
 
 		if (determineClickedLine(event)) {
-			('determineClickedLine');
+			console.log('[DRAG-DEBUG] handleMouseDown: line detected');
 			mouseDownStartX = event.clientX;
 			mouseDownStartY = event.clientY;
 
@@ -899,6 +1128,9 @@
 				const deltaY = Math.abs(moveEvent.clientY - mouseDownStartY);
 
 				if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+					console.log(
+						'[DRAG-DEBUG] handleMouseDown: Drag threshold exceeded, calling startDragging'
+					);
 					// It's a drag - start dragging and remove this temporary listener
 					document.removeEventListener('mousemove', handleMouseMoveForDrag);
 					document.removeEventListener('mouseup', handleMouseUpForClick);
@@ -910,9 +1142,18 @@
 			const handleMouseUpForClick = (upEvent: MouseEvent) => {
 				const deltaX = Math.abs(upEvent.clientX - mouseDownStartX);
 				const deltaY = Math.abs(upEvent.clientY - mouseDownStartY);
+				/*
+				console.log(
+					'🖱️ Mouse up detected, deltaX:',
+					deltaX,
+					'deltaY:',
+					deltaY,
+					'threshold:',
+					DRAG_THRESHOLD
+				);*/
 
 				if (deltaX <= DRAG_THRESHOLD && deltaY <= DRAG_THRESHOLD) {
-					('click');
+					console.log('[DRAG-DEBUG] handleMouseDown: Click confirmed, activating menu');
 					// It's a click - show menu
 					drawingMenuProps.update((v) => ({
 						...v,
@@ -920,6 +1161,8 @@
 						clientX: upEvent.clientX,
 						clientY: upEvent.clientY
 					}));
+				} else {
+					//console.log('❌ Movement exceeded threshold, not activating menu');
 				}
 
 				// Clean up listeners
@@ -969,8 +1212,8 @@
 						handleScroll: true,
 						handleScale: true,
 						kineticScroll: {
-							mouse: true,
-							touch: true
+							mouse: false,
+							touch: false
 						}
 					});
 					document.removeEventListener('mousemove', shiftOverlayTrack);
@@ -1013,8 +1256,8 @@
 					handleScroll: true,
 					handleScale: true,
 					kineticScroll: {
-						mouse: true,
-						touch: true
+						mouse: false,
+						touch: false
 					}
 				});
 
@@ -1032,17 +1275,20 @@
 	}
 
 	async function updateLatestChartBar(trade: TradeData) {
-		// Early returns for invalid data or conditions
+		// Early returns for invalid data
 		if (
 			!trade?.price ||
 			!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
-			isLoadingChartData ||
-			trade.conditions?.some((condition) => excludedConditions.has(condition))
+			isSwitchingTickers
+			//|| trade.conditions?.some((condition) => excludedConditions.has(condition))
 		) {
 			return;
 		}
+
+		// Skip price updates based on shouldUpdatePrice flag
+		const shouldSkipPriceUpdate = !trade.shouldUpdatePrice;
 
 		const isExtendedHoursTrade = extendedHours(trade.timestamp);
 		if (
@@ -1076,29 +1322,38 @@
 			if (!chartLatestDataReached) return;
 			const now = Date.now();
 
-			if (!pendingBarUpdate) {
-				pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+			// Only update price-related data if not skipping price updates
+			if (!shouldSkipPriceUpdate) {
+				if (!pendingBarUpdate) {
+					pendingBarUpdate = { ...mostRecentBar }; // Create a mutable copy
+				}
+
+				pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
+				pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
+				pendingBarUpdate.close = trade.price;
 			}
 
-			if (!pendingVolumeUpdate) {
-				const lastVolumeRaw = chartVolumeSeries.data().at(-1);
-				if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
-					pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+			// Always update volume (unless size is 0)
+			if (trade.size > 0) {
+				if (!pendingVolumeUpdate) {
+					const lastVolumeRaw = chartVolumeSeries.data().at(-1);
+					if (lastVolumeRaw && isHistogram(lastVolumeRaw)) {
+						pendingVolumeUpdate = { ...(lastVolumeRaw as HistogramData<Time>) }; // Create a mutable copy
+					}
+				}
+
+				if (pendingVolumeUpdate) {
+					pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
+					// Only update color if we have valid price data
+					if (!shouldSkipPriceUpdate) {
+						pendingVolumeUpdate.color =
+							pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
+					}
 				}
 			}
 
-			pendingBarUpdate.high = Math.max(pendingBarUpdate.high, trade.price);
-			pendingBarUpdate.low = Math.min(pendingBarUpdate.low, trade.price);
-			pendingBarUpdate.close = trade.price;
-
-			if (pendingVolumeUpdate) {
-				pendingVolumeUpdate.value = (pendingVolumeUpdate.value || 0) + trade.size;
-				pendingVolumeUpdate.color =
-					pendingBarUpdate.close > pendingBarUpdate.open ? '#089981' : '#ef5350';
-			}
-
 			if (now - lastUpdateTime >= updateThrottleMs) {
-				if (pendingBarUpdate) {
+				if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 					chartCandleSeries.update(pendingBarUpdate);
 					pendingBarUpdate = null;
 				}
@@ -1115,7 +1370,7 @@
 		} else {
 			if (!chartLatestDataReached) return;
 
-			if (pendingBarUpdate) {
+			if (pendingBarUpdate && !shouldSkipPriceUpdate) {
 				chartCandleSeries.update(pendingBarUpdate);
 				pendingBarUpdate = null;
 			}
@@ -1125,30 +1380,47 @@
 			}
 			lastUpdateTime = Date.now();
 
-			const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
-				trade.timestamp,
-				currentChartInstance.extendedHours
-			);
-			const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
-			const flooredDifference =
-				Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
-			const newTime = UTCSecondstoESTSeconds(
-				referenceStartTime / 1000 + flooredDifference
-			) as UTCTimestamp;
+			// Only create new bar if we should update price
+			if (!shouldSkipPriceUpdate) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
 
-			chartCandleSeries.update({
-				time: newTime,
-				open: trade.price,
-				high: trade.price,
-				low: trade.price,
-				close: trade.price
-			});
+				chartCandleSeries.update({
+					time: newTime,
+					open: trade.price,
+					high: trade.price,
+					low: trade.price,
+					close: trade.price
+				});
+			}
 
-			chartVolumeSeries.update({
-				time: newTime,
-				value: trade.size,
-				color: '#089981'
-			});
+			// Always update volume if size > 0
+			if (trade.size > 0) {
+				const referenceStartTime = getReferenceStartTimeForDateMilliseconds(
+					trade.timestamp,
+					currentChartInstance.extendedHours
+				);
+				const timeDiff = (trade.timestamp - referenceStartTime) / 1000;
+				const flooredDifference =
+					Math.floor(timeDiff / chartTimeframeInSeconds) * chartTimeframeInSeconds;
+				const newTime = UTCSecondstoESTSeconds(
+					referenceStartTime / 1000 + flooredDifference
+				) as UTCTimestamp;
+
+				chartVolumeSeries.update({
+					time: newTime,
+					value: trade.size,
+					color: '#089981'
+				});
+			}
 
 			if (legendIsDisplayingCurrentLastCandle) {
 				_refreshLegendWithLatestCandleData();
@@ -1222,12 +1494,25 @@
 	}
 
 	// Add subscription to activeAlerts store to update alert lines
-	$: if ($activeAlerts && chartCandleSeries) {
+	$: if (
+		$activeAlerts &&
+		chartCandleSeries &&
+		$drawingMenuProps &&
+		!$drawingMenuProps.isDragging &&
+		!$drawingMenuProps.selectedLine
+	) {
+		console.log('[DRAG-DEBUG] Alert lines reactive block fired.');
 		// Remove existing alert lines
-		alertLines.forEach((line) => {
+		$drawingMenuProps.alertLines.forEach((line) => {
 			chartCandleSeries.removePriceLine(line.line);
 		});
-		alertLines = [];
+
+		// Create new alert lines array - using the correct type from the DrawingMenuProps interface
+		const newAlertLines: Array<{
+			price: number;
+			line: IPriceLine;
+			alertId: number;
+		}> = [];
 
 		// Add new alert lines for price alerts
 		$activeAlerts.forEach((alert) => {
@@ -1239,12 +1524,11 @@
 					lineStyle: 1, // Dashed line
 					axisLabelVisible: true,
 					title: `Alert: ${alert.alertPrice}`
-					// Make lines unclickable by not adding any interactive properties
 				});
 
 				// Fix the alert ID type
 				if (alert.alertId !== undefined) {
-					alertLines.push({
+					newAlertLines.push({
 						price: alert.alertPrice,
 						line: priceLine,
 						alertId: alert.alertId
@@ -1252,9 +1536,117 @@
 				}
 			}
 		});
+
+		// Update the drawingMenuProps store with new alert lines
+		drawingMenuProps.update((props) => ({
+			...props,
+			alertLines: newAlertLines
+		}));
 	}
 
-	function change(newReq: ChartQueryDispatch) {
+	// Add subscription to horizontalLines store to update chart lines
+	$: if (
+		$horizontalLines &&
+		chartCandleSeries &&
+		chartSecurityId &&
+		!$drawingMenuProps.isDragging
+	) {
+		console.log('[DRAG-DEBUG] Horizontal lines reactive block fired.');
+		// Get current lines for this security from drawingMenuProps
+		const currentDrawingLines = $drawingMenuProps.horizontalLines || [];
+
+		// Get lines for current security from the store
+		const storeLines = $horizontalLines.filter((line) => line.securityId === chartSecurityId);
+
+		// Find lines that exist in store but not in drawingMenuProps (need to add)
+		const linesToAdd = storeLines.filter(
+			(storeLine) => !currentDrawingLines.find((drawingLine) => drawingLine.id === storeLine.id)
+		);
+
+		// Find lines that exist in drawingMenuProps but not in store (need to remove)
+		const linesToRemove = currentDrawingLines.filter(
+			(drawingLine) =>
+				drawingLine.id > 0 && !storeLines.find((storeLine) => storeLine.id === drawingLine.id)
+		);
+
+		// Find lines that exist in both but might have different properties (need to update)
+		const linesToUpdate = storeLines.filter((storeLine) => {
+			const drawingLine = currentDrawingLines.find((dl) => dl.id === storeLine.id);
+			return (
+				drawingLine &&
+				(drawingLine.price !== storeLine.price ||
+					drawingLine.color !== storeLine.color ||
+					drawingLine.lineWidth !== storeLine.lineWidth)
+			);
+		});
+
+		// Remove lines that no longer exist in store
+		linesToRemove.forEach((lineToRemove) => {
+			chartCandleSeries.removePriceLine(lineToRemove.line);
+		});
+
+		// Update drawingMenuProps to match store
+		if (linesToAdd.length > 0 || linesToRemove.length > 0 || linesToUpdate.length > 0) {
+			drawingMenuProps.update((props) => {
+				let updatedLines = [...props.horizontalLines];
+
+				// Remove lines
+				updatedLines = updatedLines.filter(
+					(line) => !linesToRemove.find((removeMe) => removeMe.id === line.id)
+				);
+
+				// Add new lines
+				linesToAdd.forEach((lineToAdd) => {
+					const priceLine = chartCandleSeries.createPriceLine({
+						price: lineToAdd.price,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth,
+						lineStyle: 0, // Solid line
+						axisLabelVisible: true
+					});
+
+					updatedLines.push({
+						id: lineToAdd.id,
+						price: lineToAdd.price,
+						line: priceLine,
+						color: lineToAdd.color,
+						lineWidth: lineToAdd.lineWidth as LineWidth
+					});
+				});
+
+				// Update existing lines
+				linesToUpdate.forEach((lineToUpdate) => {
+					const existingLineIndex = updatedLines.findIndex((ul) => ul.id === lineToUpdate.id);
+					if (existingLineIndex !== -1) {
+						const existingLine = updatedLines[existingLineIndex];
+						existingLine.line.applyOptions({
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						});
+
+						// Update the stored properties
+						updatedLines[existingLineIndex] = {
+							...existingLine,
+							price: lineToUpdate.price,
+							color: lineToUpdate.color,
+							lineWidth: lineToUpdate.lineWidth as LineWidth
+						};
+					}
+				});
+
+				return {
+					...props,
+					horizontalLines: updatedLines
+				};
+			});
+		}
+	}
+
+	function change(
+		newReq: ChartQueryDispatch,
+		preloadedResponse?: { bars: BarData[]; isEarliestData: boolean }
+	) {
 		// Reset pending updates when changing charts
 		pendingBarUpdate = null;
 		pendingVolumeUpdate = null;
@@ -1262,7 +1654,7 @@
 
 		// Show overlay for new ticker changes
 		if (newReq.requestType === 'loadNewTicker') {
-			isChartSwitching = true;
+			isSwitchingTickers = true;
 		}
 
 		const securityId =
@@ -1291,6 +1683,16 @@
 			...currentChartInstance,
 			...updatedReq
 		};
+
+		// Update global chart state so other components know about the current chart
+		if (typeof chartId === 'number') {
+			setActiveChart(chartId, currentChartInstance);
+		}
+
+		// Fetch detailed ticker information including logo
+		if (updatedReq.securityId) {
+			fetchTickerDetails(updatedReq.securityId);
+		}
 
 		// Determine if viewing live data based on timestamp
 		isViewingLiveData = updatedReq.timestamp === 0;
@@ -1340,16 +1742,19 @@
 		if ('trades' in newReq && Array.isArray(newReq.trades)) {
 			updatedReq.trades = newReq.trades;
 		}
-		// Clear existing alert lines when changing tickers
-		if (chartCandleSeries) {
-			alertLines.forEach((line) => {
-				chartCandleSeries.removePriceLine(line.line);
-			});
-			alertLines = [];
-		}
-
 		if (arrowSeries) {
 			arrowSeries.setData([]);
+		}
+
+		// Clear existing alert lines when changing tickers
+		if (chartCandleSeries) {
+			$drawingMenuProps.alertLines.forEach((line) => {
+				chartCandleSeries.removePriceLine(line.line);
+			});
+			drawingMenuProps.update((props) => ({
+				...props,
+				alertLines: []
+			}));
 		}
 
 		// Reset session highlighting when changing securities
@@ -1358,13 +1763,19 @@
 			sessionHighlighting = new SessionHighlighting(createDefaultSessionHighlighter());
 			chartCandleSeries.attachPrimitive(sessionHighlighting);
 		}
-		backendLoadChartData(updatedReq);
+
+		// Use preloaded data (this is from the initial page load on going to /app)
+		if (preloadedResponse) {
+			processChartDataResponse(preloadedResponse, updatedReq, null);
+		} else {
+			backendLoadChartData(updatedReq);
+		}
 	}
 
 	onMount(() => {
 		// Keep onMount synchronous
 		const chartOptions = {
-			autoSize: true,
+			autoSize: false,
 			crosshair: {
 				mode: CrosshairMode.Normal
 			},
@@ -1372,8 +1783,9 @@
 				textColor: 'white',
 				background: {
 					type: ColorType.Solid,
-					color: 'black'
-				}
+					color: '#121212'
+				},
+				attributionLogo: false
 			},
 			grid: {
 				vertLines: {
@@ -1393,6 +1805,10 @@
 			},
 			leftPriceScale: {
 				borderColor: 'black'
+			},
+			kineticScroll: {
+				mouse: false,
+				touch: false
 			}
 		};
 		const chartContainer = document.getElementById(`chart_container-${chartId}`);
@@ -1404,7 +1820,23 @@
 			event.preventDefault();
 			if (!chartCandleSeries) return;
 
-			const price = chartCandleSeries.coordinateToPrice(event.clientY);
+			// First check if a line was clicked
+			if (determineClickedLine(event)) {
+				// If a line was clicked, show the drawing menu instead of the right-click menu
+				drawingMenuProps.update((v: DrawingMenuProps) => ({
+					...v,
+					active: true,
+					clientX: event.clientX,
+					clientY: event.clientY
+				}));
+				return;
+			}
+
+			// No line was clicked, proceed with normal right-click menu
+			const relativeY = getRelativeMouseY(event);
+			if (relativeY === null) return;
+
+			const price = chartCandleSeries.coordinateToPrice(relativeY);
 			if (typeof price !== 'number') return;
 
 			const timestamp = ESTSecondstoUTCMillis(latestCrosshairPositionTime);
@@ -1775,13 +2207,6 @@
 
 			latestCrosshairPositionTime = barToUse.time as number;
 			latestCrosshairPositionY = param && param.point ? param.point.y : 0;
-
-			/*
-			// Original RVOL calculation logic was here, would need adaptation
-			// if currentChartInstance.timeframe && /^\d+$/.test(currentChartInstance.timeframe)) {
-			//	...
-			// }
-			*/
 		});
 		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
 			if (selectedEvent) {
@@ -1790,13 +2215,16 @@
 			if (!logicalRange || Date.now() - lastChartQueryDispatchTime < chartRequestThrottleDuration) {
 				return;
 			}
+			if (isLoadingAdditionalData || isSwitchingTickers) {
+				return;
+			}
 			const barsOnScreen = Math.floor(logicalRange.to) - Math.ceil(logicalRange.from);
 			const bufferInScreenSizes = 0.7;
 
 			// Backward loading condition:
 			// Original condition: logicalRange.from / barsOnScreen < bufferInScreenSizes
 			// Corrected condition: Check if number of bars to the left is less than the buffer
-			if (logicalRange.from < 20 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
+			if (logicalRange.from < 30 && logicalRange.from < bufferInScreenSizes * barsOnScreen) {
 				if (!chartEarliestDataReached) {
 					// Get the earliest timestamp from current data
 					const earliestBar = chartCandleSeries.data()[0];
@@ -1833,9 +2261,6 @@
 					return;
 				}
 				if ($streamInfo.replayActive) {
-					return;
-				}
-				if (isLoadingChartData) {
 					return;
 				}
 				const lastBar = chartCandleSeries.data().at(-1);
@@ -1920,7 +2345,8 @@
 				};
 				change(req);
 			} else if (e.event == 'addHorizontalLine') {
-				addHorizontalLine(e.data.price, e.data.securityId);
+				const data = e.data as { price: number; securityId: number };
+				addHorizontalLine(data.price, data.securityId);
 			}
 		});
 
@@ -1934,7 +2360,33 @@
 		}
 
 		const loadDefaultChart = async () => {
-			// Check if the current instance is still empty/default before loading NVDA
+			// Check if preloaded data is available
+			if (defaultChartData) {
+				// Use server-side preloaded data
+				const chartQueryDispatch: ChartQueryDispatch = {
+					ticker: defaultChartData.ticker,
+					timestamp: defaultChartData.timestamp,
+					timeframe: defaultChartData.timeframe,
+					securityId: defaultChartData.securityId,
+					price: defaultChartData.price,
+					chartId: chartId,
+					extendedHours: false,
+					bars: defaultChartData.bars,
+					direction: 'backward',
+					requestType: 'loadNewTicker',
+					includeLastBar: true
+				};
+
+				const preloadedResponse = {
+					bars: defaultChartData.chartData.bars,
+					isEarliestData: defaultChartData.chartData.isEarliestData || false
+				};
+
+				change(chartQueryDispatch, preloadedResponse);
+				return;
+			}
+
+			// Load default SPY chart if no current instance
 			if (!currentChartInstance || !currentChartInstance.ticker) {
 				try {
 					type SecurityIdResponse = { securityId?: number };
@@ -1946,21 +2398,21 @@
 						}
 					);
 
-					const nvdaSecurityId = response?.securityId ?? 0;
+					const spySecurityId = response?.securityId ?? 0;
 
-					if (nvdaSecurityId !== 0) {
+					if (spySecurityId !== 0) {
 						queryChart({
 							ticker: 'SPY',
 							timeframe: '1d',
 							timestamp: 0,
-							securityId: nvdaSecurityId,
+							securityId: spySecurityId,
 							price: 0
 						});
 					} else {
-						console.warn('Could not fetch securityId for default ticker NVDA.');
+						console.warn('Could not fetch securityId for default ticker SPY.');
 					}
 				} catch (error) {
-					console.error('Error fetching securityId for default ticker NVDA:', error);
+					console.error('Error fetching securityId for default ticker SPY:', error);
 				}
 			}
 		};
@@ -1980,8 +2432,6 @@
 			// Clean up global shift key listeners
 			document.removeEventListener('keydown', handleGlobalKeyDown);
 			document.removeEventListener('keyup', handleGlobalKeyUp);
-
-			// ... any other cleanup code ...
 		};
 	});
 
@@ -2015,6 +2465,58 @@
 	// Handle closing the event popup
 	function closeEventPopup() {
 		selectedEvent = null;
+	}
+
+	// Function to calculate optimal position for event-info popup
+	function calculateEventInfoPosition(
+		containerWidth: number,
+		containerHeight: number,
+		eventX: number,
+		eventY: number
+	) {
+		const margin = 10; // Margin from edges
+		const minPopupWidth = 200; // Minimum popup width
+		const maxPopupWidth = 350; // Maximum popup width
+		const popupWidth = Math.max(
+			minPopupWidth,
+			Math.min(maxPopupWidth, containerWidth - margin * 2)
+		);
+
+		// Estimate popup height (we'll use a reasonable default since we can't measure before rendering)
+		const estimatedPopupHeight = 150; // Adjust based on typical content
+
+		// Calculate initial position centered on the event
+		let leftPosition = eventX - popupWidth / 2;
+		let topPosition = eventY - estimatedPopupHeight - margin; // Position above the event by default
+
+		// Adjust horizontal position to stay within container bounds
+		if (leftPosition < margin) {
+			leftPosition = margin;
+		} else if (leftPosition + popupWidth > containerWidth - margin) {
+			leftPosition = containerWidth - popupWidth - margin;
+		}
+
+		// Adjust vertical position to stay within container bounds
+		if (topPosition < margin) {
+			// If there's not enough space above, position below the event
+			topPosition = eventY + margin;
+		}
+
+		// Ensure popup doesn't go beyond bottom edge
+		if (topPosition + estimatedPopupHeight > containerHeight - margin) {
+			topPosition = containerHeight - estimatedPopupHeight - margin;
+		}
+
+		// Final bounds check
+		topPosition = Math.max(margin, topPosition);
+		const maxHeight = containerHeight - topPosition - margin;
+
+		return {
+			left: leftPosition,
+			top: topPosition,
+			width: popupWidth,
+			maxHeight: maxHeight
+		};
 	}
 
 	// New interface for the data object
@@ -2091,32 +2593,53 @@
 	}
 </script>
 
-<div
-	class="chart"
-	id="chart_container-{chartId}"
-	style="width: {width}px; position: relative;"
-	tabindex="-1"
->
+<div class="chart" id="chart_container-{chartId}" style="position: relative;" tabindex="-1">
 	<Legend instance={currentChartInstance} {hoveredCandleData} {width} />
 	<Shift {shiftOverlay} />
 	<DrawingMenu {drawingMenuProps} />
 
 	<!-- Chart switching overlay -->
-	{#if isChartSwitching}
+	{#if isSwitchingTickers}
 		<div class="chart-switching-overlay"></div>
+	{/if}
+
+	<!-- Company Logo positioned at bottom right where axes meet -->
+	{#if currentChartInstance?.logo || currentChartInstance?.icon}
+		<div class="chart-logo-container">
+			<img
+				src={currentChartInstance.logo || currentChartInstance.icon}
+				alt="{currentChartInstance?.name || 'Company'} logo"
+				class="chart-company-logo"
+			/>
+		</div>
+	{:else if currentChartInstance?.ticker}
+		<!-- Debug fallback: show ticker letter if no logo/icon available -->
+		<div class="chart-logo-container">
+			<div class="chart-ticker-fallback">
+				{currentChartInstance.ticker.charAt(0)}
+			</div>
+		</div>
 	{/if}
 </div>
 
-<!-- Why Moving Popup -->
-<WhyMoving ticker={whyMovingTicker} trigger={whyMovingTrigger} />
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
+	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
+	{@const containerHeight = chartContainer?.clientHeight || 600}
+	{@const position = calculateEventInfoPosition(
+		width,
+		containerHeight,
+		selectedEvent.x,
+		selectedEvent.y
+	)}
 	<div
 		class="event-info"
 		style="
-            left: {selectedEvent.x}px;
-            top: {selectedEvent.y}px; /* Position relative to marker's y */"
+            left: {position.left}px;
+            top: {position.top}px;
+            width: {position.width}px;
+            max-height: {position.maxHeight}px;"
 	>
 		<div class="event-header">
 			{#if selectedEvent.events[0]?.type === 'sec_filing'}
@@ -2194,38 +2717,20 @@
 <style>
 	.event-info {
 		position: absolute;
-		background: rgba(37, 37, 37, 0.8);
+		background: rgb(37 37 37 / 80%);
 		border: none;
 		border-radius: 8px;
-		padding: 8px 10px 10px 10px;
+		padding: 8px 10px 10px;
 		z-index: 1000;
-		width: 220px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-		transform: translate(-50%, calc(-100% - 15px)) scale(0.95);
-		transform-origin: bottom center;
-		opacity: 0;
-		animation: fadeInDown 0.2s ease-out forwards;
+
+		/* Width and max-height now set via inline styles for dynamic sizing */
+		min-width: 200px;
+		overflow-y: auto;
+		box-shadow: 0 4px 12px rgb(0 0 0 / 50%);
+		word-wrap: break-word;
+		hyphens: auto;
 	}
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
-		}
-		to {
-			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
-		}
-	}
-	.event-info::after {
-		content: '';
-		position: absolute;
-		top: 100%; /* Position arrow below the box */
-		left: 50%;
-		transform: translateX(-50%);
-		border-width: 8px 8px 0; /* T:8 R:8 B:0 L:8 -> Points Down */
-		border-style: solid;
-		border-color: #252525 transparent transparent transparent; /* Color top border */
-	}
+
 	.event-header {
 		display: flex;
 		align-items: center;
@@ -2236,6 +2741,7 @@
 		margin-bottom: 8px;
 		position: relative;
 	}
+
 	.close-button {
 		background: transparent;
 		border: none;
@@ -2245,36 +2751,53 @@
 		padding: 4px;
 		transition: color 0.2s;
 	}
+
 	.close-button:hover {
 		color: #fff;
 	}
+
 	.event-row {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.3rem;
 		padding: 6px 0;
 		border-bottom: 1px solid #444;
 		color: #e0e0e0;
 		text-decoration: none;
 		transition: background 0.2s;
 	}
+
 	.event-row:hover {
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 	}
+
 	.event-type {
 		font-size: 0.95rem;
 		color: #fff;
 		font-weight: 500;
+		word-wrap: break-word;
+		line-height: 1.3;
 	}
+
 	.dividend-date {
 		font-size: 0.85rem;
 		color: #ccc;
-		margin-top: 4px;
+		line-height: 1.2;
 	}
+
+	.dividend-details {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
 	.event-actions {
 		display: flex;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: flex-start;
 	}
+
 	/* Sleek button and filing styles */
 	.btn {
 		display: inline-flex;
@@ -2289,51 +2812,62 @@
 			background-color 0.2s ease,
 			color 0.2s ease;
 	}
+
 	.btn-primary {
 		background-color: var(--accent-color, #3a8bf7);
 		color: #fff;
 		border: none;
 	}
+
 	.btn-primary:hover {
 		background-color: var(--accent-color-dark, #336ecf);
 	}
+
 	.btn-secondary {
 		background-color: transparent;
 		color: var(--text-primary, #fff);
 		border: 1px solid var(--accent-color, #3a8bf7);
 	}
+
 	.btn-secondary:hover {
 		background-color: var(--accent-color, #3a8bf7);
 		color: #fff;
 	}
+
 	.btn-tertiary {
 		background-color: transparent;
 		color: var(--text-secondary, #aaa);
 		border: 1px solid var(--ui-border, #444);
 	}
+
 	.btn-tertiary:hover {
-		background-color: rgba(255, 255, 255, 0.1);
+		background-color: rgb(255 255 255 / 10%);
 		color: #fff;
 	}
+
 	.filing-row {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 0.75rem;
-		align-items: center;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 		padding: 0.5rem 0;
 		border-bottom: 1px solid #444;
 	}
+
 	.filing-info .event-type {
 		font-size: 1rem;
 		font-weight: 600;
 		color: #fff;
+		word-wrap: break-word;
+		line-height: 1.2;
 	}
+
 	.filing-row .event-actions {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.4rem;
 	}
+
 	.btn-sm {
 		padding: 0.15rem 0.3rem;
 		font-size: 0.7rem;
@@ -2342,11 +2876,8 @@
 
 	.chart-switching-overlay {
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.4);
+		inset: 0;
+		background: rgb(0 0 0 / 40%);
 		z-index: 500; /* Above chart but below legend and UI elements */
 		opacity: 0;
 		animation: fadeInOverlay 0.2s ease-out forwards;
@@ -2357,19 +2888,51 @@
 		from {
 			opacity: 0;
 		}
+
 		to {
 			opacity: 1;
 		}
 	}
 
-	@keyframes fadeInDown {
-		from {
-			opacity: 0;
-			transform: translate(-50%, calc(-100% - 5px)); /* Start slightly lower than final */
-		}
-		to {
-			opacity: 1;
-			transform: translate(-50%, calc(-100% - 15px)); /* End in final position */
-		}
+	/* Chart logo styles positioned at bottom right where axes meet */
+	.chart-logo-container {
+		position: absolute;
+		bottom: 2px;
+		right: 2px;
+		z-index: 1000; /* High z-index to appear above chart canvas */
+		pointer-events: none;
+		opacity: 0.85;
+		transition: opacity 0.2s ease;
+		padding: 2px;
+	}
+
+	.chart-logo-container:hover {
+		opacity: 1;
+	}
+
+	.chart-company-logo {
+		height: 18px;
+		max-width: 50px;
+		object-fit: contain;
+		filter: brightness(0.9) contrast(0.95);
+		transition: filter 0.2s ease;
+		display: block;
+	}
+
+	.chart-company-logo:hover {
+		filter: brightness(1) contrast(1);
+	}
+
+	/* Fallback ticker display for debugging */
+	.chart-ticker-fallback {
+		width: 20px;
+		height: 18px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: rgb(255 255 255 / 80%);
+		font-size: 10px;
+		font-weight: bold;
+		font-family: monospace;
 	}
 </style>

@@ -1,5 +1,12 @@
-<script>
+<script lang="ts">
 	import Auth from '$lib/components/auth.svelte';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import { getAuthState } from '$lib/auth';
+
+	// Auth state - check immediately to prevent flash
+	let isAuthenticated = getAuthState();
 </script>
 
-<Auth loginMenu={false} />
+<SiteHeader {isAuthenticated} />
+
+<Auth mode="signup" />

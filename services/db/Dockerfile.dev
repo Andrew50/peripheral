@@ -1,7 +1,17 @@
-FROM timescale/timescaledb-ha:pg17
+FROM timescale/timescaledb:latest-pg17
+
 USER root
-RUN apt-get update && apt-get install -y cron
-ENV PGDATA /var/lib/postgresql/data
+RUN apk add --no-cache curl ca-certificates
+
+# -------------------------------------------------------------------
+# Install kubectl for local/dev containers (matches cluster v1.30.*)
+ARG KUBECTL_VERSION=v1.30.0
+RUN curl -L -o /usr/local/bin/kubectl \
+    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
+    chmod +x /usr/local/bin/kubectl
+# -------------------------------------------------------------------
+
+ENV PGDATA=/home/postgres/pgdata/data
 EXPOSE 5432
 
 # Copy initialization scripts
@@ -9,9 +19,11 @@ COPY init/ /docker-entrypoint-initdb.d/
 
 # Copy PostgreSQL configuration
 COPY config/dev.conf /etc/postgresql/postgresql.conf
+# Set environment variable to enable data checksums during initdb
+ENV POSTGRES_INITDB_ARGS="--data-checksums"
 
 # Create directories for migrations and app scripts
-RUN mkdir -p /migrations /app
+RUN mkdir -p /migrations /app /app/scripts
 
 # Copy migration files
 COPY migrations/*.sql /migrations/
@@ -23,7 +35,7 @@ COPY scripts/backup-improved.sh /app/backup-improved.sh
 COPY scripts/health-monitor.sh /app/health-monitor.sh
 COPY scripts/recovery-restore.sh /app/recovery-restore.sh
 COPY scripts/recovery-reset.sh /app/recovery-reset.sh
-
+COPY scripts/graceful-shutdown.sh /app/graceful-shutdown.sh
 # Make all scripts executable
 RUN chmod +x /app/*.sh
 

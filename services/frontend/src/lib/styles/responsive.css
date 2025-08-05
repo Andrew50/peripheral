@@ -2,72 +2,72 @@
 
 /* Root font size adjustments - use consistent base with minimal viewport dependency */
 :root {
-    /* Base font size - consistent across displays with minimal scaling */
-    font-size: 16px;
+	/* Base font size - consistent across displays with minimal scaling */
+	font-size: 16px;
 
-    /* Define responsive spacing variables */
-    --space-xs: 0.25rem;
-    --space-sm: 0.5rem;
-    --space-md: 0.75rem;
-    --space-lg: 1rem;
-    --space-xl: 1.5rem;
+	/* Define responsive spacing variables */
+	--space-xs: 0.25rem;
+	--space-sm: 0.5rem;
+	--space-md: 0.75rem;
+	--space-lg: 1rem;
+	--space-xl: 1.5rem;
 
-    /* Define responsive border radius variables */
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 8px;
+	/* Define responsive border radius variables */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
 
-    /* Define responsive font size variables */
-    --font-xs: 0.75rem;
-    --font-sm: 0.875rem;
-    --font-md: 1rem;
-    --font-lg: 1.125rem;
-    --font-xl: 1.25rem;
-    --font-2xl: 1.5rem;
-    --font-3xl: 1.75rem;
-    --font-4xl: 2rem;
+	/* Define responsive font size variables */
+	--font-xs: 0.75rem;
+	--font-sm: 0.875rem;
+	--font-md: 1rem;
+	--font-lg: 1.125rem;
+	--font-xl: 1.25rem;
+	--font-2xl: 1.5rem;
+	--font-3xl: 1.75rem;
+	--font-4xl: 2rem;
 }
 
 /* Media queries for different screen sizes */
-@media (max-width: 480px) {
-    :root {
-        font-size: 14px;
-    }
+@media (width <= 480px) {
+	:root {
+		font-size: 14px;
+	}
 }
 
-@media (min-width: 1921px) {
-    :root {
-        font-size: 18px;
-    }
+@media (width >= 1921px) {
+	:root {
+		font-size: 18px;
+	}
 }
 
 /* High-DPI displays get slightly larger base font for readability */
-@media (min-resolution: 2dppx) {
-    :root {
-        font-size: 17px;
-    }
+@media (resolution >= 2dppx) {
+	:root {
+		font-size: 17px;
+	}
 }
 
 /* Responsive text sizing */
 h1 {
-    font-size: var(--font-4xl);
-    letter-spacing: 0.1rem;
-    margin-bottom: var(--space-md);
+	font-size: var(--font-4xl);
+	letter-spacing: 0.1rem;
+	margin-bottom: var(--space-md);
 }
 
 h2 {
-    font-size: var(--font-3xl);
-    margin-bottom: var(--space-sm);
+	font-size: var(--font-3xl);
+	margin-bottom: var(--space-sm);
 }
 
 h3 {
-    font-size: var(--font-2xl);
-    margin-bottom: var(--space-sm);
+	font-size: var(--font-2xl);
+	margin-bottom: var(--space-sm);
 }
 
 h4 {
-    font-size: var(--font-xl);
-    margin-bottom: var(--space-xs);
+	font-size: var(--font-xl);
+	margin-bottom: var(--space-xs);
 }
 
 p,
@@ -77,291 +77,290 @@ button,
 input,
 select,
 textarea {
-    font-size: var(--font-sm);
+	font-size: var(--font-sm);
 }
 
 .tagline {
-    font-size: var(--font-lg);
+	font-size: var(--font-lg);
 }
 
 /* Responsive padding and margins */
 .content-padding {
-    padding: var(--space-lg);
+	padding: var(--space-lg);
 }
 
 .content-padding-sm {
-    padding: var(--space-sm);
+	padding: var(--space-sm);
 }
 
 .content-padding-md {
-    padding: var(--space-md);
+	padding: var(--space-md);
 }
 
 .content-padding-lg {
-    padding: var(--space-lg);
+	padding: var(--space-lg);
 }
 
 .content-padding-xl {
-    padding: var(--space-xl);
+	padding: var(--space-xl);
 }
 
 .content-margin {
-    margin: var(--space-lg);
+	margin: var(--space-lg);
 }
 
 .content-margin-sm {
-    margin: var(--space-sm);
+	margin: var(--space-sm);
 }
 
 .content-margin-md {
-    margin: var(--space-md);
+	margin: var(--space-md);
 }
 
 .content-margin-lg {
-    margin: var(--space-lg);
+	margin: var(--space-lg);
 }
 
 .content-margin-xl {
-    margin: var(--space-xl);
+	margin: var(--space-xl);
 }
 
 /* Responsive buttons */
 button,
 .cta-button {
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
+	padding: var(--space-sm) var(--space-lg);
+	border-radius: var(--radius-md);
 }
 
 /* Responsive icons */
 .feature-icon {
-    font-size: 1.5rem;
+	font-size: 1.5rem;
 }
 
 .icon {
-    width: 24px;
-    height: 24px;
+	width: 24px;
+	height: 24px;
 }
 
 .icon-sm {
-    width: 16px;
-    height: 16px;
+	width: 16px;
+	height: 16px;
 }
 
 .icon-lg {
-    width: 32px;
-    height: 32px;
+	width: 32px;
+	height: 32px;
 }
 
 /* Responsive containers */
 .popup-container {
-    max-width: min(90vw, 500px);
-    max-height: 80vh;
-    padding: var(--space-md);
+	max-width: min(90vw, 500px);
+	max-height: 80vh;
+	padding: var(--space-md);
 }
 
 .auth-card {
-    width: min(90vw, 400px);
-    padding: var(--space-lg);
+	width: min(90vw, 400px);
+	padding: var(--space-lg);
 }
 
 /* Responsive tables */
 td,
 th {
-    padding: var(--space-sm) var(--space-md);
+	padding: var(--space-sm) var(--space-md);
 }
 
 /* Responsive grid layouts */
 .responsive-grid {
-    display: grid;
-    gap: var(--space-md);
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+	display: grid;
+	gap: var(--space-md);
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .responsive-grid-sm {
-    display: grid;
-    gap: var(--space-sm);
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+	display: grid;
+	gap: var(--space-sm);
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
 }
 
 .responsive-grid-lg {
-    display: grid;
-    gap: var(--space-lg);
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+	display: grid;
+	gap: var(--space-lg);
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
 }
 
 /* Responsive flex layouts */
 .responsive-flex {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-sm);
 }
 
 .responsive-flex-col {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-sm);
 }
 
 /* Responsive images */
 img {
-    max-width: 100%;
-    height: auto;
+	max-width: 100%;
+	height: auto;
 }
 
 /* Responsive form elements */
 input,
 select,
 textarea {
-    padding: var(--space-sm);
-    border-radius: var(--radius-md);
+	padding: var(--space-sm);
+	border-radius: var(--radius-md);
 }
 
 /* Utility classes for responsive design */
 .hide-on-mobile {
-    display: initial;
+	display: initial;
 }
 
 .show-on-mobile {
-    display: none;
+	display: none;
 }
 
-@media (max-width: 768px) {
-    .hide-on-mobile {
-        display: none;
-    }
+@media (width <= 768px) {
+	.hide-on-mobile {
+		display: none;
+	}
 
-    .show-on-mobile {
-        display: initial;
-    }
+	.show-on-mobile {
+		display: initial;
+	}
 
-    /* Adjust flex direction for mobile */
-    .mobile-column {
-        flex-direction: column;
-    }
+	/* Adjust flex direction for mobile */
+	.mobile-column {
+		flex-direction: column;
+	}
 
-    /* Adjust padding for mobile */
-    .mobile-padding {
-        padding: var(--space-sm);
-    }
+	/* Adjust padding for mobile */
+	.mobile-padding {
+		padding: var(--space-sm);
+	}
 
-    /* Adjust font sizes for mobile */
-    .mobile-text-sm {
-        font-size: var(--font-xs);
-    }
+	/* Adjust font sizes for mobile */
+	.mobile-text-sm {
+		font-size: var(--font-xs);
+	}
 
-    /* Adjust margins for mobile */
-    .mobile-margin {
-        margin: var(--space-sm);
-    }
+	/* Adjust margins for mobile */
+	.mobile-margin {
+		margin: var(--space-sm);
+	}
 }
 
 /* Fluid typography for better readability */
 .fluid-text {
-    font-size: var(--font-md);
-    line-height: 1.5;
+	font-size: var(--font-md);
+	line-height: 1.5;
 }
 
 .fluid-text-sm {
-    font-size: var(--font-sm);
-    line-height: 1.5;
+	font-size: var(--font-sm);
+	line-height: 1.5;
 }
 
 .fluid-text-lg {
-    font-size: var(--font-lg);
-    line-height: 1.5;
+	font-size: var(--font-lg);
+	line-height: 1.5;
 }
 
 /* Responsive borders and shadows */
 .responsive-border {
-    border-width: 1px;
-    border-radius: var(--radius-md);
+	border-width: 1px;
+	border-radius: var(--radius-md);
 }
 
 .responsive-border-sm {
-    border-width: 1px;
-    border-radius: var(--radius-sm);
+	border-width: 1px;
+	border-radius: var(--radius-sm);
 }
 
 .responsive-border-lg {
-    border-width: 2px;
-    border-radius: var(--radius-lg);
+	border-width: 2px;
+	border-radius: var(--radius-lg);
 }
 
 .responsive-shadow {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 4px 8px rgb(0 0 0 / 20%);
 }
 
 .responsive-shadow-sm {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 }
 
 .responsive-shadow-lg {
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 8px 16px rgb(0 0 0 / 30%);
 }
 
 /* Responsive gaps */
 .gap-xs {
-    gap: var(--space-xs);
+	gap: var(--space-xs);
 }
 
 .gap-sm {
-    gap: var(--space-sm);
+	gap: var(--space-sm);
 }
 
 .gap-md {
-    gap: var(--space-md);
+	gap: var(--space-md);
 }
 
 .gap-lg {
-    gap: var(--space-lg);
+	gap: var(--space-lg);
 }
 
 .gap-xl {
-    gap: var(--space-xl);
+	gap: var(--space-xl);
 }
 
 /* Responsive widths */
 .width-full {
-    width: 100%;
+	width: 100%;
 }
 
 .width-half {
-    width: 50%;
+	width: 50%;
 }
 
 .width-third {
-    width: 33.333%;
+	width: 33.333%;
 }
 
 .width-quarter {
-    width: 25%;
+	width: 25%;
 }
 
 .max-width-xs {
-    max-width: min(90vw, 300px);
+	max-width: min(90vw, 300px);
 }
 
 .max-width-sm {
-    max-width: min(90vw, 400px);
+	max-width: min(90vw, 400px);
 }
 
 .max-width-md {
-    max-width: min(90vw, 600px);
+	max-width: min(90vw, 600px);
 }
 
 .max-width-lg {
-    max-width: min(90vw, 800px);
+	max-width: min(90vw, 800px);
 }
 
 .max-width-xl {
-    max-width: min(90vw, 1200px);
+	max-width: min(90vw, 1200px);
 }
 
-@media (max-width: 640px) {
-
-    .width-half,
-    .width-third,
-    .width-quarter {
-        width: 100%;
-    }
+@media (width <= 640px) {
+	.width-half,
+	.width-third,
+	.width-quarter {
+		width: 100%;
+	}
 }

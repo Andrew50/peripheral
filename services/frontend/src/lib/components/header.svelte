@@ -37,9 +37,9 @@
 	}
 
 	.header.scrolled {
-		background: rgba(0, 0, 0, 0.95);
+		background: rgb(0 0 0 / 95%);
 		backdrop-filter: blur(10px);
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 2px 10px rgb(0 0 0 / 30%);
 		height: 60px;
 	}
 
@@ -62,7 +62,9 @@
 		height: 80px;
 		width: auto;
 		display: block;
-		transition: height 0.3s ease, transform 0.3s ease;
+		transition:
+			height 0.3s ease,
+			transform 0.3s ease;
 		transform: translateY(5px);
 	}
 

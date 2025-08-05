@@ -13,9 +13,11 @@ import (
 	"github.com/invopop/jsonschema"
 	"google.golang.org/genai"
 
+	"strconv"
+
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/shared"
 )
 
 // Pre-compile regex pattern for ticker formatting cleanup
@@ -50,12 +52,9 @@ type FinalResponse struct {
 	Suggestions   []string       `json:"suggestions,omitempty"`
 	TokenCounts   TokenCounts    `json:"token_counts,omitempty"`
 }
-
-type TokenCounts struct {
-	InputTokenCount    int64 `json:"input_token_count,omitempty"`
-	OutputTokenCount   int64 `json:"output_token_count,omitempty"`
-	ThoughtsTokenCount int64 `json:"thoughts_token_count,omitempty"`
-	TotalTokenCount    int64 `json:"total_token_count,omitempty"`
+type ResponseImage struct {
+	Data   string `json:"data"`
+	Format string `json:"format"`
 }
 
 /*
@@ -219,24 +218,16 @@ type TokenCounts struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-// const finalResponseModel = "gemini-2.5-flash"
-const openAIPlannerModel = "o4-mini"
-const openAIFinalResponseModel = "o3"
-
-func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, initialRound bool, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, systemPromptFile string, _ []ExecuteResult, _ []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
-	if initialRound {
-		systemPrompt, err = getSystemInstruction("defaultSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
-	} else {
-		systemPrompt, err = getSystemInstruction("IntermediateSystemPrompt")
-		if err != nil {
-			return nil, fmt.Errorf("error getting system instruction: %w", err)
-		}
+	if systemPromptFile == "" {
+		systemPromptFile = "defaultSystemPrompt"
+	}
+	systemPrompt, err = GetSystemInstruction(systemPromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
 	plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
 	if err != nil {
@@ -262,7 +253,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	////fmt.Println("prompt", prompt)
 	thinkingBudget := int32(10000)
 	// Enhance the system instruction with tool descriptions
-	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt)
+	enhancedSystemInstruction := enhanceSystemPromptWithTools(systemPrompt, true)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
@@ -275,14 +266,15 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		},
 		ResponseMIMEType: "application/json",
 	}
-	fmt.Println("\n\nprompt", prompt)
+	prompt = appendCurrentTimeToPrompt(prompt)
 
 	maxRetries := 3
 	for attempt := 0; attempt < maxRetries; attempt++ {
 
 		result, err := client.Models.GenerateContent(ctx, planningModel, genai.Text(prompt), config)
 		if err != nil {
-			return Plan{}, fmt.Errorf("gemini had an error generating plan : %w", err)
+			fmt.Println("error generating plan gemini side: ", err)
+			continue
 		}
 		var sb strings.Builder
 		if len(result.Candidates) <= 0 {
@@ -391,7 +383,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+/*func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
@@ -437,7 +429,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 	resultText := res.OutputText()
 	fmt.Println("\n GPT resultText: ", resultText)
 
-	/*var directAns DirectAnswer
+	var directAns DirectAnswer
 	directParseErr := json.Unmarshal([]byte(resultText), &directAns)
 	if directParseErr == nil && len(directAns.ContentChunks) > 0 {
 		hasValidContent := false
@@ -457,7 +449,7 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 			}
 			return directAns, nil
 		}
-	}*/
+	}
 
 	var plan Plan
 	planParseErr := json.Unmarshal([]byte(resultText), &plan)
@@ -513,23 +505,21 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 		}
 	}
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
-}
+}*/
 
-func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
-	apiKey := conn.OpenAIKey
+func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
+	client := conn.OpenAIClient
 
-	client := openai.NewClient(option.WithAPIKey(apiKey))
-
-	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-	conversationHistory, err := GetConversationMessages(ctx, conn, conversationID, userID)
+	conversationHistory, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
 	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts, true)
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
 	}
@@ -538,6 +528,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
+	model := "o3"
 
 	rawSchema := ref.Reflect(AtlantisFinalResponse{})
 	b, _ := json.Marshal(rawSchema)
@@ -547,7 +538,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 	textConfig := responses.ResponseTextConfigParam{
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name:   "atlantis_response",
+				Name:   "peripheral_response",
 				Schema: oaSchema,
 				Strict: openai.Bool(true),
 			},
@@ -557,10 +548,11 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Model:        openAIFinalResponseModel,
+		Model:        model,
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
+		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment, "convID": conversationID, "msgID": messageID},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error generating final response: %w", err)
@@ -606,20 +598,65 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 		// Add assistant message from content chunks
 		assistantContent := ""
 		for _, chunk := range msg.ContentChunks {
-			switch v := chunk.Content.(type) {
-			case string:
-				assistantContent += v
-			case map[string]interface{}:
-				// For table data or other structured content, convert to a simple text representation
-				jsonData, err := json.Marshal(v)
-				if err == nil {
-					assistantContent += fmt.Sprintf("[Table data: %s]", string(jsonData))
-				} else {
-					assistantContent += "[Table data]"
+			switch chunk.Type {
+			case "table":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Table data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Table data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+			case "backtest_table":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Backtest table data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Backtest table data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+
+			case "backtest_plot", "plot":
+				switch v := chunk.Content.(type) {
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Plot data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Plot data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
+			case "text":
+				switch v := chunk.Content.(type) {
+				case string:
+					assistantContent += v
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
 				}
 			default:
-				// Handle any other type by converting to string
-				assistantContent += fmt.Sprintf("%v", v)
+				switch v := chunk.Content.(type) {
+				case string:
+					assistantContent += v
+				case map[string]interface{}:
+					jsonData, err := json.Marshal(v)
+					if err == nil {
+						assistantContent += fmt.Sprintf("[Data: %s]", string(jsonData))
+					} else {
+						assistantContent += "[Data issue]"
+					}
+				default:
+					assistantContent += fmt.Sprintf("%v", v)
+				}
 			}
 		}
 		if assistantContent == "" {
@@ -648,7 +685,7 @@ func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBCo
 }
 
 // buildOpenAIFinalResponseMessages converts rich context to OpenAI message format
-func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string, finalRound bool) (responses.ResponseInputParam, error) {
+func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DBConversationMessage, executionResults []ExecuteResult, thoughts []string) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam
 	conversationMessages, err := buildOpenAIConversationHistory(userQuery, conversationHistory)
 	if err != nil {
@@ -667,17 +704,89 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 	}
 	if len(executionResults) > 0 {
 		var allResults []map[string]interface{}
+		var allImages []ResponseImage
 		for _, result := range executionResults {
 			// Skip results that had errors
-			if result.Error != nil && finalRound {
+			if result.Error != nil {
 				continue
+			}
+
+			// Create a cleaned result without responseImages
+			var resultsWithoutResponseImages map[string]interface{}
+
+			// Check if result contains responseImages
+			// First try direct cast to map
+			var resultMap map[string]interface{}
+			var ok bool
+
+			if resultMap, ok = result.Result.(map[string]interface{}); ok {
+			} else {
+				// If direct cast fails, convert any type to map through JSON marshaling
+				// Marshal the result to JSON
+				jsonBytes, err := json.Marshal(result.Result)
+				if err != nil {
+					fmt.Printf("Failed to marshal result to JSON: %v\n", err)
+					// Keep original result if marshaling fails
+					resultData := map[string]interface{}{
+						"fn":   result.FunctionName,
+						"res":  result.Result,
+						"args": result.Args,
+					}
+					allResults = append(allResults, resultData)
+					continue
+				}
+
+				// Unmarshal back to map[string]interface{}
+				if err := json.Unmarshal(jsonBytes, &resultMap); err != nil {
+					fmt.Printf("Failed to unmarshal JSON to map: %v\n", err)
+					// Keep original result if unmarshaling fails
+					resultData := map[string]interface{}{
+						"fn":   result.FunctionName,
+						"res":  result.Result,
+						"args": result.Args,
+					}
+					allResults = append(allResults, resultData)
+					continue
+				}
+			}
+
+			// Now check for responseImages in the converted map
+			if responseImages, hasImages := resultMap["responseImages"]; hasImages {
+				// Try to extract and append images to allImages with multiple type assertions
+				// First try []ResponseImage
+				if imageList, ok := responseImages.([]ResponseImage); ok {
+					allImages = append(allImages, imageList...)
+				} else if imageList, ok := responseImages.([]interface{}); ok {
+					// Try []interface{} (common after JSON unmarshaling)
+					for _, img := range imageList {
+						imgBytes, err := json.Marshal(img)
+						if err == nil {
+							var responseImg ResponseImage
+							if err := json.Unmarshal(imgBytes, &responseImg); err == nil {
+								allImages = append(allImages, responseImg)
+							}
+						}
+					}
+				}
+
+				// Always create a copy of the result without responseImages (regardless of processing success)
+				cleanedResultMap := make(map[string]interface{})
+				for k, v := range resultMap {
+					if k != "responseImages" {
+						cleanedResultMap[k] = v
+					}
+				}
+				resultsWithoutResponseImages = cleanedResultMap
+			} else {
+				resultsWithoutResponseImages = resultMap
 			}
 
 			resultData := map[string]interface{}{
 				"fn":   result.FunctionName,
-				"res":  result.Result,
+				"res":  resultsWithoutResponseImages,
 				"args": result.Args,
 			}
+
 			allResults = append(allResults, resultData)
 		}
 
@@ -698,7 +807,37 @@ func buildOpenAIFinalResponseMessages(userQuery string, conversationHistory []DB
 				},
 			})
 		}
+		if len(allImages) > 0 {
+			var imageContent []responses.ResponseInputContentUnionParam
+			for _, img := range allImages {
+				// Format as data URL: data:image/png;base64,{base64_data}
+				dataURL := fmt.Sprintf("data:image/%s;base64,%s", img.Format, img.Data)
+				imageContent = append(imageContent, responses.ResponseInputContentUnionParam{
+					OfInputImage: &responses.ResponseInputImageParam{
+						ImageURL: openai.String(dataURL),
+					},
+				})
+			}
+			// Add images as a system message with mixed content
+			messages = append(messages, responses.ResponseInputItemUnionParam{
+				OfMessage: &responses.EasyInputMessageParam{
+					Role: responses.EasyInputMessageRoleUser,
+					Content: responses.EasyInputMessageContentUnionParam{
+						OfInputItemContentList: imageContent,
+					},
+				},
+			})
+		}
 	}
+	est, _ := time.LoadLocation("America/New_York")
+	messages = append(messages, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleSystem,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: openai.String(fmt.Sprintf("CURRENT DATE (EST/Market Time): %s\n CURRENT TIME IN SECONDS: %d", time.Now().In(est).Format("2006-01-02 15:04:05"), time.Now().In(est).Unix())),
+			},
+		},
+	})
 
 	return messages, nil
 }
@@ -762,10 +901,17 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	return responseText, nil
 
 }
+func appendCurrentTimeToPrompt(prompt string) string {
+	sb := strings.Builder{}
+	sb.WriteString(prompt)
+	sb.WriteString("The current timestamp in seconds is: ")
+	sb.WriteString(fmt.Sprint(time.Now().Unix()))
+	return sb.String()
+}
 
 //deprecate gemini
 /*func GetFinalResponse(ctx context.Context, conn *data.Conn, prompt string) (*FinalResponse, error) {
-	systemPrompt, err := getSystemInstruction("finalResponseSystemPrompt")
+	systemPrompt, err := GetSystemInstruction("finalResponseSystemPrompt")
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
@@ -809,14 +955,16 @@ func GenerateConversationTitle(conn *data.Conn, _ int, query string) (string, er
 	// Concatenate the text from *all* parts to ensure we capture the full response
 	var frSB strings.Builder
 	candidate := result.Candidates[0]
-	if candidate.Content != nil {
+	if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
 		for _, part := range candidate.Content.Parts {
-			if part.Thought {
-				continue
-			}
-			if part.Text != "" {
-				frSB.WriteString(part.Text)
-				frSB.WriteString("\n")
+			if part != nil {
+				if part.Thought {
+					continue
+				}
+				if part.Text != "" {
+					frSB.WriteString(part.Text)
+					frSB.WriteString("\n")
+				}
 			}
 		}
 	}

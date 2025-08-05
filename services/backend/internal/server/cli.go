@@ -458,10 +458,11 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			/*
 				if len(failedTasks) > 0 {
 					////fmt.Println("\nFailed tasks:")
-					for _, taskID := range taskIDs {
-						if failedTasks[taskID] {
-						}
-					}
+					//for _, taskID := range taskIDs {
+					//	if failedTasks[taskID] {
+					//		// Debug output would go here
+					//	}
+					//}
 				}*/
 
 			// Return true only if all tasks completed successfully
@@ -477,10 +478,11 @@ func monitorTasksAndWait(conn *data.Conn, taskIDs []string) bool {
 			/*
 				if len(completedTasks) < len(taskIDs) {
 					////fmt.Println("\nIncomplete or failed tasks:")
-					for _, taskID := range taskIDs {
-						if !completedTasks[taskID] {
-						}
-					}
+					//for _, taskID := range taskIDs {
+					//	if !completedTasks[taskID] {
+					//		// Debug output would go here
+					//	}
+					//}
 				}
 			*/
 
@@ -659,10 +661,11 @@ func monitorTasks(conn *data.Conn, taskIDs []string) {
 			// List incomplete tasks
 			/*if len(completedTasks) < len(taskIDs) {
 				////fmt.Println("\nIncomplete tasks:")
-				for _, taskID := range taskIDs {
-					if !completedTasks[taskID] {
-					}
-				}
+				//for _, taskID := range taskIDs {
+				//	if !completedTasks[taskID] {
+				//		// Debug output would go here
+				//	}
+				//}
 			}*/
 
 			return
@@ -736,6 +739,26 @@ func monitorTask(taskID string) {
 	monitorTasks(conn, []string{taskID})
 }
 
+func createInvite(planName string, trialDays int) {
+	// Create a connection
+	inContainer := os.Getenv("IN_CONTAINER") == "true"
+	conn, cleanup := data.InitConn(inContainer)
+	defer cleanup()
+
+	// Create the invite
+	invite, err := data.CreateInvite(conn, planName, trialDays)
+	if err != nil {
+		fmt.Printf("Error creating invite: %v\n", err)
+		return
+	}
+
+	// Print the invite code and link
+	fmt.Printf("Invite created successfully!\n")
+	fmt.Printf("Link: https://peripheral.io/invite/%s\n", invite.Code)
+	fmt.Printf("Plan Name: %s\n", invite.PlanName)
+	fmt.Printf("Trial Days: %d\n", invite.TrialDays)
+}
+
 func printUsage() {
 	////fmt.Println("Usage: jobctl [command] [arguments]")
 	////fmt.Println("\nAvailable commands:")
@@ -760,6 +783,30 @@ func printUsage() {
 				if err != nil {
 					fmt.Printf("Error running job: %v\n", err)
 				}
+			},
+		},
+		"create-invite": {
+			usage:       "create-invite [plan_name] [trial_days]",
+			description: "Create a new invite code (trial_days defaults to 30)",
+			execute: func(args []string) {
+				if len(args) < 1 {
+					fmt.Println("Error: plan name is required")
+					fmt.Println("Usage: jobctl create-invite [plan_name] [trial_days]")
+					fmt.Println("Example: jobctl create-invite pro 30")
+					return
+				}
+
+				planName := args[0]
+				trialDays := 30 // default
+
+				if len(args) >= 2 {
+					if days, err := fmt.Sscanf(args[1], "%d", &trialDays); err != nil || days != 1 {
+						fmt.Printf("Error: invalid trial days '%s', using default of 30\n", args[1])
+						trialDays = 30
+					}
+				}
+
+				createInvite(planName, trialDays)
 			},
 		},
 		"status": {
@@ -839,7 +886,7 @@ func StartCLI() {
 			description: "Run a specific job",
 			execute: func(args []string) {
 				if len(args) < 1 {
-					////fmt.Println("Error: job name is required")
+					////fmt.Println("Error: job name is required")a
 					printUsage()
 					return
 				}
@@ -847,6 +894,30 @@ func StartCLI() {
 				if err != nil {
 					fmt.Printf("Error running job: %v\n", err)
 				}
+			},
+		},
+		"create-invite": {
+			usage:       "create-invite [plan_name] [trial_days]",
+			description: "Create a new invite code (trial_days defaults to 30)",
+			execute: func(args []string) {
+				if len(args) < 1 {
+					fmt.Println("Error: plan name is required")
+					fmt.Println("Usage: jobctl create-invite [plan_name] [trial_days]")
+					fmt.Println("Example: jobctl create-invite pro 30")
+					return
+				}
+
+				planName := args[0]
+				trialDays := 30 // default
+
+				if len(args) >= 2 {
+					if days, err := fmt.Sscanf(args[1], "%d", &trialDays); err != nil || days != 1 {
+						fmt.Printf("Error: invalid trial days '%s', using default of 30\n", args[1])
+						trialDays = 30
+					}
+				}
+
+				createInvite(planName, trialDays)
 			},
 		},
 		"status": {

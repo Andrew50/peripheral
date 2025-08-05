@@ -4,20 +4,24 @@ import (
 	"backend/internal/data"
 	"backend/internal/data/polygon"
 	"backend/internal/data/postgres"
+	"backend/internal/services/socket"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/polygon-io/client-go/rest/models"
 )
+
+const contextWithTimeout = 5 * time.Second
 
 // GetCurrentTickerArgs represents a structure for handling GetCurrentTickerArgs data.
 type GetCurrentTickerArgs struct {
@@ -228,6 +232,62 @@ func GetPopularTickers(conn *data.Conn, _ json.RawMessage) (interface{}, error) 
 	return results, nil
 }
 
+type GetUserLastTickersResults struct {
+	SecurityID int    `json:"securityId"`
+	Ticker     string `json:"ticker"`
+	Timestamp  int64  `json:"timestamp"`
+	Icon       string `json:"icon"`
+	Name       string `json:"name"`
+}
+
+func GetUserLastTickers(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
+	// Get the 3 most recent queried tickers for a user (distinct securities)
+	query := `
+	WITH recent_queries AS (
+		SELECT 
+			securityid,
+			MAX(created_at) as last_queried
+		FROM chart_queries 
+		WHERE userid = $1
+		GROUP BY securityid
+		ORDER BY last_queried DESC
+		LIMIT 3
+	)
+	SELECT 
+		s.securityid,
+		s.ticker,
+		COALESCE(s.icon, '') as icon,
+		COALESCE(s.name, '') as name
+	FROM recent_queries rq
+	JOIN securities s ON rq.securityid = s.securityid
+	WHERE s.maxDate IS NULL  -- only active securities
+	ORDER BY rq.last_queried DESC`
+
+	ctx, cancel := context.WithTimeout(context.Background(), contextWithTimeout)
+	defer cancel()
+	rows, err := conn.DB.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user last tickers: %v", err)
+	}
+	defer rows.Close()
+
+	var results []GetUserLastTickersResults
+	for rows.Next() {
+		var result GetUserLastTickersResults
+		if err := rows.Scan(&result.SecurityID, &result.Ticker, &result.Icon, &result.Name); err != nil {
+			return nil, fmt.Errorf("failed to scan user last ticker: %v", err)
+		}
+		// Set timestamp to 0 since we're filtering by timestamp = 0
+		result.Timestamp = 0
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over user last tickers: %v", err)
+	}
+	return results, nil
+}
+
 // GetSecurityFromTickerArgs represents a structure for handling GetSecurityFromTickerArgs data.
 type GetSecurityFromTickerArgs struct {
 	Ticker string `json:"ticker"`
@@ -250,74 +310,36 @@ func GetSecuritiesFromTicker(conn *data.Conn, rawArgs json.RawMessage) (interfac
 	}
 
 	// Clean and prepare the search query
-	query := strings.ToUpper(strings.TrimSpace(args.Ticker))
-
-	// Modified query to properly handle name and icon and prioritize active securities
+	tickerQuery := strings.ToUpper(strings.TrimSpace(args.Ticker))
+	// Optimized query with improved indexing strategy and reduced similarity calculations
 	sqlQuery := `
-	WITH ranked_results AS (
-		WITH normalized AS (
-			SELECT 
-				securityId, 
-				ticker,
-				NULLIF(name, '') as name,
-				NULLIF(icon, '') as icon, 
-				maxDate,
-				UPPER(ticker) as ticker_upper,
-				UPPER(COALESCE(name, '')) as name_upper,
-				REPLACE(UPPER(ticker), '.', '') as ticker_norm,
-				REPLACE(UPPER(COALESCE(name, '')), '.', '') as name_norm
-			FROM securities s
-			WHERE maxDate IS NULL
-		)
-		SELECT DISTINCT ON (ticker) 
-			securityId, 
-			ticker,
-			name,
-			icon, 
-			maxDate,
-			CASE 
-				WHEN ticker_upper = UPPER($1) OR ticker_norm = REPLACE(UPPER($1), '.', '') THEN 1
-				WHEN name_upper = UPPER($1) OR name_norm = REPLACE(UPPER($1), '.', '') THEN 2
-				WHEN ticker_upper LIKE UPPER($1) || '%' OR ticker_norm LIKE REPLACE(UPPER($1), '.', '') || '%' THEN 3
-				WHEN name_upper LIKE UPPER($1) || '%' OR name_norm LIKE REPLACE(UPPER($1), '.', '') || '%' THEN 4
-				WHEN ticker_upper LIKE '%' || UPPER($1) || '%' OR ticker_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' THEN 5
-				WHEN name_upper LIKE '%' || UPPER($1) || '%' OR name_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' THEN 6
-				ELSE 7
-			END as match_type,
-			GREATEST(
-				similarity(ticker_upper, UPPER($1)),
-				similarity(ticker_norm, REPLACE(UPPER($1), '.', '')),
-				COALESCE(similarity(name_upper, UPPER($1)), 0),
-				COALESCE(similarity(name_norm, REPLACE(UPPER($1), '.', '')), 0)
-			) as sim_score
-		FROM normalized
-		WHERE (
-			ticker_upper = UPPER($1) OR
-			ticker_norm = REPLACE(UPPER($1), '.', '') OR
-			ticker_upper LIKE UPPER($1) || '%' OR 
-			ticker_norm LIKE REPLACE(UPPER($1), '.', '') || '%' OR
-			ticker_upper LIKE '%' || UPPER($1) || '%' OR
-			ticker_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' OR
-			similarity(ticker_upper, UPPER($1)) > 0.3 OR
-			similarity(ticker_norm, REPLACE(UPPER($1), '.', '')) > 0.3 OR
-			name_upper = UPPER($1) OR
-			name_norm = REPLACE(UPPER($1), '.', '') OR
-			name_upper LIKE UPPER($1) || '%' OR 
-			name_norm LIKE REPLACE(UPPER($1), '.', '') || '%' OR
-			name_upper LIKE '%' || UPPER($1) || '%' OR
-			name_norm LIKE '%' || REPLACE(UPPER($1), '.', '') || '%' OR
-			similarity(name_upper, UPPER($1)) > 0.3 OR
-			similarity(name_norm, REPLACE(UPPER($1), '.', '')) > 0.3
-		)
-		ORDER BY ticker, maxDate DESC NULLS FIRST
-	)
-	SELECT securityId, ticker, name, icon, maxDate
-	FROM ranked_results
-	ORDER BY match_type, sim_score DESC
-	LIMIT 10
-	`
+		SELECT  s.securityId,
+				s.ticker,
+				s.name,
+				s.icon,
+				s.maxDate
+		FROM    securities s
+		WHERE   s.maxDate IS NULL                      -- active symbols only
+		AND (                                         -- any match criteria
+				s.ticker_norm = $1
+			OR s.ticker_norm LIKE $1 || '%'
+			OR UPPER(s.name) LIKE $1 || '%'
+			OR UPPER(s.name) = $1
+			OR s.ticker_norm % $1
+			OR UPPER(s.name) % $1
+			)
+		ORDER BY
+				(s.ticker_norm = $1)                          DESC,
+				(UPPER(s.name) = $1)                          DESC,
+				(UPPER(s.name) LIKE $1 || '%')                DESC,
+				(s.ticker_norm LIKE $1 || '%')                DESC,
+				GREATEST(
+					similarity(s.ticker_norm, $1),
+					similarity(UPPER(s.name), $1)
+				)                                             DESC
+		LIMIT 10`
 
-	rows, err := conn.DB.Query(context.Background(), sqlQuery, query)
+	rows, err := conn.DB.Query(context.Background(), sqlQuery, tickerQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +452,12 @@ type GetTickerMenuDetailsResults struct {
 	Industry                    sql.NullString  `json:"industry"`
 	Sector                      sql.NullString  `json:"sector"`
 	TotalShares                 sql.NullInt64   `json:"totalShares"`
+	ShareClassFigi              sql.NullString  `json:"share_class_figi"`
+	SicCode                     sql.NullString  `json:"sic_code"`
+	SicDescription              sql.NullString  `json:"sic_description"`
+	TotalEmployees              sql.NullInt64   `json:"total_employees"`
+	WeightedSharesOutstanding   sql.NullInt64   `json:"weighted_shares_outstanding"`
+	WhyMovingContent            sql.NullString  `json:"why_moving_content,omitempty"`
 }
 
 // GetTickerMenuDetails performs operations related to GetTickerMenuDetails functionality.
@@ -439,25 +467,25 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
 
-	// Modified query to handle NULL market_cap and missing columns
+	// Combined query to handle NULL market_cap, missing columns, and whymoving data in one request
 	query := `
 		SELECT 
-			ticker,
-			NULLIF(name, '') as name,
-			NULLIF(market, '') as market,
-			NULLIF(locale, '') as locale,
-			NULLIF(primary_exchange, '') as primary_exchange,
+			s.ticker,
+			NULLIF(s.name, '') as name,
+			NULLIF(s.market, '') as market,
+			NULLIF(s.locale, '') as locale,
+			NULLIF(s.primary_exchange, '') as primary_exchange,
 			CASE 
-				WHEN maxDate IS NULL THEN 'Now'
-				ELSE to_char(maxDate, 'YYYY-MM-DD')
+				WHEN s.maxDate IS NULL THEN 'Now'
+				ELSE to_char(s.maxDate, 'YYYY-MM-DD')
 			END as active,
-			NULLIF(market_cap, 0),  -- This will convert 0 to NULL
-			NULLIF(description, '') as description,
-			NULLIF(logo, '') as logo,
-			NULLIF(icon, '') as icon,
-			share_class_shares_outstanding,
-			NULLIF(industry, '') as industry,
-			NULLIF(sector, '') as sector,
+			NULLIF(s.market_cap, 0),  -- This will convert 0 to NULL
+			NULLIF(s.description, '') as description,
+			NULLIF(s.logo, '') as logo,
+			NULLIF(s.icon, '') as icon,
+			s.share_class_shares_outstanding,
+			NULLIF(s.industry, '') as industry,
+			NULLIF(s.sector, '') as sector,
 			CASE 
 				WHEN EXISTS (
 					SELECT 1 FROM information_schema.columns 
@@ -465,14 +493,28 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 				) 
 				THEN (SELECT total_shares FROM securities WHERE securityId = $1 LIMIT 1)
 				ELSE 0
-			END as total_shares
-		FROM securities 
-		WHERE securityId = $1 AND (maxDate IS NULL OR maxDate = (
+			END as total_shares,
+			NULLIF(s.share_class_figi, '') as share_class_figi,
+			NULLIF(s.sic_code, '') as sic_code,
+			NULLIF(s.sic_description, '') as sic_description,
+			s.total_employees,
+			s.weighted_shares_outstanding,
+			w.content as why_moving_content
+		FROM securities s
+		LEFT JOIN (
+			SELECT DISTINCT ON (securityid) securityid, content
+			FROM why_is_it_moving 
+			WHERE securityid = $1 
+			AND is_content = true 
+			AND created_at >= NOW() - INTERVAL '6 hours'
+			ORDER BY securityid, created_at DESC
+		) w ON s.securityid = w.securityid
+		WHERE s.securityId = $1 AND (s.maxDate IS NULL OR s.maxDate = (
 			SELECT MAX(maxDate) 
 			FROM securities 
-			WHERE securityId = $1
+			WHERE s.securityId = $1
 		))
-		ORDER BY maxDate IS NULL DESC, maxDate DESC NULLS FIRST
+		ORDER BY s.maxDate IS NULL DESC, s.maxDate DESC NULLS FIRST
 		LIMIT 1`
 
 	var results GetTickerMenuDetailsResults
@@ -491,10 +533,17 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		&results.Industry,
 		&results.Sector,
 		&results.TotalShares,
+		&results.ShareClassFigi,
+		&results.SicCode,
+		&results.SicDescription,
+		&results.TotalEmployees,
+		&results.WeightedSharesOutstanding,
+		&results.WhyMovingContent,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ticker details: %v", err)
 	}
+
 	// Create a map to store the results and handle NULL values
 	response := map[string]interface{}{
 		"ticker":                         results.Ticker,
@@ -511,6 +560,12 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 		"industry":                       results.Industry.String,
 		"sector":                         results.Sector.String,
 		"totalShares":                    nil,
+		"share_class_figi":               results.ShareClassFigi.String,
+		"sic_code":                       results.SicCode.String,
+		"sic_description":                results.SicDescription.String,
+		"total_employees":                nil,
+		"weighted_shares_outstanding":    nil,
+		"why_moving_content":             nil,
 	}
 
 	// Only include market_cap if it's valid
@@ -526,6 +581,21 @@ func GetTickerMenuDetails(conn *data.Conn, rawArgs json.RawMessage) (interface{}
 	// Only include share_class_shares_outstanding if it's valid
 	if results.ShareClassSharesOutstanding.Valid {
 		response["share_class_shares_outstanding"] = results.ShareClassSharesOutstanding.Int64
+	}
+
+	// Only include total_employees if it's valid
+	if results.TotalEmployees.Valid {
+		response["total_employees"] = results.TotalEmployees.Int64
+	}
+
+	// Only include weighted_shares_outstanding if it's valid
+	if results.WeightedSharesOutstanding.Valid {
+		response["weighted_shares_outstanding"] = results.WeightedSharesOutstanding.Int64
+	}
+
+	// Only include whymoving data if it's valid
+	if results.WhyMovingContent.Valid {
+		response["why_moving_content"] = results.WhyMovingContent.String
 	}
 
 	return response, nil
@@ -546,6 +616,11 @@ type TickerDetailsResponse struct {
 	ShareClassSharesOutstanding int64   `json:"share_class_shares_outstanding"`
 	Industry                    string  `json:"industry"`
 	Sector                      string  `json:"sector"`
+	ShareClassFigi              string  `json:"share_class_figi"`
+	SicCode                     string  `json:"sic_code"`
+	SicDescription              string  `json:"sic_description"`
+	TotalEmployees              int64   `json:"total_employees"`
+	WeightedSharesOutstanding   int64   `json:"weighted_shares_outstanding"`
 }
 
 // GetTickerDetails performs operations related to GetTickerDetails functionality.
@@ -586,64 +661,77 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 			return "", nil
 		}
 
-		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return "", fmt.Errorf("failed to create request: %v", err)
-		}
-		req.Header.Add("Authorization", "Bearer "+conn.PolygonKey)
+		maxAttempts := 3
+		delay := 1 * time.Second
+		var lastErr error
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("failed to fetch image: %v", err)
-		}
-		defer resp.Body.Close()
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			// Create HTTP client with timeout to prevent hanging
+			client := &http.Client{Timeout: 10 * time.Second}
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to create request: %v", err)
+			}
+			req.Header.Add("Authorization", "Bearer "+conn.PolygonKey)
 
-		// Check if the response status is OK
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("failed to fetch image, status code: %d", resp.StatusCode)
-		}
-
-		imageData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("failed to read image data: %v", err)
-		}
-
-		// If no image data was returned, return empty string
-		if len(imageData) == 0 {
-			return "", fmt.Errorf("empty image data received")
-		}
-
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			// Try to detect content type from image data
-			contentType = http.DetectContentType(imageData)
-
-			// If still empty, default to a safe type based on URL extension
-			if contentType == "" || contentType == "application/octet-stream" {
-				if strings.HasSuffix(strings.ToLower(url), ".svg") {
-					contentType = "image/svg+xml"
-				} else if strings.HasSuffix(strings.ToLower(url), ".png") {
-					contentType = "image/png"
+			resp, err := client.Do(req)
+			if err != nil {
+				if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
+					log.Printf("Timeout error fetching image from %s (attempt %d/%d): %v", url, attempt, maxAttempts, err)
 				} else {
-					contentType = "image/jpeg"
+					log.Printf("Network error fetching image from %s (attempt %d/%d): %v", url, attempt, maxAttempts, err)
 				}
+				lastErr = err
+			} else {
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("HTTP error %d fetching image from %s (attempt %d/%d)", resp.StatusCode, url, attempt, maxAttempts)
+					lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+				} else {
+					imageData, errRead := io.ReadAll(resp.Body)
+					if closeErr := resp.Body.Close(); closeErr != nil {
+						log.Printf("Warning: failed to close response body: %v", closeErr)
+					}
+					if errRead != nil {
+						log.Printf("Error reading image data from %s: %v", url, errRead)
+						lastErr = errRead
+					} else if len(imageData) == 0 {
+						log.Printf("Empty image data received from %s", url)
+						lastErr = fmt.Errorf("empty image data")
+					} else {
+						contentType := resp.Header.Get("Content-Type")
+						if contentType == "" {
+							contentType = http.DetectContentType(imageData)
+							if contentType == "" || contentType == "application/octet-stream" {
+								if strings.HasSuffix(strings.ToLower(url), ".svg") {
+									contentType = "image/svg+xml"
+								} else if strings.HasSuffix(strings.ToLower(url), ".png") {
+									contentType = "image/png"
+								} else {
+									contentType = "image/jpeg"
+								}
+							}
+						}
+
+						if strings.HasPrefix(contentType, "data:") {
+							return "", fmt.Errorf("invalid content type: %s", contentType)
+						}
+
+						base64Data := base64.StdEncoding.EncodeToString(imageData)
+						if strings.HasPrefix(base64Data, "data:") {
+							return base64Data, nil
+						}
+						return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
+					}
+				}
+			}
+
+			if attempt < maxAttempts {
+				time.Sleep(delay)
+				delay *= 2
 			}
 		}
 
-		// Ensure the content type doesn't already contain a data URL prefix
-		if strings.HasPrefix(contentType, "data:") {
-			return "", fmt.Errorf("invalid content type: %s", contentType)
-		}
-
-		base64Data := base64.StdEncoding.EncodeToString(imageData)
-
-		// Check if base64Data already contains a data URL prefix to prevent duplication
-		if strings.HasPrefix(base64Data, "data:") {
-			return base64Data, nil
-		}
-
-		return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
+		return "", fmt.Errorf("failed to fetch image after %d attempts: %v", maxAttempts, lastErr)
 	}
 
 	// Fetch both logo and icon with proper error handling
@@ -673,6 +761,11 @@ func GetTickerDetails(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 		Icon:                        iconBase64,
 		Sector:                      sector,
 		Industry:                    industry,
+		ShareClassFigi:              details.ShareClassFIGI,
+		SicCode:                     details.SICCode,
+		SicDescription:              details.SICDescription,
+		TotalEmployees:              int64(details.TotalEmployees),
+		WeightedSharesOutstanding:   details.WeightedSharesOutstanding,
 	}
 
 	return response, nil
@@ -843,6 +936,21 @@ func GetIcons(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, err
 	return results, nil
 }
 
+// GetIcon performs operations to get a single icon for a ticker.
+func GetIcon(conn *data.Conn, ticker string) (string, error) {
+	// Validate ticker input
+	if ticker == "" {
+		return "", nil // Return empty string for empty ticker
+	}
+
+	var icon string
+	err := conn.DB.QueryRow(context.Background(), "SELECT COALESCE(icon, '') from securities where ticker = $1 and maxDate is NULL", ticker).Scan(&icon)
+	if err != nil {
+		return "", nil // Return empty string on error, don't propagate error
+	}
+	return icon, nil
+}
+
 type GetCurrentSecurityIDArgs struct {
 	Ticker string `json:"ticker"`
 }
@@ -891,6 +999,58 @@ func GetSecurityIDFromTickerTimestamp(conn *data.Conn, rawArgs json.RawMessage) 
 type GetTickerDailySnapshotArgs struct {
 	Ticker string `json:"ticker"`
 }
+
+type AgentThinkingTraceBarData struct {
+	Timestamp int64   `json:"timestamp"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+}
+
+func AgentGetTickerDailySnapshot(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := GetTickerDailySnapshot(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		var args GetTickerDailySnapshotArgs
+		if err := json.Unmarshal(rawArgs, &args); err != nil {
+			return
+		}
+		ticker := args.Ticker
+		// Use polygon connection safely
+		agg, err := polygon.GetAggsData(conn.Polygon, ticker, 1, "day", models.Millis(time.Now().AddDate(0, 0, -100)), models.Millis(time.Now()), 100, "asc", true)
+		if err != nil {
+			fmt.Printf("Error getting agg data for ticker %s: %v\n", ticker, err)
+			return
+		}
+
+		var barData []AgentThinkingTraceBarData
+		for agg.Next() {
+			bar := agg.Item()
+			barData = append(barData, AgentThinkingTraceBarData{
+				Timestamp: int64(time.Time(bar.Timestamp).Unix()),
+				Open:      bar.Open,
+				High:      bar.High,
+				Low:       bar.Low,
+				Close:     bar.Close,
+				Volume:    bar.Volume,
+			})
+		}
+
+		data := map[string]interface{}{
+			"ticker":    ticker,
+			"chartData": barData,
+		}
+		socket.SendAgentStatusUpdate(userID, "getDailySnapshot", data)
+	}()
+
+	return res, nil
+}
+
 type GetTickerDailySnapshotResults struct {
 	Ticker             string  `json:"ticker,omitempty"`
 	LastBid            float64 `json:"lastBid,omitempty"`
@@ -901,10 +1061,10 @@ type GetTickerDailySnapshotResults struct {
 	Timestamp          int64   `json:"timestamp"`
 	Volume             float64 `json:"volume"`
 	Vwap               float64 `json:"vwap"`
-	TodayOpen          float64 `json:"todayOpen"`
-	TodayHigh          float64 `json:"todayHigh"`
-	TodayLow           float64 `json:"todayLow"`
-	TodayClose         float64 `json:"todayClose"`
+	Open               float64 `json:"open"`
+	High               float64 `json:"high"`
+	Low                float64 `json:"low"`
+	Close              float64 `json:"close"`
 	PreviousClose      float64 `json:"previousClose"`
 }
 
@@ -925,15 +1085,14 @@ func GetTickerDailySnapshot(conn *data.Conn, _ int, rawArgs json.RawMessage) (in
 	results.LastTradePrice = snapshot.LastTrade.Price
 	currPrice := snapshot.Day.Close
 	lastClose := snapshot.PrevDay.Close
-	results.TodayChange = math.Round((currPrice-lastClose)*100) / 100
-	results.TodayChangePercent = math.Round(((currPrice-lastClose)/lastClose)*100*100) / 100
+	results.TodayChange = float64(int((currPrice-lastClose)*1000)) / 1000
+	results.TodayChangePercent = float64(int(((currPrice-lastClose)/lastClose)*100*1000)) / 1000
 	results.Volume = snapshot.Day.Volume
-	results.TodayOpen = snapshot.Day.Open
-	results.TodayHigh = snapshot.Day.High
-	results.TodayLow = snapshot.Day.Low
-	results.TodayClose = snapshot.Day.Close
+	results.Open = snapshot.Day.Open
+	results.High = snapshot.Day.High
+	results.Low = snapshot.Day.Low
+	results.Close = snapshot.Day.Close
 	results.PreviousClose = lastClose
-	////fmt.Println(results)
 	return results, nil
 }
 
@@ -956,10 +1115,10 @@ func GetAllTickerSnapshots(conn *data.Conn, _ int, _ json.RawMessage) (interface
 		ticker.Timestamp = int64(time.Time(snapshot.Updated).Unix())
 		ticker.Volume = snapshot.Day.Volume
 		ticker.Vwap = snapshot.Day.VolumeWeightedAverage
-		ticker.TodayOpen = snapshot.Day.Open
-		ticker.TodayHigh = snapshot.Day.High
-		ticker.TodayLow = snapshot.Day.Low
-		ticker.TodayClose = snapshot.Day.Close
+		ticker.Open = snapshot.Day.Open
+		ticker.High = snapshot.Day.High
+		ticker.Low = snapshot.Day.Low
+		ticker.Close = snapshot.Day.Close
 		results.Tickers = append(results.Tickers, ticker)
 	}
 	return results, nil
@@ -975,7 +1134,12 @@ type GetFilteredTickerSnapshotResults struct {
 }
 
 type GetLastPriceArgs struct {
-	Ticker string `json:"ticker"`
+	Tickers []string `json:"tickers"`
+}
+
+type GetLastPriceResults struct {
+	Ticker string  `json:"ticker"`
+	Price  float64 `json:"price"`
 }
 
 func GetLastPrice(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{}, error) {
@@ -983,10 +1147,17 @@ func GetLastPrice(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("invalid args: %v", err)
 	}
-	trade, err := polygon.GetLastTrade(conn.Polygon, args.Ticker, true)
-	if err != nil {
-		return nil, fmt.Errorf("error getting last trade: %v", err)
+
+	trades := make([]GetLastPriceResults, len(args.Tickers))
+	for i, ticker := range args.Tickers {
+		trade, err := polygon.GetLastTrade(conn.Polygon, ticker, true)
+		if err != nil {
+			return nil, fmt.Errorf("error getting last trade: %v", err)
+		}
+		trades[i] = GetLastPriceResults{
+			Ticker: ticker,
+			Price:  trade.Price,
+		}
 	}
-	roundedPrice := math.Round(trade.Price*100) / 100
-	return roundedPrice, nil
+	return trades, nil
 }

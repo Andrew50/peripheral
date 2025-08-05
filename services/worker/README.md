@@ -13,13 +13,103 @@ The system is designed to force AI models to implement their own technical analy
 - **SecurityValidator**: AST-based code validation and security enforcement
 - **Worker**: Redis-based job processing and result management
 
+## ⚠️ Critical: Component Synchronization Requirements
+
+**ALL components must be kept in perfect synchronization at all times.** Any changes to strategy requirements, data structures, or validation rules must be propagated across all components immediately.
+
+### Components That Must Stay in Sync:
+
+1. **System Prompt** (`services/backend/internal/app/strategy/prompts/classifier.txt`)
+   - Defines what AI models should generate
+   - Function signatures, parameter names, return structures
+   - Available DataFrame columns and technical indicator examples
+
+2. **Security Validator** (`services/worker/src/validator.py`)
+   - Validates generated Python code for security and compliance
+   - Function signature requirements (parameter names, types)
+   - Required instance fields, allowed modules, forbidden patterns
+
+3. **Strategy Examples** (`services/worker/src/examples.py`)
+   - Reference implementations showing correct patterns
+   - Must match exact function signatures and return formats
+   - Demonstrates proper technical indicator calculations
+
+4. **DataFrame Engine** (`services/worker/src/engine.py`)
+   - Executes strategies and processes results
+   - Data loading, preprocessing, and result formatting
+   - Must handle the exact DataFrame structure defined in other components
+
+5. **Go Backend Interface** (`services/backend/internal/app/strategy/strategies.go`)
+   - Calls worker service and processes results
+   - Must understand the return format and field names
+   - Handles strategy creation, execution, and result parsing
+
+### Synchronization Requirements:
+
+**Function Signatures:**
+- Parameter name: `df` (pandas DataFrame)
+- Return type: `List[Dict]` with instances
+- No `signal` field (implicit True)
+- `timestamp` field (not `date`)
+
+**DataFrame Structure:**
+- Raw market data only (ticker, date, OHLCV, volume, fund_*)
+- NO pre-calculated technical indicators
+- Strategies must calculate their own indicators
+
+**Instance Fields:**
+- **Required**: `ticker` (string), `timestamp` (string)
+- **Optional**: `score`, `message`, custom metrics
+- **Forbidden**: `signal` (redundant)
+
+**Security Rules:**
+- Pandas and numpy allowed for data processing
+- No file I/O, network access, or system calls
+- No dangerous built-ins or introspection
+
+**Validation Patterns:**
+- Function must be named descriptively (not generic `strategy`)
+- Must import pandas (`import pandas as pd`)
+- Must sort data before calculations involving time series
+- Must use `.groupby('ticker')` for multi-symbol operations
+
+### When Making Changes:
+
+1. **Identify Impact**: Determine which components are affected
+2. **Update All**: Never update just one component - update ALL affected components
+3. **Test Integration**: Verify that generated strategies pass validation and execute correctly
+4. **Verify Examples**: Ensure all examples in `examples.py` still work
+5. **Update Documentation**: Keep README and comments current
+
+### Common Sync Issues:
+
+- ❌ Changing required fields in validator without updating system prompt
+- ❌ Adding new DataFrame columns without updating documentation
+- ❌ Modifying function signatures without updating examples
+- ❌ Changing validation rules without updating AI generation prompts
+- ❌ Adding new security restrictions without updating allowed operations
+
+**Remember: The AI generates code based on the system prompt, which must pass the validator, match the examples, and execute correctly in the engine. ALL must be perfectly aligned.**
+
 ## Available Raw Data Functions
 
 ### Price & Market Data
-- `get_price_data(symbol, timeframe, days)` - Raw OHLCV data
-- `get_historical_data(symbol, timeframe, periods, offset)` - Historical price data with lag
+- `get_price_data(symbol, timeframe, days, extended_hours=False)` - Raw OHLCV data
+- `get_historical_data(symbol, timeframe, periods, offset, extended_hours=False)` - Historical price data with lag
 - `get_security_info(symbol)` - Basic security metadata
-- `get_multiple_symbols_data(symbols, timeframe, days)` - Batch price data
+- `get_multiple_symbols_data(symbols, timeframe, days, extended_hours=False)` - Batch price data
+- `get_bar_data(timeframe, tickers, columns, min_bars, filters, aggregate_mode, extended_hours=False)` - Advanced bar data access
+
+#### Extended Hours Support
+The `extended_hours` parameter controls whether to include premarket and after-hours trading data:
+
+- **`extended_hours=False` (default)**: Only regular trading session data (9:30 AM - 4:00 PM ET, Monday-Friday)
+- **`extended_hours=True`**: Includes premarket (4:00 AM - 9:30 AM ET) and after-hours (4:00 PM - 8:00 PM ET) data
+
+**Important Notes:**
+- Extended hours parameter only affects **intraday timeframes** (seconds, minutes, hours)
+- Daily timeframes and above ignore this parameter (no extended hours concept for daily data)
+- Supported intraday timeframes: `1m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`
 
 ### Fundamental Data
 - `get_fundamental_data(symbol, metrics)` - Raw financial metrics
@@ -40,14 +130,31 @@ The system is designed to force AI models to implement their own technical analy
 
 ## Technical Indicator Implementation
 
-**Important**: The system does NOT provide pre-calculated technical indicators. AI-generated strategies must implement their own calculations using raw data.
+**Important**: The system does NOT provide pre-calculated technical indicators. 
+AI-generated strategies must implement their own calculations using raw OHLCV data.
+
+This design provides several benefits:
+- **Educational**: AI learns to implement technical analysis from first principles
+- **Flexibility**: Custom indicators and novel calculations possible
+- **Performance**: Optimized calculations for specific use cases
+- **Transparency**: Clear understanding of calculation methods
+- **Innovation**: Encourages development of new indicators
+
+### Available Raw Data
+Strategies receive only raw market data:
+- Basic OHLCV data: `open`, `high`, `low`, `close`, `volume`, `adj_close`
+- Fundamental data: `fund_pe_ratio`, `fund_market_cap`, `fund_sector`, etc.
+- No pre-calculated technical indicators
 
 ### Example: RSI Implementation
 
 ```python
 def classify_symbol(symbol):
-    # Get raw price data
+    # Get raw price data (regular hours only)
     price_data = get_price_data(symbol, timeframe='1d', days=50)
+    
+    # For intraday analysis with extended hours
+    # intraday_data = get_price_data(symbol, timeframe='1h', days=5, extended_hours=True)
     
     # Implement RSI calculation
     def calculate_rsi(prices, period=14):
@@ -94,7 +201,11 @@ def classify_symbol(symbol):
 
 ```python
 def classify_symbol(symbol):
+    # Get daily price data for Bollinger Bands calculation
     price_data = get_price_data(symbol, timeframe='1d', days=50)
+    
+    # Alternative: Get minute data including extended hours for more granular analysis
+    # minute_data = get_price_data(symbol, timeframe='5m', days=2, extended_hours=True)
     
     def calculate_bollinger_bands(prices, period=20, std_dev=2.0):
         if len(prices) < period:

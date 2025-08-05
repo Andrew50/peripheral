@@ -17,11 +17,17 @@
 			color: string;
 			lineWidth: LineWidth;
 		}[];
+		alertLines: {
+			price: number;
+			line: IPriceLine;
+			alertId: number;
+		}[];
 		isDragging: boolean;
 		selectedLinePrice: number;
 		selectedLineColor: string;
 		selectedLineWidth: LineWidth;
 		selectedLineId?: number;
+		selectedLineType?: 'horizontal' | 'alert' | null;
 		securityId?: number;
 	}
 
@@ -32,7 +38,9 @@
 		clientY: 0,
 		active: false,
 		selectedLineId: -1,
+		selectedLineType: null,
 		horizontalLines: [],
+		alertLines: [],
 		isDragging: false,
 		selectedLinePrice: 0,
 		selectedLineColor: '#FFFFFF',
@@ -48,36 +56,44 @@
 		lineWidth: LineWidth = 1 as LineWidth
 	) {
 		price = parseFloat(price.toFixed(2));
-		const chartSeries = get(drawingMenuProps).chartCandleSeries;
-		if (!chartSeries) {
-			return;
-		}
 
-		const priceLine = chartSeries.createPriceLine({
-			price: price,
-			color: color,
-			lineWidth: lineWidth,
-			lineStyle: 0, // Solid line
-			axisLabelVisible: true
-		});
-		get(drawingMenuProps).horizontalLines.push({
-			id,
-			price,
-			line: priceLine,
-			color,
-			lineWidth
-		});
 		if (id == -1) {
-			// only add to backend if it's being added not from a ticker load but from a new added line
+			// This is a user-initiated line creation (Alt+H) - add to backend and store
 			privateRequest<number>('setHorizontalLine', {
 				price: price,
 				securityId: securityId,
 				color: color,
 				lineWidth: lineWidth
 			}).then((res: number) => {
-				get(drawingMenuProps).horizontalLines[get(drawingMenuProps).horizontalLines.length - 1].id =
-					res;
+				// Update the store with the new line - reactive block will handle rendering
+				horizontalLines.update((lines) => {
+					const newLine = {
+						id: res,
+						securityId: securityId,
+						price: price,
+						color: color,
+						lineWidth: lineWidth
+					};
+
+					// Check if line already exists to avoid duplicates
+					const existingIndex = lines.findIndex((line) => line.id === res);
+					if (existingIndex !== -1) {
+						// Update existing line
+						lines[existingIndex] = newLine;
+						return [...lines];
+					} else {
+						// Add new line
+						return [...lines, newLine];
+					}
+				});
 			});
+		} else {
+			// This is for lines loaded from backend - they should already be in the store
+			// This branch is now primarily for backwards compatibility
+			// The reactive block should handle the actual rendering
+			// console.warn(
+			// 	'addHorizontalLine called with existing ID - this should be handled by the reactive block'
+			// );
 		}
 	}
 </script>
@@ -86,7 +102,37 @@
 	import '$lib/styles/global.css';
 	import { onMount } from 'svelte';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import { horizontalLines, activeAlerts } from '$lib/utils/stores/stores';
 	export let drawingMenuProps: Writable<DrawingMenuProps>;
+
+	// Helper function to convert viewport coordinates to chart-relative coordinates
+	function getRelativeMouseY(event: MouseEvent): number | null {
+		if (!$drawingMenuProps.chartCandleSeries) return null;
+
+		// Find the chart container - we need to look for it dynamically since we don't have chartId here
+		// Look for the closest chart container from the event target
+		let chartContainer: HTMLElement | null = null;
+
+		// First try to find the chart container by traversing up from the event target
+		let target = event.target as HTMLElement | null;
+		while (target && target !== document.body) {
+			if (target.id && target.id.startsWith('chart_container-')) {
+				chartContainer = target;
+				break;
+			}
+			target = target.parentElement;
+		}
+
+		// Fallback: search for any chart container
+		if (!chartContainer) {
+			chartContainer = document.querySelector('.chart[id*="chart_container"]') as HTMLElement;
+		}
+
+		if (!chartContainer) return null;
+
+		const rect = chartContainer.getBoundingClientRect();
+		return event.clientY - rect.top;
+	}
 
 	let menuElement: HTMLDivElement;
 	let adjustedMenuStyle: string = '';
@@ -114,30 +160,77 @@
 		}
 	}
 
+	function updateAlertPrice() {
+		if (
+			!$drawingMenuProps.selectedLine ||
+			!$drawingMenuProps.chartCandleSeries ||
+			$drawingMenuProps.selectedLineType !== 'alert'
+		) {
+			return;
+		}
+
+		const alertId = $drawingMenuProps.selectedLineId;
+		if (!alertId || alertId <= 0) return;
+
+		const newPrice = parseFloat(
+			parseFloat($drawingMenuProps.selectedLinePrice.toString()).toFixed(2)
+		);
+
+		// Optimistically update the line on the chart
+		$drawingMenuProps.selectedLine.applyOptions({ price: newPrice });
+
+		// Update the activeAlerts store
+		activeAlerts.update((alerts) => {
+			if (!alerts) return [];
+			return alerts.map((alert) =>
+				alert.alertId === alertId ? { ...alert, alertPrice: newPrice } : alert
+			);
+		});
+
+		// Update backend
+		privateRequest<void>('updateAlert', { alertId, price: newPrice }, true).catch((err) => {
+			console.error('Failed to update alert price:', err);
+			// Revert on failure if needed
+		});
+	}
+
 	function deleteHorizontalLine() {
 		if (!$drawingMenuProps.selectedLine || !$drawingMenuProps.chartCandleSeries) {
 			return;
 		}
 
-		// Find the line ID before removing it
-		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
-			(line) => line.line === $drawingMenuProps.selectedLine
-		);
+		if ($drawingMenuProps.selectedLineType === 'horizontal') {
+			// Handle horizontal line deletion
+			const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
+				(line) => line.line === $drawingMenuProps.selectedLine
+			);
 
-		// If the line has an ID, delete it from the server
-		if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
-			privateRequest('deleteHorizontalLine', {
-				id: $drawingMenuProps.horizontalLines[lineIndex].id
-			});
+			let deletedLineId = -1;
+
+			// If the line has an ID, delete it from the server
+			if (lineIndex >= 0 && $drawingMenuProps.horizontalLines[lineIndex].id > 0) {
+				deletedLineId = $drawingMenuProps.horizontalLines[lineIndex].id;
+				privateRequest('deleteHorizontalLine', {
+					id: deletedLineId
+				});
+
+				// Update the store to remove the line - reactive block will handle chart removal
+				horizontalLines.update((lines) => lines.filter((line) => line.id !== deletedLineId));
+			}
+		} else if ($drawingMenuProps.selectedLineType === 'alert') {
+			// Handle alert deletion
+			const alertId = $drawingMenuProps.selectedLineId;
+			if (alertId && alertId > 0) {
+				privateRequest('deleteAlert', {
+					alertId: alertId
+				});
+
+				// Update the activeAlerts store to remove the alert
+				activeAlerts.update((alerts) =>
+					alerts ? alerts.filter((alert) => alert.alertId !== alertId) : []
+				);
+			}
 		}
-
-		// Remove the line from the chart
-		$drawingMenuProps.chartCandleSeries.removePriceLine($drawingMenuProps.selectedLine);
-
-		// Remove the line from our array
-		$drawingMenuProps.horizontalLines = $drawingMenuProps.horizontalLines.filter(
-			(l) => l.line !== $drawingMenuProps.selectedLine
-		);
 
 		// Close the menu
 		$drawingMenuProps.active = false;
@@ -154,56 +247,61 @@
 		const color = $drawingMenuProps.selectedLineColor;
 		const lineWidth = $drawingMenuProps.selectedLineWidth;
 
-		$drawingMenuProps.selectedLine.applyOptions({
-			price,
-			color,
-			lineWidth
-		});
-
-		// Update the stored properties in horizontalLines array
+		// Find the line ID from the local state
 		const lineIndex = $drawingMenuProps.horizontalLines.findIndex(
 			(line) => line.line === $drawingMenuProps.selectedLine
 		);
 
 		if (lineIndex !== -1) {
-			$drawingMenuProps.horizontalLines[lineIndex].price = price;
-			$drawingMenuProps.horizontalLines[lineIndex].color = color;
-			$drawingMenuProps.horizontalLines[lineIndex].lineWidth = lineWidth;
+			const lineId = $drawingMenuProps.horizontalLines[lineIndex].id;
+			const securityId = $drawingMenuProps.securityId;
 
 			// Update in backend
 			privateRequest<void>(
 				'updateHorizontalLine',
 				{
-					id: $drawingMenuProps.horizontalLines[lineIndex].id,
+					id: lineId,
 					price,
 					color,
 					lineWidth,
-					securityId: $drawingMenuProps.securityId
+					securityId: securityId
 				},
 				true
 			);
+
+			// Update the store - reactive block will handle chart updates
+			if (lineId > 0 && securityId) {
+				horizontalLines.update((lines) =>
+					lines.map((line) => (line.id === lineId ? { ...line, price, color, lineWidth } : line))
+				);
+			}
 		}
 
 		// Keep the menu open
 	}
 
 	function handleClickOutside(event: MouseEvent) {
+		// console.log('🖱️ handleClickOutside called');
 		event.stopImmediatePropagation();
 		if (!$drawingMenuProps.active || $drawingMenuProps.isDragging) {
+			// console.log('❌ Menu not active or dragging, returning early');
 			return;
 		}
-		if (!menuElement) return;
+		if (!menuElement) {
+			// console.log('❌ No menu element, returning early');
+			return;
+		}
 
 		const deleteButton = menuElement.querySelector('button');
 		if (
 			menuElement.contains(event.target as Node) ||
 			(deleteButton && deleteButton.contains(event.target as Node))
 		) {
-			('clicked inside menu');
+			// console.log('✅ Clicked inside menu, keeping menu open');
 			return;
 		}
 
-		const clickY = event.clientY;
+		const relativeY = getRelativeMouseY(event);
 		const isClickInMenu =
 			event.target === menuElement || menuElement.contains(event.target as Node);
 
@@ -211,22 +309,35 @@
 		const chartCandleSeries = $drawingMenuProps.chartCandleSeries;
 		let isClickNearLine = false;
 
-		if (selectedLine && chartCandleSeries) {
+		if (selectedLine && chartCandleSeries && relativeY !== null) {
 			const linePrice = selectedLine.options().price;
 			const lineY = chartCandleSeries.priceToCoordinate(linePrice) || 0;
 			const CLICK_THRESHOLD = 5; // pixels
-			isClickNearLine = Math.abs(clickY - lineY) <= CLICK_THRESHOLD;
+			isClickNearLine = Math.abs(relativeY - lineY) <= CLICK_THRESHOLD;
+			// console.log('🔍 Click near line check:', {
+			// 	relativeY,
+			// 	lineY,
+			// 	distance: Math.abs(relativeY - lineY),
+			// 	threshold: CLICK_THRESHOLD,
+			// 	isClickNearLine
+			// });
 		}
 
 		if (!isClickInMenu && !isClickNearLine) {
+			// console.log('❌ Click outside menu and not near line, closing menu');
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
 				active: false
 			}));
+		} else {
+			// console.log('✅ Click near line or in menu, keeping menu open');
 		}
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
+		// Prevent keyboard events from bubbling up to the chart container
+		event.stopPropagation();
+
 		if (event.key === 'Escape') {
 			drawingMenuProps.update((v: DrawingMenuProps) => ({
 				...v,
@@ -239,10 +350,44 @@
 	function positionMenuWithinChart() {
 		if (!menuElement) return;
 
-		// Get the chart container
+		// Get the chart container - try both selectors for compatibility
 		const chartContainer =
-			menuElement.closest('.chart-wrapper') || document.querySelector('.chart-wrapper');
-		if (!chartContainer) return;
+			menuElement.closest('.chart') ||
+			menuElement.closest('.chart-wrapper') ||
+			document.querySelector('.chart') ||
+			document.querySelector('.chart-wrapper');
+
+		if (!chartContainer) {
+			// console.warn(
+			// 	'Could not find chart container for menu positioning, using fallback positioning'
+			// );
+			// Fallback: position relative to viewport with some padding
+			const viewportWidth = window.innerWidth;
+			const viewportHeight = window.innerHeight;
+
+			let menuX = $drawingMenuProps.clientX;
+			let menuY = $drawingMenuProps.clientY;
+
+			// Ensure menu stays within viewport bounds
+			if (menuX + 200 > viewportWidth) {
+				// 200px is menu width
+				menuX = viewportWidth - 220; // 200px width + 20px padding
+			}
+			if (menuY + 300 > viewportHeight) {
+				// Estimate menu height
+				menuY = viewportHeight - 320; // 300px height + 20px padding
+			}
+			if (menuX < 10) menuX = 10;
+			if (menuY < 10) menuY = 10;
+
+			adjustedMenuStyle = `
+				position: fixed;
+				left: ${menuX}px; 
+				top: ${menuY}px;
+				pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
+			`;
+			return;
+		}
 
 		// Get the dimensions of the chart container
 		const chartRect = chartContainer.getBoundingClientRect();
@@ -251,7 +396,7 @@
 		const menuWidth = menuElement.offsetWidth;
 		const menuHeight = menuElement.offsetHeight;
 
-		// Calculate the proposed position
+		// Calculate the proposed position using viewport coordinates (for fixed positioning)
 		let menuX = $drawingMenuProps.clientX;
 		let menuY = $drawingMenuProps.clientY;
 
@@ -275,8 +420,9 @@
 			menuY = chartRect.top + 10; // 10px padding
 		}
 
-		// Update the position
+		// Update the position with fixed positioning
 		adjustedMenuStyle = `
+			position: fixed;
 			left: ${menuX}px; 
 			top: ${menuY}px;
 			pointer-events: ${$drawingMenuProps.isDragging ? 'none' : 'auto'};
@@ -316,6 +462,16 @@
 		positionMenuWithinChart();
 	}
 
+	// Debug logging for drawingMenuProps changes
+	$: {
+		// console.log('📊 drawingMenuProps changed:', {
+		// 	active: $drawingMenuProps.active,
+		// 	isDragging: $drawingMenuProps.isDragging,
+		// 	selectedLine: $drawingMenuProps.selectedLine ? 'exists' : 'null',
+		// 	selectedLineId: $drawingMenuProps.selectedLineId
+		// });
+	}
+
 	// Handle input changes
 	function handlePriceInput(e: Event) {
 		$drawingMenuProps.selectedLinePrice = parseFloat((e.target as HTMLInputElement).value);
@@ -349,83 +505,108 @@
 		class="drawing-menu"
 		style={adjustedMenuStyle}
 	>
-		<button on:click={removePriceLine} class="delete-button">Delete</button>
+		<button on:click={removePriceLine} class="delete-button">
+			{#if $drawingMenuProps.selectedLineType === 'alert'}
+				Delete Alert
+			{:else}
+				Delete
+			{/if}
+		</button>
 
-		<div class="menu-section">
-			<label for="line-price">Price:</label>
-			<div class="price-input-container">
+		{#if $drawingMenuProps.selectedLineType === 'horizontal'}
+			<!-- Full menu for horizontal lines -->
+			<div class="menu-section">
+				<label for="line-price">Price:</label>
+				<div class="price-input-container">
+					<input
+						id="line-price"
+						value={formattedPrice}
+						on:input={handlePriceInput}
+						on:change={updateHorizontalLine}
+						type="number"
+						step="0.01"
+						class="price-input"
+					/>
+				</div>
+			</div>
+
+			<div class="menu-section">
+				<label for="line-width">Width:</label>
+				<select
+					id="line-width"
+					value={$drawingMenuProps.selectedLineWidth}
+					on:change={handleLineWidthChange}
+					class="line-width-select"
+				>
+					{#each lineWidthOptions as width}
+						<option value={width}>{width}px</option>
+					{/each}
+				</select>
+			</div>
+
+			<div class="menu-section">
+				<label for="line-color">Color:</label>
 				<input
-					id="line-price"
-					value={formattedPrice}
-					on:input={handlePriceInput}
-					on:change={updateHorizontalLine}
-					type="number"
-					step="0.01"
-					class="price-input"
+					id="line-color"
+					type="color"
+					value={$drawingMenuProps.selectedLineColor}
+					on:change={handleColorChange}
+					class="color-picker"
 				/>
 			</div>
-		</div>
 
-		<div class="menu-section">
-			<label for="line-width">Width:</label>
-			<select
-				id="line-width"
-				value={$drawingMenuProps.selectedLineWidth}
-				on:change={handleLineWidthChange}
-				class="line-width-select"
-			>
-				{#each lineWidthOptions as width}
-					<option value={width}>{width}px</option>
+			<div class="color-presets">
+				{#each colorPresets as color}
+					<div
+						class="color-preset"
+						style="background-color: {color}; border: 2px solid {$drawingMenuProps.selectedLineColor ===
+						color
+							? '#4CAF50'
+							: 'transparent'}"
+						on:click={() => selectColorPreset(color)}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && selectColorPreset(color)}
+					></div>
 				{/each}
-			</select>
-		</div>
+			</div>
 
-		<div class="menu-section">
-			<label for="line-color">Color:</label>
-			<input
-				id="line-color"
-				type="color"
-				value={$drawingMenuProps.selectedLineColor}
-				on:change={handleColorChange}
-				class="color-picker"
-			/>
-		</div>
-
-		<div class="color-presets">
-			{#each colorPresets as color}
+			<div class="preview-section">
 				<div
-					class="color-preset"
-					style="background-color: {color}; border: 2px solid {$drawingMenuProps.selectedLineColor ===
-					color
-						? '#4CAF50'
-						: 'transparent'}"
-					on:click={() => selectColorPreset(color)}
-					role="button"
-					tabindex="0"
-					on:keydown={(e) => e.key === 'Enter' && selectColorPreset(color)}
+					class="line-preview"
+					style="height: {$drawingMenuProps.selectedLineWidth}px; background-color: {$drawingMenuProps.selectedLineColor};"
 				></div>
-			{/each}
-		</div>
-
-		<div class="preview-section">
-			<div
-				class="line-preview"
-				style="height: {$drawingMenuProps.selectedLineWidth}px; background-color: {$drawingMenuProps.selectedLineColor};"
-			></div>
-		</div>
+			</div>
+		{:else if $drawingMenuProps.selectedLineType === 'alert'}
+			<!-- Simplified menu for alerts -->
+			<div class="menu-section">
+				<label for="alert-price">Price:</label>
+				<div class="price-input-container">
+					<input
+						id="alert-price"
+						value={formattedPrice}
+						on:input={handlePriceInput}
+						on:change={updateAlertPrice}
+						type="number"
+						step="0.01"
+						class="price-input"
+					/>
+				</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
 <style>
 	.drawing-menu {
-		position: absolute;
+		/* Position will be set dynamically via inline styles */
 		z-index: 9000;
-		background-color: rgba(20, 20, 20, 0.9);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background-color: rgb(20 20 20 / 90%);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 6px;
 		padding: 10px;
 		width: 200px;
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 4px 8px rgb(0 0 0 / 30%);
 		overflow: auto; /* Add scrolling if content becomes too large */
 	}
 
@@ -444,7 +625,7 @@
 
 	.delete-button {
 		width: 100%;
-		background-color: rgba(220, 53, 69, 0.7);
+		background-color: rgb(220 53 69 / 70%);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -455,7 +636,7 @@
 	}
 
 	.delete-button:hover {
-		background-color: rgba(220, 53, 69, 1);
+		background-color: rgb(220 53 69 / 100%);
 	}
 
 	.price-input-container {
@@ -465,9 +646,9 @@
 	.price-input,
 	.line-width-select {
 		width: 100%;
-		background-color: rgba(30, 30, 30, 0.7);
+		background-color: rgb(30 30 30 / 70%);
 		color: white;
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border: 1px solid rgb(255 255 255 / 20%);
 		border-radius: 4px;
 		padding: 5px;
 		font-size: 12px;
@@ -503,7 +684,7 @@
 	.preview-section {
 		margin-top: 10px;
 		padding: 8px;
-		background-color: rgba(0, 0, 0, 0.3);
+		background-color: rgb(0 0 0 / 30%);
 		border-radius: 4px;
 		display: flex;
 		align-items: center;

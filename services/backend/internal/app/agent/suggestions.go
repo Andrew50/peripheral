@@ -57,7 +57,7 @@ func GetSuggestedQueries(conn *data.Conn, userID int, _ json.RawMessage) (interf
 	activeConversationID, err := GetActiveConversationIDCached(ctx, conn, userID)
 	if err == nil && activeConversationID != "" {
 		// Load conversation messages from database
-		messagesInterface, err := GetConversationMessages(ctx, conn, activeConversationID, userID)
+		messagesInterface, err := GetConversationMessagesRaw(ctx, conn, activeConversationID, userID)
 		if err == nil && messagesInterface != nil {
 			// Type assert to get the actual messages
 			if dbMessages, ok := messagesInterface.([]DBConversationMessage); ok && len(dbMessages) > 0 {
@@ -216,7 +216,7 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	barsJSON, _ := json.MarshalIndent(processedBars, "", "  ") // Use processedBars
 
-	sysPrompt, err := getSystemInstruction("initialQueriesPrompt")
+	sysPrompt, err := GetSystemInstruction("initialQueriesPrompt")
 	if err != nil {
 		////fmt.Printf("Error getting system instruction: %v\n", err)
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, fmt.Errorf("error fetching system prompt: %w", err)
@@ -235,23 +235,12 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 	userContent := &genai.Content{Parts: userParts}
 	// --- End Prompt Preparation ---
 
-	// --- Call LLM ---
-	apiKey, err := conn.GetGeminiKey()
-	if err != nil {
-		return nil, fmt.Errorf("error getting Gemini key: %w", err)
-	}
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error creating Gemini client: %w", err)
-	}
+	client := conn.GeminiClient
 
 	// Use GenerateContent with []*genai.Content input
 	result, err := client.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash",
+		"gemini-2.5-flash-lite-preview-06-17",
 		[]*genai.Content{userContent},
 		cfg,
 	)
@@ -263,14 +252,14 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 
 	// --- Parse Response ---
 	llmResponseText := ""
-	if len(result.Candidates) > 0 && result.Candidates[0].Content != nil {
-		for _, p := range result.Candidates[0].Content.Parts {
-			if p.Thought {
-				continue
-			}
-			if p.Text != "" {
-				llmResponseText = p.Text
-				break
+	if len(result.Candidates) > 0 {
+		candidate := result.Candidates[0]
+		if candidate != nil && candidate.Content != nil && candidate.Content.Parts != nil {
+			for _, p := range candidate.Content.Parts {
+				if p != nil && !p.Thought && p.Text != "" {
+					llmResponseText = p.Text
+					break
+				}
 			}
 		}
 	}

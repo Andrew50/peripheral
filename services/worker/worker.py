@@ -1,286 +1,124 @@
 #!/usr/bin/env python3
 """
-Python Strategy Worker
-Executes Python trading strategies in a sandboxed environment
+Strategy Worker
+Executes trading strategies via Redis queue for backtesting and screening
 """
+# pylint: disable=import-error
+
+import os
+import sys
 
 import asyncio
 import json
 import logging
-import os
-import sys
+import threading
 import time
-import traceback
-import uuid
-from contextlib import contextmanager
 from datetime import datetime
-from io import StringIO
-from typing import Any, Dict, Optional
 
-import psutil
-import redis
-
-from src.data_provider import DataProvider
-from src.execution_engine import PythonExecutionEngine
-from src.security_validator import SecurityError, SecurityValidator
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+from src.agent import python_agent
+from src.backtest import backtest
+from src.screen import screen
+from src.alert import alert
+from src.generator import create_strategy
+from src.utils.conn import Conn
+from src.utils.context import Context, NoSubscribersException
+from src.utils.error_utils import capture_exception
 
 # Configure logging
-os.makedirs(
-    "/app/logs", exist_ok=True
-)  # Ensure the logs directory exists before logging setup
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/app/logs/worker.log"),
-    ],
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
-
-class PythonWorker:
-    """Python strategy execution worker"""
-
+class Worker:
+    """Redis queue-based strategy execution worker"""
+    
     def __init__(self):
-        self.redis_client = self._init_redis()
-        self.execution_engine = PythonExecutionEngine()
-        self.security_validator = SecurityValidator()
-        self.data_provider = DataProvider()
-        self.worker_id = os.environ.get("HOSTNAME", str(uuid.uuid4()))
+        self.worker_id = f"worker_{threading.get_ident()}"
+        self.shutdown_requested = False
+        self.conn = Conn()
+        self.tasks_processed = 0
+        self.tasks_failed = 0
+        self.tasks_completed = 0
+        self._current_task_id = None
+        self._current_status_id = None
+        self._current_heartbeat_interval = None
+        self._task_start_time = None
+        self.func_map = {
+            'backtest': backtest,
+            'screen': screen,
+            'alert': alert,
+            'create_strategy': create_strategy,
+            'python_agent': python_agent
+        }
+        self._worker_start_time = time.time()
+        logger.info("🎯 Strategy worker %s started at %s", self.worker_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-    def _init_redis(self) -> redis.Redis:
-        """Initialize Redis connection"""
-        redis_host = os.environ.get("REDIS_HOST", "localhost")
-        redis_port = int(os.environ.get("REDIS_PORT", "6379"))
-        redis_password = os.environ.get("REDIS_PASSWORD")
+    def run(self):
+        """Main queue processing loop with priority queue support"""
 
-        return redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password,
-            decode_responses=True,
-            socket_connect_timeout=60,
-            socket_timeout=60,
-            socket_keepalive=True,
-            socket_keepalive_options={},
-            health_check_interval=30,
-        )
-
-    async def run(self):
-        """Main worker loop"""
-        logger.info(f"Python worker {self.worker_id} starting...")
 
         while True:
+            logger.info("🔍 Waiting for task on %s", self.worker_id)
+            task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
+            if not task:
+                self.conn.check_connections()
+                continue
+            queue_name, task_data = task
+            self.tasks_processed += 1
+            # parsing of task data, this shouldnt fail unless the task data is malformed which is not task dependent
+            # therefore this shouldnt send an error message back as this cannot happen
             try:
-                # Listen for execution requests with longer timeout
-                job_data = self.redis_client.blpop("python_execution_queue", timeout=60)
+                task_data = json.loads(task_data)
+            except json.JSONDecodeError as e:
+                logger.error("❌ Failed to parse task JSON: %s", e)
+                continue
+                
+            task_id = task_data.get('task_id')
+            task_type = task_data.get('task_type')
+            kwargs = json.loads(task_data.get('kwargs', '{}'))
+            priority = task_data.get('priority', 'normal')
+            status_id = task_data.get('status_id')  # Extract status_id for unified channel
+            heartbeat_interval = task_data.get('heartbeat_interval')  # Extract heartbeat interval
+            if not task_id or not task_type or not status_id or not heartbeat_interval or not priority:
+                logger.error("❌ Missing required task data: %s", task_data)
+                continue
 
-                if job_data:
-                    _, job_json = job_data
-                    job = json.loads(job_json)
-                    await self.process_job(job)
-
-            except KeyboardInterrupt:
-                logger.info("Received shutdown signal")
-                break
-            except Exception as e:
-                logger.error(f"Error in worker loop: {e}")
-                # Add exponential backoff to prevent rapid retry loops
-                await asyncio.sleep(5)
-
-    async def process_job(self, job: Dict[str, Any]):
-        """Process a single execution job"""
-        execution_id = job.get("execution_id")
-        logger.info(f"Processing job {execution_id}")
-
-        try:
-            # Update status to running
-            await self._update_execution_status(
-                execution_id,
-                "running",
-                {
-                    "worker_node": self.worker_id,
-                    "started_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-            # Extract job parameters
-            python_code = job["python_code"]
-            input_data = job.get("input_data", {})
-            timeout_seconds = job.get("timeout_seconds", 300)
-            memory_limit_mb = job.get("memory_limit_mb", 512)
-            libraries = job.get("libraries", [])
-            data_prep_sql = job.get("data_prep_sql")
-
-            # Validate code security
-            if not self.security_validator.validate_code(python_code):
-                raise SecurityError("Code contains prohibited operations")
-
-            # Prepare data if SQL provided
-            prepared_data = None
-            if data_prep_sql:
-                prepared_data = await self.data_provider.execute_sql(data_prep_sql)
-
-            # Execute the strategy
-            start_time = time.time()
-            result = await self._execute_with_limits(
-                python_code=python_code,
-                input_data=input_data,
-                prepared_data=prepared_data,
-                timeout_seconds=timeout_seconds,
-                memory_limit_mb=memory_limit_mb,
-                libraries=libraries,
-            )
-            execution_time_ms = int((time.time() - start_time) * 1000)
-
-            # Update status to completed
-            await self._update_execution_status(
-                execution_id,
-                "completed",
-                {
-                    "output_data": result,
-                    "execution_time_ms": execution_time_ms,
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-            logger.info(
-                f"Job {execution_id} completed successfully in {execution_time_ms}ms"
-            )
-
-        except SecurityError as e:
-            logger.error(f"Security violation in job {execution_id}: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": f"Security violation: {str(e)}",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except asyncio.TimeoutError:
-            logger.error(f"Job {execution_id} timed out")
-            await self._update_execution_status(
-                execution_id,
-                "timeout",
-                {
-                    "error_message": "Execution timed out",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except MemoryError as e:
-            logger.error(f"Job {execution_id} exceeded memory limit: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": f"Memory limit exceeded: {str(e)}",
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"Job {execution_id} failed: {e}")
-            await self._update_execution_status(
-                execution_id,
-                "failed",
-                {
-                    "error_message": str(e),
-                    "error_traceback": traceback.format_exc(),
-                    "completed_at": datetime.utcnow().isoformat(),
-                },
-            )
-
-    async def _execute_with_limits(
-        self,
-        python_code: str,
-        input_data: Dict[str, Any],
-        prepared_data: Optional[Dict[str, Any]],
-        timeout_seconds: int,
-        memory_limit_mb: int,
-        libraries: list,
-    ) -> Dict[str, Any]:
-        """Execute Python code with resource limits"""
-
-        # Set up execution context
-        execution_context = {
-            "input_data": input_data,
-            "prepared_data": prepared_data,
-            "libraries": libraries,
-        }
-
-        # Monitor resource usage
-        process = psutil.Process()
-        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
-
-        try:
-            # Execute with timeout
-            result = await asyncio.wait_for(
-                self.execution_engine.execute(python_code, execution_context),
-                timeout=timeout_seconds,
-            )
-
-            # Check memory usage
-            final_memory = process.memory_info().rss / 1024 / 1024  # MB
-            memory_used = final_memory - initial_memory
-
-            if memory_used > memory_limit_mb:
-                raise MemoryError(
-                    f"Memory limit exceeded: {memory_used:.1f}MB > {memory_limit_mb}MB"
-                )
-
-            # Add resource usage to result
-            result["_execution_stats"] = {
-                "memory_used_mb": memory_used,
-                "cpu_percent": process.cpu_percent(),
-            }
-
-            return result
-
-        except asyncio.TimeoutError:
-            raise
-        except Exception as e:
-            logger.error(f"Execution error: {e}")
-            raise
-
-    async def _update_execution_status(
-        self, execution_id: str, status: str, additional_data: Dict[str, Any] = None
-    ):
-        """Update execution status in database via Redis"""
-        try:
-            update_data = {
-                "execution_id": execution_id,
-                "status": status,
-                "worker_id": self.worker_id,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-            if additional_data:
-                update_data.update(additional_data)
-
-            # Publish update for backend to process
-            self.redis_client.publish(
-                "python_execution_updates", json.dumps(update_data)
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to update execution status: {e}")
+            func = self.func_map.get(task_type, None)
+            if not func:
+                logger.error("❌ Unknown task type: %s.", task_type)
+                continue
 
 
-class MemoryError(Exception):
-    """Raised when memory limit is exceeded"""
+            execution_context = Context(self.conn, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
+            kwargs["ctx"] = execution_context
+            logger.info("🔧 Executing %s with args: %s", task_type, kwargs)
 
-    pass
+            result = None
+            error_obj = None
+            status = "completed"
 
-
-async def main():
-    """Main entry point"""
-    worker = PythonWorker()
-    await worker.run()
-
+            try:
+                result = func(**kwargs)
+                status = "completed"
+            except NoSubscribersException:
+                status = "cancelled" # Special status for cancelled tasks
+            except asyncio.TimeoutError as timeout_error:
+                error_obj = capture_exception(logger, timeout_error)
+                status = "error"
+            except MemoryError as memory_error:
+                error_obj = capture_exception(logger, memory_error)
+                status = "error"
+            except Exception as exec_error: # pylint: disable=broad-exception-caught
+                error_obj = capture_exception(logger, exec_error)
+                status = "error"
+            finally:
+                logger.info("💓 Publishing result for task %s %s", task_id, status)
+                execution_context.publish_result(result, error_obj, status) #publish result and stop heartbeat
+                execution_context.destroy() #stop heartbeat and context
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    Worker().run()

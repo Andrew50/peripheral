@@ -38,7 +38,7 @@ Then provide the six sections **in order** and **exactly** as titled below (plai
 3. `POTENTIAL_INDICATORS` – bullets proposing specific indicator instances the strategy might need (give an *id*, *type*, *parameters*, *timeframe*). Keep this section brief.  
 4. `DERIVED_COLUMNS` – bullets for any ad‑hoc calculations (e.g., `gap_pct`, `range_ratio`) with a short verbal “SQL‑style” formula. Only include when necessary.  
 5. `CANDIDATE_CONDITIONS` – numbered natural‑language rules that could become `conditions` or `sequence` entries. Reference the indicators / derived columns you proposed. Frame each rule so it can be evaluated at the **reference bar**.  
-6. `STRATEGY_QUERY` – **one or two clear sentences** combining the most compelling rules into a single natural‑language request suitable for the downstream *createStrategyFromNaturalLanguage* function.
+6. `STRATEGY_QUERY` – **one or two clear sentences** combining the most compelling rules into a single natural‑language request suitable for the downstream *runStrategyAgent* function.
 
 Guidelines:
 

@@ -18,18 +18,21 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install watchdog
 
 # Copy application code
 COPY src/ ./src/
 COPY worker.py .
-COPY hot_reload.py .
+RUN chmod +x /app/worker.py 
 
 # Create directories for data and results
-RUN mkdir -p /app/data /app/results /app/logs
+RUN mkdir -p /app/data /app/results
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+
+# Make entrypoint script executable
 
 # Create non-root user for security
 RUN useradd -m -u 1000 worker && \
@@ -40,5 +43,5 @@ USER worker
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
-# Development command with hot reload
-CMD ["python", "hot_reload.py"] 
+# Development command with watchfiles hot reload
+CMD ["watchmedo", "auto-restart", "--recursive", "--patterns=*py", "--", "python", "-u", "worker.py"]

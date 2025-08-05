@@ -122,76 +122,25 @@
 			formatters={{
 				timestamp: (value) => formatTimestamp(value)
 			}}
-			linkColumns={['url']}
 			on:rowClick={({ detail }) => handleFilingClick(detail)}
 		/>
 	</div>
 </div>
 
 <style>
-	.filings-container {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		padding: clamp(1rem, 3vw, 1.25rem);
-		overflow: hidden; /* Prevent double scrollbars */
-	}
-
-	.header-section {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: clamp(1rem, 3vh, 1.25rem);
-		flex-shrink: 0; /* Prevent header from shrinking */
-	}
-
 	h2 {
 		margin: 0;
 		font-size: clamp(1.25rem, 2.5vw, 1.5rem);
-	}
-
-	.refresh-button {
-		background-color: #333;
-		color: white;
-		border: 1px solid #555;
-		padding: clamp(0.375rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem);
-		border-radius: clamp(4px, 0.5vw, 6px);
-		cursor: pointer;
-	}
-
-	.loading-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: clamp(1rem, 3vw, 1.25rem);
-		gap: clamp(0.5rem, 1vh, 0.625rem);
-		flex: 1;
-	}
-
-	.loading-spinner {
-		width: clamp(1.5rem, 3vw, 1.875rem);
-		height: clamp(1.5rem, 3vw, 1.875rem);
-		border: 3px solid #333;
-		border-top: 3px solid #fff;
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
 	}
 
 	@keyframes spin {
 		0% {
 			transform: rotate(0deg);
 		}
+
 		100% {
 			transform: rotate(360deg);
 		}
-	}
-
-	.no-data {
-		text-align: center;
-		color: #aaa;
-		margin-top: clamp(1rem, 3vh, 1.25rem);
-		flex: 1;
 	}
 
 	/* Make the List component take remaining space and scroll */

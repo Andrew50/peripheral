@@ -20,11 +20,19 @@ spec:
             - containerPort: 3000
           resources:
             requests:
-              cpu: 500m
+              cpu: 100m
               memory: 128Mi
             limits:
               cpu: 500m
               memory: 512Mi
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:5058"
+            - name: PUBLIC_STRIPE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secret
+                  key: STRIPE_PUBLISHABLE_KEY
 ---
 apiVersion: v1
 kind: Service

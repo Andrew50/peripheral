@@ -1,181 +1,317 @@
 <script lang="ts">
-    import type { ConversationSummary } from '../interface';
-    export let conversationDropdown: HTMLDivElement;
-    export let showConversationDropdown: boolean;
-    export let conversations: ConversationSummary[];
-    export let currentConversationId: string;
-    export let currentConversationTitle: string;
-    export let loadingConversations: boolean;
-    export let conversationToDelete: string;
-    export let messagesStore: any;
-    export let isLoading: boolean;
-    export let isTypingTitle: boolean;
-    export let typingTitleText: string;
-    
-    export let isPublicViewing: boolean = false;
-    export let sharedConversationId: string = '';
-    export let toggleConversationDropdown: () => void;
-    export let createNewConversation: () => void;
-    export let switchToConversation: (id: string, title: string) => void;
-    export let deleteConversation: (id: string, e: MouseEvent) => void;
-    export let confirmDeleteConversation: (id: string) => void;
-    export let cancelDeleteConversation: () => void;
-    export let handleShareConversation: (event?: Event) => void;
+	import type { ConversationInfo } from '../interface';
+	import {titleUpdateStore} from '$lib/utils/stream/socket';
+	import { browser } from '$app/environment';
+	import { onDestroy } from 'svelte';
+	export let conversationDropdown: HTMLDivElement;
+	export let showConversationDropdown: boolean;
+	export let conversations: ConversationInfo[];
+	export let currentConversationId: string;
+	export let currentConversationTitle: string;
+	export let loadingConversations: boolean;
+	export let conversationToDelete: string;
+	export let messagesStore: any;
+	export let isLoading: boolean;
+	
+	export let isPublicViewing: boolean = false;
+	export let sharedConversationId: string = '';
+	export let toggleConversationDropdown: () => void;
+	export let createNewConversation: () => void;
+	export let switchToConversation: (id: string, title: string, isPublic: boolean) => void;
+	export let deleteConversation: (id: string, e: MouseEvent) => void;
+	export let confirmDeleteConversation: (id: string) => void;
+	export let cancelDeleteConversation: () => void;
+	export let shareModalRef: any;
+
+	let typingTitleText: string;
+	let isTypingTitle: boolean;
+	let typingTitleTarget: string;
+	let typingInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Share conversation functions
+	async function openShareModal(event?: Event) {
+		// Stop event propagation to prevent immediate closing
+		if (event) {
+			event.stopPropagation();
+			event.preventDefault();
+		}
+
+		// Close conversation dropdown if it's open
+		if (showConversationDropdown) {
+			showConversationDropdown = false;
+		}
+
+		// Toggle the share modal
+		if (shareModalRef) {
+			shareModalRef.toggleModal();
+		}
+	}
+	// Function to create typing effect for title
+	function startTitleTypingEffect(newTitle: string) {
+		// Don't start typing if already typing or if the title is the same
+		if (isTypingTitle || currentConversationTitle === newTitle) {
+			return;
+		}
+
+		isTypingTitle = true;
+		typingTitleTarget = newTitle;
+		typingTitleText = '';
+
+		let currentIndex = 0;
+		const typingSpeed = 50; // milliseconds per character
+
+		// Clear any existing interval
+		if (typingInterval) {
+			clearInterval(typingInterval);
+		}
+
+		typingInterval = setInterval(() => {
+			if (currentIndex < typingTitleTarget.length) {
+				typingTitleText = typingTitleTarget.substring(0, currentIndex + 1);
+				currentIndex++;
+			} else {
+				// Typing complete
+				clearInterval(typingInterval!);
+				typingInterval = null;
+				isTypingTitle = false;
+				currentConversationTitle = typingTitleTarget;
+				typingTitleText = '';
+			}
+		}, typingSpeed);
+	}
+	// Reactive block to handle title updates from websocket
+	$: if ($titleUpdateStore && browser) {
+	const titleUpdate = $titleUpdateStore;
+
+	// Handle title updates for current conversation OR new conversations (when currentConversationId is empty)
+	if (
+		titleUpdate.conversation_id === currentConversationId ||
+		(!currentConversationId && titleUpdate.conversation_id)
+	) {
+		// If this is a new conversation, set the conversation ID
+		if (!currentConversationId) {
+			currentConversationId = titleUpdate.conversation_id;
+		}
+
+		// Start typing effect for the new title
+		startTitleTypingEffect(titleUpdate.title);
+
+		// Also update the conversations list if it's loaded
+		if (conversations.length > 0) {
+			conversations = conversations.map((conv) =>
+				conv.conversation_id === titleUpdate.conversation_id
+					? { ...conv, title: titleUpdate.title }
+					: conv
+			);
+		}
+	}
+
+	// Clear the store after processing
+	titleUpdateStore.set(null);
+	}
+	onDestroy(() => {
+		if (typingInterval) {
+			clearInterval(typingInterval);
+		}
+	});
 </script>
 
 {#if isPublicViewing}
-    <!-- Simple header for public viewing -->
-    <div class="public-conversation-header">
-        <h3>{currentConversationTitle || 'Shared Conversation'}</h3>
-        <div class="header-buttons">
-            <button 
-                class="header-btn share-btn" 
-                on:click={handleShareConversation}
-                disabled={!currentConversationId && !sharedConversationId}
-                title="Share This Conversation"
-            >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                    <polyline points="16,6 12,2 8,6"/>
-                    <line x1="12" y1="2" x2="12" y2="15"/>
-                </svg>
-                Share
-            </button>
-        </div>
-    </div>
+	<!-- Simple header for public viewing -->
+	<div class="public-conversation-header">
+		<h3>{currentConversationTitle || 'Shared Conversation'}</h3>
+		<div class="header-buttons">
+			<button
+				class="header-btn share-btn"
+				on:click={openShareModal}
+				disabled={!currentConversationId && !sharedConversationId}
+				title="Share This Conversation"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					width="14"
+					height="14"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+					<polyline points="16,6 12,2 8,6" />
+					<line x1="12" y1="2" x2="12" y2="15" />
+				</svg>
+				Share
+			</button>
+		</div>
+	</div>
 {:else}
-    <!-- Full conversation management header for authenticated users -->
-    <div class="chat-header">
-        <div class="header-left">
-            <div class="conversation-dropdown-container" bind:this={conversationDropdown}>
-                <button class="hamburger-button" on:click={toggleConversationDropdown} aria-label="Open conversations menu">
-                    <svg viewBox="0 0 24 24" width="20" height="20">
-                        <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
-                    </svg>
-                </button>
-                
-                {#if showConversationDropdown}
-                    <div class="conversation-dropdown glass glass--rounded glass--responsive">
-                        <div class="dropdown-header">
-                            <h4>Conversations</h4>
-                            <div class="header-buttons">
-                                <button class="new-conversation-btn glass glass--small glass--responsive" on:click={createNewConversation}>
-                                    <svg viewBox="0 0 24 24" width="16" height="16">
-                                        <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
-                                    </svg>
-                                    New Chat
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div class="conversation-list">
-                            {#if loadingConversations}
-                                <div class="conversations-skeleton">
-                                    {#each Array(4) as _, i}
-                                        <div class="skeleton-conversation-item">
-                                            <div class="skeleton-conversation-info">
-                                                <div class="skeleton-title">
-                                                    <div class="skeleton-shimmer"></div>
-                                                </div>
-                                                <div class="skeleton-meta">
-                                                    <div class="skeleton-shimmer"></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    {/each}
-                                </div>
-                            {:else if conversations.length === 0}
-                                <div class="no-conversations">No conversations yet</div>
-                            {:else}
-                                {#each conversations as conversation (conversation.conversation_id)}
-                                    <div 
-                                        class="conversation-item {conversation.conversation_id === currentConversationId ? 'active' : ''}"
-                                        on:click={() => switchToConversation(conversation.conversation_id, conversation.title)}
-                                    >
-                                        <div class="conversation-info">
-                                            <div class="conversation-title">{conversation.title}</div>
-                                            <div class="conversation-meta">
-                                                {new Date(conversation.updated_at).toLocaleDateString()}
-                                            </div>
-                                        </div>
-                                        
-                                        {#if conversationToDelete === conversation.conversation_id}
-                                            <!-- Show Yes/No buttons when in delete mode -->
-                                            <div class="delete-confirmation-buttons">
-                                                <button 
-                                                    class="confirm-delete-btn yes"
-                                                    on:click={(e) => {
-                                                        e.stopPropagation();
-                                                        confirmDeleteConversation(conversation.conversation_id);
-                                                    }}
-                                                    aria-label="Confirm delete"
-                                                >
-                                                    Delete
-                                                </button>
-                                                <button 
-                                                    class="confirm-delete-btn no"
-                                                    on:click={(e) => {
-                                                        e.stopPropagation();
-                                                        cancelDeleteConversation();
-                                                    }}
-                                                    aria-label="Cancel delete"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        {:else}
-                                            <!-- Show normal delete button -->
-                                            <button 
-                                                class="delete-conversation-btn"
-                                                on:click={(e) => deleteConversation(conversation.conversation_id, e)}
-                                                aria-label="Delete conversation"
-                                            >
-                                                <svg viewBox="0 0 24 24" width="14" height="14">
-                                                    <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" fill="currentColor" />
-                                                </svg>
-                                            </button>
-                                        {/if}
-                                    </div>
-                                {/each}
-                            {/if}
-                        </div>
-                    </div>	
-                {/if}
-            </div>
-            
-            <h3 class="conversation-title">
-                {#if isTypingTitle}
-                    {typingTitleText}<span class="typing-cursor">|</span>
-                {:else}
-                    {currentConversationTitle}
-                {/if}
-            </h3>
-        </div>
-        
-        <div class="header-right">
-            {#if $messagesStore.length > 0 || currentConversationId}
-                <div class="header-buttons">
-                    <button 
-                        class="header-btn share-btn" 
-                        on:click={handleShareConversation}
-                        disabled={!currentConversationId}
-                        title="Share Current Conversation"
-                    >
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                            <polyline points="16,6 12,2 8,6"/>
-                            <line x1="12" y1="2" x2="12" y2="15"/>
-                        </svg>
-                        Share
-                    </button>
-                    <button class="header-btn new-chat-btn" on:click={createNewConversation} disabled={isLoading}>
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                            <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
-                        </svg>
-                        <span class="new-chat-text">New Chat</span>
-                    </button>
-                </div>
-            {/if}
-        </div>
-    </div>
+	<!-- Full conversation management header for authenticated users -->
+	<div class="chat-header">
+		<div class="header-left">
+			<div class="conversation-dropdown-container" bind:this={conversationDropdown}>
+				<button
+					class="hamburger-button"
+					on:click={toggleConversationDropdown}
+					aria-label="Open conversations menu"
+				>
+					<svg viewBox="0 0 24 24" width="20" height="20">
+						<path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" fill="currentColor" />
+					</svg>
+				</button>
+
+				{#if showConversationDropdown}
+					<div class="conversation-dropdown glass glass--rounded glass--responsive">
+						<div class="dropdown-header">
+							<h4>Conversations</h4>
+							<div class="header-buttons">
+								<button
+									class="new-conversation-btn glass glass--small glass--responsive"
+									on:click={createNewConversation}
+								>
+									<svg viewBox="0 0 24 24" width="16" height="16">
+										<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
+									</svg>
+									New Chat
+								</button>
+							</div>
+						</div>
+
+						<div class="conversation-list">
+							{#if loadingConversations}
+								<div class="conversations-skeleton">
+									{#each Array(4) as _, i}
+										<div class="skeleton-conversation-item">
+											<div class="skeleton-conversation-info">
+												<div class="skeleton-title">
+													<div class="skeleton-shimmer"></div>
+												</div>
+												<div class="skeleton-meta">
+													<div class="skeleton-shimmer"></div>
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{:else if conversations.length === 0}
+								<div class="no-conversations">No conversations yet</div>
+							{:else}
+								{#each conversations as conversation (conversation.conversation_id)}
+									<div
+										class="conversation-item {conversation.conversation_id === currentConversationId
+											? 'active'
+											: ''}"
+										on:click={() =>
+											switchToConversation(conversation.conversation_id, conversation.title, conversation.is_public)}
+										role="button"
+										tabindex="0"
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault();
+												switchToConversation(conversation.conversation_id, conversation.title, conversation.is_public);
+											}
+										}}
+									>
+										<div class="conversation-info">
+											<div class="conversation-title">{conversation.title}</div>
+											<div class="conversation-meta">
+												{new Date(conversation.updated_at).toLocaleDateString()}
+											</div>
+										</div>
+
+										{#if conversationToDelete === conversation.conversation_id}
+											<!-- Show Yes/No buttons when in delete mode -->
+											<div class="delete-confirmation-buttons">
+												<button
+													class="confirm-delete-btn yes"
+													on:click={(e) => {
+														e.stopPropagation();
+														confirmDeleteConversation(conversation.conversation_id);
+													}}
+													aria-label="Confirm delete"
+												>
+													Delete
+												</button>
+												<button
+													class="confirm-delete-btn no"
+													on:click={(e) => {
+														e.stopPropagation();
+														cancelDeleteConversation();
+													}}
+													aria-label="Cancel delete"
+												>
+													Cancel
+												</button>
+											</div>
+										{:else}
+											<!-- Show normal delete button -->
+											<button
+												class="delete-conversation-btn"
+												on:click={(e) => deleteConversation(conversation.conversation_id, e)}
+												aria-label="Delete conversation"
+											>
+												<svg viewBox="0 0 24 24" width="14" height="14">
+													<path
+														d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+														fill="currentColor"
+													/>
+												</svg>
+											</button>
+										{/if}
+									</div>
+								{/each}
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<h3 class="conversation-title">
+				{#if isTypingTitle}
+					{typingTitleText}<span class="typing-cursor">|</span>
+				{:else}
+					{currentConversationTitle}
+				{/if}
+			</h3>
+		</div>
+
+		<div class="header-right">
+			{#if $messagesStore.length > 0 || currentConversationId}
+				<div class="header-buttons">
+					<button
+						class="header-btn share-btn"
+						on:click={openShareModal}
+						disabled={!currentConversationId}
+						title="Share Current Conversation"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							width="14"
+							height="14"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+							<polyline points="16,6 12,2 8,6" />
+							<line x1="12" y1="2" x2="12" y2="15" />
+						</svg>
+						Share
+					</button>
+					<button
+						class="header-btn new-chat-btn"
+						on:click={createNewConversation}
+						disabled={isLoading}
+					>
+						<svg viewBox="0 0 24 24" width="14" height="14">
+							<path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor" />
+						</svg>
+						<span class="new-chat-text">New Chat</span>
+					</button>
+				</div>
+			{/if}
+		</div>
+	</div>
 {/if}

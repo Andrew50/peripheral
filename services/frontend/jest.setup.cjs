@@ -1,2 +1,2 @@
-// Import @testing-library/jest-dom
-require('@testing-library/jest-dom'); 
+// Jest setup file - CommonJS format
+require('@testing-library/jest-dom');

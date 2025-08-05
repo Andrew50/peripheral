@@ -10,7 +10,7 @@ declare global {
 	}
 }
 
-export { };
+export {};
 
 // Add missing module declarations for SvelteKit
 declare module '$app/environment' {

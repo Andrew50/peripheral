@@ -19,7 +19,7 @@ if ! minikube status -p "$MINIKUBE_PROFILE" &> /dev/null; then
         MEM_SIZE=65536  # 64GB
     fi
     
-    minikube start -p "$MINIKUBE_PROFILE" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --v=1
+    minikube start -p "$MINIKUBE_PROFILE" --cpus="$CPU_COUNT" --memory="$MEM_SIZE" --disk-size="400g" --v=1
     
     if minikube status -p "$MINIKUBE_PROFILE" &> /dev/null; then
         echo "Minikube profile '$MINIKUBE_PROFILE' started successfully with CPU=$CPU_COUNT, Memory=${MEM_SIZE}MB."
@@ -38,9 +38,32 @@ fi
 echo "Setting kubectl to use minikube profile '$MINIKUBE_PROFILE' context..."
 minikube update-context -p "$MINIKUBE_PROFILE"
 
-echo "Enabling ingress addon for profile '$MINIKUBE_PROFILE'..."
-minikube addons enable ingress -p "$MINIKUBE_PROFILE"
-echo "Ingress addon enabled."
+enable_if_missing () {
+  local addon=$1
+  if ! minikube addons list -p "$MINIKUBE_PROFILE" | grep -qE "${addon}[[:space:]]+enabled"; then
+    echo "Enabling $addon addon for profile '$MINIKUBE_PROFILE'..."
+    minikube addons enable "$addon" -p "$MINIKUBE_PROFILE"
+    echo "$addon addon enabled."
+  else
+    echo "$addon addon already enabled for '$MINIKUBE_PROFILE'."
+  fi
+}
+
+# --- Required for Ingresses ---------------------------------------------------
+enable_if_missing ingress           # nginx‑ingress controller + admission webhook
+enable_if_missing metrics-server    # lets HPAs fetch CPU/memory metrics
+
+# Wait for the ingress-nginx controller pods to be ready (up to 2 minutes)
+echo "Waiting for ingress-nginx controller pods to become ready..."
+if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s; then
+  echo "ERROR: ingress-nginx controller pods did not become ready in time."
+  kubectl get pods --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" --selector=app.kubernetes.io/component=controller -o wide
+  exit 1
+fi
+echo "Ingress-nginx controller pods are ready."
 
 echo "Waiting for ingress-nginx admission configuration jobs to complete..."
 # Wait up to 2 minutes for the admission create job
@@ -57,7 +80,6 @@ if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
 fi
 echo "Ingress Nginx admission jobs completed."
 
-
 echo "Waiting for ingress-nginx controller deployment to be ready..."
 # Wait up to 2 minutes for the deployment to become available in the ingress-nginx namespace
 if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
@@ -72,9 +94,6 @@ if ! kubectl wait --namespace ingress-nginx --context="${MINIKUBE_PROFILE}" \
   exit 1
 fi
 echo "Ingress Nginx controller deployment is ready."
-
-
-#kubectl config use-context "${MINIKUBE_PROFILE}" #should --context arg be passed here? remove this becuase all kuectl commands statelessly use --context="{MINIKUBE_PROFILE}"
 
 # Set namespace if provided and create it if it doesn't exist
 if [[ -n "$K8S_NAMESPACE" ]]; then

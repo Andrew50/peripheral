@@ -34,6 +34,23 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: POSTGRES_DB
               value: "postgres"
+            # OpenAI API key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-secret
+                  key: OPENAI_API_KEY
+            - name: FRED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fred-secret
+                  key: FRED_API_KEY
+            # Gemini API key
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-secret
+                  key: GEMINI_API_KEY
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
@@ -51,17 +68,20 @@ spec:
                   fieldPath: metadata.name
           resources:
             requests:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
-              cpu: "2000m"
+              cpu: "1000m"
               memory: "2Gi"
           livenessProbe:
             exec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis
+                  r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True)
+                  r.ping()
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -71,7 +91,10 @@ spec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis
+                  r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True)
+                  r.ping()
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
@@ -95,7 +118,7 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 100
     - type: Resource
       resource:
         name: memory
@@ -106,12 +129,12 @@ spec:
     scaleUp:
       stabilizationWindowSeconds: 60
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
+        - type: Percent
+          value: 100
+          periodSeconds: 15
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60 
+        - type: Percent
+          value: 50
+          periodSeconds: 60

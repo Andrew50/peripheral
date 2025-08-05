@@ -29,7 +29,7 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 				LIMIT 1
 			) as last_message_query
 		FROM conversations c
-		WHERE c.user_id = $1
+		WHERE c.userId = $1
 		ORDER BY c.updated_at DESC`
 
 	rows, err := conn.DB.Query(context.Background(), query, userID)
@@ -38,9 +38,9 @@ func GetUserConversations(conn *data.Conn, userID int, _ json.RawMessage) (inter
 	}
 	defer rows.Close()
 
-	var conversations []ConversationSummary
+	var conversations []ConversationInfo
 	for rows.Next() {
-		var conv ConversationSummary
+		var conv ConversationInfo
 		var lastMessageQuery sql.NullString
 
 		err := rows.Scan(
@@ -134,15 +134,16 @@ func DeleteConversation(conn *data.Conn, userID int, args json.RawMessage) (inte
 }
 
 // Helper function to convert DB messages to ConversationData format
-func convertDBMessagesToConversationData(dbMessages []DBConversationMessage) *ConversationData {
+func convertDBMessagesToConversationData(conn *data.Conn, userID int, dbMessages []DBConversationMessage) *ConversationData {
 	var chatMessages []ChatMessage
 	var totalTokenCount int
 
 	for _, dbMsg := range dbMessages {
+		contentChunks := processContentChunksForFrontend(context.Background(), conn, userID, dbMsg.ContentChunks)
 		chatMsg := ChatMessage{
 			MessageID:        dbMsg.MessageID,
 			Query:            dbMsg.Query,
-			ContentChunks:    dbMsg.ContentChunks,
+			ContentChunks:    contentChunks,
 			ResponseText:     dbMsg.ResponseText,
 			FunctionCalls:    dbMsg.FunctionCalls,
 			ToolResults:      dbMsg.ToolResults,
@@ -316,16 +317,17 @@ func checkIfConversationIsPublic(conn *data.Conn, conversationID string) (bool, 
 	var userID int
 	var title string
 
-	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, user_id, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
+	err := conn.DB.QueryRow(context.Background(), "SELECT is_public, userid, title FROM conversations WHERE conversation_id = $1", conversationID).Scan(&isPublic, &userID, &title)
 	if err != nil {
 		return false, 0, "", err
 	}
 	return isPublic, userID, title, nil
 }
-func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, string, error) {
+func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID string) (bool, int, string, string, string, string, error) {
 	var isPublic bool
 	var userID int
 	var title string
+	var plot string
 	var firstUserMessage sql.NullString
 	var firstAssistantMessage string
 	var contentChunksJSON []byte
@@ -342,8 +344,9 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		)
 		SELECT 
 			c.is_public,
-			c.user_id,
+			c.userid,
 			c.title,
+			c.plot,
 			fm1.query as first_query,
 			COALESCE(fm2.content_chunks, '[]'::jsonb) as first_content_chunks
 		FROM conversations c
@@ -355,16 +358,17 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		&isPublic,
 		&userID,
 		&title,
+		&plot,
 		&firstUserMessage,
 		&contentChunksJSON,
 	)
 	if err != nil {
-		return false, 0, "", "", "", err
+		return false, 0, "", "", "", "", err
 	}
 
 	// If not public, return early
 	if !isPublic {
-		return false, 0, "", "", "", fmt.Errorf("conversation is not public")
+		return false, 0, "", "", "", "", fmt.Errorf("conversation is not public")
 	}
 
 	// Extract text from content_chunks
@@ -403,7 +407,7 @@ func checkIfConversationIsPublicAndGrabPreview(conn *data.Conn, conversationID s
 		firstUserMessageStr = firstUserMessage.String
 	}
 
-	return isPublic, userID, title, firstUserMessageStr, firstAssistantMessage, nil
+	return isPublic, userID, title, plot, firstUserMessageStr, firstAssistantMessage, nil
 }
 
 type GetPublicConversationRequest struct {
@@ -415,7 +419,6 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing request: %w", err)
 	}
-	fmt.Println("Getting public conversation for conversationID:", args.ConversationID)
 	var isPublic bool
 	var userID int
 	var title string
@@ -428,7 +431,7 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	}
 
 	// Get the raw messages
-	messagesInterface, err := GetConversationMessages(context.Background(), conn, args.ConversationID, userID)
+	messagesInterface, err := GetConversationMessagesRaw(context.Background(), conn, args.ConversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +443,7 @@ func GetPublicConversation(conn *data.Conn, rawArgs json.RawMessage) (interface{
 	}
 
 	// Convert to the format expected by the frontend
-	conversationData := convertDBMessagesToConversationData(messages)
+	conversationData := convertDBMessagesToConversationData(conn, userID, messages)
 	conversationData.ConversationID = args.ConversationID
 	conversationData.Title = title
 
@@ -481,6 +484,7 @@ type ConversationSnippetResponse struct {
 	Title         string `json:"title"`
 	FirstQuery    string `json:"first_query"`
 	FirstResponse string `json:"first_response"`
+	Plot          string `json:"plot"`
 }
 
 func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
@@ -494,7 +498,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 	}
 
 	// Use the updated function to get conversation preview data
-	isPublic, _, title, firstUserMessage, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
+	isPublic, _, title, plot, firstUserMessage, firstResponse, err := checkIfConversationIsPublicAndGrabPreview(conn, args.ConversationID)
 	if !isPublic {
 		return nil, fmt.Errorf("conversation not public")
 	}
@@ -506,6 +510,7 @@ func GetConversationSnippet(conn *data.Conn, rawArgs json.RawMessage) (interface
 		Title:         title,
 		FirstQuery:    firstUserMessage,
 		FirstResponse: firstResponse,
+		Plot:          plot,
 	}, nil
 }
 
@@ -579,6 +584,7 @@ func RetryMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{
 	if status == "pending" {
 		return nil, fmt.Errorf("cannot retry a message that is currently being processed")
 	}
+	// Allow retrying error messages as well as completed ones
 
 	// Archive all messages after this one (preserve them for logging with retry reason)
 	archiveSQL := `UPDATE conversation_messages SET archived = TRUE, archive_reason = $1 WHERE conversation_id = $2 AND message_order >= $3 AND archived = FALSE`

@@ -5,7 +5,7 @@ import type {
 	ISeriesPrimitive,
 	SeriesAttachedParameter,
 	SeriesOptionsMap,
-	Time,
+	Time
 } from 'lightweight-charts';
 
 export abstract class PluginBase implements ISeriesPrimitive<Time> {
@@ -54,5 +54,5 @@ export abstract class PluginBase implements ISeriesPrimitive<Time> {
 		if (this.dataUpdated) {
 			this.dataUpdated(scope);
 		}
-	}
+	};
 }

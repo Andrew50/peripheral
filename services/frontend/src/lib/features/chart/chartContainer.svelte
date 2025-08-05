@@ -4,11 +4,12 @@
 	import { onMount, tick } from 'svelte';
 	import { queryInstanceInput } from '$lib/components/input/input.svelte';
 	import { queryChart } from './interface';
-	export let width: number;
+	export let defaultChartData: any;
 
 	// Add focus management
 	let containerRef: HTMLDivElement;
-
+	let containerWidth = 0;
+	let chartWidth = 0;
 	onMount(() => {
 		// Wait for DOM to be ready
 		tick().then(() => {
@@ -16,28 +17,30 @@
 				containerRef.focus();
 			}
 		});
-	});
+		const ro = new ResizeObserver((entries) => {
+			containerWidth = entries[0].contentRect.width;
+			chartWidth = Math.floor(containerWidth / $settings.chartColumns);
+		});
 
-	// Handle focus management
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Tab') {
-			event.preventDefault(); // Prevent default tab behavior
-		}
-	}
+		ro.observe(containerRef);
+		return () => ro.disconnect();
+	});
 </script>
 
 <div
 	class="chart-container"
 	bind:this={containerRef}
-	tabindex="0"
 	role="application"
 	aria-label="Chart Container"
-	on:keydown={handleKeyDown}
 >
 	{#each Array.from({ length: $settings.chartRows }) as _, j}
 		<div class="row" style="height: calc(100% / {$settings.chartRows})">
 			{#each Array.from({ length: $settings.chartColumns }) as _, i}
-				<Chart width={width / $settings.chartColumns} chartId={i + j * $settings.chartColumns} />
+				<Chart
+					width={chartWidth}
+					chartId={i + j * $settings.chartColumns}
+					defaultChartData={i + j * $settings.chartColumns === 0 ? defaultChartData : null}
+				/>
 			{/each}
 		</div>
 	{/each}
@@ -57,16 +60,16 @@
 		display: flex;
 		width: 100%;
 		justify-content: space-between;
-		flex: 1;
+		min-width: 0;
 		min-height: 0;
 	}
 
 	/* Add responsive focus indicator for accessibility */
 	.chart-container:focus {
-		box-shadow: inset 0 0 0 clamp(1px, 0.2vw, 2px) var(--ui-accent, rgba(59, 130, 246, 0.5));
+		box-shadow: inset 0 0 0 clamp(1px, 0.2vw, 2px) var(--ui-accent, rgb(59 130 246 / 50%));
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		/* Adjust for smaller screens if needed */
 		.chart-container {
 			overflow: hidden;

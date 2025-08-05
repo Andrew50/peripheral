@@ -1,7 +1,7 @@
 import type { Instance } from '$lib/utils/types/types';
-import { writable, get, type Writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { streamInfo } from '$lib/utils/stores/stores';
-import { privateRequest, publicRequest } from '$lib/utils/helpers/backend';
+import { publicRequest } from '$lib/utils/helpers/backend';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 export interface ShiftOverlay {
@@ -34,7 +34,7 @@ export interface ChartQueryDispatch extends Instance {
 export interface ChartEventDispatch {
 	event: ChartEvent;
 	chartId: ChartId;
-	data: any;
+	data: unknown;
 }
 
 export const activeChartInstance = writable<Instance | null>(null);
@@ -82,7 +82,7 @@ export const chartEventDispatcher = writable<ChartEventDispatch>({
 	data: null
 });
 
-export function eventChart(event: ChartEvent, chartId: ChartId = 0, data: any = null) {
+export function eventChart(event: ChartEvent, chartId: ChartId = 0, data: unknown = null) {
 	chartEventDispatcher.set({ event, chartId, data });
 }
 
@@ -105,10 +105,9 @@ export function queryChart(newInstance: Instance, includeLast: boolean = true): 
 	}
 	// Ensure we have all necessary instance properties
 	if (!newInstance.name && newInstance.securityId) {
-		publicRequest<Record<string, any>>(
-			'getTickerMenuDetails',
-			{ securityId: newInstance.securityId }
-		)
+		publicRequest<Record<string, unknown>>('getTickerMenuDetails', {
+			securityId: newInstance.securityId
+		})
 			.then((details) => {
 				const updatedDispatch: ChartQueryDispatch = {
 					...queryDispatch,
@@ -133,7 +132,7 @@ export interface BarData {
 	low: number;
 	close: number;
 	volume: number;
-	events?: Array<{timestamp: number, type: string, value: string}>;
+	events?: Array<{ timestamp: number; type: string; value: string }>;
 }
 
 export interface CustomData<Time extends UTCTimestamp> extends Omit<BarData, 'time'> {

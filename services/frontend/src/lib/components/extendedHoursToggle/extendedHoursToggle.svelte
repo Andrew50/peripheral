@@ -17,8 +17,7 @@
 	function setRegular() {
 		if (instance && instance.extendedHours) {
 			const updatedInstance = { ...instance, extendedHours: false };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350); // Start fade-out slightly before slide completes
@@ -27,14 +26,17 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600); // Total time: slide (300ms) + fade (250ms) + buffer (50ms)
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		}
 	}
 
 	function setExtended() {
 		if (instance && !instance.extendedHours) {
 			const updatedInstance = { ...instance, extendedHours: true };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350); // Start fade-out slightly before slide completes
@@ -43,18 +45,21 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600); // Total time: slide (300ms) + fade (250ms) + buffer (50ms)
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		}
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
 		// Always stop propagation to prevent other handlers from interfering
 		event.stopPropagation();
-		
+
 		if (event.key === 'Tab' || event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			const updatedInstance = { ...instance, extendedHours: !instance.extendedHours };
-			queryChart(updatedInstance, true);
-			// Start closing animation after slide completes
+			// Start animation immediately for responsive UI
 			setTimeout(() => {
 				isClosing = true;
 			}, 350);
@@ -63,6 +68,10 @@
 				dispatch('change');
 				dispatch('close');
 			}, 600);
+			// Make server call asynchronously to avoid blocking animation
+			setTimeout(() => {
+				queryChart(updatedInstance, true);
+			}, 0);
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			dispatch('close');
@@ -75,7 +84,7 @@
 
 	function handleClickOutside(event: MouseEvent) {
 		if (!visible || !toggleContainer) return;
-		
+
 		const target = event.target as Node;
 		if (toggleContainer && !toggleContainer.contains(target)) {
 			dispatch('close');
@@ -123,40 +132,49 @@
 		removeDocumentListener();
 	});
 </script>
+
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <!-- svelte-ignore a11y-no-static-element-interactions	-->
-	{#if visible}
-		<div class="extended-hours-overlay" class:closing={isClosing} on:click={handleOverlayClick} on:keydown={handleKeyDown} role="dialog" aria-label="Extended Hours Toggle" tabindex="-1">
-			<div bind:this={toggleContainer} class="extended-hours-toggle" on:click|stopPropagation>
-				<div class="segmented-control glass glass--rounded glass--responsive">
-					<div class="sliding-indicator" class:extended={instance?.extendedHours}></div>
-					<button 
-						bind:this={regularButton}
-						class="segment-button regular"
-						class:active={!instance?.extendedHours}
-						on:click|stopPropagation={setRegular}
-						on:keydown|stopPropagation={handleKeyDown}
-						aria-label="Set to regular hours"
-						aria-pressed={!instance?.extendedHours ? 'true' : 'false'}
-					>
-						Regular
-					</button>
-					<button 
-						bind:this={toggleButton}
-						class="segment-button extended"
-						class:active={instance?.extendedHours}
-						on:click|stopPropagation={setExtended}
-						on:keydown|stopPropagation={handleKeyDown}
-						aria-label="Set to extended hours"
-						aria-pressed={instance?.extendedHours ? 'true' : 'false'}
-					>
-						Extended
-					</button>
-				</div>
+{#if visible}
+	<div
+		class="extended-hours-overlay"
+		class:closing={isClosing}
+		on:click={handleOverlayClick}
+		on:keydown={handleKeyDown}
+		role="dialog"
+		aria-label="Extended Hours Toggle"
+		tabindex="-1"
+	>
+		<div bind:this={toggleContainer} class="extended-hours-toggle" on:click|stopPropagation>
+			<div class="segmented-control glass glass--rounded glass--responsive">
+				<div class="sliding-indicator" class:extended={instance?.extendedHours}></div>
+				<button
+					bind:this={regularButton}
+					class="segment-button regular"
+					class:active={!instance?.extendedHours}
+					on:click|stopPropagation={setRegular}
+					on:keydown|stopPropagation={handleKeyDown}
+					aria-label="Set to regular hours"
+					aria-pressed={!instance?.extendedHours ? 'true' : 'false'}
+				>
+					Regular
+				</button>
+				<button
+					bind:this={toggleButton}
+					class="segment-button extended"
+					class:active={instance?.extendedHours}
+					on:click|stopPropagation={setExtended}
+					on:keydown|stopPropagation={handleKeyDown}
+					aria-label="Set to extended hours"
+					aria-pressed={instance?.extendedHours ? 'true' : 'false'}
+				>
+					Extended
+				</button>
 			</div>
 		</div>
-	{/if}
+	</div>
+{/if}
 
 <style>
 	.extended-hours-overlay {
@@ -179,6 +197,7 @@
 			opacity: 0;
 			transform: translateX(-50%) translateY(-20px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
@@ -190,6 +209,7 @@
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
 		}
+
 		to {
 			opacity: 0;
 			transform: translateX(-50%) translateY(-20px);
@@ -207,6 +227,7 @@
 			transform: scale(0.9);
 			opacity: 0;
 		}
+
 		to {
 			transform: scale(1);
 			opacity: 1;
@@ -228,11 +249,11 @@
 		left: 4px;
 		width: calc(50% - 4px);
 		height: calc(100% - 8px);
-		background: rgba(255, 255, 255, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 20%);
+		border: 1px solid rgb(255 255 255 / 30%);
 		border-radius: 6px;
 		transition: transform 0.3s ease;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 		backdrop-filter: blur(8px);
 		z-index: 1;
 	}
@@ -247,7 +268,7 @@
 		z-index: 2;
 		background: transparent;
 		border: none;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 13px;
 		font-weight: 600;
 		cursor: pointer;
@@ -256,32 +277,30 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		user-select: none;
 		outline: none;
 	}
 
-
-
 	.segment-button.active {
-		color: rgba(255, 255, 255, 1);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 1);
+		color: rgb(255 255 255 / 100%);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 100%);
 	}
 
 	.segment-button:hover:not(.active) {
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.extended-hours-overlay {
 			top: 15px;
 		}
-		
+
 		.segmented-control {
 			width: 180px;
 			height: 36px;
 		}
-		
+
 		.segment-button {
 			font-size: 12px;
 		}

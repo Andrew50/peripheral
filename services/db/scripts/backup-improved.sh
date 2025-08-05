@@ -46,12 +46,15 @@ send_backup_alert() {
         "INFO") emoji="ℹ️" ;;
     esac
     
+    # Get environment info consistently to avoid literal placeholder output
+    local env_info="${ENVIRONMENT:-Development}"
+    
     # Format message for Telegram
     local telegram_message="$emoji *Database Backup - $alert_type*
 
 *System:* PostgreSQL Backup System
 *Time:* $timestamp
-*Environment:* ${ENVIRONMENT:-Development}
+*Environment:* $env_info
 
 *Message:*
 $message
@@ -159,7 +162,7 @@ main() {
     # Create backup with verbose output
     log "Starting pg_dump..."
     
-    # Use comprehensive pg_dump options
+    # Use comprehensive pg_dump options, excluding large OHLCV tables
     if PGPASSWORD=$POSTGRES_PASSWORD pg_dump \
         -U "$DB_USER" \
         -d "$DB_NAME" \
@@ -170,6 +173,8 @@ main() {
         --create \
         --clean \
         --if-exists \
+        --exclude-table=ohlcv_1m \
+        --exclude-table=ohlcv_1d \
         > "$BACKUP_FILE" 2>>"$LOG_FILE"; then
         
         log "pg_dump completed successfully"
@@ -218,13 +223,14 @@ EOF
     
     # Cleanup old backups
     log "Cleaning up backups older than $RETENTION_DAYS days..."
-    local deleted_count=$(find "$BACKUP_DIR" -name "backup_*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete -print | wc -l)
+    # Delete compressed (.sql.gz) AND legacy uncompressed (.sql) dumps older than the retention window
+    local deleted_count=$(find "$BACKUP_DIR" -type f \( -name "backup_*.sql" -o -name "backup_*.sql.gz" \) -mtime +$RETENTION_DAYS -delete -print | wc -l)
     find "$BACKUP_DIR" -name "backup_*.manifest" -type f -mtime +$RETENTION_DAYS -delete
     log "Removed $deleted_count old backup files"
     
     # List recent backups
     log "Recent backups:"
-    ls -lah "$BACKUP_DIR"/backup_*.sql.gz | tail -5 | while read line; do
+    ls -lah "$BACKUP_DIR"/backup_*.sql* 2>/dev/null | tail -5 | while read line; do
         log "  $line"
     done
     

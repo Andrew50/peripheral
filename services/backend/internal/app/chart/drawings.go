@@ -54,12 +54,42 @@ type DeleteHorizontalLineArgs struct {
 	ID int `json:"id"`
 }
 
+func AgentDeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := DeleteHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		var args DeleteHorizontalLineArgs
+		err = json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		lineData := map[string]interface{}{
+			"id": args.ID,
+		}
+		socket.SendHorizontalLineUpdate(userID, "remove", securityID, lineData)
+	}()
+	*/
+	return res, nil
+}
+
 // DeleteHorizontalLine performs operations related to DeleteHorizontalLine functionality.
 func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteHorizontalLineArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %v", err)
 	}
+
+	// Get security ID before deletion for WebSocket update
+	var securityID int
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT securityId FROM horizontal_lines WHERE id = $1 AND userId = $2`,
+		args.ID, userID).Scan(&securityID)
+	if err != nil {
+		return nil, fmt.Errorf("horizontal line not found: %v", err)
+	}
+
 	cmdTag, err := conn.DB.Exec(context.Background(), `DELETE FROM horizontal_lines WHERE id = $1 AND userId = $2`, args.ID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
@@ -67,7 +97,31 @@ func DeleteHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) 
 	if cmdTag.RowsAffected() == 0 {
 		return nil, fmt.Errorf("error deleting horizontal line: %v", err)
 	}
+
 	return nil, nil
+}
+
+func AgentSetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := SetHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		var args HorizontalLine
+		err = json.Unmarshal(rawArgs, &args)
+		if err != nil {
+			return
+		}
+		lineData := map[string]interface{}{
+			"id":         id,
+			"securityId": line.SecurityID,
+			"price":      line.Price,
+			"color":      line.Color,
+			"lineWidth":  line.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "add", line.SecurityID, lineData)
+	}()*/
+	return res, nil
 }
 
 // SetHorizontalLine performs operations related to SetHorizontalLine functionality.
@@ -93,6 +147,7 @@ func SetHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	if err != nil {
 		return nil, fmt.Errorf("error inserting horizontal line: %v", err)
 	}
+
 	return id, nil
 }
 
@@ -103,6 +158,24 @@ type UpdateHorizontalLineArgs struct {
 	Price      float64 `json:"price"`
 	Color      string  `json:"color"`
 	LineWidth  int     `json:"lineWidth"`
+}
+
+func AgentUpdateHorizontalLine(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	res, err := UpdateHorizontalLine(conn, userID, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	/*go func() {
+		lineData := map[string]interface{}{
+			"id":         args.ID,
+			"securityId": args.SecurityID,
+			"price":      args.Price,
+			"color":      args.Color,
+			"lineWidth":  args.LineWidth,
+		}
+		socket.SendHorizontalLineUpdate(userID, "update", args.SecurityID, lineData)
+	}()*/
+	return res, nil
 }
 
 // UpdateHorizontalLine performs operations related to UpdateHorizontalLine functionality.

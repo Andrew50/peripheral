@@ -101,8 +101,6 @@
 		}, 50);
 	}
 
-
-
 	// Watch for content changes that might affect size
 	$: if (hoveredCandleData || instance || width) {
 		debouncedCheckOverflow();
@@ -137,39 +135,45 @@
 	});
 </script>
 
-<div
-	bind:this={legendElement}
-	tabindex="-1"
-	class="legend {isOverflowing ? 'compact' : ''}"
->
-
+<div bind:this={legendElement} tabindex="-1" class="legend {isOverflowing ? 'compact' : ''}">
 	{#if showPriceGrid}
-			<!-- OHLC Row -->
-			<div class="ohlc-row">
-				<span class="label">O</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.open.toFixed(2)}</span>
-				<span class="label">H</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.high.toFixed(2)}</span>
-				<span class="label">L</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.low.toFixed(2)}</span>
-				<span class="label">C</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">{$hoveredCandleData.close.toFixed(2)}</span>
-			</div>
-		{/if}
+		<!-- OHLC Row -->
+		<div class="ohlc-row">
+			<span class="label">O</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.open.toFixed(2)}</span
+			>
+			<span class="label">H</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.high.toFixed(2)}</span
+			>
+			<span class="label">L</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.low.toFixed(2)}</span
+			>
+			<span class="label">C</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}"
+				>{$hoveredCandleData.close.toFixed(2)}</span
+			>
+		</div>
+	{/if}
 
-		{#if showMetricsGrid}
-			<!-- Metrics Row -->
-			<div class="metrics-row">
-				<span class="label">CHG</span>
-				<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
-					{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct.toFixed(2)}%)
-				</span>
-				<span class="label">VOL</span>
-				<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
-				<span class="label">ADR</span>
-				<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
-			</div>
-		{/if}
+	{#if showMetricsGrid}
+		<!-- Metrics Row -->
+		<div class="metrics-row">
+			<span class="label">CHG</span>
+			<span class="value" style="color: {$hoveredCandleData.chgprct < 0 ? '#ef5350' : '#089981'}">
+				{$hoveredCandleData.chg >= 0 ? '+' : ''}{$hoveredCandleData.chg.toFixed(2)} ({$hoveredCandleData.chgprct >=
+				0
+					? '+'
+					: ''}{$hoveredCandleData.chgprct.toFixed(2)}%)
+			</span>
+			<span class="label">VOL</span>
+			<span class="value">{formatLargeNumber($hoveredCandleData.volume, $settings.dolvol)}</span>
+			<span class="label">ADR</span>
+			<span class="value">{$hoveredCandleData.adr?.toFixed(2) ?? 'NA'}</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -179,13 +183,13 @@
 		left: 10px;
 		padding: 8px;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		color: #ffffff;
-		z-index: 1100;
+		color: #fff;
+		z-index: 5;
 		max-width: calc(100% - 20px);
 		width: fit-content;
 		min-width: min-content;
 		user-select: none;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		background: transparent;
 		border: none;
 	}
@@ -194,7 +198,6 @@
 	.legend.compact {
 		width: auto;
 	}
-
 
 	.ohlc-row {
 		display: grid;
@@ -216,11 +219,11 @@
 	.label {
 		font-size: 12px;
 		line-height: 16px;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-weight: 500;
 		min-width: 35px;
 		flex-shrink: 0;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 	}
 
 	.value {
@@ -233,16 +236,15 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
-		color: #ffffff;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		color: #fff;
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 	}
 
 	/* Ensure legend stays within chart bounds */
-	@media (max-width: 400px) {
+	@media (width <= 400px) {
 		.legend {
 			width: calc(100% - 20px);
 			min-width: 260px;
 		}
 	}
-
 </style>

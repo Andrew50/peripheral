@@ -34,6 +34,17 @@ spec:
                   key: DB_ROOT_PASSWORD
             - name: POSTGRES_DB
               value: "postgres"
+            # OpenAI API key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: OPENAI_API_KEY
+            - name: FRED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fred-secret
+                  key: FRED_API_KEY
             # Redis connection
             - name: REDIS_HOST
               value: "cache"
@@ -49,19 +60,26 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-secret
+                  key: GEMINI_API_KEY
           resources:
             requests:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "256Mi"
             limits:
-              cpu: "200m"
-              memory: "512Mi"
+              cpu: "1000m"
+              memory: "2Gi"
           livenessProbe:
             exec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis; r = redis.Redis(host='cache', port=6379,
+                  password='${REDIS_PASSWORD}', decode_responses=True); r.ping()
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -71,7 +89,9 @@ spec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.Redis(host='cache', port=6379, password='${REDIS_PASSWORD}', decode_responses=True); r.ping()"
+                - |
+                  import redis; r = redis.Redis(host='cache', port=6379,
+                  password='${REDIS_PASSWORD}', decode_responses=True); r.ping()
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
@@ -87,7 +107,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: worker
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
     - type: Resource
@@ -101,17 +121,17 @@ spec:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 80
+          averageUtilization: 100
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 60
+      stabilizationWindowSeconds: 30
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
+        - type: Percent
+          value: 100
+          periodSeconds: 15
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60 
+        - type: Percent
+          value: 50
+          periodSeconds: 60

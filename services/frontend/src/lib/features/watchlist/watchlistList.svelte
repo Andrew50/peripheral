@@ -3,15 +3,16 @@
 	import { writable, get } from 'svelte/store';
 	import type { Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
-	import { queryChart } from '$lib/features/chart/interface';
+	import { queryChart, activeChartInstance } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/utils/stores/stores';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
 	import StreamCellV2 from '$lib/utils/stream/streamCellV2.svelte';
 	import { getColumnStore } from '$lib/utils/stream/streamHub';
+	import { isMobileDevice } from '$lib/utils/stores/device';
 	import '$lib/styles/glass.css';
-
+	import { switchMobileTab } from '$lib/stores/mobileStore';
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
 	// Define WatchlistItem to match what's used in watchlist.svelte
@@ -29,7 +30,6 @@
 		icon?: string;
 	}
 
-	let longPressTimer: ReturnType<typeof setTimeout>;
 	export let list: Writable<WatchlistItem[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: WatchlistItem) => {};
@@ -59,7 +59,7 @@
 		return columnName
 			.replace(/_/g, ' ') // Replace underscores with spaces
 			.split(' ') // Split into words
-			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
 			.join(' '); // Join back with spaces
 	}
 
@@ -130,13 +130,15 @@
 		scrollToRow(selectedRowIndex);
 	}
 
-	function scrollToRow(index: number) {
+	function scrollToRow(index: number, shouldQueryChart: boolean = true) {
 		const row = document.getElementById(`row-${index}`);
 		if (row) {
 			row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-			const currentList = get(list);
-			if (index >= 0 && index < currentList.length) {
-				queryChart(currentList[index]);
+			if (shouldQueryChart) {
+				const currentList = get(list);
+				if (index >= 0 && index < currentList.length) {
+					queryChart(currentList[index]);
+				}
 			}
 		}
 	}
@@ -216,7 +218,9 @@
 				if (sortColumn === 'Ticker') {
 					const tickerA = String(a.ticker ?? '').toLowerCase();
 					const tickerB = String(b.ticker ?? '').toLowerCase();
-					return sortDirection === 'asc' ? tickerA.localeCompare(tickerB) : tickerB.localeCompare(tickerA);
+					return sortDirection === 'asc'
+						? tickerA.localeCompare(tickerB)
+						: tickerB.localeCompare(tickerA);
 				}
 
 				// For other columns, use the *original* sortColumn as the data key directly
@@ -241,33 +245,6 @@
 		});
 	}
 
-
-	onMount(() => {
-		try {
-			isLoading = true;
-			window.addEventListener('keydown', handleKeydown);
-			const preventContextMenu = (e: Event) => {
-				e.preventDefault();
-			};
-
-			window.addEventListener('contextmenu', preventContextMenu);
-
-			// Load icons if needed
-			// Use original column name 'Ticker' if that's the key
-			if (columns?.includes('Ticker') && $list?.length > 0) {
-				loadIcons();
-			}
-
-			return () => {
-				window.removeEventListener('contextmenu', preventContextMenu);
-			};
-		} catch (error) {
-			loadError = error instanceof Error ? error.message : 'An unknown error occurred';
-			console.error('Failed to load data:', error);
-		} finally {
-			isLoading = false;
-		}
-	});
 
 	async function loadIcons() {
 		if (isLoadingIcons) return;
@@ -316,9 +293,6 @@
 		isLoadingIcons = false;
 	}
 
-	onDestroy(() => {
-		window.removeEventListener('keydown', handleKeydown);
-	});
 
 	function clickHandler(
 		event: MouseEvent,
@@ -327,33 +301,21 @@
 		force: number | null = null
 	) {
 		const button = force !== null ? force : event.button;
-
+		if($isMobileDevice) {
+			switchMobileTab('chart');
+		}
 		event.preventDefault();
 		event.stopPropagation();
 		if (button === 0) {
-			selectedRowIndex = index;
-			queryChart(instance);
+			// Only query chart if clicking on a different row
+			if (selectedRowIndex !== index) {
+				selectedRowIndex = index;
+				queryChart(instance);
+			}
 		} else if (button === 1) {
 			flagSecurity(instance);
 		}
 	}
-
-	function handleTouchStart(
-		event: TouchEvent & { currentTarget: EventTarget & HTMLTableRowElement },
-		watch: WatchlistItem,
-		i: number
-	) {
-		event.preventDefault(); // Prevent default touch behavior
-		const target = event.currentTarget as HTMLElement;
-		longPressTimer = setTimeout(() => {
-			clickHandler(new MouseEvent('mousedown'), watch, i, 2);
-		}, 600);
-	}
-
-	function handleTouchEnd() {
-		clearTimeout(longPressTimer);
-	}
-
 
 
 
@@ -368,10 +330,12 @@
 		if (img && ticker) {
 			// Update the cache so we don't retry loading the bad icon
 			iconCache.set(ticker, BLACK_PIXEL);
-					// Force the specific item in the list to use the black pixel
-		list.update((items: WatchlistItem[]) =>
-			items.map((item: WatchlistItem) => (item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item))
-		);
+			// Force the specific item in the list to use the black pixel
+			list.update((items: WatchlistItem[]) =>
+				items.map((item: WatchlistItem) =>
+					item.ticker === ticker ? { ...item, icon: BLACK_PIXEL } : item
+				)
+			);
 		}
 	}
 
@@ -399,137 +363,226 @@
 				return 'price'; // Sensible fallback
 		}
 	}
+	function syncWatchlistWithActiveChart(activeTicker: string) {
+		if (!activeTicker || !$list?.length) return;
+
+		// Find the ticker in the current watchlist (case-insensitive)
+		const matchIndex = $list.findIndex(
+			(item) => item.ticker?.toLowerCase() === activeTicker.toLowerCase()
+		);
+
+		if (matchIndex !== -1 && matchIndex !== selectedRowIndex) {
+			// Update selection and scroll to the matched ticker (without querying chart)
+			selectedRowIndex = matchIndex;
+			// Use setTimeout to ensure DOM is updated before scrolling
+			setTimeout(() => {
+				scrollToRow(selectedRowIndex, false);
+			}, 0);
+		} else if (matchIndex === -1) {
+			// No match found, clear selection
+			selectedRowIndex = -1;
+		}
+	}
+	onMount(() => {
+		try {
+			isLoading = true;
+			window.addEventListener('keydown', handleKeydown);
+			const preventContextMenu = (e: Event) => {
+				e.preventDefault();
+			};
+
+			window.addEventListener('contextmenu', preventContextMenu);
+
+			// Load icons if needed
+			// Use original column name 'Ticker' if that's the key
+			if (columns?.includes('Ticker') && $list?.length > 0) {
+				loadIcons();
+			}
+
+			return () => {
+				window.removeEventListener('contextmenu', preventContextMenu);
+			};
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'An unknown error occurred';
+			console.error('Failed to load data:', error);
+		} finally {
+			isLoading = false;
+		}
+	});
+	onDestroy(() => {
+		window.removeEventListener('keydown', handleKeydown);
+	});
+	
+	// Add reactive synchronization with activeChartInstance
+	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
+		syncWatchlistWithActiveChart($activeChartInstance.ticker);
+	}
 
 </script>
 
-<div class="table-container">
+<div class="table-container" class:mobile={$isMobileDevice}>
 	{#if isLoading}
-		<div class="loading glass glass--small glass--light">Loading...</div>
+		<div class="loading">Loading...</div>
 	{:else if loadError}
-		<div class="error glass glass--small glass--medium">
+		<div class="error">
 			<p>Failed to load data: {loadError}</p>
-			<button class="glass glass--small glass--light" on:click={() => window.location.reload()}>Retry</button>
+			<button on:click={() => window.location.reload()}>Retry</button>
 		</div>
 	{:else}
-		<table class="default-table glass glass--rounded glass--medium" class:sorting={isSorting}>
-			<thead>
-				<tr class="default-tr">
-					<th class="default-th"></th> {#each columns as col} 
-						<th
-							class="default-th"
-							data-type={col.toLowerCase().replace(/\s+/g, '-')}
-							class:sortable={col !== ''}
-							class:sorting={sortColumn === col}
-							class:sort-asc={sortColumn === col && sortDirection === 'asc'} 
-							class:sort-desc={sortColumn === col && sortDirection === 'desc'}
-							on:click={() => handleSort(col)} 
-						>
-							<div class="th-content">
-								<span>{displayNames[col] || formatColumnHeader(col)}</span>
-								{#if sortColumn === col} 
-									<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-								{/if}
-							</div>
-						</th>
-					{/each}
-					<th class="default-th"></th>
-				</tr>
-			</thead>
+		<!-- Fixed Header -->
+		<div class="table-header">
+			<table class="header-table" class:sorting={isSorting}>
+				<thead>
+					<tr class="default-tr">
+						<th class="default-th"></th>
+						{#each columns as col}
+							<th
+								class="default-th"
+								data-type={col.toLowerCase().replace(/\s+/g, '-')}
+								class:sortable={col !== ''}
+								class:sorting={sortColumn === col}
+								class:sort-asc={sortColumn === col && sortDirection === 'asc'}
+								class:sort-desc={sortColumn === col && sortDirection === 'desc'}
+								on:click={() => handleSort(col)}
+							>
+								<div class="th-content">
+									<span>{displayNames[col] || formatColumnHeader(col)}</span>
+									{#if sortColumn === col}
+										<span class="sort-icon">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+									{/if}
+								</div>
+							</th>
+						{/each}
+						<th class="default-th"></th>
+					</tr>
+				</thead>
+			</table>
+		</div>
+
+		<!-- Scrollable Body -->
+		<div class="table-body">
 			{#if Array.isArray($list) && $list.length > 0}
-				<tbody>
-					{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
-						<tr
-							class="default-tr {rowClass(watch)}" 
-							on:mousedown={(event) => clickHandler(event, watch, i)}
-							on:touchstart={(event) => handleTouchStart(event, watch, i)}
-							on:touchend={handleTouchEnd}
-							id="row-{i}"
-							class:selected={i === selectedRowIndex}
-							on:contextmenu={(event) => {
-								event.preventDefault();
-							}}
-						>
-							<td class="default-td">
-								{#if isFlagged(watch, $flagWatchlist)}
-									<span class="flag-icon">
-										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-											<path d="M5 5v14"></path>
-											<path d="M19 5l-6 4 6 4-6 4"></path>
-										</svg>
-									</span>
-								{/if}
-							</td>
-							{#each columns as col} 
-								{#if col === 'Ticker'} 
-									<td class="default-td">
-										{#if watch.icon && watch.icon !== BLACK_PIXEL}
-											<img
-												src={watch.icon}
-												alt={`${watch.ticker} icon`}
-												class="ticker-icon"
-												on:error={(e) => handleImageError(e, watch.ticker ?? '')}
+				<table class="body-table">
+					<tbody>
+						{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
+							<tr
+								class="default-tr {rowClass(watch)}"
+								on:click={(event) => clickHandler(event, watch, i)}
+								id="row-{i}"
+								class:selected={i === selectedRowIndex}
+								on:contextmenu={(event) => {
+									event.preventDefault();
+								}}
+							>
+								<td class="default-td">
+									{#if isFlagged(watch, $flagWatchlist)}
+										<span class="flag-icon">
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M5 5v14"></path>
+												<path d="M19 5l-6 4 6 4-6 4"></path>
+											</svg>
+										</span>
+									{/if}
+								</td>
+								{#each columns as col}
+									{#if col === 'Ticker'}
+										<td class="default-td">
+											{#if watch.icon && watch.icon !== BLACK_PIXEL}
+												<img
+													src={watch.icon}
+													alt={`${watch.ticker} icon`}
+													class="ticker-icon"
+													on:error={(e) => handleImageError(e, watch.ticker ?? '')}
+												/>
+											{:else if watch.ticker}
+												<span class="default-ticker-icon">
+													{watch.ticker.charAt(0).toUpperCase()}
+												</span>
+											{/if}
+											<span class="ticker-name">{watch.ticker}</span>
+										</td>
+									{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)}
+										<td class="default-td">
+											<StreamCellV2
+												on:contextmenu={(event) => {
+													event.preventDefault();
+													event.stopPropagation();
+												}}
+												instance={watch}
+												type={getStreamCellType(col)}
 											/>
-										{:else if watch.ticker}
-											<span class="default-ticker-icon">
-												{watch.ticker.charAt(0).toUpperCase()}
-											</span>
-										{/if}
-                                        <span class="ticker-name">{watch.ticker}</span> 
-									</td>
-								{:else if ['Price', 'Chg', 'Chg%', 'Ext'].includes(col)} 
-									<td class="default-td">
-										<StreamCellV2
-											on:contextmenu={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-											}}
-											instance={watch}
-											type={getStreamCellType(col)} 
-										/>
-									</td>
-								{/if}
-							{/each}
-							<td class="default-td">
-								<button
-									class="delete-button"
-									on:click={(event) => {
-										deleteRow(event, watch);
-									}}
-								>
-									✕
-								</button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
+										</td>
+									{/if}
+								{/each}
+								<td class="default-td">
+									<button
+										class="delete-button"
+										on:click={(event) => {
+											deleteRow(event, watch);
+										}}
+										on:mousedown={(event) => {
+											event.stopPropagation();
+											event.preventDefault();
+										}}
+										title="Remove from watchlist"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+											width="12"
+											height="12"
+										>
+											<path
+												d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"
+											/>
+										</svg>
+									</button>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			{/if}
-		</table>
+		</div>
 	{/if}
 </div>
 
 <style>
-	.selected {
-		outline: 2px solid var(--ui-accent);
-	}
-
-	tr {
-		transition: outline 0.2s ease;
-	}
-
-	.list-container {
-		width: 100%;
-		overflow-x: auto;
-	}
-
 	.table-container {
 		width: 100%;
 		overflow: hidden;
 		max-width: 100%;
 		padding: 0;
 		margin: 0;
+		height: 100%;
+		max-height: 100%;
+		display: flex;
+		flex-direction: column;
 	}
 
-	table {
+	.table-header {
+		flex-shrink: 0;
+		width: 100%;
+		background: transparent;
+	}
+
+	.table-body {
+		flex-grow: 1;
+		overflow: hidden auto;
+		width: 100%;
+	}
+
+	.header-table,
+	.body-table {
 		width: 100%;
 		border-collapse: separate;
 		border-spacing: 0 2px;
@@ -540,40 +593,87 @@
 		background: transparent;
 	}
 
+	.body-table {
+		border-spacing: 0 1.5px;
+	}
+
+	.header-table {
+		border-spacing: 0;
+	}
+
 	th,
 	td {
-		padding: 8px 12px;
-		text-align: left;
+		padding: clamp(3px, 0.35vw, 5px) clamp(2px, 0.35vw, 3px);
+		text-align: right;
 		background: transparent;
-		font-size: 13px;
+		overflow: hidden;
+		font-size: clamp(0.73rem, 0.82rem, 0.95rem);
+		vertical-align: middle;
 	}
 
-	/* Header cells keep original styling */
+	/* Ticker column - reduce left padding */
+	th:nth-child(2),
+	td:nth-child(2) {
+		padding-left: clamp(1px, 0.2vw, 2px);
+	}
+
+	/* Second-to-last column (Extended hours) - reduce right padding */
+	th:nth-last-child(2),
+	td:nth-last-child(2) {
+		padding-right: clamp(1px, 0.2vw, 2px);
+	}
+
+	/* Header cells */
 	th {
-		border-bottom: none;
+		font-weight: normal;
+		color: var(--text-secondary);
+		position: static;
+		z-index: 1;
+		background: transparent;
+		text-align: right;
 	}
 
-	/* Body cells only get rounded styling */
+	/* Header divider - removed */
+	thead tr {
+		background: transparent;
+		position: relative;
+	}
+
+	/* Custom scrollbar for the table body */
+	.table-body::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.table-body::-webkit-scrollbar-track {
+		background: transparent;
+		border-radius: 3px;
+	}
+
+	.table-body::-webkit-scrollbar-thumb {
+		background-color: rgb(255 255 255 / 20%);
+		border-radius: 3px;
+		border: 1px solid transparent;
+		background-clip: content-box;
+	}
+
+	.table-body::-webkit-scrollbar-thumb:hover {
+		background-color: rgb(255 255 255 / 40%);
+	}
+
+	/* Body cells */
 	tbody td {
 		border: none;
+		vertical-align: middle;
 	}
 
 	tbody td:first-child {
-		border-top-left-radius: 6px;
-		border-bottom-left-radius: 6px;
+		border-top-left-radius: 3px;
+		border-bottom-left-radius: 3px;
 	}
 
 	tbody td:last-child {
-		border-top-right-radius: 6px;
-		border-bottom-right-radius: 6px;
-	}
-
-	th {
-		font-weight: bold;
-		color: var(--text-secondary);
-		position: sticky;
-		top: 0;
-		z-index: 1;
+		border-top-right-radius: 3px;
+		border-bottom-right-radius: 3px;
 	}
 
 	/* Sorting styles */
@@ -585,13 +685,12 @@
 	}
 
 	.sortable:hover {
-		color: #4a9eff;
-		border-bottom: 1px solid #4a9eff;
+		color: #cfd0d2;
+		border-bottom: 1px solid #aeafb0;
 	}
 
 	.th-content {
-		display: flex;
-		align-items: center;
+		align-items: right;
 		justify-content: space-between;
 	}
 
@@ -602,7 +701,7 @@
 	}
 
 	.sorting {
-		background-color: var(--ui-bg-hover);
+		background-color: transparent;
 	}
 
 	table.sorting tbody tr {
@@ -617,11 +716,8 @@
 	table.sorting::after {
 		content: '';
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.05);
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
 		pointer-events: none;
 	}
 
@@ -631,33 +727,9 @@
 		color: var(--ui-accent);
 	}
 
-
-
-	tr {
-		transition: background-color 0.2s;
-	}
-
-
-
-
-	.table-container {
-		width: 100%;
-		overflow: hidden;
-		max-width: 100%;
-		padding: 0;
-		margin: 0;
-	}
-
-	.delete-button {
-		opacity: 0;
-		transition: opacity 0.2s ease;
-	}
-
 	tr:hover .delete-button {
 		opacity: 1;
 	}
-
-
 
 	.loading,
 	.error,
@@ -675,36 +747,23 @@
 		border: none;
 		border-radius: 6px;
 		cursor: pointer;
-		color: #ffffff;
+		color: #fff;
 		font-weight: 500;
 		transition: all 0.2s ease;
 	}
 
 	.error button:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-	}
-
-	.positive {
-		color: var(--positive);
-	}
-
-	.negative {
-		color: var(--negative);
-	}
-
-	h4 {
-		margin: 20px 0 10px 0;
-		color: var(--text-secondary);
+		box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
 	}
 
 	.ticker-icon {
-		width: 22px;
-		height: 22px;
+		width: clamp(15px, 2.3vw, 20px);
+		height: clamp(15px, 2.3vw, 20px);
 		border-radius: 50%; /* Make icons circular */
 		object-fit: cover; /* Ensure icon covers the area nicely */
 		background-color: var(--ui-bg-element); /* BG for unloaded images */
-		margin-right: 4px; /* Space between icon and text */
+		margin-right: clamp(2px, 0.4vw, 3px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
@@ -712,27 +771,20 @@
 		display: inline-flex; /* Use inline-flex for alignment */
 		align-items: center;
 		justify-content: center;
-		width: 22px;
-		height: 22px;
+		width: clamp(15px, 2.3vw, 20px);
+		height: clamp(15px, 2.3vw, 20px);
 		border-radius: 50%;
 		background-color: var(--ui-border); /* Use border color for background */
 		color: var(--text-primary); /* Use primary text color */
-		font-size: 10px;
+		font-size: clamp(0.48rem, 0.3rem + 0.3vw, 0.6rem);
 		font-weight: 500;
 		user-select: none; /* Prevent text selection */
-		margin-right: 4px; /* Space between icon and text */
+		margin-right: clamp(2px, 0.4vw, 3px); /* Space between icon and text */
 		vertical-align: middle;
 	}
 
 	.ticker-name {
-		overflow: hidden; /* Prevent long names from breaking layout */
-		white-space: nowrap;
 		vertical-align: middle;
-	}
-
-	/* Style for different trade types */
-	.long {
-		color: var(--color-positive);
 	}
 
 	/* Professional flag icon styling */
@@ -741,6 +793,7 @@
 		align-items: center;
 		justify-content: center;
 	}
+
 	.flag-icon svg {
 		width: 16px;
 		height: 16px;
@@ -748,83 +801,155 @@
 	}
 
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
-	/* Sticky Last column (Delete Button) */
-	th:last-child, td:last-child {
-		position: sticky;
-		right: 0px; /* Stick to the very edge */
-		z-index: 1; /* Above non-sticky cells */
-		background-color: transparent; /* Transparent for glass effect */
-		width: 30px; /* Minimal width for button */
-		max-width: 30px;
-		padding: 0;
+
+	/* First column (Flag column) - minimize left space */
+	th:first-child,
+	td:first-child {
+		width: 20px;
+		min-width: 20px;
+		max-width: 20px;
+		padding: clamp(1px, 0.15vw, 2px) 0 clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px);
 		text-align: center;
 		vertical-align: middle;
 	}
-    th:last-child {
-        z-index: 3; /* Above tbody cells and sort overlay */
-        background-color: transparent; /* Transparent for glass effect */
-     }
+
+	/* Regular Last column (Delete Button) */
+	th:last-child,
+	td:last-child {
+		width: 30px;
+		min-width: 30px;
+		max-width: 30px;
+		padding: clamp(1px, 0.15vw, 2px) clamp(1px, 0.2vw, 2px) clamp(1px, 0.15vw, 2px) 0;
+		text-align: center;
+		vertical-align: middle;
+	}
+
+	/* Define widths for main content columns */
+	th:nth-child(2),
+	td:nth-child(2) {
+		width: 25%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.2vw, 2px);
+	}
+
+	th:nth-child(3),
+	td:nth-child(3) {
+		width: 18%;
+		min-width: 45px;
+		padding-right: clamp(0px, 0.1vw, 1px);
+	}
+
+	th:nth-child(4),
+	td:nth-child(4) {
+		width: 18%;
+		min-width: 45px;
+		padding-right: clamp(0px, 0.1vw, 1px);
+	}
+
+	th:nth-child(5),
+	td:nth-child(5) {
+		width: 20%;
+		min-width: 55px;
+		padding-right: clamp(2px, 0.3vw, 4px);
+	}
+
+	th:nth-child(6),
+	td:nth-child(6) {
+		width: 13%;
+		min-width: 40px;
+	}
 
 	.delete-button {
 		opacity: 0;
-		transition: opacity 0.2s ease;
+		transition: none;
 		cursor: pointer;
 		border: none;
 		background: none;
-		color: var(--negative);
-		font-size: 1.2em;
-		padding: 4px;
-        line-height: 1;
-        display: inline-flex; /* Helps center */
-        align-items: center;
-        justify-content: center;
-	}
-    .delete-button:hover {
-        color: var(--negative-hover, red); /* Darker red on hover */
-    }
-
-	tr:hover .delete-button {
-		opacity: 1;
+		color: var(--text-secondary);
+		font-size: 0.75em;
+		padding: 0;
+		line-height: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		margin: auto;
 	}
 
-	/* Adjust background for sticky columns on hover/select */
-    /* Assuming .selected class is used for row selection */
-    tr:hover th:last-child, tr:hover td:last-child {
-        background-color: rgba(255, 255, 255, 0.08);
-    }
-
-
-
-	/* Table header with glass effect */
-	thead tr {
-		background: rgba(0, 0, 0, 0.3);
-		backdrop-filter: blur(8px);
+	.delete-button:hover {
+		background: rgb(255 255 255 / 10%);
+		color: var(--text-secondary);
 	}
 
-	/* Table rows with subtle glass effect */
+	/* Table rows */
 	tbody tr {
-		background: rgba(255, 255, 255, 0.02);
-		transition: all 0.2s ease;
+		background: transparent;
 		border-radius: 6px;
-		margin: 1px 0;
+		position: relative;
+	}
+
+	tbody tr::after {
+		content: '';
+		position: absolute;
+		bottom: -1px;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background: rgb(255 255 255 / 8%);
+		border-radius: 0.5px;
 	}
 
 	tbody tr:hover {
-		background: rgba(255, 255, 255, 0.08);
-		backdrop-filter: blur(4px);
+		background: rgb(255 255 255 / 5%);
 		border-radius: 6px;
+	}
+
+	tbody tr:hover::after {
+		opacity: 0;
 	}
 
 	/* Selected row enhancement */
 	tbody tr.selected {
-		background: rgba(255, 255, 255, 0.12);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		outline: 2px solid #cfd0d2;
 		border-radius: 6px;
 	}
 
-	/* Table cells with enhanced readability */
-	td, th {
-		backdrop-filter: inherit;
+	tbody tr.selected::after {
+		opacity: 0;
+	}
+
+	/* Mobile-specific styles - make rows taller and wider for better touch targets */
+	.table-container.mobile th,
+	.table-container.mobile td {
+		padding: clamp(8px, 1.2vw, 12px) clamp(6px, 1vw, 10px);
+		font-size: clamp(0.8rem, 0.9rem, 1rem);
+		line-height: 1.4;
+	}
+
+	/* Mobile ticker icons - make them bigger for better visibility */
+	.table-container.mobile .ticker-icon,
+	.table-container.mobile .default-ticker-icon {
+		width: clamp(22px, 3vw, 28px);
+		height: clamp(22px, 3vw, 28px);
+		margin-right: clamp(4px, 0.6vw, 6px);
+	}
+
+	.table-container.mobile .default-ticker-icon {
+		font-size: clamp(0.6rem, 0.4rem + 0.4vw, 0.8rem);
+		font-weight: 600;
+	}
+
+	/* Mobile delete button - make it more visible and easier to tap */
+	.table-container.mobile .delete-button {
+		opacity: 0.6;
+		width: 22px;
+		height: 22px;
+	}
+
+	.table-container.mobile .delete-button svg {
+		width: 13px;
+		height: 13px;
 	}
 </style>
-

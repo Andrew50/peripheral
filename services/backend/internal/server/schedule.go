@@ -4,25 +4,22 @@ import (
 	"backend/internal/data"
 	"backend/internal/services/alerts"
 	"backend/internal/services/marketdata"
+	"backend/internal/services/screener"
 	"backend/internal/services/securities"
 	"backend/internal/services/socket"
+	"backend/internal/services/subscriptions"
+	"backend/internal/services/telegram"
 	"context"
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 	//"github.com/go-redis/redis/v8"
 )
 
 var useBS = false //alerts, securityUpdate, marketMetrics, sectorUpdate
-
-var (
-	polygonInitialized bool
-	polygonInitMutex   sync.Mutex
-	alertsInitialized  bool
-	alertsInitMutex    sync.Mutex
-)
 
 // JobFunc represents a function that can be executed as a job
 type JobFunc func(conn *data.Conn) error
@@ -44,6 +41,9 @@ type Job struct {
 	ExecutionMutex     sync.Mutex
 	IsRunning          bool
 	SkipOnWeekends     bool
+	RetryOnFailure     bool          // Whether to retry the job on failure
+	MaxRetries         int           // Maximum number of retry attempts
+	RetryDelay         time.Duration // Delay between retry attempts
 }
 
 // JobScheduler manages and executes jobs
@@ -59,6 +59,7 @@ type JobScheduler struct {
 // Redis key prefix for job last run times
 const jobLastRunKeyPrefix = "job:lastrun:"
 const jobLastCompletionKeyPrefix = "job:lastcompletion:"
+const jobRetryCountKeyPrefix = "job:retrycount:"
 
 // getJobLastRunKey returns the Redis key for storing a job's last run time
 func getJobLastRunKey(jobName string) string {
@@ -68,6 +69,11 @@ func getJobLastRunKey(jobName string) string {
 // getJobLastCompletionKey returns the Redis key for storing a job's last completion time
 func getJobLastCompletionKey(jobName string) string {
 	return jobLastCompletionKeyPrefix + jobName
+}
+
+// getJobRetryCountKey returns the Redis key for storing a job's retry count
+func getJobRetryCountKey(jobName string) string {
+	return jobRetryCountKeyPrefix + jobName
 }
 
 // loadJobLastRunTimes loads the last run times for all jobs from Redis
@@ -127,21 +133,41 @@ func (s *JobScheduler) saveJobLastCompletionTime(job *Job) error {
 	return err
 }
 
+// saveJobRetryCount saves a job's retry count to Redis
+func (s *JobScheduler) saveJobRetryCount(job *Job, retryCount int) error {
+	ctx := context.Background()
+	err := s.Conn.Cache.Set(ctx, getJobRetryCountKey(job.Name), retryCount, 0).Err()
+	return err
+}
+
+// loadJobRetryCount loads a job's retry count from Redis
+func (s *JobScheduler) loadJobRetryCount(job *Job) int {
+	ctx := context.Background()
+	retryCountStr, err := s.Conn.Cache.Get(ctx, getJobRetryCountKey(job.Name)).Result()
+	if err == nil && retryCountStr != "" {
+		if count, err := strconv.Atoi(retryCountStr); err == nil {
+			return count
+		}
+	}
+	return 0
+}
+
+// resetJobRetryCount resets a job's retry count to 0
+func (s *JobScheduler) resetJobRetryCount(job *Job) error {
+	return s.saveJobRetryCount(job, 0)
+}
+
 // Define job functions for security detail updates
 // These wrappers avoid redeclaring functions that exist in other files
 func securityDetailUpdateJob(conn *data.Conn) error {
-	// Call the actual function from securitiesTable.go
-	return securities.UpdateSecurityDetails(conn, true)
+	return securities.UpdateSecurityDetails(conn, false)
 }
 
 func securityCikUpdateJob(conn *data.Conn) error {
-	// We call the function from securities.go
 	return securities.UpdateSecurityCik(conn)
 }
 
 func simpleSecuritiesUpdateJob(conn *data.Conn) error {
-	// We call the function from securities.go
-	////fmt.Println("Starting securities update - refreshing security data...")
 	return securities.SimpleUpdateSecuritiesV2(conn)
 }
 
@@ -151,44 +177,85 @@ func updateSectorsJob(conn *data.Conn) error {
 	return err                                                  // Return the error, if any
 }
 
+// Wrapper for yearly subscription credit update
+func updateYearlySubscriptionCreditsJob(conn *data.Conn) error {
+	return subscriptions.UpdateYearlySubscriptionCredits(conn)
+}
+
+// Wrapper for Stripe pricing sync
+func syncPricingFromStripeJob(conn *data.Conn) error {
+	return SyncPricingFromStripe(conn)
+}
+
+func turnOnTwitterWebhookInAMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, true)
+}
+
+func turnOffTwitterWebhookInPMJob(conn *data.Conn) error {
+	return updateTwitterNewsWebhookPollingFrequency(conn, 30, false)
+}
+func verifyTwitterWebhookIsCorrectlyConfiguredJob(conn *data.Conn) error {
+	return verifyTwitterWebhookConfiguration(conn)
+}
+
+func initUserTelegramBotJob(conn *data.Conn) error {
+	return telegram.InitTelegramUserNotificationBot()
+}
+
+// startPolygonWebSocketInternal is the internal implementation for starting polygon websocket
+func startPolygonWebSocketInternal(conn *data.Conn) error {
+	// Set up critical alert callback for socket package before starting WebSocket
+	socket.SetCriticalAlertCallback(alerts.LogCriticalAlert)
+
+	err := socket.StartPolygonWS(conn, useBS)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Define all jobs and their schedules
 var (
 	JobList = []*Job{
 		{
-			Name:           "UpdateDailyOHLCV",
-			Function:       marketdata.UpdateDailyOHLCV,
-			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM
+			Name:           "SyncPricingFromStripe",
+			Function:       syncPricingFromStripeJob,
+			Schedule:       []TimeOfDay{{Hour: 2, Minute: 0}}, // Run at 2:00 AM daily
 			RunOnInit:      true,
-			SkipOnWeekends: true,
+			SkipOnWeekends: false, // Run every day to keep pricing up-to-date
+			RetryOnFailure: true,
+			MaxRetries:     3,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "InitAggregates",
-			Function:       initAggregates,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		//TODO: FIX THIS SHIT
-		/*{
-			Name:           "StartAlertLoop",
-			Function:       startAlertLoop,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},*/
-		{
-			Name:           "StartPolygonWebSocket",
-			Function:       startPolygonWebSocket,
-			Schedule:       []TimeOfDay{{Hour: 3, Minute: 58}}, // Run before market open
-			RunOnInit:      true,
-			SkipOnWeekends: true,
-		},
-		{
-			Name:           "SimpleUpdateSecurities",
+			Name:           "UpdateSecurityTables",
 			Function:       simpleSecuritiesUpdateJob,
-			Schedule:       []TimeOfDay{{Hour: 20, Minute: 45}}, // Run at 8:45 PM
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - update ecurities table with currently listed tickers
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{ // enable this before PR
+			Name:           "UpdateAllOHLCV",
+			Function:       marketdata.UpdateAllOHLCV,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 45}}, // Run at 9:45 PM - consolidates all OHLCV updates
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     100,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "StartMarketHourServices",
+			Function:       startMarketHourServices,
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 59}}, // Run before market open
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     100,             // Retry until partial coverage is achieved
+			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		{
 			Name:           "UpdateSecurityDetails",
@@ -196,13 +263,17 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Run at 9:00 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
-			Name:           "StopServices",
+			Name:           "StopMarketHourServices",
 			Function:       stopServicesJob,
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 0}}, // Stop services at 8:00 PM
 			RunOnInit:      false,
 			SkipOnWeekends: true,
+			RetryOnFailure: false, // Don't retry stop services
 		},
 		{
 			Name:           "UpdateSectors",
@@ -210,6 +281,9 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 20, Minute: 15}}, // Run at 8:15 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
 		},
 		{
 			Name:           "UpdateSecurityCik",
@@ -217,6 +291,58 @@ var (
 			Schedule:       []TimeOfDay{{Hour: 21, Minute: 30}}, // Run at 9:30 PM
 			RunOnInit:      true,
 			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "UpdateYearlySubscriptionCredits",
+			Function:       updateYearlySubscriptionCreditsJob,
+			Schedule:       []TimeOfDay{{Hour: 4, Minute: 5}}, // Daily at 4:05 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOnTwitterWebhookInAM",
+			Function:       turnOnTwitterWebhookInAMJob,
+			Schedule:       []TimeOfDay{{Hour: 6, Minute: 0}}, // Daily at 6:00 AM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "TurnOffTwitterWebhookInPM",
+			Function:       turnOffTwitterWebhookInPMJob,
+			Schedule:       []TimeOfDay{{Hour: 21, Minute: 0}}, // Daily at 9:00 PM ET
+			RunOnInit:      false,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "VerifyTwitterWebhookIsCorrectlyConfigured",
+			Function:       verifyTwitterWebhookIsCorrectlyConfiguredJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
+			RetryDelay:     1 * time.Minute,
+		},
+		{
+			Name:           "InitUserTelegramBotJob",
+			Function:       initUserTelegramBotJob,
+			Schedule:       []TimeOfDay{{Hour: 0, Minute: 0}}, // Daily at 12:00 AM ET
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     2,
 		},
 	}
 )
@@ -225,6 +351,18 @@ var (
 func isWeekend(now time.Time) bool {
 	weekday := now.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
+}
+
+// isMarketHours checks if the given time is within market service hours (3:00 AM - 8:00 PM ET, weekdays)
+func isMarketHours(now time.Time) bool {
+	// Skip weekends
+	if isWeekend(now) {
+		return false
+	}
+
+	hour := now.Hour()
+	// Market service hours: 4:00 AM to 8:00 PM ET with 1 minute buffer
+	return (hour >= 4 || (hour == 3 && now.Minute() >= 59)) && hour < 20
 }
 
 // NewScheduler creates a new job scheduler
@@ -271,6 +409,19 @@ func clearJobCache(conn *data.Conn) error {
 	} else if len(lastCompletionKeys) > 0 {
 		// Delete all last completion keys
 		err = conn.Cache.Del(ctx, lastCompletionKeys...).Err()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Get all keys with the job retry count prefix
+	retryCountKeys, err := conn.Cache.Keys(ctx, jobRetryCountKeyPrefix+"*").Result()
+	if err != nil {
+		return err
+		// Log error getting job retry count keys
+	} else if len(retryCountKeys) > 0 {
+		// Delete all retry count keys
+		err = conn.Cache.Del(ctx, retryCountKeys...).Err()
 		return err
 	}
 	return nil
@@ -283,6 +434,9 @@ func StartScheduler(conn *data.Conn) chan struct{} {
 	if err := clearJobCache(conn); err != nil {
 		log.Printf("Error clearing job cache: %v", err)
 	}
+
+	// NOTE: Removed early database state verification to avoid long blocking index builds on startup.
+	// The state check is now executed after the OHLCV update job completes.
 
 	scheduler, err := NewScheduler(conn)
 	if err != nil {
@@ -307,24 +461,36 @@ func (s *JobScheduler) Start() chan struct{} {
 	// Reload job last run times from Redis
 	s.loadJobLastRunTimes()
 
-	// Run jobs marked for initialization
-	s.runInitJobs()
+	// Add 10-minute delay before starting scheduler operations
+	log.Printf("⏰ Scheduler initialized - 5 seconds before starting job execution...")
 
-	// Start the Edgar Filings Service
-	marketdata.StartEdgarFilingsService(s.Conn)
 	go func() {
-		for filing := range marketdata.NewFilingsChannel {
-			socket.BroadcastGlobalSECFiling(filing)
+		// Wait 5 seconds before starting scheduler operations
+		select {
+		case <-time.After(5 * time.Second):
+			log.Printf("🚀 Starting scheduler operations after 5-second delay")
+		case <-s.StopChan:
+			log.Printf("⏹️ Scheduler stopped during startup delay")
+			return
 		}
-	}()
 
-	// Start the ticker for regular job execution
-	ticker := time.NewTicker(1 * time.Minute)
+		// Run jobs marked for initialization
+		s.runInitJobs()
 
-	// Create a separate ticker for queue status updates (every 5 minutes)
-	queueStatusTicker := time.NewTicker(5 * time.Minute)
+		// Start the Edgar Filings Service
+		marketdata.StartEdgarFilingsService(s.Conn)
+		go func() {
+			for filing := range marketdata.NewFilingsChannel {
+				socket.BroadcastGlobalSECFiling(filing)
+			}
+		}()
 
-	go func() {
+		// Start the ticker for regular job execution
+		ticker := time.NewTicker(1 * time.Minute)
+
+		// Create a separate ticker for queue status updates (every 5 minutes)
+		queueStatusTicker := time.NewTicker(5 * time.Minute)
+
 		for {
 			select {
 			case <-ticker.C:
@@ -334,8 +500,6 @@ func (s *JobScheduler) Start() chan struct{} {
 				ticker.Stop()
 				queueStatusTicker.Stop()
 				// Stop alert loop and polygon websocket when scheduler stops
-				stopAlertLoop()
-				stopPolygonWebSocket()
 				s.mutex.Lock()
 				s.IsRunning = false
 				s.mutex.Unlock()
@@ -347,7 +511,7 @@ func (s *JobScheduler) Start() chan struct{} {
 	return s.StopChan
 }
 
-// runInitJobs runs all jobs that are marked to run on initialization
+// runInitJobs runs all jobs that are marked to run on initialization, doesnt respect SkipOnWeekends
 func (s *JobScheduler) runInitJobs() {
 	for _, job := range s.Jobs {
 		if job.RunOnInit {
@@ -366,6 +530,12 @@ func (s *JobScheduler) checkAndRunJobs(now time.Time) {
 		// Check if the job should run at this time
 		shouldRun := s.shouldRunJob(job, now)
 		if shouldRun {
+			go s.executeJob(job, now)
+		}
+
+		// Check if there's a pending retry for this job
+		if s.hasPendingRetry(job) {
+			log.Printf("🔄 Found pending retry for job %s, executing immediately", job.Name)
 			go s.executeJob(job, now)
 		}
 	}
@@ -424,6 +594,16 @@ func (s *JobScheduler) shouldRunJob(job *Job, now time.Time) bool {
 	return false
 }
 
+// hasPendingRetry checks if a job has a pending retry that should be executed
+func (s *JobScheduler) hasPendingRetry(job *Job) bool {
+	if !job.RetryOnFailure {
+		return false
+	}
+
+	currentRetryCount := s.loadJobRetryCount(job)
+	return currentRetryCount > 0 && currentRetryCount <= job.MaxRetries
+}
+
 // getNextScheduledTime returns the next time the job should run
 func (s *JobScheduler) getNextScheduledTime(job *Job, now time.Time) *TimeOfDay {
 	if len(job.Schedule) == 0 {
@@ -465,38 +645,77 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.ExecutionMutex.Lock()
 	if job.IsRunning {
 		job.ExecutionMutex.Unlock()
+		log.Printf("📋 Job %s is already running, skipping this execution", job.Name)
+
+		// Clear pending retry if job is already running to prevent infinite retry loop
+		if job.RetryOnFailure {
+			currentRetryCount := s.loadJobRetryCount(job)
+			if currentRetryCount > 0 {
+				log.Printf("🔄 Clearing pending retry for already running job %s", job.Name)
+				if err := s.resetJobRetryCount(job); err != nil {
+					log.Printf("⚠️ Error clearing retry count for running job %s: %v", job.Name, err)
+				}
+			}
+		}
 		return
 	}
 	job.IsRunning = true
 	job.ExecutionMutex.Unlock()
 
 	// Job execution variables
-	//jobName := job.Name
-	//startTime := time.Now()
+	jobName := job.Name
+	startTime := time.Now()
 
-	// isQueued := false // Removed as it's no longer used after the `else if isQueued` block was removed.
-	//var taskID string
+	// Recover from panics to avoid scheduler crash
+	defer func() {
+		if rec := recover(); rec != nil {
+			var err error
+			switch x := rec.(type) {
+			case error:
+				err = fmt.Errorf("panic: %w", x)
+			default:
+				err = fmt.Errorf("panic: %v", x)
+			}
+			_ = alerts.LogCriticalAlert(err, jobName)
+			log.Printf("❌ Job %s panicked: %v", jobName, err)
+		}
+	}()
 
 	// Log job start
+	log.Printf("🚀 Starting job: %s at %s", jobName, startTime.Format("2006-01-02 15:04:05"))
 
-	err := job.Function(s.Conn)
+	// Execute job with retry logic
+	err := s.executeJobWithRetry(job, startTime)
+
+	// Calculate execution duration
+	duration := time.Since(startTime).Round(time.Millisecond)
 
 	// Update job status
-	//duration := time.Since(startTime).Round(time.Millisecond)
 	job.ExecutionMutex.Lock()
 	job.IsRunning = false
 	job.LastRun = now
 	job.ExecutionMutex.Unlock()
+
 	if err := s.saveJobLastRunTime(job); err != nil {
-		log.Printf("Error saving job last run time for %s: %v", job.Name, err)
+		log.Printf("❌ Error saving job last run time for %s: %v", job.Name, err)
 	}
 
-	// Handle completion logging based on execution method and result
+	// Handle completion logging based on execution result
 	if err != nil {
+		log.Printf("❌ Job %s FAILED after %v: %v", jobName, duration, err)
+		_ = alerts.LogCriticalAlert(err, jobName)
 		return
-		// Job failed
 	}
-	// Job completed directly
+
+	// Job completed successfully
+	log.Printf("✅ Job %s completed successfully in %v", jobName, duration)
+
+	// Reset retry count on successful completion
+	if job.RetryOnFailure {
+		if err := s.resetJobRetryCount(job); err != nil {
+			log.Printf("⚠️ Error resetting retry count for %s: %v", job.Name, err)
+		}
+	}
 
 	// Update completion time
 	completionTime := time.Now()
@@ -504,10 +723,71 @@ func (s *JobScheduler) executeJob(job *Job, now time.Time) {
 	job.LastCompletionTime = completionTime
 	job.ExecutionMutex.Unlock()
 	if err := s.saveJobLastCompletionTime(job); err != nil {
-		log.Printf("Error saving job completion time for %s: %v", job.Name, err)
+		log.Printf("❌ Error saving job completion time for %s: %v", job.Name, err)
 	}
 }
 
+// executeJobWithRetry executes a job with retry logic if configured
+func (s *JobScheduler) executeJobWithRetry(job *Job, startTime time.Time) error {
+	jobName := job.Name
+	currentRetryCount := s.loadJobRetryCount(job)
+
+	// Execute the job
+	err := job.Function(s.Conn)
+
+	// If job succeeded or retry is not enabled, return immediately
+	if err == nil || !job.RetryOnFailure {
+		return err
+	}
+
+	// Job failed and retry is enabled
+	log.Printf("❌ Job %s failed (attempt %d/%d): %v", jobName, currentRetryCount+1, job.MaxRetries+1, err)
+
+	// Check if we've exceeded max retries
+	if currentRetryCount >= job.MaxRetries {
+		log.Printf("❌ Job %s exceeded maximum retries (%d), giving up", jobName, job.MaxRetries)
+		return err
+	}
+
+	// Increment retry count
+	currentRetryCount++
+	if err := s.saveJobRetryCount(job, currentRetryCount); err != nil {
+		log.Printf("⚠️ Error saving retry count for %s: %v", job.Name, err)
+	}
+
+	// Log retry attempt
+	log.Printf("🔄 Scheduling retry for job %s in %v (attempt %d/%d)", jobName, job.RetryDelay, currentRetryCount, job.MaxRetries)
+
+	// Schedule retry after delay
+	go func() {
+		select {
+		case <-time.After(job.RetryDelay):
+			// Check if scheduler is still running
+			s.mutex.Lock()
+			if !s.IsRunning {
+				s.mutex.Unlock()
+				log.Printf("⚠️ Scheduler stopped, cancelling retry for job %s", jobName)
+				return
+			}
+			s.mutex.Unlock()
+
+			// Execute retry
+			log.Printf("🔄 Retrying job %s (attempt %d/%d)", jobName, currentRetryCount, job.MaxRetries)
+			retryErr := s.executeJobWithRetry(job, startTime)
+			if retryErr != nil {
+				log.Printf("❌ Job %s retry failed (attempt %d/%d): %v", jobName, currentRetryCount, job.MaxRetries, retryErr)
+			}
+		case <-s.StopChan:
+			log.Printf("⚠️ Scheduler stopped, cancelling retry for job %s", jobName)
+		}
+	}()
+
+	// Return the original error for immediate logging and alerting
+	return err
+}
+
+// COMMENTED OUT: initAggregates function disabled
+/*
 // initAggregates initializes the aggregates
 func initAggregates(conn *data.Conn) error {
 	if useBS {
@@ -516,74 +796,91 @@ func initAggregates(conn *data.Conn) error {
 	}
 	return nil
 }
-
-// startAlertLoop starts the alert loop if not already running
-// TODO: Currently commented out - see JobList for related commented job
-/*
-func startAlertLoop(conn *data.Conn) error {
-	alertsInitMutex.Lock()
-	defer alertsInitMutex.Unlock()
-
-	if !alertsInitialized {
-		err := alerts.StartAlertLoop(conn)
-		if err != nil {
-			//log.Printf("Failed to start alert loop: %v", err)
-			return err
-		}
-		alertsInitialized = true
-	}
-	// Log that alert loop is already running
-
-	return nil
-}
 */
 
-// startPolygonWebSocket starts the Polygon WebSocket if not already running
-func startPolygonWebSocket(conn *data.Conn) error {
-	polygonInitMutex.Lock()
-	defer polygonInitMutex.Unlock()
-
-	if !polygonInitialized {
-		err := socket.StartPolygonWS(conn, useBS)
-		if err != nil {
-			//log.Printf("Failed to start Polygon WebSocket: %v", err)
-			return err
-		}
-		polygonInitialized = true
+// startMarketHourServices starts alert loop, screener updater, and polygon websocket during market hours
+// First checks if current time is within market hours, then checks OHLCV coverage before starting services
+func startMarketHourServices(conn *data.Conn) error {
+	now := time.Now().In(time.FixedZone("ET", -5*3600)) // Convert to ET for market hours check
+	if !isMarketHours(now) {
+		log.Printf("⏰ Market hour services not started - outside market hours (3:00 AM - 8:00 PM ET, weekdays)")
+		return nil // Return nil to indicate this is expected behavior, not an error
 	}
-	// Log that websocket is already running
 
+	// Second check: Verify OHLCV partial coverage is sufficient
+	hasCoverage, err := marketdata.CheckOHLCVPartialCoverage(conn)
+	if err != nil {
+		log.Printf("❌ Failed to check OHLCV partial coverage for market hour services: %v", err)
+		return err
+	}
+
+	if !hasCoverage {
+		log.Printf("⏳ Market hour services blocked - OHLCV partial coverage not yet sufficient (need 2 months back), will retry")
+		return fmt.Errorf("OHLCV partial coverage not yet sufficient for market hour services")
+	}
+
+	log.Printf("🚀 Starting market hour services - time and OHLCV coverage checks passed")
+
+	// Start all services concurrently
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 3)
+
+	// Start alert loop
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := alerts.StartAlertLoop(conn); err != nil {
+			err = fmt.Errorf("failed to start alert loop: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
+		}
+	}()
+
+	// Start screener updater
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := screener.StartScreenerUpdaterLoop(conn); err != nil {
+			err = fmt.Errorf("failed to start screener updater: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
+		}
+	}()
+
+	// Start polygon websocket
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := startPolygonWebSocketInternal(conn); err != nil {
+			err = fmt.Errorf("failed to start polygon websocket: %w", err)
+			log.Printf("❌ %v", err)
+			errChan <- err
+		}
+	}()
+
+	// Wait for all services to start
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to start %d market hour service(s)", len(errors))
+	}
+
+	log.Printf("✅ All market hour services started successfully")
 	return nil
 }
 
-// Stop function for alert loop
-func stopAlertLoop() {
-	alertsInitMutex.Lock()
-	defer alertsInitMutex.Unlock()
-
-	if alertsInitialized {
-		alerts.StopAlertLoop()
-		alertsInitialized = false
-	}
-}
-
-// stopPolygonWebSocket stops the Polygon WebSocket if it's running
-func stopPolygonWebSocket() {
-	polygonInitMutex.Lock()
-	defer polygonInitMutex.Unlock()
-
-	if polygonInitialized {
-		// if err := socket.StopPolygonWS(); err != nil {
-		// 	//log.Printf("Failed to stop Polygon WebSocket: %v", err)
-		// }
-		_ = socket.StopPolygonWS() // Assign to blank identifier if error is intentionally ignored
-		polygonInitialized = false
-	}
-}
-
-// stopServicesJob stops alert loop and polygon websocket as a scheduled job
+// stopServicesJob stops alert loop, polygon websocket, and screener updater as a scheduled job
 func stopServicesJob(_ *data.Conn) error {
-	stopAlertLoop()
-	stopPolygonWebSocket()
+	alerts.StopAlertLoop()
+	_ = socket.StopPolygonWS()
+	_ = screener.StopScreenerUpdaterLoop()
 	return nil
 }

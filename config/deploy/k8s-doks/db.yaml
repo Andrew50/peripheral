@@ -4,6 +4,8 @@ metadata:
   name: db
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: db
@@ -12,6 +14,24 @@ spec:
       labels:
         app: db
     spec:
+      nodeSelector:
+        dedicated: db
+      tolerations:
+        - key: "db-only"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      initContainers:
+        - name: init-db-dir
+          image: busybox
+          command:
+            ["sh", "-c", "[ -d /mnt/pgdata/data ] || mkdir -p /mnt/pgdata/data"]
+          volumeMounts:
+            - name: db-pvc
+              mountPath: /mnt/pgdata
+          securityContext:
+            runAsUser: 999
+
       containers:
         - name: db
           image: ${DOCKER_USERNAME}/db:${DOCKER_TAG}
@@ -24,15 +44,53 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: DB_ROOT_PASSWORD
-            - name: PGDATA                    # ← new: tell Postgres where to keep its cluster
+            - name: PGDATA # ← new: tell Postgres where to keep its cluster
               value: /home/postgres/pgdata/data
+            # Telegram credentials for alerts
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: bot-token
+                  optional: true
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-secret
+                  key: chat-id
+                  optional: true
+            - name: ENVIRONMENT
+              value: ${ENVIRONMENT}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/app/graceful-shutdown.sh"]
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 45 # 45 × 30s = 22.5 minutes for migrations
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 10
+            failureThreshold: 3 # Fast detection after startup (30s)
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3 # Fast detection after startup (90s)
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 2000m
+              memory: 4000Mi
             limits:
-              cpu: 1000m
-              memory: 2000Mi
+              cpu: 3500m
+              memory: 6250Mi
           volumeMounts:
             - name: db-pvc
               mountPath: /home/postgres/pgdata
@@ -40,7 +98,7 @@ spec:
         - name: db-pvc
           persistentVolumeClaim:
             claimName: db-pvc
-      terminationGracePeriodSeconds: 90
+      terminationGracePeriodSeconds: 900
 
 ---
 apiVersion: v1
@@ -66,5 +124,4 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 100Gi
-
+      storage: 350Gi

@@ -2,202 +2,117 @@
 	import { settings } from '$lib/utils/stores/stores';
 	import { get } from 'svelte/store';
 	import type { Settings } from '$lib/utils/types/types';
-	import { privateRequest } from '$lib/utils/helpers/backend';
 	import '$lib/styles/global.css';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { colorSchemes, applyColorScheme } from '$lib/styles/colorSchemes';
+	import { logout } from '$lib/auth';
+	import { subscriptionStatus, fetchCombinedSubscriptionAndUsage } from '$lib/utils/stores/stores';
+	import { privateRequest } from '$lib/utils/helpers/backend';
+
+	// Export initialTab prop to handle external tab selection
+	export let initialTab: 'interface' | 'account' | 'appearance' | 'usage' | 'chart' | 'format' =
+		'interface';
 
 	let errorMessage: string = '';
 	let tempSettings: Settings = { ...get(settings) }; // Create a local copy to work with
-	let activeTab: 'chart' | 'format' | 'account' | 'appearance' = 'chart';
-	let watchlists: Array<{ watchlistId: string; watchlistName: string }> = [];
-	let customTickers = ''; // For managing comma-separated list of tickers
+	let originalSettings: Settings = { ...get(settings) }; // Store original settings for comparison
+	let hasChanges = false; // Track if settings have been modified
 
-	// Add profile picture state
-	let profilePic = browser ? sessionStorage.getItem('profilePic') || '' : '';
-	let username = browser ? sessionStorage.getItem('username') || '' : '';
-	let newProfilePic = '';
-	let uploadedImage: File | null = null;
-	let previewUrl = '';
-	let uploadStatus = '';
+	// Map old tab names to new ones for backward compatibility
+	function mapTabName(tab: string): 'interface' | 'account' | 'appearance' | 'usage' {
+		switch (tab) {
+			case 'chart':
+			case 'format':
+				return 'interface';
+			case 'account':
+				return 'account';
+			case 'appearance':
+				return 'appearance';
+			case 'usage':
+				return 'usage';
+			default:
+				return 'interface';
+		}
+	}
+
+	let activeTab: 'interface' | 'account' | 'appearance' | 'usage' = mapTabName(initialTab);
 
 	// Delete account variables
 	let showDeleteConfirmation = false;
 	let deleteConfirmationText = '';
 	let deletingAccount = false;
 
-	// Function to determine if the current user is a guest
-	const isGuestAccount = (): boolean => {
-		return username === 'Guest';
-	};
+	// Cancel subscription variables
+	let cancelingSubscription = false;
+	let showCancelConfirmation = false;
+	let cancelConfirmationText = '';
 
-	// DEPRECATED: Screensaver settings initialization
-	// Initialize timeframes as a comma-separated string for editing
-	// let timeframesString = tempSettings.screensaverTimeframes?.join(',') || '1w,1d,1h,1';
+	// Handle manage subscription
+	function handleManageSubscription() {
+		goto('/pricing');
+	}
 
+	// Initialize component
+	async function initializeComponent() {
+		await fetchCombinedSubscriptionAndUsage();
+	}
+
+	// Run initialization on mount
 	onMount(() => {
-		// DEPRECATED: Load watchlists for the screensaver settings
-		// privateRequest<Array<{ watchlistId: string; watchlistName: string }>>('getWatchlists', {}).then(
-		// 	(response) => {
-		// 		watchlists = response || [];
-		// 	}
-		// );
-
-		// DEPRECATED: Initialize custom tickers string if available
-		// if (tempSettings.screensaverTickers && tempSettings.screensaverTickers.length > 0) {
-		// 	customTickers = tempSettings.screensaverTickers.join(',');
-		// }
-
-		// Apply the current color scheme on mount using the store value
-		// if ($settings.colorScheme && browser) {
-		// 	const scheme = colorSchemes[$settings.colorScheme];
-		// 	if (scheme) {
-		// 		applyColorScheme(scheme);
-		// 	}
-		// }
+		initializeComponent();
 	});
 
-	function updateLayout() {
-		// DEPRECATED: Screensaver timeframes and tickers update
-		// Update timeframes array from the comma-separated string
-		// if (timeframesString) {
-		// 	tempSettings.screensaverTimeframes = timeframesString
-		// 		.split(',')
-		// 		.map((tf) => tf.trim())
-		// 		.filter((tf) => tf.length > 0);
-		// }
+	// Function to check if settings have changed
+	function checkForChanges() {
+		hasChanges = JSON.stringify(tempSettings) !== JSON.stringify(originalSettings);
+	}
 
-		// Update custom tickers if user-defined is selected
-		// if (tempSettings.screensaverDataSource === 'user-defined' && customTickers) {
-		// 	tempSettings.screensaverTickers = customTickers
-		// 		.split(',')
-		// 		.map((ticker) => ticker.trim().toUpperCase())
-		// 		.filter((ticker) => ticker.length > 0);
-		// }
+	function saveSettings() {
+		privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
+			settings.set(tempSettings);
+			originalSettings = { ...tempSettings }; // Update original settings after save
+			hasChanges = false; // Reset change flag
+			errorMessage = '';
+		});
+	}
 
-		if (tempSettings.chartRows > 0 && tempSettings.chartColumns > 0) {
-			privateRequest<void>('setSettings', { settings: tempSettings }).then(() => {
-				settings.set(tempSettings); // Update the store with new settings
-
-				// Apply color scheme if changed - REMOVED FROM HERE, handled by reactive statement
-				// if (browser && tempSettings.colorScheme) {
-				// 	const scheme = colorSchemes[tempSettings.colorScheme];
-				// 	if (scheme) {
-				// 		applyColorScheme(scheme);
-				// 	}
-				// }
-
-				errorMessage = '';
-			});
-		} else {
-			errorMessage = 'Chart rows and columns must be greater than 0';
-		}
+	function resetSettings() {
+		tempSettings = { ...originalSettings }; // Reset to original settings
+		hasChanges = false; // Reset change flag
+		saveSettings();
 	}
 
 	function handleKeyPress(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			updateLayout();
+			saveSettings();
 		}
 	}
 
-	function handleLogout() {
-		if (browser) {
-			sessionStorage.removeItem('authToken');
-			sessionStorage.removeItem('profilePic');
-			sessionStorage.removeItem('username');
-		}
-		goto('/');
-	}
-
-	// Function to navigate to the signup page
-	function goToSignup() {
-		goto('/signup');
-	}
-
-	// Generate initial avatar SVG from username
-	function generateInitialAvatar(username: string) {
-		const initial = username.charAt(0).toUpperCase();
-		return `data:image/svg+xml,${encodeURIComponent(`<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#1a1c21"/><text x="50" y="65" font-family="Arial" font-size="40" fill="#e0e0e0" text-anchor="middle" font-weight="bold">${initial}</text></svg>`)}`;
-	}
-
-	// Handle file selection for profile picture upload
-	function handleFileSelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files && input.files.length > 0) {
-			uploadedImage = input.files[0];
-
-			// Validate file type
-			if (!uploadedImage.type.match('image.*')) {
-				uploadStatus = 'Please select an image file';
-				previewUrl = '';
-				return;
-			}
-
-			// Create a preview URL
-			previewUrl = URL.createObjectURL(uploadedImage);
-			uploadStatus = '';
-		}
-	}
-
-	// Update profile picture
-	async function updateProfilePicture() {
-		if (!uploadedImage) {
-			uploadStatus = 'Please select an image to upload';
+	// Function to handle subscription cancellation
+	async function handleCancelSubscription() {
+		if (cancelConfirmationText !== 'CANCEL') {
 			return;
 		}
 
+		cancelingSubscription = true;
+		errorMessage = '';
+
 		try {
-			uploadStatus = 'Uploading...';
+			await privateRequest('cancelSubscription', {});
 
-			// Convert image to base64
-			const reader = new FileReader();
-			reader.readAsDataURL(uploadedImage);
-			reader.onload = async () => {
-				const base64String = reader.result as string;
+			// Refresh subscription status to reflect the cancellation
+			await fetchCombinedSubscriptionAndUsage();
 
-				try {
-					// Send to backend
-					await privateRequest('updateProfilePicture', {
-						profilePicture: base64String
-					});
-
-					// Update in session storage
-					if (browser) {
-						sessionStorage.setItem('profilePic', base64String);
-					}
-
-					profilePic = base64String;
-					uploadStatus = 'Profile picture updated successfully!';
-
-					// Clear file input
-					uploadedImage = null;
-				} catch (error) {
-					console.error('Error uploading profile picture:', error);
-					uploadStatus = 'Failed to update profile picture. Please try again.';
-				}
-			};
+			// Reset confirmation state
+			showCancelConfirmation = false;
+			cancelConfirmationText = '';
 		} catch (error) {
-			console.error('Error processing image:', error);
-			uploadStatus = 'Error processing image. Please try again.';
-		}
-	}
-
-	// Reset to default initial avatar
-	function resetToDefaultAvatar() {
-		if (username) {
-			const defaultAvatar = generateInitialAvatar(username);
-			profilePic = defaultAvatar;
-
-			if (browser) {
-				sessionStorage.setItem('profilePic', defaultAvatar);
-			}
-
-			// Clear uploaded state
-			uploadedImage = null;
-			previewUrl = '';
-			uploadStatus = 'Reset to default avatar';
+			console.error('Error canceling subscription:', error);
+			errorMessage = 'Failed to cancel subscription. Please try again.';
+		} finally {
+			cancelingSubscription = false;
 		}
 	}
 
@@ -216,15 +131,7 @@
 			});
 
 			// If successful, logout and return to login page
-			if (browser) {
-				sessionStorage.removeItem('authToken');
-				sessionStorage.removeItem('profilePic');
-				sessionStorage.removeItem('username');
-				sessionStorage.removeItem('isGuestSession');
-			}
-
-			// Redirect to login page
-			goto('/login');
+			logout('/login');
 		} catch (error) {
 			console.error('Error deleting account:', error);
 			errorMessage = 'Failed to delete account. Please try again.';
@@ -235,525 +142,375 @@
 </script>
 
 <div class="settings-panel">
-	{#if isGuestAccount()}
-		<!-- Simplified view for guest users -->
-		<div class="settings-header">
-			<h2>Settings</h2>
-		</div>
-		<div class="settings-content guest-only-content">
-			<div class="profile-section guest-profile">
-				<div class="profile-picture-container">
-					<div class="profile-picture">
-						<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
-					</div>
-					<div class="username-display">
-						{username}
-					</div>
-				</div>
+	<!-- Full settings view for all authenticated users -->
+	<div class="tabs">
+		<button
+			class="tab {activeTab === 'interface' ? 'active' : ''}"
+			on:click={() => (activeTab = 'interface')}
+		>
+			Interface
+		</button>
+		<button
+			class="tab {activeTab === 'usage' ? 'active' : ''}"
+			on:click={() => (activeTab = 'usage')}
+		>
+			Usage
+		</button>
+		<button
+			class="tab {activeTab === 'account' ? 'active' : ''}"
+			on:click={() => (activeTab = 'account')}
+		>
+			Account
+		</button>
+		<!-- <button
+			class="tab {activeTab === 'appearance' ? 'active' : ''}"
+			on:click={() => (activeTab = 'appearance')}
+		>
+			Appearance
+		</button> -->
+	</div>
 
-				<div class="guest-account-notice">
-					<p>
-						You're currently using a guest account. Create your own account to save your preferences
-						and data.
-					</p>
-					<button class="create-account-button" on:click={goToSignup}> Create Your Account </button>
-				</div>
-			</div>
-
-			<div class="account-actions">
-				<button class="logout-button" on:click={handleLogout}>Logout</button>
-			</div>
-		</div>
-	{:else}
-		<!-- Full settings panel for registered users -->
-		<div class="settings-tabs">
-			<button
-				class="tab-button {activeTab === 'account' ? 'active' : ''}"
-				on:click={() => (activeTab = 'account')}
-			>
-				Account
-			</button>
-			<button
-				class="tab-button {activeTab === 'chart' ? 'active' : ''}"
-				on:click={() => (activeTab = 'chart')}
-			>
-				Chart
-			</button>
-			<button
-				class="tab-button {activeTab === 'format' ? 'active' : ''}"
-				on:click={() => (activeTab = 'format')}
-			>
-				Format
-			</button>
-			<!-- DEPRECATED: Screensaver tab -->
-			<!-- <button
-				class="tab-button {activeTab === 'screensaver' ? 'active' : ''}"
-				on:click={() => (activeTab = 'screensaver')}
-			>
-				Screensaver
-			</button> -->
-			<button
-				class="tab-button {activeTab === 'appearance' ? 'active' : ''}"
-				on:click={() => (activeTab = 'appearance')}
-			>
-				Appearance
-			</button>
-		</div>
-
-		<div class="settings-content">
-			{#if activeTab === 'chart'}
-				<div class="settings-section">
-					<h3>Chart Layout</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="chartRows">Chart Rows</label>
-							<input
-								type="number"
-								id="chartRows"
-								bind:value={tempSettings.chartRows}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-
-						<div class="setting-item">
-							<label for="chartColumns">Chart Columns</label>
-							<input
-								type="number"
-								id="chartColumns"
-								bind:value={tempSettings.chartColumns}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-				</div>
+	<div class="settings-content">
+		<!-- Interface Settings Tab -->
+		{#if activeTab === 'interface'}
+			<div class="interface-settings">
+				<h3>Interface Settings</h3>
 
 				<div class="settings-section">
-					<h3>Technical Indicators</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="adrPeriod">Average Range Period</label>
-							<input
-								type="number"
-								id="adrPeriod"
-								bind:value={tempSettings.adrPeriod}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-				</div>
-			{:else if activeTab === 'format'}
-				<div class="settings-section">
-					<h3>Display Options</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="dolvol">Show Dollar Volume</label>
-							<div class="toggle-container">
-								<select id="dolvol" bind:value={tempSettings.dolvol} on:keypress={handleKeyPress}>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
+					<h4>Chart</h4>
+					<label class="setting-item">
+						<span>Show Dollar Volume:</span>
+						<input type="checkbox" bind:checked={tempSettings.dolvol} on:change={checkForChanges} />
+					</label>
 
-						<div class="setting-item">
-							<label for="showFilings">Show SEC Filings</label>
-							<div class="toggle-container">
-								<select
-									id="showFilings"
-									bind:value={tempSettings.showFilings}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-
-						<!-- DEPRECATED: Screensaver enable/disable setting -->
-						<!-- <div class="setting-item">
-							<label for="enableScreensaver">Enable Screensaver</label>
-							<div class="toggle-container">
-								<select
-									id="enableScreensaver"
-									bind:value={tempSettings.enableScreensaver}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div> -->
-					</div>
-				</div>
-
-				<div class="settings-section">
-					<h3>Time & Sales</h3>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="filterTaS">Show trades less than 100 shares</label>
-							<div class="toggle-container">
-								<select
-									id="filterTaS"
-									bind:value={tempSettings.filterTaS}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-
-						<div class="setting-item">
-							<label for="divideTaS">Divide Time and Sales by 100</label>
-							<div class="toggle-container">
-								<select
-									id="divideTaS"
-									bind:value={tempSettings.divideTaS}
-									on:keypress={handleKeyPress}
-								>
-									<option value={true}>Yes</option>
-									<option value={false}>No</option>
-								</select>
-							</div>
-						</div>
-					</div>
-				</div>
-			<!-- DEPRECATED: Screensaver settings section -->
-			<!-- {:else if activeTab === 'screensaver'}
-				<div class="settings-section">
-					<h3>Screensaver Settings</h3>
-
-					<div class="setting-item">
-						<label for="enableScreensaver">Enable Screensaver</label>
-						<div class="toggle-container">
-							<select
-								id="enableScreensaver"
-								bind:value={tempSettings.enableScreensaver}
-								on:keypress={handleKeyPress}
-							>
-								<option value={true}>Yes</option>
-								<option value={false}>No</option>
-							</select>
-						</div>
-					</div>
-
-					<div class="settings-grid">
-						<div class="setting-item">
-							<label for="screensaverTimeout">Inactivity Timeout (seconds)</label>
-							<input
-								type="number"
-								id="screensaverTimeout"
-								bind:value={tempSettings.screensaverTimeout}
-								min="30"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-
-						<div class="setting-item">
-							<label for="screensaverSpeed">Cycle Speed (seconds)</label>
-							<input
-								type="number"
-								id="screensaverSpeed"
-								bind:value={tempSettings.screensaverSpeed}
-								min="1"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					</div>
-
-					<div class="setting-item wide">
-						<label for="screensaverTimeframes">Timeframes (comma-separated)</label>
+					<label class="setting-item">
+						<span>Show SEC Filings:</span>
 						<input
-							type="text"
-							id="screensaverTimeframes"
-							bind:value={timeframesString}
-							placeholder="1w,1d,1h,1"
-							on:keypress={handleKeyPress}
+							type="checkbox"
+							bind:checked={tempSettings.showFilings}
+							on:change={checkForChanges}
 						/>
-					</div>
+					</label>
+				</div>
 
-					<h3>Data Source</h3>
-					<div class="setting-item">
-						<label for="screensaverDataSource">Chart Data Source</label>
-						<div class="toggle-container">
-							<select
-								id="screensaverDataSource"
-								bind:value={tempSettings.screensaverDataSource}
-								on:keypress={handleKeyPress}
+				<div class="settings-section">
+					<h4>Technical Indicators</h4>
+					<label class="setting-item">
+						<span>Average Range Period:</span>
+						<input
+							type="number"
+							bind:value={tempSettings.adrPeriod}
+							min="1"
+							on:keypress={handleKeyPress}
+							on:change={checkForChanges}
+						/>
+					</label>
+				</div>
+
+				<!-- <div class="settings-section">
+					<h4>Time & Sales</h4>
+					<label class="setting-item">
+						<span>Show trades less than 100 shares:</span>
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.filterTaS}
+							on:change={checkForChanges}
+						/>
+					</label>
+
+					<label class="setting-item">
+						<span>Divide Time and Sales by 100:</span>
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.divideTaS}
+							on:change={checkForChanges}
+						/>
+					</label>
+				</div> -->
+			</div>
+		{/if}
+
+		<!-- Account Settings Tab -->
+		{#if activeTab === 'account'}
+			<div class="account-settings">
+				<h3>Account Settings</h3>
+
+				<!-- Account Actions -->
+				<div class="account-actions">
+					<button class="logout-button" on:click={() => logout('/')}>Logout</button>
+
+					<!-- Delete Account Section -->
+					<div class="danger-zone">
+						<h4>Danger Zone</h4>
+						<div class="delete-account-section">
+							<p>Permanently delete your account and all associated data.</p>
+
+							{#if !showDeleteConfirmation}
+								<button class="delete-button" on:click={() => (showDeleteConfirmation = true)}>
+									Delete Account
+								</button>
+							{:else}
+								<div class="delete-confirmation">
+									<p class="warning-text">
+										⚠️ This action cannot be undone. All your data will be permanently deleted.
+									</p>
+									<p>Type <strong>DELETE</strong> to confirm:</p>
+									<input
+										type="text"
+										bind:value={deleteConfirmationText}
+										placeholder="Type DELETE here"
+										class="delete-input"
+									/>
+									<div class="delete-buttons">
+										<button
+											class="cancel-button"
+											on:click={() => {
+												showDeleteConfirmation = false;
+												deleteConfirmationText = '';
+											}}
+										>
+											Cancel
+										</button>
+										<button
+											class="confirm-delete-button"
+											disabled={deleteConfirmationText !== 'DELETE' || deletingAccount}
+											on:click={handleDeleteAccount}
+										>
+											{deletingAccount ? 'Deleting...' : 'Delete Account'}
+										</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Appearance Settings Tab -->
+		<!-- {#if activeTab === 'appearance'}
+			<div class="appearance-settings">
+				<h3>Appearance Settings</h3>
+
+				<div class="settings-section">
+					<h4>Color Scheme</h4>
+					<div class="color-scheme-grid">
+						{#each Object.entries(colorSchemes) as [key, scheme]}
+							<button
+								class="color-scheme-option {tempSettings.colorScheme === key ? 'selected' : ''}"
+								on:click={() => {
+									tempSettings = { ...tempSettings, colorScheme: key };
+									applyColorScheme(scheme);
+								}}
 							>
-								<option value="gainers-losers">Gainers & Losers</option>
-								<option value="watchlist">Watchlist</option>
-								<option value="user-defined">Custom Tickers</option>
-							</select>
-						</div>
+								<div class="color-preview">
+									<div class="color-bar" style="background-color: {scheme.c1}"></div>
+									<div class="color-bar" style="background-color: {scheme.c2}"></div>
+									<div class="color-bar" style="background-color: {scheme.c3}"></div>
+								</div>
+								<span class="scheme-name">{scheme.name}</span>
+							</button>
+						{/each}
 					</div>
+				</div>
+			</div>
+		{/if} -->
 
-					{#if tempSettings.screensaverDataSource === 'watchlist'}
-						<div class="setting-item">
-							<label for="screensaverWatchlistId">Select Watchlist</label>
-							<div class="toggle-container">
-								<select
-									id="screensaverWatchlistId"
-									bind:value={tempSettings.screensaverWatchlistId}
-									on:keypress={handleKeyPress}
-								>
-									{#each watchlists as watchlist}
-										<option value={watchlist.watchlistId}>{watchlist.watchlistName}</option>
-									{/each}
-								</select>
-							</div>
-						</div>
-					{:else if tempSettings.screensaverDataSource === 'user-defined'}
-						<div class="setting-item wide">
-							<label for="customTickers">Custom Tickers (comma-separated)</label>
-							<input
-								type="text"
-								id="customTickers"
-								bind:value={customTickers}
-								placeholder="AAPL,MSFT,GOOGL,AMZN"
-								on:keypress={handleKeyPress}
-							/>
-						</div>
-					{/if}
-
-					<div class="info-message screensaver-info">
-						{#if tempSettings.enableScreensaver}
-							The screensaver will activate after {tempSettings.screensaverTimeout} seconds of inactivity,
-							cycling through charts every {tempSettings.screensaverSpeed} seconds.
+		<!-- Usage Tab -->
+		{#if activeTab === 'usage'}
+			<div class="usage-settings">
+				<h3>Usage</h3>
+				<div class="usage-layout">
+					<!-- Usage Information -->
+					<div class="settings-section">
+						<h4>Usage & Limits</h4>
+						{#if $subscriptionStatus.loading}
+							<p>Loading usage information...</p>
+						{:else if $subscriptionStatus.error}
+							<p class="error-text">{$subscriptionStatus.error}</p>
 						{:else}
-							The screensaver is currently disabled. Enable it to display trending charts during
-							idle periods.
+							<div class="usage-info">
+								<!-- Queries Section -->
+								<div class="usage-section">
+									<h5>Queries</h5>
+									<div class="usage-item">
+										<span class="usage-label">Total Queries:</span>
+										<span class="usage-value">{$subscriptionStatus.totalCreditsRemaining || 0}</span
+										>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Subscription Queries:</span>
+										<span class="usage-value"
+											>{$subscriptionStatus.subscriptionCreditsRemaining || 0}</span
+										>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Purchased Queries:</span>
+										<span class="usage-value"
+											>{$subscriptionStatus.purchasedCreditsRemaining || 0}</span
+										>
+									</div>
+									{#if $subscriptionStatus.isActive}
+										<div class="usage-item">
+											<span class="usage-label">Monthly Allocation:</span>
+											<span class="usage-value"
+												>{$subscriptionStatus.subscriptionCreditsAllocated || 0}</span
+											>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Alerts Section -->
+								<div class="usage-section">
+									<h5>Alerts</h5>
+									<div class="usage-item">
+										<span class="usage-label">Active Alerts:</span>
+										<span class="usage-value">
+											{$subscriptionStatus.activeAlerts || 0}
+											{#if $subscriptionStatus.alertsLimit !== undefined}
+												/ {$subscriptionStatus.alertsLimit}
+											{/if}
+										</span>
+									</div>
+									<div class="usage-item">
+										<span class="usage-label">Strategy Alerts:</span>
+										<span class="usage-value">
+											{$subscriptionStatus.activeStrategyAlerts || 0}
+											{#if $subscriptionStatus.strategyAlertsLimit !== undefined}
+												/ {$subscriptionStatus.strategyAlertsLimit}
+											{/if}
+										</span>
+									</div>
+								</div>
+
+								<!-- Purchase Queries Button -->
+								{#if !$subscriptionStatus.isActive}
+									<p class="upgrade-note">Upgrade to a paid plan to purchase additional queries</p>
+								{/if}
+							</div>
 						{/if}
 					</div>
-				</div> -->
-			{:else if activeTab === 'appearance'}
-				<div class="settings-section">
-					<h3>Color Scheme</h3>
-					<div class="setting-item wide">
-						<label for="colorScheme">Choose a color scheme</label>
-						<div class="toggle-container">
-							<select
-								id="colorScheme"
-								bind:value={tempSettings.colorScheme}
-								on:keypress={handleKeyPress}
-							>
-								<option value="default">Default</option>
-								<option value="dark-blue">Dark Blue</option>
-								<option value="midnight">Midnight</option>
-								<option value="forest">Forest</option>
-								<option value="sunset">Sunset</option>
-								<option value="grayscale">Grayscale</option>
-							</select>
-						</div>
-					</div>
 
-					<!-- Color scheme preview -->
-					<div class="color-scheme-preview">
-						<h4>Preview</h4>
-						<div
-							class="color-preview-container"
-							style="background-color: {colorSchemes[tempSettings.colorScheme].c2};"
-						>
-							<div
-								class="preview-header"
-								style="background-color: {colorSchemes[tempSettings.colorScheme]
-									.c1}; border-bottom: 1px solid {colorSchemes[tempSettings.colorScheme].c3};"
-							>
-								<div
-									class="preview-title"
-									style="color: {colorSchemes[tempSettings.colorScheme].f1};"
-								>
-									Chart Window
-								</div>
-							</div>
-							<div class="preview-content">
-								<div
-									class="preview-section"
-									style="background-color: {colorSchemes[tempSettings.colorScheme]
-										.c2}; border: 1px solid {colorSchemes[tempSettings.colorScheme].c4};"
-								>
-									<div
-										class="preview-text"
-										style="color: {colorSchemes[tempSettings.colorScheme].f1};"
-									>
-										Primary Text
-									</div>
-									<div
-										class="preview-text"
-										style="color: {colorSchemes[tempSettings.colorScheme].f2};"
-									>
-										Secondary Text
-									</div>
-								</div>
-								<div class="preview-buttons">
-									<button
-										class="preview-button"
-										style="background-color: {colorSchemes[tempSettings.colorScheme]
-											.c3}; color: white;"
-									>
-										Action Button
-									</button>
-									<div class="preview-indicators">
-										<span style="color: {colorSchemes[tempSettings.colorScheme].colorUp};"
-											>▲ +2.45%</span
-										>
-										<span style="color: {colorSchemes[tempSettings.colorScheme].colorDown};"
-											>▼ -1.23%</span
-										>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="info-message">
-						Color scheme changes will be applied immediately but must be saved using the "Apply
-						Changes" button to persist across sessions.
-					</div>
-				</div>
-			{:else if activeTab === 'account'}
-				<div class="settings-section">
-					<h3>Account Information</h3>
-
-					<div class="profile-section">
-						<div class="profile-picture-container">
-							<div class="profile-picture">
-								{#if profilePic}
-									<img
-										src={profilePic}
-										alt="Profile"
-										class="profile-image"
-										on:error={() => {
-											profilePic = generateInitialAvatar(username);
-										}}
-									/>
-								{:else if username}
-									<img src={generateInitialAvatar(username)} alt="Profile" class="profile-image" />
+					<!-- Subscription Management -->
+					<div class="settings-section">
+						<h4>Subscription</h4>
+						{#if $subscriptionStatus.loading}
+							<p>Loading subscription information...</p>
+						{:else if $subscriptionStatus.error}
+							<p class="error-text">{$subscriptionStatus.error}</p>
+						{:else if $subscriptionStatus.isActive}
+							<div class="subscription-info">
+								{#if $subscriptionStatus.isCanceling}
+									<p class="subscription-status">
+										Status: <span class="canceling">Canceling</span>
+									</p>
+									{#if $subscriptionStatus.currentPlan}
+										<p>Plan: {$subscriptionStatus.currentPlan}</p>
+									{/if}
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p>
+											Access until: {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
+									<p class="canceling-note">
+										Your subscription will remain active until the end of your current billing
+										period.
+									</p>
 								{:else}
-									<div class="profile-placeholder">?</div>
+									<p class="subscription-status">Status: <span class="active">Active</span></p>
+									{#if $subscriptionStatus.currentPlan}
+										<p>Plan: {$subscriptionStatus.currentPlan}</p>
+									{/if}
+									{#if $subscriptionStatus.currentPeriodEnd}
+										<p>
+											Next billing: {new Date(
+												$subscriptionStatus.currentPeriodEnd * 1000
+											).toLocaleDateString()}
+										</p>
+									{/if}
 								{/if}
-							</div>
-							<div class="username-display">
-								{username || 'User'}
-							</div>
-						</div>
-
-						<div class="profile-upload-section">
-							<h4>Update Profile Picture</h4>
-
-							<div class="file-upload">
-								<label for="profile-pic-upload" class="file-upload-label"> Choose Image </label>
-								<input
-									type="file"
-									id="profile-pic-upload"
-									accept="image/*"
-									on:change={handleFileSelect}
-								/>
-
-								{#if previewUrl}
-									<div class="preview-container">
-										<img src={previewUrl} alt="Preview" class="preview-image" />
-									</div>
-								{/if}
-
-								<div class="upload-actions">
-									<button
-										class="upload-button"
-										on:click={updateProfilePicture}
-										disabled={!uploadedImage}
-									>
-										Upload
+								<div class="subscription-buttons">
+									<button class="manage-subscription-button" on:click={handleManageSubscription}>
+										Manage Subscription
 									</button>
-
-									<button class="reset-button" on:click={resetToDefaultAvatar}>
-										Reset to Default
+									{#if !$subscriptionStatus.isCanceling}
+										{#if !showCancelConfirmation}
+											<button
+												class="cancel-subscription-button"
+												on:click={() => (showCancelConfirmation = true)}
+											>
+												Cancel Subscription
+											</button>
+										{:else}
+											<div class="cancel-confirmation">
+												<p class="warning-text">
+													⚠️ This will cancel your subscription at the end of your current billing
+													period.
+												</p>
+												<p>Type <strong>CANCEL</strong> to confirm:</p>
+												<input
+													type="text"
+													bind:value={cancelConfirmationText}
+													placeholder="Type CANCEL here"
+													class="cancel-input"
+												/>
+												<div class="cancel-buttons">
+													<button
+														class="cancel-button"
+														on:click={() => {
+															showCancelConfirmation = false;
+															cancelConfirmationText = '';
+														}}
+													>
+														Keep Subscription
+													</button>
+													<button
+														class="confirm-cancel-button"
+														disabled={cancelConfirmationText !== 'CANCEL' || cancelingSubscription}
+														on:click={handleCancelSubscription}
+													>
+														{cancelingSubscription ? 'Canceling...' : 'Cancel Subscription'}
+													</button>
+												</div>
+											</div>
+										{/if}
+									{/if}
+									<button class="upgrade-button" on:click={() => goto('/pricing')}>
+										Purchase More Queries
 									</button>
 								</div>
-
-								{#if uploadStatus}
-									<div class="upload-status">
-										{uploadStatus}
-									</div>
-								{/if}
 							</div>
-						</div>
-					</div>
-
-					<div class="account-actions">
-						<button class="logout-button" on:click={handleLogout}>Logout</button>
-					</div>
-
-					<div class="danger-zone">
-						<h3>Danger Zone</h3>
-						<div class="delete-account-section">
-							<div class="warning-message">
-								<p>
-									Permanently delete your account and all associated data. This action cannot be
-									undone.
-								</p>
+						{:else}
+							<div class="subscription-info">
+								<p class="subscription-status">Status: <span class="inactive">Free Plan</span></p>
+								<p>Upgrade to access premium features</p>
+								<button class="upgrade-button" on:click={() => goto('/pricing')}>
+									View Plans
+								</button>
 							</div>
-
-							<button
-								class="delete-account-button"
-								on:click={() => (showDeleteConfirmation = true)}
-							>
-								Delete Account
-							</button>
-						</div>
+						{/if}
 					</div>
 				</div>
-			{/if}
-
-			{#if errorMessage}
-				<div class="error-message">{errorMessage}</div>
-			{/if}
-
-			<div class="settings-actions">
-				<button class="apply-button" on:click={updateLayout}>Apply Changes</button>
 			</div>
+		{/if}
 
-			{#if showDeleteConfirmation}
-				<div class="confirmation-modal-overlay">
-					<div class="confirmation-modal">
-						<h3>Delete Account</h3>
-						<p>
-							This will permanently delete your account and all associated data. This action cannot
-							be undone.
-						</p>
-						<p class="confirmation-instruction">
-							Type <strong>DELETE</strong> to confirm.
-						</p>
+		<!-- Settings Actions - Only show in Interface tab -->
+		{#if activeTab === 'interface'}
+			<div class="settings-actions">
+				<button class="save-button {hasChanges ? 'has-changes' : ''}" on:click={saveSettings}
+					>Save Settings</button
+				>
+				<button class="reset-button {hasChanges ? 'has-changes' : ''}" on:click={resetSettings}
+					>Reset</button
+				>
+			</div>
+		{/if}
+	</div>
 
-						<input
-							type="text"
-							bind:value={deleteConfirmationText}
-							placeholder="Type DELETE to confirm"
-							class="confirmation-input"
-						/>
-
-						<div class="confirmation-actions">
-							<button class="cancel-button" on:click={() => (showDeleteConfirmation = false)}>
-								Cancel
-							</button>
-							<button
-								class="confirm-delete-button"
-								disabled={deleteConfirmationText !== 'DELETE'}
-								on:click={handleDeleteAccount}
-							>
-								{#if deletingAccount}
-									<span class="loader"></span>
-								{:else}
-									Delete My Account
-								{/if}
-							</button>
-						</div>
-					</div>
-				</div>
-			{/if}
-		</div>
+	{#if errorMessage}
+		<div class="error-message">{errorMessage}</div>
 	{/if}
 </div>
 
@@ -762,555 +519,136 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		width: 100%;
-		max-width: 95vw;
-		max-height: 92vh;
-		color: var(--f1);
 		background-color: var(--c1);
-		border-radius: 8px;
-		overflow: hidden;
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-		margin: 0 auto;
-		position: relative;
-		min-width: 800px;
-		min-height: 600px;
+		color: var(--f1);
+		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 	}
 
-	.settings-tabs {
+	.tabs {
 		display: flex;
-		background-color: var(--c2);
 		border-bottom: 1px solid var(--c3);
-		height: 56px;
-		min-height: 56px;
+		background-color: var(--c2);
 	}
 
-	.tab-button {
-		padding: 0 20px;
-		background: transparent;
+	.tab {
+		padding: 1rem 1.5rem;
+		background: none;
 		border: none;
 		color: var(--f2);
-		font-size: 0.9375rem;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		position: relative;
-		text-align: center;
-		height: 100%;
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		font-size: 0.9375rem;
 		font-weight: 500;
-		letter-spacing: 0.2px;
+		transition: all 0.2s ease;
+		border-bottom: 3px solid transparent;
 	}
 
-	.tab-button:hover {
-		background-color: rgba(255, 255, 255, 0.05);
+	.tab:hover {
+		background-color: rgb(255 255 255 / 5%);
 		color: var(--f1);
 	}
 
-	.tab-button.active {
+	.tab.active {
 		color: var(--f1);
-		font-weight: 600;
-	}
-
-	.tab-button.active::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 100%;
-		height: 3px;
-		background-color: var(--c3);
+		border-bottom-color: var(--f1);
+		background-color: rgb(255 255 255 / 3%);
 	}
 
 	.settings-content {
 		flex: 1;
-		padding: 1.75rem 2rem;
+		padding: 2rem;
 		overflow-y: auto;
-		overflow-x: hidden;
+	}
+
+	.interface-settings,
+	.account-settings,
+	.usage-settings {
+		max-width: 600px;
 	}
 
 	.settings-section {
 		margin-bottom: 2rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-		padding-bottom: 1.75rem;
+		padding: 1.5rem;
+		background-color: rgb(255 255 255 / 3%);
+		border-radius: 8px;
+		border: 1px solid rgb(255 255 255 / 8%);
 	}
 
-	.settings-section:last-child {
-		border-bottom: none;
-		margin-bottom: 0;
-		padding-bottom: 0;
-	}
-
-	h3 {
-		margin: 0 0 1.25rem 0;
-		font-size: 1.125rem;
-		font-weight: 600;
+	.settings-section h4 {
+		margin: 0 0 1rem;
 		color: var(--f1);
-		position: relative;
-		padding-bottom: 0.5rem;
-	}
-
-	h3::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 40px;
-		height: 2px;
-		background-color: var(--c3);
-	}
-
-	.settings-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 0.875rem;
-	}
-
-	@media (min-width: 600px) {
-		.settings-grid {
-			grid-template-columns: 1fr 1fr;
-			gap: 1.25rem;
-		}
-	}
-
-	@media (min-width: 1200px) {
-		.settings-grid {
-			grid-template-columns: 1fr 1fr 1fr;
-			gap: 1.5rem;
-		}
+		font-size: 1rem;
+		font-weight: 600;
 	}
 
 	.setting-item {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 1rem 1.25rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		transition: border-color 0.2s ease;
-	}
-
-	.setting-item:hover {
-		border-color: rgba(255, 255, 255, 0.12);
-	}
-
-	.setting-item.wide {
-		grid-column: 1 / -1;
-	}
-
-	.setting-item.wide input {
-		width: 70%;
-		max-width: 500px;
-	}
-
-	label {
-		font-size: 0.9375rem;
-		color: var(--f2);
-		margin-right: 1rem;
-		font-weight: 500;
-	}
-
-	input[type='number'] {
-		width: 90px;
-		padding: 0.625rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-		text-align: center;
-		transition: all 0.2s ease;
-	}
-
-	input[type='number']:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
-	}
-
-	input[type='text'] {
-		padding: 0.625rem 0.875rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-		min-width: 250px;
-		transition: all 0.2s ease;
-	}
-
-	input[type='text']:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
-	}
-
-	.toggle-container select {
-		padding: 0.625rem 0.875rem;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-		min-width: 120px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' fill='none'%3E%3Cpath fill='%23999' d='M0 0h12L6 6 0 0z'/%3E%3C/svg%3E");
-		background-repeat: no-repeat;
-		background-position: right 12px center;
-		padding-right: 36px;
-	}
-
-	.toggle-container select:focus {
-		outline: none;
-		border-color: var(--c3);
-		box-shadow: 0 0 0 1px var(--c3);
-	}
-
-	.info-message {
-		padding: 1.25rem;
-		background-color: rgba(59, 130, 246, 0.05);
-		border-radius: 6px;
-		color: var(--f2);
-		font-size: 0.9375rem;
-		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
-		margin-top: 1.5rem;
-	}
-
-
-	.account-actions {
-		margin-top: 2rem;
-		display: flex;
-		justify-content: center;
-	}
-
-	.error-message {
-		margin: 1.25rem 0;
-		padding: 1rem 1.25rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border-radius: 6px;
-		font-size: 0.9375rem;
-		text-align: center;
-		border: 1px solid rgba(239, 68, 68, 0.2);
-	}
-
-	.settings-actions {
-		margin-top: 2rem;
-		display: flex;
-		justify-content: flex-end;
-		position: sticky;
-		bottom: 0;
-		background-color: var(--c1);
-		padding: 1.25rem 0 0 0;
-		border-top: 1px solid rgba(255, 255, 255, 0.05);
-	}
-
-	.apply-button {
-		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
-		color: white;
-		border: none;
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-	}
-
-	.apply-button:hover {
-		background-color: var(--c3-hover);
-	}
-
-	.logout-button {
-		padding: 0.75rem 1.5rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.logout-button:hover {
-		background-color: rgba(239, 68, 68, 0.2);
-	}
-
-	/* Profile section styles */
-	.profile-section {
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-
-	@media (min-width: 768px) {
-		.profile-section {
-			flex-direction: row;
-			align-items: flex-start;
-		}
-
-		.profile-picture-container {
-			flex: 0 0 auto;
-		}
-
-		.profile-upload-section {
-			flex: 1;
-		}
-	}
-
-	.profile-picture-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.875rem;
-	}
-
-	.profile-picture {
-		width: 100px;
-		height: 100px;
-		border-radius: 50%;
-		overflow: hidden;
-		background-color: var(--c2);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: 2px solid var(--c3);
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-	}
-
-	.profile-image {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-
-	.profile-placeholder {
-		font-size: 2.5rem;
-		color: var(--f2);
-		font-weight: bold;
-	}
-
-	.username-display {
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.profile-upload-section {
-		background-color: rgba(0, 0, 0, 0.1);
-		border-radius: 6px;
-		padding: 1.5rem;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-	}
-
-	.profile-upload-section h4 {
-		margin: 0 0 1.25rem 0;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.file-upload {
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.file-upload input[type='file'] {
-		display: none;
-	}
-
-	.file-upload-label {
-		background-color: var(--c3);
-		color: white;
-		padding: 0.75rem 1.25rem;
-		border-radius: 4px;
-		cursor: pointer;
-		text-align: center;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		transition: background-color 0.2s;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.file-upload-label:hover {
-		background-color: var(--c3-hover);
-	}
-
-	.preview-container {
-		width: 100%;
-		height: 140px;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		overflow: hidden;
-		border-radius: 6px;
-		background-color: rgba(0, 0, 0, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.preview-image {
-		max-width: 100%;
-		max-height: 100%;
-		object-fit: contain;
-	}
-
-	.upload-actions {
-		display: flex;
-		gap: 1rem;
-	}
-
-	.upload-button,
-	.reset-button {
-		padding: 0.75rem 1.25rem;
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		flex: 1;
-		transition: all 0.2s;
-	}
-
-	.upload-button {
-		background-color: var(--c3);
-		color: white;
-		border: none;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.upload-button:hover:not(:disabled) {
-		background-color: var(--c3-hover);
-	}
-
-	.upload-button:disabled {
-		background-color: rgba(59, 130, 246, 0.3);
-		cursor: not-allowed;
-		box-shadow: none;
-	}
-
-	.reset-button {
-		background-color: rgba(0, 0, 0, 0.2);
-		color: var(--f1);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.reset-button:hover {
-		background-color: rgba(0, 0, 0, 0.3);
-	}
-
-	.upload-status {
-		padding: 0.875rem;
-		text-align: center;
-		font-size: 0.9375rem;
-		color: var(--f2);
-		background-color: rgba(0, 0, 0, 0.1);
-		border-radius: 4px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-	}
-
-	/* Color scheme preview styles */
-	.color-scheme-preview {
-		margin-top: 1.75rem;
-		margin-bottom: 1.75rem;
-	}
-
-	.color-scheme-preview h4 {
-		margin: 0 0 1rem 0;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.color-preview-container {
-		border-radius: 8px;
-		overflow: hidden;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.preview-header {
-		padding: 0.875rem 1.25rem;
-		display: flex;
-		align-items: center;
-	}
-
-	.preview-title {
-		font-size: 1rem;
-		font-weight: 600;
-	}
-
-	.preview-content {
-		padding: 1.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.preview-section {
-		padding: 1.25rem;
-		border-radius: 8px;
-	}
-
-	.preview-text {
 		margin-bottom: 1rem;
 		font-size: 0.9375rem;
 	}
 
-	.preview-buttons {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
+	.setting-item span {
+		color: var(--f2);
+		flex-grow: 1;
 	}
 
-	.preview-button {
-		padding: 0.625rem 1.25rem;
-		border: none;
+	.setting-item input[type='number'] {
+		padding: 0.5rem;
+		background-color: var(--c2);
+		border: 1px solid var(--c3);
 		border-radius: 4px;
+		color: var(--f1);
 		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+		min-width: 120px;
 	}
 
-	.preview-indicators {
+	.setting-item input[type='checkbox'] {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--f1);
+	}
+
+	.subscription-info {
 		display: flex;
-		gap: 1.25rem;
-		font-size: 0.875rem;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.subscription-status {
 		font-weight: 600;
 	}
 
-	.guest-account-notice {
-		background-color: rgba(59, 130, 246, 0.05);
-		border-radius: 6px;
-		padding: 1.25rem;
-		margin-bottom: 1.5rem;
-		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
+	.subscription-status .active {
+		color: var(--success-color, #10b981);
+	}
+
+	.subscription-status .inactive {
+		color: var(--warning-color, #f59e0b);
+	}
+
+	.subscription-status .canceling {
+		color: var(--warning-color, #f59e0b);
+	}
+
+	.canceling-note {
+		color: var(--warning-color, #f59e0b);
+		font-size: 0.875rem;
+		font-style: italic;
+		margin-top: 0.5rem;
+	}
+
+	.subscription-buttons {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
+		gap: 0.75rem;
+		align-items: flex-start;
 	}
 
-	.guest-account-notice p {
-		color: var(--f2);
-		margin: 0;
-		font-size: 0.9375rem;
-	}
-
-	.create-account-button {
+	.manage-subscription-button,
+	.upgrade-button {
 		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
+		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -1318,69 +656,118 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-		width: fit-content;
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
-	.create-account-button:hover {
-		background-color: var(--c3-hover);
+	.manage-subscription-button:hover,
+	.upgrade-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
 	}
 
-	/* Guest mode styles */
-	.settings-header {
-		padding: 1.5rem 2rem;
-		border-bottom: 1px solid var(--c3);
-		background-color: var(--c2);
+	.cancel-subscription-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
-	.settings-header h2 {
-		margin: 0;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--f1);
+	.cancel-subscription-button:hover:not(:disabled) {
+		background-color: #b91c1c;
 	}
 
-	.guest-only-content {
+	.cancel-subscription-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.cancel-confirmation {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		padding: 2rem;
-		height: 100%;
-	}
-
-	.guest-profile {
+		gap: 1rem;
 		width: 100%;
-		max-width: 500px;
-		margin: 0 auto;
-		padding: 2rem;
-		background-color: rgba(255, 255, 255, 0.03);
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		text-align: center;
-	}
-
-	.guest-account-notice {
-		width: 100%;
-		margin-top: 2rem;
-		padding: 1.5rem;
-		background-color: rgba(59, 130, 246, 0.05);
+		max-width: 400px;
+		padding: 1rem;
+		background-color: rgb(239 68 68 / 5%);
 		border-radius: 6px;
+		border: 1px solid rgb(239 68 68 / 10%);
+	}
+
+	.cancel-input {
+		padding: 0.75rem;
+		background-color: var(--c2);
+		border: 1px solid #dc2626;
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		width: 100%;
 		text-align: center;
-		border: 1px solid rgba(59, 130, 246, 0.1);
+	}
+
+	.cancel-buttons {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+	}
+
+	.confirm-cancel-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.confirm-cancel-button:hover:not(:disabled) {
+		background-color: #b91c1c;
+	}
+
+	.confirm-cancel-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.account-actions {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
 		gap: 1.5rem;
+	}
+
+	.logout-button {
+		padding: 0.75rem 1.5rem;
+		background-color: var(--secondary-button-bg, #6b7280);
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		align-self: flex-start;
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
+	}
+
+	.logout-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
 	}
 
 	.danger-zone {
 		margin-top: 2rem;
 		padding: 1.5rem;
-		background-color: rgba(239, 68, 68, 0.05);
+		background-color: rgb(239 68 68 / 5%);
 		border-radius: 6px;
 		text-align: center;
-		border: 1px solid rgba(239, 68, 68, 0.1);
+		border: 1px solid rgb(239 68 68 / 10%);
 	}
 
 	.delete-account-section {
@@ -1390,95 +777,58 @@
 		gap: 1rem;
 	}
 
-	.warning-message {
-		color: var(--f2);
-		font-size: 0.9375rem;
-	}
-
-	.delete-account-button {
+	.delete-button {
 		padding: 0.75rem 1.5rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		color: #ef4444;
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		border-radius: 4px;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.delete-account-button:hover {
-		background-color: rgba(239, 68, 68, 0.2);
-	}
-
-	.confirmation-modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background-color: rgba(0, 0, 0, 0.5);
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.confirmation-modal {
-		background-color: var(--c1);
-		padding: 2rem;
-		border-radius: 8px;
-		width: 100%;
-		max-width: 400px;
-	}
-
-	.confirmation-modal h3 {
-		margin-top: 0;
-		margin-bottom: 1rem;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--f1);
-	}
-
-	.confirmation-instruction {
-		margin-bottom: 1.5rem;
-		font-size: 0.9375rem;
-		color: var(--f2);
-	}
-
-	.confirmation-input {
-		width: 100%;
-		padding: 0.75rem;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 4px;
-		color: var(--f1);
-		font-size: 0.9375rem;
-	}
-
-	.confirmation-actions {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.cancel-button {
-		padding: 0.75rem 1.5rem;
-		background-color: rgba(255, 255, 255, 0.1);
-		color: var(--f1);
+		background-color: #dc2626;
+		color: white;
 		border: none;
 		border-radius: 4px;
 		font-size: 0.9375rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
-	.cancel-button:hover {
-		background-color: rgba(255, 255, 255, 0.2);
+	.delete-button:hover {
+		background-color: #b91c1c;
 	}
 
-	.confirm-delete-button {
+	.delete-confirmation {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		width: 100%;
+		max-width: 400px;
+	}
+
+	.warning-text {
+		color: #fbbf24;
+		font-weight: 600;
+		text-align: center;
+	}
+
+	.delete-input {
+		padding: 0.75rem;
+		background-color: var(--c2);
+		border: 1px solid #dc2626;
+		border-radius: 4px;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		width: 100%;
+		text-align: center;
+	}
+
+	.delete-buttons {
+		display: flex;
+		gap: 1rem;
+		justify-content: center;
+	}
+
+	.cancel-button {
 		padding: 0.75rem 1.5rem;
-		background-color: var(--c3);
+		background-color: var(--secondary-button-bg, #6b7280);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -1488,30 +838,173 @@
 		transition: background-color 0.2s;
 	}
 
-	.confirm-delete-button:hover {
-		background-color: var(--c3-hover);
+	.cancel-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.confirm-delete-button {
+		padding: 0.75rem 1.5rem;
+		background-color: #dc2626;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.confirm-delete-button:hover:not(:disabled) {
+		background-color: #b91c1c;
 	}
 
 	.confirm-delete-button:disabled {
-		background-color: rgba(59, 130, 246, 0.3);
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
-	.loader {
-		border: 4px solid rgba(255, 255, 255, 0.3);
-		border-top: 4px solid var(--c3);
-		border-radius: 50%;
-		width: 24px;
-		height: 24px;
-		animation: spin 1s linear infinite;
+	.settings-actions {
+		display: flex;
+		gap: 1rem;
+		margin-top: 2rem;
+		padding-top: 2rem;
+		border-top: 1px solid rgb(255 255 255 / 8%);
 	}
 
-	@keyframes spin {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
+	.save-button,
+	.reset-button {
+		padding: 0.75rem 1.5rem;
+		border: none;
+		border-radius: 4px;
+		font-size: 0.9375rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
+	}
+
+	.save-button {
+		background-color: var(--secondary-button-bg, #6b7280);
+		color: white;
+		transition: background-color 0.2s;
+	}
+
+	.save-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.save-button.has-changes {
+		background-color: #3b82f6;
+	}
+
+	.save-button.has-changes:hover {
+		background-color: #2563eb;
+	}
+
+	.reset-button {
+		background-color: var(--secondary-button-bg, #6b7280);
+		color: white;
+		transition: background-color 0.2s;
+	}
+
+	.reset-button:hover {
+		background-color: var(--secondary-button-hover, #4b5563);
+	}
+
+	.reset-button.has-changes {
+		background-color: #3b82f6;
+	}
+
+	.reset-button.has-changes:hover {
+		background-color: #2563eb;
+	}
+
+	.error-message {
+		margin-top: 1rem;
+		padding: 1rem;
+		background-color: rgb(239 68 68 / 10%);
+		border: 1px solid rgb(239 68 68 / 30%);
+		border-radius: 4px;
+		color: #fca5a5;
+		font-size: 0.875rem;
+		text-align: center;
+	}
+
+	.error-text {
+		color: #fca5a5;
+	}
+
+	h3 {
+		margin: 0 0 1.5rem;
+		color: var(--f1);
+		font-size: 1.5rem;
+		font-weight: 600;
+	}
+
+	.upgrade-note {
+		color: var(--f2);
+		font-size: 0.875rem;
+		font-style: italic;
+		margin-top: 0.5rem;
+	}
+
+	/* Usage Information Styles */
+	.usage-info {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.usage-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.usage-section h5 {
+		margin: 0;
+		color: var(--f1);
+		font-size: 0.9375rem;
+		font-weight: 600;
+		border-bottom: 1px solid rgb(255 255 255 / 10%);
+		padding-bottom: 0.5rem;
+	}
+
+	.usage-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
+	}
+
+	.usage-item:last-child {
+		border-bottom: none;
+	}
+
+	.usage-label {
+		color: var(--f2);
+		font-size: 0.9375rem;
+	}
+
+	.usage-value {
+		color: var(--f1);
+		font-weight: 600;
+		font-size: 1rem;
+	}
+
+	.usage-settings {
+		max-width: 1200px;
+	}
+
+	.usage-layout {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2rem;
+	}
+
+	.usage-layout > .settings-section {
+		flex: 1;
+		min-width: 300px;
 	}
 </style>
