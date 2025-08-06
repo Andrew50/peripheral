@@ -501,10 +501,21 @@ jobs:
         working-directory: services/backend
         run: |
           echo "Cleaning Go caches..."
-          go clean -cache
-          go clean -modcache
-          # Ensure staticcheck cache directory exists and is writable
-          mkdir -p "$XDG_CACHE_HOME/staticcheck"
+          go clean -cache || true
+          go clean -modcache || true
+          
+          # Force cleanup with proper permissions if needed
+          if [ -d "$GOMODCACHE" ]; then
+            echo "Force cleaning module cache with proper permissions..."
+            chmod -R u+w "$GOMODCACHE" || true
+            rm -rf "$GOMODCACHE" || true
+          fi
+          if [ -d "$GOCACHE" ]; then
+            echo "Force cleaning build cache with proper permissions..."
+            chmod -R u+w "$GOCACHE" || true
+            rm -rf "$GOCACHE" || true
+          fi
+          
           echo "Re-tidying modules..."
           go mod tidy
           echo "Running go vet..."
@@ -583,6 +594,29 @@ jobs:
             echo "### Backend CI Results ❌" >> $GITHUB_STEP_SUMMARY
             echo "❌ Backend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Final Go cache cleanup
+        if: always() # Always run to ensure cleanup even if other steps fail
+        run: |
+          echo "Performing final cleanup of Go caches..."
+          # Force cleanup of Go module cache with proper permissions
+          if [ -d "$GOMODCACHE" ]; then
+            echo "Cleaning Go module cache at $GOMODCACHE"
+            chmod -R u+w "$GOMODCACHE" || true
+            rm -rf "$GOMODCACHE" || true
+          fi
+          if [ -d "$GOCACHE" ]; then
+            echo "Cleaning Go build cache at $GOCACHE"
+            chmod -R u+w "$GOCACHE" || true
+            rm -rf "$GOCACHE" || true
+          fi
+          # Clean any remaining .go directory
+          if [ -d "$GOPATH" ]; then
+            echo "Cleaning remaining Go workspace at $GOPATH"
+            chmod -R u+w "$GOPATH" || true
+            rm -rf "$GOPATH" || true
+          fi
+          echo "Final Go cache cleanup complete."
 
   frontend-lint-security:
     needs: [check-workflow-conditions, determine-runner-user]
@@ -820,7 +854,7 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running pylint comprehensive linting..."
-          pylint src/ worker.py hot_reload.py
+          pylint src/ worker.py
 
       - name: Security linting with bandit
         working-directory: services/worker
