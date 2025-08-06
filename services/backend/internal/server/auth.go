@@ -193,7 +193,7 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 			// Note: User is already created, so we continue but log the error
 			// In production, you might want to handle this differently
 		} else {
-			log.Printf("Created trial subscription %s for user %d", subscription.ID, userID)
+			log.Printf("Created  trial subscription %s for user %d", subscription.ID, userID)
 
 			// Persist Stripe identifiers and initial trial status in our database so that
 			// later webhook events (e.g. invoice.payment_succeeded) can correctly map
