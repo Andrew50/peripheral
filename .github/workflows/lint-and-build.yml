@@ -619,6 +619,7 @@ jobs:
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
+      options: --user 1000
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
