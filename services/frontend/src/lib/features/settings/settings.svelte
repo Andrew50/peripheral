@@ -543,14 +543,14 @@
 	}
 
 	.tab:hover {
-		background-color: rgba(255, 255, 255, 0.05);
+		background-color: rgb(255 255 255 / 5%);
 		color: var(--f1);
 	}
 
 	.tab.active {
 		color: var(--f1);
 		border-bottom-color: var(--f1);
-		background-color: rgba(255, 255, 255, 0.03);
+		background-color: rgb(255 255 255 / 3%);
 	}
 
 	.settings-content {
@@ -568,13 +568,13 @@
 	.settings-section {
 		margin-bottom: 2rem;
 		padding: 1.5rem;
-		background-color: rgba(255, 255, 255, 0.03);
+		background-color: rgb(255 255 255 / 3%);
 		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
+		border: 1px solid rgb(255 255 255 / 8%);
 	}
 
 	.settings-section h4 {
-		margin: 0 0 1rem 0;
+		margin: 0 0 1rem;
 		color: var(--f1);
 		font-size: 1rem;
 		font-weight: 600;
@@ -656,7 +656,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
 	.manage-subscription-button:hover,
@@ -674,7 +674,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
 	.cancel-subscription-button:hover:not(:disabled) {
@@ -694,9 +694,9 @@
 		width: 100%;
 		max-width: 400px;
 		padding: 1rem;
-		background-color: rgba(239, 68, 68, 0.05);
+		background-color: rgb(239 68 68 / 5%);
 		border-radius: 6px;
-		border: 1px solid rgba(239, 68, 68, 0.1);
+		border: 1px solid rgb(239 68 68 / 10%);
 	}
 
 	.cancel-input {
@@ -754,7 +754,7 @@
 		cursor: pointer;
 		transition: background-color 0.2s;
 		align-self: flex-start;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
 	.logout-button:hover {
@@ -764,10 +764,10 @@
 	.danger-zone {
 		margin-top: 2rem;
 		padding: 1.5rem;
-		background-color: rgba(239, 68, 68, 0.05);
+		background-color: rgb(239 68 68 / 5%);
 		border-radius: 6px;
 		text-align: center;
-		border: 1px solid rgba(239, 68, 68, 0.1);
+		border: 1px solid rgb(239 68 68 / 10%);
 	}
 
 	.delete-account-section {
@@ -787,7 +787,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
 	.delete-button:hover {
@@ -868,7 +868,7 @@
 		gap: 1rem;
 		margin-top: 2rem;
 		padding-top: 2rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.08);
+		border-top: 1px solid rgb(255 255 255 / 8%);
 	}
 
 	.save-button,
@@ -880,7 +880,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 	}
 
 	.save-button {
@@ -922,8 +922,8 @@
 	.error-message {
 		margin-top: 1rem;
 		padding: 1rem;
-		background-color: rgba(239, 68, 68, 0.1);
-		border: 1px solid rgba(239, 68, 68, 0.3);
+		background-color: rgb(239 68 68 / 10%);
+		border: 1px solid rgb(239 68 68 / 30%);
 		border-radius: 4px;
 		color: #fca5a5;
 		font-size: 0.875rem;
@@ -935,7 +935,7 @@
 	}
 
 	h3 {
-		margin: 0 0 1.5rem 0;
+		margin: 0 0 1.5rem;
 		color: var(--f1);
 		font-size: 1.5rem;
 		font-weight: 600;
@@ -966,7 +966,7 @@
 		color: var(--f1);
 		font-size: 0.9375rem;
 		font-weight: 600;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		border-bottom: 1px solid rgb(255 255 255 / 10%);
 		padding-bottom: 0.5rem;
 	}
 
@@ -975,7 +975,7 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.5rem 0;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
 	}
 
 	.usage-item:last-child {

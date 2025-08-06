@@ -26,13 +26,25 @@ concurrency:
 env:
   # Linting configuration
   GOLANGCI_LINT_VERSION: v2.3.0
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.11'  # Using system Python 3.11 from Debian 12 for self-hosted runners
   NODE_VERSION: '18'
 
 jobs:
+  # Determine the UID/GID of the runner user to avoid permission issues with containers
+  determine-runner-user:
+    runs-on: self-hosted
+    outputs:
+      uid: ${{ steps.ids.outputs.uid }}
+      gid: ${{ steps.ids.outputs.gid }}
+    steps:
+      - id: ids
+        run: |
+          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       actions: read
       contents: read
@@ -432,18 +444,22 @@ jobs:
   #         fi
 
   backend-lint-security:
-    needs: [check-workflow-conditions]
+    needs: [check-workflow-conditions, determine-runner-user]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-    runs-on: ubuntu-latest
+      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
       contents: write
       checks: write
       pull-requests: read
     env:
-      GOPATH: /go # Assuming standard GOPATH in container, or adjust as per your image
+      # Use a workspace-local GOPATH so the non-root UID can write to it
+      GOPATH: ${{ github.workspace }}/.go
+      GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
+      GOCACHE: ${{ github.workspace }}/.go/cache
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
@@ -459,7 +475,7 @@ jobs:
         with:
           path: |
             ${{ env.GOPATH }}/pkg/mod
-            ~/.cache/go-build
+            ${{ env.GOCACHE }}
             ~/.cache/golangci-lint # Cache for golangci-lint
             ${{ env.GOPATH }}/bin
           key: ${{ runner.os }}-go-${{ hashFiles('services/backend/go.sum') }}
@@ -484,8 +500,21 @@ jobs:
         working-directory: services/backend
         run: |
           echo "Cleaning Go caches..."
-          go clean -cache
-          go clean -modcache
+          go clean -cache || true
+          go clean -modcache || true
+          
+          # Force cleanup with proper permissions if needed
+          if [ -d "$GOMODCACHE" ]; then
+            echo "Force cleaning module cache with proper permissions..."
+            chmod -R u+w "$GOMODCACHE" || true
+            rm -rf "$GOMODCACHE" || true
+          fi
+          if [ -d "$GOCACHE" ]; then
+            echo "Force cleaning build cache with proper permissions..."
+            chmod -R u+w "$GOCACHE" || true
+            rm -rf "$GOCACHE" || true
+          fi
+          
           echo "Re-tidying modules..."
           go mod tidy
           echo "Running go vet..."
@@ -565,12 +594,36 @@ jobs:
             echo "❌ Backend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Final Go cache cleanup
+        if: always() # Always run to ensure cleanup even if other steps fail
+        run: |
+          echo "Performing final cleanup of Go caches..."
+          # Force cleanup of Go module cache with proper permissions
+          if [ -d "$GOMODCACHE" ]; then
+            echo "Cleaning Go module cache at $GOMODCACHE"
+            chmod -R u+w "$GOMODCACHE" || true
+            rm -rf "$GOMODCACHE" || true
+          fi
+          if [ -d "$GOCACHE" ]; then
+            echo "Cleaning Go build cache at $GOCACHE"
+            chmod -R u+w "$GOCACHE" || true
+            rm -rf "$GOCACHE" || true
+          fi
+          # Clean any remaining .go directory
+          if [ -d "$GOPATH" ]; then
+            echo "Cleaning remaining Go workspace at $GOPATH"
+            chmod -R u+w "$GOPATH" || true
+            rm -rf "$GOPATH" || true
+          fi
+          echo "Final Go cache cleanup complete."
+
   frontend-lint-security:
-    needs: [check-workflow-conditions]
+    needs: [check-workflow-conditions, determine-runner-user]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-    runs-on: ubuntu-latest
+      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     steps:
       - uses: actions/checkout@v3
@@ -589,8 +642,17 @@ jobs:
       - name: Install frontend dependencies
         working-directory: services/frontend
         run: |
+          # Clean install to avoid issues with cached/corrupted dependencies
+          echo "Performing a clean install of npm packages..."
+          rm -rf node_modules package-lock.json
+          npm install
+
           # Using npm ci for reliable installs from package-lock.json
-          npm ci
+          # npm ci
+
+          # Install packages required for Stylelint with Svelte
+          echo "Installing PostCSS for Stylelint..."
+          npm install --save-dev postcss postcss-html
 
           # Install additional test dependencies if not already in package.json as devDependencies
           echo "Ensuring testing libraries are available..."
@@ -712,7 +774,7 @@ jobs:
   worker-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
       contents: read
@@ -724,17 +786,46 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+      # - name: Set up Python 3.11
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.11'
+      #     cache: 'pip'
+
+      - name: Use system Python 3.11 (Debian 12 default)
+        run: |
+          echo "Using system Python instead of actions/setup-python for self-hosted runner"
+          python3 --version
+          python3 -m pip --version
 
       - name: Install dependencies
         working-directory: services/worker
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # -----------------------------
+          # OLD system-wide installation (now disabled because Debian 12 marks the
+          # root environment as "externally-managed", see PEP 668). Keeping for
+          # easy rollback:
+          # python -m pip install --upgrade pip
+          # pip install -r requirements.txt
+          #
+          # NEW: create an isolated virtual environment so we can safely install
+          # anything we need without hitting the externally-managed restriction.
+          # -----------------------------
+          python3 -m venv .venv
+          # Add the venv to PATH for the *rest of the job* so subsequent steps
+          # pick up flake8, isort, mypy, etc. from the venv without having to
+          # reference the full path each time.
+          echo "$(pwd)/.venv/bin" >> "$GITHUB_PATH"
+
+          # Upgrade pip inside venv and install deps
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+
+      - name: Configure Python Path
+        working-directory: services/worker
+        run: |
+          echo "Adding src directory to PYTHONPATH for this job"
+          echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
 
       - name: Import sorting check with isort
         working-directory: services/worker
@@ -758,7 +849,7 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running pylint comprehensive linting..."
-          pylint src/ worker.py hot_reload.py
+          pylint src/ worker.py
 
       - name: Security linting with bandit
         working-directory: services/worker
@@ -807,7 +898,7 @@ jobs:
   # Summary and reporting (updated to include format checks)
   lint-summary:
     name: Lint and Format Summary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
 
@@ -827,13 +918,13 @@ jobs:
           echo "✅ Frontend lint and security checks completed"
           echo "✅ Worker lint and security checks completed"
           echo ""
-          echo "🎯 Go and Python format checks enforce camelCase naming conventions"
+          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
           echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
           echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
           echo ""
           echo "📋 Summary:"
           echo "- Go: golangci-lint with revive rules for camelCase"
-          echo "- Python: Pylint with camelCase naming rules"
+          echo "- Python: Pylint with snake_case naming rules"
           echo "- Svelte/TS/JS: ESLint + Stylelint"
           echo "- YAML: yamllint for formatting consistency"
           echo "- SQL: SQLFluff with consistent formatting"

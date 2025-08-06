@@ -584,6 +584,7 @@ func RetryMessage(conn *data.Conn, userID int, args json.RawMessage) (interface{
 	if status == "pending" {
 		return nil, fmt.Errorf("cannot retry a message that is currently being processed")
 	}
+	// Allow retrying error messages as well as completed ones
 
 	// Archive all messages after this one (preserve them for logging with retry reason)
 	archiveSQL := `UPDATE conversation_messages SET archived = TRUE, archive_reason = $1 WHERE conversation_id = $2 AND message_order >= $3 AND archived = FALSE`

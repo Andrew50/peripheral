@@ -2,7 +2,7 @@ package agent
 
 import (
 	"embed"
-
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -57,6 +57,7 @@ func GetSystemInstruction(name string) (string, error) {
 	}
 	return s, nil
 }
+
 func getCleanThinkingTracePrompt() string {
 	raw, err := fs.ReadFile("chatUXPrompts/cleanThinkingTrace.txt")
 	if err != nil {
@@ -80,9 +81,16 @@ func enhanceSystemPromptWithTools(basePrompt string, userSpecificTools bool) str
 
 	// Start with the base prompt
 	toolsDescription.WriteString(basePrompt)
-	toolsDescription.WriteString("\n\nHere are the available tools. '?' indicates an optional parameter.\n")
+	toolsDescription.WriteString("\n## Function Tools")
+	toolsDescription.WriteString("\n### Functions Available in JSON Format")
 
-	// Sort tool names for consistent output
+	toolsAsJSON, err := GetToolsAsJSON(userSpecificTools)
+	if err != nil {
+		fmt.Println("Error getting tools as JSON:", err)
+	}
+	toolsDescription.WriteString(toolsAsJSON)
+
+	/* // Sort tool names for consistent output
 	var toolNames []string
 	for name := range Tools {
 		toolNames = append(toolNames, name)
@@ -120,8 +128,7 @@ func enhanceSystemPromptWithTools(basePrompt string, userSpecificTools bool) str
 
 		// Add spacing between functions
 		toolsDescription.WriteString("\n")
-	}
-
+	}*/
 	enhancedPrompt := toolsDescription.String()
 
 	// Cache the result
@@ -130,6 +137,35 @@ func enhanceSystemPromptWithTools(basePrompt string, userSpecificTools bool) str
 	systemPromptCacheMutex.Unlock()
 
 	return enhancedPrompt
+}
+
+// GetToolsAsJSON attempts to directly marshal the existing tools to JSON
+func GetToolsAsJSON(userSpecificTools bool) (string, error) {
+	var toolLines []string
+
+	// Sort tool names for consistent output
+	var toolNames []string
+	for name := range Tools {
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+
+	for _, name := range toolNames {
+		tool := Tools[name]
+		if !userSpecificTools && tool.UserSpecificTool {
+			continue // skip user specific tools if not user specific
+		}
+
+		// Marshal each tool individually
+		jsonBytes, err := json.Marshal(tool.FunctionDeclaration)
+		if err != nil {
+			return "", fmt.Errorf("error marshaling tool %s to JSON: %w", name, err)
+		}
+		toolLines = append(toolLines, string(jsonBytes))
+	}
+
+	result := strings.Join(toolLines, "\n")
+	return result, nil
 }
 
 // ClearSystemPromptCache clears the cached enhanced system prompts

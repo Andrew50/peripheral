@@ -69,7 +69,7 @@
 		width: 100%;
 		background: var(--ui-bg-primary);
 		border-bottom: 1px solid var(--ui-border);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
 		padding: var(--space-sm) var(--space-md);
 	}
 
@@ -134,7 +134,7 @@
 	}
 
 	/* Mobile-specific adjustments */
-	@media (max-width: 640px) {
+	@media (width <= 640px) {
 		.mobile-banner {
 			padding: var(--space-xs) var(--space-sm);
 		}

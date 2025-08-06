@@ -197,6 +197,7 @@
 			opacity: 0;
 			transform: translateX(-50%) translateY(-20px);
 		}
+
 		to {
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
@@ -208,6 +209,7 @@
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
 		}
+
 		to {
 			opacity: 0;
 			transform: translateX(-50%) translateY(-20px);
@@ -225,6 +227,7 @@
 			transform: scale(0.9);
 			opacity: 0;
 		}
+
 		to {
 			transform: scale(1);
 			opacity: 1;
@@ -246,11 +249,11 @@
 		left: 4px;
 		width: calc(50% - 4px);
 		height: calc(100% - 8px);
-		background: rgba(255, 255, 255, 0.2);
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 20%);
+		border: 1px solid rgb(255 255 255 / 30%);
 		border-radius: 6px;
 		transition: transform 0.3s ease;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 		backdrop-filter: blur(8px);
 		z-index: 1;
 	}
@@ -265,7 +268,7 @@
 		z-index: 2;
 		background: transparent;
 		border: none;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 13px;
 		font-weight: 600;
 		cursor: pointer;
@@ -274,21 +277,21 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 		user-select: none;
 		outline: none;
 	}
 
 	.segment-button.active {
-		color: rgba(255, 255, 255, 1);
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 1);
+		color: rgb(255 255 255 / 100%);
+		text-shadow: 0 1px 2px rgb(0 0 0 / 100%);
 	}
 
 	.segment-button:hover:not(.active) {
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 	}
 
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.extended-hours-overlay {
 			top: 15px;
 		}

@@ -155,7 +155,7 @@
 		background-color: #1a1c21;
 		color: #f9fafb;
 		font-family:
-			'Inter',
+			Inter,
 			-apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -164,8 +164,10 @@
 		position: fixed;
 		top: 0;
 		left: 0;
+
 		/* Prevent overscroll/bounce effects */
 		overscroll-behavior: none;
+
 		/* Prevent pull-to-refresh on mobile */
 		overscroll-behavior-y: none;
 	}
@@ -178,7 +180,7 @@
 		width: 100%;
 		background-color: #1a1c21;
 		color: #f9fafb;
-		font-family: 'Inter', sans-serif;
+		font-family: Inter, sans-serif;
 		padding: 1rem;
 		box-sizing: border-box;
 		position: relative;
@@ -210,7 +212,7 @@
 		text-align: center;
 		max-width: 450px;
 		padding: 1.5rem 2rem;
-		background-color: rgba(45, 49, 57, 0.8);
+		background-color: rgb(45 49 57 / 80%);
 		border-radius: 6px;
 		border: 1px solid #ef4444;
 	}
@@ -241,6 +243,7 @@
 		0% {
 			transform: rotate(0deg);
 		}
+
 		100% {
 			transform: rotate(360deg);
 		}

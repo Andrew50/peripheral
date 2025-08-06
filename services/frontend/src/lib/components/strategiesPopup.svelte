@@ -178,8 +178,9 @@
 		border: 1px solid var(--ui-border);
 		border-radius: clamp(6px, 0.8vw, 8px);
 		overflow: hidden;
-		box-shadow: 0 4px 12px rgba(0 0 0 / 0.2);
+		box-shadow: 0 4px 12px rgba(0 0 0 / 20%);
 	}
+
 	.content-container {
 		padding: clamp(4px, 1vw, 8px);
 	}
@@ -188,6 +189,7 @@
 		width: 100%;
 		border-collapse: collapse;
 	}
+
 	.header-row th {
 		text-align: left;
 		font-weight: 600;
@@ -203,6 +205,7 @@
 		border-radius: 4px;
 		transition: background 0.2s;
 	}
+
 	.item-row:hover td {
 		background: var(--ui-bg-hover);
 	}

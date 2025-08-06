@@ -878,7 +878,7 @@
 	}
 
 	.plot-title {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: Geist, Inter, system-ui, sans-serif;
 		font-size: 1.2rem;
 		font-weight: 600;
 		color: var(--text-primary, #fff);
@@ -918,9 +918,9 @@
 	/* Watermark styles - only used in cloned/copied version */
 	:global(.watermark-offscreen) {
 		text-align: right;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: Geist, Inter, system-ui, sans-serif;
 		font-size: 13px;
-		color: rgba(255, 255, 255, 0.9);
+		color: rgb(255 255 255 / 90%);
 		padding-bottom: 4px;
 		padding-right: 8px;
 		margin-top: 8px;
@@ -930,7 +930,7 @@
 	:global(.watermark-offscreen .watermark-brand) {
 		font-size: 16px;
 		font-weight: 600;
-		color: #ffffff;
+		color: #fff;
 	}
 
 	.copy-image-btn {
@@ -939,29 +939,32 @@
 		align-items: center;
 		justify-content: center;
 		padding: 0.3rem;
-		color: #ffffff;
+		color: #fff;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		font-size: 0.75rem;
 	}
 
 	.copy-image-btn:hover {
-		--glass-bg: rgba(255, 255, 255, 0.1);
+		--glass-bg: rgb(255 255 255 / 10%);
 		--glass-border: #fff;
+
 		color: var(--text-primary, #fff);
 		border-color: #fff;
 	}
 
 	.copy-image-btn.copied {
-		--glass-bg: rgba(76, 175, 80, 0.2);
+		--glass-bg: rgb(76 175 80 / 20%);
 		--glass-border: #4caf50;
+
 		color: #4caf50;
 		animation: copySuccess 0.3s ease;
 	}
 
 	.copy-image-btn.copied:hover {
-		--glass-bg: rgba(76, 175, 80, 0.3);
+		--glass-bg: rgb(76 175 80 / 30%);
 		--glass-border: #4caf50;
+
 		color: #4caf50;
 	}
 
@@ -974,16 +977,18 @@
 		0% {
 			transform: scale(1);
 		}
+
 		50% {
 			transform: scale(1.1);
 		}
+
 		100% {
 			transform: scale(1);
 		}
 	}
 
 	/* Responsive adjustments */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.plot-container {
 			min-height: 380px;
 		}
@@ -999,8 +1004,8 @@
 	}
 
 	:global(.plot-container .plotly .modebar) {
-		background: rgba(15, 23, 42, 0.8) !important;
-		border: 1px solid rgba(71, 85, 105, 0.3) !important;
+		background: rgb(15 23 42 / 80%) !important;
+		border: 1px solid rgb(71 85 105 / 30%) !important;
 		border-radius: 4px !important;
 	}
 
@@ -1009,7 +1014,7 @@
 	}
 
 	:global(.plot-container .plotly .modebar-btn:hover) {
-		background: rgba(71, 85, 105, 0.3) !important;
+		background: rgb(71 85 105 / 30%) !important;
 		color: #e2e8f0 !important;
 	}
 
@@ -1017,8 +1022,8 @@
 	:global(.plot-container .plotly .hoverlayer .hovertext) {
 		background: #1e293b !important;
 		border: 1px solid #475569 !important;
-		color: #ffffff !important;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+		color: #fff !important;
+		font-family: Geist, Inter, system-ui, sans-serif !important;
 		font-size: 11px !important;
 		border-radius: 2px !important;
 		padding: 4px 6px !important;
@@ -1041,7 +1046,7 @@
 	/* Make hover labels more compact */
 	:global(.plot-container .plotly .hoverlayer .hovertext text) {
 		font-size: 11px !important;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif !important;
+		font-family: Geist, Inter, system-ui, sans-serif !important;
 	}
 
 	:global(.plot-container .plotly .hoverlayer .hovertext tspan) {

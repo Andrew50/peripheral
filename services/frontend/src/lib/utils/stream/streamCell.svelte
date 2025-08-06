@@ -266,43 +266,51 @@
 <style>
 	@keyframes flashGreen {
 		0% {
-			color: var(--positive, rgb(72, 225, 72));
+			color: var(--positive, rgb(72 225 72));
 		}
+
 		/* Using ease-out, so 100% to currentColor should provide a smooth transition */
 		100% {
-			color: currentColor;
+			color: currentcolor;
 		}
 	}
+
 	@keyframes flashRed {
 		0% {
-			color: var(--negative, rgb(225, 72, 72));
+			color: var(--negative, rgb(225 72 72));
 		}
+
 		100% {
-			color: currentColor;
+			color: currentcolor;
 		}
 	}
+
 	.flash-up {
 		animation: flashGreen 0.5s ease-out forwards;
 	}
+
 	.flash-down {
 		animation: flashRed 0.5s ease-out forwards;
 	}
 
 	/* Sticky colour for the changed digits */
 	.diff.up {
-		color: var(--positive, rgb(72, 225, 72));
+		color: var(--positive, rgb(72 225 72));
 	}
+
 	.diff.down {
-		color: var(--negative, rgb(225, 72, 72));
+		color: var(--negative, rgb(225 72 72));
 	}
 
 	/* Styles for change and change % consistency */
 	.red {
-		color: var(--negative, rgb(225, 72, 72));
+		color: var(--negative, rgb(225 72 72));
 	}
+
 	.green {
-		color: var(--positive, rgb(72, 225, 72));
+		color: var(--positive, rgb(72 225 72));
 	}
+
 	.white {
 		color: var(--neutral-placeholder-text, #888); /* Neutral color for placeholders */
 	}
@@ -315,10 +323,11 @@
 	/* Override flash animations and colors specifically for price type when flash is disabled */
 	@keyframes flashWhitePrice {
 		0% {
-			color: #ffffff;
+			color: #fff;
 		}
+
 		100% {
-			color: #ffffff;
+			color: #fff;
 		}
 	}
 
@@ -326,14 +335,16 @@
 	.price-type:not(.disable-flash-mode).flash-up {
 		animation: flashWhitePrice 0.5s ease-out forwards;
 	}
+
 	.price-type:not(.disable-flash-mode).flash-down {
 		animation: flashWhitePrice 0.5s ease-out forwards;
 	}
 
 	.price-type:not(.disable-flash-mode) .diff.up {
-		color: #ffffff;
+		color: #fff;
 	}
+
 	.price-type:not(.disable-flash-mode) .diff.down {
-		color: #ffffff;
+		color: #fff;
 	}
 </style>

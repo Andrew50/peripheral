@@ -27,6 +27,7 @@
 		}
 	});
 </script>
+
 <AlertPopup />
 
 <slot />

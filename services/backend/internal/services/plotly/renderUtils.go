@@ -73,7 +73,7 @@ func saveImageToContainer(base64Data string) {
 	filename := "/tmp/peripheral_plot.png"
 
 	// Write to file
-	err = os.WriteFile(filename, data, 0644)
+	err = os.WriteFile(filename, data, 0600)
 	if err != nil {
 		log.Printf("Failed to save image to %s: %v", filename, err)
 		return

@@ -175,7 +175,7 @@
 		font-size: 12px;
 		width: 100%;
 		overflow-y: auto;
-		background-color: var(--ui-bg-secondary, rgba(18, 18, 18, 0.9));
+		background-color: var(--ui-bg-secondary, rgb(18 18 18 / 90%));
 		border-radius: 6px;
 		border: 1px solid var(--ui-border, #333);
 		margin-top: 5px;
@@ -209,14 +209,17 @@
 	.trade-table td:nth-child(1) {
 		width: 30%;
 	}
+
 	.trade-table th:nth-child(2),
 	.trade-table td:nth-child(2) {
 		width: 25%;
 	}
+
 	.trade-table th:nth-child(3),
 	.trade-table td:nth-child(3) {
 		width: 20%;
 	}
+
 	.trade-table th:nth-child(4),
 	.trade-table td:nth-child(4) {
 		width: 25%;
@@ -245,7 +248,7 @@
 	}
 
 	.trade-row:hover {
-		background-color: var(--ui-bg-hover, rgba(255, 255, 255, 0.05));
+		background-color: var(--ui-bg-hover, rgb(255 255 255 / 5%));
 	}
 
 	.empty-row td {
@@ -257,15 +260,19 @@
 	.dark-green {
 		color: var(--color-up-strong, #43a047);
 	}
+
 	.green {
 		color: var(--color-up, #66bb6a);
 	}
+
 	.dark-red {
 		color: var(--color-down-strong, #e53935);
 	}
+
 	.red {
 		color: var(--color-down, #ef5350);
 	}
+
 	.white {
 		color: var(--text-primary, #fff);
 	}

@@ -986,6 +986,7 @@
 	:root {
 		--hero-total-scroll: 0;
 	}
+
 	/* Animation Input Bar - Mobile */
 	.animation-input-container {
 		position: relative;
@@ -1001,22 +1002,24 @@
 		padding: 0.75rem 1rem;
 		gap: 0.75rem;
 	}
+
 	.animation-input-wrapper {
 		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		background: rgba(255, 255, 255, 0.95);
-		border: 2px solid rgba(79, 124, 130, 0.3);
+		background: rgb(255 255 255 / 95%);
+		border: 2px solid rgb(79 124 130 / 30%);
 		border-radius: 28px;
 		padding: 1rem 1.5rem;
 		backdrop-filter: blur(20px);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 8px 32px rgb(0 0 0 / 10%);
 		transition: all 0.3s ease;
 	}
+
 	.animation-input-wrapper:focus-within {
 		border-color: var(--color-primary);
-		box-shadow: 0 12px 48px rgba(79, 124, 130, 0.2);
+		box-shadow: 0 12px 48px rgb(79 124 130 / 20%);
 	}
 
 	.animation-input {
@@ -1047,10 +1050,12 @@
 		transition: all 0.3s ease;
 		flex-shrink: 0;
 	}
+
 	.animation-send:hover {
 		background: var(--color-dark);
 		transform: scale(1.05);
 	}
+
 	.animation-send.pulse {
 		animation: pulse 0.6s ease-in-out;
 	}
@@ -1059,10 +1064,12 @@
 		0% {
 			transform: scale(1);
 		}
+
 		50% {
 			transform: scale(1.2);
 			background: #10b981;
 		}
+
 		100% {
 			transform: scale(1);
 		}
@@ -1078,6 +1085,7 @@
 		width: 16px;
 		height: 16px;
 	}
+
 	.animation-input-container.complete {
 		/* Fade out instead of dropping down */
 		opacity: 1;
@@ -1093,25 +1101,29 @@
 		border-radius: 28px; /* match input wrapper radius */
 		pointer-events: none;
 		border: 2px solid var(--color-primary);
-		box-shadow: 0 0 0 0 rgba(79, 124, 130, 0.6);
+		box-shadow: 0 0 0 0 rgb(79 124 130 / 60%);
 		animation: ringPulse 1s ease-out forwards;
 	}
+
 	@keyframes ringPulse {
 		/* Faster expansion (first 0.2s), longer hold (0.5s), then fade */
 		0% {
-			box-shadow: 0 0 0 0 rgba(79, 124, 130, 0.6);
+			box-shadow: 0 0 0 0 rgb(79 124 130 / 60%);
 			opacity: 1;
 		}
+
 		20% {
-			box-shadow: 0 0 0 8px rgba(79, 124, 130, 0.6);
+			box-shadow: 0 0 0 8px rgb(79 124 130 / 60%);
 			opacity: 1;
 		}
+
 		70% {
-			box-shadow: 0 0 0 8px rgba(79, 124, 130, 0.6);
+			box-shadow: 0 0 0 8px rgb(79 124 130 / 60%);
 			opacity: 1;
 		}
+
 		100% {
-			box-shadow: 0 0 0 8px rgba(79, 124, 130, 0);
+			box-shadow: 0 0 0 8px rgb(79 124 130 / 0%);
 			opacity: 0;
 		}
 	}
@@ -1122,6 +1134,7 @@
 			opacity: 1;
 			transform: scale(1);
 		}
+
 		100% {
 			opacity: 0;
 			transform: scale(0.95);
@@ -1132,15 +1145,16 @@
 	.hero-title {
 		font-size: clamp(2.7rem, 4vw, 5rem);
 		font-weight: 800;
-		margin: 0 0 1.5rem 0;
+		margin: 0 0 1.5rem;
 		letter-spacing: -0.02em;
 		line-height: 1.1;
 		color: #f5f9ff;
 		text-shadow:
-			0 2px 12px rgba(0, 0, 0, 0.2),
-			0 1px 0 rgba(255, 255, 255, 0.01);
+			0 2px 12px rgb(0 0 0 / 20%),
+			0 1px 0 rgb(255 255 255 / 1%);
 		padding-top: var(--header-h);
 	}
+
 	.gradient-text {
 		background: linear-gradient(
 			135deg,
@@ -1151,7 +1165,7 @@
 			#f59e0b 100%
 		);
 		background-size: 200% 200%;
-		-webkit-background-clip: text;
+		background-clip: text;
 		background-clip: text;
 		-webkit-text-fill-color: transparent;
 		animation: gradient-shift 8s ease infinite;
@@ -1162,23 +1176,28 @@
 		100% {
 			background-position: 0% 50%;
 		}
+
 		25% {
 			background-position: 100% 50%;
 		}
+
 		50% {
 			background-position: 100% 100%;
 		}
+
 		75% {
 			background-position: 0% 100%;
 		}
 	}
+
 	/* Shift hero title & subtitle downward */
 	.hero-header {
 		margin-top: 6rem; /* adjust as needed */
 	}
+
 	.hero-subtitle {
 		font-size: clamp(1.1rem, 3vw, 1.5rem);
-		color: rgba(245, 249, 255, 0.85);
+		color: rgb(245 249 255 / 85%);
 		margin-bottom: 1.5rem;
 		line-height: 1.6;
 		margin-top: 0;
@@ -1202,7 +1221,8 @@
 		isolation: isolate;
 		border-radius: 4.5rem;
 	}
-	@media (max-width: 768px) {
+
+	@media (width <= 768px) {
 		.hero-section {
 			padding: 1rem 1rem 3rem;
 			padding-top: calc(var(--header-h) + 1rem);
@@ -1212,18 +1232,22 @@
 			flex-direction: column;
 			align-items: center;
 		}
+
 		:root {
 			--hero-widget-h: 220px;
 		}
+
 		.hero-chat-container {
 			max-width: 100%;
 			min-height: 220px;
 			max-height: 260px;
 		}
+
 		.hero-chart-container {
 			max-width: 100%;
 			height: var(--hero-widget-h);
 		}
+
 		/* Hero Header - Always Visible */
 		.hero-header {
 			text-align: center;
@@ -1232,6 +1256,7 @@
 			margin-top: 2rem; /* mobile: slightly less offset */
 		}
 	}
+
 	/* Hero section halo */
 	.hero-section::before {
 		content: '';
@@ -1239,8 +1264,10 @@
 		inset: 0;
 		pointer-events: none;
 		z-index: -1;
+
 		/* Brighter hue – using primary brand colour */
 		--halo-rgb: 79, 124, 130;
+
 		/* Inner colour wash */
 		background: radial-gradient(
 			ellipse at 50% 50%,
@@ -1248,6 +1275,7 @@
 			rgba(var(--halo-rgb), 0.25) 45%,
 			rgba(var(--halo-rgb), 0) 70%
 		);
+
 		/* Concentric steps */
 		box-shadow:
 			0 0 0 48px rgba(var(--halo-rgb), 0.15),
@@ -1255,13 +1283,14 @@
 			0 0 0 144px rgba(var(--halo-rgb), 0.07),
 			0 0 0 192px rgba(var(--halo-rgb), 0.04),
 			0 0 0 240px rgba(var(--halo-rgb), 0.02);
+
 		/* Slightly crisper blur */
 		filter: blur(28px);
 		border-radius: 28px; /* match parent radius */
 	}
 
 	.animation-input::placeholder {
-		color: rgba(11, 46, 51, 0.5);
+		color: rgb(11 46 51 / 50%);
 	}
 
 	.animation-input.typing-cursor::after {
@@ -1275,6 +1304,7 @@
 		50% {
 			opacity: 1;
 		}
+
 		51%,
 		100% {
 			opacity: 0;
@@ -1294,6 +1324,7 @@
 		width: 100%;
 		max-width: 800px;
 		margin-top: 0;
+
 		/* Allow hero-actions to fill remaining vertical space */
 		flex: 0 1 auto;
 		height: auto;
@@ -1314,6 +1345,7 @@
 		flex-direction: column;
 		gap: 0; /* Remove gap since there's only the messages pane */
 		margin: 0;
+
 		/* Fill available vertical space */
 		min-height: 280px;
 		height: var(--hero-widget-h);
@@ -1322,7 +1354,7 @@
 
 	.hero-chat-messages {
 		background: var(--hero-widget-background-color);
-		border: 1px solid rgba(255, 255, 255, 1);
+		border: 1px solid rgb(255 255 255 / 100%);
 		border-radius: 16px;
 		padding: 1.5rem;
 		overflow-y: hidden; /* Disable manual scrolling, controlled programmatically */
@@ -1338,7 +1370,7 @@
 
 	.hero-chat-placeholder {
 		text-align: center;
-		color: rgba(255, 255, 255, 0.7);
+		color: rgb(255 255 255 / 70%);
 		font-size: 1rem;
 		line-height: 1.5;
 		width: 100%;
@@ -1359,7 +1391,7 @@
 	}
 
 	/* Responsive adjustments for hero chat */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.hero-chat-container {
 			max-width: 100%;
 			min-height: 220px;
@@ -1377,10 +1409,11 @@
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		:root {
 			--hero-widget-h: 220px;
 		}
+
 		.hero-chat-container {
 			min-height: 160px;
 			max-height: 220px;
@@ -1396,10 +1429,11 @@
 			max-height: 220px;
 		}
 	}
+
 	/* ================================================
         Desktop layout: split chat & chart 50/50
         ================================================ */
-	@media (min-width: 1024px) {
+	@media (width >= 1024px) {
 		.hero-actions {
 			max-width: 75vw;
 			display: grid;
@@ -1444,13 +1478,13 @@
 
 	.message.user {
 		background: linear-gradient(135deg, #0a84ff 0%, #007aff 100%);
-		color: #ffffff;
+		color: #fff;
 		padding: 0.6rem 1rem;
 		border-radius: 1rem;
 		max-width: 80%;
 		font-size: 0.9rem;
 		border-bottom-right-radius: 0.25rem;
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
 		text-align: left;
 	}
 
@@ -1472,14 +1506,14 @@
 	/* Force Inter font inside chat */
 	.hero-chat-container,
 	.hero-chat-container * {
-		font-family: 'Geist';
+		font-family: Geist;
 	}
 
 	/* Ticker button styles */
 	.hero-chat-container :global(.ticker-button) {
-		background: rgba(79, 124, 130, 0.1);
+		background: rgb(79 124 130 / 10%);
 		color: #4f7c82;
-		border: 1px solid rgba(79, 124, 130, 0.3);
+		border: 1px solid rgb(79 124 130 / 30%);
 		border-radius: 0.25rem;
 		padding: 0.125rem 0.375rem;
 		font-size: 0.75rem;
@@ -1488,11 +1522,11 @@
 		transition: all 0.2s ease;
 		display: inline-block;
 		margin: 0 0.125rem;
-		font-family: 'Geist', monospace;
+		font-family: Geist, monospace;
 	}
 
 	.hero-chat-container :global(.ticker-button:hover) {
-		background: rgba(79, 124, 130, 0.2);
+		background: rgb(79 124 130 / 20%);
 		border-color: #4f7c82;
 		transform: translateY(-1px);
 	}
@@ -1539,8 +1573,8 @@
 	.hero-chat-container :global(.chunk-table-container) {
 		margin: 0.5rem 0;
 		border-radius: 0.375rem;
-		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 5%);
+		border: 1px solid rgb(255 255 255 / 10%);
 		overflow: hidden;
 		font-size: 0.75rem;
 		position: relative;
@@ -1552,8 +1586,8 @@
 		text-align: left;
 		font-weight: 600;
 		color: var(--color-dark);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-		background: rgba(255, 255, 255, 0.1);
+		border-bottom: 1px solid rgb(255 255 255 / 10%);
+		background: rgb(255 255 255 / 10%);
 		font-size: 0.85rem;
 		position: relative;
 		z-index: 2;
@@ -1578,8 +1612,8 @@
 		text-align: left;
 		font-weight: 600;
 		color: var(--color-dark);
-		background: rgba(255, 255, 255, 0.1);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgb(255 255 255 / 10%);
+		border-bottom: 1px solid rgb(255 255 255 / 20%);
 		white-space: nowrap;
 		cursor: pointer;
 		user-select: none;
@@ -1589,7 +1623,7 @@
 	}
 
 	.hero-chat-container :global(.chunk-table th.sortable:hover) {
-		background: rgba(255, 255, 255, 0.15);
+		background: rgb(255 255 255 / 15%);
 	}
 
 	.hero-chat-container :global(.chunk-table th .sort-indicator) {
@@ -1601,7 +1635,7 @@
 	.hero-chat-container :global(.chunk-table td) {
 		padding: 0.375rem 0.5rem;
 		color: var(--color-dark);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		border-bottom: 1px solid rgb(255 255 255 / 5%);
 		white-space: nowrap;
 		font-size: 0.75rem;
 		vertical-align: middle;
@@ -1612,7 +1646,7 @@
 	}
 
 	.hero-chat-container :global(.chunk-table tbody tr:hover) {
-		background: rgba(255, 255, 255, 0.05);
+		background: rgb(255 255 255 / 5%);
 	}
 
 	/* Table pagination - compact version */
@@ -1621,8 +1655,8 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.5rem;
-		background: rgba(255, 255, 255, 0.05);
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgb(255 255 255 / 5%);
+		border-top: 1px solid rgb(255 255 255 / 10%);
 	}
 
 	.hero-chat-container :global(.pagination-controls) {
@@ -1632,8 +1666,8 @@
 
 	.hero-chat-container :global(.pagination-btn) {
 		padding: 0.25rem;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgb(255 255 255 / 20%);
+		background: rgb(255 255 255 / 10%);
 		color: var(--color-dark);
 		border-radius: 0.2rem;
 		cursor: pointer;
@@ -1646,8 +1680,8 @@
 	}
 
 	.hero-chat-container :global(.pagination-btn:hover:not(:disabled)) {
-		background: rgba(255, 255, 255, 0.2);
-		border-color: rgba(255, 255, 255, 0.3);
+		background: rgb(255 255 255 / 20%);
+		border-color: rgb(255 255 255 / 30%);
 	}
 
 	.hero-chat-container :global(.pagination-btn:disabled) {
@@ -1671,14 +1705,14 @@
 	.hero-chat-container :global(.chunk-error) {
 		padding: 1rem;
 		color: #ef4444;
-		background: rgba(239, 68, 68, 0.1);
-		border: 1px solid rgba(239, 68, 68, 0.2);
+		background: rgb(239 68 68 / 10%);
+		border: 1px solid rgb(239 68 68 / 20%);
 		border-radius: 0.5rem;
 		font-size: 0.875rem;
 	}
 
 	/* Responsive table design - compact but readable for hero */
-	@media (max-width: 768px) {
+	@media (width <= 768px) {
 		.hero-chat-container :global(.chunk-table table) {
 			font-size: 0.7rem;
 		}
@@ -1710,7 +1744,7 @@
 		top: 6px;
 		left: 6px;
 		background: none;
-		color: #000000;
+		color: #000;
 		padding: 4px 6px;
 		border-radius: 4px;
 		font-size: 0.8rem;
@@ -1718,6 +1752,7 @@
 		gap: 0.4rem;
 		pointer-events: none;
 	}
+
 	.hero-chart-legend .ticker {
 		font-weight: 700;
 	}
@@ -1727,10 +1762,12 @@
 		/* Already uses variable – class mainly for semantics now */
 		height: var(--hero-widget-h);
 	}
+
 	.hero-wrapper {
 		height: calc(100vh + var(--hero-total-scroll)); /* 100 vh +  totalScroll (1500 px) */
 		position: relative;
 	}
+
 	.hero-pin {
 		position: sticky; /*  or 'fixed: top:0; left:0; width:100%' */
 		top: 0;
@@ -1738,6 +1775,6 @@
 	}
 
 	.hero-chat-container :global(tr.selected-row) {
-		background: rgba(79, 124, 130, 0.2) !important;
+		background: rgb(79 124 130 / 20%) !important;
 	}
 </style>

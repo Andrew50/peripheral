@@ -121,7 +121,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 
 	// --- strategy / back-testing ---------------------------------------------
 	"run_backtest":  wrapContextFunc(strategy.RunBacktest),
-	"run_screening": strategy.RunScreening,
+	"run_screening": wrapContextFunc(strategy.RunScreening),
 
 	"getStrategies":            strategy.GetStrategies,
 	"createStrategyFromPrompt": wrapContextFunc(strategy.CreateStrategyFromPrompt),
@@ -170,6 +170,7 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 // Private functions that support context cancellation
 var privateFuncWithContext = map[string]func(context.Context, *data.Conn, int, json.RawMessage) (interface{}, error){
 	"getQuery": agent.GetChatRequest,
+	"stopChat": agent.StopChatRequest,
 }
 
 // Request represents a structure for handling Request data.

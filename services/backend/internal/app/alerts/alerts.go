@@ -36,11 +36,14 @@ type Alert struct {
 // fires, its triggeredTimestamp is set; that single record substitutes for the
 // old alertLogs table.
 type GetAlertLogsResult struct {
-	AlertLogID int     `json:"alertLogId"` // identical to alertId (kept to preserve signature)
-	AlertID    int     `json:"alertId"`
-	Timestamp  int64   `json:"timestamp"` // ms since epoch
-	SecurityID int     `json:"securityId"`
-	Ticker     *string `json:"ticker,omitempty"`
+	AlertLogID   int      `json:"alertLogId"` // identical to alertId (kept to preserve signature)
+	AlertID      int      `json:"alertId"`
+	AlertType    string   `json:"alertType"`
+	Timestamp    int64    `json:"timestamp"` // ms since epoch
+	SecurityID   int      `json:"securityId"`
+	Ticker       *string  `json:"ticker,omitempty"`
+	AlertPrice   *float64 `json:"alertPrice,omitempty"`
+	StrategyName *string  `json:"strategyName,omitempty"`
 }
 
 /*
@@ -49,27 +52,11 @@ type GetAlertLogsResult struct {
    ────────────────────────────────────────────────────────────────────────────────
 */
 
-type GetAlertsArgs struct {
-	AlertType string `json:"alertType,omitempty"` // "price", "strategy", or "all"
-}
-
 func GetAlerts(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	var args GetAlertsArgs
-	if err := json.Unmarshal(rawArgs, &args); err != nil {
-		// Default to "all" if no args provided or parsing fails
-		args.AlertType = "all"
-	}
-
-	// Default to "all" if no alert type specified
-	if args.AlertType == "" {
-		args.AlertType = "all"
-	}
-
 	var results []Alert
 
-	// Fetch price alerts if requested
-	if args.AlertType == "all" || args.AlertType == "price" {
-		priceRows, err := conn.DB.Query(context.Background(), `
+	// Fetch price alerts only (strategy alerts are handled via GetStrategies)
+	priceRows, err := conn.DB.Query(context.Background(), `
 			SELECT a.alertId,
 			       'price' AS alertType,
 			       a.price,
@@ -81,69 +68,24 @@ func GetAlerts(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{
 			LEFT JOIN securities s USING (securityId)
 			WHERE a.userId = $1
 			ORDER BY a.alertId`, userID)
-		if err != nil {
-			return nil, fmt.Errorf("querying price alerts: %w", err)
-		}
-		defer priceRows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("querying price alerts: %w", err)
+	}
+	defer priceRows.Close()
 
-		for priceRows.Next() {
-			var r Alert
-			if err := priceRows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
-				&r.Ticker, &r.Active, &r.Direction); err != nil {
-				return nil, fmt.Errorf("scanning price alert: %w", err)
-			}
-			results = append(results, r)
+	for priceRows.Next() {
+		var r Alert
+		if err := priceRows.Scan(&r.AlertID, &r.AlertType, &r.Price, &r.SecurityID,
+			&r.Ticker, &r.Active, &r.Direction); err != nil {
+			return nil, fmt.Errorf("scanning price alert: %w", err)
 		}
-		if err := priceRows.Err(); err != nil {
-			return nil, fmt.Errorf("iterating price alert rows: %w", err)
-		}
+		results = append(results, r)
+	}
+	if err := priceRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating price alert rows: %w", err)
 	}
 
-	// Fetch strategy alerts if requested
-	if args.AlertType == "all" || args.AlertType == "strategy" {
-		strategyRows, err := conn.DB.Query(context.Background(), `
-			SELECT s.strategyId,
-			       'strategy' AS alertType,
-			       s.name,
-			       s.isAlertActive,
-			       COALESCE(s.alert_threshold, 0.0) as alert_threshold,
-			       COALESCE(s.alert_universe, ARRAY[]::TEXT[]) as alert_universe
-			FROM strategies s
-			WHERE s.userId = $1 AND s.isAlertActive = true
-			ORDER BY s.strategyId`, userID)
-		if err != nil {
-			return nil, fmt.Errorf("querying strategy alerts: %w", err)
-		}
-		defer strategyRows.Close()
-
-		for strategyRows.Next() {
-			var strategyID int
-			var alertType string
-			var name string
-			var isActive bool
-			var threshold float64
-			var universe []string
-
-			if err := strategyRows.Scan(&strategyID, &alertType, &name, &isActive, &threshold, &universe); err != nil {
-				return nil, fmt.Errorf("scanning strategy alert: %w", err)
-			}
-
-			// Map strategy alert to Alert struct format for frontend compatibility
-			strategyAlert := Alert{
-				AlertID:   strategyID, // Use strategyId as alertId for consistency
-				AlertType: "strategy",
-				Ticker:    &name,      // Use strategy name as ticker for display
-				Price:     &threshold, // Use threshold as price for display
-				Active:    isActive,
-			}
-
-			results = append(results, strategyAlert)
-		}
-		if err := strategyRows.Err(); err != nil {
-			return nil, fmt.Errorf("iterating strategy alert rows: %w", err)
-		}
-	}
-
+	// Strategy alerts are fetched via GetStrategies API; removed redundant fetch here
 	return results, nil
 }
 
@@ -169,41 +111,115 @@ func GetAlertLogs(conn *data.Conn, userID int, rawArgs json.RawMessage) (interfa
 		args.AlertType = "all"
 	}
 
-	// Use the new centralized logging system to get alert logs
-	alertLogs, err := alerts.GetAlertLogs(conn, userID, args.AlertType)
+	// Build query with joins to get all necessary data
+	var query string
+	var queryArgs []interface{}
+
+	if args.AlertType != "" && args.AlertType != "all" {
+		// Filter by alert type if specified and not "all"
+		query = `
+			SELECT
+				al.log_id AS alertLogId,
+				al.related_id AS alertId,
+				al.alert_type AS alertType,
+				(EXTRACT(EPOCH FROM al.timestamp) * 1000)::bigint AS timestamp,
+				CASE 
+					WHEN al.alert_type = 'price' THEN a.securityId
+					WHEN al.alert_type = 'strategy' THEN COALESCE((al.payload->>'securityId')::int, 0)
+					ELSE 0
+				END AS securityId,
+				al.ticker AS ticker,
+				CASE 
+					WHEN al.alert_type = 'price' THEN a.price
+					ELSE NULL
+				END AS alertPrice,
+				CASE 
+					WHEN al.alert_type = 'strategy' THEN st.name
+					ELSE NULL
+				END AS strategyName
+			FROM alert_logs al
+			LEFT JOIN alerts a ON al.alert_type = 'price' AND a.alertId = al.related_id
+			LEFT JOIN securities s ON a.securityId = s.securityId
+			LEFT JOIN strategies st ON al.alert_type = 'strategy' AND st.strategyId = al.related_id
+			WHERE al.user_id = $1 AND al.alert_type = $2
+			ORDER BY al.timestamp DESC
+		`
+		queryArgs = []interface{}{userID, args.AlertType}
+	} else {
+		// Get all alert types if not specified or "all" is specified
+		query = `
+			SELECT
+				al.log_id AS alertLogId,
+				al.related_id AS alertId,
+				al.alert_type AS alertType,
+				(EXTRACT(EPOCH FROM al.timestamp) * 1000)::bigint AS timestamp,
+				CASE 
+					WHEN al.alert_type = 'price' THEN a.securityId
+					WHEN al.alert_type = 'strategy' THEN COALESCE((al.payload->>'securityId')::int, 0)
+					ELSE 0
+				END AS securityId,
+				al.ticker AS ticker,
+				CASE 
+					WHEN al.alert_type = 'price' THEN a.price
+					ELSE NULL
+				END AS alertPrice,
+				CASE 
+					WHEN al.alert_type = 'strategy' THEN st.name
+					ELSE NULL
+				END AS strategyName
+			FROM alert_logs al
+			LEFT JOIN alerts a ON al.alert_type = 'price' AND a.alertId = al.related_id
+			LEFT JOIN securities s ON a.securityId = s.securityId
+			LEFT JOIN strategies st ON al.alert_type = 'strategy' AND st.strategyId = al.related_id
+			WHERE al.user_id = $1
+			ORDER BY al.timestamp DESC
+		`
+		queryArgs = []interface{}{userID}
+	}
+
+	rows, err := conn.DB.Query(context.Background(), query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("querying alert logs: %w", err)
 	}
+	defer rows.Close()
 
 	var logs []GetAlertLogsResult
-	for _, log := range alertLogs {
-		// Extract ticker and securityId from the payload
-		var ticker *string
-		var securityID int
+	for rows.Next() {
+		var result GetAlertLogsResult
+		var ticker sql.NullString
+		var alertPrice sql.NullFloat64
+		var strategyName sql.NullString
 
-		if tickerVal, exists := log.Payload["ticker"]; exists {
-			if tickerStr, ok := tickerVal.(string); ok {
-				ticker = &tickerStr
-			}
+		err := rows.Scan(
+			&result.AlertLogID,
+			&result.AlertID,
+			&result.AlertType,
+			&result.Timestamp,
+			&result.SecurityID,
+			&ticker,
+			&alertPrice,
+			&strategyName,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scanning alert log row: %w", err)
 		}
 
-		if securityIDVal, exists := log.Payload["securityId"]; exists {
-			switch v := securityIDVal.(type) {
-			case int:
-				securityID = v
-			case float64:
-				securityID = int(v)
-			}
+		// Handle nullable fields
+		if ticker.Valid {
+			result.Ticker = &ticker.String
+		}
+		if alertPrice.Valid {
+			result.AlertPrice = &alertPrice.Float64
+		}
+		if strategyName.Valid {
+			result.StrategyName = &strategyName.String
 		}
 
-		result := GetAlertLogsResult{
-			AlertLogID: log.LogID,
-			AlertID:    log.RelatedID, // For price alerts, relatedID is the alertID; for strategy alerts, it's the strategyID
-			Timestamp:  log.Timestamp.UnixMilli(),
-			SecurityID: securityID,
-			Ticker:     ticker,
-		}
 		logs = append(logs, result)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating alert log rows: %w", err)
 	}
 
 	return logs, nil

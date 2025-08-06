@@ -249,7 +249,9 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 			}
 		} else if ruleTag == "Ask Peripheral" {
 			fmt.Println("Processing @Ask Peripheral tweet", tweet)
-			twitter.GenerateAskPeripheralTweet(conn, tweet)
+			if err := twitter.GenerateAskPeripheralTweet(conn, tweet); err != nil {
+				log.Printf("Error generating Ask Peripheral tweet: %v", err)
+			}
 		}
 	}
 	return nil
@@ -332,7 +334,7 @@ func CreatePeripheralTweetFromNews(conn *data.Conn, tweet twitter.ExtractedTweet
 	agentResult.Plot = samplePlot*/
 
 	var base64PNG string
-	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, false)
+	base64PNG, err = plotly.RenderTwitterPlotToBase64(conn, agentResult.Plot, true)
 	if err != nil {
 		log.Printf("🚨 ERROR rendering Twitter plot: %v", err)
 	}

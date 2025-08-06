@@ -3,12 +3,11 @@ package strategy
 import (
 	"backend/internal/app/limits"
 	"backend/internal/data"
+	"backend/internal/queue"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
-	"time"
 )
 
 // RunBacktestArgs represents arguments for backtesting (API compatibility)
@@ -119,115 +118,6 @@ func (d *DateRangeField) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("date_range must be either string or []string")
 }
 
-// checkForActiveBacktests performs a comprehensive check for active backtests for a specific user
-func checkForActiveBacktests(ctx context.Context, conn *data.Conn, userID int) (bool, error) {
-	// Check both queues for waiting backtest tasks
-	queues := []string{"strategy_queue", "strategy_queue_priority"}
-
-	for _, queueName := range queues {
-		queueLen, err := conn.Cache.LLen(ctx, queueName).Result()
-		if err != nil {
-			return false, fmt.Errorf("error checking queue %s: %v", queueName, err)
-		}
-
-		if queueLen > 0 {
-			// Read all items in the queue
-			queueItems, err := conn.Cache.LRange(ctx, queueName, 0, queueLen-1).Result()
-			if err != nil {
-				return false, fmt.Errorf("error reading queue %s: %v", queueName, err)
-			}
-
-			// Check for backtest tasks for this user
-			for _, item := range queueItems {
-				var queuedTask map[string]interface{}
-				if err := json.Unmarshal([]byte(item), &queuedTask); err != nil {
-					continue // skip malformed
-				}
-
-				if queuedTask["task_type"] == "backtest" {
-					if args, ok := queuedTask["args"].(map[string]interface{}); ok {
-						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
-							// Check if this backtest belongs to the current user
-							queuedUserID, err := strconv.Atoi(userIDStr)
-							if err != nil {
-								continue
-							}
-
-							if queuedUserID == userID {
-								return true, nil // Found active backtest for this user
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Check task assignments for currently running backtest tasks
-	assignmentKeys, err := conn.Cache.Keys(ctx, "task_assignment:*").Result()
-	if err != nil {
-		return false, fmt.Errorf("error getting task assignment keys: %v", err)
-	}
-
-	for _, assignmentKey := range assignmentKeys {
-		assignmentJSON, err := conn.Cache.Get(ctx, assignmentKey).Result()
-		if err != nil {
-			continue // skip if assignment was deleted
-		}
-
-		var assignment map[string]interface{}
-		if err := json.Unmarshal([]byte(assignmentJSON), &assignment); err != nil {
-			continue // skip malformed
-		}
-
-		// Get the task result to check if it's a backtest for this user
-		taskID, ok := assignment["task_id"].(string)
-		if !ok {
-			continue
-		}
-
-		resultKey := fmt.Sprintf("task_result:%s", taskID)
-		resultJSON, err := conn.Cache.Get(ctx, resultKey).Result()
-		if err != nil {
-			continue // skip if result doesn't exist
-		}
-
-		var taskResult map[string]interface{}
-		if err := json.Unmarshal([]byte(resultJSON), &taskResult); err != nil {
-			continue // skip malformed
-		}
-
-		// Check if this is a backtest task
-		data, ok := taskResult["data"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Check original task data
-		if originalTask, exists := data["original_task"]; exists {
-			if taskMap, ok := originalTask.(map[string]interface{}); ok {
-				if taskType, ok := taskMap["task_type"].(string); ok && taskType == "backtest" {
-					// Check if this backtest belongs to the current user
-					if args, ok := taskMap["args"].(map[string]interface{}); ok {
-						if userIDStr, ok := args["user_id"].(string); ok && userIDStr != "" {
-							assignedUserID, err := strconv.Atoi(userIDStr)
-							if err != nil {
-								continue
-							}
-
-							if assignedUserID == userID {
-								return true, nil // Found running backtest for this user
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return false, nil
-}
-
 // RunBacktest executes a complete strategy backtest using the new worker architecture
 func RunBacktest(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (any, error) {
 	return RunBacktestWithProgress(ctx, conn, userID, rawArgs, nil)
@@ -331,57 +221,49 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	return response, nil
 }
 
-// callWorkerBacktestWithProgress calls the worker's run_backtest function via Redis queue with progress callbacks
+// callWorkerBacktestWithProgress calls the worker's run_backtest function via the new queue system with progress callbacks
 func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, args RunBacktestArgs, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
-	// Generate unique task ID
-	taskID := fmt.Sprintf("backtest_%d_%d", args.StrategyID, time.Now().UnixNano())
-
-	// Prepare backtest task payload
-	task := map[string]interface{}{
-		"task_id":   taskID,
-		"task_type": "backtest",
-		"args": map[string]interface{}{
-			"strategy_id": fmt.Sprintf("%d", args.StrategyID),
-			"user_id":     fmt.Sprintf("%d", userID), // Include user ID for ownership verification
-			"version":     args.Version,
-			"start_date":  args.StartDate,
-			"end_date":    args.EndDate,
-		},
-		"created_at": time.Now().UTC().Format(time.RFC3339),
+	// Prepare backtest task arguments
+	taskArgs := map[string]interface{}{
+		"strategy_id": args.StrategyID, // Send as int, not string
+		"user_id":     userID,          // Send as int, not string
+		"version":     args.Version,
+		"start_date":  args.StartDate,
+		"end_date":    args.EndDate,
 	}
 
-	// Check for active backtests using comprehensive check
-	hasActiveBacktest, err := checkForActiveBacktests(ctx, conn, userID)
+	// Queue the task using the new queue system
+	handle, err := queue.QueueBacktest(ctx, conn, taskArgs)
 	if err != nil {
-		return nil, fmt.Errorf("error checking for active backtests: %v", err)
-	}
-	if hasActiveBacktest {
-		return nil, fmt.Errorf("another backtest is already queued or running for your account. Please wait for it to complete before starting a new one")
+		return nil, fmt.Errorf("error queuing backtest task: %v", err)
 	}
 
-	// Submit task to Redis queue
-	taskJSON, err := json.Marshal(task)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling task: %v", err)
+	// Create a progress callback wrapper that converts queue.ResultUpdate to the expected string format
+	var queueProgressCallback queue.ProgressCallback
+	if progressCallback != nil {
+		queueProgressCallback = func(update queue.ResultUpdate) {
+			// Convert status to message format expected by ProgressCallback
+			message := fmt.Sprintf("Status: %s", update.Status)
+			if update.Data != nil {
+				if msg, ok := update.Data["message"].(string); ok {
+					message = msg
+				}
+			}
+			progressCallback(message)
+		}
 	}
 
-	// Push task to worker queue
-	err = conn.Cache.RPush(ctx, "strategy_queue", string(taskJSON)).Err()
-	if err != nil {
-		return nil, fmt.Errorf("error submitting task to queue: %v", err)
-	}
-
-	// Wait for result with timeout and progress callbacks
-	result, err := waitForBacktestResultWithProgress(ctx, conn, taskID, 10*time.Minute, progressCallback)
+	// Wait for result with progress callbacks using the simplified API
+	result, err := queue.AwaitTypedResult[WorkerBacktestResult](ctx, handle, queueProgressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("error waiting for backtest result: %v", err)
 	}
-	fmt.Println("\n\nresult version:", result.Version)
+
 	return result, nil
 }
 
 // waitForBacktestResultWithProgress waits for a backtest result with optional progress callbacks
-func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
+/*func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, taskID string, timeout time.Duration, progressCallback ProgressCallback) (*WorkerBacktestResult, error) {
 	// Subscribe to task updates
 	pubsub := conn.Cache.Subscribe(ctx, "worker_task_updates")
 	defer func() {
@@ -457,6 +339,7 @@ func waitForBacktestResultWithProgress(ctx context.Context, conn *data.Conn, tas
 		}
 	}
 }
+*/
 
 // convertWorkerInstancesToBacktestResults converts worker instances to API format
 func convertWorkerInstancesToBacktestResults(instances []map[string]any) []BacktestInstanceRow {

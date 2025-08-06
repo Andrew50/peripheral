@@ -132,7 +132,7 @@
 	/* Custom styles for the invite page */
 	main {
 		background-image:
-			radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
-			radial-gradient(circle at 75% 75%, rgba(168, 85, 247, 0.1) 0%, transparent 50%);
+			radial-gradient(circle at 25% 25%, rgb(59 130 246 / 10%) 0%, transparent 50%),
+			radial-gradient(circle at 75% 75%, rgb(168 85 247 / 10%) 0%, transparent 50%);
 	}
 </style>
