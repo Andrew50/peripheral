@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	//"log"
 	"sync"
@@ -68,9 +69,16 @@ func (p *PolygonSocketService) Start(conn *data.Conn, useAlerts bool) error {
 
 	// Create new websocket client
 	var err error
+	// Use business feed API key if present, otherwise fallback to standard key
+	businessKey := os.Getenv("POLYGON_BUSINESS_API_KEY")
+	if businessKey == "" {
+		fmt.Println("POLYGON_BUSINESS_API_KEY is not set, using standard key")
+		businessKey = conn.PolygonKey
+	}
+
 	p.wsClient, err = polygonws.New(polygonws.Config{
-		APIKey: conn.PolygonKey,
-		Feed:   polygonws.RealTime,
+		APIKey: businessKey,
+		Feed:   polygonws.BusinessFeed,
 		Market: polygonws.Stocks,
 	})
 	if err != nil {
@@ -298,24 +306,9 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 	fmt.Println("Starting stale flusher")
 	staleFlusherOnce.Do(func() { startStaleFlusher(p.conn) })
 
-	err := p.wsClient.Subscribe(polygonws.StocksQuotes)
+	err := p.wsClient.Subscribe(polygonws.BusinessFairMarketValue, "*")
 	if err != nil {
-		log.Printf("❌ Error subscribing to StocksQuotes: %v", err)
-		return
-	}
-	err = p.wsClient.Subscribe(polygonws.StocksTrades)
-	if err != nil {
-		log.Printf("❌ Error subscribing to StocksTrades: %v", err)
-		return
-	}
-	err = p.wsClient.Subscribe(polygonws.StocksMinAggs)
-	if err != nil {
-		log.Printf("❌ Error subscribing to StocksMinAggs: %v", err)
-		return
-	}
-	err = p.wsClient.Subscribe(polygonws.StocksSecAggs)
-	if err != nil {
-		log.Printf("❌ Error subscribing to StocksSecAggs: %v", err)
+		log.Printf("❌ Error subscribing to FMV stream: %v", err)
 		return
 	}
 
@@ -342,7 +335,7 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 			switch msg := out.(type) {
 			case models.FairMarketValue:
 				symbol = msg.Ticker
-				timestamp = msg.Timestamp
+				timestamp = msg.Timestamp / 1_000_000 // convert ns -> ms
 			default:
 				if msg != nil {
 					log.Printf("⚠️ Unknown message type received: %T", msg)
@@ -366,84 +359,27 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 			}
 
 			switch msg := out.(type) {
-			case models.EquityAgg:
-				// 1-second aggregate has duration 1 000 ms; skip others (e.g. 1-minute)
-				if msg.EndTimestamp-msg.StartTimestamp == 1000 {
 
-					if ohlcvBuffer != nil {
-						ohlcvBuffer.addBar(msg.EndTimestamp, symbol, msg)
-					} else {
-						log.Printf("⚠️ ohlcvBuffer is nil, cannot add bar for %s", symbol)
-					}
-
-					// Mark ticker as stale for screener refresh
-					flagTickerStale(symbol)
-					// Mark ticker as updated for alert processing
-					if err := markTickerUpdatedForAlerts(p.conn, symbol, msg.EndTimestamp); err != nil {
-						// Log error but don't fail the entire trade processing
-						log.Printf("⚠️ Failed to mark ticker %s as updated for alerts: %v", symbol, err)
-					}
-				} else {
-					//log.Printf("📊 Skipping EquityAgg for %s (duration=%dms, need 1000ms)",
-					//msg.Symbol, msg.EndTimestamp-msg.StartTimestamp)
-				}
-
-				/* alerts.appendAggregate(securityId,msg.Open,msg.High,msg.Low,msg.Close,msg.Volume)*/
-			case models.EquityTrade:
-				// First check if trade should be completely excluded (ignore both price and volume)
-				// Check if we should skip price updates but keep volume
-				skipPriceUpdate := shouldSkipOhlc(msg.Conditions)
-				skipVolumeUpdate := shouldSkipVolume(msg.Conditions)
-
-				channelNameType := getChannelNameType(msg.Timestamp)
+			case models.FairMarketValue:
+				timestampMs := msg.Timestamp / 1_000_000 // ns -> ms for consistency
+				channelNameType := getChannelNameType(timestampMs)
 				fastChannelName := fmt.Sprintf("%d-fast-%s", securityID, channelNameType)
 				allChannelName := fmt.Sprintf("%d-all", securityID)
 				slowChannelName := fmt.Sprintf("%d-slow-%s", securityID, channelNameType)
 
-				// Create trade data with conditional price and size
-				// If skipping volume updates, set size to 0
-				tradeSize := msg.Size
-				if skipVolumeUpdate {
-					tradeSize = 0
-				}
-
-				// Set shouldUpdatePrice flag based on condition codes
-				shouldUpdatePrice := !skipPriceUpdate
-
 				data := TradeData{
-					//					Ticker:     msg.Symbol,
-					Price:             msg.Price,
-					Size:              tradeSize,
-					Timestamp:         msg.Timestamp,
-					Conditions:        msg.Conditions,
-					ExchangeID:        int(msg.Exchange),
+					Price:             msg.FMV,
+					Size:              0,
+					Timestamp:         timestampMs,
+					Conditions:        nil,
+					ExchangeID:        0,
 					Channel:           fastChannelName,
-					ShouldUpdatePrice: shouldUpdatePrice,
+					ShouldUpdatePrice: true,
 				}
 
-				// Only update latest price cache if we're not skipping price updates
-				if !skipPriceUpdate {
-					updateLatestPrice(securityID, msg.Price)
-				}
+				// Update latest price cache
+				updateLatestPrice(securityID, msg.FMV)
 
-				// COMMENTED OUT: appendTick call disabled - alerts will be processed directly from ticks
-				/*
-					//if alerts.IsAggsInitialized() {
-					if useAlerts {
-						if err := appendTick(conn, securityID, data.Timestamp, data.Price, data.Size); err != nil {
-							// Only log non-initialization errors to reduce noise
-							if !strings.Contains(err.Error(), "aggregates not yet initialized") {
-								fmt.Printf("Error appending tick: %v\n", err)
-							}
-						}
-					}
-				*/
-				// Process alerts directly from tick data
-				//only do this when update price is true once reimplemented
-				/*if useAlerts {
-					// Update tick prices and process alerts
-					alerts.ProcessTickUpdate(conn, securityID, data.Price)
-				}*/
 				if !hasListeners(fastChannelName) && !hasListeners(allChannelName) && !hasListeners(slowChannelName) {
 					break
 				}
@@ -464,9 +400,7 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 				nextDispatch, exists := nextDispatchTimes.times[msg.Ticker]
 				nextDispatchTimes.RUnlock()
 
-				//}
-				// Only send to slow stream if shouldUpdatePrice is true (not volume-only trade)
-				if data.ShouldUpdatePrice && (!exists || now.After(nextDispatch)) {
+				if !exists || now.After(nextDispatch) {
 					data.Channel = slowChannelName
 					jsonData, _ = json.Marshal(data) // Handle potential error, though unlikely
 					broadcastToChannel(slowChannelName, string(jsonData))
@@ -474,25 +408,7 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 					nextDispatchTimes.times[msg.Ticker] = now.Add(slowRedisTimeout)
 					nextDispatchTimes.Unlock()
 				}
-			case models.EquityQuote:
-				channelName := fmt.Sprintf("%d-quote", securityID)
-				if !hasListeners(channelName) {
-					break
-				}
-				data := QuoteData{
-					Timestamp: msg.Timestamp,
-					BidPrice:  msg.BidPrice,
-					AskPrice:  msg.AskPrice,
-					BidSize:   msg.BidSize,
-					AskSize:   msg.AskSize,
-					Channel:   channelName,
-				}
-				jsonData, err := json.Marshal(data)
-				if err != nil {
-					//fmt.Printf("io1nv %v\n", err)
-					continue
-				}
-				broadcastToChannel(channelName, string(jsonData))
+				// default case removed to avoid noisy logging of unhandled message types
 			}
 		}
 	}

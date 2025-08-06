@@ -1276,9 +1276,10 @@
 
 	async function updateLatestChartBar(trade: TradeData) {
 		// Early returns for invalid data
+		console.log('trade', trade);
 		if (
 			!trade?.price ||
-			!trade?.size ||
+			//!trade?.size ||
 			!trade?.timestamp ||
 			!chartCandleSeries?.data()?.length ||
 			isSwitchingTickers
@@ -2621,7 +2622,6 @@
 		</div>
 	{/if}
 </div>
-
 
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
