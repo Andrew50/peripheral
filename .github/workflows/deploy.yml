@@ -118,6 +118,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     # Removed the needs: [check-build] dependency
     if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
+    timeout-minutes: 30
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
