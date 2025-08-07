@@ -181,7 +181,7 @@
 		}
 		// 2. Data quality - based on realtime_charts
 		if (plan.realtime_charts) {
-			features.push('Realtime data');
+			features.push('Realtime Data');
 		} else {
 			features.push('Realtime Derived');
 		}
