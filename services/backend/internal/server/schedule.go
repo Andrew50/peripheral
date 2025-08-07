@@ -259,7 +259,7 @@ var (
 		*/
 		{
 			Name:           "StartScreenerUpdater",
-			Function:       startScreenerUpdater,               // Uses partial coverage guard
+			Function:       screener.StartScreenerUpdaterLoop,  // Uses partial coverage guard
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 45}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -270,7 +270,7 @@ var (
 		{
 			Name: "StartAlertLoop",
 
-			Function:       startAlertLoop,
+			Function:       alerts.StartAlertLoop,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
