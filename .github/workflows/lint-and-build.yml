@@ -35,6 +35,7 @@ jobs:
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
     runs-on: self-hosted
+    timeout-minutes: 2
     permissions:
       actions: read
       contents: read
@@ -441,6 +442,7 @@ jobs:
       options: --user 1000
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    timeout-minutes: 8
     permissions:
       contents: write
       checks: write
@@ -623,6 +625,7 @@ jobs:
       options: --user 1000
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    timeout-minutes: 8
     env:
       # Use workspace-local npm cache to avoid permission issues with /github/home/.npm
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
@@ -785,6 +788,7 @@ jobs:
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    timeout-minutes: 8
     permissions:
       contents: read
       checks: write
@@ -951,6 +955,7 @@ jobs:
   reset-workspace-permissions:
     name: Reset workspace file ownership
     runs-on: self-hosted
+    timeout-minutes: 2
     needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
 

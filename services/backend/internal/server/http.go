@@ -46,6 +46,8 @@ var publicFunc = map[string]func(*data.Conn, json.RawMessage) (interface{}, erro
 	"getSecurityClassifications":       helpers.GetSecurityClassifications,
 	"getPublicPricingConfiguration":    GetPublicPricingConfiguration,
 	"validateInvite":                   ValidateInvite,
+	"verifyOTP":                        VerifyOTP,
+	"sendVerificationOTP":              SendVerificationOTP,
 }
 
 // Wrapper functions to adapt existing functions to the old signature for HTTP handlers
@@ -291,6 +293,7 @@ func publicHandler(conn *data.Conn) http.HandlerFunc {
 			log.Printf("Public handler error [%s]: %v", req.Function, err)
 			// Map to safe client message
 			status, msg := resolveAppError(err)
+			log.Printf("%d %s", status, msg)
 			http.Error(w, msg, status)
 			return
 		}

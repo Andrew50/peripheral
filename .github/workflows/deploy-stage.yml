@@ -47,6 +47,7 @@ concurrency:
 jobs:
   detect_changes:
     if: github.event_name == 'push'
+    timeout-minutes: 3
     uses: ./.github/workflows/detect-changes.yml
 
   compute_manual_strategy:
@@ -65,6 +66,7 @@ jobs:
       (github.event_name == 'push' && needs.detect_changes.outputs.strategy != 'no-changes') ||
       (github.event_name == 'workflow_dispatch' && needs.compute_manual_strategy.outputs.strategy != 'no-changes')    
     uses: ./.github/workflows/deploy.yml
+    timeout-minutes: 30
     with:
       environment: 'stage'
       target_branch: ${{ github.event.inputs.branch || github.ref_name }}
@@ -104,3 +106,8 @@ jobs:
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_DEV_PUBLISHABLE_KEY }}
       TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
       TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
+      SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_OTP_PORT: ${{ secrets.SMTP_OTP_PORT }}
+      EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}

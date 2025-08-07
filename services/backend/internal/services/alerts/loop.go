@@ -853,10 +853,6 @@ func (a *AlertService) processStrategyAlertsPerTicker() {
 				return
 			}
 
-			// Execute strategy with filtered ticker list
-			log.Printf("🎯 Processing strategy %d: %s with %d tickers: %v",
-				alert.StrategyID, alert.Name, len(finalTickers), finalTickers)
-
 			data.IncrementStrategyRuns()
 			if err := executeStrategyAlert(context.Background(), a.conn, alert, finalTickers); err != nil {
 				log.Printf("Error processing strategy %d: %v", alert.StrategyID, err)
