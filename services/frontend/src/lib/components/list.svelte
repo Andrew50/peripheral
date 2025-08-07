@@ -1,24 +1,30 @@
+<script lang="ts" context="module">
+	import type { Instance, Trade } from '$lib/utils/types/types';
+	export interface ExtendedInstance extends Instance {
+		trades?: Trade[];
+		[key: string]: any;
+	}
+	export interface ActionButton {
+		label: string;
+		action: (item: ExtendedInstance) => void;
+		class?: string;
+	}
+</script>
+
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { writable, get } from 'svelte/store';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import type { Writable } from 'svelte/store';
-	import type { Instance } from '$lib/utils/types/types';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { queryChart } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/utils/stores/stores';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
-	import type { Trade } from '$lib/utils/types/types';
 	import { fade } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
-
-	interface ExtendedInstance extends Instance {
-		trades?: Trade[];
-		[key: string]: any; // Allow dynamic property access
-	}
 
 	// Response shape from getIcons API
 	interface IconResponse {
@@ -202,27 +208,28 @@
 	// NOTE: This function relies on the *original* `sortColumn` value.
 	function sortList() {
 		if (!sortColumn) return;
+		const currentSortColumn = sortColumn;
 
 		list.update((items: ExtendedInstance[]) => {
 			const sorted = [...items].sort((a, b) => {
 				// Handle special column cases first based on the *original* column name directly
 				// Keep these checks using the original column keys passed to handleSort
-				if (sortColumn === 'Price') {
+				if (currentSortColumn === 'Price') {
 					const priceA = typeof a.price === 'number' ? a.price : 0;
 					const priceB = typeof b.price === 'number' ? b.price : 0;
 					return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
 				}
-				if (sortColumn === 'Chg') {
+				if (currentSortColumn === 'Chg') {
 					const changeA = typeof a.change === 'number' ? a.change : 0;
 					const changeB = typeof b.change === 'number' ? b.change : 0;
 					return sortDirection === 'asc' ? changeA - changeB : changeB - changeA;
 				}
-				if (sortColumn === 'Chg%') {
+				if (currentSortColumn === 'Chg%') {
 					const pctA = typeof a['change%'] === 'number' ? a['change%'] : 0;
 					const pctB = typeof b['change%'] === 'number' ? b['change%'] : 0;
 					return sortDirection === 'asc' ? pctA - pctB : pctB - pctA;
 				}
-				if (sortColumn === 'Ext') {
+				if (currentSortColumn === 'Ext') {
 					const extA = typeof a['change%extended'] === 'number' ? a['change%extended'] : 0;
 					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
 					return sortDirection === 'asc' ? extA - extB : extB - extA;
@@ -230,7 +237,7 @@
 
 				// For other columns, use the *original* sortColumn as the data key directly
 				// Or use getDataKey if that transformation is required for your data structure
-				const dataKey = sortColumn; // Assuming direct key access works for underscore columns like 'market_cap'
+				const dataKey = currentSortColumn; // Assuming direct key access works for underscore columns like 'market_cap'
 				// const dataKey = getDataKey(sortColumn); // Use this if you need the transformation from getDataKey
 
 				let valueA = a[dataKey];
@@ -625,7 +632,7 @@
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}>{UTCTimestampToESTString(watch.timestamp)}</td
+										}}>{watch.timestamp ? UTCTimestampToESTString(watch.timestamp) : 'N/A'}</td
 									>
 								{:else if col === 'Trade Duration'}
 									<td

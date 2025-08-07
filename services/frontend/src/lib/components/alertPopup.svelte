@@ -30,7 +30,7 @@
 			}
 		}
 		// Hide the alert popup after navigating or clicking anywhere
-		dismissAlert($alertPopup.alertId);
+		dismissAlert($alertPopup?.alertId ?? 0);
 	}
 
 	function updateTimeDelta() {
@@ -112,7 +112,7 @@
 						</div>
 					</div>
 				</div>
-				<button class="close-button" on:click={() => dismissAlert($alertPopup.alertId)}>
+				<button class="close-button" on:click={() => dismissAlert($alertPopup?.alertId ?? 0)}>
 					<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
 						<path
 							d="M9 3L3 9M3 3L9 9"
@@ -143,7 +143,7 @@
 
 	.alert-popup {
 		width: clamp(260px, 30vw, 320px);
-		backdrop-filter: blur(14.735342979431152px);
+		backdrop-filter: blur(14.7353px);
 		background-color: rgb(214 214 214 / 30%);
 		border-radius: 16px;
 		padding: 16px;
@@ -212,7 +212,7 @@
 		font-family: Inter, sans-serif;
 		font-weight: 700;
 		font-size: 14px;
-		line-height: 139.9999976158142%;
+		line-height: 140%;
 		text-decoration: none;
 		text-transform: none;
 		color: rgb(245 245 245 / 100%);
@@ -224,7 +224,7 @@
 		font-family: Inter, sans-serif;
 		font-weight: normal;
 		font-size: 12px;
-		line-height: 139.9999976158142%;
+		line-height: 140%;
 		text-decoration: none;
 		text-transform: none;
 		color: rgb(245 245 245 / 100%);

@@ -30,17 +30,7 @@ env:
   NODE_VERSION: '18'
 
 jobs:
-  # Determine the UID/GID of the runner user to avoid permission issues with containers
-  determine-runner-user:
-    runs-on: self-hosted
-    outputs:
-      uid: ${{ steps.ids.outputs.uid }}
-      gid: ${{ steps.ids.outputs.gid }}
-    steps:
-      - id: ids
-        run: |
-          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
-          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+  # determine-runner-user job removed – containers now run as root by default
 
   # Add a check to determine if we should run the tests
   check-workflow-conditions:
@@ -444,11 +434,11 @@ jobs:
   #         fi
 
   backend-lint-security:
-    needs: [check-workflow-conditions, determine-runner-user]
+    needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_backend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
+      options: --user 1000
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     permissions:
@@ -618,12 +608,19 @@ jobs:
           fi
           echo "Final Go cache cleanup complete."
 
+      - name: Reset workspace permissions (Backend)
+        if: always()
+        run: |
+          echo "Resetting workspace ownership after backend job..."
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          echo "Backend workspace permissions reset complete."
+
   frontend-lint-security:
-    needs: [check-workflow-conditions, determine-runner-user]
+    needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_frontend_changes == 'true' }}
     container:
       image: billin19/ci-image:latest # Use custom Docker image
-      options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
+      options: --user 1000
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
     env:
@@ -776,6 +773,13 @@ jobs:
             echo "❌ Frontend checks failed (lint, security, or vulnerability scan - see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Reset workspace permissions (Frontend)
+        if: always()
+        run: |
+          echo "Resetting workspace ownership after frontend job..."
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          echo "Frontend workspace permissions reset complete."
+
   worker-lint-security:
     needs: [check-workflow-conditions]
     if: ${{ always() && needs.check-workflow-conditions.outputs.should_run == 'true' && needs.check-workflow-conditions.outputs.has_worker_changes == 'true' }}
@@ -900,39 +904,59 @@ jobs:
             echo "❌ Worker lint and security checks failed (see logs for details)." >> $GITHUB_STEP_SUMMARY
           fi
 
-  # Summary and reporting (updated to include format checks)
-  lint-summary:
-    name: Lint and Format Summary
+      - name: Reset workspace permissions (Worker)
+        if: always()
+        run: |
+          echo "Resetting workspace ownership after worker job..."
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          echo "Worker workspace permissions reset complete."
+
+# Summary and reporting (updated to include format checks)
+#  lint-summary:
+#    name: Lint and Format Summary
+#    runs-on: self-hosted
+#    needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
+#    if: always()
+#
+#    steps:
+#      - name: 📊 Generate Lint and Format Summary
+#        run: |
+#          echo "📊 Lint and Format Summary Report"
+#          echo "================================"
+#          echo ""
+#          echo "✅ Go format checks completed with camelCase enforcement"
+#          echo "✅ Python format checks completed with camelCase enforcement"
+#          echo "✅ Svelte/TS/JS format checks completed"
+#          echo "✅ YAML format checks completed"
+#          echo "✅ SQL format checks completed with consistent formatting"
+#          echo "✅ Backend lint and security checks completed"
+#          echo "✅ Frontend lint and security checks completed"
+#          echo "✅ Worker lint and security checks completed"
+#          echo ""
+#          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
+#          echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
+#          echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
+#          echo ""
+#          echo "📋 Summary:"
+#          echo "- Go: golangci-lint with revive rules for camelCase"
+#          echo "- Python: Pylint with snake_case naming rules"
+#          echo "- Svelte/TS/JS: ESLint + Stylelint"
+#          echo "- YAML: yamllint for formatting consistency"
+#          echo "- SQL: SQLFluff with consistent formatting"
+#          echo "- Backend: Full security and lint checks"
+#          echo "- Frontend: Full security and lint checks"
+#          echo "- Worker: Full security and lint checks"
+
+# Workspace permission reset (runs on host, not in container)
+  reset-workspace-permissions:
+    name: Reset workspace file ownership
     runs-on: self-hosted
     needs: [backend-lint-security, frontend-lint-security, worker-lint-security]
     if: always()
 
-    
     steps:
-      - name: 📊 Generate Lint and Format Summary
+      - name: Change ownership of workspace back to runner user
         run: |
-          echo "📊 Lint and Format Summary Report"
-          echo "================================"
-          echo ""
-          echo "✅ Go format checks completed with camelCase enforcement"
-          echo "✅ Python format checks completed with camelCase enforcement"
-          echo "✅ Svelte/TS/JS format checks completed"
-          echo "✅ YAML format checks completed"
-          echo "✅ SQL format checks completed with consistent formatting"
-          echo "✅ Backend lint and security checks completed"
-          echo "✅ Frontend lint and security checks completed"
-          echo "✅ Worker lint and security checks completed"
-          echo ""
-          echo "🎯 Go format checks enforce camelCase; Python format checks enforce snake_case naming conventions"
-          echo "📋 SQL allows both snake_case and camelCase for consistency with existing code"
-          echo "📋 All linters run in CHECK-ONLY mode - no code modifications"
-          echo ""
-          echo "📋 Summary:"
-          echo "- Go: golangci-lint with revive rules for camelCase"
-          echo "- Python: Pylint with snake_case naming rules"
-          echo "- Svelte/TS/JS: ESLint + Stylelint"
-          echo "- YAML: yamllint for formatting consistency"
-          echo "- SQL: SQLFluff with consistent formatting"
-          echo "- Backend: Full security and lint checks"
-          echo "- Frontend: Full security and lint checks"
-          echo "- Worker: Full security and lint checks"
+          echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
+          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          echo "Final workspace permission reset complete."

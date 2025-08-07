@@ -428,7 +428,7 @@
 		const onMove = (ev: PointerEvent) => {
 			const delta = startX - ev.clientX; // inverse for right sidebar!
 			let newWidth = Math.max(start + delta, 0);
-			const dynamicMinWidth = window.innerWidth * 0.10; // Calculate minimum width dynamically
+			const dynamicMinWidth = window.innerWidth * 0.1; // Calculate minimum width dynamically
 
 			// Handle collapsing logic
 			if (newWidth < dynamicMinWidth && lastSidebarMenu !== null) {
@@ -700,7 +700,8 @@
 		document.addEventListener('touchend', stopSidebarResize);
 	}
 
-	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) { // for tickerinfo/quote 
+	function handleRightSidebarMenusResize(event: MouseEvent | TouchEvent) {
+		// for tickerinfo/quote
 		if (!sidebarResizing) return;
 
 		let currentY;
@@ -716,10 +717,16 @@
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
 		// Clamp the height between min and max values
-		tickerInfoContainerHeight = Math.min(Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT), MAX_TICKER_INFO_CONTAINER_HEIGHT);
+		tickerInfoContainerHeight = Math.min(
+			Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT),
+			MAX_TICKER_INFO_CONTAINER_HEIGHT
+		);
 
 		// Update the CSS variable
-		document.documentElement.style.setProperty('--ticker-info-container-height', `${tickerInfoContainerHeight}px`);
+		document.documentElement.style.setProperty(
+			'--ticker-info-container-height',
+			`${tickerInfoContainerHeight}px`
+		);
 	}
 
 	function stopSidebarResize() {
@@ -778,7 +785,7 @@
 
 		// Constraints
 		const minLeftSidebarWidth = window.innerWidth * 0.15;
-		const maxLeftSidebarWidth = window.innerWidth*0.4;
+		const maxLeftSidebarWidth = window.innerWidth * 0.4;
 
 		const onMove = (ev: PointerEvent) => {
 			const delta = ev.clientX - startX;
@@ -989,12 +996,8 @@
 		on:close={hideAuthModal}
 	/>
 
-		{#if $isMobileDevice}
-		<MobileInterface 
-			{data} 
-			{sharedConversationId} 
-			isPublicViewing={$isPublicViewingStore} 
-		/>
+	{#if $isMobileDevice}
+		<MobileInterface {data} {sharedConversationId} isPublicViewing={$isPublicViewingStore} />
 	{:else}
 		<!-- Desktop interface -->
 
@@ -1400,7 +1403,9 @@
 		display: grid;
 		height: 100%;
 		width: 100%;
-		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(--right-sidebar-width);
+		grid-template-columns: var(--left-sidebar-width) var(--left-gutter) 1fr var(--right-gutter) var(
+				--right-sidebar-width
+			);
 		grid-template-areas: 'left g1 center g2 right';
 	}
 
@@ -1440,90 +1445,6 @@
 
 	.resizer-right {
 		grid-area: g2;
-	}
-
-	.sidebar-header {
-		height: 40px;
-		min-height: 40px;
-		background-color: #121212;
-		display: flex;
-		align-items: center;
-		padding: 0 10px;
-		flex-shrink: 0;
-		width: 100%;
-		z-index: 10;
-		border-bottom: 4px solid var(--c1);
-	}
-
-	.sidebar-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	/* ───── Alert tab styles ─────────────────────────────────────────────────── */
-	.alert-tab-container {
-		display: flex;
-		align-items: center;
-		flex-grow: 1;
-		min-width: 0;
-		gap: 0;
-	}
-
-	.sidebar-header .watchlist-tab {
-		font-family: inherit;
-		font-size: 13px;
-		line-height: 18px;
-		color: rgb(255 255 255 / 90%);
-		padding: 6px 12px;
-		background: transparent;
-		border-radius: 6px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		border: 1px solid transparent;
-		cursor: pointer;
-		transition: none;
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
-	}
-
-	.sidebar-header .watchlist-tab:hover {
-		background: rgb(255 255 255 / 15%);
-		border-color: transparent;
-		color: #fff;
-		box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
-	}
-
-	.sidebar-header .watchlist-tab:focus {
-		outline: none;
-		box-shadow: 0 0 0 2px rgb(255 255 255 / 40%);
-	}
-
-	.sidebar-header .watchlist-tab.active {
-		background: rgb(255 255 255 / 20%);
-		border-color: transparent;
-		color: #fff;
-		font-weight: 600;
-		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
-	}
-
-
-
-	.center-section {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-width: 0; /* Allows flex child to shrink below content size */
-	}
-
-	.sidebar {
-		display: flex !important;
-		flex-direction: column;
-		height: 100%;
 	}
 
 	.sidebar-header {

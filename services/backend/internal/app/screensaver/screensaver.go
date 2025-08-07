@@ -1,3 +1,4 @@
+// Package screensaver provides functionality for fetching and managing screensaver data.
 package screensaver
 
 import (

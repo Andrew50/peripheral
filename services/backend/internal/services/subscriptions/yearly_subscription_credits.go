@@ -1,3 +1,4 @@
+// Package subscriptions manages subscription-related tasks, such as updating credits.
 package subscriptions
 
 import (

@@ -762,7 +762,7 @@
 	// Merge layouts (user layout takes precedence, but handle dual y-axis)
 	// Destructure width and height out of plotData.layout to prevent them from overriding fillParent
 	$: {
-		const { width, height, ...userLayoutWithoutDimensions } = plotData.layout || {};
+		const { width, height, ...userLayoutWithoutDimensions } = (plotData.layout || {}) as any;
 
 		// Base layout configuration
 		const baseLayout = {
@@ -995,7 +995,7 @@
 		--glass-border: #4caf50;
 
 		color: #4caf50;
-		animation: copySuccess 0.3s ease;
+		animation: copy-success 0.3s ease;
 	}
 
 	.copy-image-btn.copied:hover {
@@ -1010,7 +1010,7 @@
 		height: 0.75rem;
 	}
 
-	@keyframes copySuccess {
+	@keyframes copy-success {
 		0% {
 			transform: scale(1);
 		}

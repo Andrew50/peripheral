@@ -9,6 +9,7 @@ import { handleAlert } from './alert';
 import type { AlertData } from '$lib/utils/types/types';
 import { enqueueTick } from './streamHub';
 
+
 // Type definitions for dynamic updates - moved to top
 export type WatchlistUpdate = {
 	type: 'watchlist_update';
