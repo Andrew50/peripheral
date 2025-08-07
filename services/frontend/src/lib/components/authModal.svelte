@@ -103,10 +103,10 @@
 		justify-content: center;
 		z-index: 10000;
 		padding: 1.5rem;
-		animation: fadeIn 0.2s ease-out;
+		animation: fade-in 0.2s ease-out;
 	}
 
-	@keyframes fadeIn {
+	@keyframes fade-in {
 		from {
 			opacity: 0;
 		}
@@ -116,7 +116,7 @@
 		}
 	}
 
-	@keyframes slideUp {
+	@keyframes slide-up {
 		from {
 			opacity: 0;
 			transform: translateY(20px);
@@ -135,7 +135,7 @@
 		overflow-y: auto;
 		position: relative;
 		margin: 0 auto;
-		animation: slideUp 0.3s ease-out;
+		animation: slide-up 0.3s ease-out;
 	}
 
 	.auth-modal-content {

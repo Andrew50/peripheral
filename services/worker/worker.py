@@ -92,7 +92,6 @@ class Worker:
                 logger.error("❌ Unknown task type: %s.", task_type)
                 continue
 
-
             execution_context = Context(self.conn, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
             kwargs["ctx"] = execution_context
             logger.info("🔧 Executing %s with args: %s", task_type, kwargs)

@@ -3,17 +3,13 @@
 	import { get, writable } from 'svelte/store';
 	import { strategies } from '$lib/utils/stores/stores';
 	import { privateRequest } from '$lib/utils/helpers/backend';
+	import type { Strategy } from '$lib/utils/types/types';
 
 	/***********************
 	 *     ─ Types ─       *
 	 ***********************/
 	/** StrategyId follows the convention of the parent module */
 	type StrategyId = number | 'new' | null;
-
-	interface Strategy {
-		strategyId: number;
-		name: string;
-	}
 
 	/***********************
 	 *   ─ Public Props ─  *

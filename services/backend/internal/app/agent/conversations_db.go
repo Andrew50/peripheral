@@ -405,7 +405,9 @@ func SavePendingMessageToConversation(ctx context.Context, conn *data.Conn, user
 		if err != nil {
 			log.Printf("Failed to get user email: %v", err)
 		}
-		telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s sent query: %s", email, query))
+		if err := telegram.SendTelegramUserUsageMessage(fmt.Sprintf("%s sent query: %s", email, query)); err != nil {
+			log.Printf("Failed to send telegram usage message: %v", err)
+		}
 	}()
 
 	return conversationID, messageID, nil
