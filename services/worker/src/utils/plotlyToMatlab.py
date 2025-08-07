@@ -2,11 +2,12 @@
 Generic Plotly-to-matplotlib fallback for chart image generation
 """
 
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import logging
 from io import BytesIO
 import base64
-import logging
+
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,6 @@ def extract_any_plottable_data(trace):
     for attr in ['x', 'y', 'z', 'values', 'open', 'high', 'low', 'close']:
         data = getattr(trace, attr, None)
         if data is not None and hasattr(data, '__len__') and len(data) > 0:
-            # Try to convert to numeric if possible
             try:
                 # Handle various data types
                 if hasattr(data, 'tolist'):
@@ -36,7 +36,7 @@ def extract_any_plottable_data(trace):
                 
                 if numeric_data:
                     plottable_data[attr] = numeric_data
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError) as e:
                 logger.warning("Error extracting plottable data for attribute '%s': %s", attr, e)
                 continue  # Stop further processing for this trace if unexpected error
     
@@ -90,7 +90,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     return plotted
 
 
-def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version=None) -> str:
+def plotly_to_matplotlib_png(plotly_fig, plot_id, id_naming, strategy_id, version=None) -> str:
     """
     Convert any Plotly figure to a simple matplotlib PNG for LLM analysis
     
@@ -118,7 +118,7 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version
                     if create_matlab_plot(plottable_data, trace_name, ax):
                         traces_plotted += 1
                     
-            except Exception as trace_error:
+            except (ValueError, TypeError, AttributeError) as trace_error:
                 logger.warning("Skipping trace %s due to error: %s", i, trace_error)
                 continue
         # Apply basic styling for readability
@@ -133,14 +133,14 @@ def plotly_to_matplotlib_png(plotly_fig, plotID, id_naming, strategy_id, version
                 title_text = getattr(plotly_fig.layout.title, 'text', None)
                 if title_text:
                     if version:
-                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version} - " + title_text
+                        title_text = f"Plot {plot_id} {id_naming}: {strategy_id} v{version} - " + title_text
                     else:
-                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} - " + title_text
+                        title_text = f"Plot {plot_id} {id_naming}: {strategy_id} - " + title_text
                 else:
                     if version:
-                        title_text = f"Plot {plotID} {id_naming}: {strategy_id} v{version}"
+                        title_text = f"Plot {plot_id} {id_naming}: {strategy_id} v{version}"
                     else:
-                        title_text = f"Plot {plotID} {id_naming}: {strategy_id}"
+                        title_text = f"Plot {plot_id} {id_naming}: {strategy_id}"
                 ax.set_title(title_text)
         except ValueError as e:
             logger.warning("Optional: could not set plot title: %s", e)

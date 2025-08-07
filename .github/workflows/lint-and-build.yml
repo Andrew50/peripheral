@@ -460,6 +460,7 @@ jobs:
       GOPATH: ${{ github.workspace }}/.go
       GOMODCACHE: ${{ github.workspace }}/.go/pkg/mod
       GOCACHE: ${{ github.workspace }}/.go/cache
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
       GO111MODULE: "on"
     steps:
       - uses: actions/checkout@v3
@@ -625,6 +626,9 @@ jobs:
       options: --user ${{ needs.determine-runner-user.outputs.uid }}:${{ needs.determine-runner-user.outputs.gid }}
     runs-on: self-hosted
     continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+    env:
+      # Use workspace-local npm cache to avoid permission issues with /github/home/.npm
+      NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
     steps:
       - uses: actions/checkout@v3
         with:
@@ -634,7 +638,7 @@ jobs:
       - name: Cache npm packages
         uses: actions/cache@v4
         with:
-          path: ~/.npm # Cache npm's global cache directory
+          path: ${{ env.NPM_CONFIG_CACHE }}
           key: ${{ runner.os }}-npm-cache-${{ hashFiles('services/frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-cache-
@@ -642,8 +646,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: services/frontend
         run: |
-          # Clean install to avoid issues with cached/corrupted dependencies
           echo "Performing a clean install of npm packages..."
+          # Ensure our npm cache directory exists and is writable
+          mkdir -p "$NPM_CONFIG_CACHE"
           rm -rf node_modules package-lock.json
           npm install
 
