@@ -171,14 +171,8 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("error creating user: %v", err)
 	}
 
-	// Handle invite marking within the transaction before committing
-	if invite != nil {
-		// Mark invite as used within the transaction
-		if err := data.MarkInviteUsedTx(ctx, tx, invite.Code); err != nil {
-			log.Printf("ERROR: Failed to mark invite %s as used in transaction: %v", invite.Code, err)
-			return nil, fmt.Errorf("failed to process invite: %v", err)
-		}
-	}
+	// Note: Invite will be marked as used later in VerifyOTP() after email verification
+	// This ensures the invite is only consumed when the user proves mailbox ownership
 
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
@@ -193,8 +187,9 @@ func Signup(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 // LoginArgs represents a structure for handling LoginArgs data.
 type LoginArgs struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	InviteCode string `json:"inviteCode,omitempty"` // Optional invite code for existing users
 }
 
 // Login performs operations related to Login functionality.
@@ -257,6 +252,14 @@ func Login(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	if !verified {
 		log.Printf("Unverified user signin attempt for email: %s", a.Email)
 		return nil, fmt.Errorf("%w", ErrEmailNotVerified)
+	}
+
+	// Handle invite redemption for existing users (if invite code provided)
+	if err := redeemInviteIfProvided(conn, userID, a.InviteCode, a.Email); err != nil {
+		log.Printf("WARNING: Invite redemption failed for user %d with code %s: %v", userID, a.InviteCode, err)
+		// Note: We continue with login even if invite redemption fails
+		// This ensures users can still log in if there's an issue with the invite
+		// The error is logged for investigation but doesn't block authentication
 	}
 
 	token, err := createToken(userID)
@@ -343,6 +346,22 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		}
 	}
 
+	// Start a transaction for all verification side-effects
+	tx, err := conn.DB.Begin(ctx)
+	if err != nil {
+		log.Printf("ERROR: Failed to start verification transaction: %v", err)
+		return nil, fmt.Errorf("error starting transaction: %v", err)
+	}
+
+	// Ensure transaction is either committed or rolled back
+	var txClosed bool
+	defer func() {
+		if !txClosed && tx != nil {
+			log.Println("Rolling back verification transaction due to error")
+			_ = tx.Rollback(context.Background())
+		}
+	}()
+
 	// Handle invite-based trial subscription or regular free plan
 	if invite != nil {
 		log.Printf("Creating trial subscription for user %d with invite %s for plan %s", userID, invite.Code, invite.PlanName)
@@ -355,7 +374,7 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		}
 
 		// Create trial subscription via Stripe
-		customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, a.Email, invite.TrialDays)
+		customer, subscription, err := StripeCreateTrialSubscription(conn, userID, priceID, a.Email, invite.TrialDays)
 		if err != nil {
 			log.Printf("ERROR: Failed to create trial subscription for user %d: %v", userID, err)
 			// Note: User is already created, so we continue but log the error
@@ -363,13 +382,8 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		} else {
 			log.Printf("Created trial subscription %s for user %d", subscription.ID, userID)
 
-			// Persist Stripe identifiers and initial trial status in our database so that
-			// later webhook events (e.g. invoice.payment_succeeded) can correctly map
-			// back to this user.
-			ctxStripe, cancelStripe := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancelStripe()
-
-			_, dbErr := conn.DB.Exec(ctxStripe, `
+			// Persist Stripe identifiers and initial trial status in our database using the transaction
+			_, dbErr := tx.Exec(ctx, `
 				UPDATE users
 				SET stripe_customer_id     = $1,
 				    stripe_subscription_id = $2,
@@ -386,35 +400,47 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 			)
 			if dbErr != nil {
 				log.Printf("ERROR: Failed to persist Stripe IDs for trial user %d: %v", userID, dbErr)
+				return nil, fmt.Errorf("failed to persist Stripe IDs: %v", dbErr)
 			}
 		}
 
-		// Note: Invite is already marked as used within the signup transaction
+		// Mark invite as used within the transaction
+		if err := data.MarkInviteUsedTx(ctx, tx, invite.Code); err != nil {
+			log.Printf("ERROR: Failed to mark invite %s as used in verification transaction: %v", invite.Code, err)
+			return nil, fmt.Errorf("failed to process invite: %v", err)
+		}
 
-		// For trial users, we might want to allocate different credits or skip the free plan
-		// For now, we'll still allocate free plan credits as a baseline
+		// For trial users, we still allocate free plan credits as a baseline
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
 			log.Printf("ERROR: Failed to allocate free credits for trial user %d: %v", userID, err)
-			// Continue, as trial subscription is the main benefit
+			return nil, fmt.Errorf("failed to allocate free credits: %v", err)
 		}
 	} else {
 		// Allocate free plan credits for the new user (idempotent if called again)
 		if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
-			// Propagate the error so signup fails clearly if free credits cannot be allocated
+			// Propagate the error so verification fails clearly if free credits cannot be allocated
 			return nil, fmt.Errorf("failed to allocate free credits: %v", err)
 		}
 	}
 
-	_, dbErr := conn.DB.Exec(ctx, `
-	UPDATE users
-	SET verified = true
-	WHERE userId = $1`,
+	// Update user to verified within the transaction
+	_, dbErr := tx.Exec(ctx, `
+		UPDATE users
+		SET verified = true
+		WHERE userId = $1`,
 		userID,
 	)
 	if dbErr != nil {
 		log.Printf("ERROR: Failed to verify user %d: %v", userID, dbErr)
-		return nil, fmt.Errorf("failed to verify")
+		return nil, fmt.Errorf("failed to verify: %v", dbErr)
 	}
+
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		log.Printf("ERROR: Failed to commit verification transaction: %v", err)
+		return nil, fmt.Errorf("error committing verification transaction: %v", err)
+	}
+	txClosed = true
 
 	// we return nil indicating success and then have the frontend call login again
 	return nil, nil
@@ -575,6 +601,122 @@ func validateToken(tokenString string) (int, error) {
 	return claims.UserID, nil
 }
 
+// redeemInviteIfProvided handles invite redemption logic for existing users
+// This is a shared helper to avoid code duplication across login paths
+func redeemInviteIfProvided(conn *data.Conn, userID int, inviteCode string, email string) error {
+	// Return early if no invite code provided
+	if inviteCode == "" {
+		return nil
+	}
+
+	log.Printf("Processing invite redemption for user %d with invite code: %s", userID, inviteCode)
+
+	// Verify the invite code is valid and unused
+	invite, err := data.GetInviteByCode(conn, inviteCode)
+	if err != nil {
+		log.Printf("ERROR: Invalid invite code %s: %v", inviteCode, err)
+		return fmt.Errorf("invalid invite code")
+	}
+
+	if invite.Used {
+		log.Printf("ERROR: Invite code %s already used", inviteCode)
+		return fmt.Errorf("invite code already used")
+	}
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Check if user already has an active subscription
+	var currentStatus sql.NullString
+	err = conn.DB.QueryRow(ctx, "SELECT subscription_status FROM users WHERE userId = $1", userID).Scan(&currentStatus)
+	if err != nil {
+		log.Printf("ERROR: Failed to check user subscription status: %v", err)
+		return fmt.Errorf("failed to check subscription status: %v", err)
+	}
+
+	// Skip if user already has a paid or trialing subscription
+	if currentStatus.Valid && (currentStatus.String == "active" || currentStatus.String == "trialing") {
+		log.Printf("User %d already has an active or trialing subscription (%s), skipping invite redemption", userID, currentStatus.String)
+		return fmt.Errorf("user already has an active subscription")
+	}
+
+	log.Printf("Creating trial subscription for user %d with invite %s for plan %s", userID, invite.Code, invite.PlanName)
+
+	// Get the Stripe price ID for the plan (defaulting to monthly billing for trials)
+	priceID, err := pricing.GetStripePriceIDForProduct(conn, invite.PlanName, "monthly")
+	if err != nil {
+		log.Printf("ERROR: Failed to get price ID for plan %s: %v", invite.PlanName, err)
+		return fmt.Errorf("invalid plan in invite: %v", err)
+	}
+
+	// Create trial subscription via Stripe (this now handles existing customers)
+	_, subscription, err := StripeCreateTrialSubscription(conn, userID, priceID, email, invite.TrialDays)
+	if err != nil {
+		log.Printf("ERROR: Failed to create trial subscription for user %d: %v", userID, err)
+		return fmt.Errorf("failed to create trial subscription: %v", err)
+	}
+
+	log.Printf("Created trial subscription %s for user %d", subscription.ID, userID)
+
+	// Start transaction for database updates
+	tx, err := conn.DB.Begin(ctx)
+	if err != nil {
+		log.Printf("ERROR: Failed to start invite redemption transaction: %v", err)
+		return fmt.Errorf("error starting transaction: %v", err)
+	}
+
+	// Ensure transaction is either committed or rolled back
+	var txClosed bool
+	defer func() {
+		if !txClosed && tx != nil {
+			log.Println("Rolling back invite redemption transaction due to error")
+			_ = tx.Rollback(context.Background())
+		}
+	}()
+
+	// Persist Stripe identifiers and initial trial status in our database
+	_, dbErr := tx.Exec(ctx, `
+		UPDATE users
+		SET stripe_subscription_id = $1,
+		    subscription_status    = 'trialing',
+		    subscription_plan      = $2,
+		    invite_code_used       = $3,
+		    updated_at             = CURRENT_TIMESTAMP
+		WHERE userId = $4`,
+		subscription.ID,
+		invite.PlanName,
+		invite.Code,
+		userID,
+	)
+	if dbErr != nil {
+		log.Printf("ERROR: Failed to persist Stripe IDs for user %d: %v", userID, dbErr)
+		return fmt.Errorf("failed to persist Stripe IDs: %v", dbErr)
+	}
+
+	// Mark invite as used within the transaction
+	if err := data.MarkInviteUsedTx(ctx, tx, invite.Code); err != nil {
+		log.Printf("ERROR: Failed to mark invite %s as used: %v", invite.Code, err)
+		return fmt.Errorf("failed to process invite: %v", err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		log.Printf("ERROR: Failed to commit invite redemption transaction: %v", err)
+		return fmt.Errorf("error committing transaction: %v", err)
+	}
+	txClosed = true
+
+	// Allocate free plan credits as baseline (idempotent operation)
+	if err := limits.UpdateUserCreditsForPlan(conn, userID, "Free"); err != nil {
+		log.Printf("ERROR: Failed to allocate free credits for user %d: %v", userID, err)
+		// Don't fail the whole operation for this, just log it
+	}
+
+	log.Printf("Successfully redeemed invite %s for user %d", invite.Code, userID)
+	return nil
+}
+
 // GoogleUser represents a structure for handling GoogleUser data.
 type GoogleUser struct {
 	ID            string `json:"id"`
@@ -594,6 +736,7 @@ type GoogleLoginResponse struct {
 func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
 		RedirectOrigin string `json:"redirectOrigin"`
+		InviteCode     string `json:"inviteCode,omitempty"` // Optional invite code
 	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
@@ -612,7 +755,7 @@ func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		googleOauthConfig.RedirectURL = args.RedirectOrigin + "/auth/google/callback"
 	}
 
-	state := generateState()
+	state := generateStateWithInvite(args.InviteCode)
 	url := googleOauthConfig.AuthCodeURL(state)
 	return map[string]string{"url": url, "state": state}, nil
 }
@@ -620,15 +763,21 @@ func GoogleLogin(_ *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 // GoogleCallback performs operations related to GoogleCallback functionality.
 func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	var args struct {
-		Code       string `json:"code"`
-		State      string `json:"state"`
-		InviteCode string `json:"inviteCode,omitempty"` // Optional invite code
+		Code  string `json:"code"`
+		State string `json:"state"`
 	}
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("%w: invalid args: %v", ErrInvalidInput, err)
 	}
 
-	log.Printf("Google callback processing with code")
+	// Extract invite code from state if present
+	_, inviteCode, err := parseStateWithInvite(args.State)
+	if err != nil {
+		log.Printf("WARNING: Failed to parse state for invite code: %v", err)
+		inviteCode = "" // Continue without invite code
+	}
+
+	log.Printf("Google callback processing with code, invite code: %s", inviteCode)
 
 	oauthToken, err := googleOauthConfig.Exchange(context.Background(), args.Code)
 	if err != nil {
@@ -650,20 +799,20 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		return nil, fmt.Errorf("failed decoding user info: %v", err)
 	}
 
-	// Handle invite code if provided
+	// Handle invite code if provided (extracted from state)
 	var invite *data.Invite
-	if args.InviteCode != "" {
-		log.Printf("Processing Google signup with invite code: %s", args.InviteCode)
+	if inviteCode != "" {
+		log.Printf("Processing Google signup with invite code: %s", inviteCode)
 
 		// Verify the invite code is valid and unused
-		invite, err = data.GetInviteByCode(conn, args.InviteCode)
+		invite, err = data.GetInviteByCode(conn, inviteCode)
 		if err != nil {
-			log.Printf("ERROR: Invalid invite code %s: %v", args.InviteCode, err)
+			log.Printf("ERROR: Invalid invite code %s: %v", inviteCode, err)
 			return nil, fmt.Errorf("invalid invite code")
 		}
 
 		if invite.Used {
-			log.Printf("ERROR: Invite code %s already used", args.InviteCode)
+			log.Printf("ERROR: Invite code %s already used", inviteCode)
 			return nil, fmt.Errorf("invite code already used")
 		}
 	}
@@ -752,7 +901,7 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 			}
 
 			// Create trial subscription via Stripe
-			customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, googleUser.Email, invite.TrialDays)
+			customer, subscription, err := StripeCreateTrialSubscription(conn, userID, priceID, googleUser.Email, invite.TrialDays)
 			if err != nil {
 				log.Printf("ERROR: Failed to create trial subscription for Google user %d: %v", userID, err)
 				// Note: User is already created, so we continue but log the error
@@ -823,55 +972,19 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		}
 		log.Printf("Linked Google account to existing user ID: %d", userID)
 
-		// Handle invite code for existing user linking Google account
-		if invite != nil {
-			log.Printf("Processing invite %s for existing user %d linking Google account", invite.Code, userID)
-
-			// Get the Stripe price ID for the plan (defaulting to monthly billing for trials)
-			priceID, err := pricing.GetStripePriceIDForProduct(conn, invite.PlanName, "monthly")
-			if err != nil {
-				log.Printf("ERROR: Failed to get price ID for plan %s: %v", invite.PlanName, err)
-				return nil, fmt.Errorf("invalid plan in invite: %v", err)
-			}
-
-			// Create trial subscription via Stripe
-			customer, subscription, err := StripeCreateTrialSubscription(userID, priceID, googleUser.Email, invite.TrialDays)
-			if err != nil {
-				log.Printf("ERROR: Failed to create trial subscription for existing user %d: %v", userID, err)
-				// Note: User linking is already complete, so we continue but log the error
-			} else {
-				log.Printf("Created trial subscription %s for existing user %d", subscription.ID, userID)
-
-				// Persist Stripe identifiers and initial trial status in our database
-				ctxStripe, cancelStripe := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancelStripe()
-
-				_, dbErr := conn.DB.Exec(ctxStripe, `
-					UPDATE users
-					SET stripe_customer_id     = $1,
-					    stripe_subscription_id = $2,
-					    subscription_status    = 'trialing',
-					    subscription_plan      = $3,
-					    invite_code_used       = $4,
-					    updated_at             = CURRENT_TIMESTAMP
-					WHERE userId = $5`,
-					customer.ID,
-					subscription.ID,
-					invite.PlanName,
-					invite.Code,
-					userID,
-				)
-				if dbErr != nil {
-					log.Printf("ERROR: Failed to persist Stripe IDs for existing user %d: %v", userID, dbErr)
-				}
-			}
-
-			// Mark invite as used (non-transactional for existing user linking)
-			if err := data.MarkInviteUsed(conn, invite.Code); err != nil {
-				log.Printf("ERROR: Failed to mark invite %s as used: %v", invite.Code, err)
-				// This is a critical error for existing user linking - the invite should be marked as used
-				return nil, fmt.Errorf("failed to mark invite as used: %v", err)
-			}
+		// Handle invite redemption for existing user linking Google account
+		if err := redeemInviteIfProvided(conn, userID, inviteCode, googleUser.Email); err != nil {
+			log.Printf("WARNING: Invite redemption failed for existing user %d with code %s: %v", userID, inviteCode, err)
+			// Note: We continue with Google login even if invite redemption fails
+			// This ensures users can still authenticate if there's an issue with the invite
+		}
+	} else {
+		// User already exists with Google auth (authType == "google" or "both")
+		// Handle invite redemption for existing Google user
+		log.Printf("Existing Google user %d logging in", userID)
+		if err := redeemInviteIfProvided(conn, userID, inviteCode, googleUser.Email); err != nil {
+			log.Printf("WARNING: Invite redemption failed for existing Google user %d with code %s: %v", userID, inviteCode, err)
+			// Note: We continue with Google login even if invite redemption fails
 		}
 	}
 
@@ -900,6 +1013,61 @@ func generateState() string {
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
 	return base64.URLEncoding.EncodeToString(b)
+}
+
+// generateStateWithInvite creates a state string that includes the invite code
+func generateStateWithInvite(inviteCode string) string {
+	// Generate a random state component
+	b := make([]byte, 16)
+	var randomState string
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("ERROR: Failed to generate random state: %v", err)
+		randomState = time.Now().String()
+	} else {
+		randomState = base64.URLEncoding.EncodeToString(b)
+	}
+
+	// Create state object with random state and invite code
+	stateData := struct {
+		State      string `json:"state"`
+		InviteCode string `json:"inviteCode,omitempty"`
+	}{
+		State:      randomState,
+		InviteCode: inviteCode,
+	}
+
+	// JSON encode and base64 encode the state data
+	stateJson, err := json.Marshal(stateData)
+	if err != nil {
+		log.Printf("ERROR: Failed to marshal state data: %v", err)
+		// Fallback to simple random state if JSON marshaling fails
+		return randomState
+	}
+
+	return base64.URLEncoding.EncodeToString(stateJson)
+}
+
+// parseStateWithInvite extracts the original state and invite code from the encoded state
+func parseStateWithInvite(encodedState string) (string, string, error) {
+	// Decode base64
+	stateJson, err := base64.URLEncoding.DecodeString(encodedState)
+	if err != nil {
+		// If it fails to decode, assume it's a legacy state without invite code
+		return encodedState, "", nil
+	}
+
+	// Parse JSON
+	var stateData struct {
+		State      string `json:"state"`
+		InviteCode string `json:"inviteCode,omitempty"`
+	}
+
+	if err := json.Unmarshal(stateJson, &stateData); err != nil {
+		// If JSON parsing fails, assume it's a legacy state without invite code
+		return encodedState, "", nil
+	}
+
+	return stateData.State, stateData.InviteCode, nil
 }
 
 // DeleteAccount deletes a user account and all associated data

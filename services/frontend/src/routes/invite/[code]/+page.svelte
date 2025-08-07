@@ -116,7 +116,10 @@
 						<div class="mt-6 text-center">
 							<p class="text-sm text-gray-500">
 								Already have an account?
-								<a href="/login" class="text-blue-600 hover:text-blue-500 font-medium">
+								<a
+									href={`/login?invite=${inviteCode}`}
+									class="text-blue-600 hover:text-blue-500 font-medium"
+								>
 									Sign in instead
 								</a>
 							</p>
@@ -131,8 +134,7 @@
 <style>
 	/* Custom styles for the invite page */
 	main {
-		background-image:
-			radial-gradient(circle at 25% 25%, rgb(59 130 246 / 10%) 0%, transparent 50%),
+		background-image: radial-gradient(circle at 25% 25%, rgb(59 130 246 / 10%) 0%, transparent 50%),
 			radial-gradient(circle at 75% 75%, rgb(168 85 247 / 10%) 0%, transparent 50%);
 	}
 </style>

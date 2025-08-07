@@ -199,6 +199,32 @@ spec:
                   key: STRIPE_PUBLISHABLE_KEY
             - name: ENVIRONMENT
               value: ${ENVIRONMENT}
+            # Add SMTP credentials for email verification
+            - name: SMTP_FROM_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: SMTP_FROM_EMAIL
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: SMTP_PASSWORD
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: SMTP_HOST
+            - name: SMTP_OTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: SMTP_OTP_PORT
+            - name: EMAIL_FROM_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: EMAIL_FROM_ADDRESS
           resources:
             requests:
               cpu: "1000m"

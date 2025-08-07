@@ -57,6 +57,12 @@
 			redirectPlan = urlParams.get('plan');
 			redirectType = urlParams.get('redirect');
 
+			// Re-hydrate invite code from sessionStorage if not provided via prop
+			if (!inviteCode) {
+				const cached = sessionStorage.getItem('inviteCode');
+				if (cached) inviteCode = cached;
+			}
+
 			// Validate invite code if present
 			if (inviteCode && inviteCode.trim() !== '' && mode === 'signup') {
 				validateInviteCode(inviteCode.trim());
@@ -66,7 +72,7 @@
 
 	function otpHandleInput(index: number, event: Event) {
 		if (event.target === null) {
-			return
+			return;
 		}
 		const input = event.target as HTMLInputElement;
 		const value = input.value;
@@ -79,14 +85,14 @@
 		}
 
 		otpDigits[index] = value;
-		
+
 		// Auto-focus next input
 		if (value && index < 4) {
 			inputRefs[index + 1]?.focus();
 		}
-		
+
 		// Dispatch complete event when all 5 digits are filled
-		if (otpDigits.every(digit => digit !== '')) {
+		if (otpDigits.every((digit) => digit !== '')) {
 			verify(email, +otpDigits.join(''));
 		}
 	}
@@ -94,45 +100,45 @@
 	function otpHandleKeydown(index: number, event: KeyboardEvent): void {
 		// Handle backspace
 		if (event.key === 'Backspace') {
-		if (!otpDigits[index] && index > 0) {
-			// If current field is empty, go to previous and clear it
-			otpDigits[index - 1] = '';
-			inputRefs[index - 1]?.focus();
-		} else if (otpDigits[index]) {
-			// Clear current field
-			otpDigits[index] = '';
+			if (!otpDigits[index] && index > 0) {
+				// If current field is empty, go to previous and clear it
+				otpDigits[index - 1] = '';
+				inputRefs[index - 1]?.focus();
+			} else if (otpDigits[index]) {
+				// Clear current field
+				otpDigits[index] = '';
+			}
 		}
-		}
-		
+
 		// Handle arrow keys
 		if (event.key === 'ArrowRight' && index < 4) {
-		inputRefs[index + 1]?.focus();
+			inputRefs[index + 1]?.focus();
 		}
 		if (event.key === 'ArrowLeft' && index > 0) {
-		inputRefs[index - 1]?.focus();
+			inputRefs[index - 1]?.focus();
 		}
 	}
 
 	function otpHandlePaste(event: ClipboardEvent): void {
 		event.preventDefault();
 		const pastedData = event.clipboardData?.getData('text') || '';
-		
+
 		// Extract only digits and take first 5
 		const digits = pastedData.replace(/\D/g, '').slice(0, 5);
-		
+
 		if (digits.length > 0) {
 			// Clear current OTP
 			otpDigits = ['', '', '', '', ''];
-			
+
 			// Fill with pasted digits
 			for (let i = 0; i < digits.length; i++) {
 				otpDigits[i] = digits[i];
 			}
-			
+
 			// Focus the next empty field or the last field
 			const nextIndex = Math.min(digits.length, 4);
 			inputRefs[nextIndex]?.focus();
-			
+
 			// Dispatch complete if we have 5 digits
 			if (digits.length === 5) {
 				verify(email, +digits);
@@ -150,6 +156,14 @@
 		validateInviteCode(inviteCode.trim());
 	}
 
+	// Persist invite code to sessionStorage
+	$: if (browser) {
+		if (inviteCode && inviteCode.trim() !== '') {
+			sessionStorage.setItem('inviteCode', inviteCode.trim());
+		} else {
+			sessionStorage.removeItem('inviteCode');
+		}
+	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
@@ -170,6 +184,11 @@
 	}
 	// Handle successful authentication with deep linking
 	function handleAuthSuccess(user: LoginResponse) {
+		// Clear invite code from sessionStorage after successful auth
+		if (browser) {
+			sessionStorage.removeItem('inviteCode');
+		}
+
 		// Dispatch success event for modal usage
 		dispatch('authSuccess', { type: mode, user });
 
@@ -179,7 +198,7 @@
 			goto(`/pricing?upgrade=${redirectPlan}`);
 		} else {
 			// Default redirect to app
-			goto('/app'); 
+			goto('/app');
 		}
 	}
 
@@ -188,13 +207,20 @@
 			await publicRequest('sendVerificationOTP', { email });
 		} catch (error) {
 			errorMessage.set('Failed to send verification code');
-		}	
+		}
 	}
 
 	async function signIn(email: string, password: string) {
 		loading = true;
 		try {
-			const r = await publicRequest<LoginResponse>('login', { email: email, password: password });
+			const loginData: any = { email: email, password: password };
+
+			// Include invite code if provided
+			if (inviteCode && inviteCode.trim() !== '') {
+				loginData.inviteCode = inviteCode.trim();
+			}
+
+			const r = await publicRequest<LoginResponse>('login', loginData);
 			if (browser) {
 				// Set auth data using centralized utilities
 				setAuthCookies(r.token, r.profilePic);
@@ -205,7 +231,7 @@
 		} catch (error) {
 			if (typeof error === 'string' && error.toLowerCase().includes('email address not verified')) {
 				mode = 'verify';
-				console.log("wowo this is so cool")
+				console.log('wowo this is so cool');
 				sendVerificationOTP(email);
 				errorMessage.set('Please check your email to verify your account');
 				return;
@@ -251,7 +277,6 @@
 			mode = 'verify';
 
 			sendVerificationOTP(email);
-
 		} catch (error) {
 			console.log(error);
 			let displayError = 'Failed to create account. Please try again.';
@@ -304,15 +329,25 @@
 				sessionStorage.setItem('redirectType', redirectType);
 			}
 
-			// Store invite code for after Google auth
+			// Store invite code for after Google auth (fallback)
 			if (inviteCode && inviteCode.trim() !== '') {
 				sessionStorage.setItem('inviteCode', inviteCode.trim());
 			}
 
-			// Pass the current origin to the backend
-			const response = await publicRequest<{ url: string; state: string }>('googleLogin', {
+			// Pass the current origin and invite code to the backend
+			const googleLoginData: any = {
 				redirectOrigin: currentOrigin
-			});
+			};
+
+			// Include invite code if provided
+			if (inviteCode && inviteCode.trim() !== '') {
+				googleLoginData.inviteCode = inviteCode.trim();
+			}
+
+			const response = await publicRequest<{ url: string; state: string }>(
+				'googleLogin',
+				googleLoginData
+			);
 
 			// Store the state in sessionStorage to verify on return
 			if (response.state) {
@@ -378,11 +413,11 @@
 		<div class="auth-header">
 			<h1 class="auth-title">
 				{#if mode === 'login'}
-				 Sign into Peripheral
+					Sign into Peripheral
 				{:else if mode === 'signup'}
-				 Keep the Market within your Peripheral
+					Keep the Market within your Peripheral
 				{:else}
-					 Verify Email Address
+					Verify Email Address
 				{/if}
 			</h1>
 		</div>
@@ -460,125 +495,132 @@
 			class="auth-form"
 		>
 			{#if mode === 'verify'}
-			<!-- Verification Code Section -->
-			<div class="verification-container">
-			  <!-- Email Reminder -->
-			  <div class="email-reminder">
-				<div class="email-icon">
-				  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-					<polyline points="22,6 12,13 2,6"/>
-				  </svg>
-				</div>
-				<p class="email-text">We sent a code to <strong>{email}</strong></p>
-			  </div>
-		  
-			  <!-- OTP Input Grid -->
-			  <div class="otp-container">
-				<div class="otp-grid">
-				  {#each otpDigits as digit, index}
-					<input
-					  bind:this={inputRefs[index]}
-					  type="text"
-					  inputmode="numeric"
-					  maxlength="1"
-					  bind:value={otpDigits[index]}
-					  on:input={(e) => otpHandleInput(index, e)}
-					  on:keydown={(e) => otpHandleKeydown(index, e)}
-					  on:paste={otpHandlePaste}
-					  on:focus={() => otpHandleFocus(index)}
-					  disabled={loading}
-					  placeholder=""
-					  class="otp-digit {digit ? 'filled' : ''} {loading ? 'loading' : ''}"
-					/>
-				  {/each}
-				</div>
-				
-				<p class="otp-instruction">Enter the 5-digit verification code</p>
-			  </div>
-		  
-			  <!-- Status Section -->
-			  {#if loading}
-				<div class="status-container verifying">
-				  <div class="spinner"></div>
-				  <span>Verifying your code...</span>
-				</div>
-			  {/if}
-		  
-			  <!-- Resend Section -->
-			  <div class="resend-section">
-				<p class="resend-text">Didn't receive the code?</p>
-				<button
-				  type="button"
-				  class="resend-button"
-				  on:click={() => sendVerificationOTP(email)}
-				  disabled={loading}
-				>
-				  Resend Code
-				</button>
-			  </div>
-			</div>
-			{:else}
-
-						<!-- Google Login Button -->
-						<div class="form-group">
-							<button
-								class="google-login-button"
-								on:click={handleGoogleLogin}
-								type="button"
-								disabled={loading}
+				<!-- Verification Code Section -->
+				<div class="verification-container">
+					<!-- Email Reminder -->
+					<div class="email-reminder">
+						<div class="email-icon">
+							<svg
+								width="24"
+								height="24"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
 							>
-								<div class="google-icon">
-									<svg
-										version="1.1"
-										xmlns="http://www.w3.org/2000/svg"
-										viewBox="0 0 48 48"
-										xmlns:xlink="http://www.w3.org/1999/xlink"
-										style="display: block;"
-									>
-										<path
-											fill="#EA4335"
-											d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-										></path>
-										<path
-											fill="#4285F4"
-											d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-										></path>
-										<path
-											fill="#FBBC05"
-											d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-										></path>
-										<path
-											fill="#34A853"
-											d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-										></path>
-										<path fill="none" d="M0 0h48v48H0z"></path>
-									</svg>
-								</div>
-								<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
-							</button>
+								<path
+									d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+								/>
+								<polyline points="22,6 12,13 2,6" />
+							</svg>
 						</div>
-			
-						<!-- Divider -->
-						<div class="auth-divider">
-							<span>OR</span>
+						<p class="email-text">We sent a code to <strong>{email}</strong></p>
+					</div>
+
+					<!-- OTP Input Grid -->
+					<div class="otp-container">
+						<div class="otp-grid">
+							{#each otpDigits as digit, index}
+								<input
+									bind:this={inputRefs[index]}
+									type="text"
+									inputmode="numeric"
+									maxlength="1"
+									bind:value={otpDigits[index]}
+									on:input={(e) => otpHandleInput(index, e)}
+									on:keydown={(e) => otpHandleKeydown(index, e)}
+									on:paste={otpHandlePaste}
+									on:focus={() => otpHandleFocus(index)}
+									disabled={loading}
+									placeholder=""
+									class="otp-digit {digit ? 'filled' : ''} {loading ? 'loading' : ''}"
+								/>
+							{/each}
 						</div>
-			
-						<!-- Email Input -->
-						<div class="form-group">
-							<input
-								type="email"
-								id="email"
-								bind:value={email}
-								required
-								on:keydown={handleKeydown}
-								placeholder="Email"
-								class="auth-input"
-								disabled={loading}
-							/>
+
+						<p class="otp-instruction">Enter the 5-digit verification code</p>
+					</div>
+
+					<!-- Status Section -->
+					{#if loading}
+						<div class="status-container verifying">
+							<div class="spinner"></div>
+							<span>Verifying your code...</span>
 						</div>
-			
-			
+					{/if}
+
+					<!-- Resend Section -->
+					<div class="resend-section">
+						<p class="resend-text">Didn't receive the code?</p>
+						<button
+							type="button"
+							class="resend-button"
+							on:click={() => sendVerificationOTP(email)}
+							disabled={loading}
+						>
+							Resend Code
+						</button>
+					</div>
+				</div>
+			{:else}
+				<!-- Google Login Button -->
+				<div class="form-group">
+					<button
+						class="google-login-button"
+						on:click={handleGoogleLogin}
+						type="button"
+						disabled={loading}
+					>
+						<div class="google-icon">
+							<svg
+								version="1.1"
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 48 48"
+								xmlns:xlink="http://www.w3.org/1999/xlink"
+								style="display: block;"
+							>
+								<path
+									fill="#EA4335"
+									d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+								></path>
+								<path
+									fill="#4285F4"
+									d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+								></path>
+								<path
+									fill="#FBBC05"
+									d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+								></path>
+								<path
+									fill="#34A853"
+									d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+								></path>
+								<path fill="none" d="M0 0h48v48H0z"></path>
+							</svg>
+						</div>
+						<span>{mode === 'login' ? 'Login with Google' : 'Sign up with Google'}</span>
+					</button>
+				</div>
+
+				<!-- Divider -->
+				<div class="auth-divider">
+					<span>OR</span>
+				</div>
+
+				<!-- Email Input -->
+				<div class="form-group">
+					<input
+						type="email"
+						id="email"
+						bind:value={email}
+						required
+						on:keydown={handleKeydown}
+						placeholder="Email"
+						class="auth-input"
+						disabled={loading}
+					/>
+				</div>
+
 				<!-- Password Input -->
 				<div class="form-group">
 					<input
@@ -593,30 +635,24 @@
 					/>
 				</div>
 
-							<!-- Submit Button -->
-			<div class="form-group">
-				<button type="submit" class="submit-button" disabled={loading}>
-					{#if loading}
-						<div class="loader"></div>
-					{:else}
-						{#if mode === 'login'}
+				<!-- Submit Button -->
+				<div class="form-group">
+					<button type="submit" class="submit-button" disabled={loading}>
+						{#if loading}
+							<div class="loader"></div>
+						{:else if mode === 'login'}
 							Sign In
 						{:else if mode === 'signup'}
 							Create Account
 						{/if}
-					
-					{/if}
-				</button>
-			</div>
-
-
+					</button>
+				</div>
 			{/if}
 
 			<!-- Error Message -->
 			{#if errorMessageText}
 				<p class="error-message">{errorMessageText}</p>
 			{/if}
-
 		</form>
 
 		<!-- Toggle Auth Mode -->
@@ -624,20 +660,35 @@
 			{#if mode === 'login'}
 				<p>
 					Don't have an account?
-					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
+					<a
+						href={inviteCode ? `/signup?invite=${inviteCode}` : '/signup'}
+						on:click={handleToggleMode}
+						class="auth-link">Sign Up</a
+					>
 				</p>
 			{:else if mode === 'signup'}
 				<p>
 					Already have an account?
-					<a href="/login" on:click={handleToggleMode} class="auth-link">Sign In</a>
+					<a
+						href={inviteCode ? `/login?invite=${inviteCode}` : '/login'}
+						on:click={handleToggleMode}
+						class="auth-link">Sign In</a
+					>
 				</p>
 			{:else}
 				<p>
 					Don't have an account?
-					<a href="/signup" on:click={handleToggleMode} class="auth-link">Sign Up</a>
+					<a
+						href={inviteCode ? `/signup?invite=${inviteCode}` : '/signup'}
+						on:click={handleToggleMode}
+						class="auth-link">Sign Up</a
+					>
 					Already have an account?
-					<a href="/login" on:click={handleToggleMode} class="auth-link">Sign In</a>
-
+					<a
+						href={inviteCode ? `/login?invite=${inviteCode}` : '/login'}
+						on:click={handleToggleMode}
+						class="auth-link">Sign In</a
+					>
 				</p>
 			{/if}
 		</div>
@@ -985,195 +1036,196 @@
 		z-index: 10;
 	}
 
-
 	.verification-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2rem;
-    width: 100%;
-    padding: 1rem 0;
-  }
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2rem;
+		width: 100%;
+		padding: 1rem 0;
+	}
 
-  .email-reminder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    text-align: center;
-  }
+	.email-reminder {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		text-align: center;
+	}
 
-  .email-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-    color: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  }
+	.email-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+		color: white;
+		border-radius: 12px;
+		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+	}
 
-  .email-text {
-    color: #6b7280;
-    font-size: 0.9rem;
-    line-height: 1.5;
-    margin: 0;
-  }
+	.email-text {
+		color: #6b7280;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		margin: 0;
+	}
 
-  .email-text strong {
-    color: #374151;
-    font-weight: 600;
-  }
+	.email-text strong {
+		color: #374151;
+		font-weight: 600;
+	}
 
-  .otp-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-  }
+	.otp-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+	}
 
-  .otp-grid {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-  }
+	.otp-grid {
+		display: flex;
+		gap: 0.75rem;
+		align-items: center;
+	}
 
-  .otp-digit {
-    width: 56px;
-    height: 56px;
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
-    text-align: center;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1f2937;
-    background: #ffffff;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    outline: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    position: relative;
-  }
+	.otp-digit {
+		width: 56px;
+		height: 56px;
+		border: 2px solid #e5e7eb;
+		border-radius: 12px;
+		text-align: center;
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: #1f2937;
+		background: #ffffff;
+		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		outline: none;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+		position: relative;
+	}
 
-  .otp-digit::placeholder {
-    color: transparent;
-  }
+	.otp-digit::placeholder {
+		color: transparent;
+	}
 
-  .otp-digit:hover:not(:disabled) {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-    transform: translateY(-1px);
-  }
+	.otp-digit:hover:not(:disabled) {
+		border-color: #3b82f6;
+		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+		transform: translateY(-1px);
+	}
 
-  .otp-digit:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 4px 12px rgba(59, 130, 246, 0.15);
-    transform: translateY(-1px);
-  }
+	.otp-digit:focus {
+		border-color: #3b82f6;
+		box-shadow:
+			0 0 0 3px rgba(59, 130, 246, 0.1),
+			0 4px 12px rgba(59, 130, 246, 0.15);
+		transform: translateY(-1px);
+	}
 
-  .otp-digit.filled {
-    border-color: #10b981;
-    background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
-    color: #065f46;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
-  }
+	.otp-digit.filled {
+		border-color: #10b981;
+		background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+		color: #065f46;
+		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+	}
 
-  .otp-digit.loading {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+	.otp-digit.loading {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 
-  .otp-instruction {
-    color: #6b7280;
-    font-size: 0.875rem;
-    margin: 0;
-    text-align: center;
-  }
+	.otp-instruction {
+		color: #6b7280;
+		font-size: 0.875rem;
+		margin: 0;
+		text-align: center;
+	}
 
-  .status-container {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-  }
+	.status-container {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		padding: 0.75rem 1rem;
+		border-radius: 8px;
+		background: #f8fafc;
+		border: 1px solid #e2e8f0;
+	}
 
-  .status-container.verifying {
-    color: #3b82f6;
-    background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
-    border-color: #bfdbfe;
-  }
+	.status-container.verifying {
+		color: #3b82f6;
+		background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+		border-color: #bfdbfe;
+	}
 
-  .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid #bfdbfe;
-    border-top-color: #3b82f6;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
+	.spinner {
+		width: 16px;
+		height: 16px;
+		border: 2px solid #bfdbfe;
+		border-top-color: #3b82f6;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 
-  .resend-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    text-align: center;
-  }
+	.resend-section {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		text-align: center;
+	}
 
-  .resend-text {
-    color: #6b7280;
-    font-size: 0.875rem;
-    margin: 0;
-  }
+	.resend-text {
+		color: #6b7280;
+		font-size: 0.875rem;
+		margin: 0;
+	}
 
-  .resend-button {
-    background: none;
-    border: none;
-    color: #3b82f6;
-    font-size: 0.875rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-  }
+	.resend-button {
+		background: none;
+		border: none;
+		color: #3b82f6;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		transition: all 0.2s ease;
+	}
 
-  .resend-button:hover:not(:disabled) {
-    background: #eff6ff;
-    color: #1d4ed8;
-  }
+	.resend-button:hover:not(:disabled) {
+		background: #eff6ff;
+		color: #1d4ed8;
+	}
 
-  .resend-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+	.resend-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 
-  /* Mobile responsiveness */
-  @media (max-width: 480px) {
-    .verification-container {
-      gap: 1.5rem;
-    }
+	/* Mobile responsiveness */
+	@media (max-width: 480px) {
+		.verification-container {
+			gap: 1.5rem;
+		}
 
-    .otp-grid {
-      gap: 0.5rem;
-    }
+		.otp-grid {
+			gap: 0.5rem;
+		}
 
-    .otp-digit {
-      width: 48px;
-      height: 48px;
-      font-size: 1.25rem;
-    }
-  }
+		.otp-digit {
+			width: 48px;
+			height: 48px;
+			font-size: 1.25rem;
+		}
+	}
 </style>
