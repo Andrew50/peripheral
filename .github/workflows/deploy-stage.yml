@@ -47,7 +47,7 @@ concurrency:
 jobs:
   detect_changes:
     if: github.event_name == 'push'
-    timeout-minutes: 30
+    timeout-minutes: 3
     uses: ./.github/workflows/detect-changes.yml
 
   compute_manual_strategy:
