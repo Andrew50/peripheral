@@ -385,6 +385,7 @@ func (p *PolygonSocketService) streamPolygonDataToRedis() {
 					flagTickerStale(symbol)
 					// Mark ticker as updated for alert processing
 					if err := markTickerUpdatedForAlerts(p.conn, symbol, msg.EndTimestamp); err != nil {
+
 						// Log error but don't fail the entire trade processing
 						log.Printf("⚠️ Failed to mark ticker %s as updated for alerts: %v", symbol, err)
 					}
@@ -558,8 +559,17 @@ func initTickerToSecurityIDMap(conn *data.Conn) error {
 }
 
 // markTickerUpdatedForAlerts marks a ticker as updated for alert processing
-func markTickerUpdatedForAlerts(conn *data.Conn, ticker string, timestampNanos int64) error {
-	// Convert nanosecond timestamp to milliseconds for Redis storage
-	timestampMs := timestampNanos / 1000000
-	return data.MarkTickerUpdated(conn, ticker, timestampMs)
+func markTickerUpdatedForAlerts(conn *data.Conn, ticker string, rawTimestamp int64) error {
+	// Some Polygon streams already provide millisecond epoch timestamps (13-digit).
+	// Others provide nanoseconds. Detect heuristically to avoid losing precision.
+
+	//TODO: this is a hack to get the timestamp in milliseconds
+	var tsMs int64
+	if rawTimestamp > 1e12 { // already looks like milliseconds since epoch (~2001-2286)
+		tsMs = rawTimestamp
+	} else {
+		tsMs = rawTimestamp / 1_000_000 // convert nanoseconds → milliseconds
+	}
+
+	return data.MarkTickerUpdated(conn, ticker, tsMs)
 }
