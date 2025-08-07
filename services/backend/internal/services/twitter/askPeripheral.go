@@ -125,7 +125,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	model := "o4-mini"
+	model := "gpt-5"
 	thinkingEffort := "medium"
 	rawSchema := ref.Reflect(AgentReplyTweet{})
 	b, _ := json.Marshal(rawSchema)

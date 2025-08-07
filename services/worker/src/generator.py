@@ -598,7 +598,7 @@ def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: O
             user_prompt += "\n- Handle NaN values with .dropna() before statistical operations"
             user_prompt += "\n- Ensure proper error handling for edge cases"
 
-        model_name = "o3"
+        model_name = "gpt-5-mini"
         last_error = None
 
 
