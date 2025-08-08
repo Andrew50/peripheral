@@ -60,42 +60,43 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 	chatResultText := ""
 	var availablePlots []map[string]interface{}
 
-	for _, chunk := range chatResult.ContentChunks {
-		if chunk.Type == "text" {
-			chatResultText += chunk.Content.(string)
-		} else if chunk.Type == "table" {
-			tableData := chunk.Content.(map[string]interface{})
-			chatResultText += "\n Table: " + tableData["caption"].(string) + "\n"
+    for _, chunk := range chatResult.ContentChunks {
+        switch chunk.Type {
+        case "text":
+            chatResultText += chunk.Content.(string)
+        case "table":
+            tableData := chunk.Content.(map[string]interface{})
+            chatResultText += "\n Table: " + tableData["caption"].(string) + "\n"
 
-			// Append column headers if they exist
-			if headers, ok := tableData["headers"].([]interface{}); ok {
-				chatResultText += "Columns: "
-				for i, header := range headers {
-					if i > 0 {
-						chatResultText += ", "
-					}
-					chatResultText += fmt.Sprintf("%v", header)
-				}
-				chatResultText += "\n"
-			}
-		} else if chunk.Type == "plot" {
-			if plotData, ok := chunk.Content.(map[string]interface{}); ok {
-				plotInfo := map[string]interface{}{
-					"index":        len(availablePlots),
-					"originalPlot": plotData,
-				}
-				if title, exists := plotData["title"].(string); exists {
-					plotInfo["title"] = title
-				} else {
-					plotInfo["title"] = fmt.Sprintf("Plot %d", len(availablePlots)+1)
-				}
-				if chartType, exists := plotData["chart_type"].(string); exists {
-					plotInfo["chart_type"] = chartType
-				}
-				availablePlots = append(availablePlots, plotInfo)
-			}
-		}
-	}
+            // Append column headers if they exist
+            if headers, ok := tableData["headers"].([]interface{}); ok {
+                chatResultText += "Columns: "
+                for i, header := range headers {
+                    if i > 0 {
+                        chatResultText += ", "
+                    }
+                    chatResultText += fmt.Sprintf("%v", header)
+                }
+                chatResultText += "\n"
+            }
+        case "plot":
+            if plotData, ok := chunk.Content.(map[string]interface{}); ok {
+                plotInfo := map[string]interface{}{
+                    "index":        len(availablePlots),
+                    "originalPlot": plotData,
+                }
+                if title, exists := plotData["title"].(string); exists {
+                    plotInfo["title"] = title
+                } else {
+                    plotInfo["title"] = fmt.Sprintf("Plot %d", len(availablePlots)+1)
+                }
+                if chartType, exists := plotData["chart_type"].(string); exists {
+                    plotInfo["chart_type"] = chartType
+                }
+                availablePlots = append(availablePlots, plotInfo)
+            }
+        }
+    }
 	// Build comprehensive prompt with plot information
 	promptText := fmt.Sprintf("Query: %s\n Response: %s\n\n", tweetText, chatResultText)
 	// append information about plots

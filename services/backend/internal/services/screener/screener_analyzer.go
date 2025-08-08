@@ -1,4 +1,4 @@
-package screener
+package screener //nolint:errcheck // File writes in analysis are best-effort; ignoring errors is acceptable for diagnostics
 
 import (
 	"backend/internal/data"

@@ -1,3 +1,4 @@
+// Package main contains a small utility to validate DB connectivity for CI.
 package main
 
 import (

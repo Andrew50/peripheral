@@ -6,9 +6,11 @@ Centralized connection management for Redis and Database connections
 import os
 import logging
 from contextlib import contextmanager
+from typing import Iterator, Optional, Type
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2.extensions import connection as PGConnection, cursor as PGCursor
 
 import redis
 from openai import OpenAI
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 class Conn:
     """Centralized connection manager for Redis and Database connections"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize all connections"""
         self.redis_client = self._init_redis()
         self.db_conn = self._init_database()
@@ -33,7 +35,7 @@ class Conn:
         self.environment = None
         self._init_environment()
 
-    def _init_environment(self):
+    def _init_environment(self) -> None:
         """Initialize environment variables"""
         self.environment = os.getenv('ENVIRONMENT')
         # Treat empty ENVIRONMENT or common dev variants uniformly
@@ -41,7 +43,7 @@ class Conn:
             self.environment = "dev"
         else:
             self.environment = "prod"
-    def _init_openai_client(self):
+    def _init_openai_client(self) -> None:
         """Initialize OpenAI client"""
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
@@ -49,7 +51,7 @@ class Conn:
 
         self.openai_client = OpenAI(api_key=api_key)
 
-    def _init_gemini_client(self):
+    def _init_gemini_client(self) -> None:
         """Initialize Gemini client"""
         api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
@@ -81,7 +83,7 @@ class Conn:
 
         return client
 
-    def _init_database(self):
+    def _init_database(self) -> PGConnection:
         """Initialize database connection"""
         db_host = os.environ.get("DB_HOST", "db")
         db_port = os.environ.get("DB_PORT", "5432")
@@ -102,7 +104,7 @@ class Conn:
             logger.error("❌ Failed to connect to database: %s", db_error)
             raise
 
-    def ensure_db_connection(self):
+    def ensure_db_connection(self) -> None:
         """Ensure database connection is healthy, reconnect if needed"""
         try:
             # Test the connection with a simple query
@@ -165,7 +167,7 @@ class Conn:
             raise
 
     @contextmanager
-    def transaction(self, cursor_factory=RealDictCursor):
+    def transaction(self, cursor_factory: Optional[Type[PGCursor]] = RealDictCursor) -> Iterator[PGCursor]:
         """
         Database transaction context manager that automatically handles commits and rollbacks.
         This prevents 'current transaction is aborted' errors by ensuring proper transaction cleanup.
@@ -192,7 +194,7 @@ class Conn:
             logger.error("❌ Failed to ensure database connection before transaction: %s", conn_error, exc_info=True)
             raise
 
-        cursor = None
+        cursor: Optional[PGCursor] = None
         try:
             # Start transaction by getting cursor with specified factory
             cursor = self.db_conn.cursor(cursor_factory=cursor_factory)
@@ -241,13 +243,13 @@ class Conn:
                     logger.warning("⚠️ Error closing cursor (non-critical): %s", close_error)
 
     @contextmanager
-    def get_connection(self):
+    def get_connection(self) -> Iterator[PGConnection]:
         """Context manager to yield a healthy database connection."""
         # Ensure the DB connection is healthy or reconnect if needed
         self.ensure_db_connection()
         yield self.db_conn
 
-    def check_connections(self):
+    def check_connections(self) -> None:
         """Lightweight connection check - only when necessary"""
         # Quick Redis ping - this is very fast
         try:
@@ -263,7 +265,7 @@ class Conn:
             logger.error("Database connection check failed: %s", db_check_error)
             # Don't raise here to avoid interrupting the worker loop
 
-    def close_connections(self):
+    def close_connections(self) -> None:
         """Close all connections gracefully"""
         try:
             if hasattr(self, 'redis_client') and self.redis_client:

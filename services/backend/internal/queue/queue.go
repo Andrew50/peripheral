@@ -409,7 +409,11 @@ func (h *Handle) eventLoop(ctx context.Context, maxRetries int, timeout time.Dur
 	// Subscribe to unified task status channel
 	statusChannel := fmt.Sprintf("task_status:%s", statusID)
 	pubsub := h.conn.Cache.Subscribe(ctx, statusChannel)
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			log.Printf("error closing pubsub: %v", err)
+		}
+	}()
 
 	ch := pubsub.Channel()
 	log.Printf("🔔 Subscribed to status channel: %s", statusChannel)

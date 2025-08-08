@@ -1,3 +1,4 @@
+// Package limits implements credit usage, alert limits, and related accounting.
 package limits
 
 import (
@@ -15,12 +16,16 @@ import (
 // UsageType represents different types of resource usage
 type UsageType string
 
+// UsageType constants define categories of usage used for enforcing limits.
 const (
 	// UsageTypeCredits represents usage that consumes credits
-	UsageTypeCredits       UsageType = "credits"
-	UsageTypeAlert         UsageType = "alert"
+	UsageTypeCredits UsageType = "credits"
+	// UsageTypeAlert represents standard alert usage
+	UsageTypeAlert UsageType = "alert"
+	// UsageTypeStrategyAlert represents strategy alert usage
 	UsageTypeStrategyAlert UsageType = "strategy_alert"
-	UsageTypeBacktest      UsageType = "backtest"
+	// UsageTypeBacktest represents backtest usage
+	UsageTypeBacktest UsageType = "backtest"
 )
 
 // UserUsage represents the current credits and usage for a user
@@ -289,7 +294,7 @@ func ResetUserSubscriptionCredits(conn *data.Conn, userID int, productKey string
 }
 
 // GetUserUsageStats returns usage statistics for a user
-func GetUserUsageStats(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+func GetUserUsageStats(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

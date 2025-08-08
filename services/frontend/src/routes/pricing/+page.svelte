@@ -1747,12 +1747,12 @@
 		color: #f5f9ff;
 	}
 
-	.feature-value .is-yes {
+	.feature-value.is-yes {
 		color: var(--landing-success, #22c55e);
 		font-size: 1.25rem;
 	}
 
-	.feature-value .is-no {
+	.feature-value.is-no {
 		color: rgb(245 249 255 / 40%);
 		font-size: 1.25rem;
 	}

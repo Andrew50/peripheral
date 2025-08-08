@@ -7,7 +7,7 @@ import re
 import time
 import asyncio
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional, cast
 from datetime import datetime
 from google.genai import types
 from validator import validate_code
@@ -231,7 +231,21 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
 
 
 
-async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, data: str, conversation_id: str, message_id: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+async def start_general_python_agent(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    data: str,
+    conversation_id: str,
+    message_id: str,
+) -> Tuple[
+    List[Dict[str, Any]],
+    str,
+    List[Dict[str, Any]],
+    List[Dict[str, Any]],
+    str,
+    Optional[Exception],
+]:
     # Generate unique execution_id for this run - accessible throughout method
     execution_serial = int(time.time())  # Seconds timestamp
     execution_id = f"{user_id}_{execution_serial}"
@@ -322,7 +336,14 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
                 error_message=None
             ))
 
-            return result.result, result.prints, result.plots, result.response_images, execution_id, None
+            return (
+                result.result,
+                result.prints,
+                result.plots,
+                result.response_images,
+                execution_id,
+                None,
+            )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             capture_exception(logger, e)
@@ -356,7 +377,7 @@ def _extract_python_code(response: str) -> str:
     """Extract Python code from response, removing markdown formatting"""
     # Remove markdown code blocks
     code_block_pattern = r'```(?:python)?\s*(.*?)\s*```'
-    matches = re.findall(code_block_pattern, response, re.DOTALL)
+    matches = cast(List[str], re.findall(code_block_pattern, response, re.DOTALL))
 
     if matches:
         return matches[0].strip()
@@ -364,10 +385,18 @@ def _extract_python_code(response: str) -> str:
     # If no code blocks found, return the response as-is
     return response.strip()
 
-async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, python_code: str,
-                                execution_id: str, result: Any = None, prints: str = "",
-                                plots: list = None, response_images: list = None,
-                                error_message: str = None) -> bool:
+async def _save_agent_python_code(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    python_code: str,
+    execution_id: str,
+    result: Any | None = None,
+    prints: str = "",
+    plots: Optional[List[Dict[str, Any]]] = None,
+    response_images: Optional[List[Dict[str, Any]]] = None,
+    error_message: Optional[str] = None,
+) -> bool:
     """Save Python agent execution to database"""
     conn = None
     cursor = None
@@ -401,10 +430,19 @@ async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, pytho
 
 
 
-def python_agent(ctx: Context, user_id: int = None,
-                                    prompt: str = None, data: str = None, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
+def python_agent(
+    ctx: Context,
+    user_id: Optional[int] = None,
+    prompt: Optional[str] = None,
+    data: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+) -> Dict[str, Any]:
 # Initialize defaults to avoid scope issues
-    result, prints, plots, response_images = [], "", [], []
+    result: List[Dict[str, Any]] = []
+    prints: str = ""
+    plots: List[Dict[str, Any]] = []
+    response_images: List[Dict[str, Any]] = []
     execution_id = None  # Initialize to avoid UnboundLocalError
 
     #try:
@@ -424,9 +462,9 @@ def python_agent(ctx: Context, user_id: int = None,
             ctx=ctx,
             user_id=user_id,
             prompt=prompt,
-            data=data,
-            conversation_id=conversation_id,
-            message_id=message_id
+            data=data or "",
+            conversation_id=conversation_id or "",
+            message_id=message_id or "",
         )
     )
 
