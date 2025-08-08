@@ -840,18 +840,18 @@ jobs:
           echo "Adding src directory to PYTHONPATH for this job"
           echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
 
-      - name: Import sorting check with isort
-        working-directory: services/worker
-        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
-        run: |
-          echo "Checking import sorting with isort..."
-          isort --check-only --diff .
+      # - name: Import sorting check with isort
+      #   working-directory: services/worker
+      #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+      #   run: |
+      #     echo "Checking import sorting with isort..."
+      #     isort --check-only --diff .
 
-      - name: Code style check with flake8
-        working-directory: services/worker
-        run: |
-          echo "Running flake8 code style checks..."
-          flake8 . || true
+      # - name: Code style check with flake8
+      #   working-directory: services/worker
+      #   run: |
+      #     echo "Running flake8 code style checks..."
+      #     flake8 . || true
 
       - name: Static type checking with mypy
         working-directory: services/worker

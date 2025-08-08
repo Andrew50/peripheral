@@ -314,7 +314,7 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	switch {
 	case err == pgx.ErrNoRows:
-		log.Printf("Verification failed: No user found for id: %s", userID)
+		log.Printf("Verification failed: No user found for id: %d", userID)
 		return nil, fmt.Errorf("No user found")
 	case err != nil:
 		log.Printf("ERROR: Database query failed during user check: %v", err)
