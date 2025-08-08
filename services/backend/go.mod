@@ -2,7 +2,7 @@ module backend
 
 go 1.23.0
 
-toolchain go1.24.3
+toolchain go1.24.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.5
@@ -12,7 +12,7 @@ require (
 	github.com/dghubble/oauth1 v0.7.3
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-rod/rod v0.116.2
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/invopop/jsonschema v0.13.0
