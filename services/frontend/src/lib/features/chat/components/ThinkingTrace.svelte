@@ -725,7 +725,6 @@
 		background-position: -100% 0;
 		background-repeat: no-repeat;
 		background-clip: text;
-		background-clip: text;
 		animation: loading-text-highlight 3s infinite linear;
 		animation-delay: 0.3s;
 		display: flex;

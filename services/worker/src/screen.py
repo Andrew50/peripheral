@@ -2,7 +2,6 @@
 Screening module
 """
 
-import time
 import logging
 from typing import List, Dict, Any
 from .engine import execute_strategy
@@ -57,7 +56,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
             'instances': ranked_results
         }
 
-    except Exception as e:
+    except ValueError as e:
         error_obj = capture_exception(logger, e)
         return {
             'success': False,

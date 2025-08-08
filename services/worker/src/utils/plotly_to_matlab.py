@@ -7,8 +7,6 @@ from io import BytesIO
 import base64
 
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +86,7 @@ def create_matlab_plot(plottable_data, trace_name, ax):
         plotted = True
     
     return plotted
+
 
 
 def plotly_to_matplotlib_png(plotly_fig, plot_id, id_naming, strategy_id, version=None) -> str:

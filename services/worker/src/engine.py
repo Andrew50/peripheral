@@ -20,7 +20,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
-from utils.plotlyToMatlab import plotly_to_matplotlib_png
+from utils.plotly_to_matlab import plotly_to_matplotlib_png
 from utils.context import Context
 from utils.data_accessors import _get_bar_data, _get_general_data
 from utils.error_utils import capture_exception

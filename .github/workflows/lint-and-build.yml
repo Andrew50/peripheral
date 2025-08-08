@@ -842,9 +842,10 @@ jobs:
 
       - name: Import sorting check with isort
         working-directory: services/worker
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
         run: |
           echo "Checking import sorting with isort..."
-          isort --check-only --diff . || true
+          isort --check-only --diff .
 
       - name: Code style check with flake8
         working-directory: services/worker
@@ -854,9 +855,10 @@ jobs:
 
       - name: Static type checking with mypy
         working-directory: services/worker
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
         run: |
           echo "Running mypy static type checking..."
-          mypy . || true  # Allow mypy to fail softly for now
+          mypy .
 
       - name: Comprehensive linting with pylint
         working-directory: services/worker

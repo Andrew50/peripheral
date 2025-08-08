@@ -245,7 +245,6 @@
 		});
 	}
 
-
 	async function loadIcons() {
 		if (isLoadingIcons) return;
 		isLoadingIcons = true;
@@ -293,7 +292,6 @@
 		isLoadingIcons = false;
 	}
 
-
 	function clickHandler(
 		event: MouseEvent,
 		instance: WatchlistItem,
@@ -301,7 +299,7 @@
 		force: number | null = null
 	) {
 		const button = force !== null ? force : event.button;
-		if($isMobileDevice) {
+		if ($isMobileDevice) {
 			switchMobileTab('chart');
 		}
 		event.preventDefault();
@@ -316,8 +314,6 @@
 			flagSecurity(instance);
 		}
 	}
-
-
 
 	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	// Use original column name 'Ticker'
@@ -412,12 +408,11 @@
 	onDestroy(() => {
 		window.removeEventListener('keydown', handleKeydown);
 	});
-	
+
 	// Add reactive synchronization with activeChartInstance
 	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
 		syncWatchlistWithActiveChart($activeChartInstance.ticker);
 	}
-
 </script>
 
 <div class="table-container" class:mobile={$isMobileDevice}>
@@ -611,10 +606,14 @@
 		vertical-align: middle;
 	}
 
-	/* Ticker column - reduce left padding */
+	/* Ticker column - reduce left padding and define width/alignment */
 	th:nth-child(2),
 	td:nth-child(2) {
 		padding-left: clamp(1px, 0.2vw, 2px);
+		width: 25%;
+		min-width: 45px;
+		text-align: left;
+		padding-right: clamp(1px, 0.2vw, 2px);
 	}
 
 	/* Second-to-last column (Extended hours) - reduce right padding */
@@ -702,18 +701,15 @@
 
 	.sorting {
 		background-color: transparent;
+		position: relative;
 	}
 
-	table.sorting tbody tr {
+	.sorting tbody tr {
 		opacity: 0.7;
 		transition: opacity 0.3s ease;
 	}
 
-	table.sorting {
-		position: relative;
-	}
-
-	table.sorting::after {
+	.sorting::after {
 		content: '';
 		position: absolute;
 		inset: 0;
@@ -825,14 +821,6 @@
 	}
 
 	/* Define widths for main content columns */
-	th:nth-child(2),
-	td:nth-child(2) {
-		width: 25%;
-		min-width: 45px;
-		text-align: left;
-		padding-right: clamp(1px, 0.2vw, 2px);
-	}
-
 	th:nth-child(3),
 	td:nth-child(3) {
 		width: 18%;
@@ -911,12 +899,12 @@
 	}
 
 	/* Selected row enhancement */
-	tbody tr.selected {
+	tbody .selected {
 		outline: 2px solid #cfd0d2;
 		border-radius: 6px;
 	}
 
-	tbody tr.selected::after {
+	tbody .selected::after {
 		opacity: 0;
 	}
 

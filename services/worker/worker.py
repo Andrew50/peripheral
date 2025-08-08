@@ -5,9 +5,6 @@ Executes trading strategies via Redis queue for backtesting and screening
 """
 # pylint: disable=import-error
 
-import os
-import sys
-
 import asyncio
 import json
 import logging
@@ -15,7 +12,6 @@ import threading
 import time
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.agent import python_agent
 from src.backtest import backtest
 from src.screen import screen
@@ -59,7 +55,6 @@ class Worker:
 
     def run(self):
         """Main queue processing loop with priority queue support"""
-
 
 
 
