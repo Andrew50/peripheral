@@ -62,6 +62,7 @@ class Worker:
 
 
 
+
         while True:
             task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
             if not task:
