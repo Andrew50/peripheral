@@ -25,6 +25,7 @@ func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strate
 	return conn.Cache.Set(ctx, cacheKey, cacheData, cachedDataTTL).Err()
 }
 
+// GetBacktestFromCache retrieves a cached backtest response or computes and caches it on a miss.
 func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int) (*BacktestResponse, error) {
 	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 
@@ -62,6 +63,7 @@ func GetBacktestFromCache(ctx context.Context, conn *data.Conn, userID int, stra
 	return &response, nil
 }
 
+// InvalidateBacktestInstancesCache removes a cached backtest response for the given identifiers.
 func InvalidateBacktestInstancesCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int) error {
 	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 

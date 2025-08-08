@@ -531,8 +531,8 @@ jobs:
           args: >-
             --timeout=3m
             --config=.golangci.yml
-            --max-issues-per-linter=10
-            --max-same-issues=5
+             --max-issues-per-linter=0
+             --max-same-issues=0
             --build-tags=all
             --allow-parallel-runners
             --path-prefix=services/backend
@@ -870,8 +870,9 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running bandit security checks..."
-          bandit -r . -f json -o bandit-report.json || true
-          bandit -r . -f txt
+          # Restrict scan to project code and exclude virtualenv and caches to avoid scanning site-packages
+          bandit -r src worker.py -x .venv,venv,env,.tox,build,dist,.mypy_cache,.pytest_cache -f json -o bandit-report.json || true
+          bandit -r src worker.py -x .venv,venv,env,.tox,build,dist,.mypy_cache,.pytest_cache -f txt
 
       - name: Dependency vulnerability scanning with safety
         working-directory: services/worker

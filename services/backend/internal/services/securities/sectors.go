@@ -46,6 +46,9 @@ type meta struct{ Sector, Industry string }
 //  Public entry-point                                                 //
 // ------------------------------------------------------------------- //
 
+// UpdateSectors updates `securities.sector` and `securities.industry` for all tickers
+// that lack a `maxDate` by sourcing metadata from the US-Stock-Symbols repository.
+// It fetches exchange listings, builds a ticker→(sector,industry) map, and applies updates.
 func UpdateSectors(ctx context.Context, c *data.Conn) error {
 	// ---------------------------------------------------------------- //
 	// 1. Load sector / industry map once                               //

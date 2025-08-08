@@ -119,9 +119,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 			return fmt.Errorf("reactivate tickers for %s: %w", targetDateStr, err)
 		}
 		ipos, err := polygon.GetPolygonIPOs(conn.Polygon, targetDateStr)
-		if err != nil {
-			// Continue processing even if IPO fetch fails
-		} else {
+		if err == nil {
 			// 4) INSERT new IPO tickers with mindate = current date
 			for _, ipo := range ipos.Tickers {
 				if _, err := data.ExecWithRetry(ctx, conn.DB, `
@@ -129,7 +127,7 @@ func SimpleUpdateSecurities(conn *data.Conn) error {
 					VALUES ($1, $2, $3)
 					ON CONFLICT (ticker, mindate) DO NOTHING
 				`, ipo, currentDate, ""); err != nil {
-					// Continue processing other IPOs even if one fails
+					// swallow and continue to next IPO
 				}
 			}
 		}
@@ -707,7 +705,7 @@ func SimpleUpdateSecuritiesV2(conn *data.Conn) error {
 }
 
 // validateSecurityInsertionV2 checks if a security insertion would violate database constraints
-func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, _ string, debug bool) error {
+func validateSecurityInsertionV2(ctx context.Context, conn *data.Conn, securityID *int, ticker string, minDate string, _ string, _ bool) error {
 	// Check for (securityid, minDate) constraint violation
 	if securityID != nil {
 		var count int
