@@ -46,8 +46,11 @@ func SendTweetToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPeriphe
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error sending tweet: %v", err)
+		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusCreated { // 201 on success
 		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
 		return
@@ -73,8 +76,11 @@ func SendTweetReplyToPeripheralTwitterAccount(conn *data.Conn, tweet FormattedPe
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error sending tweet: %v", err)
+		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusCreated { // 201 on success
 		log.Printf("X API returned %d — check rate limit or perms", resp.StatusCode)
 		err = telegram.SendTelegramAskPeripheralTweets(replyToTweetID, tweet.Text, tweet.Image)
@@ -115,7 +121,9 @@ func UploadImageToTwitter(conn *data.Conn, image string) (string, error) {
 		log.Printf("Error sending request: %v", err)
 		return "", fmt.Errorf("error sending request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)

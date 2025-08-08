@@ -791,7 +791,9 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 		log.Printf("ERROR: Failed getting Google user info: %v", err)
 		return nil, fmt.Errorf("failed getting user info: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var googleUser GoogleUser
 	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {

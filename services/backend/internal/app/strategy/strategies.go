@@ -32,6 +32,7 @@ type ScreeningResponse struct {
 	UniverseSize  int                `json:"universeSize"`
 }
 
+// ScreeningResult represents a single ranked screening result.
 type ScreeningResult struct {
 	Symbol       string                 `json:"symbol"`
 	Score        float64                `json:"score"`
@@ -96,7 +97,7 @@ func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json
 	return response, nil
 }
 
-// Worker screening types and functions
+// WorkerScreeningResult captures the worker's response for a screening run.
 type WorkerScreeningResult struct {
 	Success         bool                 `json:"success"`
 	StrategyID      int                  `json:"strategy_id"`
@@ -108,6 +109,7 @@ type WorkerScreeningResult struct {
 	ErrorMessage    string               `json:"error_message,omitempty"`
 }
 
+// WorkerRankedResult represents a single ranked item returned by the worker.
 type WorkerRankedResult struct {
 	Symbol       string                 `json:"symbol"`
 	Score        float64                `json:"score"`

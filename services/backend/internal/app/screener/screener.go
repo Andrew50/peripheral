@@ -428,9 +428,9 @@ type Filter struct {
 	Value    interface{}
 }
 
-// ScreenerArgs defines the inputs for constructing a screener query including
+// Args defines the inputs for constructing a screener query including
 // selected columns, sorting, limiting, and a list of filters.
-type ScreenerArgs struct {
+type Args struct {
 	ReturnColumns []string
 	OrderBy       string
 	SortDirection string
@@ -656,8 +656,8 @@ func validateSingleValue(colType ColumnType, value interface{}) error {
 	return nil
 }
 
-// validateArgs validates the entire ScreenerArgs struct
-func validateArgs(args ScreenerArgs) error {
+// validateArgs validates the entire Args struct
+func validateArgs(args Args) error {
 	// Validate return columns
 	if len(args.ReturnColumns) == 0 {
 		return ValidationError{
@@ -743,7 +743,7 @@ func validateArgs(args ScreenerArgs) error {
 }
 
 // buildQuery constructs the SQL query with proper parameterization
-func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
+func buildQuery(args Args) (string, []interface{}, error) {
 	var queryParts []string
 	var params []interface{}
 	paramIndex := 1
@@ -950,7 +950,7 @@ func convertDBValue(v interface{}) interface{} {
 
 // GetScreenerData retrieves screener data based on the provided arguments
 func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	var args ScreenerArgs
+	var args Args
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal screener arguments: %w", err)
 	}
