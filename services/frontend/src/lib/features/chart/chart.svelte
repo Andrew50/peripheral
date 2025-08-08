@@ -2622,7 +2622,6 @@
 	{/if}
 </div>
 
-
 <!-- Replace the filing info overlay with a more generic event info overlay -->
 {#if selectedEvent}
 	{@const chartContainer = document.getElementById(`chart_container-${chartId}`)}
@@ -2880,11 +2879,11 @@
 		background: rgb(0 0 0 / 40%);
 		z-index: 500; /* Above chart but below legend and UI elements */
 		opacity: 0;
-		animation: fadeInOverlay 0.2s ease-out forwards;
+		animation: fade-in-overlay 0.2s ease-out forwards;
 		pointer-events: none; /* Allow clicks to pass through */
 	}
 
-	@keyframes fadeInOverlay {
+	@keyframes fade-in-overlay {
 		from {
 			opacity: 0;
 		}

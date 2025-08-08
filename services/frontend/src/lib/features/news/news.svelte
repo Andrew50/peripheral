@@ -279,7 +279,7 @@
 		transition: all 0.2s;
 	}
 
-	.tab-navigation button.active {
+	.tab-navigation .active {
 		color: white;
 		background-color: #444;
 	}

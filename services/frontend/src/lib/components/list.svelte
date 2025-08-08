@@ -768,6 +768,7 @@
 
 	.sorting {
 		position: relative;
+		background-color: var(--ui-bg-hover);
 	}
 
 	.sorting::after {
@@ -788,10 +789,6 @@
 		margin-left: 4px;
 		font-size: 0.8em;
 		opacity: 0.7;
-	}
-
-	.sorting {
-		background-color: var(--ui-bg-hover);
 	}
 
 	.sort-asc .sort-icon,
@@ -886,14 +883,6 @@
 		padding-right: 8px;
 	}
 
-	tr:hover .delete-button {
-		opacity: 1;
-	}
-
-	tr:hover td {
-		background-color: var(--ui-bg-hover);
-	}
-
 	.loading,
 	.error,
 	.no-results {
@@ -985,6 +974,8 @@
 	}
 
 	th:last-child {
+		position: sticky;
+		right: 0;
 		z-index: 3; /* Above tbody cells and sort overlay */
 		background-color: var(--ui-bg-element); /* Ensure header BG */
 	}
@@ -1006,10 +997,6 @@
 
 	.delete-button:hover {
 		color: var(--negative-hover, red); /* Darker red on hover */
-	}
-
-	tr:hover .delete-button {
-		opacity: 1;
 	}
 
 	/* Adjust background for sticky columns on hover/select */
