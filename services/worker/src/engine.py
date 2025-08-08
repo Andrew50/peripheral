@@ -498,12 +498,12 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                 except (ValueError, TypeError, OverflowError):
                     # Handle invalid timestamps
                     serializable_instance[key] = None
-            elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
+            #elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
                 # Handle pandas nullable integer types
-                serializable_instance[key] = int(value.item()) if pd.notna(value) else None
-            elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
+                #serializable_instance[key] = int(value.item()) if pd.notna(value) else None
+            #elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
                 # Handle pandas nullable float types
-                serializable_instance[key] = float(value.item()) if pd.notna(value) else None
+                #serializable_instance[key] = float(value.item()) if pd.notna(value) else None
             elif pd.isna(value):
                 # Handle pandas NA values early to avoid unreachable branch
                 serializable_instance[key] = None

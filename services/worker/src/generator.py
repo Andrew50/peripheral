@@ -85,11 +85,10 @@ def _parse_filter_needs_response(response: Any) -> Dict[str, bool]:
 
 def _get_system_instruction(ctx: Context, prompt: str) -> str:
     """Get system instruction for OpenAI code generation with current database filter values"""
-    contents = [
-        types.Content(role="user", parts=[
-            types.Part.from_text(text=prompt),
-        ])
-    ]
+    content = types.Content(
+        role="user",
+        parts=[types.Part.from_text(text=prompt)],
+    )
     generate_content_config = types.GenerateContentConfig(
         thinking_config = types.ThinkingConfig(
             thinking_budget=0
@@ -103,7 +102,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
     )
     response = ctx.conn.gemini_client.models.generate_content(
         model="gemini-2.5-flash-lite-preview-06-17",
-        contents=contents,
+        contents=content,
         config=generate_content_config,
     )
 
@@ -568,8 +567,7 @@ def _generate_and_validate_strategy(
             capture_exception(logger, e)
             last_validation_error = str(e)
       
-        if attempt == max_retries:
-            break
+        # No explicit break needed; loop naturally ends at max_retries
 
     return ""
 
@@ -620,15 +618,23 @@ def _generate_strategy_code(
 
 
 
-        response = ctx.conn.openai_client.responses.create(
-            model=model_name,
-            reasoning={"effort": "low"},
-            input=user_prompt,
-            instructions=system_instruction,
-            user="user:0",
-            metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
-            timeout=150.0  # 150 second timeout for other models
-        )
+        openai_request: Dict[str, Any] = {
+            "model": model_name,
+            "reasoning": {"effort": "low"},
+            "input": user_prompt,
+            "instructions": system_instruction,
+            "user": "user:0",
+            "metadata": {
+                "userID": str(user_id),
+                "env": ctx.conn.environment,
+                "convID": conversation_id,
+                "msgID": message_id,
+            },
+            "timeout": 150.0,
+        }
+
+        openai_responses: Any = ctx.conn.openai_client.responses
+        response = openai_responses.create(**openai_request)
 
         strategy_code = response.output_text
         strategy_code = _extract_python_code(strategy_code)
