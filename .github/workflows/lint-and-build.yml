@@ -48,7 +48,7 @@ jobs:
       has_frontend_changes: ${{ steps.changed-paths.outputs.has_frontend_changes }}
       has_worker_changes: ${{ steps.changed-paths.outputs.has_worker_changes }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -455,7 +455,7 @@ jobs:
       XDG_CACHE_HOME: ${{ github.workspace }}/.cache
       GO111MODULE: "on"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
@@ -630,7 +630,7 @@ jobs:
       # Use workspace-local npm cache to avoid permission issues with /github/home/.npm
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
@@ -794,7 +794,7 @@ jobs:
       checks: write
       security-events: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
