@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+            clean: false
+            fetch-depth: 0
+            persist-credentials: false
       - name: Echo
         run: |
           echo "Runner: $RUNNER_NAME ($RUNNER_OS/$RUNNER_ARCH)"
