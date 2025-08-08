@@ -128,7 +128,11 @@ func updateTwitterAPIRule(conn *data.Conn, request TwitterAPIUpdateWebhookReques
 		log.Printf("Error making Twitter API request: %v", err)
 		return fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Warning: failed to close response body: %v", err)
+		}
+	}()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
@@ -179,7 +183,11 @@ func HandleTwitterWebhook(conn *data.Conn) http.HandlerFunc {
 			http.Error(w, "Error reading request body", http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				log.Printf("Warning: failed to close request body: %v", err)
+			}
+		}()
 
 		// Parse the JSON payload
 		var payload TwitterWebhookPayload

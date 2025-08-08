@@ -12,6 +12,13 @@ from datetime import datetime
 import importlib.util as _importlib_util
 import importlib as _importlib
 
+from .validator import validate_code
+from .utils.context import Context
+from .utils.data_accessors import get_available_filter_values
+from .utils.error_utils import capture_exception
+from .sandbox import PythonSandbox, create_default_config
+from .generator import _parse_filter_needs_response
+
 if TYPE_CHECKING:
     # Imported only for type checking; not executed at runtime
     from google.genai import types as genai_types 
@@ -22,12 +29,6 @@ _genai_types_runtime: Any | None = (
     if _importlib_util.find_spec("google.genai.types") is not None
     else None
 )
-from .validator import validate_code
-from .utils.context import Context
-from .utils.data_accessors import get_available_filter_values
-from .utils.error_utils import capture_exception
-from .sandbox import PythonSandbox, create_default_config
-from .generator import _parse_filter_needs_response
 
 
 logger = logging.getLogger(__name__)

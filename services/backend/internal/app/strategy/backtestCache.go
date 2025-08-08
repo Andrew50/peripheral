@@ -10,8 +10,10 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// BacktestCacheKey is the Redis cache key format for storing backtest results
 const BacktestCacheKey = "backtest:userID:%d:strategyID:%d:version:%d"
 
+// SetBacktestToCache stores a backtest response in Redis cache with TTL
 func SetBacktestToCache(ctx context.Context, conn *data.Conn, userID int, strategyID int, version int, response BacktestResponse) error {
 	cacheKey := fmt.Sprintf(BacktestCacheKey, userID, strategyID, version)
 

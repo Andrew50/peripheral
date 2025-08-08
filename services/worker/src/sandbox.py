@@ -158,7 +158,7 @@ class PythonSandbox:
         return_value: Any = None
 
         try:
-            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
+            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing  # pylint: disable=exec-used
             # Execute with stdout/stderr capture
             code_func: Optional[Callable[[], Any]] = safe_locals.get('code')
             if not code_func or not callable(code_func):

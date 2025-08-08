@@ -265,12 +265,14 @@ func convertScreeningInstances(instances []map[string]interface{}) []ScreeningRe
 	return results
 }
 
+// CreateStrategyFromPromptResult contains the result of creating a strategy from a prompt
 type CreateStrategyFromPromptResult struct {
 	StrategyID int    `json:"strategyId"`
 	Name       string `json:"name"`
 	Version    int    `json:"version"`
 }
 
+// AgentCreateStrategyFromPrompt creates a strategy from a prompt using the agent and sends updates via websocket
 func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	res, err := CreateStrategyFromPrompt(ctx, conn, userID, rawArgs)
 	if err != nil {
@@ -286,6 +288,7 @@ func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID 
 	}()*/
 	return res, nil
 }
+// CreateStrategyFromPrompt creates a new strategy from a natural language prompt using the worker queue
 func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START (WORKER QUEUE) ===")
 	log.Printf("UserID: %d", userID)
@@ -371,6 +374,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	return result, nil
 }
 
+// GetStrategies retrieves all strategies for a given user from the database
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT strategyid, name, 
@@ -430,6 +434,7 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 	return strategies, nil
 }
 
+// SetAlertArgs contains arguments for configuring strategy alerts
 type SetAlertArgs struct {
 	StrategyID int      `json:"strategyId"`
 	Active     bool     `json:"active"`
@@ -437,6 +442,7 @@ type SetAlertArgs struct {
 	Universe   []string `json:"universe,omitempty"`
 }
 
+// SetAlert configures alert settings for a strategy including threshold and universe
 func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -547,10 +553,12 @@ func syncStrategyUniverseToRedis(conn *data.Conn, strategyID int) error {
 	return nil
 }
 
+// DeleteStrategyArgs contains arguments for deleting a strategy
 type DeleteStrategyArgs struct {
 	StrategyID int `json:"strategyId"`
 }
 
+// DeleteStrategy removes a strategy from the database and updates alert counters
 func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

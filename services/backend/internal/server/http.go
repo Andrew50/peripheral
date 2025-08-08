@@ -344,7 +344,11 @@ func privateUploadHandler(conn *data.Conn) http.HandlerFunc {
 			handleError(w, err, "file")
 			return
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				log.Printf("Warning: failed to close file: %v", err)
+			}
+		}()
 
 		fileContent, err := io.ReadAll(file)
 		if err != nil {
@@ -759,7 +763,9 @@ func sendSSEError(w http.ResponseWriter, errMsg, streamID string) {
 }
 
 func sendSSEPing(w http.ResponseWriter) {
-	fmt.Fprintf(w, ": ping\n\n")
+	if _, err := fmt.Fprintf(w, ": ping\n\n"); err != nil {
+		log.Printf("Warning: failed to write ping: %v", err)
+	}
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -767,7 +773,9 @@ func sendSSEPing(w http.ResponseWriter) {
 
 func sendSSEEvent(w http.ResponseWriter, eventType string, data interface{}) {
 	jsonData, _ := json.Marshal(data)
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData))
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData)); err != nil {
+		log.Printf("Warning: failed to write SSE event: %v", err)
+	}
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
