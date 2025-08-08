@@ -585,14 +585,14 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				var minDuration time.Duration
 				var chunkOffset time.Duration
 
-                switch timeframe {
-                case "1-minute":
-                    minDuration = 7 * 24 * time.Hour
-                    chunkOffset = 4 * 30 * 24 * time.Hour // 4 months
-                case "1-day":
-                    minDuration = 60 * 24 * time.Hour
-                    chunkOffset = 8 * 365 * 24 * time.Hour // 8 years
-                }
+				switch timeframe {
+				case "1-minute":
+					minDuration = 7 * 24 * time.Hour
+					chunkOffset = 4 * 30 * 24 * time.Hour // 4 months
+				case "1-day":
+					minDuration = 60 * 24 * time.Hour
+					chunkOffset = 8 * 365 * 24 * time.Hour // 8 years
+				}
 
 				// Only compress if we have both bounds established
 				if !newState.Latest.IsZero() && !newState.Earliest.IsZero() {
