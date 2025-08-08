@@ -1,3 +1,5 @@
+// Package alerts contains the core alert processing loops for price and
+// strategy alerts, including throttling, metrics, and Redis integration.
 package alerts
 
 import (

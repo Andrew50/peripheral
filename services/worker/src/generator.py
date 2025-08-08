@@ -7,7 +7,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, cast
 
 from google.genai import types
 from validator import validate_strategy
@@ -28,7 +28,7 @@ _TIMEFRAME_RE = re.compile(
 
 def _detect_min_timeframe(code: str) -> str:
     """Extract the minimum timeframe from strategy code by parsing get_bar_data calls"""
-    matches = _TIMEFRAME_RE.findall(code)
+    matches: List[str] = cast(List[str], _TIMEFRAME_RE.findall(code))
     if not matches:
         return "1d"  # Default fallback
     
@@ -62,10 +62,10 @@ def _detect_min_timeframe(code: str) -> str:
     return min(matches, key=tf_as_minutes)
 
 
-def _parse_filter_needs_response( response) -> Dict[str, bool]:
+def _parse_filter_needs_response(response: Any) -> Dict[str, bool]:
     """Parse the Gemini API response to determine which filters are needed"""
     try:
-        response_text = response.text.strip()
+        response_text: str = str(response.text).strip()
         # Try to extract JSON if it's wrapped in code blocks
         if '```json' in response_text:
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
@@ -76,14 +76,14 @@ def _parse_filter_needs_response( response) -> Dict[str, bool]:
             if json_match:
                 response_text = json_match.group(1)
 
-        filter_needs = json.loads(response_text)
+        filter_needs: Dict[str, bool] = cast(Dict[str, bool], json.loads(response_text))
         return filter_needs
     except (json.JSONDecodeError, AttributeError) as e:
         logger.warning("Failed to parse filter needs JSON: %s, response: %s", e, response.text)
         # Default to needing all filters if parsing fails
         return {"sectors": True, "industries": True, "primary_exchanges": True}
 
-def _get_system_instruction(ctx, prompt: str) -> str:
+def _get_system_instruction(ctx: Context, prompt: str) -> str:
     """Get system instruction for OpenAI code generation with current database filter values"""
     contents = [
         types.Content(role="user", parts=[
@@ -478,12 +478,12 @@ def _get_system_instruction(ctx, prompt: str) -> str:
 
         Generate clean, robust Python code."""
 
-def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
+def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = -1, conversation_id: Optional[str] = None, message_id: Optional[str] = None) -> Dict[str, Any]:
 
 
     # Check if this is an edit operation
     is_edit = strategy_id != -1
-    existing_strategy = None
+    existing_strategy: Optional[Dict[str, Any]] = None
 
     if is_edit:
         result = fetch_strategy_code(ctx, user_id, strategy_id)
@@ -516,6 +516,7 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
 
     description = _extract_description(strategy_code, prompt)
     if is_edit:
+        assert existing_strategy is not None
         name = existing_strategy.get('name', 'Strategy')
     else:
         name = _generate_strategy_name(prompt)
@@ -540,7 +541,15 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
 
 
 
-def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None, conversation_id: str = None, message_id: str = None, max_retries: int = 2) -> str:
+def _generate_and_validate_strategy(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    existing_strategy: Optional[Dict[str, Any]] = None,
+    conversation_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+    max_retries: int = 2,
+) -> str:
     """Generate strategy with validation retry logic"""
 
     last_validation_error = None
@@ -565,7 +574,15 @@ def _generate_and_validate_strategy(ctx: Context, user_id: int, prompt: str, exi
     return ""
 
 
-def _generate_strategy_code(ctx, user_id: int, prompt: str, existing_strategy: Optional[Dict[str, Any]] = None,  last_error: Optional[str] = None, conversation_id: str = None, message_id: str = None) -> str:
+def _generate_strategy_code(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    existing_strategy: Optional[Dict[str, Any]] = None,
+    last_error: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+) -> str:
     """
     Generate strategy code using OpenAI with optimized prompts
     """
@@ -630,7 +647,7 @@ def _extract_python_code(response: str) -> str:
     """Extract Python code from response, removing markdown formatting"""
     # Remove markdown code blocks
     code_block_pattern = r'```(?:python)?\s*(.*?)\s*```'
-    matches = re.findall(code_block_pattern, response, re.DOTALL)
+    matches: List[str] = cast(List[str], re.findall(code_block_pattern, response, re.DOTALL))
 
     if matches:
         return matches[0].strip()
@@ -641,10 +658,10 @@ def _extract_python_code(response: str) -> str:
 def _extract_description(strategy_code: str, prompt: str) -> str:
     """Extract or generate description from strategy code and prompt"""
     docstring_pattern = r'"""(.*?)"""'
-    matches = re.findall(docstring_pattern, strategy_code, re.DOTALL)
+    matches: List[str] = cast(List[str], re.findall(docstring_pattern, strategy_code, re.DOTALL))
 
     if matches:
-        description = matches[0].strip()
+        description: str = matches[0].strip()
         # Clean up the description
         if len(description) > 200:
             description = description[:200] + "..."

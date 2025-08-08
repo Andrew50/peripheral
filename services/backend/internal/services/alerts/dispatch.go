@@ -1,3 +1,5 @@
+// Package alerts contains the alerting system for price and strategy alerts
+// including integrations with Telegram and the web socket layer.
 package alerts
 
 import (

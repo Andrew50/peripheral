@@ -241,13 +241,14 @@ func processTwitterWebhookEvent(conn *data.Conn, ruleTag string, tweets []twitte
 	fmt.Println("tweets", tweets)
 	fmt.Println("ruleTag", ruleTag)
 	for _, tweet := range tweets {
-		if ruleTag == "Main Twitter" {
+		switch ruleTag {
+		case "Main Twitter":
 			processTweet(conn, tweet)
-		} else if ruleTag == "Reply Webhook" {
+		case "Reply Webhook":
 			if err := twitter.HandleTweetForReply(conn, tweet); err != nil {
 				log.Printf("Warning: failed to handle tweet for reply: %v", err)
 			}
-		} else if ruleTag == "Ask Peripheral" {
+		case "Ask Peripheral":
 			fmt.Println("Processing @Ask Peripheral tweet", tweet)
 			if err := twitter.GenerateAskPeripheralTweet(conn, tweet); err != nil {
 				log.Printf("Error generating Ask Peripheral tweet: %v", err)

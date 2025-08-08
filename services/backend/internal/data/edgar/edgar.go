@@ -271,7 +271,7 @@ func fetchEdgarFilingsTickerPage(cik string, _ int, _ int) ([]Filing, error) {
 		utcMillis := timestampTime.UTC().UnixMilli()
 
 		// Format the accession number by removing dashes
-		accessionNumber := strings.Replace(recent.AccessionNumber[i], "-", "", -1)
+		accessionNumber := strings.ReplaceAll(recent.AccessionNumber[i], "-", "")
 
 		// Create URL that points to the human-readable HTML page
 		htmlURL := fmt.Sprintf("https://www.sec.gov/Archives/edgar/data/%s/%s/%s",
@@ -666,7 +666,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]Filing, error) {
 		}
 
 		// Check for duplicates using accession number
-		accessionNumber := strings.Replace(recent.AccessionNumber[i], "-", "", -1)
+		accessionNumber := strings.ReplaceAll(recent.AccessionNumber[i], "-", "")
 		if seen[accessionNumber] {
 			continue
 		}

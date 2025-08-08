@@ -1,3 +1,5 @@
+// Package worker_monitor provides monitoring and recovery of worker tasks
+// via Redis heartbeats and task status management.
 package worker_monitor
 
 import (

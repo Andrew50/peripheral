@@ -1,3 +1,5 @@
+// Package chart provides helpers for chart timeframe alignment and reference
+// time calculations used by the charting service.
 package chart
 
 import (
@@ -9,7 +11,7 @@ import (
 	"github.com/polygon-io/client-go/rest/models"
 )
 
-// MillisFromUTCTime performs operations related to MillisFromUTCTime functionality.
+// MillisFromUTCTime converts a UTC time to polygon models.Millis.
 func MillisFromUTCTime(timeObj time.Time) (models.Millis, error) {
 	return models.Millis(timeObj), nil
 }

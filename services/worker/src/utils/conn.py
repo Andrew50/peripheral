@@ -23,23 +23,27 @@ logger = logging.getLogger(__name__)
 class Conn:
     """Centralized connection manager for Redis and Database connections"""
 
+    # Explicit attribute type annotations for mypy
+    redis_client: redis.Redis
+    db_conn: PGConnection
+    openai_client: OpenAI
+    gemini_client: genai.Client
+    environment: str
+
     def __init__(self) -> None:
         """Initialize all connections"""
         self.redis_client = self._init_redis()
         self.db_conn = self._init_database()
 
-        self.openai_client = None
-        self.gemini_client = None
         self._init_openai_client()
         self._init_gemini_client()
-        self.environment = None
         self._init_environment()
 
     def _init_environment(self) -> None:
         """Initialize environment variables"""
-        self.environment = os.getenv('ENVIRONMENT')
-        # Treat empty ENVIRONMENT or common dev variants uniformly
-        if self.environment in ("dev", "development", ""):
+        raw_env = os.getenv('ENVIRONMENT')
+        # Treat missing/empty ENVIRONMENT or common dev variants uniformly
+        if raw_env in (None, "", "dev", "development"):
             self.environment = "dev"
         else:
             self.environment = "prod"

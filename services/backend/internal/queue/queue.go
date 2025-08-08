@@ -1,3 +1,5 @@
+// Package queue implements a Redis-backed task queue and typed result handling
+// for backend worker tasks (backtest, screening, alerts, etc.).
 package queue
 
 import (

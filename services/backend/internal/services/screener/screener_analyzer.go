@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -29,6 +30,20 @@ type AnalysisConfig struct {
 	QueryPatterns    []string
 	TestFunctions    []TestQuery
 	ComponentTests   []TestQuery
+}
+
+// safeFprintf writes to an io.Writer and logs any error encountered.
+func safeFprintf(w io.Writer, format string, a ...interface{}) {
+	if _, err := fmt.Fprintf(w, format, a...); err != nil {
+		log.Printf("Error writing to log file: %v", err)
+	}
+}
+
+// safeFprintln writes a line to an io.Writer and logs any error encountered.
+func safeFprintln(w io.Writer, s string) {
+	if _, err := fmt.Fprintln(w, s); err != nil {
+		log.Printf("Error writing to log file: %v", err)
+	}
 }
 
 func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
@@ -75,19 +90,15 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	log.Printf("✅ Successfully created analysis log file at: %s", logFilePath)
 
 	// Write header
-	if _, err := fmt.Fprintf(logFile, "=== PERFORMANCE ANALYSIS LOG - %s ===\n", time.Now().Format("2006-01-02 15:04:05")); err != nil {
-		log.Printf("Error writing to log file: %v", err)
-	}
-	if _, err := fmt.Fprintf(logFile, "Log file path: %s\n\n", logFilePath); err != nil {
-		log.Printf("Error writing to log file: %v", err)
-	}
+	safeFprintf(logFile, "=== PERFORMANCE ANALYSIS LOG - %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
+	safeFprintf(logFile, "Log file path: %s\n\n", logFilePath)
 
 	// Get items (e.g., tickers) if StaleQuery is provided
 	var items []string
 	if config.StaleQuery != "" {
 		rows, err := conn.DB.Query(ctx, config.StaleQuery, config.StaleQueryParams...)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get items list: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get items list: %v\n", err)
 		} else {
 			defer rows.Close()
 			for rows.Next() {
@@ -102,21 +113,21 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	}
 
 	if len(items) > 0 {
-		fmt.Fprintf(logFile, "\n📊 Total items to process: %d\n", len(items))
-		fmt.Fprintf(logFile, "📊 Sample items: %v\n\n", items[:min(len(items), 5)])
+		safeFprintf(logFile, "\n📊 Total items to process: %d\n", len(items))
+		safeFprintf(logFile, "📊 Sample items: %v\n\n", items[:min(len(items), 5)])
 	} else {
-		fmt.Fprintln(logFile, "📊 No items found for analysis")
+		safeFprintln(logFile, "📊 No items found for analysis")
 	}
 
 	// Enable track_io_timing
 	_, err = conn.DB.Exec(ctx, "SET track_io_timing = on")
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to enable track_io_timing: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to enable track_io_timing: %v\n", err)
 	}
 
 	// Run general analyses
 	if err := analyzeDatabaseConfiguration(ctx, conn, logFile); err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to analyze database configuration: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to analyze database configuration: %v\n", err)
 	}
 	if err := analyzeDatabaseActivity(ctx, conn, logFile, config.QueryPatterns); err != nil {
 		fmt.Fprintf(logFile, "⚠️  Failed to analyze database activity: %v\n", err)
@@ -184,7 +195,7 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 		}
 	}
 
-	fmt.Fprintf(logFile, "\n📊 Analysis complete at %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	safeFprintf(logFile, "\n📊 Analysis complete at %s\n", time.Now().Format("2006-01-02 15:04:05"))
 
 	if err := logFile.Sync(); err != nil {
 		log.Printf("⚠️  Failed to sync log file: %v", err)
@@ -197,7 +208,7 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 
 // analyzeDatabaseConfiguration analyzes database configuration and version
 func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 Database Configuration Analysis:")
+	safeFprintln(logFile, "📊 Database Configuration Analysis:")
 
 	// Get database version
 	var version string
@@ -205,7 +216,7 @@ func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile 
 	if err != nil {
 		return fmt.Errorf("failed to get database version: %v", err)
 	}
-	fmt.Fprintf(logFile, "📊 Database Version: %s\n", version)
+	safeFprintf(logFile, "📊 Database Version: %s\n", version)
 
 	// Get key configuration parameters
 	configQuery := `
@@ -227,13 +238,13 @@ func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile 
 	}
 	defer rows.Close()
 
-	fmt.Fprintln(logFile, "📊 Key Configuration Parameters:")
+	safeFprintln(logFile, "📊 Key Configuration Parameters:")
 	for rows.Next() {
 		var name, setting, unit, context, source string
 		if err := rows.Scan(&name, &setting, &unit, &context, &source); err != nil {
 			continue
 		}
-		fmt.Fprintf(logFile, "📊   %s: %s %s (context: %s, source: %s)\n", name, setting, unit, context, source)
+		safeFprintf(logFile, "📊   %s: %s %s (context: %s, source: %s)\n", name, setting, unit, context, source)
 	}
 
 	// Get database size info
@@ -248,21 +259,21 @@ func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile 
 	var dbSize, ohlcv1mSize, ohlcv1dSize, screenerSize string
 	err = conn.DB.QueryRow(ctx, sizeQuery).Scan(&dbSize, &ohlcv1mSize, &ohlcv1dSize, &screenerSize)
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to get size info: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to get size info: %v\n", err)
 	} else {
-		fmt.Fprintf(logFile, "📊 Database Size: %s\n", dbSize)
-		fmt.Fprintf(logFile, "📊 OHLCV 1m Size: %s\n", ohlcv1mSize)
-		fmt.Fprintf(logFile, "📊 OHLCV 1d Size: %s\n", ohlcv1dSize)
-		fmt.Fprintf(logFile, "📊 Screener Size: %s\n", screenerSize)
+		safeFprintf(logFile, "📊 Database Size: %s\n", dbSize)
+		safeFprintf(logFile, "📊 OHLCV 1m Size: %s\n", ohlcv1mSize)
+		safeFprintf(logFile, "📊 OHLCV 1d Size: %s\n", ohlcv1dSize)
+		safeFprintf(logFile, "📊 Screener Size: %s\n", screenerSize)
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeLockActivity analyzes current lock activity and blocking queries
 func analyzeLockActivity(ctx context.Context, conn *data.Conn, logFile *os.File, patterns []string) error {
-	fmt.Fprintln(logFile, "📊 Lock Activity and Blocking Analysis (Screener-Related):")
+	safeFprintln(logFile, "📊 Lock Activity and Blocking Analysis (Screener-Related):")
 
 	// Build filter for both blocked and blocking
 	filter := ""

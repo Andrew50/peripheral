@@ -164,9 +164,9 @@ func GetScreensavers(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, er
 		FROM securities
 		WHERE ticker = ANY($1) AND maxDate IS NULL`
 
-	rowsDB, errDb := conn.DB.Query(context.Background(), query, tickers)
-	if errDb != nil {
-		return nil, fmt.Errorf("failed to execute query: %v", errDb)
+	rowsDB, errDB := conn.DB.Query(context.Background(), query, tickers)
+	if errDB != nil {
+		return nil, fmt.Errorf("failed to execute query: %v", errDB)
 	}
 	defer rowsDB.Close()
 

@@ -4,6 +4,8 @@ Executes Python strategies that use get_bar_data() and get_general_data() functi
 instead of receiving DataFrames as parameters.
 """
 
+# pylint: disable=import-error
+
 from datetime import datetime as dt, timedelta
 import json
 import datetime
@@ -12,42 +14,45 @@ import logging
 import io
 import contextlib
 import math
-from typing import Any, Dict, List, Optional, Tuple
-import numpy as np
-import pandas as pd
-import plotly
-import plotly.express as px
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
+from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex
+import numpy as np  # type: ignore[import-untyped,import-not-found]
+import pandas as pd  # type: ignore[import-untyped,import-not-found]
+import plotly  # type: ignore[import-untyped,import-not-found]
+import plotly.express as px  # type: ignore[import-untyped,import-not-found]
+from plotly.subplots import make_subplots  # type: ignore[import-untyped,import-not-found]
+import plotly.graph_objects as go  # type: ignore[import-untyped,import-not-found]
 
-from utils.plotly_to_matlab import plotly_to_matplotlib_png
-from utils.context import Context
-from utils.data_accessors import _get_bar_data, _get_general_data
-from utils.error_utils import capture_exception
+from utils.plotly_to_matlab import plotly_to_matplotlib_png  # type: ignore[import-untyped,import-not-found]
+from utils.context import Context  # type: ignore[import-untyped,import-not-found]
+from utils.data_accessors import _get_bar_data, _get_general_data  # type: ignore[import-untyped,import-not-found]
+from utils.error_utils import capture_exception  # type: ignore[import-untyped,import-not-found]
 
 logger = logging.getLogger(__name__)
 
 max_instances = 15000 
 
-class TrackedList(list):
+T = TypeVar("T")
+
+
+class TrackedList(list, Generic[T]):
     """List that tracks total instances across all TrackedList objects"""
     _global_instance_count = 0
     _max_instances = 15000
     _limit_reached = False
 
     @classmethod
-    def reset_counter(cls, max_instances=max_instances):
+    def reset_counter(cls, max_instances_limit: int = max_instances) -> None:
         """Reset global counter for new strategy execution"""
         cls._global_instance_count = 0
-        cls._max_instances = max_instances
+        cls._max_instances = max_instances_limit
         cls._limit_reached = False
 
     @classmethod
-    def is_limit_reached(cls):
+    def is_limit_reached(cls) -> bool:
         """Check if the instance limit was reached during execution"""
         return cls._limit_reached
 
-    def _check_and_update_limit(self, additional_count=1):
+    def _check_and_update_limit(self, additional_count: int = 1) -> bool:
         """Check if adding items would exceed limit and update counter if not"""
         new_count = TrackedList._global_instance_count + additional_count
         if new_count > TrackedList._max_instances:
@@ -63,45 +68,41 @@ class TrackedList(list):
                            TrackedList._max_instances)
         TrackedList._global_instance_count = new_count
         return True  # OK to add instances
-    def append(self, item):
+    def append(self, item: T) -> None:
         if self._check_and_update_limit(1):
             super().append(item)
 
-    def extend(self, items):
-        items_list = list(items) if not isinstance(items, list) else items
+    def extend(self, items: Iterable[Any]) -> None:
+        items_list = list(items) if not isinstance(items, list) else items  # type: ignore[assignment]
         if len(items_list) == 0:
             return
         if self._check_and_update_limit(len(items_list)):
-            super().extend(items_list)
-    def insert(self, index, item):
+            super().extend(items_list)  # type: ignore[arg-type]
+    def insert(self, index: SupportsIndex, item: T) -> None:
         if self._check_and_update_limit(1):
             super().insert(index, item)
-    def __iadd__(self, other):
-        other_list = list(other) if not isinstance(other, list) else other
-        if len(other_list) == 0:
-            return self
-        if self._check_and_update_limit(len(other_list)):
-            return super().__iadd__(other_list)
-        return self
+    # Intentionally do not override __iadd__; base implementation calls extend(),
+    # which we override to enforce the instance limit.
 
 def execute_strategy(
     ctx: Context,
     strategy_code: str, 
     strategy_id: int,
-    version: int = None,
+    version: Optional[int] = None,
     start_date: datetime.datetime = datetime.datetime(2003, 1, 1),
     end_date: datetime.datetime = datetime.datetime.now(),
-    symbols: List[str] = None,
+    symbols: Optional[List[str]] = None,
    # max_instances: int = 15000,
     #version: int = None # None means new strategy
-) -> Tuple[List[Dict], str, List[Dict], List[Dict], Dict]:
+) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], List[Optional[str]], Optional[Dict[str, Any]]]:
     """Execute the strategy function with data accessor context"""
 
     # Create safe execution environment with data accessor functions
-    safe_globals = _create_safe_globals(ctx, start_date, end_date, symbols)
-    safe_locals = {}
-    plots_collection = []
-    response_images = []
+    symbols_set: Optional[Set[str]] = set(symbols) if symbols else None
+    safe_globals: Dict[str, Any] = _create_safe_globals(ctx, start_date, end_date, symbols_set)
+    safe_locals: Dict[str, Any] = {}
+    plots_collection: List[Dict[str, Any]] = []
+    response_images: List[Optional[str]] = []
     strategy_prints = ""
     # Execute strategy code in restricted environment
     # pylint: disable=exec-used  # nolint B102 - exec necessary for strategy execution with proper sandboxing
@@ -112,7 +113,7 @@ def execute_strategy(
         raise ValueError("No strategy function found. Function must be named 'strategy'")
 
     # Reset instance counter for this execution
-    TrackedList.reset_counter(max_instances=max_instances)
+    TrackedList.reset_counter(max_instances)
 
     # Execute strategy function with proper error handling and stdout capture
     
@@ -130,7 +131,8 @@ def execute_strategy(
     # Validate and clean instances
     if not isinstance(instances, list):
         logger.error("Strategy function must return a list, got %s", type(instances))
-        return [], "", [], [], "Strategy function must return a list"
+        error_detail: Dict[str, Any] = {"message": "Strategy function must return a list"}
+        return [], "", [], [], error_detail
     # Filter out None instances and validate structure
     valid_instances = []
     for instance in instances:
@@ -151,13 +153,18 @@ def execute_strategy(
 
 
 
-def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_intersect: List[str]) -> Dict[str, Any]:
+def _create_safe_globals(
+    ctx: Context,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    symbols_intersect: Optional[Set[str]],
+) -> Dict[str, Any]:
     """Create safe execution environment with data accessor functions"""
 
     # Initialize plots collection for this execution
     # Create bound methods that use this engine's data accessor
     # this is so that strategy code cannot access class data
-    def apply_drawdown_styling(fig):
+    def apply_drawdown_styling(fig: go.Figure) -> go.Figure:
         """Apply custom styling for drawdown plots with red line and shaded fill"""
         # Update all traces to use red line with shaded fill
         fig.update_traces(
@@ -166,7 +173,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
             fillcolor='rgba(255, 77, 77, 0.4)'
         )
         return fig
-    def apply_equity_curve_styling(fig):
+    def apply_equity_curve_styling(fig: go.Figure) -> go.Figure:
         """Apply custom styling for equity curve plots - blue above 0, red below 0, no fill"""
         # Update all traces to remove fill and set basic styling
         fig.update_traces(
@@ -198,7 +205,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
         return _get_general_data(ctx, columns, filters)
     
 
-    safe_globals = {
+    safe_globals: Dict[str, Any] = {
         # Built-ins for safe execution (including __import__ for import statements)
         # we dont use defaults becuase that would allow for things like open, eval, exec, etc.
         '__builtins__': {
@@ -255,7 +262,12 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
     }
     return safe_globals
 
-def _plotly_capture_context(plots_collection, response_images, strategy_id=None, version=None):
+def _plotly_capture_context(
+    plots_collection: List[Dict[str, Any]],
+    response_images: List[Optional[str]],
+    strategy_id: Optional[int] = None,
+    version: Optional[int] = None,
+) -> ContextManager[None]:
     """Context manager that temporarily patches plotly to capture plots
      instead of displaying them"""
     # Store original methods
@@ -263,7 +275,7 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
     original_make_subplots = make_subplots
     plot_counter = 0
     # Create capture function
-    def capture_plot(fig):
+    def capture_plot(fig: go.Figure) -> None:
         """Capture plot instead of showing it - extract only essential data"""
         nonlocal plot_counter
         try:
@@ -311,7 +323,7 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
             # Add None to response_images for failed plot
             response_images.append(None)
     # Create wrapped make_subplots that returns figures with captured show
-    def captured_make_subplots(*args, **kwargs):
+    def captured_make_subplots(*args: Any, **kwargs: Any) -> go.Figure:
         fig = original_make_subplots(*args, **kwargs)
         # Monkey patch the show method on this specific figure instance
         fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
@@ -332,7 +344,7 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
 
 
 
-def _extract_plot_data(fig) -> dict:
+def _extract_plot_data(fig: go.Figure) -> Dict[str, Any]:
     """Extract trace data from plotly figure using Plotly's
      built-in serialization (fig.to_dict())."""
     try:
@@ -343,7 +355,7 @@ def _extract_plot_data(fig) -> dict:
         logger.error("[extract_plot_data] Exception in fig.to_json(): %s", e)
         return {}
 
-def _decode_binary_arrays(data):
+def _decode_binary_arrays(data: Any) -> Any:
     """Recursively decode binary arrays in plot data"""
 
     if isinstance(data, dict):
@@ -404,11 +416,11 @@ def _extract_plot_title_with_ticker(fig) -> Tuple[str, Optional[str]]:
 
 
 
-def _ensure_json_serializable(instances: List[Dict]) -> List[Dict]:
+def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
-    serializable_instances = []
+    serializable_instances: List[Dict[str, Any]] = []
     for instance in instances:
-        serializable_instance = {}
+        serializable_instance: Dict[str, Any] = {}
         for key, value in instance.items():
             # Convert numpy/pandas types to native Python types
             if isinstance(value, np.integer):
