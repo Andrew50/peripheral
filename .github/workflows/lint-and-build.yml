@@ -528,14 +528,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: services/backend
-          args: >-
-            --timeout=3m
-            --config=.golangci.yml
-             --max-issues-per-linter=0
-             --max-same-issues=0
-            --build-tags=all
-            --allow-parallel-runners
-            --path-prefix=services/backend
+          args: --timeout=3m --config=.golangci.yml --build-tags=all --allow-parallel-runners --path-prefix=services/backend
           # Disable PR diff fetching to avoid 20k line limit issues
           only-new-issues: false
           skip-cache: true
@@ -878,7 +871,19 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Scanning dependencies for known vulnerabilities..."
-          safety scan --output text
+          # Run Safety with machine-readable output and capture exit code
+          SAFETY_EXIT_CODE=0
+          safety scan --output json > safety-report.json || SAFETY_EXIT_CODE=$?
+          # Also print a human-readable report to the logs
+          echo "=== Safety Scan Results (human-readable) ==="
+          safety scan --output screen || true
+          # If issues were found, optionally fail the step based on continue_on_error policy
+          if [ "$SAFETY_EXIT_CODE" -ne 0 ]; then
+            echo "::error title=Python Security Vulnerabilities::Found security vulnerabilities in Python dependencies. Review the Safety output above."
+            if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+              exit 1
+            fi
+          fi
 
       - name: Run tests with coverage
         working-directory: services/worker
