@@ -14,7 +14,7 @@ import importlib as _importlib
 
 if TYPE_CHECKING:
     # Imported only for type checking; not executed at runtime
-    from google.genai import types as genai_types  # type: ignore[import-not-found]
+    from google.genai import types as genai_types 
 
 # Runtime availability check without relying on import exceptions
 _genai_types_runtime: Any | None = (

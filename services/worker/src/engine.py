@@ -494,9 +494,9 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                     # Handle invalid timestamps
                     serializable_instance[key] = None
             # Normalize pandas/NumPy NA-like values early to None
-            elif pd.isna(value):
+            #elif pd.isna(value):
                 # Handle pandas NA values early to avoid unreachable branch
-                serializable_instance[key] = None
+                #serializable_instance[key] = None
             elif isinstance(value, np.integer):
                 serializable_instance[key] = int(value)
             elif isinstance(value, np.floating):
