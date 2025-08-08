@@ -30,6 +30,19 @@ var (
 	activeChatCanc = make(map[int]context.CancelFunc) // key = userID
 )
 
+const (
+	CONVERSATION_ID_KEY                        contextKey = "conversationID"
+	MESSAGE_ID_KEY                             contextKey = "messageID"
+	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
+	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
+)
+
+const (
+	StagePlanMore          Stage = "plan_more"
+	StageExecute           Stage = "execute"
+	StageFinishedExecuting Stage = "finished_executing"
+)
+
 // registerChatCancel stores the cancel function for a user's active chat
 func registerChatCancel(userID int, cancel context.CancelFunc) {
 	activeChatMu.Lock()
@@ -47,20 +60,7 @@ func clearChatCancel(userID int) {
 // Custom types for context keys to avoid collisions
 type contextKey string
 
-const (
-	CONVERSATION_ID_KEY                        contextKey = "conversationID"
-	MESSAGE_ID_KEY                             contextKey = "messageID"
-	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
-	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
-)
-
 type Stage string
-
-const (
-	StagePlanMore          Stage = "plan_more"
-	StageExecute           Stage = "execute"
-	StageFinishedExecuting Stage = "finished_executing"
-)
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
@@ -374,7 +374,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 				// Update query with active results for next planning iteration
 				// Only pass active results to avoid context bloat
-				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
+				//planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {

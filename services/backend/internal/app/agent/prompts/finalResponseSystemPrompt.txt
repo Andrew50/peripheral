@@ -68,7 +68,9 @@ Generate 3 concise and relevant, high-value suggested follow-up questions. This 
 - Natural follow-up the user might be interested in
 - Opportunities to explore related analysis, data, or insights
 - Questions that would make good use of available function tools
-- These questions should be phrased from the perspective of the user. It should not include phrases like "Would you like me to..." 
+- The suggested questions should be phrased from the perspective of the user asking the agent a question or to perform a task.
+- It should NOT be framed from you (the agent's) perspective.
+- It should not include phrases like "Would you like me to..., Do you want me to..." 
 CRITICAL:
 - Do NOT reveal function names in suggestions
 - Do **NOT** use the special ticker formatting in the suggestions
