@@ -1,7 +1,5 @@
 // Package marketdata provides functionality for retrieving, processing, and storing
 // market data including price history, indexes, and other financial time series.
-//
-//lint:file-ignore SA1019 Deprecated AWS endpoint resolver constructs are intentionally used until SDK upgrade to service-specific endpoints
 package marketdata
 
 import (
@@ -66,10 +64,13 @@ func newS3Client(cfg s3Config) (*s3.Client, error) {
 		config.WithRegion(cfg.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
 		//nolint:staticcheck // SA1019: Deprecated resolver used until AWS SDK upgrade; service-specific resolver migration tracked separately
+		//lint:ignore SA1019 Deprecated resolver used until AWS SDK upgrade; service-specific resolver migration tracked separately
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			//nolint:staticcheck // SA1019: aws.Endpoint is deprecated with the same reason as above; safe for our fixed endpoint usage
+			//lint:ignore SA1019 aws.Endpoint is deprecated with the same reason as above; safe for our fixed endpoint usage
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
 				//nolint:staticcheck // SA1019: intentional usage until SDK upgrade
+				//lint:ignore SA1019 intentional usage until SDK upgrade
 				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil
 			}),
 		),
