@@ -538,15 +538,22 @@ jobs:
 
       - name: 🔒 Run Go vulnerability check
         working-directory: services/backend
+        shell: bash
         run: |
           echo "🔒 Running Go vulnerability scanning with govulncheck..."
+          # Ensure GOPATH bin is available on PATH and set GOBIN explicitly
+          export PATH="${GOPATH}/bin:${PATH}"
+          export GOBIN="${GOPATH}/bin"
+
           # Install govulncheck if not available
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          
-          # Run vulnerability check
-          govulncheck ./... || VULN_EXIT_CODE=$?
-          
-          if [ "$VULN_EXIT_CODE" != "0" ]; then
+          if ! command -v govulncheck >/dev/null 2>&1; then
+            go install golang.org/x/vuln/cmd/govulncheck@latest
+          fi
+
+          # Run vulnerability check using explicit path to be safe
+          "$(go env GOPATH)"/bin/govulncheck ./... || VULN_EXIT_CODE=$?
+
+          if [ "${VULN_EXIT_CODE:-0}" != "0" ]; then
             echo "::error title=Go Security Vulnerabilities::Found security vulnerabilities in Go dependencies. Review the output above."
             if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
               exit 1
@@ -869,19 +876,36 @@ jobs:
 
       - name: Dependency vulnerability scanning with safety
         working-directory: services/worker
+        env:
+          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
         run: |
           echo "Scanning dependencies for known vulnerabilities..."
-          # Run Safety with machine-readable output and capture exit code
-          SAFETY_EXIT_CODE=0
-          safety scan --output json > safety-report.json || SAFETY_EXIT_CODE=$?
-          # Also print a human-readable report to the logs
-          echo "=== Safety Scan Results (human-readable) ==="
-          safety scan --output screen || true
-          # If issues were found, optionally fail the step based on continue_on_error policy
-          if [ "$SAFETY_EXIT_CODE" -ne 0 ]; then
-            echo "::error title=Python Security Vulnerabilities::Found security vulnerabilities in Python dependencies. Review the Safety output above."
-            if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
-              exit 1
+          if [ -n "${SAFETY_API_KEY:-}" ]; then
+            echo "Running Safety with API key (non-interactive)..."
+            SAFETY_EXIT_CODE=0
+            # Safety picks up the API key from SAFETY_API_KEY env var; avoid CLI flag differences across versions
+            safety scan --output json > safety-report.json || SAFETY_EXIT_CODE=$?
+            echo "=== Safety Scan Results (human-readable) ==="
+            safety scan --output screen || true
+            if [ "$SAFETY_EXIT_CODE" -ne 0 ]; then
+              echo "::error title=Python Security Vulnerabilities::Found security vulnerabilities in Python dependencies. Review the Safety output above."
+              if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+                exit 1
+              fi
+            fi
+          else
+            echo "SAFETY_API_KEY not set; using pip-audit fallback (no login required)..."
+            # Ensure pip-audit is available in the virtualenv
+            .venv/bin/pip install --upgrade pip-audit >/dev/null 2>&1 || true
+            PIP_AUDIT_EXIT_CODE=0
+            .venv/bin/pip-audit -r requirements.txt -f json -o pip-audit-report.json || PIP_AUDIT_EXIT_CODE=$?
+            echo "=== pip-audit Results (human-readable) ==="
+            .venv/bin/pip-audit -r requirements.txt || true
+            if [ "$PIP_AUDIT_EXIT_CODE" -ne 0 ]; then
+              echo "::error title=Python Security Vulnerabilities (pip-audit)::Found security vulnerabilities in Python dependencies. Review the pip-audit output above."
+              if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+                exit 1
+              fi
             fi
           fi
 
