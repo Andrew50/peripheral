@@ -61,8 +61,8 @@ class Worker:
         """Main queue processing loop with priority queue support"""
 
 
+
         while True:
-            logger.info("🔍 Waiting for task on %s", self.worker_id)
             task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
             if not task:
                 self.conn.check_connections()
