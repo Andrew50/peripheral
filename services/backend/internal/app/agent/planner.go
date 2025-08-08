@@ -238,7 +238,7 @@ func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, use
 
 }
 
-func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
+/*func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
 		return Plan{}, fmt.Errorf("error getting gemini key: %w", err)
@@ -382,7 +382,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	// If parsing failed or no JSON block found, return error
 
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
-}
+}*/
 
 func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey

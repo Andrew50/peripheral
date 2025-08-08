@@ -717,7 +717,9 @@
 	}
 
 	tr {
-		transition: outline 0.2s ease;
+		transition:
+			outline 0.2s ease,
+			background-color 0.2s;
 	}
 
 	.list-container {
@@ -758,6 +760,24 @@
 		position: relative;
 	}
 
+	/* Sorting state styles applied to table via class binding */
+	.sorting tbody tr {
+		opacity: 0.7;
+		transition: opacity 0.3s ease;
+	}
+
+	.sorting {
+		position: relative;
+	}
+
+	.sorting::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
+		pointer-events: none;
+	}
+
 	.th-content {
 		display: flex;
 		align-items: center;
@@ -774,35 +794,14 @@
 		background-color: var(--ui-bg-hover);
 	}
 
-	table.sorting tbody tr {
-		opacity: 0.7;
-		transition: opacity 0.3s ease;
-	}
-
-	table.sorting {
-		position: relative;
-	}
-
-	table.sorting::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: rgb(0 0 0 / 5%);
-		pointer-events: none;
-	}
-
 	.sort-asc .sort-icon,
 	.sort-desc .sort-icon {
 		opacity: 1;
 		color: var(--ui-accent);
 	}
 
-	th.sortable:hover {
+	.sortable:hover {
 		background-color: var(--ui-bg-hover);
-	}
-
-	tr {
-		transition: background-color 0.2s;
 	}
 
 	tr:hover {
@@ -885,31 +884,6 @@
 		max-width: 100%;
 		padding-bottom: 2px;
 		padding-right: 8px;
-	}
-
-	td:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		text-align: center;
-		background-color: var(--ui-bg-primary);
-		vertical-align: middle;
-	}
-
-	th:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		transition: opacity 0.2s ease;
-	}
-
-	.delete-button {
-		opacity: 0;
-		transition: opacity 0.2s ease;
 	}
 
 	tr:hover .delete-button {
@@ -998,7 +972,6 @@
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
 
 	/* Sticky Last column (Delete Button) */
-	th:last-child,
 	td:last-child {
 		position: sticky;
 		right: 0; /* Stick to the very edge */

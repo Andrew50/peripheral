@@ -315,7 +315,7 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 	switch {
 	case err == pgx.ErrNoRows:
 		log.Printf("Verification failed: No user found for id: %d", userID)
-		return nil, fmt.Errorf("No user found")
+		return nil, fmt.Errorf("no user found")
 	case err != nil:
 		log.Printf("ERROR: Database query failed during user check: %v", err)
 		return nil, fmt.Errorf("database error: %v", err)
@@ -1004,7 +1004,7 @@ func GoogleCallback(conn *data.Conn, rawArgs json.RawMessage) (interface{}, erro
 	}, nil
 }
 
-func generateState() string {
+/*func generateState() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// If there's an error reading random bytes, log it and return a fallback value
@@ -1013,7 +1013,7 @@ func generateState() string {
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
 	return base64.URLEncoding.EncodeToString(b)
-}
+}*/
 
 // generateStateWithInvite creates a state string that includes the invite code
 func generateStateWithInvite(inviteCode string) string {

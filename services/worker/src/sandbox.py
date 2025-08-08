@@ -14,9 +14,9 @@ import math
 import sys
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, ContextManager, Callable, Iterator, cast
 
 import numpy as np
 import pandas as pd
@@ -50,8 +50,8 @@ class SandboxResult:
     result: Any = None  # Main return value (renamed from return_value)
     prints: str = ""    # Stdout output (renamed from stdout)
     stderr: str = ""
-    plots: List[Dict] = None
-    response_images: List[str] = None
+    plots: List[Dict[str, Any]] = field(default_factory=list)
+    response_images: List[Optional[str]] = field(default_factory=list)
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
     execution_time_ms: float = 0.0
@@ -63,15 +63,15 @@ class PythonSandbox:
     with configurable imports, plotting support, and comprehensive error handling.
     """
 
-    def __init__(self, config: SandboxConfig, execution_id: str = None):
+    def __init__(self, config: SandboxConfig, execution_id: Optional[str] = None):
         self.config = config
-        self.execution_id = execution_id
-        self.plots_collection = []
-        self.response_images = []
-        self.plot_counter = 0
+        self.execution_id: Optional[str] = execution_id
+        self.plots_collection: List[Dict[str, Any]] = []
+        self.response_images: List[Optional[str]] = []
+        self.plot_counter: int = 0
 
-    async def execute_code(self, ctx: Context, code: str, additional_globals: Dict[str, Any] = None,
-                          execution_id: str = None) -> SandboxResult:
+    async def execute_code(self, ctx: Context, code: str, additional_globals: Optional[Dict[str, Any]] = None,
+                          execution_id: Optional[str] = None) -> SandboxResult:
         """
         Execute Python code in a secure sandbox environment
 
@@ -87,10 +87,13 @@ class PythonSandbox:
 
         #try:
 
+        # If an execution_id is provided for this run, override the instance value
+        if execution_id is not None:
+            self.execution_id = execution_id
 
         # create execution environment
         safe_globals = self._create_safe_globals(ctx, additional_globals or {})
-        safe_locals = {}
+        safe_locals: Dict[str, Any] = {}
 
         # Initialize capture systems
         self._reset_capture_systems()
@@ -140,7 +143,7 @@ class PythonSandbox:
                 #execution_time_ms=(time.time() - start_time) * 1000
             #)
 
-    def _reset_capture_systems(self):
+    def _reset_capture_systems(self) -> None:
         """Reset plot and output capture systems"""
         self.plots_collection = []
         self.response_images = []
@@ -152,16 +155,19 @@ class PythonSandbox:
 
         stdout_buffer = io.StringIO()
         stderr_buffer = io.StringIO()
-        return_value = None
+        return_value: Any = None
 
         try:
             exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
             # Execute with stdout/stderr capture
-            code_func = safe_locals.get('code')
+            code_func: Optional[Callable[[], Any]] = safe_locals.get('code')
             if not code_func or not callable(code_func):
                 func = safe_locals.get('main')
                 if func and callable(func):
-                    code_func = func
+                    code_func = func  # type: ignore[assignment]
+
+            if not code_func or not callable(code_func):
+                raise RuntimeError("No callable 'code' or 'main' found in executed code")
 
             function_prints = ""
             with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
@@ -187,7 +193,7 @@ class PythonSandbox:
         """Create safe execution environment with configurable globals"""
 
         # Start with configured builtins
-        safe_globals = {
+        safe_globals: Dict[str, Any] = {
             '__builtins__': self.config.allowed_builtins.copy()
         }
 
@@ -213,13 +219,13 @@ class PythonSandbox:
             #    end_date=datetime.now()
             #)
 
-            def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
-                                   extended_hours=False, start_date=None, end_date=None):
+            def bound_get_bar_data(timeframe: str = "1d", columns: Optional[List[str]] = None, min_bars: int = 1, filters: Optional[Dict[str, Any]] = None,
+                                   extended_hours: bool = False, start_date: Optional[dt] = None, end_date: Optional[dt] = None) -> pd.DataFrame:
                 """Wrapper to call utils.data_accessors._get_bar_data with the correct signature."""
                 return get_bar_data(ctx, start_date, end_date, timeframe,
                                     columns, min_bars, filters, extended_hours)
 
-            def bound_get_general_data(columns=None, filters=None):
+            def bound_get_general_data(columns: Optional[List[str]] = None, filters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
                 """Wrapper to call utils.data_accessors._get_general_data with context."""
                 return get_general_data(ctx, columns, filters)
 
@@ -237,7 +243,7 @@ class PythonSandbox:
 
         return safe_globals
 
-    def _plotly_capture_context(self):
+    def _plotly_capture_context(self) -> ContextManager[None]:
         """Context manager that captures plotly plots instead of displaying them"""
 
         if not self.config.enable_plots:
@@ -248,7 +254,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
 
-        def capture_plot(fig, *_args, **_kwargs):
+        def capture_plot(fig: go.Figure, *_args: Any, **_kwargs: Any) -> None:
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -296,13 +302,13 @@ class PythonSandbox:
                 self.plots_collection.append(fallback_plot)
                 self.response_images.append(None)
 
-        def captured_make_subplots(*args, **kwargs):
+        def captured_make_subplots(*args: Any, **kwargs: Any) -> go.Figure:
             fig = original_make_subplots(*args, **kwargs)
             fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
             return fig
 
         @contextlib.contextmanager
-        def patch_context():
+        def patch_context() -> Iterator[None]:
             try:
                 # Apply patches
                 go.Figure.show = capture_plot
@@ -315,16 +321,16 @@ class PythonSandbox:
 
         return patch_context()
 
-    def _extract_plot_data(self, fig) -> dict:
+    def _extract_plot_data(self, fig: go.Figure) -> dict:
         """Extract plot data from plotly figure"""
         try:
-            plot_data = json.loads(fig.to_json())
-            return self._decode_binary_arrays(plot_data)
+            plot_data: Dict[str, Any] = json.loads(fig.to_json())
+            return cast(Dict[str, Any], self._decode_binary_arrays(plot_data))
         except ValueError as e:
             logger.error("Failed to extract plot data: %s", e)
             return {}
 
-    def _decode_binary_arrays(self, data):
+    def _decode_binary_arrays(self, data: Any) -> Any:
         """Recursively decode binary arrays in plot data"""
 
         if isinstance(data, dict):
@@ -355,7 +361,7 @@ class PythonSandbox:
         else:
             return data
 
-    def _extract_plot_title_with_ticker(self, fig) -> Tuple[str, Optional[str]]:
+    def _extract_plot_title_with_ticker(self, fig: go.Figure) -> Tuple[str, Optional[str]]:
         """Extract title and ticker from plotly figure"""
         try:
             title = 'Untitled Plot'
@@ -383,7 +389,7 @@ class PythonSandbox:
             tb = traceback.format_exc()
             _, _, exc_traceback = sys.exc_info()
 
-            error_info = {
+            error_info: Dict[str, Any] = {
                 'error_type': type(error).__name__,
                 'error_message': str(error),
                 'full_traceback': tb,
