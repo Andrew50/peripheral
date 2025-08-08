@@ -2,7 +2,6 @@ import time
 import json
 import threading
 import logging
-import traceback
 from typing import Dict, Any, Optional
 from datetime import datetime
 from .conn import Conn
@@ -11,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 class NoSubscribersException(Exception):
     """Raised when a task has no subscribers."""
-    pass
 
 
 class Context():
@@ -85,8 +83,6 @@ class Context():
                 logger.warning("Task %s has no subscribers, signalling cancellation.", self.task_id)
                 self._cancellation_event.set()
                 break  # Stop heartbeat thread
-            except Exception as e:
-                logger.error("❌ Heartbeat thread error: %s", e)
             self._heartbeat_stop_event.wait(self.heartbeat_interval)
 
     def publish_result(self, results: Dict[str, Any], error: Optional[Dict[str, str]] = None, status: str = "completed") -> None:
@@ -105,8 +101,6 @@ class Context():
         except NoSubscribersException:
             # It's ok if there are no subscribers when publishing final result.
             pass
-        except Exception as e:
-            logger.error("❌ Failed to publish result: %s", e)
 
     def destroy(self) -> None:
         """Destroy the execution context"""

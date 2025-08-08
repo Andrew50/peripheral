@@ -201,7 +201,7 @@ def _get_bar_data_batched(
         }
         # Collect results as they complete
         for future in as_completed(future_to_batch):
-            batch_num = future_to_batch[future]
+            # Collect results; batch index not required here
             #try:
             result = future.result()
             if result is not None:

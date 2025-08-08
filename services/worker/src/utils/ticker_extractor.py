@@ -63,7 +63,7 @@ def _get_function_name(call_node: ast.Call) -> Optional[str]:
     """Extract function name from call node, handling both direct and attribute calls."""
     if isinstance(call_node.func, ast.Name):
         return call_node.func.id
-    elif isinstance(call_node.func, ast.Attribute):
+    if isinstance(call_node.func, ast.Attribute):
         return call_node.func.attr
     return None
 
