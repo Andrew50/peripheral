@@ -5,7 +5,6 @@ Generic Plotly-to-matplotlib fallback for chart image generation
 import logging
 from io import BytesIO
 import base64
-import importlib
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -110,8 +109,8 @@ def plotly_to_matplotlib_png(
         str: Base64 encoded PNG image
     """
     try:
-        # Import via importlib to avoid static import errors in type checkers
-        plt = importlib.import_module("matplotlib.pyplot")
+        # Import here to avoid import-time linter errors when matplotlib is unavailable in analysis envs
+        import matplotlib.pyplot as plt  # type: ignore[import-not-found]
         # Create matplotlib figure
         fig, ax = plt.subplots(figsize=(10, 6))
         

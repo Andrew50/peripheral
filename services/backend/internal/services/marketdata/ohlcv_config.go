@@ -60,23 +60,28 @@ func loadS3Config() s3Config {
 
 // newS3Client returns a tuned AWS S3 client for high-throughput, low-latency transfers.
 func newS3Client(cfg s3Config) (*s3.Client, error) {
-    awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-        config.WithRegion(cfg.Region),
-        config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
-    )
+	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(cfg.Region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
+		//lint:ignore SA1019 using deprecated global endpoint resolver until AWS SDK upgrade completes
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			//lint:ignore SA1019 using deprecated aws.Endpoint until AWS SDK upgrade completes
+			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
+				//lint:ignore SA1019 using deprecated aws.Endpoint struct until AWS SDK upgrade completes
+				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: region, HostnameImmutable: true}, nil
+			}),
+		),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("load aws cfg: %w", err)
 	}
 
 	// Use a custom HTTP client with an extended timeout to handle slow S3 responses.
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
-    return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-        o.HTTPClient = httpClient
-        o.DisableLogOutputChecksumValidationSkipped = true
-        // Prefer per-service endpoint resolution to avoid deprecated global resolver usage
-        // Use BaseEndpoint to target a specific S3-compatible endpoint (e.g., Polygon files)
-        o.BaseEndpoint = aws.String(cfg.Endpoint)
-    }), nil
+	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.HTTPClient = httpClient
+		o.DisableLogOutputChecksumValidationSkipped = true
+	}), nil
 }
 
 // -----------------------------------------------------------------------------

@@ -233,7 +233,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 	}
 
 	// Queue the task using the new queue system
-	handle, err := queue.QueueBacktest(ctx, conn, taskArgs)
+	handle, err := queue.Backtest(ctx, conn, taskArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error queuing backtest task: %v", err)
 	}

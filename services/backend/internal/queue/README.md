@@ -41,7 +41,7 @@ The system now uses a unified channel approach:
 import "backend/internal/queue"
 
 // Queue a task
-handle, err := queue.QueueTask(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
+handle, err := queue.Task(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
 if err != nil {
     return err
 }
@@ -70,7 +70,7 @@ The queue system provides strongly-typed result handling to eliminate manual par
 import "backend/internal/queue"
 
 // Queue a backtest with typed result
-result, err := queue.QueueBacktestTyped(ctx, conn, args)
+result, err := queue.BacktestTyped(ctx, conn, args)
 if err != nil {
     return err
 }
@@ -119,29 +119,29 @@ The package provides both untyped and typed convenience functions:
 #### Untyped Functions (Return Handle)
 ```go
 // Queue a backtest (10 minute timeout, 3 retries)
-handle, err := queue.QueueBacktest(ctx, conn, args)
+handle, err := queue.Backtest(ctx, conn, args)
 
 // Queue a strategy creation (15 minute timeout, 2 retries, high priority)
-handle, err := queue.QueueCreateStrategy(ctx, conn, args)
+handle, err := queue.CreateStrategy(ctx, conn, args)
 
 // Queue a screening task (5 minute timeout, 3 retries)
-handle, err := queue.QueueScreening(ctx, conn, args)
+handle, err := queue.Screening(ctx, conn, args)
 
 // Queue an alert task (2 minute timeout, 3 retries)
-handle, err := queue.QueueAlert(ctx, conn, args)
+handle, err := queue.Alert(ctx, conn, args)
 
 // Queue a Python agent task (8 minute timeout, 3 retries)
-handle, err := queue.QueuePythonAgent(ctx, conn, args)
+handle, err := queue.PythonAgent(ctx, conn, args)
 ```
 
 #### Typed Functions (Return Direct Result)
 ```go
 // Typed functions automatically wait and return strongly-typed results
-result, err := queue.QueueBacktestTyped(ctx, conn, args)      // *BacktestResult
-result, err := queue.QueueCreateStrategyTyped(ctx, conn, args) // *CreateStrategyResult
-result, err := queue.QueueScreeningTyped(ctx, conn, args)     // *ScreeningResult
-result, err := queue.QueueAlertTyped(ctx, conn, args)         // *AlertResult
-result, err := queue.QueuePythonAgentTyped(ctx, conn, args)   // *PythonAgentResult
+result, err := queue.BacktestTyped(ctx, conn, args)      // *BacktestResult
+result, err := queue.CreateStrategyTyped(ctx, conn, args) // *CreateStrategyResult
+result, err := queue.ScreeningTyped(ctx, conn, args)     // *ScreeningResult
+result, err := queue.AlertTyped(ctx, conn, args)         // *AlertResult
+result, err := queue.PythonAgentTyped(ctx, conn, args)   // *PythonAgentResult
 ```
 
 ## Typed Result Structures
@@ -175,7 +175,7 @@ If you need more control over the waiting process, you can use the generic `Awai
 
 ```go
 // Queue a task and get a handle
-handle, err := queue.QueueBacktest(ctx, conn, args)
+handle, err := queue.Backtest(ctx, conn, args)
 if err != nil {
     return err
 }
@@ -236,7 +236,7 @@ If you need to convert an untyped result to a typed one:
 
 ```go
 // Get untyped result
-handle, err := queue.QueueBacktest(ctx, conn, args)
+handle, err := queue.Backtest(ctx, conn, args)
 result, err := handle.Await(ctx)
 
 // Convert to typed result
@@ -309,7 +309,7 @@ Tasks now include additional fields for unified monitoring:
 
 ### Go Queue System
 
-1. **QueueTask**: Main entry point that creates tasks and returns handles
+1. **Task**: Main entry point that creates tasks and returns handles
 2. **Handle**: Provides control over individual tasks (Updates channel, Cancel, Await)
 3. **Watchdog**: Per-task monitoring goroutine that handles retries and heartbeat monitoring
 4. **Progress Subscriber**: Subscribes to unified channel for real-time updates
@@ -347,7 +347,7 @@ result, err := waitForResult(ctx, conn, taskID, timeout)
 **After:**
 ```go
 // Simplified task queuing with built-in unified monitoring
-handle, err := queue.QueueBacktest(ctx, conn, args)
+handle, err := queue.Backtest(ctx, conn, args)
 result, err := handle.Await(ctx)
 ```
 

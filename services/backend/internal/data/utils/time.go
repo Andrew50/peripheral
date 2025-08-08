@@ -1,3 +1,5 @@
+// Package utils provides time utilities used across data layer.
+// revive:disable:var-naming - allow conventional 'utils' package name
 package utils
 
 import (
@@ -135,3 +137,5 @@ func IsTimestampRegularHours(timestamp time.Time) bool {
 	marketCloseTime := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 16, 0, 0, 0, easternLocation)
 	return !timestamp.Before(marketOpenTime) && timestamp.Before(marketCloseTime)
 }
+
+// revive:enable:var-naming

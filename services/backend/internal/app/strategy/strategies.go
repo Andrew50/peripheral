@@ -76,7 +76,7 @@ func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json
 	}*/
 
 	// Submit task via the unified queue system
-	qResult, err := queue.QueueScreeningTyped(ctx, conn, qArgs)
+	qResult, err := queue.ScreeningTyped(ctx, conn, qArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}
@@ -359,7 +359,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	}
 
 	// Queue the task using the new typed queue system and return result directly
-	result, err := queue.QueueCreateStrategyTyped(ctx, conn, args)
+	result, err := queue.CreateStrategyTyped(ctx, conn, args)
 	if err != nil {
 		return nil, fmt.Errorf("error queuing strategy creation task: %v", err)
 	}

@@ -1,7 +1,10 @@
 import logging
 import traceback
-from typing import List, Dict, Tuple, Optional, Any, TYPE_CHECKING
+import psycopg2
+from typing import List, Dict, Tuple, Optional, Any
+from .conn import Conn
 from .context import Context
+from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +17,6 @@ def fetch_strategy_code(
 ) -> Tuple[str, int]:
     if not strategy_id:
         raise ValueError("strategy_id is required")
-
-    # Import inside function to avoid import-time type checker errors where stubs are missing
-    # Avoid binding names when only type checking
-    if not TYPE_CHECKING:
-        import psycopg2  # noqa: F401
-        from psycopg2.extras import RealDictCursor  # noqa: F401
 
     with ctx.conn.transaction() as cursor:
         result = None
@@ -88,11 +85,6 @@ def save_strategy(ctx: Context, user_id: int, name: str, description: str, promp
                         python_code: str, strategy_id: Optional[int] = None, min_timeframe: Optional[str] = None,
                         alert_universe_full: Optional[List[str]] = None) -> Dict[str, Any]:
     """Save strategy to database with duplicate name handling"""
-    # Import inside function to avoid import-time type checker errors where stubs are missing
-    if not TYPE_CHECKING:
-        import psycopg2  # noqa: F401
-        from psycopg2.extras import RealDictCursor  # noqa: F401
-
     conn = None
     cursor = None
     try:

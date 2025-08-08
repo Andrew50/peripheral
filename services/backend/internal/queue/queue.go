@@ -290,7 +290,7 @@ type WorkerHeartbeat struct {
 	QueueStats    map[string]interface{} `json:"queue_stats"`
 }
 
-// QueueTask enqueues a task and returns a handle for monitoring and control
+// Task enqueues a task and returns a handle for monitoring and control
 func Task(ctx context.Context, conn *data.Conn, taskType string, args map[string]interface{}, priority bool, maxRetries int, timeout time.Duration) (*Handle, error) {
 	// Generate unique task ID and status ID
 	taskID := uuid.New().String()
@@ -677,12 +677,12 @@ func (h *Handle) markTaskAsFailed(reason string) {
 
 // Convenience wrapper functions for common task types
 
-// QueueBacktest queues a backtest task with default settings
+// Backtest queues a backtest task with default settings
 func Backtest(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
 	return Task(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
 }
 
-// QueueBacktestTyped queues a backtest task and returns a typed result
+// BacktestTyped queues a backtest task and returns a typed result
 func BacktestTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*BacktestResult, error) {
 	handle, err := Task(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
 	if err != nil {
@@ -692,12 +692,12 @@ func BacktestTyped(ctx context.Context, conn *data.Conn, args map[string]interfa
 	return AwaitTypedResult[BacktestResult](ctx, handle, nil)
 }
 
-// QueueScreening queues a screening task with default settings
+// Screening queues a screening task with default settings
 func Screening(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
 	return Task(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 }
 
-// QueueScreeningTyped queues a screening task and returns a typed result
+// ScreeningTyped queues a screening task and returns a typed result
 func ScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*ScreeningResult, error) {
 	handle, err := Task(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 	if err != nil {
@@ -707,12 +707,12 @@ func ScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]interf
 	return AwaitTypedResult[ScreeningResult](ctx, handle, nil)
 }
 
-// QueueAlert queues an alert task with default settings
+// Alert queues an alert task with default settings
 func Alert(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
 	return Task(ctx, conn, "alert", args, false, 3, 2*time.Minute)
 }
 
-// QueueAlertTyped queues an alert task and returns a typed result
+// AlertTyped queues an alert task and returns a typed result
 func AlertTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*AlertResult, error) {
 	handle, err := Task(ctx, conn, "alert", args, false, 3, 2*time.Minute)
 	if err != nil {
@@ -722,12 +722,12 @@ func AlertTyped(ctx context.Context, conn *data.Conn, args map[string]interface{
 	return AwaitTypedResult[AlertResult](ctx, handle, nil)
 }
 
-// QueueCreateStrategy queues a strategy creation task with high priority
+// CreateStrategy queues a strategy creation task with high priority
 func CreateStrategy(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
 	return Task(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
 }
 
-// QueueCreateStrategyTyped queues a strategy creation task and returns a typed result
+// CreateStrategyTyped queues a strategy creation task and returns a typed result
 func CreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*CreateStrategyResult, error) {
 	handle, err := Task(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
 	if err != nil {
@@ -737,12 +737,12 @@ func CreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[string]i
 	return AwaitTypedResult[CreateStrategyResult](ctx, handle, nil)
 }
 
-// QueuePythonAgent queues a general python agent task with default settings
+// PythonAgent queues a general python agent task with default settings
 func PythonAgent(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
 	return Task(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 }
 
-// QueuePythonAgentTyped queues a general python agent task and returns a typed result
+// PythonAgentTyped queues a general python agent task and returns a typed result
 func PythonAgentTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*PythonAgentResult, error) {
 	handle, err := Task(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 	if err != nil {

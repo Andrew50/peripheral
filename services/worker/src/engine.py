@@ -17,17 +17,17 @@ import io
 import contextlib
 import math
 from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex, Iterator
-import numpy as np
-import pandas as pd
-import plotly
-import plotly.express as px
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
+import numpy as np  # type: ignore[import-untyped,import-not-found]
+import pandas as pd  # type: ignore[import-untyped,import-not-found]
+import plotly  # type: ignore[import-untyped,import-not-found]
+import plotly.express as px  # type: ignore[import-untyped,import-not-found]
+from plotly.subplots import make_subplots  # type: ignore[import-untyped,import-not-found]
+import plotly.graph_objects as go  # type: ignore[import-untyped,import-not-found]
 
-from .utils.plotly_to_matlab import plotly_to_matplotlib_png
-from .utils.context import Context
-from .utils.data_accessors import _get_bar_data, _get_general_data
-from .utils.error_utils import capture_exception
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png  # type: ignore[import-untyped,import-not-found]
+from .utils.context import Context  # type: ignore[import-untyped,import-not-found]
+from .utils.data_accessors import _get_bar_data, _get_general_data  # type: ignore[import-untyped,import-not-found]
+from .utils.error_utils import capture_exception  # type: ignore[import-untyped,import-not-found]
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ def _create_safe_globals(
     # Initialize plots collection for this execution
     # Create bound methods that use this engine's data accessor
     # this is so that strategy code cannot access class data
-    def apply_drawdown_styling(fig: go.Figure) -> go.Figure:
+    def apply_drawdown_styling(fig: Any) -> Any:
         """Apply custom styling for drawdown plots with red line and shaded fill"""
         # Update all traces to use red line with shaded fill
         fig.update_traces(
@@ -175,7 +175,7 @@ def _create_safe_globals(
             fillcolor='rgba(255, 77, 77, 0.4)'
         )
         return fig
-    def apply_equity_curve_styling(fig: go.Figure) -> go.Figure:
+    def apply_equity_curve_styling(fig: Any) -> Any:
         """Apply custom styling for equity curve plots - blue above 0, red below 0, no fill"""
         # Update all traces to remove fill and set basic styling
         fig.update_traces(
@@ -196,21 +196,40 @@ def _create_safe_globals(
                     fig.data[i].update(line={"color": color, "width": 2})
         return fig
     
+    # Normalize filter dict to use canonical keys expected by data accessors
+    def _normalize_filters(input_filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if input_filters is None:
+            return None
+        normalized: Dict[str, Any] = input_filters.copy()
+        # Support legacy 'symbols' key by mapping to 'tickers' if needed
+        if 'symbols' in normalized and 'tickers' not in normalized:
+            symbols_val = normalized.get('symbols')
+            if isinstance(symbols_val, str):
+                normalized['tickers'] = [symbols_val]
+            elif isinstance(symbols_val, list):
+                normalized['tickers'] = [str(s) for s in symbols_val]
+            else:
+                normalized['tickers'] = []
+            # Remove legacy key to avoid confusion downstream
+            normalized.pop('symbols', None)
+        return normalized
+
     def get_bar_data(
         timeframe: str,
         min_bars: int,
         columns: Optional[List[str]] = None,
         filters: Optional[Dict[str, Any]] = None,
         extended_hours: bool = False,
-    ) -> pd.DataFrame:
-        return _get_bar_data(ctx,start_date,end_date,timeframe, columns, min_bars, filters, extended_hours)
+    ) -> Any:
+        normalized_filters = _normalize_filters(filters)
+        return _get_bar_data(ctx, start_date, end_date, timeframe, columns, min_bars, normalized_filters, extended_hours)
     def get_general_data(
         columns: Optional[List[str]] = None,
         filters: Optional[Dict[str, Any]] = None,
-    ) -> pd.DataFrame:
+    ) -> Any:
         #if the execution is called with a certain set of symboles then we need to intersect that with each get bar data call
         # this will cause references to statuc symbols to possibly fail like if you are referencing spy in a strategy not returning spy
-        actual_filters: Optional[Dict[str, Any]] = filters.copy() if isinstance(filters, dict) else None
+        actual_filters: Optional[Dict[str, Any]] = _normalize_filters(filters)
         if symbols_intersect:
             if actual_filters is None:
                 actual_filters = {}
@@ -299,7 +318,7 @@ def _plotly_capture_context(
     original_make_subplots = make_subplots
     plot_counter = 0
     # Create capture function
-    def capture_plot(fig: go.Figure) -> None:
+    def capture_plot(fig: Any) -> None:
         """Capture plot instead of showing it - extract only essential data"""
         nonlocal plot_counter
         try:
@@ -353,7 +372,7 @@ def _plotly_capture_context(
             # Add None to response_images for failed plot
             response_images.append(None)
     # Create wrapped make_subplots that returns figures with captured show
-    def captured_make_subplots(*args: Any, **kwargs: Any) -> go.Figure:
+    def captured_make_subplots(*args: Any, **kwargs: Any) -> Any:
         fig = original_make_subplots(*args, **kwargs)
         # Monkey patch the show method on this specific figure instance
         fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
@@ -374,7 +393,7 @@ def _plotly_capture_context(
 
 
 
-def _extract_plot_data(fig: go.Figure) -> Dict[str, Any]:
+def _extract_plot_data(fig: Any) -> Dict[str, Any]:
     """Extract trace data from plotly figure using Plotly's
      built-in serialization (fig.to_dict())."""
     try:
@@ -422,7 +441,7 @@ def _decode_binary_arrays(data: Any) -> Any:
     else:
         return data
 
-def _extract_plot_title_with_ticker(fig: go.Figure) -> Tuple[str, Optional[str]]:
+def _extract_plot_title_with_ticker(fig: Any) -> Tuple[str, Optional[str]]:
     """Extract title and ticker from plotly figure. Returns (cleaned_title, ticker)"""
     try:
         title = 'Untitled Plot'

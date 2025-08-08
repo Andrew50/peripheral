@@ -1,3 +1,5 @@
+// Package utils provides task-related helpers.
+// revive:disable:var-naming - allow conventional 'utils' package name
 package utils
 
 import (
@@ -54,6 +56,8 @@ func NewTask(funcName string, args interface{}) *Task {
 		UpdatedAt: now,
 	}
 }
+
+// revive:enable:var-naming
 // convertToMap ensures an interface is converted to a map[string]interface{}
 func convertToMap(data interface{}) map[string]interface{} {
 	if data == nil {
