@@ -614,7 +614,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after backend job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Backend workspace permissions reset complete."
 
   frontend-lint-security:
@@ -780,7 +780,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after frontend job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Frontend workspace permissions reset complete."
 
   worker-lint-security:
@@ -912,7 +912,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after worker job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Worker workspace permissions reset complete."
 
 # Summary and reporting (updated to include format checks)
@@ -963,5 +963,5 @@ jobs:
       - name: Change ownership of workspace back to runner user
         run: |
           echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Final workspace permission reset complete."
