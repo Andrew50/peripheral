@@ -124,7 +124,7 @@ class PythonSandbox:
                 error=f"Execution timed out after {self.config.execution_timeout} seconds",
                 execution_time_ms=(time.time() - start_time) * 1000
             )
-        except Exception as e: # pylint: disable=broad-exception-caught - we want to catch all errors as its a sandbox
+        except Exception as e: # pylint: disable=broad-exception-caught
             error_info = self._get_detailed_error_info(e, code)
             capture_exception(logger, e)
             return SandboxResult(
@@ -164,7 +164,7 @@ class PythonSandbox:
             if not code_func or not callable(code_func):
                 func = safe_locals.get('main')
                 if func and callable(func):
-                    code_func = func  # type: ignore[assignment]
+                    code_func = func
 
             if not code_func or not callable(code_func):
                 raise RuntimeError("No callable 'code' or 'main' found in executed code")
@@ -182,7 +182,7 @@ class PythonSandbox:
                 'stderr': stderr_content
             }
 
-        except Exception as e:# pylint: disable=broad-exception-caught - we want to catch all errors as its a sandbox
+        except Exception as e:# pylint: disable=broad-exception-caught
             stderr_content = stderr_buffer.getvalue()
             if stderr_content:
                 logger.error("Stderr before error: %s", stderr_content)
@@ -220,12 +220,15 @@ class PythonSandbox:
             #)
 
             def bound_get_bar_data(timeframe: str = "1d", columns: Optional[List[str]] = None, min_bars: int = 1, filters: Optional[Dict[str, Any]] = None,
-                                   extended_hours: bool = False, start_date: Optional[dt] = None, end_date: Optional[dt] = None) -> pd.DataFrame:
+                                   extended_hours: bool = False, start_date: Optional[dt] = None, end_date: Optional[dt] = None) -> Any:
                 """Wrapper to call utils.data_accessors._get_bar_data with the correct signature."""
-                return get_bar_data(ctx, start_date, end_date, timeframe,
+                # Ensure concrete datetimes when None
+                effective_start: dt = start_date if start_date is not None else datetime.datetime(2003, 1, 1)
+                effective_end: dt = end_date if end_date is not None else datetime.datetime.now()
+                return get_bar_data(ctx, effective_start, effective_end, timeframe,
                                     columns, min_bars, filters, extended_hours)
 
-            def bound_get_general_data(columns: Optional[List[str]] = None, filters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+            def bound_get_general_data(columns: Optional[List[str]] = None, filters: Optional[Dict[str, Any]] = None) -> Any:
                 """Wrapper to call utils.data_accessors._get_general_data with context."""
                 return get_general_data(ctx, columns, filters)
 
@@ -254,7 +257,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
 
-        def capture_plot(fig: go.Figure, *_args: Any, **_kwargs: Any) -> None:
+        def capture_plot(fig: Any, *_args: Any, **_kwargs: Any) -> None:
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -273,7 +276,8 @@ class PythonSandbox:
 
                 # Generate PNG as base64
                 try:
-                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Execution ID", self.execution_id)
+                    id_label = f"Execution ID {self.execution_id}" if self.execution_id is not None else "Execution ID"
+                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, id_label, -1)
                     if png_base64:
                         self.response_images.append(png_base64)
                     else:
@@ -302,7 +306,7 @@ class PythonSandbox:
                 self.plots_collection.append(fallback_plot)
                 self.response_images.append(None)
 
-        def captured_make_subplots(*args: Any, **kwargs: Any) -> go.Figure:
+        def captured_make_subplots(*args: Any, **kwargs: Any) -> Any:
             fig = original_make_subplots(*args, **kwargs)
             fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
             return fig
@@ -321,7 +325,7 @@ class PythonSandbox:
 
         return patch_context()
 
-    def _extract_plot_data(self, fig: go.Figure) -> dict:
+    def _extract_plot_data(self, fig: Any) -> dict:
         """Extract plot data from plotly figure"""
         try:
             plot_data: Dict[str, Any] = json.loads(fig.to_json())
@@ -361,7 +365,7 @@ class PythonSandbox:
         else:
             return data
 
-    def _extract_plot_title_with_ticker(self, fig: go.Figure) -> Tuple[str, Optional[str]]:
+    def _extract_plot_title_with_ticker(self, fig: Any) -> Tuple[str, Optional[str]]:
         """Extract title and ticker from plotly figure"""
         try:
             title = 'Untitled Plot'

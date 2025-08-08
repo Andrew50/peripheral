@@ -31,8 +31,8 @@ import (
 	"time"
 )
 
-// ScreenerUpdaterService encapsulates the screener updater and its state
-type ScreenerUpdaterService struct {
+// UpdaterService encapsulates the screener updater and its state
+type UpdaterService struct {
 	conn      *data.Conn
 	isRunning bool
 	stopChan  chan struct{}
@@ -42,11 +42,11 @@ type ScreenerUpdaterService struct {
 }
 
 // Global instance of the service
-var screenerService *ScreenerUpdaterService
+var screenerService *UpdaterService
 var serviceInitMutex sync.Mutex
 
-// GetScreenerService returns the singleton instance of ScreenerUpdaterService
-func GetScreenerService() *ScreenerUpdaterService {
+// GetScreenerService returns the singleton instance of UpdaterService
+func GetScreenerService() *UpdaterService {
 	serviceInitMutex.Lock()
 	defer serviceInitMutex.Unlock()
 
@@ -56,7 +56,7 @@ func GetScreenerService() *ScreenerUpdaterService {
 			log.Fatalf("❌ cannot load ET timezone: %v", err)
 		}
 
-		screenerService = &ScreenerUpdaterService{
+		screenerService = &UpdaterService{
 			stopChan: make(chan struct{}),
 			loc:      loc,
 		}
@@ -65,7 +65,7 @@ func GetScreenerService() *ScreenerUpdaterService {
 }
 
 // Start initializes and starts the screener updater service (idempotent)
-func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
+func (s *UpdaterService) Start(conn *data.Conn) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -131,7 +131,7 @@ func (s *ScreenerUpdaterService) Start(conn *data.Conn) error {
 }
 
 // Stop gracefully shuts down the screener updater service (idempotent)
-func (s *ScreenerUpdaterService) Stop() error {
+func (s *UpdaterService) Stop() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -155,14 +155,14 @@ func (s *ScreenerUpdaterService) Stop() error {
 }
 
 // IsRunning returns whether the service is currently running
-func (s *ScreenerUpdaterService) IsRunning() bool {
+func (s *UpdaterService) IsRunning() bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.isRunning
 }
 
 // runUpdaterLoop is the main updater loop that runs in a goroutine
-func (s *ScreenerUpdaterService) runUpdaterLoop() {
+func (s *UpdaterService) runUpdaterLoop() {
 	defer s.wg.Done()
 
 	// Create tickers for different refresh intervals
@@ -243,8 +243,7 @@ var (
 	extendedHoursCaggMu sync.Mutex // guards cagg_extended_hours refresh
 )
 
-// Legacy function maintained for backward compatibility
-// StartScreenerUpdaterLoop starts the screener updater service
+// StartScreenerUpdaterLoop starts the screener updater service (legacy compatibility)
 func StartScreenerUpdaterLoop(conn *data.Conn) error {
 	log.Printf("🚀 StartScreenerUpdaterLoop called (using service-based approach)")
 	service := GetScreenerService()
@@ -619,7 +618,7 @@ var screenerAnalysisConfig = AnalysisConfig{
 		// Performance-critical joins (simulating screener calculation logic) - updated for migration 78
 		{Name: "screener_join_simulation", Query: `
 			SELECT s.ticker, s.market_cap, sr.price_1d, sr.dma_50, sr.dma_200, sr.volatility_1w_pct, 
-				   sr1m.price_1m, sr1m.range_15m_pct, sr1m.range_1h_pct, o1d.close/1000.0 as current_price
+			       sr1m.price_1m, sr1m.range_15m_pct, sr1m.range_1h_pct, o1d.close/1000.0 as current_price
 			FROM securities s
 			LEFT JOIN static_refs_daily sr ON s.ticker = sr.ticker
 			LEFT JOIN static_refs_1m sr1m ON s.ticker = sr1m.ticker
@@ -635,8 +634,8 @@ var screenerAnalysisConfig = AnalysisConfig{
 				SELECT ticker FROM screener_stale WHERE stale = TRUE LIMIT $2
 			)
 			SELECT COUNT(*) as stale_count, 
-				   COUNT(DISTINCT s.ticker) as active_count,
-				   AVG(EXTRACT(EPOCH FROM now() - ss.last_update_time)) as avg_staleness_seconds
+			       COUNT(DISTINCT s.ticker) as active_count,
+			       AVG(EXTRACT(EPOCH FROM now() - ss.last_update_time)) as avg_staleness_seconds
 			FROM stale_batch sb
 			JOIN screener_stale ss ON sb.ticker = ss.ticker
 			JOIN securities s ON sb.ticker = s.ticker AND s.active = TRUE

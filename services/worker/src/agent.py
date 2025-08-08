@@ -9,7 +9,7 @@ import asyncio
 import json
 from typing import Dict, Any, List, Tuple, Optional, cast
 from datetime import datetime
-from google.genai import types
+from google.genai import types as genai_types  # type: ignore[import-not-found]  # pylint: disable=import-error
 from .validator import validate_code
 from .utils.context import Context
 from .utils.data_accessors import get_available_filter_values
@@ -21,27 +21,30 @@ from .generator import _parse_filter_needs_response
 logger = logging.getLogger(__name__)
 
 def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
-    contents = [
-        types.Content(role="user", parts=[
-            types.Part.from_text(text=prompt),
-        ])
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        thinking_config = types.ThinkingConfig(
-            thinking_budget=0
-        ),
-        system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
+    if genai_types is not None:
+        contents = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part.from_text(text=prompt)],
+        )
+        generate_content_config = genai_types.GenerateContentConfig(
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            system_instruction=[genai_types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
             you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed.
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
             - primary_exchanges: NYSE, NASDAQ, ARCA
             ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
-    )
-    response = ctx.conn.gemini_client.models.generate_content(
-        model="gemini-2.5-flash-lite-preview-06-17",
-        contents=contents,
-        config=generate_content_config,
-    )
+        )
+        response = ctx.conn.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=contents,
+            config=generate_content_config,
+        )
+    else:
+        response = ctx.conn.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=str(prompt),
+        )
 
     # Parse the JSON response to determine which filters are needed
     filter_needs = _parse_filter_needs_response(response)
@@ -242,7 +245,7 @@ async def start_general_python_agent(
     List[Dict[str, Any]],
     str,
     List[Dict[str, Any]],
-    List[Dict[str, Any]],
+    List[Optional[str]],
     str,
     Optional[Exception],
 ]:
@@ -276,14 +279,20 @@ async def start_general_python_agent(
 
         try:
             # Generate code
-            openai_response = ctx.conn.openai_client.responses.create(
+            openai_client_any = cast(Any, ctx.conn.openai_client)
+            openai_response = openai_client_any.responses.create(
                 model="gpt-5-mini",
                 reasoning={"effort": "medium"},
                 input=user_prompt,
                 instructions=system_instruction,
                 user="user:0",
-                metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
-                timeout=120.0  # 2 minute timeout for other models
+                metadata={
+                    "userID": str(user_id),
+                    "env": ctx.conn.environment,
+                    "convID": conversation_id or "",
+                    "msgID": message_id or "",
+                },
+                timeout=120.0,
             )
             python_code = _extract_python_code(openai_response.output_text)
 
@@ -394,7 +403,7 @@ async def _save_agent_python_code(
     result: Any | None = None,
     prints: str = "",
     plots: Optional[List[Dict[str, Any]]] = None,
-    response_images: Optional[List[Dict[str, Any]]] = None,
+    response_images: Optional[List[Optional[str]]] = None,
     error_message: Optional[str] = None,
 ) -> bool:
     """Save Python agent execution to database"""
@@ -442,7 +451,7 @@ def python_agent(
     result: List[Dict[str, Any]] = []
     prints: str = ""
     plots: List[Dict[str, Any]] = []
-    response_images: List[Dict[str, Any]] = []
+    response_images: List[Optional[str]] = []
     execution_id = None  # Initialize to avoid UnboundLocalError
 
     #try:

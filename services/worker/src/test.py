@@ -25,7 +25,7 @@ from engine import execute_strategy
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def test_strategy_validation():
+def test_strategy_validation() -> None:
     """Test strategy validation with a simple strategy"""
     
     # Create connection instance

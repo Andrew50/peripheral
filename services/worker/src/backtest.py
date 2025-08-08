@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from .engine import execute_strategy
-from .utils.error_utils import capture_exception
+# from .utils.error_utils import capture_exception
 from .utils.strategy_crud import fetch_strategy_code
 from .utils.context import Context
 
@@ -20,6 +20,11 @@ def backtest(
     """Execute backtest task using new accessor strategy engine"""
     if not strategy_id:
         raise ValueError("strategy_id is required")
+    if user_id is None:
+        raise ValueError("user_id is required")
+    # Help static typing: ensure non-None for calls below
+    assert strategy_id is not None
+    assert user_id is not None
     strategy_code, version = fetch_strategy_code(ctx, user_id, strategy_id)
 
     if symbols is not None and len(symbols) == 0:

@@ -1,3 +1,5 @@
+// Package twitter integrates with X/Twitter workflows for generating replies
+// and media for tweets using internal agent and rendering services.
 package twitter
 
 import (

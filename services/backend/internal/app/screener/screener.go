@@ -1,3 +1,6 @@
+// Package screener defines the types and validation helpers used to build
+// dynamic SQL queries for the screener feature. It exposes column metadata,
+// validation, and query construction utilities that other packages can consume.
 package screener
 
 import (
@@ -19,9 +22,13 @@ import (
 type ColumnType string
 
 const (
+	// TypeInteger indicates integer-typed screener columns
 	TypeInteger ColumnType = "integer"
-	TypeFloat   ColumnType = "float"
-	TypeString  ColumnType = "string"
+	// TypeFloat indicates floating-point-typed screener columns
+	TypeFloat ColumnType = "float"
+	// TypeString indicates string-typed screener columns
+	TypeString ColumnType = "string"
+	// TypeBoolean indicates boolean-typed screener columns
 	TypeBoolean ColumnType = "boolean"
 )
 

@@ -1,3 +1,5 @@
+// Package twitter integrates with X/Twitter APIs for posting tweets and media
+// for various automated workflows in the system.
 package twitter
 
 import (

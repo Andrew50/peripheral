@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def test_bar_data_queries():
+def test_bar_data_queries() -> None:
     """Test _get_bar_data with various parameters"""
     
     # Create connection instance

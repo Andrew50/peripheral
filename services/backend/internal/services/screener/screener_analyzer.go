@@ -17,11 +17,14 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+// TestQuery represents a named SQL statement used for analysis or benchmarking.
 type TestQuery struct {
 	Name  string
 	Query string
 }
 
+// AnalysisConfig configures what the screener performance analyzer will inspect.
+// It includes log destination, seed queries, and test cases.
 type AnalysisConfig struct {
 	LogFilePath      string
 	StaleQuery       string
@@ -46,6 +49,8 @@ func safeFprintln(w io.Writer, s string) {
 	}
 }
 
+// RunPerformanceAnalysis executes a comprehensive database and OS-level analysis
+// for the screener system and writes a human-readable report to the configured log.
 func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -114,7 +119,7 @@ func RunPerformanceAnalysis(conn *data.Conn, config AnalysisConfig) error {
 
 	if len(items) > 0 {
 		safeFprintf(logFile, "\n📊 Total items to process: %d\n", len(items))
-		safeFprintf(logFile, "📊 Sample items: %v\n\n", items[:min(len(items), 5)])
+		safeFprintf(logFile, "📊 Sample items: %v\n\n", items[:intMin(len(items), 5)])
 	} else {
 		safeFprintln(logFile, "📊 No items found for analysis")
 	}
@@ -333,23 +338,23 @@ func analyzeLockActivity(ctx context.Context, conn *data.Conn, logFile *os.File,
 		}
 
 		lockCount++
-		fmt.Fprintf(logFile, "📊 Blocking #%d: Blocked PID %d (%s) by PID %d (%s), Duration: %v\n", lockCount, blockedPid, blockedUser, blockingPid, blockingUser, duration)
-		fmt.Fprintf(logFile, "📊   Blocked Query: %s\n", blockedStmt[:min(len(blockedStmt), 100)])
-		fmt.Fprintf(logFile, "📊   Blocking Query: %s\n", blockingStmt[:min(len(blockingStmt), 100)])
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊 Blocking #%d: Blocked PID %d (%s) by PID %d (%s), Duration: %v\n", lockCount, blockedPid, blockedUser, blockingPid, blockingUser, duration)
+		safeFprintf(logFile, "📊   Blocked Query: %s\n", blockedStmt[:intMin(len(blockedStmt), 100)])
+		safeFprintf(logFile, "📊   Blocking Query: %s\n", blockingStmt[:intMin(len(blockingStmt), 100)])
+		safeFprintln(logFile, "📊   ---")
 	}
 
 	if lockCount == 0 {
-		fmt.Fprintln(logFile, "📊 No blocking locks found")
+		safeFprintln(logFile, "📊 No blocking locks found")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeWaitEvents analyzes what the database is waiting for
 func analyzeWaitEvents(ctx context.Context, conn *data.Conn, logFile *os.File, patterns []string) error {
-	fmt.Fprintln(logFile, "📊 Wait Events Analysis (Screener-Related):")
+	safeFprintln(logFile, "📊 Wait Events Analysis (Screener-Related):")
 
 	// Build filter
 	filter := ""
@@ -393,21 +398,21 @@ func analyzeWaitEvents(ctx context.Context, conn *data.Conn, logFile *os.File, p
 		}
 
 		waitCount++
-		fmt.Fprintf(logFile, "📊 Wait Event: %s:%s (count: %d, avg: %.2fs)\n",
+		safeFprintf(logFile, "📊 Wait Event: %s:%s (count: %d, avg: %.2fs)\n",
 			waitEventType, waitEvent, count, avgWaitTime)
 	}
 
 	if waitCount == 0 {
-		fmt.Fprintln(logFile, "📊 No wait events found")
+		safeFprintln(logFile, "📊 No wait events found")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeQueryPlans analyzes execution plans for provided queries
 func analyzeQueryPlans(ctx context.Context, conn *data.Conn, logFile *os.File, queries []TestQuery) error {
-	fmt.Fprintln(logFile, "📊 Query Plans Analysis:")
+	safeFprintln(logFile, "📊 Query Plans Analysis:")
 
 	for _, q := range queries {
 		planQuery := fmt.Sprintf(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) %s`, q.Query)
@@ -415,29 +420,29 @@ func analyzeQueryPlans(ctx context.Context, conn *data.Conn, logFile *os.File, q
 		var planJSON string
 		err := conn.DB.QueryRow(ctx, planQuery).Scan(&planJSON)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get query plan for %s: %v\n", q.Name, err)
+			safeFprintf(logFile, "⚠️  Failed to get query plan for %s: %v\n", q.Name, err)
 			continue
 		}
 
-		fmt.Fprintf(logFile, "📊 Execution Plan for %s:\n", q.Name)
-		fmt.Fprintf(logFile, "📊 %s\n", planJSON)
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊 Execution Plan for %s:\n", q.Name)
+		safeFprintf(logFile, "📊 %s\n", planJSON)
+		safeFprintln(logFile, "📊   ---")
 	}
 
 	if len(queries) == 0 {
-		fmt.Fprintln(logFile, "📊 No queries provided for plan analysis")
+		safeFprintln(logFile, "📊 No queries provided for plan analysis")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeTableStatistics analyzes table and index statistics for provided tables
 func analyzeTableStatistics(ctx context.Context, conn *data.Conn, logFile *os.File, tables []string) error {
-	fmt.Fprintln(logFile, "📊 Table Statistics Analysis:")
+	safeFprintln(logFile, "📊 Table Statistics Analysis:")
 
 	if len(tables) == 0 {
-		fmt.Fprintln(logFile, "📊 No tables provided for analysis")
+		safeFprintln(logFile, "📊 No tables provided for analysis")
 		return nil
 	}
 
@@ -481,39 +486,39 @@ func analyzeTableStatistics(ctx context.Context, conn *data.Conn, logFile *os.Fi
 			continue
 		}
 
-		fmt.Fprintf(logFile, "📊 Table: %s.%s\n", schemaName, tableName)
-		fmt.Fprintf(logFile, "📊   Live tuples: %d, Dead tuples: %d (%.2f%% dead)\n",
-			nLiveTup, nDeadTup, float64(nDeadTup)/float64(max64(nLiveTup+nDeadTup, 1))*100)
-		fmt.Fprintf(logFile, "📊   Inserts: %d, Updates: %d, Deletes: %d\n", nTupIns, nTupUpd, nTupDel)
+		safeFprintf(logFile, "📊 Table: %s.%s\n", schemaName, tableName)
+		safeFprintf(logFile, "📊   Live tuples: %d, Dead tuples: %d (%.2f%% dead)\n",
+			nLiveTup, nDeadTup, float64(nDeadTup)/float64(int64Max(nLiveTup+nDeadTup, 1))*100)
+		safeFprintf(logFile, "📊   Inserts: %d, Updates: %d, Deletes: %d\n", nTupIns, nTupUpd, nTupDel)
 
 		if lastVacuum != nil {
-			fmt.Fprintf(logFile, "📊   Last vacuum: %v\n", *lastVacuum)
+			safeFprintf(logFile, "📊   Last vacuum: %v\n", *lastVacuum)
 		}
 		if lastAutovacuum != nil {
-			fmt.Fprintf(logFile, "📊   Last autovacuum: %v\n", *lastAutovacuum)
+			safeFprintf(logFile, "📊   Last autovacuum: %v\n", *lastAutovacuum)
 		}
 		if lastAnalyze != nil {
-			fmt.Fprintf(logFile, "📊   Last analyze: %v\n", *lastAnalyze)
+			safeFprintf(logFile, "📊   Last analyze: %v\n", *lastAnalyze)
 		}
 		if lastAutoanalyze != nil {
-			fmt.Fprintf(logFile, "📊   Last autoanalyze: %v\n", *lastAutoanalyze)
+			safeFprintf(logFile, "📊   Last autoanalyze: %v\n", *lastAutoanalyze)
 		}
 
-		fmt.Fprintf(logFile, "📊   Vacuum count: %d, Autovacuum count: %d\n", vacuumCount, autovacuumCount)
-		fmt.Fprintf(logFile, "📊   Analyze count: %d, Autoanalyze count: %d\n", analyzeCount, autoanalyzeCount)
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊   Vacuum count: %d, Autovacuum count: %d\n", vacuumCount, autovacuumCount)
+		safeFprintf(logFile, "📊   Analyze count: %d, Autoanalyze count: %d\n", analyzeCount, autoanalyzeCount)
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeIndexUsage analyzes index usage and effectiveness for provided tables
 func analyzeIndexUsage(ctx context.Context, conn *data.Conn, logFile *os.File, tables []string) error {
-	fmt.Fprintln(logFile, "📊 Index Usage Analysis:")
+	safeFprintln(logFile, "📊 Index Usage Analysis:")
 
 	if len(tables) == 0 {
-		fmt.Fprintln(logFile, "📊 No tables provided for index analysis")
+		safeFprintln(logFile, "📊 No tables provided for index analysis")
 		return nil
 	}
 
@@ -546,26 +551,26 @@ func analyzeIndexUsage(ctx context.Context, conn *data.Conn, logFile *os.File, t
 			continue
 		}
 
-		fmt.Fprintf(logFile, "📊 Index: %s on %s.%s\n", indexName, schemaName, tableName)
-		fmt.Fprintf(logFile, "📊   Scans: %d, Tuples read: %d, Tuples fetched: %d\n", idxScan, idxTupRead, idxTupFetch)
-		fmt.Fprintf(logFile, "📊   Size: %s\n", indexSize)
+		safeFprintf(logFile, "📊 Index: %s on %s.%s\n", indexName, schemaName, tableName)
+		safeFprintf(logFile, "📊   Scans: %d, Tuples read: %d, Tuples fetched: %d\n", idxScan, idxTupRead, idxTupFetch)
+		safeFprintf(logFile, "📊   Size: %s\n", indexSize)
 
 		if idxScan > 0 {
-			fmt.Fprintf(logFile, "📊   Avg tuples per scan: %.2f\n", float64(idxTupRead)/float64(idxScan))
+			safeFprintf(logFile, "📊   Avg tuples per scan: %.2f\n", float64(idxTupRead)/float64(idxScan))
 		}
 		if idxScan == 0 {
-			fmt.Fprintf(logFile, "📊   ⚠️  Index not being used!\n")
+			safeFprintf(logFile, "📊   ⚠️  Index not being used!\n")
 		}
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeMemoryUsage analyzes memory usage and temp file creation
 func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 Memory Usage Analysis:")
+	safeFprintln(logFile, "📊 Memory Usage Analysis:")
 
 	// Get temp file usage
 	tempQuery := `
@@ -585,12 +590,12 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 		return fmt.Errorf("failed to get temp file usage: %v", err)
 	}
 
-	fmt.Fprintf(logFile, "📊 Database: %s\n", datname)
-	fmt.Fprintf(logFile, "📊 Temp files created: %d\n", tempFiles)
-	fmt.Fprintf(logFile, "📊 Temp bytes used: %s\n", tempSize)
+	safeFprintf(logFile, "📊 Database: %s\n", datname)
+	safeFprintf(logFile, "📊 Temp files created: %d\n", tempFiles)
+	safeFprintf(logFile, "📊 Temp bytes used: %s\n", tempSize)
 
 	if tempFiles > 0 {
-		fmt.Fprintf(logFile, "📊 ⚠️  Temp files indicate work_mem may be too small!\n")
+		safeFprintf(logFile, "📊 ⚠️  Temp files indicate work_mem may be too small!\n")
 	}
 
 	// Get buffer stats - check PostgreSQL version to handle column moves
@@ -613,10 +618,10 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 		var buffersClean, buffersAlloc int64
 		err = conn.DB.QueryRow(ctx, bufferQuery).Scan(&buffersClean, &buffersAlloc)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get buffer stats: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get buffer stats: %v\n", err)
 		} else {
-			fmt.Fprintf(logFile, "📊 Buffer stats:\n")
-			fmt.Fprintf(logFile, "📊   Clean: %d, Allocated: %d\n", buffersClean, buffersAlloc)
+			safeFprintf(logFile, "📊 Buffer stats:\n")
+			safeFprintf(logFile, "📊   Clean: %d, Allocated: %d\n", buffersClean, buffersAlloc)
 
 			// Try to get backend buffer stats from pg_stat_io
 			var buffersBackend, buffersBackendFsync int64
@@ -628,9 +633,9 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 				WHERE backend_type = 'client backend'
 			`).Scan(&buffersBackend, &buffersBackendFsync)
 			if err != nil {
-				fmt.Fprintf(logFile, "📊   Backend buffer stats not available: %v\n", err)
+				safeFprintf(logFile, "📊   Backend buffer stats not available: %v\n", err)
 			} else {
-				fmt.Fprintf(logFile, "📊   Backend: %d, Backend fsync: %d\n", buffersBackend, buffersBackendFsync)
+				safeFprintf(logFile, "📊   Backend: %d, Backend fsync: %d\n", buffersBackend, buffersBackendFsync)
 			}
 		}
 	} else {
@@ -647,24 +652,24 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 		var buffersClean, buffersBackend, buffersBackendFsync, buffersAlloc int64
 		err = conn.DB.QueryRow(ctx, bufferQuery).Scan(&buffersClean, &buffersBackend, &buffersBackendFsync, &buffersAlloc)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get buffer stats: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get buffer stats: %v\n", err)
 		} else {
-			fmt.Fprintf(logFile, "📊 Buffer stats:\n")
-			fmt.Fprintf(logFile, "📊   Clean: %d, Backend: %d\n", buffersClean, buffersBackend)
-			fmt.Fprintf(logFile, "📊   Backend fsync: %d, Allocated: %d\n", buffersBackendFsync, buffersAlloc)
+			safeFprintf(logFile, "📊 Buffer stats:\n")
+			safeFprintf(logFile, "📊   Clean: %d, Backend: %d\n", buffersClean, buffersBackend)
+			safeFprintf(logFile, "📊   Backend fsync: %d, Allocated: %d\n", buffersBackendFsync, buffersAlloc)
 		}
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeMaintenanceStatus analyzes vacuum and analyze status for provided tables
 func analyzeMaintenanceStatus(ctx context.Context, conn *data.Conn, logFile *os.File, tables []string) error {
-	fmt.Fprintln(logFile, "📊 Maintenance Status Analysis:")
+	safeFprintln(logFile, "📊 Maintenance Status Analysis:")
 
 	if len(tables) == 0 {
-		fmt.Fprintln(logFile, "📊 No tables provided for maintenance analysis")
+		safeFprintln(logFile, "📊 No tables provided for maintenance analysis")
 		return nil
 	}
 
@@ -704,37 +709,37 @@ func analyzeMaintenanceStatus(ctx context.Context, conn *data.Conn, logFile *os.
 			continue
 		}
 
-		fmt.Fprintf(logFile, "📊 Table: %s.%s\n", schemaName, tableName)
-		fmt.Fprintf(logFile, "📊   Dead tuples: %d (%.2f%% of live)\n", nDeadTup, deadTuplePct)
+		safeFprintf(logFile, "📊 Table: %s.%s\n", schemaName, tableName)
+		safeFprintf(logFile, "📊   Dead tuples: %d (%.2f%% of live)\n", nDeadTup, deadTuplePct)
 
 		if deadTuplePct > 20 {
-			fmt.Fprintf(logFile, "📊   ⚠️  High dead tuple percentage - needs vacuum!\n")
+			safeFprintf(logFile, "📊   ⚠️  High dead tuple percentage - needs vacuum!\n")
 		}
 
 		now := time.Now()
 		if lastVacuum != nil {
-			fmt.Fprintf(logFile, "📊   Last vacuum: %v (%v ago)\n", *lastVacuum, now.Sub(*lastVacuum))
+			safeFprintf(logFile, "📊   Last vacuum: %v (%v ago)\n", *lastVacuum, now.Sub(*lastVacuum))
 		}
 		if lastAutovacuum != nil {
-			fmt.Fprintf(logFile, "📊   Last autovacuum: %v (%v ago)\n", *lastAutovacuum, now.Sub(*lastAutovacuum))
+			safeFprintf(logFile, "📊   Last autovacuum: %v (%v ago)\n", *lastAutovacuum, now.Sub(*lastAutovacuum))
 		}
 		if lastAnalyze != nil {
-			fmt.Fprintf(logFile, "📊   Last analyze: %v (%v ago)\n", *lastAnalyze, now.Sub(*lastAnalyze))
+			safeFprintf(logFile, "📊   Last analyze: %v (%v ago)\n", *lastAnalyze, now.Sub(*lastAnalyze))
 		}
 		if lastAutoanalyze != nil {
-			fmt.Fprintf(logFile, "📊   Last autoanalyze: %v (%v ago)\n", *lastAutoanalyze, now.Sub(*lastAutoanalyze))
+			safeFprintf(logFile, "📊   Last autoanalyze: %v (%v ago)\n", *lastAutoanalyze, now.Sub(*lastAutoanalyze))
 		}
 
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeConcurrentQueries analyzes concurrent query impact using provided patterns
 func analyzeConcurrentQueries(ctx context.Context, conn *data.Conn, logFile *os.File, patterns []string) error {
-	fmt.Fprintln(logFile, "📊 Concurrent Query Impact Analysis (Screener-Related):")
+	safeFprintln(logFile, "📊 Concurrent Query Impact Analysis (Screener-Related):")
 
 	// Build filter
 	filter := ""
@@ -800,11 +805,11 @@ func analyzeConcurrentQueries(ctx context.Context, conn *data.Conn, logFile *os.
 			waitInfo = fmt.Sprintf("%s:%s", *waitEventType, *waitEvent)
 		}
 
-		fmt.Fprintf(logFile, "📊 Concurrent Query #%d:\n", queryCount)
-		fmt.Fprintf(logFile, "📊   PID: %d, User: %s, State: %s, Duration: %.2fs\n", pid, username, state, duration)
-		fmt.Fprintf(logFile, "📊   Wait: %s\n", waitInfo)
-		fmt.Fprintf(logFile, "📊   Query: %s\n", queryStart)
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊 Concurrent Query #%d:\n", queryCount)
+		safeFprintf(logFile, "📊   PID: %d, User: %s, State: %s, Duration: %.2fs\n", pid, username, state, duration)
+		safeFprintf(logFile, "📊   Wait: %s\n", waitInfo)
+		safeFprintf(logFile, "📊   Query: %s\n", queryStart)
+		safeFprintln(logFile, "📊   ---")
 	}
 
 	avgDuration := 0.0
@@ -812,45 +817,45 @@ func analyzeConcurrentQueries(ctx context.Context, conn *data.Conn, logFile *os.
 		avgDuration = totalDuration / float64(totalActive)
 	}
 
-	fmt.Fprintf(logFile, "📊 Total screener-related connections: %d\n", totalActive)
-	fmt.Fprintf(logFile, "📊 Active queries: %d\n", activeQueries)
-	fmt.Fprintf(logFile, "📊 Waiting queries: %d\n", waitingQueries)
-	fmt.Fprintf(logFile, "📊 Average query duration: %.2f seconds\n", avgDuration)
+	safeFprintf(logFile, "📊 Total screener-related connections: %d\n", totalActive)
+	safeFprintf(logFile, "📊 Active queries: %d\n", activeQueries)
+	safeFprintf(logFile, "📊 Waiting queries: %d\n", waitingQueries)
+	safeFprintf(logFile, "📊 Average query duration: %.2f seconds\n", avgDuration)
 
 	if waitingQueries > 0 {
-		fmt.Fprintf(logFile, "📊 ⚠️  %d queries are waiting - possible contention!\n", waitingQueries)
+		safeFprintf(logFile, "📊 ⚠️  %d queries are waiting - possible contention!\n", waitingQueries)
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeQueryPerformance runs performance tests on provided functions and component queries
 func analyzeQueryPerformance(ctx context.Context, conn *data.Conn, logFile *os.File, testFunctions []TestQuery, componentTests []TestQuery, items []string) error {
-	fmt.Fprintln(logFile, "📊 Query Performance Analysis:")
+	safeFprintln(logFile, "📊 Query Performance Analysis:")
 
 	if len(items) == 0 {
-		fmt.Fprintln(logFile, "📊 No items provided for component tests")
+		safeFprintln(logFile, "📊 No items provided for component tests")
 	}
 
 	// Test functions (using Exec, no params)
 	for _, fn := range testFunctions {
-		fmt.Fprintf(logFile, "📊 Testing %s...\n", fn.Name)
+		safeFprintf(logFile, "📊 Testing %s...\n", fn.Name)
 
 		start := time.Now()
 		_, err := conn.DB.Exec(ctx, fn.Query)
 		duration := time.Since(start)
 
 		if err != nil {
-			fmt.Fprintf(logFile, "📊   ❌ Failed: %v\n", err)
+			safeFprintf(logFile, "📊   ❌ Failed: %v\n", err)
 		} else {
-			fmt.Fprintf(logFile, "📊   ✅ Success: %v\n", duration)
+			safeFprintf(logFile, "📊   ✅ Success: %v\n", duration)
 		}
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintln(logFile, "📊   ---")
 	}
 
 	// Test components (using Query with sample items)
-	sampleItems := items[:min(len(items), 3)]
+	sampleItems := items[:intMin(len(items), 3)]
 	batchSize := len(items)
 	if batchSize > 10 {
 		batchSize = 10 // Limit batch size for testing
@@ -871,7 +876,7 @@ func analyzeQueryPerformance(ctx context.Context, conn *data.Conn, logFile *os.F
 		}
 
 		if err != nil {
-			fmt.Fprintf(logFile, "📊 %s: ❌ %v\n", test.Name, err)
+			safeFprintf(logFile, "📊 %s: ❌ %v\n", test.Name, err)
 			continue
 		}
 
@@ -882,21 +887,21 @@ func analyzeQueryPerformance(ctx context.Context, conn *data.Conn, logFile *os.F
 		rows.Close()
 
 		duration := time.Since(start)
-		msPerRow := float64(duration.Milliseconds()) / float64(max(rowCount, 1))
-		fmt.Fprintf(logFile, "📊 %s: ✅ %v (%d rows, %.2f ms per row)\n",
+		msPerRow := float64(duration.Milliseconds()) / float64(intMax(rowCount, 1))
+		safeFprintf(logFile, "📊 %s: ✅ %v (%d rows, %.2f ms per row)\n",
 			test.Name, duration, rowCount, msPerRow)
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzePgStatStatements analyzes query performance using pg_stat_statements with provided patterns
 func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.File, patterns []string) error {
-	fmt.Fprintln(logFile, "📊 Query Performance Statistics Analysis:")
+	safeFprintln(logFile, "📊 Query Performance Statistics Analysis:")
 
 	if len(patterns) == 0 {
-		fmt.Fprintln(logFile, "📊 No query patterns provided")
+		safeFprintln(logFile, "📊 No query patterns provided")
 		return nil
 	}
 
@@ -917,7 +922,7 @@ func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.F
 		meanColumn = "mean_exec_time"
 		hasIoTiming = false
 		hasMaxExecTime = true
-		fmt.Fprintf(logFile, "⚠️  Failed to check pg_stat_statements columns, using fallback: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to check pg_stat_statements columns, using fallback: %v\n", err)
 	}
 
 	// Build select clause
@@ -971,7 +976,7 @@ func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.F
 	}
 	defer rows.Close()
 
-	fmt.Fprintln(logFile, "📊 Top matching queries by total time:")
+	safeFprintln(logFile, "📊 Top matching queries by total time:")
 	queryCount := 0
 	for rows.Next() {
 		var shortQuery string
@@ -1012,43 +1017,43 @@ func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.F
 			writeTimeStr = fmt.Sprintf("%.2fms", *blkWriteTime)
 		}
 
-		fmt.Fprintf(logFile, "📊 Query #%d: %s\n", queryCount, shortQuery)
-		fmt.Fprintf(logFile, "📊   Performance: %d calls, %.2fms total, %.2fms mean, %s max\n",
+		safeFprintf(logFile, "📊 Query #%d: %s\n", queryCount, shortQuery)
+		safeFprintf(logFile, "📊   Performance: %d calls, %.2fms total, %.2fms mean, %s max\n",
 			calls, totalTime, meanTime, maxTimeStr)
-		fmt.Fprintf(logFile, "📊   Rows: %d processed (%.2f rows/call)\n",
-			rowsProcessed, float64(rowsProcessed)/float64(max64(calls, 1)))
-		fmt.Fprintf(logFile, "📊   Cache: %s hit ratio, %d reads, %d hits\n",
+		safeFprintf(logFile, "📊   Rows: %d processed (%.2f rows/call)\n",
+			rowsProcessed, float64(rowsProcessed)/float64(int64Max(calls, 1)))
+		safeFprintf(logFile, "📊   Cache: %s hit ratio, %d reads, %d hits\n",
 			hitPercentStr, sharedBlksRead, sharedBlksHit)
 
 		if calls > 0 && meanTime > 1000 {
-			fmt.Fprintf(logFile, "📊   ⚠️  SLOW: Mean time > 1s - optimization needed!\n")
+			safeFprintf(logFile, "📊   ⚠️  SLOW: Mean time > 1s - optimization needed!\n")
 		}
 		if hitPercent != nil && *hitPercent < 90 {
-			fmt.Fprintf(logFile, "📊   ⚠️  LOW CACHE HIT: %.2f%% - consider increasing shared_buffers\n", *hitPercent)
+			safeFprintf(logFile, "📊   ⚠️  LOW CACHE HIT: %.2f%% - consider increasing shared_buffers\n", *hitPercent)
 		}
 		if tempBlksRead > 0 || tempBlksWritten > 0 {
-			fmt.Fprintf(logFile, "📊   ⚠️  TEMP FILES: %d read, %d written - increase work_mem\n",
+			safeFprintf(logFile, "📊   ⚠️  TEMP FILES: %d read, %d written - increase work_mem\n",
 				tempBlksRead, tempBlksWritten)
 		}
 
 		if blkReadTime != nil && blkWriteTime != nil {
-			fmt.Fprintf(logFile, "📊   I/O: Read %s, Write %s\n", readTimeStr, writeTimeStr)
+			safeFprintf(logFile, "📊   I/O: Read %s, Write %s\n", readTimeStr, writeTimeStr)
 		}
 
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintln(logFile, "📊   ---")
 	}
 
 	if queryCount == 0 {
-		fmt.Fprintln(logFile, "📊 No matching queries found in pg_stat_statements")
+		safeFprintln(logFile, "📊 No matching queries found in pg_stat_statements")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeDatabaseActivity analyzes current database activity
 func analyzeDatabaseActivity(ctx context.Context, conn *data.Conn, logFile *os.File, patterns []string) error {
-	fmt.Fprintln(logFile, "📊 Current Database Activity Analysis (Screener-Related):")
+	safeFprintln(logFile, "📊 Current Database Activity Analysis (Screener-Related):")
 
 	// Build filter
 	filter := ""
@@ -1082,7 +1087,7 @@ func analyzeDatabaseActivity(ctx context.Context, conn *data.Conn, logFile *os.F
 	}
 	defer rows.Close()
 
-	fmt.Fprintln(logFile, "📊 Current active queries:")
+	safeFprintln(logFile, "📊 Current active queries:")
 	for rows.Next() {
 		var pid int
 		var duration time.Duration
@@ -1098,18 +1103,18 @@ func analyzeDatabaseActivity(ctx context.Context, conn *data.Conn, logFile *os.F
 			waitInfo = fmt.Sprintf("%s:%s", *waitEventType, *waitEvent)
 		}
 
-		fmt.Fprintf(logFile, "📊 PID: %d, Duration: %v, State: %s, Wait: %s\n", pid, duration, state, waitInfo)
-		fmt.Fprintf(logFile, "📊   Query: %s\n", query[:min(len(query), 100)])
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊 PID: %d, Duration: %v, State: %s, Wait: %s\n", pid, duration, state, waitInfo)
+		safeFprintf(logFile, "📊   Query: %s\n", query[:intMin(len(query), 100)])
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzePerQueryIO: Use EXPLAIN (ANALYZE, VERBOSE, BUFFERS) on the test queries provided in config.TestFunctions.
 func analyzePerQueryIO(ctx context.Context, conn *data.Conn, logFile *os.File, queries []TestQuery) error {
-	fmt.Fprintln(logFile, "📊 Per-Query I/O Breakdown Analysis:")
+	safeFprintln(logFile, "📊 Per-Query I/O Breakdown Analysis:")
 
 	for _, q := range queries {
 		// Replace any references to stale_tickers with screener_stale
@@ -1119,28 +1124,28 @@ func analyzePerQueryIO(ctx context.Context, conn *data.Conn, logFile *os.File, q
 		var planText string
 		err := conn.DB.QueryRow(ctx, planQuery).Scan(&planText)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get I/O breakdown for %s: %v\n", q.Name, err)
+			safeFprintf(logFile, "⚠️  Failed to get I/O breakdown for %s: %v\n", q.Name, err)
 			continue
 		}
 
-		fmt.Fprintf(logFile, "📊 I/O Breakdown for %s:\n", q.Name)
-		fmt.Fprintf(logFile, "📊 %s\n", planText)
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintf(logFile, "📊 I/O Breakdown for %s:\n", q.Name)
+		safeFprintf(logFile, "📊 %s\n", planText)
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeTableBloat: Use pgstattuple extension if available to check bloat for config.Tables.
 func analyzeTableBloat(ctx context.Context, conn *data.Conn, logFile *os.File, tables []string) error {
-	fmt.Fprintln(logFile, "📊 Table Bloat Analysis:")
+	safeFprintln(logFile, "📊 Table Bloat Analysis:")
 
 	// Check if pgstattuple is installed
 	var extInstalled bool
 	err := conn.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgstattuple')").Scan(&extInstalled)
 	if err != nil || !extInstalled {
-		fmt.Fprintln(logFile, "📊 pgstattuple extension not installed - skipping bloat analysis")
+		safeFprintln(logFile, "📊 pgstattuple extension not installed - skipping bloat analysis")
 		return nil
 	}
 
@@ -1159,36 +1164,36 @@ func analyzeTableBloat(ctx context.Context, conn *data.Conn, logFile *os.File, t
 		var tableLen, tupleCount, tupleLen, deadTupleCount, deadTupleLen, freeSpace int64
 		err = conn.DB.QueryRow(ctx, bloatQuery).Scan(&tableLen, &tupleCount, &tupleLen, &deadTupleCount, &deadTupleLen, &freeSpace)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed for %s: %v\n", table, err)
+			safeFprintf(logFile, "⚠️  Failed for %s: %v\n", table, err)
 			continue
 		}
 
-		bloatPct := float64(deadTupleLen+freeSpace) / float64(max64(tableLen, 1)) * 100
+		bloatPct := float64(deadTupleLen+freeSpace) / float64(int64Max(tableLen, 1)) * 100
 
-		fmt.Fprintf(logFile, "📊 Table: %s\n", table)
-		fmt.Fprintf(logFile, "📊   Size: %d bytes\n", tableLen)
-		fmt.Fprintf(logFile, "📊   Tuples: %d live, %d dead\n", tupleCount, deadTupleCount)
-		fmt.Fprintf(logFile, "📊   Bloat: %.2f%% (dead: %d bytes, free: %d bytes)\n", bloatPct, deadTupleLen, freeSpace)
+		safeFprintf(logFile, "📊 Table: %s\n", table)
+		safeFprintf(logFile, "📊   Size: %d bytes\n", tableLen)
+		safeFprintf(logFile, "📊   Tuples: %d live, %d dead\n", tupleCount, deadTupleCount)
+		safeFprintf(logFile, "📊   Bloat: %.2f%% (dead: %d bytes, free: %d bytes)\n", bloatPct, deadTupleLen, freeSpace)
 		if bloatPct > 20 {
-			fmt.Fprintln(logFile, "📊   ⚠️  High bloat - consider vacuum full or pg_repack")
+			safeFprintln(logFile, "📊   ⚠️  High bloat - consider vacuum full or pg_repack")
 		}
-		fmt.Fprintln(logFile, "📊   ---")
+		safeFprintln(logFile, "📊   ---")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeOSDiskMetrics: Use run_terminal_cmd to run 'iostat -x 1 2' and parse output.
 func analyzeOSDiskMetrics(logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 OS-Level Disk Metrics:")
+	safeFprintln(logFile, "📊 OS-Level Disk Metrics:")
 
 	cmd := exec.Command("iostat", "-x", "1", "2")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to run iostat: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to run iostat: %v\n", err)
 		return nil
 	}
 
@@ -1196,17 +1201,17 @@ func analyzeOSDiskMetrics(logFile *os.File) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "%util") || strings.Contains(line, "avg-cpu") {
-			fmt.Fprintf(logFile, "📊 %s\n", line)
+			safeFprintf(logFile, "📊 %s\n", line)
 		}
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeCPUMemory: Use run_terminal_cmd to run 'vmstat 1 2' and 'free -h'.
 func analyzeCPUMemory(logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 CPU and Memory Metrics:")
+	safeFprintln(logFile, "📊 CPU and Memory Metrics:")
 
 	// vmstat
 	cmd := exec.Command("vmstat", "1", "2")
@@ -1214,10 +1219,10 @@ func analyzeCPUMemory(logFile *os.File) error {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to run vmstat: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to run vmstat: %v\n", err)
 	} else {
-		fmt.Fprintln(logFile, "📊 vmstat output:")
-		fmt.Fprintln(logFile, out.String())
+		safeFprintln(logFile, "📊 vmstat output:")
+		safeFprintln(logFile, out.String())
 	}
 
 	// free -h
@@ -1226,19 +1231,19 @@ func analyzeCPUMemory(logFile *os.File) error {
 	cmd.Stdout = &out
 	err = cmd.Run()
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to run free: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to run free: %v\n", err)
 	} else {
-		fmt.Fprintln(logFile, "📊 free output:")
-		fmt.Fprintln(logFile, out.String())
+		safeFprintln(logFile, "📊 free output:")
+		safeFprintln(logFile, out.String())
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeWALCheckpoint: Query pg_stat_bgwriter and pg_stat_wal.
 func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 WAL and Checkpoint Analysis:")
+	safeFprintln(logFile, "📊 WAL and Checkpoint Analysis:")
 
 	// Check if pg_stat_checkpointer exists (PostgreSQL 17+)
 	var checkpointerExists bool
@@ -1263,12 +1268,12 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 			FROM pg_stat_checkpointer
 		`).Scan(&checkpointsTimed, &checkpointsReq, &checkpointWriteTime, &checkpointSyncTime, &buffersCheckpoint)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get checkpointer stats: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get checkpointer stats: %v\n", err)
 		} else {
-			fmt.Fprintln(logFile, "📊 Checkpoints (from pg_stat_checkpointer):")
-			fmt.Fprintf(logFile, "📊   Timed: %d, Requested: %d\n", checkpointsTimed, checkpointsReq)
-			fmt.Fprintf(logFile, "📊   Write time: %.2fms, Sync time: %.2fms\n", checkpointWriteTime, checkpointSyncTime)
-			fmt.Fprintf(logFile, "📊   Buffers written: %d\n", buffersCheckpoint)
+			safeFprintln(logFile, "📊 Checkpoints (from pg_stat_checkpointer):")
+			safeFprintf(logFile, "📊   Timed: %d, Requested: %d\n", checkpointsTimed, checkpointsReq)
+			safeFprintf(logFile, "📊   Write time: %.2fms, Sync time: %.2fms\n", checkpointWriteTime, checkpointSyncTime)
+			safeFprintf(logFile, "📊   Buffers written: %d\n", buffersCheckpoint)
 		}
 
 		// Get background writer stats from pg_stat_bgwriter
@@ -1281,10 +1286,10 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 			FROM pg_stat_bgwriter
 		`).Scan(&buffersClean, &maxwrittenClean, &buffersAlloc)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get bgwriter stats: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get bgwriter stats: %v\n", err)
 		} else {
-			fmt.Fprintln(logFile, "📊 Background Writer:")
-			fmt.Fprintf(logFile, "📊   Clean: %d, Max written clean: %d, Alloc: %d\n", buffersClean, maxwrittenClean, buffersAlloc)
+			safeFprintln(logFile, "📊 Background Writer:")
+			safeFprintf(logFile, "📊   Clean: %d, Max written clean: %d, Alloc: %d\n", buffersClean, maxwrittenClean, buffersAlloc)
 		}
 
 		// Try to get backend buffer stats from pg_stat_io (PostgreSQL 17+)
@@ -1297,9 +1302,9 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 			WHERE backend_type = 'client backend'
 		`).Scan(&buffersBackend, &buffersBackendFsync)
 		if err != nil {
-			fmt.Fprintf(logFile, "📊   Backend buffer stats not available from pg_stat_io: %v\n", err)
+			safeFprintf(logFile, "📊   Backend buffer stats not available from pg_stat_io: %v\n", err)
 		} else {
-			fmt.Fprintf(logFile, "📊   Backend: %d, Backend fsync: %d\n", buffersBackend, buffersBackendFsync)
+			safeFprintf(logFile, "📊   Backend: %d, Backend fsync: %d\n", buffersBackend, buffersBackendFsync)
 		}
 	} else {
 		// PostgreSQL 16 and earlier - use pg_stat_bgwriter
@@ -1325,14 +1330,14 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 			&buffersCheckpoint, &buffersClean, &maxwrittenClean, &buffersBackend,
 			&buffersBackendFsync, &buffersAlloc)
 		if err != nil {
-			fmt.Fprintf(logFile, "⚠️  Failed to get bgwriter stats: %v\n", err)
+			safeFprintf(logFile, "⚠️  Failed to get bgwriter stats: %v\n", err)
 		} else {
-			fmt.Fprintln(logFile, "📊 Checkpoints (from pg_stat_bgwriter):")
-			fmt.Fprintf(logFile, "📊   Timed: %d, Requested: %d\n", checkpointsTimed, checkpointsReq)
-			fmt.Fprintf(logFile, "📊   Write time: %.2fms, Sync time: %.2fms\n", checkpointWriteTime, checkpointSyncTime)
-			fmt.Fprintf(logFile, "📊   Buffers: Checkpoint %d, Clean %d, Backend %d, Alloc %d\n",
+			safeFprintln(logFile, "📊 Checkpoints (from pg_stat_bgwriter):")
+			safeFprintf(logFile, "📊   Timed: %d, Requested: %d\n", checkpointsTimed, checkpointsReq)
+			safeFprintf(logFile, "📊   Write time: %.2fms, Sync time: %.2fms\n", checkpointWriteTime, checkpointSyncTime)
+			safeFprintf(logFile, "📊   Buffers: Checkpoint %d, Clean %d, Backend %d, Alloc %d\n",
 				buffersCheckpoint, buffersClean, buffersBackend, buffersAlloc)
-			fmt.Fprintf(logFile, "📊   Max written clean: %d, Backend fsync: %d\n", maxwrittenClean, buffersBackendFsync)
+			safeFprintf(logFile, "📊   Max written clean: %d, Backend fsync: %d\n", maxwrittenClean, buffersBackendFsync)
 		}
 	}
 
@@ -1346,19 +1351,19 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 		FROM pg_stat_wal
 	`).Scan(&walRecords, &walFpi, &walBytes)
 	if err == nil {
-		fmt.Fprintln(logFile, "📊 WAL Stats:")
-		fmt.Fprintf(logFile, "📊   Records: %d, FPI: %d, Bytes: %d\n", walRecords, walFpi, walBytes)
+		safeFprintln(logFile, "📊 WAL Stats:")
+		safeFprintf(logFile, "📊   Records: %d, FPI: %d, Bytes: %d\n", walRecords, walFpi, walBytes)
 	} else {
-		fmt.Fprintf(logFile, "📊 pg_stat_wal not available\n")
+		safeFprintf(logFile, "📊 pg_stat_wal not available\n")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeRefreshScreenerPlan: Insert 3 synthetic stale tickers, run EXPLAIN (ANALYZE, BUFFERS, WAL) SELECT refresh_screener(3); then clean up.
 func analyzeRefreshScreenerPlan(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 Refresh Screener Plan Analysis:")
+	safeFprintln(logFile, "📊 Refresh Screener Plan Analysis:")
 
 	// Insert synthetic stale tickers
 	_, err := conn.DB.Exec(ctx, `
@@ -1367,7 +1372,7 @@ func analyzeRefreshScreenerPlan(ctx context.Context, conn *data.Conn, logFile *o
 		ON CONFLICT (ticker) DO UPDATE SET stale = TRUE
 	`)
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to insert synthetic data: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to insert synthetic data: %v\n", err)
 		return nil
 	}
 
@@ -1392,25 +1397,25 @@ func analyzeRefreshScreenerPlan(ctx context.Context, conn *data.Conn, logFile *o
 	var planText string
 	err = conn.DB.QueryRow(ctx, planQuery).Scan(&planText)
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed to explain refresh_screener: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed to explain refresh_screener: %v\n", err)
 		return nil
 	}
 
-	fmt.Fprintln(logFile, "📊 Plan:")
-	fmt.Fprintln(logFile, planText)
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "📊 Plan:")
+	safeFprintln(logFile, planText)
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzePgStatIO: Check if pg_stat_io exists (PG17+), query it.
 func analyzePgStatIO(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 PG Stat IO Analysis (PG17+):")
+	safeFprintln(logFile, "📊 PG Stat IO Analysis (PG17+):")
 
 	// Check if available
 	var exists bool
 	err := conn.DB.QueryRow(ctx, "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pg_stat_io')").Scan(&exists)
 	if err != nil || !exists {
-		fmt.Fprintln(logFile, "📊 pg_stat_io not available")
+		safeFprintln(logFile, "📊 pg_stat_io not available")
 		return nil
 	}
 
@@ -1429,7 +1434,7 @@ func analyzePgStatIO(ctx context.Context, conn *data.Conn, logFile *os.File) err
 		ORDER BY reads + writes DESC
 	`)
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed: %v\n", err)
+		safeFprintf(logFile, "⚠️  Failed: %v\n", err)
 		return nil
 	}
 	defer rows.Close()
@@ -1441,16 +1446,16 @@ func analyzePgStatIO(ctx context.Context, conn *data.Conn, logFile *os.File) err
 		if err := rows.Scan(&backendType, &object, &context, &reads, &readTime, &writes, &writeTime, &writebacks, &extends); err != nil {
 			continue
 		}
-		fmt.Fprintf(logFile, "📊 %s - %s (%s): Reads %d (%.2fms), Writes %d (%.2fms)\n", backendType, object, context, reads, readTime, writes, writeTime)
+		safeFprintf(logFile, "📊 %s - %s (%s): Reads %d (%.2fms), Writes %d (%.2fms)\n", backendType, object, context, reads, readTime, writes, writeTime)
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // analyzeContinuousAggLag: Query timescaledb_information.continuous_aggregate_stats.
 func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.File) error {
-	fmt.Fprintln(logFile, "📊 Continuous Aggregate Lag Analysis:")
+	safeFprintln(logFile, "📊 Continuous Aggregate Lag Analysis:")
 
 	// Check if TimescaleDB is installed and the view exists
 	var viewExists bool
@@ -1462,8 +1467,8 @@ func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.F
 		)
 	`).Scan(&viewExists)
 	if err != nil || !viewExists {
-		fmt.Fprintf(logFile, "⚠️  TimescaleDB continuous_aggregate_stats view not available\n")
-		fmt.Fprintln(logFile, "")
+		safeFprintf(logFile, "⚠️  TimescaleDB continuous_aggregate_stats view not available\n")
+		safeFprintln(logFile, "")
 		return nil
 	}
 
@@ -1477,8 +1482,8 @@ func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.F
 		ORDER BY lag DESC
 	`)
 	if err != nil {
-		fmt.Fprintf(logFile, "⚠️  Failed: %v\n", err)
-		fmt.Fprintln(logFile, "")
+		safeFprintf(logFile, "⚠️  Failed: %v\n", err)
+		safeFprintln(logFile, "")
 		return nil
 	}
 	defer rows.Close()
@@ -1492,36 +1497,36 @@ func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.F
 			continue
 		}
 		aggCount++
-		fmt.Fprintf(logFile, "📊 %s: Lag %v, Last duration %v, Status %s\n", hypertable, lag, lastDuration, lastStatus)
+		safeFprintf(logFile, "📊 %s: Lag %v, Last duration %v, Status %s\n", hypertable, lag, lastDuration, lastStatus)
 		if lag > time.Minute*5 {
-			fmt.Fprintln(logFile, "⚠️  High lag - check policies")
+			safeFprintln(logFile, "⚠️  High lag - check policies")
 		}
 	}
 
 	if aggCount == 0 {
-		fmt.Fprintln(logFile, "📊 No continuous aggregates found")
+		safeFprintln(logFile, "📊 No continuous aggregates found")
 	}
 
-	fmt.Fprintln(logFile, "")
+	safeFprintln(logFile, "")
 	return nil
 }
 
 // Helper functions
-func max(a, b int) int {
+func intMax(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
 
-func max64(a, b int64) int64 {
+func int64Max(a, b int64) int64 {
 	if a > b {
 		return a
 	}
 	return b
 }
 
-func min(a, b int) int {
+func intMin(a, b int) int {
 	if a < b {
 		return a
 	}

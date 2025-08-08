@@ -17,17 +17,17 @@ import io
 import contextlib
 import math
 from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex, Iterator
-import numpy as np  # type: ignore[import-untyped,import-not-found]
-import pandas as pd  # type: ignore[import-untyped,import-not-found]
-import plotly  # type: ignore[import-untyped,import-not-found]
-import plotly.express as px  # type: ignore[import-untyped,import-not-found]
-from plotly.subplots import make_subplots  # type: ignore[import-untyped,import-not-found]
-import plotly.graph_objects as go  # type: ignore[import-untyped,import-not-found]
+import numpy as np
+import pandas as pd
+import plotly
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
-from .utils.plotly_to_matlab import plotly_to_matplotlib_png  # type: ignore[import-untyped,import-not-found]
-from .utils.context import Context  # type: ignore[import-untyped,import-not-found]
-from .utils.data_accessors import _get_bar_data, _get_general_data  # type: ignore[import-untyped,import-not-found]
-from .utils.error_utils import capture_exception  # type: ignore[import-untyped,import-not-found]
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png
+from .utils.context import Context
+from .utils.data_accessors import _get_bar_data, _get_general_data
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
@@ -504,11 +504,11 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
             elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
                 # Handle pandas nullable float types
                 serializable_instance[key] = float(value.item()) if pd.notna(value) else None
+            elif pd.isna(value):
+                # Handle pandas NA values early to avoid unreachable branch
+                serializable_instance[key] = None
             elif hasattr(value, 'item'):  # Other numpy scalars
                 serializable_instance[key] = value.item()
-            elif pd.isna(value):
-                # Handle pandas NA values
-                serializable_instance[key] = None
             else:
                 serializable_instance[key] = value
 
