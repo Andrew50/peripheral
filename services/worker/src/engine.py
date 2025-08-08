@@ -4,6 +4,8 @@ Executes Python strategies that use get_bar_data() and get_general_data() functi
 instead of receiving DataFrames as parameters.
 """
 
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
 # pylint: disable=import-error
 
 from datetime import datetime as dt, timedelta
@@ -14,18 +16,18 @@ import logging
 import io
 import contextlib
 import math
-from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex
-import numpy as np  # type: ignore[import-untyped,import-not-found]
-import pandas as pd  # type: ignore[import-untyped,import-not-found]
-import plotly  # type: ignore[import-untyped,import-not-found]
-import plotly.express as px  # type: ignore[import-untyped,import-not-found]
-from plotly.subplots import make_subplots  # type: ignore[import-untyped,import-not-found]
-import plotly.graph_objects as go  # type: ignore[import-untyped,import-not-found]
+from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex, Iterator
+import numpy as np
+import pandas as pd
+import plotly
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
-from utils.plotly_to_matlab import plotly_to_matplotlib_png  # type: ignore[import-untyped,import-not-found]
-from utils.context import Context  # type: ignore[import-untyped,import-not-found]
-from utils.data_accessors import _get_bar_data, _get_general_data  # type: ignore[import-untyped,import-not-found]
-from utils.error_utils import capture_exception  # type: ignore[import-untyped,import-not-found]
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png
+from .utils.context import Context
+from .utils.data_accessors import _get_bar_data, _get_general_data
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +74,12 @@ class TrackedList(list, Generic[T]):
         if self._check_and_update_limit(1):
             super().append(item)
 
-    def extend(self, items: Iterable[Any]) -> None:
-        items_list = list(items) if not isinstance(items, list) else items  # type: ignore[assignment]
+    def extend(self, items: Iterable[T]) -> None:
+        items_list: List[T] = list(items) if not isinstance(items, list) else list(items)
         if len(items_list) == 0:
             return
         if self._check_and_update_limit(len(items_list)):
-            super().extend(items_list)  # type: ignore[arg-type]
+            super().extend(items_list)
     def insert(self, index: SupportsIndex, item: T) -> None:
         if self._check_and_update_limit(1):
             super().insert(index, item)
@@ -194,15 +196,37 @@ def _create_safe_globals(
                     fig.data[i].update(line={"color": color, "width": 2})
         return fig
     
-    def get_bar_data(timeframe, min_bars, columns=None, filters=None, 
-                         extended_hours=False):
+    def get_bar_data(
+        timeframe: str,
+        min_bars: int,
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        extended_hours: bool = False,
+    ) -> pd.DataFrame:
         return _get_bar_data(ctx,start_date,end_date,timeframe, columns, min_bars, filters, extended_hours)
-    def get_general_data(columns=None, filters=None):
+    def get_general_data(
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> pd.DataFrame:
         #if the execution is called with a certain set of symboles then we need to intersect that with each get bar data call
         # this will cause references to statuc symbols to possibly fail like if you are referencing spy in a strategy not returning spy
+        actual_filters: Optional[Dict[str, Any]] = filters.copy() if isinstance(filters, dict) else None
         if symbols_intersect:
-            filters['symbols'] = symbols_intersect.intersection(filters['symbols'])
-        return _get_general_data(ctx, columns, filters)
+            if actual_filters is None:
+                actual_filters = {}
+            # Intersect provided tickers with the execution symbol set (or set it if missing)
+            if 'tickers' in actual_filters and actual_filters['tickers'] is not None:
+                tickers_val = actual_filters['tickers']
+                if isinstance(tickers_val, str):
+                    tickers_list: List[str] = [tickers_val]
+                elif isinstance(tickers_val, list):
+                    tickers_list = tickers_val
+                else:
+                    tickers_list = []
+                actual_filters['tickers'] = list(symbols_intersect.intersection(set(tickers_list)))
+            else:
+                actual_filters['tickers'] = list(symbols_intersect)
+        return _get_general_data(ctx, columns, actual_filters)
     
 
     safe_globals: Dict[str, Any] = {
@@ -292,7 +316,13 @@ def _plotly_capture_context(
             # Generate PNG as base64 and add to response_images using matplotlib
             try:
 
-                png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Strategy ID", strategy_id, version)
+                png_base64 = plotly_to_matplotlib_png(
+                    fig,
+                    plot_id,
+                    "Strategy ID",
+                    strategy_id if strategy_id is not None else -1,
+                    version,
+                )
                 if png_base64:
                     response_images.append(png_base64)
                 else:
@@ -329,7 +359,7 @@ def _plotly_capture_context(
         fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
         return fig
     @contextlib.contextmanager
-    def patch_context():
+    def patch_context() -> Iterator[None]:
         try:
             # Apply patches
             go.Figure.show = capture_plot
@@ -350,7 +380,8 @@ def _extract_plot_data(fig: go.Figure) -> Dict[str, Any]:
     try:
         plot_data = json.loads(fig.to_json())
         # Decode any binary data before sending to frontend
-        return _decode_binary_arrays(plot_data)
+        processed = _decode_binary_arrays(plot_data)
+        return processed if isinstance(processed, dict) else {}
     except ValueError as e:
         logger.error("[extract_plot_data] Exception in fig.to_json(): %s", e)
         return {}
@@ -391,7 +422,7 @@ def _decode_binary_arrays(data: Any) -> Any:
     else:
         return data
 
-def _extract_plot_title_with_ticker(fig) -> Tuple[str, Optional[str]]:
+def _extract_plot_title_with_ticker(fig: go.Figure) -> Tuple[str, Optional[str]]:
     """Extract title and ticker from plotly figure. Returns (cleaned_title, ticker)"""
     try:
         title = 'Untitled Plot'
@@ -429,7 +460,7 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                 serializable_instance[key] = float(value)
             elif isinstance(value, np.bool_):
                 serializable_instance[key] = bool(value)
-            elif isinstance(value, (np.datetime64, pd.Timestamp)):
+            elif isinstance(value, (np.datetime64, pd.Timestamp, dt)):
                 # Convert datetime to Unix timestamp (int), handle NaT values
                 try:
                     if isinstance(value, pd.Timestamp):
@@ -437,6 +468,8 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                             serializable_instance[key] = None
                         else:
                             serializable_instance[key] = int(value.timestamp())
+                    elif isinstance(value, dt):
+                        serializable_instance[key] = int(value.timestamp())
                     else:
                         ts = pd.Timestamp(value)
                         if pd.isna(ts):
@@ -445,13 +478,6 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                             serializable_instance[key] = int(ts.timestamp())
                 except (ValueError, TypeError, OverflowError):
                     # Handle invalid timestamps
-                    serializable_instance[key] = None
-            elif isinstance(value, dt):
-                # Handle Python datetime objects from database
-                try:
-                    serializable_instance[key] = int(value.timestamp())
-                except (ValueError, TypeError, OverflowError):
-                    # Handle invalid datetime objects
                     serializable_instance[key] = None
             elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
                 # Handle pandas nullable integer types

@@ -25,10 +25,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from utils.plotly_to_matlab import plotly_to_matplotlib_png
-from utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
-from utils.context import Context
-from utils.error_utils import capture_exception
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png
+from .utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
+from .utils.context import Context
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 

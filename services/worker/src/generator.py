@@ -10,13 +10,13 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, cast
 
 from google.genai import types
-from validator import validate_strategy
-from utils.context import Context
-from utils.strategy_crud import fetch_strategy_code, save_strategy
-from utils.error_utils import capture_exception
-from utils.errors import ModelGenerationError
-from utils.data_accessors import get_available_filter_values
-from utils.ticker_extractor import extract_tickers
+from .validator import validate_strategy
+from .utils.context import Context
+from .utils.strategy_crud import fetch_strategy_code, save_strategy
+from .utils.error_utils import capture_exception
+from .utils.errors import ModelGenerationError
+from .utils.data_accessors import get_available_filter_values
+from .utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 

@@ -67,7 +67,7 @@ func RunPythonAgentWithProgress(ctx context.Context, conn *data.Conn, userID int
 	}
 
 	// Use standard queue with progress callback
-	handle, err := queue.QueuePythonAgent(ctx, conn, queueArgs)
+    handle, err := queue.PythonAgent(ctx, conn, queueArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error queuing python agent: %v", err)
 	}

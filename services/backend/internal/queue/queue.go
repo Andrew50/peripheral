@@ -291,7 +291,7 @@ type WorkerHeartbeat struct {
 }
 
 // QueueTask enqueues a task and returns a handle for monitoring and control
-func QueueTask(ctx context.Context, conn *data.Conn, taskType string, args map[string]interface{}, priority bool, maxRetries int, timeout time.Duration) (*Handle, error) {
+func Task(ctx context.Context, conn *data.Conn, taskType string, args map[string]interface{}, priority bool, maxRetries int, timeout time.Duration) (*Handle, error) {
 	// Generate unique task ID and status ID
 	taskID := uuid.New().String()
 	statusID := uuid.New().String()
@@ -678,13 +678,13 @@ func (h *Handle) markTaskAsFailed(reason string) {
 // Convenience wrapper functions for common task types
 
 // QueueBacktest queues a backtest task with default settings
-func QueueBacktest(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
+func Backtest(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
+	return Task(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
 }
 
 // QueueBacktestTyped queues a backtest task and returns a typed result
-func QueueBacktestTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*BacktestResult, error) {
-	handle, err := QueueTask(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
+func BacktestTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*BacktestResult, error) {
+	handle, err := Task(ctx, conn, "backtest", args, false, 3, 10*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -693,13 +693,13 @@ func QueueBacktestTyped(ctx context.Context, conn *data.Conn, args map[string]in
 }
 
 // QueueScreening queues a screening task with default settings
-func QueueScreening(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "screen", args, false, 3, 5*time.Minute)
+func Screening(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
+	return Task(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 }
 
 // QueueScreeningTyped queues a screening task and returns a typed result
-func QueueScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*ScreeningResult, error) {
-	handle, err := QueueTask(ctx, conn, "screen", args, false, 3, 5*time.Minute)
+func ScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*ScreeningResult, error) {
+	handle, err := Task(ctx, conn, "screen", args, false, 3, 5*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -708,13 +708,13 @@ func QueueScreeningTyped(ctx context.Context, conn *data.Conn, args map[string]i
 }
 
 // QueueAlert queues an alert task with default settings
-func QueueAlert(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "alert", args, false, 3, 2*time.Minute)
+func Alert(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
+	return Task(ctx, conn, "alert", args, false, 3, 2*time.Minute)
 }
 
 // QueueAlertTyped queues an alert task and returns a typed result
-func QueueAlertTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*AlertResult, error) {
-	handle, err := QueueTask(ctx, conn, "alert", args, false, 3, 2*time.Minute)
+func AlertTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*AlertResult, error) {
+	handle, err := Task(ctx, conn, "alert", args, false, 3, 2*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -723,13 +723,13 @@ func QueueAlertTyped(ctx context.Context, conn *data.Conn, args map[string]inter
 }
 
 // QueueCreateStrategy queues a strategy creation task with high priority
-func QueueCreateStrategy(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
+func CreateStrategy(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
+	return Task(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
 }
 
 // QueueCreateStrategyTyped queues a strategy creation task and returns a typed result
-func QueueCreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*CreateStrategyResult, error) {
-	handle, err := QueueTask(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
+func CreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*CreateStrategyResult, error) {
+	handle, err := Task(ctx, conn, "create_strategy", args, true, 2, 15*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -738,13 +738,13 @@ func QueueCreateStrategyTyped(ctx context.Context, conn *data.Conn, args map[str
 }
 
 // QueuePythonAgent queues a general python agent task with default settings
-func QueuePythonAgent(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
-	return QueueTask(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
+func PythonAgent(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*Handle, error) {
+	return Task(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 }
 
 // QueuePythonAgentTyped queues a general python agent task and returns a typed result
-func QueuePythonAgentTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*PythonAgentResult, error) {
-	handle, err := QueueTask(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
+func PythonAgentTyped(ctx context.Context, conn *data.Conn, args map[string]interface{}) (*PythonAgentResult, error) {
+	handle, err := Task(ctx, conn, "python_agent", args, false, 3, 8*time.Minute)
 	if err != nil {
 		return nil, err
 	}

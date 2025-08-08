@@ -1169,7 +1169,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 
 	log.Printf("🚀 Strategy %d (%s): queuing alert task with args: %+v", strategy.StrategyID, strategy.Name, args)
 	// Submit the alert task through the unified queue system and wait for the typed result.
-	result, err := queue.QueueAlertTyped(ctx, conn, args)
+    result, err := queue.AlertTyped(ctx, conn, args)
 	if err != nil {
 		log.Printf("❌ Strategy %d (%s): queue submission failed: %v", strategy.StrategyID, strategy.Name, err)
 		return fmt.Errorf("queue alert error: %w", err)

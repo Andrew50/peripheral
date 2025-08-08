@@ -22,10 +22,10 @@ import keyword
 import sys
 import traceback
 from typing import List, Dict, Any, Optional, Tuple, Set
-from engine import execute_strategy
-from utils.context import Context
-from utils.error_utils import capture_exception
-from utils.ticker_extractor import extract_tickers
+from .engine import execute_strategy
+from .utils.context import Context
+from .utils.error_utils import capture_exception
+from .utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 
