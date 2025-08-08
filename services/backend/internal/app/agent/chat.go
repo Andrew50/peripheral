@@ -38,7 +38,6 @@ const (
 )
 
 const (
-	StagePlanMore          Stage = "plan_more"
 	StageExecute           Stage = "execute"
 	StageFinishedExecuting Stage = "finished_executing"
 )
