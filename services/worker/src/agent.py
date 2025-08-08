@@ -263,8 +263,8 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
         try:
             # Generate code
             openai_response = ctx.conn.openai_client.responses.create(
-                model="o4-mini",
-                reasoning={"effort": "low"},
+                model="gpt-5-mini",
+                reasoning={"effort": "medium"},
                 input=user_prompt,
                 instructions=system_instruction,
                 user="user:0",

@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 )
@@ -218,7 +219,7 @@ type ResponseImage struct {
 */
 const planningModel = "gemini-2.5-flash"
 
-func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt string, systemPromptFile string, _ []ExecuteResult, _ []string) (interface{}, error) {
+func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, systemPromptFile string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	var systemPrompt string
 	var plan interface{}
 	var err error
@@ -229,7 +230,7 @@ func RunPlanner(ctx context.Context, conn *data.Conn, _ string, _ int, prompt st
 	if err != nil {
 		return nil, fmt.Errorf("error getting system instruction: %w", err)
 	}
-	plan, err = _geminiGeneratePlan(ctx, conn, systemPrompt, prompt)
+	plan, err = _gptGeneratePlan(ctx, conn, conversationID, userID, systemPrompt, prompt, executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error generating plan: %w", err)
 	}
@@ -383,15 +384,15 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 	return nil, fmt.Errorf("no valid plan or direct answer found in response after %d attempts", maxRetries)
 }
 
-/*func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID string, userID int, systemPrompt string, prompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
 	apiKey := conn.OpenAIKey
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt)
-	conversationHistory, err := GetConversationMessages(ctx, conn, conversationID, userID)
+	enhancedSystemPrompt := enhanceSystemPromptWithTools(systemPrompt, true)
+	conversationHistory, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversation history: %w", err)
 	}
-	messages, err := buildOpenAIFinalResponseMessages(prompt, conversationHistory.([]DBConversationMessage), executionResults, thoughts, false)
+	messages, err := buildOpenAIFinalResponseMessages(prompt, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
 	if err != nil {
 		return nil, fmt.Errorf("error building OpenAI conversation history: %w", err)
 	}
@@ -417,7 +418,10 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Model:        openAIPlannerModel,
+		Model: "gpt-5-mini",
+		Reasoning: shared.ReasoningParam{
+			Effort: "low",
+		},
 		Instructions: openai.String(enhancedSystemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
@@ -505,7 +509,7 @@ func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt stri
 		}
 	}
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
-}*/
+}
 
 func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
 	client := conn.OpenAIClient
@@ -528,7 +532,7 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	model := "o3"
+	model := "gpt-5"
 
 	rawSchema := ref.Reflect(AtlantisFinalResponse{})
 	b, _ := json.Marshal(rawSchema)
@@ -548,7 +552,10 @@ func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQ
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messages,
 		},
-		Model:        model,
+		Model: model,
+		Reasoning: shared.ReasoningParam{
+			Effort: "low",
+		},
 		Instructions: openai.String(systemPrompt),
 		User:         openai.String(fmt.Sprintf("user:%d", userID)),
 		Text:         textConfig,
