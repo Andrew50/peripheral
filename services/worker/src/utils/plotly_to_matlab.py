@@ -2,20 +2,21 @@
 Generic Plotly-to-matplotlib fallback for chart image generation
 """
 
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+# pylint: disable=import-error
+
 import logging
 from io import BytesIO
 import base64
-
+from typing import Any, Dict, List, Optional
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-def extract_any_plottable_data(trace):
+def extract_any_plottable_data(trace: Any) -> Dict[str, List[float]]:
     """Extract any numeric data that can be plotted, regardless of trace type"""
-    plottable_data = {}
+    plottable_data: Dict[str, List[float]] = {}
     
     # Check all common data attributes
     for attr in ['x', 'y', 'z', 'values', 'open', 'high', 'low', 'close']:
@@ -44,9 +45,13 @@ def extract_any_plottable_data(trace):
 
 
 
-def create_matlab_plot(plottable_data, trace_name, ax):
+def create_matlab_plot(
+    plottable_data: Dict[str, List[float]],
+    trace_name: str,
+    ax: Any,
+) -> bool:
     """Create a plot from any available numeric data"""
-    plotted = False
+    plotted: bool = False
     
     # Strategy 1: Standard x,y plot
     if 'x' in plottable_data and 'y' in plottable_data:
@@ -90,7 +95,14 @@ def create_matlab_plot(plottable_data, trace_name, ax):
     return plotted
 
 
-def plotly_to_matplotlib_png(plotly_fig, plot_id, id_naming, strategy_id, version=None) -> str:
+
+def plotly_to_matplotlib_png(
+    plotly_fig: Any,
+    plot_id: int,
+    id_naming: str,
+    strategy_id: int,
+    version: Optional[int] = None,
+) -> str:
     """
     Convert any Plotly figure to a simple matplotlib PNG for LLM analysis
     
@@ -101,6 +113,7 @@ def plotly_to_matplotlib_png(plotly_fig, plot_id, id_naming, strategy_id, versio
         str: Base64 encoded PNG image
     """
     try:
+        # Import here to avoid import-time linter errors when matplotlib is unavailable in analysis envs
         # Create matplotlib figure
         fig, ax = plt.subplots(figsize=(10, 6))
         

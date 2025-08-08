@@ -185,14 +185,14 @@
 		background: transparent;
 		z-index: 99999;
 		opacity: 0;
-		animation: slideInFromTop 0.2s ease-out forwards;
+		animation: slide-in-from-top 0.2s ease-out forwards;
 	}
 
 	.extended-hours-overlay.closing {
-		animation: slideOutToTop 0.25s ease-in forwards;
+		animation: slide-out-to-top 0.25s ease-in forwards;
 	}
 
-	@keyframes slideInFromTop {
+	@keyframes slide-in-from-top {
 		from {
 			opacity: 0;
 			transform: translateX(-50%) translateY(-20px);
@@ -204,7 +204,7 @@
 		}
 	}
 
-	@keyframes slideOutToTop {
+	@keyframes slide-out-to-top {
 		from {
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
@@ -219,10 +219,10 @@
 	.extended-hours-toggle {
 		position: relative;
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		animation: scaleIn 0.2s ease-out;
+		animation: scale-in 0.2s ease-out;
 	}
 
-	@keyframes scaleIn {
+	@keyframes scale-in {
 		from {
 			transform: scale(0.9);
 			opacity: 0;

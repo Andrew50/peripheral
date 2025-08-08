@@ -2,9 +2,8 @@
 Screening module
 """
 
-import time
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .engine import execute_strategy
 from .utils.context import Context
 #from .utils.tracked_list import TrackedList
@@ -13,7 +12,7 @@ from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
-def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe: List[str] = None) -> Dict[str, Any]:
+def screen(ctx: Context, user_id: int, strategy_ids: Optional[List[int]] = None, universe: Optional[List[str]] = None) -> Dict[str, Any]:
     """Execute screening task using new accessor strategy engine"""
     if not strategy_ids:
         raise ValueError("strategy_ids is required")
@@ -32,7 +31,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
         strategy_code = strategy_codes[strategy_id]
         
         # Use provided universe or let strategy determine requirements
-        target_universe = universe or None
+        target_universe: List[str] = universe or []
 
         # Execute strategy with accessor context
         instances, _, _, _, error = execute_strategy(
@@ -57,7 +56,7 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
             'instances': ranked_results
         }
 
-    except Exception as e:
+    except ValueError as e:
         error_obj = capture_exception(logger, e)
         return {
             'success': False,
@@ -66,11 +65,11 @@ def screen(ctx: Context, user_id: str, strategy_ids: List[str] = None, universe:
         }
 
 
-def _rank_screening_results(instances: List[Dict]) -> List[Dict]:
+def _rank_screening_results(instances: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Rank screening results by score or other criteria and convert to WorkerRankedResult format"""
 
     # Sort by score if available, otherwise by timestamp descending (most recent first)
-    def sort_key(instance):
+    def sort_key(instance: Dict[str, Any]) -> Any:
         if 'score' in instance:
             return instance['score']
         # Use timestamp for sorting if no score - more recent = higher priority

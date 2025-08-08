@@ -1062,7 +1062,7 @@
 		background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
 		color: white;
 		border-radius: 12px;
-		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+		box-shadow: 0 4px 12px rgb(59 130 246 / 30%);
 	}
 
 	.email-text {
@@ -1099,10 +1099,10 @@
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: #1f2937;
-		background: #ffffff;
+		background: #fff;
 		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 		outline: none;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
 		position: relative;
 	}
 
@@ -1112,15 +1112,15 @@
 
 	.otp-digit:hover:not(:disabled) {
 		border-color: #3b82f6;
-		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+		box-shadow: 0 4px 12px rgb(59 130 246 / 15%);
 		transform: translateY(-1px);
 	}
 
 	.otp-digit:focus {
 		border-color: #3b82f6;
 		box-shadow:
-			0 0 0 3px rgba(59, 130, 246, 0.1),
-			0 4px 12px rgba(59, 130, 246, 0.15);
+			0 0 0 3px rgb(59 130 246 / 10%),
+			0 4px 12px rgb(59 130 246 / 15%);
 		transform: translateY(-1px);
 	}
 
@@ -1128,7 +1128,7 @@
 		border-color: #10b981;
 		background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
 		color: #065f46;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+		box-shadow: 0 4px 12px rgb(16 185 129 / 15%);
 	}
 
 	.otp-digit.loading {
@@ -1213,7 +1213,7 @@
 	}
 
 	/* Mobile responsiveness */
-	@media (max-width: 480px) {
+	@media (width <= 480px) {
 		.verification-container {
 			gap: 1.5rem;
 		}

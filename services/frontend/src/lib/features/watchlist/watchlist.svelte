@@ -508,25 +508,6 @@
 		border-color: rgb(255 255 255 / 40%);
 	}
 
-	.add-symbol-button {
-		padding: 6px 8px;
-		color: #fff;
-		font-size: 14px;
-		font-weight: 600;
-		text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
-		min-width: 32px;
-		height: 32px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: transparent;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: background 0.2s ease;
-		flex-shrink: 0;
-	}
-
 	.add-symbol-button:hover {
 		background: rgb(255 255 255 / 10%);
 	}

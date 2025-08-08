@@ -1,3 +1,5 @@
+// Package twitter integrates with X/Twitter workflows for generating replies
+// and media for tweets using internal agent and rendering services.
 package twitter
 
 import (
@@ -55,7 +57,11 @@ func HandleTweetForReply(conn *data.Conn, tweet ExtractedTweetData) error {
 				if err != nil {
 					log.Printf("Failed to create Plotly renderer: %v", err)
 				} else {
-					defer renderer.Close()
+					defer func() {
+						if cerr := renderer.Close(); cerr != nil {
+							log.Printf("Failed to close Plotly renderer: %v", cerr)
+						}
+					}()
 
 					// Render the plot
 					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

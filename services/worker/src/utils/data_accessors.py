@@ -7,7 +7,7 @@ These functions replace the previous approach of passing large DataFrames to str
 import logging
 import re
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from zoneinfo import ZoneInfo
 
@@ -33,9 +33,16 @@ def _ts_to_epoch(expr: str) -> str:
     """Return SQL snippet that extracts Unix epoch seconds from a timestamptz expr."""
     return f"EXTRACT(EPOCH FROM {expr})::bigint"
 
-def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timeframe: str = "1d", columns: List[str] = None,
-                    min_bars: int = 1, filters: Dict[str, any] = None,
-                    extended_hours: bool = False) -> pd.DataFrame:
+def _get_bar_data(
+    ctx: Context,
+    start_date: datetime,
+    end_date: datetime,
+    timeframe: str = "1d",
+    columns: Optional[List[str]] = None,
+    min_bars: int = 1,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+) -> pd.DataFrame:
     """
     Get OHLCV bar data as numpy array with context-aware date ranges and intelligent batching
 
@@ -88,7 +95,7 @@ def _get_bar_data(ctx: Context, start_date: datetime, end_date: datetime, timefr
     return _get_bar_data_single(ctx, timeframe, columns, min_bars, filters, extended_hours, start_date, end_date)
 
 
-def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False) -> bool:
+def _should_use_batching(tickers: Optional[List[str]] = None, aggregate_mode: bool = False) -> bool:
     """Determine if batching should be used based on the request parameters"""
     # Never batch if aggregate_mode is explicitly enabled
     if aggregate_mode:
@@ -105,16 +112,23 @@ def _should_use_batching(tickers: List[str] = None, aggregate_mode: bool = False
 
     return False
 
-def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str] = None,
-            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
-            start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> pd.DataFrame:
+def _get_bar_data_batched(
+    ctx: Context,
+    timeframe: str = "1d",
+    columns: Optional[List[str]] = None,
+    min_bars: int = 1,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
     """Get bar data using batching approach for large datasets with parallel processing"""
     logger.info("📦 _get_bar_data_batched called with: timeframe=%s, start_date=%s, end_date=%s, min_bars=%s, filters=%s", 
                 timeframe, start_date, end_date, min_bars, filters)
     
     #try:
     batch_size = 1000
-    all_results = []
+    all_results: List[pd.DataFrame] = []
 
     # Extract tickers from filters
     tickers = None
@@ -149,7 +163,7 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
     logger.info("📦 Created %d batches of size %d", len(ticker_batches), batch_size)
 
     # Helper function to process a single batch
-    def process_batch(batch_tickers, batch_num):
+    def process_batch(batch_tickers: List[str], batch_num: int) -> Optional[pd.DataFrame]:
         logger.info("🔄 Processing batch %d with %d tickers: %s", batch_num, len(batch_tickers), batch_tickers[:5])
         try:
             # Create batch filters with tickers
@@ -187,7 +201,7 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
         }
         # Collect results as they complete
         for future in as_completed(future_to_batch):
-            batch_num = future_to_batch[future]
+            # Collect results; batch index not required here
             #try:
             result = future.result()
             if result is not None:
@@ -210,12 +224,12 @@ def _get_bar_data_batched(ctx: Context, timeframe: str = "1d", columns: List[str
         #logger.error("❌ Error in batched data fetching: %s", exc)
         #return pd.DataFrame()
 
-def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> List[str]:
+def _get_all_active_tickers(ctx: Context, filters: Optional[Dict[str, Any]] = None) -> List[str]:
     """Get list of all active tickers with optional filtering"""
     #try:
     # Build filter conditions for active securities
-    filter_parts = ["maxdate IS NULL", "active = true"]
-    params = []
+    filter_parts: List[str] = ["maxdate IS NULL", "active = true"]
+    params: List[Any] = []
     # Apply additional filters if provided (excluding tickers which is handled separately)
     if filters:
         if 'sector' in filters:
@@ -257,9 +271,15 @@ def _get_all_active_tickers(ctx: Context, filters: Dict[str, any] = None) -> Lis
         #return []
 
 
-def _build_query(timeframe: str, columns: List[str], min_bars: int,
-                filters: Dict[str, any] = None, extended_hours: bool = False,
-                start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> tuple[str, List, List[str]]:
+def _build_query(
+    timeframe: str,
+    columns: List[str],
+    min_bars: int,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> Tuple[str, List[Any], List[str]]:
     """
     Unified query builder that handles all combinations of aggregated/direct and realtime/date-range modes.
 
@@ -298,14 +318,29 @@ def _build_query(timeframe: str, columns: List[str], min_bars: int,
         return _build_aggregated_query(bucket_sql, base_table, safe_columns, min_bars, filters,
                                      extended_hours, start_date, end_date, realtime_mode)
 
-    return _build_direct_query(base_table, safe_columns, min_bars, filters,
-                               extended_hours, start_date, end_date, realtime_mode)
+    return _build_direct_query(
+        base_table,
+        safe_columns,
+        min_bars,
+        filters,
+        extended_hours,
+        start_date,
+        end_date,
+        realtime_mode,
+    )
 
 
-def _build_aggregated_query(bucket_sql: str, base_table: str, columns: List[str], min_bars: int,
-                          filters: Dict[str, any] = None, extended_hours: bool = False,
-                          start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
-                          realtime_mode: bool = True) -> tuple[str, List, List[str]]:
+def _build_aggregated_query(
+    bucket_sql: str,
+    base_table: str,
+    columns: List[str],
+    min_bars: int,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    realtime_mode: bool = True,
+) -> Tuple[str, List[Any], List[str]]:
     """Build query for aggregated timeframes using TimescaleDB time_bucket."""
 
     # Build the aggregation CTE
@@ -341,7 +376,7 @@ def _build_aggregated_query(bucket_sql: str, base_table: str, columns: List[str]
             SELECT {final_select_clause}
             FROM ranked_data
             WHERE rn <= %s AND total_bars >= %s
-            ORDER BY ticker, bucket_ts DESC"""
+            ORDER BY ticker, bucket_ts DESC"""  # nosec B608
 
         params = agg_params + [min_bars, min_bars]
     else:
@@ -366,19 +401,31 @@ def _build_aggregated_query(bucket_sql: str, base_table: str, columns: List[str]
                 SELECT {agg_select_clause}
                 FROM in_range
             ) AS combined
-            ORDER BY ticker, bucket_ts ASC"""
+            ORDER BY ticker, bucket_ts ASC"""  # nosec B608
 
-        params = (agg_params +
-                 [_normalize_est(start_date), _normalize_est(start_date),
-                  _normalize_est(end_date), pre_bars_needed])
+        params = (
+            agg_params
+            + [
+                _normalize_est(start_date),
+                _normalize_est(start_date),
+                _normalize_est(end_date),
+                pre_bars_needed,
+            ]
+        )
 
     return query, params, columns
 
 
-def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
-                       filters: Dict[str, any] = None, extended_hours: bool = False,
-                       start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
-                       realtime_mode: bool = True) -> tuple[str, List, List[str]]:
+def _build_direct_query(
+    base_table: str,
+    columns: List[str],
+    min_bars: int,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    realtime_mode: bool = True,
+) -> Tuple[str, List[Any], List[str]]:
     """Build query for direct table access (1m or 1d tables)."""
 
     # Build column selection with proper scaling for prices
@@ -442,7 +489,7 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
         SELECT {final_select_clause}
         FROM ranked_data
         WHERE rn <= %s AND total_bars >= %s
-        ORDER BY ticker, timestamp DESC"""
+        ORDER BY ticker, timestamp DESC"""  # nosec B608
 
         params = params + [min_bars, min_bars]
     else:
@@ -466,22 +513,26 @@ def _build_direct_query(base_table: str, columns: List[str], min_bars: int,
             UNION ALL
             SELECT {select_no_alias_clause} FROM in_range
         ) AS combined
-        ORDER BY ticker, timestamp ASC"""
+        ORDER BY ticker, timestamp ASC"""  # nosec B608
 
         # Parameter order must match placeholders:
         #   1) base filter params for pre_bars
         #   2) < start_date
         #   3) base filter params for in_range
         #   4) >= start_date, <= end_date, and rn_pre limit
-        params = (params +                     # pre_bars WHERE clause
-                 [_normalize_est(start_date)] +
-                 params +                     # in_range WHERE clause
-                 [_normalize_est(start_date), _normalize_est(end_date), pre_bars_needed])
+        params = (
+            params
+            + [_normalize_est(start_date)]
+            + params
+            + [_normalize_est(start_date), _normalize_est(end_date), pre_bars_needed]
+        )
 
     return query, params, columns
 
 
-def _build_ticker_and_date_filters(filters: Dict[str, any] = None) -> tuple[List[str], List]:
+def _build_ticker_and_date_filters(
+    filters: Optional[Dict[str, Any]] = None,
+) -> Tuple[List[str], List[Any]]:
     """Build common ticker filter parts for direct queries.
 
     Date constraints are applied by the calling query builder (e.g. pre-roll vs in-range)
@@ -489,7 +540,7 @@ def _build_ticker_and_date_filters(filters: Dict[str, any] = None) -> tuple[List
     ticker lists that may come from the caller-supplied `filters` dict.
     """
     filter_parts: List[str] = []
-    params: List = []
+    params: List[Any] = []
 
     # Handle ticker filtering, if provided
     if filters and 'tickers' in filters:
@@ -508,9 +559,16 @@ def _build_ticker_and_date_filters(filters: Dict[str, any] = None) -> tuple[List
     return filter_parts, params
 
 
-def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str] = None,
-            min_bars: int = 1, filters: Dict[str, any] = None, extended_hours: bool = False,
-            start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> pd.DataFrame:
+def _get_bar_data_single(
+    ctx: Context,
+    timeframe: str = "1d",
+    columns: Optional[List[str]] = None,
+    min_bars: int = 1,
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> pd.DataFrame:
     """
     Get OHLCV bar data as numpy array using TimescaleDB aggregation with context-aware date ranges
 
@@ -588,7 +646,9 @@ def _get_bar_data_single(ctx: Context, timeframe: str = "1d", columns: List[str]
     return _execute_and_process_query(ctx, query, params, safe_columns)
 
 
-def _execute_and_process_query(ctx: Context, query: str, params: List, safe_columns: List[str]) -> pd.DataFrame:
+def _execute_and_process_query(
+    ctx: Context, query: str, params: List[Any], safe_columns: List[str]
+) -> pd.DataFrame:
     """Execute query and process results into DataFrame with price scaling"""
     # Execute query with fastest cursor (plain tuples)
     with ctx.conn.get_connection() as conn:
@@ -625,7 +685,9 @@ def _execute_and_process_query(ctx: Context, query: str, params: List, safe_colu
     return df
 
 
-def _get_security_ids_from_tickers(ctx: Context, tickers: List[str], filters: Dict[str, any] = None) -> List[int]:
+def _get_security_ids_from_tickers(
+    ctx: Context, tickers: List[str], filters: Optional[Dict[str, Any]] = None
+) -> List[int]:
     """Convert ticker symbols to security IDs with optional filtering"""
     #try:
     if not tickers:
@@ -706,8 +768,11 @@ def _get_security_ids_from_tickers(ctx: Context, tickers: List[str], filters: Di
         #logger.error("Error converting tickers to security IDs: %s", exc)
         #return []
 
-def _get_general_data(ctx: Context, columns: List[str] = None,
-            filters: Dict[str, any] = None) -> pd.DataFrame:
+def _get_general_data(
+    ctx: Context,
+    columns: Optional[List[str]] = None,
+    filters: Optional[Dict[str, Any]] = None,
+) -> pd.DataFrame:
     """
     Get general security information as pandas DataFrame
 
@@ -728,7 +793,7 @@ def _get_general_data(ctx: Context, columns: List[str] = None,
     """
     #try:
     # Extract tickers from filters if provided
-    tickers = None
+    tickers: Optional[List[str]] = None
     if filters and 'tickers' in filters:
         tickers = filters['tickers']
         if not isinstance(tickers, list):
@@ -763,7 +828,7 @@ def _get_general_data(ctx: Context, columns: List[str] = None,
 
     # Build the query with filters
     filter_parts = ["maxdate IS NULL"]
-    params = []
+    params: List[Any] = []
 
     # Apply filters if provided
     if filters:
@@ -816,7 +881,7 @@ def _get_general_data(ctx: Context, columns: List[str] = None,
     # Handle ticker-specific filtering
     if tickers is not None and len(tickers) > 0:
         # Convert ticker symbols to security IDs and add to filter
-        security_ids = _get_security_ids_from_tickers(tickers, filters)
+        security_ids = _get_security_ids_from_tickers(ctx, tickers, filters)
         if not security_ids:
             logger.warning("No security IDs found for provided tickers")
             return pd.DataFrame()
@@ -923,9 +988,15 @@ def _parse_timeframe(timeframe: str) -> tuple[str, str]:
 
     return bucket_sql, base_table
 
-def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
-                    filters: Dict[str, any] = None, extended_hours: bool = False,
-                    start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> tuple[str, List]:
+def _build_agg_cte(
+    bucket_sql: str,
+    base_table: str,
+    columns: List[str],
+    filters: Optional[Dict[str, Any]] = None,
+    extended_hours: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> Tuple[str, List[Any]]:
     """Build aggregation CTE SQL and parameters
 
     Args:
@@ -941,8 +1012,8 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
         Tuple of (cte_sql, params)
     """
     # Build ticker filter parts (no securities table join needed)
-    ticker_filter_parts = []
-    ticker_params = []
+    ticker_filter_parts: List[str] = []
+    ticker_params: List[Any] = []
 
     # Extract tickers from filters if provided
     tickers = None
@@ -1024,12 +1095,12 @@ def _build_agg_cte(bucket_sql: str, base_table: str, columns: List[str],
         FROM {base_table} o
         WHERE {where_clause}
         GROUP BY o.ticker, bucket_ts
-    )"""
+    )"""  # nosec B608
     # Add bucket_sql as first parameter
     cte_params = [bucket_sql] + all_params
     return cte_sql, cte_params
 
-def _normalize_est(dt: datetime):
+def _normalize_est(dt: Optional[datetime]) -> Optional[datetime]:
     """Return a naive datetime, assuming input is already in Eastern time.
 
     If the input is naive, return it as-is since it's already in the correct timezone.

@@ -1,3 +1,6 @@
+// Package screener defines the types and validation helpers used to build
+// dynamic SQL queries for the screener feature. It exposes column metadata,
+// validation, and query construction utilities that other packages can consume.
 package screener
 
 import (
@@ -19,9 +22,13 @@ import (
 type ColumnType string
 
 const (
+	// TypeInteger indicates integer-typed screener columns
 	TypeInteger ColumnType = "integer"
-	TypeFloat   ColumnType = "float"
-	TypeString  ColumnType = "string"
+	// TypeFloat indicates floating-point-typed screener columns
+	TypeFloat ColumnType = "float"
+	// TypeString indicates string-typed screener columns
+	TypeString ColumnType = "string"
+	// TypeBoolean indicates boolean-typed screener columns
 	TypeBoolean ColumnType = "boolean"
 )
 
@@ -413,13 +420,17 @@ var screenerColumns = map[string]ColumnInfo{
 	},
 }
 
+// Filter represents a single constraint in the screener query, including the
+// column name, comparison operator, and value used to build the WHERE clause.
 type Filter struct {
 	Column   string
 	Operator string // =, !=, >, <, >=, <=, LIKE, IN, topn, bottomn, topn_pct, bottomn_pct
 	Value    interface{}
 }
 
-type ScreenerArgs struct {
+// Args defines the inputs for constructing a screener query including
+// selected columns, sorting, limiting, and a list of filters.
+type Args struct {
 	ReturnColumns []string
 	OrderBy       string
 	SortDirection string
@@ -645,8 +656,8 @@ func validateSingleValue(colType ColumnType, value interface{}) error {
 	return nil
 }
 
-// validateArgs validates the entire ScreenerArgs struct
-func validateArgs(args ScreenerArgs) error {
+// validateArgs validates the entire Args struct
+func validateArgs(args Args) error {
 	// Validate return columns
 	if len(args.ReturnColumns) == 0 {
 		return ValidationError{
@@ -732,7 +743,7 @@ func validateArgs(args ScreenerArgs) error {
 }
 
 // buildQuery constructs the SQL query with proper parameterization
-func buildQuery(args ScreenerArgs) (string, []interface{}, error) {
+func buildQuery(args Args) (string, []interface{}, error) {
 	var queryParts []string
 	var params []interface{}
 	paramIndex := 1
@@ -939,7 +950,7 @@ func convertDBValue(v interface{}) interface{} {
 
 // GetScreenerData retrieves screener data based on the provided arguments
 func GetScreenerData(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
-	var args ScreenerArgs
+	var args Args
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal screener arguments: %w", err)
 	}

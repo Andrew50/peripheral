@@ -32,6 +32,7 @@ type ScreeningResponse struct {
 	UniverseSize  int                `json:"universeSize"`
 }
 
+// ScreeningResult represents a single ranked screening result.
 type ScreeningResult struct {
 	Symbol       string                 `json:"symbol"`
 	Score        float64                `json:"score"`
@@ -76,7 +77,7 @@ func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json
 	}*/
 
 	// Submit task via the unified queue system
-	qResult, err := queue.QueueScreeningTyped(ctx, conn, qArgs)
+	qResult, err := queue.ScreeningTyped(ctx, conn, qArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error executing worker screening: %v", err)
 	}
@@ -96,7 +97,7 @@ func RunScreening(ctx context.Context, conn *data.Conn, userID int, rawArgs json
 	return response, nil
 }
 
-// Worker screening types and functions
+// WorkerScreeningResult captures the worker's response for a screening run.
 type WorkerScreeningResult struct {
 	Success         bool                 `json:"success"`
 	StrategyID      int                  `json:"strategy_id"`
@@ -108,6 +109,7 @@ type WorkerScreeningResult struct {
 	ErrorMessage    string               `json:"error_message,omitempty"`
 }
 
+// WorkerRankedResult represents a single ranked item returned by the worker.
 type WorkerRankedResult struct {
 	Symbol       string                 `json:"symbol"`
 	Score        float64                `json:"score"`
@@ -263,12 +265,14 @@ func convertScreeningInstances(instances []map[string]interface{}) []ScreeningRe
 	return results
 }
 
+// CreateStrategyFromPromptResult contains the result of creating a strategy from a prompt
 type CreateStrategyFromPromptResult struct {
 	StrategyID int    `json:"strategyId"`
 	Name       string `json:"name"`
 	Version    int    `json:"version"`
 }
 
+// AgentCreateStrategyFromPrompt creates a strategy from a prompt using the agent and sends updates via websocket
 func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	res, err := CreateStrategyFromPrompt(ctx, conn, userID, rawArgs)
 	if err != nil {
@@ -284,6 +288,7 @@ func AgentCreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID 
 	}()*/
 	return res, nil
 }
+// CreateStrategyFromPrompt creates a new strategy from a natural language prompt using the worker queue
 func CreateStrategyFromPrompt(ctx context.Context, conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	log.Printf("=== STRATEGY CREATION START (WORKER QUEUE) ===")
 	log.Printf("UserID: %d", userID)
@@ -359,7 +364,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	}
 
 	// Queue the task using the new typed queue system and return result directly
-	result, err := queue.QueueCreateStrategyTyped(ctx, conn, args)
+	result, err := queue.CreateStrategyTyped(ctx, conn, args)
 	if err != nil {
 		return nil, fmt.Errorf("error queuing strategy creation task: %v", err)
 	}
@@ -369,6 +374,7 @@ func callWorkerCreateStrategy(ctx context.Context, conn *data.Conn, userID int, 
 	return result, nil
 }
 
+// GetStrategies retrieves all strategies for a given user from the database
 func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{}, error) {
 	rows, err := conn.DB.Query(context.Background(), `
 		SELECT strategyid, name, 
@@ -428,6 +434,7 @@ func GetStrategies(conn *data.Conn, userID int, _ json.RawMessage) (interface{},
 	return strategies, nil
 }
 
+// SetAlertArgs contains arguments for configuring strategy alerts
 type SetAlertArgs struct {
 	StrategyID int      `json:"strategyId"`
 	Active     bool     `json:"active"`
@@ -435,6 +442,7 @@ type SetAlertArgs struct {
 	Universe   []string `json:"universe,omitempty"`
 }
 
+// SetAlert configures alert settings for a strategy including threshold and universe
 func SetAlert(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args SetAlertArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -545,10 +553,12 @@ func syncStrategyUniverseToRedis(conn *data.Conn, strategyID int) error {
 	return nil
 }
 
+// DeleteStrategyArgs contains arguments for deleting a strategy
 type DeleteStrategyArgs struct {
 	StrategyID int `json:"strategyId"`
 }
 
+// DeleteStrategy removes a strategy from the database and updates alert counters
 func DeleteStrategy(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
 	var args DeleteStrategyArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {

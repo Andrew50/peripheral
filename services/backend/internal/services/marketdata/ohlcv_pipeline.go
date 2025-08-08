@@ -535,7 +535,7 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 
 			// Update load state based on direction
 			var shouldUpdate bool
-			var newState LoadState = state
+			newState := state
 
 			// log.Printf("🔍 State update check: timeframe=%s, direction=%s, cut=%s, persisted=%s",
 			//	timeframe, map[bool]string{true: "forward", false: "backward"}[directionForward],
@@ -585,10 +585,11 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 				var minDuration time.Duration
 				var chunkOffset time.Duration
 
-				if timeframe == "1-minute" {
+				switch timeframe {
+				case "1-minute":
 					minDuration = 7 * 24 * time.Hour
 					chunkOffset = 4 * 30 * 24 * time.Hour // 4 months
-				} else if timeframe == "1-day" {
+				case "1-day":
 					minDuration = 60 * 24 * time.Hour
 					chunkOffset = 8 * 365 * 24 * time.Hour // 8 years
 				}

@@ -21,11 +21,11 @@ import re
 import keyword
 import sys
 import traceback
-from typing import List, Dict, Any, Optional, Tuple, Set
-from engine import execute_strategy
-from utils.context import Context
-from utils.error_utils import capture_exception
-from utils.ticker_extractor import extract_tickers
+from typing import List, Dict, Any, Optional, Tuple, Set, Union, Callable, Type
+from .engine import execute_strategy
+from .utils.context import Context
+from .utils.error_utils import capture_exception
+from .utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 
@@ -295,9 +295,11 @@ def extract_get_bar_data_calls(strategy_code: str) -> List[Dict[str, Any]]:
         capture_exception(logger, e)
     return calls
 
-def _extract_string_value(node: ast.AST) -> Optional[str]:
+def _extract_string_value(node: Optional[ast.AST]) -> Optional[str]:
     """Extract string value from AST node if possible."""
     try:
+        if node is None:
+            return None
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
         if isinstance(node, ast.Str):  # Python < 3.8 compatibility
@@ -417,8 +419,12 @@ def _analyze_ast(tree: ast.AST, *, allow_none_return: bool = False, allowed_entr
         # Security checks for each node
         for node_type, checker in forbidden_nodes.items():
             if isinstance(node, node_type):
-                if not checker(node):
+                # Handle boolean flags and callables distinctly
+                if checker is False:
                     raise ValidationError(f"Forbidden operation: {node_type.__name__}")
+                if callable(checker):
+                    if not checker(node):
+                        raise ValidationError(f"Forbidden operation: {node_type.__name__}")
 
         # Collect function definitions for compliance checking
         if isinstance(node, ast.FunctionDef):
@@ -615,7 +621,8 @@ def _check_function_definition(node: ast.FunctionDef) -> bool:
 
 
 # Node type checkers - defined after functions to avoid NameError
-forbidden_nodes = {
+NodeChecker = Callable[[Any], bool]
+forbidden_nodes: Dict[Type[ast.AST], Union[NodeChecker, bool]] = {
     ast.Import: _check_import,
     ast.ImportFrom: _check_import_from,
     ast.Call: _check_function_call,
@@ -670,8 +677,6 @@ def execute_validation(
         strategy_code,
         strategy_id=-1,
         symbols=symbols_for_validation,
-        start_date=None,
-        end_date=None
     )
     if error:
         error_info = _get_detailed_error_info(error, strategy_code)
@@ -679,15 +684,27 @@ def execute_validation(
         return False, formatted_error
     return True, ""
                
-def _get_detailed_error_info(error: Exception, strategy_code: str) -> Dict[str, Any]:
+def _get_detailed_error_info(error: Union[Exception, Dict[str, Any]], strategy_code: str) -> Dict[str, Any]:
     """Extract detailed error information including line numbers and code context"""
     try:
-        # Get the full traceback
+        # If we received a structured error dict, build info directly from it
+        if isinstance(error, dict):
+            return {
+                'error_type': str(error.get('type', 'Error')),
+                'error_message': str(error.get('message', '')),
+                'full_traceback': str(error.get('traceback', '')),
+                'line_number': None,
+                'code_context': None,
+                'function_name': None,
+                'file_name': None
+            }
+
+        # Get the full traceback from current context (best effort)
         tb = traceback.format_exc()
 
         # Get the exception info
         _, _, exc_traceback = sys.exc_info()
-        error_info = {
+        error_info: Dict[str, Any] = {
             'error_type': type(error).__name__,
             'error_message': str(error),
             'full_traceback': tb,

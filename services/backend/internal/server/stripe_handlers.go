@@ -410,7 +410,11 @@ func CancelSubscription(conn *data.Conn, userID int, rawArgs json.RawMessage) (i
 		log.Printf("Error starting transaction for user %d: %v", userID, err)
 		return nil, fmt.Errorf("failed to start transaction: %v", err)
 	}
-	defer tx.Rollback(ctx) // Will be ignored if tx.Commit() is called
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			log.Printf("Warning: failed to rollback transaction: %v", err)
+		}
+	}() // Will be ignored if tx.Commit() is called
 
 	// Retrieve the user's Stripe subscription ID
 	var stripeSubscriptionID string

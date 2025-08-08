@@ -164,16 +164,16 @@ func GetScreensavers(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, er
 		FROM securities
 		WHERE ticker = ANY($1) AND maxDate IS NULL`
 
-	rowsDb, errDb := conn.DB.Query(context.Background(), query, tickers)
-	if errDb != nil {
-		return nil, fmt.Errorf("failed to execute query: %v", errDb)
+	rowsDB, errDB := conn.DB.Query(context.Background(), query, tickers)
+	if errDB != nil {
+		return nil, fmt.Errorf("failed to execute query: %v", errDB)
 	}
-	defer rowsDb.Close()
+	defer rowsDB.Close()
 
 	var results []GetScreensaversResults
-	for rowsDb.Next() {
+	for rowsDB.Next() {
 		var result GetScreensaversResults
-		errScan := rowsDb.Scan(&result.Ticker, &result.SecurityID)
+		errScan := rowsDB.Scan(&result.Ticker, &result.SecurityID)
 		if errScan != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", errScan)
 		}
@@ -181,7 +181,7 @@ func GetScreensavers(conn *data.Conn, _ int, _ json.RawMessage) (interface{}, er
 		results = append(results, result)
 	}
 
-	if errRows := rowsDb.Err(); errRows != nil {
+	if errRows := rowsDB.Err(); errRows != nil {
 		return nil, fmt.Errorf("error iterating over rows: %v", errRows)
 	}
 

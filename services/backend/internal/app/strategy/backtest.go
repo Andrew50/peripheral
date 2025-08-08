@@ -46,11 +46,11 @@ type BacktestResponse struct {
 	Summary        BacktestSummary       `json:"summary"`
 	StrategyPrints string                `json:"strategyPrints,omitempty"`
 	ResponseImages []ResponseImage       `json:"responseImages,omitempty"`
-	StrategyPlots  []StrategyPlot        `json:"strategyPlots,omitempty"`
+	StrategyPlots  []Plot                `json:"strategyPlots,omitempty"`
 }
 
-// StrategyPlot represents a captured plotly plot (lightweight version for API response)
-type StrategyPlot struct {
+// Plot represents a captured plotly plot (lightweight version for API response)
+type Plot struct {
 	Data        []map[string]any `json:"data,omitempty"`        // traces of data
 	PlotID      int              `json:"plotID"`                // Plot ID for the chart
 	ChartType   string           `json:"chartType,omitempty"`   // "line", "bar", "scatter", "histogram", "heatmap"
@@ -60,12 +60,14 @@ type StrategyPlot struct {
 	TitleTicker string           `json:"titleTicker,omitempty"` // Ticker for the title
 }
 
-// StrategyPlotData represents the full plotly data for caching
-type StrategyPlotData struct {
+// PlotData represents the full plotly data for caching
+type PlotData struct {
 	PlotID      int            `json:"plotID"`
 	Data        map[string]any `json:"data"`                  // Full plotly figure object
 	TitleTicker string         `json:"titleTicker,omitempty"` // Ticker for the titleq
 }
+
+// ResponseImage contains base64-encoded image data and format for API responses.
 type ResponseImage struct {
 	Data   string `json:"data"`
 	Format string `json:"format"`
@@ -79,7 +81,7 @@ type WorkerBacktestResult struct {
 	Instances      []map[string]any   `json:"instances"`
 	Summary        WorkerSummary      `json:"summary"`
 	StrategyPrints string             `json:"strategy_prints,omitempty"`
-	StrategyPlots  []StrategyPlotData `json:"strategy_plots,omitempty"`
+	StrategyPlots  []PlotData         `json:"strategy_plots,omitempty"`
 	ResponseImages []string           `json:"response_images,omitempty"`
 	ErrorMessage   string             `json:"error_message,omitempty"`
 }
@@ -100,6 +102,7 @@ type DateRangeField []string
 // ProgressCallback is a function type for sending progress updates during backtest execution
 type ProgressCallback func(message string)
 
+// UnmarshalJSON implements json.Unmarshaler for DateRangeField, accepting either a single string or []string.
 func (d *DateRangeField) UnmarshalJSON(data []byte) error {
 	// Try to unmarshal as []string first
 	var stringSlice []string
@@ -153,19 +156,19 @@ func RunBacktestWithProgress(ctx context.Context, conn *data.Conn, userID int, r
 	summary := convertWorkerSummaryToBacktestSummary(result.Summary, result.Instances)
 
 	// Extract plot attributes and prepare lightweight plots for API response
-	lightweightPlots := make([]StrategyPlot, len(result.StrategyPlots))
-	fullPlotData := make([]StrategyPlotData, len(result.StrategyPlots))
+	lightweightPlots := make([]Plot, len(result.StrategyPlots))
+	fullPlotData := make([]PlotData, len(result.StrategyPlots))
 
 	for i, plot := range result.StrategyPlots {
 		// Store full data for caching
-		fullPlotData[i] = StrategyPlotData{
+		fullPlotData[i] = PlotData{
 			PlotID:      plot.PlotID,
 			Data:        plot.Data,
 			TitleTicker: plot.TitleTicker,
 		}
 
 		// Create lightweight version for API response
-		lightweightPlots[i] = StrategyPlot{
+		lightweightPlots[i] = Plot{
 			PlotID:      plot.PlotID,
 			TitleTicker: plot.TitleTicker,
 		}
@@ -233,7 +236,7 @@ func callWorkerBacktestWithProgress(ctx context.Context, conn *data.Conn, userID
 	}
 
 	// Queue the task using the new queue system
-	handle, err := queue.QueueBacktest(ctx, conn, taskArgs)
+	handle, err := queue.Backtest(ctx, conn, taskArgs)
 	if err != nil {
 		return nil, fmt.Errorf("error queuing backtest task: %v", err)
 	}
@@ -402,7 +405,7 @@ func convertWorkerSummaryToBacktestSummary(summary WorkerSummary, instances []ma
 }
 
 // extractPlotAttributes extracts chart attributes from plotly JSON data
-func extractPlotAttributes(plot *StrategyPlot, plotData map[string]any) {
+func extractPlotAttributes(plot *Plot, plotData map[string]any) {
 	if plotData == nil {
 		return
 	}

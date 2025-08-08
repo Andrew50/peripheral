@@ -56,31 +56,51 @@ func (t *TableWriter) Render() {
 	}
 
 	// Print headers
-	fmt.Fprint(t.writer, "| ")
-	for i, h := range t.headers {
-		fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], h)
+	if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+		return
 	}
-	fmt.Fprintln(t.writer)
+	for i, h := range t.headers {
+		if _, err := fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], h); err != nil {
+			return
+		}
+	}
+	if _, err := fmt.Fprintln(t.writer); err != nil {
+		return
+	}
 
 	// Print separator
-	fmt.Fprint(t.writer, "| ")
+	if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+		return
+	}
 	for i := range t.headers {
 		for j := 0; j < colWidths[i]; j++ {
-			fmt.Fprint(t.writer, "-")
+			if _, err := fmt.Fprint(t.writer, "-"); err != nil {
+				return
+			}
 		}
-		fmt.Fprint(t.writer, " | ")
+		if _, err := fmt.Fprint(t.writer, " | "); err != nil {
+			return
+		}
 	}
-	fmt.Fprintln(t.writer)
+	if _, err := fmt.Fprintln(t.writer); err != nil {
+		return
+	}
 
 	// Print rows
 	for _, row := range t.rows {
-		fmt.Fprint(t.writer, "| ")
+		if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+			return
+		}
 		for i, cell := range row {
 			if i < len(colWidths) {
-				fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], cell)
+				if _, err := fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], cell); err != nil {
+					return
+				}
 			}
 		}
-		fmt.Fprintln(t.writer)
+		if _, err := fmt.Fprintln(t.writer); err != nil {
+			return
+		}
 	}
 }
 

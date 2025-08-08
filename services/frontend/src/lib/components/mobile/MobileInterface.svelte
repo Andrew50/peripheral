@@ -283,12 +283,12 @@
 		height: 24px;
 	}
 
-	.mobile-nav-tab svg.watchlist-icon {
+	.mobile-nav-tab .watchlist-icon {
 		width: 24px;
 		height: 24px;
 	}
 
-	.mobile-nav-tab svg.chart-icon {
+	.mobile-nav-tab .chart-icon {
 		width: 24px;
 		height: 24px;
 	}

@@ -1,3 +1,5 @@
+// Package alerts contains the alerting system for price and strategy alerts
+// with unified logging to the database for audit and analytics.
 package alerts
 
 import (

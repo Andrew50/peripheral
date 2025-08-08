@@ -717,7 +717,9 @@
 	}
 
 	tr {
-		transition: outline 0.2s ease;
+		transition:
+			outline 0.2s ease,
+			background-color 0.2s;
 	}
 
 	.list-container {
@@ -758,6 +760,25 @@
 		position: relative;
 	}
 
+	/* Sorting state styles applied to table via class binding */
+	.sorting tbody tr {
+		opacity: 0.7;
+		transition: opacity 0.3s ease;
+	}
+
+	.sorting {
+		position: relative;
+		background-color: var(--ui-bg-hover);
+	}
+
+	.sorting::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
+		pointer-events: none;
+	}
+
 	.th-content {
 		display: flex;
 		align-items: center;
@@ -770,39 +791,14 @@
 		opacity: 0.7;
 	}
 
-	.sorting {
-		background-color: var(--ui-bg-hover);
-	}
-
-	table.sorting tbody tr {
-		opacity: 0.7;
-		transition: opacity 0.3s ease;
-	}
-
-	table.sorting {
-		position: relative;
-	}
-
-	table.sorting::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: rgb(0 0 0 / 5%);
-		pointer-events: none;
-	}
-
 	.sort-asc .sort-icon,
 	.sort-desc .sort-icon {
 		opacity: 1;
 		color: var(--ui-accent);
 	}
 
-	th.sortable:hover {
+	.sortable:hover {
 		background-color: var(--ui-bg-hover);
-	}
-
-	tr {
-		transition: background-color 0.2s;
 	}
 
 	tr:hover {
@@ -887,39 +883,6 @@
 		padding-right: 8px;
 	}
 
-	td:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		text-align: center;
-		background-color: var(--ui-bg-primary);
-		vertical-align: middle;
-	}
-
-	th:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		transition: opacity 0.2s ease;
-	}
-
-	.delete-button {
-		opacity: 0;
-		transition: opacity 0.2s ease;
-	}
-
-	tr:hover .delete-button {
-		opacity: 1;
-	}
-
-	tr:hover td {
-		background-color: var(--ui-bg-hover);
-	}
-
 	.loading,
 	.error,
 	.no-results {
@@ -998,7 +961,6 @@
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
 
 	/* Sticky Last column (Delete Button) */
-	th:last-child,
 	td:last-child {
 		position: sticky;
 		right: 0; /* Stick to the very edge */
@@ -1012,6 +974,8 @@
 	}
 
 	th:last-child {
+		position: sticky;
+		right: 0;
 		z-index: 3; /* Above tbody cells and sort overlay */
 		background-color: var(--ui-bg-element); /* Ensure header BG */
 	}
@@ -1033,10 +997,6 @@
 
 	.delete-button:hover {
 		color: var(--negative-hover, red); /* Darker red on hover */
-	}
-
-	tr:hover .delete-button {
-		opacity: 1;
 	}
 
 	/* Adjust background for sticky columns on hover/select */

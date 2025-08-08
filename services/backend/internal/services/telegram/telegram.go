@@ -112,7 +112,7 @@ func SendTelegramBenTweetsMessage(tweetURL string, id string, msg string, image 
 	return err
 }
 
-// SendTelegramBenTweetsMessage sends tweet information to the Telegram channel
+// SendTelegramAskPeripheralTweets sends Ask Peripheral tweet info to Telegram.
 func SendTelegramAskPeripheralTweets(id string, msg string, image string) error {
 	if !isProdEnv {
 		return nil

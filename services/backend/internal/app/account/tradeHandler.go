@@ -310,6 +310,9 @@ func GetSecurityIDFromTickerTrades(conn *data.Conn, ticker string) (int, error) 
 	return securityID, nil
 }
 
+// ProcessTradesWithinConn processes unlinked `trade_executions` for a user and
+// updates or creates `trades` rows within a single transaction using the
+// provided connection. It returns a simple status payload on success.
 func ProcessTradesWithinConn(conn *data.Conn, userID int) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

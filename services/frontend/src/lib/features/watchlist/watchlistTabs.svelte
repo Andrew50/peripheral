@@ -280,7 +280,7 @@
 		font-size: 13px;
 		line-height: 18px;
 		color: rgb(255 255 255 / 90%);
-		padding: 6px 10px;
+		padding: 6px 12px;
 		background: transparent;
 		border-radius: 6px;
 		white-space: nowrap;
@@ -314,12 +314,6 @@
 		color: #fff;
 		font-weight: 600;
 		box-shadow: 0 2px 8px rgb(255 255 255 / 20%);
-	}
-
-	/* Adjust radius to keep tab top corners rounded and flat bottom */
-	.watchlist-tab {
-		border-radius: 6px;
-		padding: 6px 12px;
 	}
 
 	.dropdown-wrapper {

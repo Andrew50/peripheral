@@ -221,7 +221,7 @@ func parseEdgarFilingsResponse(body []byte, cik string) ([]edgar.Filing, error) 
 		}
 
 		// Check for duplicates using accession number
-		accessionNumber := strings.Replace(recent.AccessionNumber[i], "-", "", -1)
+		accessionNumber := strings.ReplaceAll(recent.AccessionNumber[i], "-", "")
 		if seen[accessionNumber] {
 			continue
 		}

@@ -132,7 +132,11 @@
 </div>
 
 <!-- Pill-style global site header reused across all pages -->
-<header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
+<header
+	class="site-header"
+	class:transparent={isHeaderTransparent}
+	class:hidden-up={!isHeaderVisible}
+>
 	<nav class="header-content">
 		<button
 			class="logo-section"
@@ -441,7 +445,7 @@
 		background: none;
 	}
 
-	#site-header {
+	.site-header {
 		position: fixed;
 		top: var(--header-top);
 		left: 50%;
@@ -468,14 +472,14 @@
 	}
 
 	/* Header behaviour modifiers */
-	#site-header.transparent {
+	.site-header.transparent {
 		background: none;
 		backdrop-filter: none;
 		box-shadow: none;
 		border: none;
 	}
 
-	#site-header.hidden-up {
+	.site-header.hidden-up {
 		transform: translateX(-50%) translateY(-120%);
 		opacity: 0;
 		pointer-events: none;
@@ -500,7 +504,7 @@
 	/* Responsive tweaks */
 	@media (width <= 768px) {
 		/* Mobile header becomes rectangle */
-		#site-header {
+		.site-header {
 			top: 0;
 			left: 0;
 			transform: none;
@@ -515,14 +519,14 @@
 			box-shadow: 0 2px 10px rgb(0 0 0 / 5%);
 		}
 
-		#site-header.transparent {
+		.site-header.transparent {
 			background: transparent;
 			backdrop-filter: none;
 			border-bottom: none;
 			box-shadow: none;
 		}
 
-		#site-header.hidden-up {
+		.site-header.hidden-up {
 			transform: translateY(-100%);
 		}
 

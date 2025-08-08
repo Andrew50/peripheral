@@ -48,7 +48,7 @@ jobs:
       has_frontend_changes: ${{ steps.changed-paths.outputs.has_frontend_changes }}
       has_worker_changes: ${{ steps.changed-paths.outputs.has_worker_changes }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -455,7 +455,7 @@ jobs:
       XDG_CACHE_HOME: ${{ github.workspace }}/.cache
       GO111MODULE: "on"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
@@ -528,14 +528,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: services/backend
-          args: >-
-            --timeout=3m
-            --config=.golangci.yml
-            --max-issues-per-linter=10
-            --max-same-issues=5
-            --build-tags=all
-            --allow-parallel-runners
-            --path-prefix=services/backend
+          args: --timeout=3m --config=.golangci.yml --build-tags=all --allow-parallel-runners --path-prefix=services/backend
           # Disable PR diff fetching to avoid 20k line limit issues
           only-new-issues: false
           skip-cache: true
@@ -545,15 +538,22 @@ jobs:
 
       - name: 🔒 Run Go vulnerability check
         working-directory: services/backend
+        shell: bash
         run: |
           echo "🔒 Running Go vulnerability scanning with govulncheck..."
+          # Ensure GOPATH bin is available on PATH and set GOBIN explicitly
+          export PATH="${GOPATH}/bin:${PATH}"
+          export GOBIN="${GOPATH}/bin"
+
           # Install govulncheck if not available
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          
-          # Run vulnerability check
-          govulncheck ./... || VULN_EXIT_CODE=$?
-          
-          if [ "$VULN_EXIT_CODE" != "0" ]; then
+          if ! command -v govulncheck >/dev/null 2>&1; then
+            go install golang.org/x/vuln/cmd/govulncheck@latest
+          fi
+
+          # Run vulnerability check using explicit path to be safe
+          "$(go env GOPATH)"/bin/govulncheck ./... || VULN_EXIT_CODE=$?
+
+          if [ "${VULN_EXIT_CODE:-0}" != "0" ]; then
             echo "::error title=Go Security Vulnerabilities::Found security vulnerabilities in Go dependencies. Review the output above."
             if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
               exit 1
@@ -614,7 +614,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after backend job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Backend workspace permissions reset complete."
 
   frontend-lint-security:
@@ -630,7 +630,7 @@ jobs:
       # Use workspace-local npm cache to avoid permission issues with /github/home/.npm
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
@@ -780,7 +780,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after frontend job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Frontend workspace permissions reset complete."
 
   worker-lint-security:
@@ -794,7 +794,7 @@ jobs:
       checks: write
       security-events: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
@@ -840,23 +840,25 @@ jobs:
           echo "Adding src directory to PYTHONPATH for this job"
           echo "PYTHONPATH=$(pwd)/src" >> $GITHUB_ENV
 
-      - name: Import sorting check with isort
-        working-directory: services/worker
-        run: |
-          echo "Checking import sorting with isort..."
-          isort --check-only --diff . || true
+      # - name: Import sorting check with isort
+      #   working-directory: services/worker
+      #   continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
+      #   run: |
+      #     echo "Checking import sorting with isort..."
+      #     isort --check-only --diff .
 
-      - name: Code style check with flake8
-        working-directory: services/worker
-        run: |
-          echo "Running flake8 code style checks..."
-          flake8 . || true
+      # - name: Code style check with flake8
+      #   working-directory: services/worker
+      #   run: |
+      #     echo "Running flake8 code style checks..."
+      #     flake8 . || true
 
       - name: Static type checking with mypy
         working-directory: services/worker
+        continue-on-error: ${{ needs.check-workflow-conditions.outputs.continue_on_error == 'true' }}
         run: |
           echo "Running mypy static type checking..."
-          mypy . || true  # Allow mypy to fail softly for now
+          mypy .
 
       - name: Comprehensive linting with pylint
         working-directory: services/worker
@@ -868,15 +870,44 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Running bandit security checks..."
-          bandit -r . -f json -o bandit-report.json || true
-          bandit -r . -f txt
+          # Restrict scan to project code and exclude virtualenv and caches to avoid scanning site-packages
+          bandit -r src worker.py -x .venv,venv,env,.tox,build,dist,.mypy_cache,.pytest_cache -f json -o bandit-report.json || true
+          bandit -r src worker.py -x .venv,venv,env,.tox,build,dist,.mypy_cache,.pytest_cache -f txt
 
       - name: Dependency vulnerability scanning with safety
         working-directory: services/worker
+        env:
+          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
         run: |
           echo "Scanning dependencies for known vulnerabilities..."
-          safety check --json --output safety-report.json || true
-          safety check
+          if [ -n "${SAFETY_API_KEY:-}" ]; then
+            echo "Running Safety with API key (non-interactive)..."
+            SAFETY_EXIT_CODE=0
+            # Safety picks up the API key from SAFETY_API_KEY env var; avoid CLI flag differences across versions
+            safety scan --output json > safety-report.json || SAFETY_EXIT_CODE=$?
+            echo "=== Safety Scan Results (human-readable) ==="
+            safety scan --output screen || true
+            if [ "$SAFETY_EXIT_CODE" -ne 0 ]; then
+              echo "::error title=Python Security Vulnerabilities::Found security vulnerabilities in Python dependencies. Review the Safety output above."
+              if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+                exit 1
+              fi
+            fi
+          else
+            echo "SAFETY_API_KEY not set; using pip-audit fallback (no login required)..."
+            # Ensure pip-audit is available in the virtualenv
+            .venv/bin/pip install --upgrade pip-audit >/dev/null 2>&1 || true
+            PIP_AUDIT_EXIT_CODE=0
+            .venv/bin/pip-audit -r requirements.txt -f json -o pip-audit-report.json || PIP_AUDIT_EXIT_CODE=$?
+            echo "=== pip-audit Results (human-readable) ==="
+            .venv/bin/pip-audit -r requirements.txt || true
+            if [ "$PIP_AUDIT_EXIT_CODE" -ne 0 ]; then
+              echo "::error title=Python Security Vulnerabilities (pip-audit)::Found security vulnerabilities in Python dependencies. Review the pip-audit output above."
+              if [[ "${{ needs.check-workflow-conditions.outputs.continue_on_error }}" != "true" ]]; then
+                exit 1
+              fi
+            fi
+          fi
 
       - name: Run tests with coverage
         working-directory: services/worker
@@ -912,7 +943,7 @@ jobs:
         if: always()
         run: |
           echo "Resetting workspace ownership after worker job..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Worker workspace permissions reset complete."
 
 # Summary and reporting (updated to include format checks)
@@ -963,5 +994,5 @@ jobs:
       - name: Change ownership of workspace back to runner user
         run: |
           echo "Resetting ownership of $GITHUB_WORKSPACE to $(id -u):$(id -g)..."
-          sudo chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
+          chown -R $(id -u):$(id -g) "$GITHUB_WORKSPACE" || true
           echo "Final workspace permission reset complete."

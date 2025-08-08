@@ -4,6 +4,10 @@ Executes Python strategies that use get_bar_data() and get_general_data() functi
 instead of receiving DataFrames as parameters.
 """
 
+# pyright: reportMissingImports=false, reportMissingTypeStubs=false
+
+# pylint: disable=import-error
+
 from datetime import datetime as dt, timedelta
 import json
 import datetime
@@ -12,7 +16,7 @@ import logging
 import io
 import contextlib
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set, Iterable, TypeVar, Generic, ContextManager, SupportsIndex, Iterator
 import numpy as np
 import pandas as pd
 import plotly
@@ -20,34 +24,37 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
-from utils.plotlyToMatlab import plotly_to_matplotlib_png
-from utils.context import Context
-from utils.data_accessors import _get_bar_data, _get_general_data
-from utils.error_utils import capture_exception
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png
+from .utils.context import Context
+from .utils.data_accessors import _get_bar_data, _get_general_data
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
 max_instances = 15000 
 
-class TrackedList(list):
+T = TypeVar("T")
+
+
+class TrackedList(list, Generic[T]):
     """List that tracks total instances across all TrackedList objects"""
     _global_instance_count = 0
     _max_instances = 15000
     _limit_reached = False
 
     @classmethod
-    def reset_counter(cls, max_instances=max_instances):
+    def reset_counter(cls, max_instances_limit: int = max_instances) -> None:
         """Reset global counter for new strategy execution"""
         cls._global_instance_count = 0
-        cls._max_instances = max_instances
+        cls._max_instances = max_instances_limit
         cls._limit_reached = False
 
     @classmethod
-    def is_limit_reached(cls):
+    def is_limit_reached(cls) -> bool:
         """Check if the instance limit was reached during execution"""
         return cls._limit_reached
 
-    def _check_and_update_limit(self, additional_count=1):
+    def _check_and_update_limit(self, additional_count: int = 1) -> bool:
         """Check if adding items would exceed limit and update counter if not"""
         new_count = TrackedList._global_instance_count + additional_count
         if new_count > TrackedList._max_instances:
@@ -63,45 +70,41 @@ class TrackedList(list):
                            TrackedList._max_instances)
         TrackedList._global_instance_count = new_count
         return True  # OK to add instances
-    def append(self, item):
+    def append(self, item: T) -> None:
         if self._check_and_update_limit(1):
             super().append(item)
 
-    def extend(self, items):
-        items_list = list(items) if not isinstance(items, list) else items
+    def extend(self, items: Iterable[T]) -> None:
+        items_list: List[T] = list(items) if not isinstance(items, list) else list(items)
         if len(items_list) == 0:
             return
         if self._check_and_update_limit(len(items_list)):
             super().extend(items_list)
-    def insert(self, index, item):
+    def insert(self, index: SupportsIndex, item: T) -> None:
         if self._check_and_update_limit(1):
             super().insert(index, item)
-    def __iadd__(self, other):
-        other_list = list(other) if not isinstance(other, list) else other
-        if len(other_list) == 0:
-            return self
-        if self._check_and_update_limit(len(other_list)):
-            return super().__iadd__(other_list)
-        return self
+    # Intentionally do not override __iadd__; base implementation calls extend(),
+    # which we override to enforce the instance limit.
 
 def execute_strategy(
     ctx: Context,
     strategy_code: str, 
     strategy_id: int,
-    version: int = None,
+    version: Optional[int] = None,
     start_date: datetime.datetime = datetime.datetime(2003, 1, 1),
     end_date: datetime.datetime = datetime.datetime.now(),
-    symbols: List[str] = None,
+    symbols: Optional[List[str]] = None,
    # max_instances: int = 15000,
     #version: int = None # None means new strategy
-) -> Tuple[List[Dict], str, List[Dict], List[Dict], Dict]:
+) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], List[Optional[str]], Optional[Dict[str, Any]]]:
     """Execute the strategy function with data accessor context"""
 
     # Create safe execution environment with data accessor functions
-    safe_globals = _create_safe_globals(ctx, start_date, end_date, symbols)
-    safe_locals = {}
-    plots_collection = []
-    response_images = []
+    symbols_set: Optional[Set[str]] = set(symbols) if symbols else None
+    safe_globals: Dict[str, Any] = _create_safe_globals(ctx, start_date, end_date, symbols_set)
+    safe_locals: Dict[str, Any] = {}
+    plots_collection: List[Dict[str, Any]] = []
+    response_images: List[Optional[str]] = []
     strategy_prints = ""
     # Execute strategy code in restricted environment
     # pylint: disable=exec-used  # nolint B102 - exec necessary for strategy execution with proper sandboxing
@@ -112,7 +115,7 @@ def execute_strategy(
         raise ValueError("No strategy function found. Function must be named 'strategy'")
 
     # Reset instance counter for this execution
-    TrackedList.reset_counter(max_instances=max_instances)
+    TrackedList.reset_counter(max_instances)
 
     # Execute strategy function with proper error handling and stdout capture
     
@@ -130,7 +133,8 @@ def execute_strategy(
     # Validate and clean instances
     if not isinstance(instances, list):
         logger.error("Strategy function must return a list, got %s", type(instances))
-        return [], "", [], [], "Strategy function must return a list"
+        error_detail: Dict[str, Any] = {"message": "Strategy function must return a list"}
+        return [], "", [], [], error_detail
     # Filter out None instances and validate structure
     valid_instances = []
     for instance in instances:
@@ -151,13 +155,18 @@ def execute_strategy(
 
 
 
-def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_intersect: List[str]) -> Dict[str, Any]:
+def _create_safe_globals(
+    ctx: Context,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    symbols_intersect: Optional[Set[str]],
+) -> Dict[str, Any]:
     """Create safe execution environment with data accessor functions"""
 
     # Initialize plots collection for this execution
     # Create bound methods that use this engine's data accessor
     # this is so that strategy code cannot access class data
-    def apply_drawdown_styling(fig):
+    def apply_drawdown_styling(fig: Any) -> Any:
         """Apply custom styling for drawdown plots with red line and shaded fill"""
         # Update all traces to use red line with shaded fill
         fig.update_traces(
@@ -166,7 +175,7 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
             fillcolor='rgba(255, 77, 77, 0.4)'
         )
         return fig
-    def apply_equity_curve_styling(fig):
+    def apply_equity_curve_styling(fig: Any) -> Any:
         """Apply custom styling for equity curve plots - blue above 0, red below 0, no fill"""
         # Update all traces to remove fill and set basic styling
         fig.update_traces(
@@ -187,18 +196,59 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
                     fig.data[i].update(line={"color": color, "width": 2})
         return fig
     
-    def get_bar_data(timeframe, min_bars, columns=None, filters=None, 
-                         extended_hours=False):
-        return _get_bar_data(ctx,start_date,end_date,timeframe, columns, min_bars, filters, extended_hours)
-    def get_general_data(columns=None, filters=None):
+    # Normalize filter dict to use canonical keys expected by data accessors
+    def _normalize_filters(input_filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if input_filters is None:
+            return None
+        normalized: Dict[str, Any] = input_filters.copy()
+        # Support legacy 'symbols' key by mapping to 'tickers' if needed
+        if 'symbols' in normalized and 'tickers' not in normalized:
+            symbols_val = normalized.get('symbols')
+            if isinstance(symbols_val, str):
+                normalized['tickers'] = [symbols_val]
+            elif isinstance(symbols_val, list):
+                normalized['tickers'] = [str(s) for s in symbols_val]
+            else:
+                normalized['tickers'] = []
+            # Remove legacy key to avoid confusion downstream
+            normalized.pop('symbols', None)
+        return normalized
+
+    def get_bar_data(
+        timeframe: str,
+        min_bars: int,
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        extended_hours: bool = False,
+    ) -> Any:
+        normalized_filters = _normalize_filters(filters)
+        return _get_bar_data(ctx, start_date, end_date, timeframe, columns, min_bars, normalized_filters, extended_hours)
+    def get_general_data(
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         #if the execution is called with a certain set of symboles then we need to intersect that with each get bar data call
         # this will cause references to statuc symbols to possibly fail like if you are referencing spy in a strategy not returning spy
+        actual_filters: Optional[Dict[str, Any]] = _normalize_filters(filters)
         if symbols_intersect:
-            filters['symbols'] = symbols_intersect.intersection(filters['symbols'])
-        return _get_general_data(ctx, columns, filters)
+            if actual_filters is None:
+                actual_filters = {}
+            # Intersect provided tickers with the execution symbol set (or set it if missing)
+            if 'tickers' in actual_filters and actual_filters['tickers'] is not None:
+                tickers_val = actual_filters['tickers']
+                if isinstance(tickers_val, str):
+                    tickers_list: List[str] = [tickers_val]
+                elif isinstance(tickers_val, list):
+                    tickers_list = tickers_val
+                else:
+                    tickers_list = []
+                actual_filters['tickers'] = list(symbols_intersect.intersection(set(tickers_list)))
+            else:
+                actual_filters['tickers'] = list(symbols_intersect)
+        return _get_general_data(ctx, columns, actual_filters)
     
 
-    safe_globals = {
+    safe_globals: Dict[str, Any] = {
         # Built-ins for safe execution (including __import__ for import statements)
         # we dont use defaults becuase that would allow for things like open, eval, exec, etc.
         '__builtins__': {
@@ -255,7 +305,12 @@ def _create_safe_globals(ctx: Context, start_date: str, end_date: str, symbols_i
     }
     return safe_globals
 
-def _plotly_capture_context(plots_collection, response_images, strategy_id=None, version=None):
+def _plotly_capture_context(
+    plots_collection: List[Dict[str, Any]],
+    response_images: List[Optional[str]],
+    strategy_id: Optional[int] = None,
+    version: Optional[int] = None,
+) -> ContextManager[None]:
     """Context manager that temporarily patches plotly to capture plots
      instead of displaying them"""
     # Store original methods
@@ -263,7 +318,7 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
     original_make_subplots = make_subplots
     plot_counter = 0
     # Create capture function
-    def capture_plot(fig):
+    def capture_plot(fig: Any) -> None:
         """Capture plot instead of showing it - extract only essential data"""
         nonlocal plot_counter
         try:
@@ -280,7 +335,13 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
             # Generate PNG as base64 and add to response_images using matplotlib
             try:
 
-                png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Strategy ID", strategy_id, version)
+                png_base64 = plotly_to_matplotlib_png(
+                    fig,
+                    plot_id,
+                    "Strategy ID",
+                    strategy_id if strategy_id is not None else -1,
+                    version,
+                )
                 if png_base64:
                     response_images.append(png_base64)
                 else:
@@ -311,13 +372,13 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
             # Add None to response_images for failed plot
             response_images.append(None)
     # Create wrapped make_subplots that returns figures with captured show
-    def captured_make_subplots(*args, **kwargs):
+    def captured_make_subplots(*args: Any, **kwargs: Any) -> Any:
         fig = original_make_subplots(*args, **kwargs)
         # Monkey patch the show method on this specific figure instance
         fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
         return fig
     @contextlib.contextmanager
-    def patch_context():
+    def patch_context() -> Iterator[None]:
         try:
             # Apply patches
             go.Figure.show = capture_plot
@@ -332,18 +393,19 @@ def _plotly_capture_context(plots_collection, response_images, strategy_id=None,
 
 
 
-def _extract_plot_data(fig) -> dict:
+def _extract_plot_data(fig: Any) -> Dict[str, Any]:
     """Extract trace data from plotly figure using Plotly's
      built-in serialization (fig.to_dict())."""
     try:
         plot_data = json.loads(fig.to_json())
         # Decode any binary data before sending to frontend
-        return _decode_binary_arrays(plot_data)
+        processed = _decode_binary_arrays(plot_data)
+        return processed if isinstance(processed, dict) else {}
     except ValueError as e:
         logger.error("[extract_plot_data] Exception in fig.to_json(): %s", e)
         return {}
 
-def _decode_binary_arrays(data):
+def _decode_binary_arrays(data: Any) -> Any:
     """Recursively decode binary arrays in plot data"""
 
     if isinstance(data, dict):
@@ -379,7 +441,7 @@ def _decode_binary_arrays(data):
     else:
         return data
 
-def _extract_plot_title_with_ticker(fig) -> Tuple[str, Optional[str]]:
+def _extract_plot_title_with_ticker(fig: Any) -> Tuple[str, Optional[str]]:
     """Extract title and ticker from plotly figure. Returns (cleaned_title, ticker)"""
     try:
         title = 'Untitled Plot'
@@ -404,20 +466,15 @@ def _extract_plot_title_with_ticker(fig) -> Tuple[str, Optional[str]]:
 
 
 
-def _ensure_json_serializable(instances: List[Dict]) -> List[Dict]:
+def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Ensure all values in instances are JSON serializable by converting numpy/pandas types"""
-    serializable_instances = []
+    serializable_instances: List[Dict[str, Any]] = []
     for instance in instances:
-        serializable_instance = {}
+        serializable_instance: Dict[str, Any] = {}
         for key, value in instance.items():
             # Convert numpy/pandas types to native Python types
-            if isinstance(value, np.integer):
-                serializable_instance[key] = int(value)
-            elif isinstance(value, np.floating):
-                serializable_instance[key] = float(value)
-            elif isinstance(value, np.bool_):
-                serializable_instance[key] = bool(value)
-            elif isinstance(value, (np.datetime64, pd.Timestamp)):
+            # Handle datetime-like values first to convert to epoch seconds
+            if isinstance(value, (np.datetime64, pd.Timestamp, dt)):
                 # Convert datetime to Unix timestamp (int), handle NaT values
                 try:
                     if isinstance(value, pd.Timestamp):
@@ -425,6 +482,8 @@ def _ensure_json_serializable(instances: List[Dict]) -> List[Dict]:
                             serializable_instance[key] = None
                         else:
                             serializable_instance[key] = int(value.timestamp())
+                    elif isinstance(value, dt):
+                        serializable_instance[key] = int(value.timestamp())
                     else:
                         ts = pd.Timestamp(value)
                         if pd.isna(ts):
@@ -434,24 +493,18 @@ def _ensure_json_serializable(instances: List[Dict]) -> List[Dict]:
                 except (ValueError, TypeError, OverflowError):
                     # Handle invalid timestamps
                     serializable_instance[key] = None
-            elif isinstance(value, dt):
-                # Handle Python datetime objects from database
-                try:
-                    serializable_instance[key] = int(value.timestamp())
-                except (ValueError, TypeError, OverflowError):
-                    # Handle invalid datetime objects
-                    serializable_instance[key] = None
-            elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
-                # Handle pandas nullable integer types
-                serializable_instance[key] = int(value.item()) if pd.notna(value) else None
-            elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
-                # Handle pandas nullable float types
-                serializable_instance[key] = float(value.item()) if pd.notna(value) else None
+            # Normalize pandas/NumPy NA-like values early to None
+            #elif pd.isna(value):
+                # Handle pandas NA values early to avoid unreachable branch
+                #serializable_instance[key] = None
+            elif isinstance(value, np.integer):  # type: ignore[unreachable]
+                serializable_instance[key] = int(value)
+            elif isinstance(value, np.floating):
+                serializable_instance[key] = float(value)
+            elif isinstance(value, np.bool_):
+                serializable_instance[key] = bool(value)
             elif hasattr(value, 'item'):  # Other numpy scalars
                 serializable_instance[key] = value.item()
-            elif pd.isna(value):
-                # Handle pandas NA values
-                serializable_instance[key] = None
             else:
                 serializable_instance[key] = value
 

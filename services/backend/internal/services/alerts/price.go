@@ -1,3 +1,5 @@
+// Package alerts provides price alert evaluation logic for dispatching
+// notifications when thresholds are crossed.
 package alerts
 
 import (

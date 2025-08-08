@@ -1425,25 +1425,20 @@
 		overflow: hidden;
 	}
 
+	.resizer-left,
+	.resizer-right {
+		cursor: ew-resize;
+		background: transparent;
+		z-index: 10; /* sit above charts for easy grab */
+	}
+
 	.resizer-left {
 		width: var(--left-gutter);
-		cursor: ew-resize;
-		background: transparent;
-		z-index: 10; /* sit above charts for easy grab */
-	}
-
-	.resizer-right {
-		width: var(--right-gutter);
-		cursor: ew-resize;
-		background: transparent;
-		z-index: 10; /* sit above charts for easy grab */
-	}
-
-	.resizer-left {
 		grid-area: g1;
 	}
 
 	.resizer-right {
+		width: var(--right-gutter);
 		grid-area: g2;
 	}
 

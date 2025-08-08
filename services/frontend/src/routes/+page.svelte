@@ -15,7 +15,7 @@
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
 
-	// Subsections data
+	// Subsections data for the landing page
 	const subsections = [
 		{
 			title: 'Backtest trading ideas',

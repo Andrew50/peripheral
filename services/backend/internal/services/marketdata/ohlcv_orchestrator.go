@@ -462,7 +462,7 @@ func setLoadState(ctx context.Context, db *pgxpool.Pool, tf string, s LoadState)
 }
 
 // Deprecated: Use getLoadState instead
-func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (time.Time, error) {
+/*func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (time.Time, error) {
 	state, err := getLoadState(ctx, db, timeframe)
 	if err != nil {
 		return time.Time{}, err
@@ -472,7 +472,7 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 		return time.Date(2003, 1, 1, 0, 0, 0, 0, time.UTC), nil
 	}
 	return state.Latest, nil
-}
+}*/
 
 func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile) error {
 	if len(files) == 0 {

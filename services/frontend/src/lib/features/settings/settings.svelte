@@ -593,7 +593,7 @@
 		flex-grow: 1;
 	}
 
-	.setting-item input[type='number'] {
+	.setting-item [type='number'] {
 		padding: 0.5rem;
 		background-color: var(--c2);
 		border: 1px solid var(--c3);
@@ -603,7 +603,7 @@
 		min-width: 120px;
 	}
 
-	.setting-item input[type='checkbox'] {
+	.setting-item [type='checkbox'] {
 		width: 18px;
 		height: 18px;
 		accent-color: var(--f1);
