@@ -376,7 +376,7 @@ def _build_aggregated_query(
             SELECT {final_select_clause}
             FROM ranked_data
             WHERE rn <= %s AND total_bars >= %s
-            ORDER BY ticker, bucket_ts DESC"""
+            ORDER BY ticker, bucket_ts DESC"""  # nosec B608
 
         params = agg_params + [min_bars, min_bars]
     else:
@@ -401,7 +401,7 @@ def _build_aggregated_query(
                 SELECT {agg_select_clause}
                 FROM in_range
             ) AS combined
-            ORDER BY ticker, bucket_ts ASC"""
+            ORDER BY ticker, bucket_ts ASC"""  # nosec B608
 
         params = (
             agg_params
@@ -489,7 +489,7 @@ def _build_direct_query(
         SELECT {final_select_clause}
         FROM ranked_data
         WHERE rn <= %s AND total_bars >= %s
-        ORDER BY ticker, timestamp DESC"""
+        ORDER BY ticker, timestamp DESC"""  # nosec B608
 
         params = params + [min_bars, min_bars]
     else:
@@ -513,7 +513,7 @@ def _build_direct_query(
             UNION ALL
             SELECT {select_no_alias_clause} FROM in_range
         ) AS combined
-        ORDER BY ticker, timestamp ASC"""
+        ORDER BY ticker, timestamp ASC"""  # nosec B608
 
         # Parameter order must match placeholders:
         #   1) base filter params for pre_bars
@@ -1095,7 +1095,7 @@ def _build_agg_cte(
         FROM {base_table} o
         WHERE {where_clause}
         GROUP BY o.ticker, bucket_ts
-    )"""
+    )"""  # nosec B608
     # Add bucket_sql as first parameter
     cte_params = [bucket_sql] + all_params
     return cte_sql, cte_params

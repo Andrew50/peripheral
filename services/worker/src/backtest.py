@@ -22,9 +22,7 @@ def backtest(
         raise ValueError("strategy_id is required")
     if user_id is None:
         raise ValueError("user_id is required")
-    # Help static typing: ensure non-None for calls below
-    assert strategy_id is not None
-    assert user_id is not None
+    # Inputs validated above; proceed with non-None values
     strategy_code, version = fetch_strategy_code(ctx, user_id, strategy_id)
 
     if symbols is not None and len(symbols) == 0:
@@ -33,8 +31,7 @@ def backtest(
     if start_date is None or end_date is None:
         raise ValueError("start_date and end_date are required for backtest")
 
-    # Help static typing: after validation, these are non-None
-    assert start_date is not None and end_date is not None
+    # Inputs validated above; proceed with non-None values
 
     parsed_start_date = datetime.strptime(start_date, '%Y-%m-%d')
     parsed_end_date = datetime.strptime(end_date, '%Y-%m-%d')

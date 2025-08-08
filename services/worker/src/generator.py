@@ -516,7 +516,8 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
 
     description = _extract_description(strategy_code, prompt)
     if is_edit:
-        assert existing_strategy is not None
+        if existing_strategy is None:
+            raise ValueError("existing_strategy is required when editing a strategy")
         name = existing_strategy.get('name', 'Strategy')
     else:
         name = _generate_strategy_name(prompt)
