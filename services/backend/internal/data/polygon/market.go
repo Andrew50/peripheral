@@ -99,6 +99,9 @@ func GetTickerDetails(client *polygon.Client, ticker string, dateString string) 
 	return &res.Results, nil
 }
 
+// GetTickerDetailsMarketCapShareOut fetches Polygon ticker details and returns
+// the market cap and share class shares outstanding for a given ticker and
+// reference date (or "now").
 func GetTickerDetailsMarketCapShareOut(client *polygon.Client, ticker string, dateString string) (float64, int64, error) {
 	tickerDetails, err := GetTickerDetails(client, ticker, dateString)
 	if err != nil {
@@ -107,11 +110,15 @@ func GetTickerDetailsMarketCapShareOut(client *polygon.Client, ticker string, da
 	return tickerDetails.MarketCap, tickerDetails.ShareClassSharesOutstanding, nil
 }
 
+// GetPolygonIPOResult represents the listing date and the set of tickers that
+// IPO'd on that date as returned by Polygon's IPO listing endpoints.
 type GetPolygonIPOResult struct {
 	ListingDate string
 	Tickers     []string
 }
 
+// GetPolygonIPOs lists IPOs for the specified date and returns their tickers
+// along with the listing date reported by Polygon.
 func GetPolygonIPOs(client *polygon.Client, dateString string) (GetPolygonIPOResult, error) {
 	params := models.ListIPOsParams{}.
 		WithListingDate(models.EQ, dateString)

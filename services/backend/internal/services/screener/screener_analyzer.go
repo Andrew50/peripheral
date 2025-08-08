@@ -1,5 +1,6 @@
 package screener
 
+/*
 import (
 	"backend/internal/data"
 	"bufio"
@@ -226,7 +227,7 @@ func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile 
 	// Get key configuration parameters
 	configQuery := `
 		SELECT name, setting, unit, context, source
-		FROM pg_settings 
+		FROM pg_settings
 		WHERE name IN (
 			'shared_buffers', 'work_mem', 'maintenance_work_mem', 'effective_cache_size',
 			'random_page_cost', 'seq_page_cost', 'cpu_tuple_cost', 'cpu_index_tuple_cost',
@@ -254,7 +255,7 @@ func analyzeDatabaseConfiguration(ctx context.Context, conn *data.Conn, logFile 
 
 	// Get database size info
 	sizeQuery := `
-		SELECT 
+		SELECT
 			pg_size_pretty(pg_database_size(current_database())) as db_size,
 			pg_size_pretty(pg_total_relation_size('ohlcv_1m')) as ohlcv_1m_size,
 			pg_size_pretty(pg_total_relation_size('ohlcv_1d')) as ohlcv_1d_size,
@@ -292,7 +293,7 @@ func analyzeLockActivity(ctx context.Context, conn *data.Conn, logFile *os.File,
 	}
 
 	lockQuery := `
-		SELECT 
+		SELECT
 			blocked_locks.pid     AS blocked_pid,
 			blocked_activity.usename  AS blocked_user,
 			blocking_locks.pid     AS blocking_pid,
@@ -302,7 +303,7 @@ func analyzeLockActivity(ctx context.Context, conn *data.Conn, logFile *os.File,
 			now() - blocked_activity.query_start AS blocked_duration
 		FROM  pg_catalog.pg_locks         blocked_locks
 		JOIN pg_catalog.pg_stat_activity blocked_activity  ON blocked_activity.pid = blocked_locks.pid
-		JOIN pg_catalog.pg_locks         blocking_locks 
+		JOIN pg_catalog.pg_locks         blocking_locks
 			ON blocking_locks.locktype = blocked_locks.locktype
 			AND blocking_locks.database IS NOT DISTINCT FROM blocked_locks.database
 			AND blocking_locks.relation IS NOT DISTINCT FROM blocked_locks.relation
@@ -313,7 +314,7 @@ func analyzeLockActivity(ctx context.Context, conn *data.Conn, logFile *os.File,
 			AND blocking_locks.classid IS NOT DISTINCT FROM blocked_locks.classid
 			AND blocking_locks.objid IS NOT DISTINCT FROM blocked_locks.objid
 			AND blocking_locks.objsubid IS NOT DISTINCT FROM blocked_locks.objsubid
-			AND blocking_locks.pid != blocked_locks.pid 
+			AND blocking_locks.pid != blocked_locks.pid
 		JOIN pg_catalog.pg_stat_activity blocking_activity ON blocking_activity.pid = blocking_locks.pid
 		WHERE NOT blocked_locks.granted
 ` + filter + `
@@ -367,7 +368,7 @@ func analyzeWaitEvents(ctx context.Context, conn *data.Conn, logFile *os.File, p
 	}
 
 	waitQuery := `
-		SELECT 
+		SELECT
 			wait_event_type,
 			wait_event,
 			COUNT(*) as count,
@@ -447,7 +448,7 @@ func analyzeTableStatistics(ctx context.Context, conn *data.Conn, logFile *os.Fi
 	}
 
 	tableStatsQuery := `
-		SELECT 
+		SELECT
 			schemaname,
 			relname,
 			n_tup_ins,
@@ -523,7 +524,7 @@ func analyzeIndexUsage(ctx context.Context, conn *data.Conn, logFile *os.File, t
 	}
 
 	indexQuery := `
-		SELECT 
+		SELECT
 			schemaname,
 			relname,
 			indexname,
@@ -574,7 +575,7 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 
 	// Get temp file usage
 	tempQuery := `
-		SELECT 
+		SELECT
 			datname,
 			temp_files,
 			temp_bytes,
@@ -609,7 +610,7 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 	if checkpointerExists {
 		// PostgreSQL 17+ - some columns moved to pg_stat_io
 		bufferQuery := `
-			SELECT 
+			SELECT
 				buffers_clean,
 				buffers_alloc
 			FROM pg_stat_bgwriter
@@ -626,7 +627,7 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 			// Try to get backend buffer stats from pg_stat_io
 			var buffersBackend, buffersBackendFsync int64
 			err = conn.DB.QueryRow(ctx, `
-				SELECT 
+				SELECT
 					COALESCE(SUM(writes), 0) as buffers_backend,
 					COALESCE(SUM(fsyncs), 0) as buffers_backend_fsync
 				FROM pg_stat_io
@@ -641,7 +642,7 @@ func analyzeMemoryUsage(ctx context.Context, conn *data.Conn, logFile *os.File) 
 	} else {
 		// PostgreSQL 16 and earlier - all columns in pg_stat_bgwriter
 		bufferQuery := `
-			SELECT 
+			SELECT
 				buffers_clean,
 				buffers_backend,
 				buffers_backend_fsync,
@@ -674,12 +675,12 @@ func analyzeMaintenanceStatus(ctx context.Context, conn *data.Conn, logFile *os.
 	}
 
 	maintenanceQuery := `
-		SELECT 
+		SELECT
 			schemaname,
 			relname,
 			n_dead_tup,
 			n_live_tup,
-			CASE 
+			CASE
 				WHEN n_live_tup = 0 THEN 0
 				ELSE (n_dead_tup::float / n_live_tup::float) * 100
 			END as dead_tuple_pct,
@@ -752,7 +753,7 @@ func analyzeConcurrentQueries(ctx context.Context, conn *data.Conn, logFile *os.
 	}
 
 	specificQuery := `
-		SELECT 
+		SELECT
 			pid,
 			usename,
 			state,
@@ -907,7 +908,7 @@ func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.F
 
 	// Check available columns
 	checkColumnsQuery := `
-		SELECT 
+		SELECT
 			CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pg_stat_statements' AND column_name = 'total_time') THEN 'total_time' ELSE 'total_exec_time' END AS time_column,
 			CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pg_stat_statements' AND column_name = 'mean_time') THEN 'mean_time' ELSE 'mean_exec_time' END AS mean_column,
 			EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pg_stat_statements' AND column_name = 'blk_read_time') AS has_io_timing,
@@ -937,7 +938,7 @@ func analyzePgStatStatements(ctx context.Context, conn *data.Conn, logFile *os.F
 	}
 
 	selectClause := fmt.Sprintf(`
-		SELECT 
+		SELECT
 			substring(query for 100) as short_query,
 			calls,
 			%s as total_time,
@@ -1066,15 +1067,15 @@ func analyzeDatabaseActivity(ctx context.Context, conn *data.Conn, logFile *os.F
 	}
 
 	activityQuery := `
-		SELECT 
+		SELECT
 			pid,
 			now() - pg_stat_activity.query_start AS duration,
 			query,
 			state,
 			wait_event_type,
 			wait_event
-		FROM pg_stat_activity 
-		WHERE state = 'active' 
+		FROM pg_stat_activity
+		WHERE state = 'active'
 		  AND query NOT LIKE '%pg_stat_activity%'
 ` + filter + `
 		ORDER BY duration DESC
@@ -1151,7 +1152,7 @@ func analyzeTableBloat(ctx context.Context, conn *data.Conn, logFile *os.File, t
 
 	for _, table := range tables {
 		bloatQuery := fmt.Sprintf(`
-			SELECT 
+			SELECT
 				table_len,
 				tuple_count,
 				tuple_len,
@@ -1259,7 +1260,7 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 		var buffersCheckpoint int64
 
 		err := conn.DB.QueryRow(ctx, `
-			SELECT 
+			SELECT
 				checkpoints_timed,
 				checkpoints_req,
 				checkpoint_write_time,
@@ -1279,7 +1280,7 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 		// Get background writer stats from pg_stat_bgwriter
 		var buffersClean, maxwrittenClean, buffersAlloc int64
 		err = conn.DB.QueryRow(ctx, `
-			SELECT 
+			SELECT
 				buffers_clean,
 				maxwritten_clean,
 				buffers_alloc
@@ -1295,7 +1296,7 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 		// Try to get backend buffer stats from pg_stat_io (PostgreSQL 17+)
 		var buffersBackend, buffersBackendFsync int64
 		err = conn.DB.QueryRow(ctx, `
-			SELECT 
+			SELECT
 				COALESCE(SUM(writes), 0) as buffers_backend,
 				COALESCE(SUM(fsyncs), 0) as buffers_backend_fsync
 			FROM pg_stat_io
@@ -1314,7 +1315,7 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 		var buffersBackend, buffersBackendFsync, buffersAlloc int64
 
 		err := conn.DB.QueryRow(ctx, `
-			SELECT 
+			SELECT
 				checkpoints_timed,
 				checkpoints_req,
 				checkpoint_write_time,
@@ -1344,7 +1345,7 @@ func analyzeWALCheckpoint(ctx context.Context, conn *data.Conn, logFile *os.File
 	// pg_stat_wal (PostgreSQL 13+)
 	var walRecords, walFpi, walBytes int64
 	err = conn.DB.QueryRow(ctx, `
-		SELECT 
+		SELECT
 			wal_records,
 			wal_fpi,
 			wal_bytes
@@ -1420,7 +1421,7 @@ func analyzePgStatIO(ctx context.Context, conn *data.Conn, logFile *os.File) err
 	}
 
 	rows, err := conn.DB.Query(ctx, `
-		SELECT 
+		SELECT
 			backend_type,
 			object,
 			context,
@@ -1461,8 +1462,8 @@ func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.F
 	var viewExists bool
 	err := conn.DB.QueryRow(ctx, `
 		SELECT EXISTS (
-			SELECT 1 FROM information_schema.tables 
-			WHERE table_schema = 'timescaledb_information' 
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = 'timescaledb_information'
 			AND table_name = 'continuous_aggregate_stats'
 		)
 	`).Scan(&viewExists)
@@ -1473,7 +1474,7 @@ func analyzeContinuousAggLag(ctx context.Context, conn *data.Conn, logFile *os.F
 	}
 
 	rows, err := conn.DB.Query(ctx, `
-		SELECT 
+		SELECT
 			materialization_hypertable,
 			lag,
 			last_run_duration,
@@ -1532,3 +1533,4 @@ func intMin(a, b int) int {
 	}
 	return b
 }
+*/

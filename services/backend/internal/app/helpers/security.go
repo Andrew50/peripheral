@@ -149,7 +149,11 @@ func GetPrevClose(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface{},
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch Polygon snapshot: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if cerr := resp.Body.Close(); cerr != nil {
+				log.Printf("warning: failed to close response body: %v", cerr)
+			}
+		}()
 
 		// Read the response body
 		body, err := io.ReadAll(resp.Body)

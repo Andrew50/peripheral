@@ -473,13 +473,8 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
         serializable_instance: Dict[str, Any] = {}
         for key, value in instance.items():
             # Convert numpy/pandas types to native Python types
-            if isinstance(value, np.integer):
-                serializable_instance[key] = int(value)
-            elif isinstance(value, np.floating):
-                serializable_instance[key] = float(value)
-            elif isinstance(value, np.bool_):
-                serializable_instance[key] = bool(value)
-            elif isinstance(value, (np.datetime64, pd.Timestamp, dt)):
+            # Handle datetime-like values first to convert to epoch seconds
+            if isinstance(value, (np.datetime64, pd.Timestamp, dt)):
                 # Convert datetime to Unix timestamp (int), handle NaT values
                 try:
                     if isinstance(value, pd.Timestamp):
@@ -498,15 +493,16 @@ def _ensure_json_serializable(instances: List[Dict[str, Any]]) -> List[Dict[str,
                 except (ValueError, TypeError, OverflowError):
                     # Handle invalid timestamps
                     serializable_instance[key] = None
-            #elif pd.api.types.is_integer_dtype(type(value)) and hasattr(value, 'item'):
-                # Handle pandas nullable integer types
-                #serializable_instance[key] = int(value.item()) if pd.notna(value) else None
-            #elif pd.api.types.is_float_dtype(type(value)) and hasattr(value, 'item'):
-                # Handle pandas nullable float types
-                #serializable_instance[key] = float(value.item()) if pd.notna(value) else None
+            # Normalize pandas/NumPy NA-like values early to None
             elif pd.isna(value):
                 # Handle pandas NA values early to avoid unreachable branch
                 serializable_instance[key] = None
+            elif isinstance(value, np.integer):
+                serializable_instance[key] = int(value)
+            elif isinstance(value, np.floating):
+                serializable_instance[key] = float(value)
+            elif isinstance(value, np.bool_):
+                serializable_instance[key] = bool(value)
             elif hasattr(value, 'item'):  # Other numpy scalars
                 serializable_instance[key] = value.item()
             else:

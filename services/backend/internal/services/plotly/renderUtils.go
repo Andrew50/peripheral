@@ -28,7 +28,11 @@ func RenderTwitterPlotToBase64(conn *data.Conn, plot interface{}, watermark bool
 			if err != nil {
 				log.Printf("Failed to create Plotly renderer: %v", err)
 			} else {
-				defer renderer.Close()
+				defer func() {
+					if err := renderer.Close(); err != nil {
+						log.Printf("warning: failed to close plotly renderer: %v", err)
+					}
+				}()
 
 				// Render the plot
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

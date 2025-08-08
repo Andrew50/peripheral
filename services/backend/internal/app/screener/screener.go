@@ -420,12 +420,16 @@ var screenerColumns = map[string]ColumnInfo{
 	},
 }
 
+// Filter represents a single constraint in the screener query, including the
+// column name, comparison operator, and value used to build the WHERE clause.
 type Filter struct {
 	Column   string
 	Operator string // =, !=, >, <, >=, <=, LIKE, IN, topn, bottomn, topn_pct, bottomn_pct
 	Value    interface{}
 }
 
+// ScreenerArgs defines the inputs for constructing a screener query including
+// selected columns, sorting, limiting, and a list of filters.
 type ScreenerArgs struct {
 	ReturnColumns []string
 	OrderBy       string

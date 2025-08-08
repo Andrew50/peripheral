@@ -1,3 +1,6 @@
+// Package edgar provides functions to fetch and parse SEC EDGAR filings,
+// transform them into convenient structs, and expose helpers to retrieve
+// filing text and metadata used throughout the application.
 package edgar
 
 import (
@@ -892,10 +895,13 @@ func GetEarningsText(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface
 	return response, nil
 }
 
+// GetFilingTextArgs contains parameters for fetching the raw text of a single
+// SEC filing by its URL.
 type GetFilingTextArgs struct {
 	URL string `json:"url"`
 }
 
+// GetFilingTextResponse holds the extracted text content of a filing.
 type GetFilingTextResponse struct {
 	Text string `json:"text"`
 }

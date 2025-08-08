@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -278,7 +279,11 @@ func RunTwitterSearch(conn *data.Conn, _ int, rawArgs json.RawMessage) (interfac
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Printf("warning: failed to close response body: %v", cerr)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		// Read the response body to get error details
 		errorBodyBytes, readErr := io.ReadAll(resp.Body)
@@ -645,7 +650,11 @@ func GetLatestTweets(conn *data.Conn, _ int, rawArgs json.RawMessage) (interface
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Printf("warning: failed to close response body: %v", cerr)
+		}
+	}()
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {

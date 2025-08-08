@@ -371,13 +371,13 @@ func updateStaleScreenerValues(conn *data.Conn) {
 	log.Printf("✅ Screener refresh completed successfully in %v", duration)
 
 	// Only run detailed analysis if the operation took too long
-	if useAnalysis {
+	/*if useAnalysis {
 		go func() {
 			if err := RunPerformanceAnalysis(conn, screenerAnalysisConfig); err != nil {
 				log.Printf("⚠️  Background performance analysis failed: %v", err)
 			}
 		}()
-	}
+	}*/
 
 	log.Printf("🔄 updateStaleScreenerValues: %v", duration)
 }
@@ -576,6 +576,7 @@ func isRegularMarketHours(now time.Time, loc *time.Location) bool {
 	return true
 }
 
+/*
 var screenerAnalysisConfig = AnalysisConfig{
 	LogFilePath:      "/app/screener_analysis.log",
 	StaleQuery:       `SELECT ticker, last_update_time, stale FROM screener_stale WHERE stale = TRUE ORDER BY last_update_time ASC LIMIT $1`,
@@ -617,7 +618,7 @@ var screenerAnalysisConfig = AnalysisConfig{
 
 		// Performance-critical joins (simulating screener calculation logic) - updated for migration 78
 		{Name: "screener_join_simulation", Query: `
-			SELECT s.ticker, s.market_cap, sr.price_1d, sr.dma_50, sr.dma_200, sr.volatility_1w_pct, 
+			SELECT s.ticker, s.market_cap, sr.price_1d, sr.dma_50, sr.dma_200, sr.volatility_1w_pct,
 			       sr1m.price_1m, sr1m.range_15m_pct, sr1m.range_1h_pct, o1d.close/1000.0 as current_price
 			FROM securities s
 			LEFT JOIN static_refs_daily sr ON s.ticker = sr.ticker
@@ -633,7 +634,7 @@ var screenerAnalysisConfig = AnalysisConfig{
 			WITH stale_batch AS (
 				SELECT ticker FROM screener_stale WHERE stale = TRUE LIMIT $2
 			)
-			SELECT COUNT(*) as stale_count, 
+			SELECT COUNT(*) as stale_count,
 			       COUNT(DISTINCT s.ticker) as active_count,
 			       AVG(EXTRACT(EPOCH FROM now() - ss.last_update_time)) as avg_staleness_seconds
 			FROM stale_batch sb
@@ -642,3 +643,4 @@ var screenerAnalysisConfig = AnalysisConfig{
 		`},
 	},
 }
+*/

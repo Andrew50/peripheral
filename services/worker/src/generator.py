@@ -485,14 +485,15 @@ def create_strategy(ctx: Context, user_id: int, prompt: str, strategy_id: int = 
     existing_strategy: Optional[Dict[str, Any]] = None
 
     if is_edit:
-        result = fetch_strategy_code(ctx, user_id, strategy_id)
-        if not result:
+        try:
+            fetched_code, fetched_version = fetch_strategy_code(ctx, user_id, strategy_id)
+        except ValueError as fetch_error:
             return {
                 "success": False,
-                "error": f"Strategy {strategy_id} not found for user {user_id}"
+                "error": str(fetch_error),
             }
         # Unpack fetched strategy code into dict for consistent access
-        existing_strategy = {"pythonCode": result[0], "version": result[1]}
+        existing_strategy = {"pythonCode": fetched_code, "version": fetched_version}
 
     strategy_code = _generate_and_validate_strategy(ctx, user_id, prompt, existing_strategy, conversation_id, message_id, max_retries=2)
 

@@ -7,9 +7,21 @@ import re
 import time
 import asyncio
 import json
-from typing import Dict, Any, List, Tuple, Optional, cast
+from typing import Dict, Any, List, Tuple, Optional, cast, TYPE_CHECKING
 from datetime import datetime
-from google.genai import types as genai_types  # type: ignore[import-not-found]  # pylint: disable=import-error
+import importlib.util as _importlib_util
+import importlib as _importlib
+
+if TYPE_CHECKING:
+    # Imported only for type checking; not executed at runtime
+    from google.genai import types as genai_types  # type: ignore[import-not-found]
+
+# Runtime availability check without relying on import exceptions
+_genai_types_runtime: Any | None = (
+    _importlib.import_module("google.genai.types")
+    if _importlib_util.find_spec("google.genai.types") is not None
+    else None
+)
 from .validator import validate_code
 from .utils.context import Context
 from .utils.data_accessors import get_available_filter_values
@@ -21,14 +33,14 @@ from .generator import _parse_filter_needs_response
 logger = logging.getLogger(__name__)
 
 def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
-    if genai_types is not None:
-        contents = genai_types.Content(
+    if _genai_types_runtime is not None:
+        contents = _genai_types_runtime.Content(
             role="user",
-            parts=[genai_types.Part.from_text(text=prompt)],
+            parts=[_genai_types_runtime.Part.from_text(text=prompt)],
         )
-        generate_content_config = genai_types.GenerateContentConfig(
-            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
-            system_instruction=[genai_types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
+        generate_content_config = _genai_types_runtime.GenerateContentConfig(
+            thinking_config=_genai_types_runtime.ThinkingConfig(thinking_budget=0),
+            system_instruction=[_genai_types_runtime.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
             you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed.
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
