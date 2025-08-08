@@ -302,15 +302,15 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var userID int
 	var inviteCodeUsed sql.NullString
-	var otp_code int
-	var otp_expires_at time.Time
+	var otpCode int
+	var otpExpiresAt time.Time
 	var verified bool
 
 	// 1) Does the email exist? Get user details.
 	err := conn.DB.QueryRow(ctx,
 		`SELECT userId, invite_code_used, otp_code, otp_expires_at, verified
 		 FROM users WHERE email=$1`,
-		a.Email).Scan(&userID, &inviteCodeUsed, &otp_code, &otp_expires_at, &verified)
+		a.Email).Scan(&userID, &inviteCodeUsed, &otpCode, &otpExpiresAt, &verified)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -325,7 +325,7 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, nil
 	}
 
-	if a.OTP != otp_code || time.Now().After(otp_expires_at) {
+	if a.OTP != otpCode || time.Now().After(otpExpiresAt) {
 		return nil, fmt.Errorf("OTP invalid or expired")
 	}
 
@@ -492,7 +492,7 @@ func SendVerificationOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{},
 		return nil, fmt.Errorf("email already verified")
 	}
 
-	new_otp, err := createOTP()
+	newOtp, err := createOTP()
 	if err != nil {
 		log.Printf("ERROR: failed to lookup user %d: %v", userID, err)
 		return nil, fmt.Errorf("error creating OTP")
@@ -500,14 +500,14 @@ func SendVerificationOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{},
 
 	_, err = conn.DB.Exec(ctx,
 		`UPDATE users
-		 SET otp_code = $1, otp_expires_at = $2
-		 WHERE userId = $3`, new_otp.otp, new_otp.otp_expires_at, userID)
+         SET otp_code = $1, otp_expires_at = $2
+         WHERE userId = $3`, newOtp.otp, newOtp.otpExpiresAt, userID)
 	if err != nil {
 		log.Printf("ERROR: failed to insert otp for user %d: %v", userID, err)
 		return nil, fmt.Errorf("error inserting OTP in database")
 	}
 
-	err = sendOTPEmail(a.Email, new_otp.otp)
+	err = sendOTPEmail(a.Email, newOtp.otp)
 	if err != nil {
 		log.Printf("ERROR: failed to send email to %s: %v", a.Email, err)
 		return nil, fmt.Errorf("error sending verification email")
@@ -555,8 +555,8 @@ func sendOTPEmail(to string, otp int) error {
 }
 
 type OTP struct {
-	otp            int
-	otp_expires_at time.Time
+	otp          int
+	otpExpiresAt time.Time
 }
 
 func createOTP() (OTP, error) {
@@ -567,9 +567,9 @@ func createOTP() (OTP, error) {
 		return OTP{}, fmt.Errorf("error creating otp")
 	}
 	otp := int(n.Int64()) + 10000
-	otp_expires_at := time.Now().Add(time.Minute * 5)
+	otpExpiresAt := time.Now().Add(time.Minute * 5)
 
-	return OTP{otp, otp_expires_at}, nil
+	return OTP{otp: otp, otpExpiresAt: otpExpiresAt}, nil
 }
 
 func createToken(userID int) (string, error) {
@@ -1039,20 +1039,20 @@ func generateStateWithInvite(inviteCode string) string {
 	}
 
 	// JSON encode and base64 encode the state data
-	stateJson, err := json.Marshal(stateData)
+	stateJSON, err := json.Marshal(stateData)
 	if err != nil {
 		log.Printf("ERROR: Failed to marshal state data: %v", err)
 		// Fallback to simple random state if JSON marshaling fails
 		return randomState
 	}
 
-	return base64.URLEncoding.EncodeToString(stateJson)
+	return base64.URLEncoding.EncodeToString(stateJSON)
 }
 
 // parseStateWithInvite extracts the original state and invite code from the encoded state
 func parseStateWithInvite(encodedState string) (string, string, error) {
 	// Decode base64
-	stateJson, err := base64.URLEncoding.DecodeString(encodedState)
+	stateJSON, err := base64.URLEncoding.DecodeString(encodedState)
 	if err != nil {
 		// If it fails to decode, assume it's a legacy state without invite code
 		return encodedState, "", nil
@@ -1064,7 +1064,7 @@ func parseStateWithInvite(encodedState string) (string, string, error) {
 		InviteCode string `json:"inviteCode,omitempty"`
 	}
 
-	if err := json.Unmarshal(stateJson, &stateData); err != nil {
+	if err := json.Unmarshal(stateJSON, &stateData); err != nil {
 		// If JSON parsing fails, assume it's a legacy state without invite code
 		return encodedState, "", nil
 	}

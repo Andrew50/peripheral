@@ -535,7 +535,7 @@ func processFilesWithPipeline(ctx context.Context, s3c *s3.Client, bucket string
 
 			// Update load state based on direction
 			var shouldUpdate bool
-			var newState LoadState = state
+			newState := state
 
 			// log.Printf("🔍 State update check: timeframe=%s, direction=%s, cut=%s, persisted=%s",
 			//	timeframe, map[bool]string{true: "forward", false: "backward"}[directionForward],

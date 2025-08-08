@@ -878,8 +878,7 @@ jobs:
         working-directory: services/worker
         run: |
           echo "Scanning dependencies for known vulnerabilities..."
-          safety check --json --output safety-report.json || true
-          safety check
+          safety scan --output text
 
       - name: Run tests with coverage
         working-directory: services/worker
