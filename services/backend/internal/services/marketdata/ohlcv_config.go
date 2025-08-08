@@ -1,5 +1,7 @@
 // Package marketdata provides functionality for retrieving, processing, and storing
 // market data including price history, indexes, and other financial time series.
+//
+//lint:file-ignore SA1019 Deprecated AWS endpoint resolver constructs are intentionally used until SDK upgrade to service-specific endpoints
 package marketdata
 
 import (
