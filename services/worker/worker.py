@@ -5,17 +5,14 @@ Executes trading strategies via Redis queue for backtesting and screening
 """
 # pylint: disable=import-error
 
-import os
-import sys
-
 import asyncio
 import json
 import logging
 import threading
 import time
 from datetime import datetime
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.agent import python_agent
 from src.backtest import backtest
 from src.screen import screen
@@ -36,7 +33,7 @@ logger = logging.getLogger(__name__)
 class Worker:
     """Redis queue-based strategy execution worker"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.worker_id = f"worker_{threading.get_ident()}"
         self.shutdown_requested = False
         self.conn = Conn()
@@ -47,7 +44,7 @@ class Worker:
         self._current_status_id = None
         self._current_heartbeat_interval = None
         self._task_start_time = None
-        self.func_map = {
+        self.func_map: Dict[str, Callable[..., Dict[str, Any]]] = {
             'backtest': backtest,
             'screen': screen,
             'alert': alert,
@@ -57,48 +54,51 @@ class Worker:
         self._worker_start_time = time.time()
         logger.info("🎯 Strategy worker %s started at %s", self.worker_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-    def run(self):
+    def run(self) -> None:
         """Main queue processing loop with priority queue support"""
 
 
+
         while True:
-            logger.info("🔍 Waiting for task on %s", self.worker_id)
-            task = self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
+            task: Optional[Tuple[str, str]] = cast(
+                Optional[Tuple[str, str]],
+                self.conn.redis_client.brpop(['priority_task_queue', 'task_queue'], timeout=30)
+            )
             if not task:
                 self.conn.check_connections()
                 continue
-            queue_name, task_data = task
+            queue_name, task_data_str = task
             self.tasks_processed += 1
             # parsing of task data, this shouldnt fail unless the task data is malformed which is not task dependent
             # therefore this shouldnt send an error message back as this cannot happen
             try:
-                task_data = json.loads(task_data)
+                task_data: Dict[str, Any] = json.loads(task_data_str)
             except json.JSONDecodeError as e:
                 logger.error("❌ Failed to parse task JSON: %s", e)
                 continue
                 
             task_id = task_data.get('task_id')
             task_type = task_data.get('task_type')
-            kwargs = json.loads(task_data.get('kwargs', '{}'))
+            kwargs: Dict[str, Any] = json.loads(task_data.get('kwargs', '{}'))
             priority = task_data.get('priority', 'normal')
             status_id = task_data.get('status_id')  # Extract status_id for unified channel
-            heartbeat_interval = task_data.get('heartbeat_interval')  # Extract heartbeat interval
-            if not task_id or not task_type or not status_id or not heartbeat_interval or not priority:
+            heartbeat_interval_val = task_data.get('heartbeat_interval')  # Extract heartbeat interval
+            if not task_id or not task_type or not status_id or heartbeat_interval_val is None or not priority:
                 logger.error("❌ Missing required task data: %s", task_data)
                 continue
+            heartbeat_interval: int = int(heartbeat_interval_val)
 
             func = self.func_map.get(task_type, None)
-            if not func:
+            if func is None:
                 logger.error("❌ Unknown task type: %s.", task_type)
                 continue
-
 
             execution_context = Context(self.conn, task_id, status_id, heartbeat_interval, queue_name, priority, self.worker_id) #new execution context for each task
             kwargs["ctx"] = execution_context
             logger.info("🔧 Executing %s with args: %s", task_type, kwargs)
 
-            result = None
-            error_obj = None
+            result: Dict[str, Any] = {}
+            error_payload: Optional[Dict[str, str]] = None
             status = "completed"
 
             try:
@@ -107,17 +107,29 @@ class Worker:
             except NoSubscribersException:
                 status = "cancelled" # Special status for cancelled tasks
             except asyncio.TimeoutError as timeout_error:
-                error_obj = capture_exception(logger, timeout_error)
+                err = capture_exception(logger, timeout_error)
+                error_payload = {
+                    "type": str(err.get("type", "TimeoutError")),
+                    "message": str(err.get("message", "timeout")),
+                }
                 status = "error"
             except MemoryError as memory_error:
-                error_obj = capture_exception(logger, memory_error)
+                err = capture_exception(logger, memory_error)
+                error_payload = {
+                    "type": str(err.get("type", "MemoryError")),
+                    "message": str(err.get("message", "out of memory")),
+                }
                 status = "error"
             except Exception as exec_error: # pylint: disable=broad-exception-caught
-                error_obj = capture_exception(logger, exec_error)
+                err = capture_exception(logger, exec_error)
+                error_payload = {
+                    "type": str(err.get("type", "Exception")),
+                    "message": str(err.get("message", "unknown error")),
+                }
                 status = "error"
             finally:
                 logger.info("💓 Publishing result for task %s %s", task_id, status)
-                execution_context.publish_result(result, error_obj, status) #publish result and stop heartbeat
+                execution_context.publish_result(result, error_payload, status) #publish result and stop heartbeat
                 execution_context.destroy() #stop heartbeat and context
 
 if __name__ == "__main__":

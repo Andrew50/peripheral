@@ -3,7 +3,6 @@ package agent
 import (
 	"backend/internal/app/alerts"
 	"backend/internal/app/chart"
-	"backend/internal/app/filings"
 	"backend/internal/app/helpers"
 	"backend/internal/app/screener"
 	"backend/internal/app/strategy"
@@ -376,7 +375,7 @@ var (
 			UserSpecificTool: false,
 		},
 		// SEC Filing Tools
-		"getStockEdgarFilings": {
+		/*"getStockEdgarFilings": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getStockEdgarFilings",
 				Description: "Retrieve a list of urls and filing types for all SEC filings for a specified security within a specified time range.",
@@ -402,7 +401,7 @@ var (
 			Function:         wrapWithContext(filings.GetStockEdgarFilings),
 			StatusMessage:    "Searching SEC filings",
 			UserSpecificTool: false,
-		},
+		},*/
 		/*"getEarningsText": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "getEarningsText",

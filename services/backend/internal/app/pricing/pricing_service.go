@@ -1,3 +1,4 @@
+// Package pricing provides subscription and credit product pricing accessors.
 package pricing
 
 import (
@@ -91,7 +92,7 @@ func GetSubscriptionProductsWithPricing(conn *data.Conn) ([]SubscriptionPlanWith
 		}
 
 		// Get prices for this product using product_key
-		prices, err := getPricesForProductKey(conn, product.ProductKey, ctx)
+		prices, err := getPricesForProductKey(ctx, conn, product.ProductKey)
 		if err != nil {
 			return nil, fmt.Errorf("error getting prices for product %s: %w", product.ProductKey, err)
 		}
@@ -106,7 +107,7 @@ func GetSubscriptionProductsWithPricing(conn *data.Conn) ([]SubscriptionPlanWith
 }
 
 // getPricesForProductKey retrieves all prices for a given product key
-func getPricesForProductKey(conn *data.Conn, productKey string, ctx context.Context) ([]Price, error) {
+func getPricesForProductKey(ctx context.Context, conn *data.Conn, productKey string) ([]Price, error) {
 	query := `
 		SELECT 
 			id, price_cents, stripe_price_id_live, stripe_price_id_test,

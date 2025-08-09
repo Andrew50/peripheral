@@ -54,6 +54,9 @@ func resolveAppError(err error) (int, string) {
 	if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection is closed") {
 		return http.StatusServiceUnavailable, "Database connection error. Please try again later."
 	}
+	if strings.Contains(err.Error(), "email not verified") {
+		return http.StatusForbidden, "Email address not verified"
+	}
 	for sentinel, info := range appErrorTable {
 		if errors.Is(err, sentinel) {
 			return info.statusCode, info.publicMsg

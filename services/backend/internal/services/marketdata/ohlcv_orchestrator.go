@@ -15,25 +15,12 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-// isFirstFullLoad returns true if this is the first time loading OHLCV data (determined via freshness check)
-func isFirstFullLoad(conn *data.Conn) bool {
-	_, err := CheckOHLCVDataFreshness(conn)
-	if err != nil {
-		// missing update state implies first load
-		return true
-	}
-	// data exists (fresh or stale), not first load
-	return false
-}
-
 // UpdateAllOHLCV streams Polygon flat files for each timeframe directly into
 // TimescaleDB without any in-memory transformation.
 func UpdateAllOHLCV(conn *data.Conn) error {
 	log.Println("🔄 Starting OHLCV update …")
 	start := time.Now()
 
-	// Determine if this is the first full load
-	isFirst := isFirstFullLoad(conn)
 	cfg := loadS3Config()
 	s3c, err := newS3Client(cfg)
 	if err != nil {
@@ -42,11 +29,7 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 
 	ctx := context.Background()
 	for _, tf := range timeframes {
-		fromDate, err := getLastLoadedAt(ctx, conn.DB, tf.name)
-		if err != nil {
-			return err
-		}
-		if err := runTimeframe(ctx, conn.DB, s3c, cfg.Bucket, fromDate, tf, isFirst); err != nil {
+		if err := runTimeframe(ctx, conn.DB, s3c, cfg.Bucket, tf); err != nil {
 			return err
 		}
 	}
@@ -56,10 +39,10 @@ func UpdateAllOHLCV(conn *data.Conn) error {
 }
 
 // runTimeframe orchestrates pre-load setup → pipeline → post-load cleanup for a single timeframe.
-func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket string, fromDate time.Time, tf timeframe, isFirstRun bool) error {
+func runTimeframe(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket string, tf timeframe) error {
 	log.Printf("🗂 Processing %s …", tf.name)
 
-	if err := PreLoadSetup(ctx, db, tf.tableName, isFirstRun); err != nil {
+	if err := PreLoadSetup(ctx, db, tf.tableName); err != nil {
 		return err
 	}
 	defer func() {
@@ -255,7 +238,7 @@ func runBackward(ctx context.Context, db *pgxpool.Pool, s3c *s3.Client, bucket s
 // Maintenance helpers (unchanged from original, but local to orchestrator)
 // -----------------------------------------------------------------------------
 
-func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string, isFirstRun bool) error {
+func PreLoadSetup(ctx context.Context, db *pgxpool.Pool, tbl string) error {
 	// log.Printf("🔧 Pre-load setup for %s", tbl)
 
 	// Remove any existing compression policy
@@ -479,7 +462,7 @@ func setLoadState(ctx context.Context, db *pgxpool.Pool, tf string, s LoadState)
 }
 
 // Deprecated: Use getLoadState instead
-func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (time.Time, error) {
+/*func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (time.Time, error) {
 	state, err := getLoadState(ctx, db, timeframe)
 	if err != nil {
 		return time.Time{}, err
@@ -489,7 +472,7 @@ func getLastLoadedAt(ctx context.Context, db *pgxpool.Pool, timeframe string) (t
 		return time.Date(2003, 1, 1, 0, 0, 0, 0, time.UTC), nil
 	}
 	return state.Latest, nil
-}
+}*/
 
 func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile) error {
 	if len(files) == 0 {
@@ -503,39 +486,6 @@ func storeFailedFiles(ctx context.Context, db *pgxpool.Pool, files []failedFile)
 		}
 	}
 	return nil
-}
-
-// CheckOHLCVDataFreshness verifies that both 1-minute and 1-day OHLCV data
-// have been updated within the last 7 days. Returns true if data is fresh,
-// false if either timeframe is stale or missing.
-func CheckOHLCVDataFreshness(conn *data.Conn) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	cutoffTime := time.Now().UTC().AddDate(0, 0, -7) // 7 days ago
-
-	// Check both 1-minute and 1-day timeframes
-	timeframes := []string{"1-minute", "1-day"}
-
-	for _, tf := range timeframes {
-		var lastLoaded time.Time
-		err := conn.DB.QueryRow(ctx, `SELECT last_loaded_at FROM ohlcv_update_state WHERE timeframe = $1 LIMIT 1`, tf).Scan(&lastLoaded)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				// log.Printf("⚠️  No update state found for timeframe %s", tf)
-				return false, fmt.Errorf("no update state found for timeframe %s", tf)
-			}
-			return false, fmt.Errorf("failed to check update state for %s: %w", tf, err)
-		}
-
-		if lastLoaded.Before(cutoffTime) {
-			// log.Printf("⚠️  OHLCV data for %s is stale (last updated: %v, cutoff: %v)", tf, lastLoaded, cutoffTime)
-			return false, nil
-		}
-	}
-
-	// log.Printf("✅ OHLCV data is fresh for both 1-minute and 1-day timeframes")
-	return true, nil
 }
 
 // CheckOHLCVPartialCoverage verifies that both 1-minute and 1-day OHLCV data

@@ -51,18 +51,20 @@ def _extract_get_bar_data_params(call_node: ast.Call) -> Optional[Dict[str, Any]
         
         return call_info
         
-    except Exception as e:
+    except (AttributeError, ValueError, TypeError) as e:
         logger.warning("Failed to extract parameters from get_bar_data call: %s", e)
         return None
 
-def _extract_string_value(node: ast.AST) -> Optional[str]:
+def _extract_string_value(node: Optional[ast.AST]) -> Optional[str]:
     """Extract string value from AST node if possible."""
     try:
+        if node is None:
+            return None
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
         if isinstance(node, ast.Str):  # Python < 3.8 compatibility
             return node.s
-    except Exception as e:
+    except (AttributeError, ValueError, TypeError) as e:
         logger.warning("_extract_string_value: %s", e)
     return None
 
@@ -74,7 +76,7 @@ def _extract_int_value(node: ast.AST) -> Optional[int]:
         if isinstance(node, ast.Num):  # Python < 3.8 compatibility
             if isinstance(node.n, int):
                 return node.n
-    except Exception as e:
+    except (AttributeError, ValueError, TypeError) as e:
         logger.warning("_extract_int_value: %s", e)
     return None
 
@@ -104,17 +106,19 @@ def _analyze_filters_ast(filters_node: Optional[ast.AST]) -> Dict[str, Any]:
                         # Handle list of tickers: ['AAPL', 'MSFT']
                         for elem in value.elts:
                             ticker = _extract_string_value(elem)
-                            tickers.add(ticker.upper())
+                            if ticker is not None:
+                                tickers.add(ticker.upper())
                     elif isinstance(value, (ast.Constant, ast.Str)):
                         # Handle single ticker: 'AAPL'
                         ticker = _extract_string_value(value)
-                        tickers.add(ticker.upper())
+                        if ticker is not None:
+                            tickers.add(ticker.upper())
             
             if tickers:
                 filter_analysis["has_tickers"] = True
                 filter_analysis["specific_tickers"] = sorted(list(tickers))
                 
-    except Exception as e:
+    except (AttributeError, ValueError, TypeError) as e:
         logger.warning("Error analyzing filters AST: %s", e)
     
     return filter_analysis

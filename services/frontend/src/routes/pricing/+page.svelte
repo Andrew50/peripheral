@@ -181,7 +181,7 @@
 		}
 		// 2. Data quality - based on realtime_charts
 		if (plan.realtime_charts) {
-			features.push('Realtime data');
+			features.push('Realtime Data');
 		} else {
 			features.push('Realtime Derived');
 		}
@@ -933,7 +933,7 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span class="feature-value is-yes">
 											{#if plan.realtime_charts}
 												✓
 											{:else}
@@ -950,7 +950,11 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span
+											class="feature-value"
+											class:is-yes={plan.strategy_alerts_limit > 0}
+											class:is-no={!(plan.strategy_alerts_limit > 0)}
+										>
 											{plan.strategy_alerts_limit > 0 ? '✓' : '✗'}
 										</span>
 									</div>
@@ -962,7 +966,11 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span
+											class="feature-value"
+											class:is-yes={plan.multi_chart}
+											class:is-no={!plan.multi_chart}
+										>
 											{plan.multi_chart ? '✓' : '✗'}
 										</span>
 									</div>
@@ -974,7 +982,11 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span
+											class="feature-value"
+											class:is-yes={plan.watchlist_alerts}
+											class:is-no={!plan.watchlist_alerts}
+										>
 											{plan.watchlist_alerts ? '✓' : '✗'}
 										</span>
 									</div>
@@ -986,7 +998,11 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span
+											class="feature-value"
+											class:is-yes={plan.multi_chart}
+											class:is-no={!plan.multi_chart}
+										>
 											{plan.multi_chart ? '✓' : '✗'}
 										</span>
 									</div>
@@ -998,7 +1014,11 @@
 								</div>
 								{#each filteredPlans as plan}
 									<div class="plan-column">
-										<span class="feature-value">
+										<span
+											class="feature-value"
+											class:is-yes={plan.sub_minute_charts}
+											class:is-no={!plan.sub_minute_charts}
+										>
 											{plan.sub_minute_charts ? '✓' : '✗'}
 										</span>
 									</div>
@@ -1082,14 +1102,11 @@
 
 	:global(html) {
 		-ms-overflow-style: none; /* IE and Edge */
+		background: transparent !important; /* Override any global backgrounds */
 	}
 
 	:global(body) {
 		-ms-overflow-style: none; /* IE and Edge */
-		background: transparent !important; /* Override any global backgrounds */
-	}
-
-	:global(html) {
 		background: transparent !important; /* Override any global backgrounds */
 	}
 
@@ -1172,7 +1189,7 @@
 		font-size: 0.9375rem;
 		text-align: center;
 		font-weight: 500;
-		animation: slideIn 0.3s ease-out;
+		animation: slide-in 0.3s ease-out;
 	}
 
 	.feedback-message.success {
@@ -1187,7 +1204,7 @@
 		border: 1px solid rgb(239 68 68 / 20%);
 	}
 
-	@keyframes slideIn {
+	@keyframes slide-in {
 		from {
 			opacity: 0;
 			transform: translateY(-10px);
@@ -1730,12 +1747,12 @@
 		color: #f5f9ff;
 	}
 
-	.feature-value:has-text('✓') {
+	.feature-value.is-yes {
 		color: var(--landing-success, #22c55e);
 		font-size: 1.25rem;
 	}
 
-	.feature-value:has-text('✗') {
+	.feature-value.is-no {
 		color: rgb(245 249 255 / 40%);
 		font-size: 1.25rem;
 	}

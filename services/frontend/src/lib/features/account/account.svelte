@@ -639,7 +639,7 @@
 		flex-wrap: wrap; /* Allow wrapping */
 	}
 
-	.tab-navigation button.active {
+	.tab-navigation .active {
 		color: white;
 		background-color: #444;
 	}
@@ -701,18 +701,18 @@
 	}
 
 	select,
-	input[type='date'],
-	input[type='text'] {
+	[type='date'],
+	[type='text'] {
 		/* padding: 8px; */
 
- /* Removed, now handled by rule above */
+		/* Removed, now handled by rule above */
 		background-color: #333;
 		color: white;
 		border: 1px solid #444;
 
 		/* border-radius: 4px; */
 
- /* Removed, now handled by rule above */
+		/* Removed, now handled by rule above */
 		box-sizing: border-box; /* Keep for safety, though redundant */
 
 		/* Adjust padding for specific input types if needed */
@@ -724,23 +724,23 @@
 	select option {
 		/* padding: 8px 15px; */
 
- /* Removed, now handled by rule above */
+		/* Removed, now handled by rule above */
 
 		/* border-radius: 4px; */
 
- /* Removed, now handled by rule above */
+		/* Removed, now handled by rule above */
 		border: 1px solid #b71c1c; /* Add a darker red border */
 		cursor: pointer;
 		margin-left: 8px; /* Keep margin */
 
 		/* font-size: 0.9em; */
 
- /* Removed, handled by inherit now */
+		/* Removed, handled by inherit now */
 		transition: background-color 0.2s ease; /* Add transition */
 
 		/* box-sizing: border-box; */
 
- /* Removed, handled by rule above */
+		/* Removed, handled by rule above */
 
 		/* Height is now set in .filters-section button, input, select */
 
@@ -778,14 +778,6 @@
 	.stat-card small {
 		color: #888;
 		font-size: 0.9em;
-	}
-
-	.positive {
-		color: #4caf50;
-	}
-
-	.negative {
-		color: #f44336;
 	}
 
 	.date-range {
@@ -860,20 +852,12 @@
 		background-color: #2a2a2a;
 	}
 
-	.hourly-stats-table tr.profitable {
-		background-color: rgb(76 175 80 / 10%);
-	}
-
-	.hourly-stats-table tr:not(.profitable) {
+	.hourly-stats-table tbody tr {
 		background-color: rgb(244 67 54 / 10%);
 	}
 
-	.positive {
-		color: #4caf50;
-	}
-
-	.negative {
-		color: #f44336;
+	.hourly-stats-table .profitable {
+		background-color: rgb(76 175 80 / 10%);
 	}
 
 	.ticker-stats-container {

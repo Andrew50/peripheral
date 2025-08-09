@@ -4,7 +4,7 @@ Shared error handling utilities for consistent error capture and logging.
 
 import traceback
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 
 def capture_exception(logger: logging.Logger, err: Exception) -> Dict[str, Any]:

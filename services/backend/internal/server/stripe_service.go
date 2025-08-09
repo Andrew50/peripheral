@@ -128,17 +128,46 @@ func StripeCreateCustomer(email, name string, userID int) (*stripe.Customer, err
 	return customer.New(params)
 }
 
-// StripeCreateTrialSubscription creates a trial subscription without requiring a payment method
-func StripeCreateTrialSubscription(userID int, priceID, email string, trialDays int) (*stripe.Customer, *stripe.Subscription, error) {
-	// First, create a customer
-	customer, err := StripeCreateCustomer(email, "", userID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create customer: %v", err)
+// StripeCreateTrialSubscription creates a trial subscription, handling both new and existing customers.
+func StripeCreateTrialSubscription(conn *data.Conn, userID int, priceID, email string, trialDays int) (*stripe.Customer, *stripe.Subscription, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), DBContextTimeout)
+	defer cancel()
+
+	// 1. Check if user already has a Stripe Customer ID
+	var stripeCustomerID string
+	err := conn.DB.QueryRow(ctx, "SELECT stripe_customer_id FROM users WHERE userId = $1", userID).Scan(&stripeCustomerID)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, nil, fmt.Errorf("failed to check for existing Stripe customer: %v", err)
 	}
 
-	// Create subscription with trial period and no payment method required
+	var cust *stripe.Customer
+	// 2. If no customer ID exists, create a new one in Stripe
+	if stripeCustomerID == "" {
+		newCust, err := StripeCreateCustomer(email, "", userID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create Stripe customer: %v", err)
+		}
+		cust = newCust
+		stripeCustomerID = newCust.ID
+
+		// Immediately save the new customer ID to our database
+		_, dbErr := conn.DB.Exec(ctx, `UPDATE users SET stripe_customer_id = $1 WHERE userId = $2`, stripeCustomerID, userID)
+		if dbErr != nil {
+			// Log a warning but proceed, as the trial can still be created
+			log.Printf("Warning: failed to immediately persist new Stripe customer ID %s for user %d: %v", stripeCustomerID, userID, dbErr)
+		}
+	} else {
+		// If customer ID exists, retrieve the customer object from Stripe
+		retrievedCust, err := customer.Get(stripeCustomerID, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to retrieve existing Stripe customer %s: %v", stripeCustomerID, err)
+		}
+		cust = retrievedCust
+	}
+
+	// 3. Create the trial subscription for the customer
 	params := &stripe.SubscriptionParams{
-		Customer: stripe.String(customer.ID),
+		Customer: stripe.String(cust.ID),
 		Items: []*stripe.SubscriptionItemsParams{
 			{
 				Price: stripe.String(priceID),
@@ -156,12 +185,12 @@ func StripeCreateTrialSubscription(userID int, priceID, email string, trialDays 
 		},
 	}
 
-	subscription, err := subscription.New(params)
+	sub, err := subscription.New(params)
 	if err != nil {
-		return customer, nil, fmt.Errorf("failed to create trial subscription: %v", err)
+		return cust, nil, fmt.Errorf("failed to create trial subscription in Stripe: %v", err)
 	}
 
-	return customer, subscription, nil
+	return cust, sub, nil
 }
 
 // HandleStripeWebhook processes Stripe webhook events

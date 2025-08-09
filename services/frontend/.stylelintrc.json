@@ -17,6 +17,7 @@
         "no-duplicate-selectors": true,
         "selector-max-id": 0,
         "selector-max-universal": 1,
-        "selector-no-qualifying-type": true
+        "selector-no-qualifying-type": true,
+        "no-descending-specificity": null
     }
 }

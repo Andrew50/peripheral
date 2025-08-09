@@ -247,6 +247,34 @@ var (
 			MaxRetries:     100,
 			RetryDelay:     1 * time.Minute,
 		},
+		// COMMENTED OUT: Aggregates initialization disabled, legacy code
+		/*
+			{
+				Name:           "InitAggregates",
+				Function:       initAggregates,
+				Schedule:       []TimeOfDay{{Hour: 3, Minute: 56}}, // Run before market open
+				RunOnInit:      true,
+				SkipOnWeekends: true,
+			},
+		*/
+		{
+			Name:           "StartScreenerUpdater",
+			Function:       screener.StartScreenerUpdaterLoop,  // Uses partial coverage guard
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 45}}, // Run before market open
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+			RetryOnFailure: true,
+			MaxRetries:     100,             // Retry until partial coverage is achieved
+			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
+		},
+		{
+			Name: "StartAlertLoop",
+
+			Function:       alerts.StartAlertLoop,
+			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
+			RunOnInit:      true,
+			SkipOnWeekends: true,
+		},
 		{
 			Name:           "StartMarketHourServices",
 			Function:       startMarketHourServices,

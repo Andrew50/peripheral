@@ -4,13 +4,7 @@
 	import { browser } from '$app/environment';
 	import { onDestroy } from 'svelte';
 	import { createChart } from 'lightweight-charts';
-	import type {
-		IChartApi,
-		CandlestickData,
-		UTCTimestamp,
-	} from 'lightweight-charts';
-
-
+	import type { IChartApi, CandlestickData, UTCTimestamp } from 'lightweight-charts';
 
 	export let isProcessingMessage: boolean = false;
 
@@ -21,7 +15,10 @@
 	let streamedMessages: Map<number, string> = new Map();
 	let streamingTimeout: NodeJS.Timeout | null = null;
 	let lastAnimatedIndex: number = -1;
-	let animatedCitationCounts: Map<number, { current: number; target: number; isAnimating: boolean }> = new Map();
+	let animatedCitationCounts: Map<
+		number,
+		{ current: number; target: number; isAnimating: boolean }
+	> = new Map();
 
 	// Chart instances management
 	let chartInstances: Map<number, IChartApi> = new Map();
@@ -34,7 +31,8 @@
 	}
 
 	// Derive current status from latest timeline message
-	$: currentHeadline = timeline.length > 0 ? timeline[timeline.length - 1].headline || 'Thinking' : '';
+	$: currentHeadline =
+		timeline.length > 0 ? timeline[timeline.length - 1].headline || 'Thinking' : '';
 
 	// Stream out function update messages when timeline changes
 	$: if (timeline.length > 0 && browser) {
@@ -60,25 +58,25 @@
 			}
 			streamedMessages = streamedMessages; // Trigger reactivity
 		}
-		
+
 		// Reset streamed message for this event
 		streamedMessages.delete(eventIndex);
 		streamedMessages = streamedMessages; // Trigger reactivity
-		
+
 		// If no text, just return
 		if (!text) return;
-		
+
 		// Split text into words for faster streaming
 		const words = text.split(' ');
 		let currentWordIndex = 0;
-		
+
 		function typeNextWordChunk() {
 			if (currentWordIndex < words.length) {
 				// Stream 1-2 words at a time for fast but visible effect
 				const wordsToAdd = Math.min(3, words.length - currentWordIndex);
 				const endIndex = currentWordIndex + wordsToAdd;
 				const partialText = words.slice(0, endIndex).join(' ');
-				
+
 				streamedMessages.set(eventIndex, partialText);
 				streamedMessages = streamedMessages; // Trigger reactivity
 				currentWordIndex = endIndex;
@@ -88,36 +86,35 @@
 				streamingTimeout = null;
 			}
 		}
-		
+
 		typeNextWordChunk();
 	}
 
 	// Show dropdown toggle if there are timeline items to show
 	$: showDropdownToggle = timeline.length > 0;
-	
 
 	// Check if there's an active web search
-	$: hasActiveWebSearch = timeline.some(event => 
-		event.type === 'webSearchQuery' && 
-		!timeline.some(laterEvent => 
-			laterEvent.type === 'webSearchCitations' && 
-			laterEvent.timestamp > event.timestamp
-		)
+	$: hasActiveWebSearch = timeline.some(
+		(event) =>
+			event.type === 'webSearchQuery' &&
+			!timeline.some(
+				(laterEvent) =>
+					laterEvent.type === 'webSearchCitations' && laterEvent.timestamp > event.timestamp
+			)
 	);
-	$: hasActiveBacktest = currentHeadline && 
-		typeof currentHeadline === 'string' && 
+	$: hasActiveBacktest =
+		currentHeadline &&
+		typeof currentHeadline === 'string' &&
 		currentHeadline.toLowerCase().includes('backtest');
 
 	// Timeline display logic: show all items when dropdown is expanded, otherwise show only the last item
-	$: displayedTimelineItems = showTimelineDropdown 
-		? timeline 
-		: (timeline.length >= 2 && 
-       timeline[timeline.length - 1].type === 'FunctionUpdate' && 
-       timeline[timeline.length - 2].type !== 'FunctionUpdate')
-	   ? timeline.slice(-2)
-	   : timeline.slice(-1);
-
-
+	$: displayedTimelineItems = showTimelineDropdown
+		? timeline
+		: timeline.length >= 2 &&
+			  timeline[timeline.length - 1].type === 'FunctionUpdate' &&
+			  timeline[timeline.length - 2].type !== 'FunctionUpdate'
+			? timeline.slice(-2)
+			: timeline.slice(-1);
 
 	// Reset timeline when processing starts/stops
 	$: if (!isProcessingMessage) {
@@ -129,7 +126,7 @@
 		lastAnimatedIndex = -1;
 		animatedCitationCounts.clear();
 		// Clear chart instances
-		chartInstances.forEach(chart => {
+		chartInstances.forEach((chart) => {
 			try {
 				chart.remove();
 			} catch (e) {
@@ -149,7 +146,11 @@
 	$: if ($agentStatusStore && browser && isProcessingMessage) {
 		const statusUpdate = $agentStatusStore;
 
-		if (statusUpdate.type === 'FunctionUpdate' && statusUpdate.data && statusUpdate.data !== lastStatusMessage) {
+		if (
+			statusUpdate.type === 'FunctionUpdate' &&
+			statusUpdate.data &&
+			statusUpdate.data !== lastStatusMessage
+		) {
 			// Add function update message to timeline
 			lastStatusMessage = statusUpdate.headline;
 			timeline = [
@@ -176,7 +177,10 @@
 		} else if (statusUpdate.type === 'WebSearchCitations' && statusUpdate.data?.citations) {
 			// Add web search citations to timeline
 			if (timeline.length > 0 && timeline[timeline.length - 1].type === 'webSearchCitations') {
-				timeline[timeline.length - 1].data.citations = [...timeline[timeline.length - 1].data.citations, ...statusUpdate.data.citations];
+				timeline[timeline.length - 1].data.citations = [
+					...timeline[timeline.length - 1].data.citations,
+					...statusUpdate.data.citations
+				];
 				lastAnimatedIndex = timeline.length - 2; //reset last animated index to the previous item
 			} else {
 				timeline = [
@@ -201,7 +205,7 @@
 					data: statusUpdate.data
 				}
 			];
-		} else if (statusUpdate.type === "getDailySnapshot" && statusUpdate.data) {
+		} else if (statusUpdate.type === 'getDailySnapshot' && statusUpdate.data) {
 			// Add daily snapshot data to timeline
 			lastStatusMessage = statusUpdate.headline;
 			timeline = [
@@ -234,37 +238,37 @@
 	// Function to start citation count animation
 	function startCitationCountAnimation(timelineIndex: number, targetCount: number): void {
 		const actualIndex = showTimelineDropdown ? timelineIndex : timeline.length - 1;
-		
+
 		// Don't animate if already exists
 		if (animatedCitationCounts.has(actualIndex)) {
 			return;
 		}
-		
+
 		animatedCitationCounts.set(actualIndex, { current: 1, target: targetCount, isAnimating: true });
-		
+
 		// Start the counting animation with a 200ms delay
 		if (targetCount > 1) {
 			setTimeout(() => {
 				const startTime = Date.now();
 				const duration = 750; // Always 0.75 seconds
-				
+
 				// Ease-out function that slows down towards the end
 				function easeOut(t: number): number {
 					return 1 - Math.pow(1 - t, 2);
 				}
-				
+
 				function updateCount() {
 					const elapsed = Date.now() - startTime;
 					const linearProgress = Math.min(elapsed / duration, 1);
 					const easedProgress = easeOut(linearProgress);
 					const current = Math.floor(1 + (targetCount - 1) * easedProgress);
-					
+
 					const countData = animatedCitationCounts.get(actualIndex);
 					if (countData) {
 						countData.current = current;
 						countData.isAnimating = linearProgress < 1;
 						animatedCitationCounts = animatedCitationCounts; // Trigger reactivity
-						
+
 						if (linearProgress < 1) {
 							requestAnimationFrame(updateCount);
 						}
@@ -290,7 +294,7 @@
 			}
 			chartInstances.delete(chartIndex);
 		}
-		
+
 		try {
 			const chart = createChart(container, {
 				width: container.clientWidth,
@@ -304,7 +308,7 @@
 					vertLines: { visible: true, color: 'rgba(255, 255, 255, 0.1)', style: 1 },
 					horzLines: { visible: true, color: 'rgba(255, 255, 255, 0.1)', style: 1 }
 				},
-				timeScale: { 
+				timeScale: {
 					visible: false,
 					timeVisible: false,
 					secondsVisible: false
@@ -315,9 +319,9 @@
 					horzTouchDrag: false,
 					vertTouchDrag: false
 				},
-				handleScale: { 
-					mouseWheel: false, 
-					pinch: false 
+				handleScale: {
+					mouseWheel: false,
+					pinch: false
 				}
 			});
 
@@ -353,7 +357,6 @@
 				});
 			});
 			resizeObserver.observe(container);
-
 		} catch (error) {
 			console.error('Error creating chart:', error);
 		}
@@ -383,11 +386,11 @@
 	}
 	function formatVolume(volume: number): string {
 		if (volume < 1000000) {
-			return (volume/1000).toFixed(1) + 'K';
+			return (volume / 1000).toFixed(1) + 'K';
 		} else if (volume < 1000000000) {
-			return (volume/1000000).toFixed(1) + 'M';
+			return (volume / 1000000).toFixed(1) + 'M';
 		} else {
-			return (volume/1000000000).toFixed(1) + 'B';
+			return (volume / 1000000000).toFixed(1) + 'B';
 		}
 	}
 
@@ -397,7 +400,7 @@
 			clearTimeout(streamingTimeout);
 		}
 		// Clear chart instances on component destroy
-		chartInstances.forEach(chart => {
+		chartInstances.forEach((chart) => {
 			try {
 				chart.remove();
 			} catch (e) {
@@ -408,26 +411,24 @@
 	});
 	// Reactive statement to trigger citation animations
 	$: if (browser && displayedTimelineItems.length > 0) {
-	displayedTimelineItems.forEach((event, index) => {
-		if (event.type === 'webSearchCitations' && event.data?.citations) {
-			const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
-			if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
-				startCitationCountAnimation(index, event.data.citations.length);
+		displayedTimelineItems.forEach((event, index) => {
+			if (event.type === 'webSearchCitations' && event.data?.citations) {
+				const actualIndex = showTimelineDropdown ? index : timeline.length - 1;
+				if (actualIndex > lastAnimatedIndex && !animatedCitationCounts.has(actualIndex)) {
+					startCitationCountAnimation(index, event.data.citations.length);
+				}
 			}
-		}
-	});
+		});
 	}
-
-
 
 	// Create charts for getDailySnapshot events
 	$: if (browser && displayedTimelineItems.length > 0) {
 		displayedTimelineItems.forEach((event, index) => {
 			if (event.type === 'getDailySnapshot' && event.data?.chartData) {
 				// Find the original timeline index for this event
-				const originalTimelineIndex = showTimelineDropdown 
-					? index 
-					: timeline.findIndex(item => item === event);
+				const originalTimelineIndex = showTimelineDropdown
+					? index
+					: timeline.findIndex((item) => item === event);
 				setTimeout(() => createThinkingTraceChart(originalTimelineIndex, event.data.chartData), 50);
 			}
 		});
@@ -439,16 +440,37 @@
 		<div class="status-header">
 			<div class="current-status">
 				<div class="status-icon" class:visible={timeline.length > 0}>
-					<svg width="24" height="24" viewBox="0 0 20 20" fill={hasActiveBacktest ? 'none' : 'currentColor'} stroke={hasActiveBacktest ? 'currentColor' : 'none'} stroke-width={hasActiveBacktest ? '1.2' : '0'} xmlns="http://www.w3.org/2000/svg" class={hasActiveWebSearch ? 'globe-spinner' : ''}>
+					<svg
+						width="24"
+						height="24"
+						viewBox="0 0 20 20"
+						fill={hasActiveBacktest ? 'none' : 'currentColor'}
+						stroke={hasActiveBacktest ? 'currentColor' : 'none'}
+						stroke-width={hasActiveBacktest ? '1.2' : '0'}
+						xmlns="http://www.w3.org/2000/svg"
+						class={hasActiveWebSearch ? 'globe-spinner' : ''}
+					>
 						{#if hasActiveWebSearch}
-							<path d="M10 2.125C14.3492 2.125 17.875 5.65076 17.875 10C17.875 14.3492 14.3492 17.875 10 17.875C5.65076 17.875 2.125 14.3492 2.125 10C2.125 5.65076 5.65076 2.125 10 2.125ZM7.88672 10.625C7.94334 12.3161 8.22547 13.8134 8.63965 14.9053C8.87263 15.5194 9.1351 15.9733 9.39453 16.2627C9.65437 16.5524 9.86039 16.625 10 16.625C10.1396 16.625 10.3456 16.5524 10.6055 16.2627C10.8649 15.9733 11.1274 15.5194 11.3604 14.9053C11.7745 13.8134 12.0567 12.3161 12.1133 10.625H7.88672ZM3.40527 10.625C3.65313 13.2734 5.45957 15.4667 7.89844 16.2822C7.7409 15.997 7.5977 15.6834 7.4707 15.3486C6.99415 14.0923 6.69362 12.439 6.63672 10.625H3.40527ZM13.3633 10.625C13.3064 12.439 13.0059 14.0923 12.5293 15.3486C12.4022 15.6836 12.2582 15.9969 12.1006 16.2822C14.5399 15.467 16.3468 13.2737 16.5947 10.625H13.3633ZM12.1006 3.7168C12.2584 4.00235 12.4021 4.31613 12.5293 4.65137C13.0059 5.90775 13.3064 7.56102 13.3633 9.375H16.5947C16.3468 6.72615 14.54 4.53199 12.1006 3.7168ZM10 3.375C9.86039 3.375 9.65437 3.44756 9.39453 3.7373C9.1351 4.02672 8.87263 4.48057 8.63965 5.09473C8.22547 6.18664 7.94334 7.68388 7.88672 9.375H12.1133C12.0567 7.68388 11.7745 6.18664 11.3604 5.09473C11.1274 4.48057 10.8649 4.02672 10.6055 3.7373C10.3456 3.44756 10.1396 3.375 10 3.375ZM7.89844 3.7168C5.45942 4.53222 3.65314 6.72647 3.40527 9.375H6.63672C6.69362 7.56102 6.99415 5.90775 7.4707 4.65137C7.59781 4.31629 7.74073 4.00224 7.89844 3.7168Z"></path>
+							<path
+								d="M10 2.125C14.3492 2.125 17.875 5.65076 17.875 10C17.875 14.3492 14.3492 17.875 10 17.875C5.65076 17.875 2.125 14.3492 2.125 10C2.125 5.65076 5.65076 2.125 10 2.125ZM7.88672 10.625C7.94334 12.3161 8.22547 13.8134 8.63965 14.9053C8.87263 15.5194 9.1351 15.9733 9.39453 16.2627C9.65437 16.5524 9.86039 16.625 10 16.625C10.1396 16.625 10.3456 16.5524 10.6055 16.2627C10.8649 15.9733 11.1274 15.5194 11.3604 14.9053C11.7745 13.8134 12.0567 12.3161 12.1133 10.625H7.88672ZM3.40527 10.625C3.65313 13.2734 5.45957 15.4667 7.89844 16.2822C7.7409 15.997 7.5977 15.6834 7.4707 15.3486C6.99415 14.0923 6.69362 12.439 6.63672 10.625H3.40527ZM13.3633 10.625C13.3064 12.439 13.0059 14.0923 12.5293 15.3486C12.4022 15.6836 12.2582 15.9969 12.1006 16.2822C14.5399 15.467 16.3468 13.2737 16.5947 10.625H13.3633ZM12.1006 3.7168C12.2584 4.00235 12.4021 4.31613 12.5293 4.65137C13.0059 5.90775 13.3064 7.56102 13.3633 9.375H16.5947C16.3468 6.72615 14.54 4.53199 12.1006 3.7168ZM10 3.375C9.86039 3.375 9.65437 3.44756 9.39453 3.7373C9.1351 4.02672 8.87263 4.48057 8.63965 5.09473C8.22547 6.18664 7.94334 7.68388 7.88672 9.375H12.1133C12.0567 7.68388 11.7745 6.18664 11.3604 5.09473C11.1274 4.48057 10.8649 4.02672 10.6055 3.7373C10.3456 3.44756 10.1396 3.375 10 3.375ZM7.89844 3.7168C5.45942 4.53222 3.65314 6.72647 3.40527 9.375H6.63672C6.69362 7.56102 6.99415 5.90775 7.4707 4.65137C7.59781 4.31629 7.74073 4.00224 7.89844 3.7168Z"
+							></path>
 						{:else if hasActiveBacktest}
-							<path stroke-linecap="round" stroke-linejoin="round" d="M8.62 3.28c.07-.45.46-.78.92-.78h.91c.46 0 .85.33.92.78l.12.74c.06.35.32.64.65.77.33.14.71.12 1-.09l.61-.44c.37-.27.88-.22 1.2.1l.64.65c.32.32.37.83.1 1.2l-.44.61c-.21.29-.23.67-.09 1 .14.33.42.59.77.65l.74.12c.45.07.78.46.78.92v.91c0 .46-.33.85-.78.92l-.74.12c-.35.06-.63.32-.77.65-.14.33-.12.71.09 1l.44.61c.27.37.22.88-.1 1.2l-.65.64c-.32.32-.83.37-1.2.1l-.61-.44c-.29-.21-.67-.23-1-.09-.33.14-.59.42-.65.77l-.12.74c-.07.45-.46.78-.92.78h-.91c-.46 0-.85-.33-.92-.78l-.12-.74c-.06-.35-.32-.64-.65-.77-.33-.14-.71-.12-1 .09l-.61.44c-.37.27-.88.22-1.2-.1l-.64-.65c-.32-.32-.37-.83-.1-1.2l.44-.61c.21-.29.23-.67.09-1-.14-.33-.42-.59-.77-.65l-.74-.12c-.45-.07-.78-.46-.78-.92v-.91c0-.46.33-.85.78-.92l.74-.12c.35-.06.63-.32.77-.65.14-.33.12-.71-.09-1l-.44-.61c-.27-.37-.22-.88.1-1.2l.65-.64c.32-.32.83-.37 1.2-.1l.61.44c.29.21.67.23 1 .09.33-.14.59-.42.65-.77l.12-.74Z"></path>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12.5 10a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z"></path>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M8.62 3.28c.07-.45.46-.78.92-.78h.91c.46 0 .85.33.92.78l.12.74c.06.35.32.64.65.77.33.14.71.12 1-.09l.61-.44c.37-.27.88-.22 1.2.1l.64.65c.32.32.37.83.1 1.2l-.44.61c-.21.29-.23.67-.09 1 .14.33.42.59.77.65l.74.12c.45.07.78.46.78.92v.91c0 .46-.33.85-.78.92l-.74.12c-.35.06-.63.32-.77.65-.14.33-.12.71.09 1l.44.61c.27.37.22.88-.1 1.2l-.65.64c-.32.32-.83.37-1.2.1l-.61-.44c-.29-.21-.67-.23-1-.09-.33.14-.59.42-.65.77l-.12.74c-.07.45-.46.78-.92.78h-.91c-.46 0-.85-.33-.92-.78l-.12-.74c-.06-.35-.32-.64-.65-.77-.33-.14-.71-.12-1 .09l-.61.44c-.37.27-.88.22-1.2-.1l-.64-.65c-.32-.32-.37-.83-.1-1.2l.44-.61c.21-.29.23-.67.09-1-.14-.33-.42-.59-.77-.65l-.74-.12c-.45-.07-.78-.46-.78-.92v-.91c0-.46.33-.85.78-.92l.74-.12c.35-.06.63-.32.77-.65.14-.33.12-.71-.09-1l-.44-.61c-.27-.37-.22-.88.1-1.2l.65-.64c.32-.32.83-.37 1.2-.1l.61.44c.29.21.67.23 1 .09.33-.14.59-.42.65-.77l.12-.74Z"
+							></path>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12.5 10a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z"
+							></path>
 						{:else}
-							<path d="M15.1687 8.0855C15.1687 5.21138 12.8509 2.88726 9.99976 2.88726C7.14872 2.88744 4.83179 5.21149 4.83179 8.0855C4.8318 9.91374 5.7711 11.5187 7.19019 12.4459H12.8103C14.2293 11.5187 15.1687 9.91365 15.1687 8.0855ZM8.47046 16.1099C8.72749 16.6999 9.31515 17.1127 9.99976 17.1128C10.6844 17.1128 11.2719 16.6999 11.5291 16.1099H8.47046ZM7.65894 14.7798H12.3416V13.7759H7.65894V14.7798ZM16.4988 8.0855C16.4988 10.3216 15.3777 12.2942 13.6716 13.4703V15.4449C13.6714 15.8119 13.3736 16.1098 13.0066 16.1099H12.9216C12.6187 17.4453 11.4268 18.4429 9.99976 18.4429C8.57283 18.4428 7.3807 17.4453 7.07788 16.1099H6.9939C6.62677 16.1099 6.32909 15.8119 6.32886 15.4449V13.4703C4.62271 12.2942 3.50172 10.3217 3.50171 8.0855C3.50171 4.48337 6.40777 1.55736 9.99976 1.55718C13.5919 1.55718 16.4988 4.48326 16.4988 8.0855Z"></path>
+							<path
+								d="M15.1687 8.0855C15.1687 5.21138 12.8509 2.88726 9.99976 2.88726C7.14872 2.88744 4.83179 5.21149 4.83179 8.0855C4.8318 9.91374 5.7711 11.5187 7.19019 12.4459H12.8103C14.2293 11.5187 15.1687 9.91365 15.1687 8.0855ZM8.47046 16.1099C8.72749 16.6999 9.31515 17.1127 9.99976 17.1128C10.6844 17.1128 11.2719 16.6999 11.5291 16.1099H8.47046ZM7.65894 14.7798H12.3416V13.7759H7.65894V14.7798ZM16.4988 8.0855C16.4988 10.3216 15.3777 12.2942 13.6716 13.4703V15.4449C13.6714 15.8119 13.3736 16.1098 13.0066 16.1099H12.9216C12.6187 17.4453 11.4268 18.4429 9.99976 18.4429C8.57283 18.4428 7.3807 17.4453 7.07788 16.1099H6.9939C6.62677 16.1099 6.32909 15.8119 6.32886 15.4449V13.4703C4.62271 12.2942 3.50172 10.3217 3.50171 8.0855C3.50171 4.48337 6.40777 1.55736 9.99976 1.55718C13.5919 1.55718 16.4988 4.48326 16.4988 8.0855Z"
+							></path>
 						{/if}
-					</svg>	
+					</svg>
 				</div>
 				{currentHeadline}
 				{#if showDropdownToggle}
@@ -465,7 +487,9 @@
 							xmlns="http://www.w3.org/2000/svg"
 							class="chevron-icon {showTimelineDropdown ? 'expanded' : ''}"
 						>
-							<path d="M7.52925 3.7793C7.75652 3.55203 8.10803 3.52383 8.36616 3.69434L8.47065 3.7793L14.2207 9.5293C14.4804 9.789 14.4804 10.211 14.2207 10.4707L8.47065 16.2207C8.21095 16.4804 7.78895 16.4804 7.52925 16.2207C7.26955 15.961 7.26955 15.539 7.52925 15.2793L12.8085 10L7.52925 4.7207L7.44429 4.61621C7.27378 4.35808 7.30198 4.00657 7.52925 3.7793Z"></path>
+							<path
+								d="M7.52925 3.7793C7.75652 3.55203 8.10803 3.52383 8.36616 3.69434L8.47065 3.7793L14.2207 9.5293C14.4804 9.789 14.4804 10.211 14.2207 10.4707L8.47065 16.2207C8.21095 16.4804 7.78895 16.4804 7.52925 16.2207C7.26955 15.961 7.26955 15.539 7.52925 15.2793L12.8085 10L7.52925 4.7207L7.44429 4.61621C7.27378 4.35808 7.30198 4.00657 7.52925 3.7793Z"
+							></path>
 						</svg>
 					</button>
 				{/if}
@@ -503,28 +527,32 @@
 								{@const countData = animatedCitationCounts.get(actualIndex)}
 								<div class="timeline-citations">
 									<div class="citations-header">
-
-										<span>Reading sources · {countData?.current || event.data.citations.length} </span>
+										<span
+											>Reading sources · {countData?.current || event.data.citations.length}
+										</span>
 									</div>
 									<div class="citations-container">
 										{#each event.data.citations as citation, index}
-											<div class="citation-item" class:animate-fade-in={shouldAnimate}
+											<div
+												class="citation-item"
+												class:animate-fade-in={shouldAnimate}
 												on:click={() => {
 													if (citation.url) {
 														window.open(citation.url, '_blank');
 													}
-												}} 
+												}}
 												on:keydown={(e) => {
 													if (e.key === 'Enter' && citation.url) {
 														window.open(citation.url, '_blank');
 													}
-												}} 
-												role="button" 
-												tabindex="0">
+												}}
+												role="button"
+												tabindex="0"
+											>
 												{#if citation.urlIcon}
-													<img 
-														src={citation.urlIcon} 
-														alt="Site icon" 
+													<img
+														src={citation.urlIcon}
+														alt="Site icon"
 														class="citation-favicon"
 														on:error={(e) => {
 															const img = e.target;
@@ -537,20 +565,39 @@
 													<div class="citation-favicon-placeholder"></div>
 												{/if}
 												<span class="citation-title">{citation.title || 'Untitled'}</span>
-												<span class="citation-url">{citation.url ? citation.url.replace(/^https?:\/\//, '').split('/')[0].split('.').slice(0, -1).join('.') : 'Unknown URL'}</span>
+												<span class="citation-url"
+													>{citation.url
+														? citation.url
+																.replace(/^https?:\/\//, '')
+																.split('/')[0]
+																.split('.')
+																.slice(0, -1)
+																.join('.')
+														: 'Unknown URL'}</span
+												>
 											</div>
 										{/each}
 									</div>
 								</div>
 							{:else if event.type === 'getDailySnapshot' && event.data?.chartData}
-								{@const originalTimelineIndex = showTimelineDropdown ? index : timeline.findIndex(item => item === event)}
+								{@const originalTimelineIndex = showTimelineDropdown
+									? index
+									: timeline.findIndex((item) => item === event)}
 								{@const ticker = event.data.ticker || ''}
 								<div class="timeline-chart" class:animate-fade-in={shouldAnimate}>
 									<div class="chart-container" id={`thinkingtrace-chart-${originalTimelineIndex}`}>
 										<div class="chart-legend">
 											<span class="ticker">{ticker}</span>
-											<span>{event.data.chartData[event.data.chartData.length - 1].close.toFixed(2)}</span>
-											<span>Vol: {formatVolume(event.data.chartData[event.data.chartData.length - 1].volume)}</span>
+											<span
+												>{event.data.chartData[event.data.chartData.length - 1].close.toFixed(
+													2
+												)}</span
+											>
+											<span
+												>Vol: {formatVolume(
+													event.data.chartData[event.data.chartData.length - 1].volume
+												)}</span
+											>
 										</div>
 									</div>
 								</div>
@@ -559,7 +606,13 @@
 									{#if event.data && Array.isArray(event.data.tickers)}
 										{@const watchlistData = event.data.tickers}
 										<div class="watchlist-header">
-											<svg class="watchlist-icon" viewBox="0 0 24 24" width="16" height="16" fill="none">
+											<svg
+												class="watchlist-icon"
+												viewBox="0 0 24 24"
+												width="16"
+												height="16"
+												fill="none"
+											>
 												<path
 													d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
 													stroke="currentColor"
@@ -570,7 +623,10 @@
 											</svg>
 											<span>Reading {event.data.watchlistName || 'Watchlist'}</span>
 										</div>
-										<div class="watchlist-container" class:watchlist-container-animate={shouldAnimate}>
+										<div
+											class="watchlist-container"
+											class:watchlist-container-animate={shouldAnimate}
+										>
 											<div class="watchlist-table">
 												<div class="watchlist-table-header">
 													<div class="watchlist-header-cell ticker">Ticker</div>
@@ -580,7 +636,11 @@
 												</div>
 												<div class="watchlist-table-body">
 													{#each watchlistData as item, index}
-														<div class="watchlist-row" class:watchlist-row-reveal={shouldAnimate} style="animation-delay: {index * 10}ms;">
+														<div
+															class="watchlist-row"
+															class:watchlist-row-reveal={shouldAnimate}
+															style="animation-delay: {index * 10}ms;"
+														>
 															<div class="watchlist-cell ticker">
 																{#if item.icon}
 																	<img
@@ -599,7 +659,11 @@
 															<div class="watchlist-cell change {getChangeClass(item.change)}">
 																{formatChange(item.change)}
 															</div>
-															<div class="watchlist-cell change-pct {getChangeClass(item.changePercent)}">
+															<div
+																class="watchlist-cell change-pct {getChangeClass(
+																	item.changePercent
+																)}"
+															>
 																{formatChangePct(item.changePercent)}
 															</div>
 														</div>
@@ -610,7 +674,7 @@
 									{/if}
 								</div>
 							{:else}
-							 <span> {event.headline} </span>						
+								<span> {event.headline} </span>
 							{/if}
 						</div>
 					</div>
@@ -642,25 +706,24 @@
 
 	.current-status {
 		--shimmer-contrast: #0009;
-		
+
 		color: transparent;
-		text-fill-color: transparent;
 		-webkit-text-fill-color: transparent;
 		font-size: 0.9rem;
 		font-weight: 500;
 		font-family: 'Instrument Sans', monospace;
 		flex: 1;
-		background: #fff linear-gradient(
-			to right, 
-			#fff 0%, 
-			var(--shimmer-contrast) 40%, 
-			var(--shimmer-contrast) 60%, 
-			#fff 100%
-		);
+		background: #fff
+			linear-gradient(
+				to right,
+				#fff 0%,
+				var(--shimmer-contrast) 40%,
+				var(--shimmer-contrast) 60%,
+				#fff 100%
+			);
 		background-size: 50% 200%;
 		background-position: -100% 0;
 		background-repeat: no-repeat;
-		background-clip: text;
 		background-clip: text;
 		animation: loading-text-highlight 3s infinite linear;
 		animation-delay: 0.3s;
@@ -686,7 +749,9 @@
 		flex-shrink: 0;
 		opacity: 0;
 		width: 0;
-		transition: opacity 0.3s ease, width 0.3s ease;
+		transition:
+			opacity 0.3s ease,
+			width 0.3s ease;
 		overflow: hidden;
 	}
 
@@ -715,7 +780,7 @@
 
 	.chevron-icon {
 		transition: transform 0.2s ease;
-		transform: rotate(0deg); 
+		transform: rotate(0deg);
 	}
 
 	.chevron-icon.expanded {
@@ -738,8 +803,6 @@
 	.timeline-item:last-child {
 		margin-bottom: 0;
 	}
-
-
 
 	.timeline-item::before {
 		content: '';
@@ -793,7 +856,7 @@
 	}
 
 	.web-search-chip.animate-fade-in {
-		animation: fadeInUp 0.3s ease-out;
+		animation: fade-in-up 0.3s ease-out;
 	}
 
 	.web-search-chip::before {
@@ -805,11 +868,11 @@
 		width: 0;
 		background: #303030;
 		border-radius: 1rem;
-		animation: fillBackground 0.5s ease-out 0.1s forwards;
+		animation: fill-background 0.5s ease-out 0.1s forwards;
 		z-index: -1;
 	}
 
-	@keyframes fillBackground {
+	@keyframes fill-background {
 		from {
 			width: 0;
 		}
@@ -827,10 +890,10 @@
 	.web-search-chip .search-query {
 		font-weight: 300;
 		font-family: 'Instrument Sans', monospace;
-		color: #ffffff;
+		color: #fff;
 	}
 
-	@keyframes fadeInUp {
+	@keyframes fade-in-up {
 		from {
 			opacity: 0;
 			transform: translateY(10px);
@@ -884,7 +947,7 @@
 	}
 
 	.citation-item.animate-fade-in {
-		animation: fadeInUp 0.3s ease-out;
+		animation: fade-in-up 0.3s ease-out;
 	}
 
 	.citation-item:last-child {
@@ -905,7 +968,7 @@
 		font-size: 0.75rem;
 		font-family: 'Instrument Sans', monospace;
 		font-weight: 500;
-		color: #ffffff;
+		color: #fff;
 		line-height: 1.3;
 		white-space: nowrap;
 		overflow: hidden;
@@ -975,7 +1038,9 @@
 	}
 
 	.watchlist-container-animate {
-		animation: fadeInUp 0.2s ease-out, expandContainer 0.25s ease-in;
+		animation:
+			fade-in-up 0.2s ease-out,
+			expand-container 0.25s ease-in;
 	}
 
 	.watchlist-table {
@@ -1035,10 +1100,10 @@
 	.watchlist-row-reveal {
 		opacity: 0;
 		transform: translateY(-10px);
-		animation: watchlistRowReveal 0.2s ease-in forwards;
+		animation: watchlist-row-reveal 0.2s ease-in forwards;
 	}
 
-	@keyframes watchlistRowReveal {
+	@keyframes watchlist-row-reveal {
 		from {
 			opacity: 0;
 			transform: translateY(-10px);
@@ -1050,7 +1115,7 @@
 		}
 	}
 
-	@keyframes expandContainer {
+	@keyframes expand-container {
 		from {
 			max-height: 40px;
 		}
@@ -1153,9 +1218,8 @@
 	}
 
 	.timeline-chart.animate-fade-in {
-		animation: fadeInUp 0.3s ease-out;
+		animation: fade-in-up 0.3s ease-out;
 	}
-
 
 	.chart-container {
 		width: 100%;

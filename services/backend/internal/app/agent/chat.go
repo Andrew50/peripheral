@@ -30,6 +30,18 @@ var (
 	activeChatCanc = make(map[int]context.CancelFunc) // key = userID
 )
 
+const (
+	conversationIDKey                     contextKey = "conversationID"
+	messageIDKey                          contextKey = "messageID"
+	peripheralLatestModelThoughtsKey      contextKey = "peripheralLatestModelThoughts"
+	peripheralAlreadyUsedModelThoughtsKey contextKey = "peripheralAlreadyUsedModelThoughts"
+)
+
+const (
+	StageExecute           Stage = "execute"
+	StageFinishedExecuting Stage = "finished_executing"
+)
+
 // registerChatCancel stores the cancel function for a user's active chat
 func registerChatCancel(userID int, cancel context.CancelFunc) {
 	activeChatMu.Lock()
@@ -47,20 +59,7 @@ func clearChatCancel(userID int) {
 // Custom types for context keys to avoid collisions
 type contextKey string
 
-const (
-	CONVERSATION_ID_KEY                        contextKey = "conversationID"
-	MESSAGE_ID_KEY                             contextKey = "messageID"
-	PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY       contextKey = "peripheralLatestModelThoughts"
-	PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY contextKey = "peripheralAlreadyUsedModelThoughts"
-)
-
 type Stage string
-
-const (
-	StagePlanMore          Stage = "plan_more"
-	StageExecute           Stage = "execute"
-	StageFinishedExecuting Stage = "finished_executing"
-)
 
 // FunctionCall represents a function to be called with its arguments
 type FunctionCall struct {
@@ -143,8 +142,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			Timestamp:      time.Now(),
 		}, fmt.Errorf("error saving pending message: %w", err)
 	}
-	ctx = context.WithValue(ctx, CONVERSATION_ID_KEY, conversationID)
-	ctx = context.WithValue(ctx, MESSAGE_ID_KEY, messageID)
+	ctx = context.WithValue(ctx, conversationIDKey, conversationID)
+	ctx = context.WithValue(ctx, messageIDKey, messageID)
 	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
 
 	// replaced with activeChatMu
@@ -294,7 +293,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 			// Capture thoughts from this planning iteration
 			if v.Thoughts != "" {
 				accumulatedThoughts = append(accumulatedThoughts, v.Thoughts)
-				ctx = context.WithValue(ctx, PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY, v.Thoughts)
+				ctx = context.WithValue(ctx, peripheralLatestModelThoughtsKey, v.Thoughts)
 			}
 
 			// Handle result discarding if specified in the plan
@@ -334,8 +333,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 					go func() {
 						var cleanedModelThoughts string
-						if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
-							ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
+						if thoughtsValue := ctx.Value(peripheralLatestModelThoughtsKey); thoughtsValue != nil && thoughtsValue != ctx.Value(peripheralAlreadyUsedModelThoughtsKey) {
+							ctx = context.WithValue(ctx, peripheralAlreadyUsedModelThoughtsKey, thoughtsValue)
 							if thoughtsStr, ok := thoughtsValue.(string); ok {
 								cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 							}
@@ -374,8 +373,8 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				}
 				// Update query with active results for next planning iteration
 				// Only pass active results to avoid context bloat
-				planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
-				if err != nil {
+				//planningPrompt, err = BuildPlanningPromptWithResultsAndConversationID(conn, userID, conversationID, query.Query, query.Context, query.ActiveChartContext, activeResults, accumulatedThoughts)
+				/*if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Failed to build prompt with results: %v", err)); markErr != nil {
 						fmt.Printf("Warning: failed to mark pending message as error: %v\n", markErr)
@@ -387,12 +386,12 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 						MessageID:      messageID,
 						Timestamp:      time.Now(),
 					}, err
-				}
+				}*/
 			case StageFinishedExecuting:
 				go func() {
 					var cleanedModelThoughts string
-					if thoughtsValue := ctx.Value(PERIPHERAL_LATEST_MODEL_THOUGHTS_KEY); thoughtsValue != nil && thoughtsValue != ctx.Value(PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY) {
-						ctx = context.WithValue(ctx, PERIPHERAL_ALREADY_USED_MODEL_THOUGHTS_KEY, thoughtsValue)
+					if thoughtsValue := ctx.Value(peripheralLatestModelThoughtsKey); thoughtsValue != nil && thoughtsValue != ctx.Value(peripheralAlreadyUsedModelThoughtsKey) {
+						ctx = context.WithValue(ctx, peripheralAlreadyUsedModelThoughtsKey, thoughtsValue)
 						if thoughtsStr, ok := thoughtsValue.(string); ok {
 							cleanedModelThoughts = cleanStatusMessage(conn, thoughtsStr)
 						}

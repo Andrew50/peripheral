@@ -97,6 +97,16 @@ on:
         required: true
       TELEGRAM_BEN_TWEETS_BOT_TOKEN:
         required: true
+      SMTP_FROM_EMAIL:
+        required: true
+      SMTP_PASSWORD:
+        required: true
+      SMTP_HOST:
+        required: true
+      SMTP_OTP_PORT:
+        required: true
+      EMAIL_FROM_ADDRESS:
+        required: true
 
 permissions:
   contents: read
@@ -108,6 +118,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     # Removed the needs: [check-build] dependency
     if: (github.event_name != 'pull_request' || success()) # Keep the success() check logic if needed, or adjust as necessary
+    timeout-minutes: 30
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
@@ -137,6 +148,11 @@ jobs:
       STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
       TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: ${{ secrets.TELEGRAM_USER_NOTIFICATION_BOT_TOKEN }}
       TELEGRAM_BEN_TWEETS_BOT_TOKEN: ${{ secrets.TELEGRAM_BEN_TWEETS_BOT_TOKEN }}
+      SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_OTP_PORT: ${{ secrets.SMTP_OTP_PORT }}
+      EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}
       GOOGLE_REDIRECT_URL: ${{ inputs.google_redirect_url }}
       K8S_CONTEXT: ${{ inputs.k8s_context }}
       K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
@@ -212,6 +228,11 @@ jobs:
           echo "STRIPE_PUBLISHABLE_KEY: [$(if [ -n "$STRIPE_PUBLISHABLE_KEY" ]; then echo SET; else echo MISSING; fi)]"
           echo "TELEGRAM_USER_NOTIFICATION_BOT_TOKEN: [$(if [ -n "$TELEGRAM_USER_NOTIFICATION_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
           echo "TELEGRAM_BEN_TWEETS_BOT_TOKEN: [$(if [ -n "$TELEGRAM_BEN_TWEETS_BOT_TOKEN" ]; then echo SET; else echo MISSING; fi)]"
+          echo "SMTP_FROM_EMAIL: [$(if [ -n "$SMTP_FROM_EMAIL" ]; then echo SET; else echo MISSING; fi)]"
+          echo "SMTP_PASSWORD: [$(if [ -n "$SMTP_PASSWORD" ]; then echo SET; else echo MISSING; fi)]"
+          echo "SMTP_HOST: [$(if [ -n "$SMTP_HOST" ]; then echo SET; else echo MISSING; fi)]"
+          echo "SMTP_OTP_PORT: [$(if [ -n "$SMTP_OTP_PORT" ]; then echo SET; else echo MISSING; fi)]"
+          echo "EMAIL_FROM_ADDRESS: [$(if [ -n "$EMAIL_FROM_ADDRESS" ]; then echo SET; else echo MISSING; fi)]"
           echo "GOOGLE_REDIRECT_URL: [$(if [ -n "$GOOGLE_REDIRECT_URL" ]; then echo SET; else echo MISSING; fi)]"
           echo "All secrets and inputs must show as 'SET' above for successful deployment."
 

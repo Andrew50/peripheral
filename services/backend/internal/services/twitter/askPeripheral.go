@@ -61,9 +61,10 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 	var availablePlots []map[string]interface{}
 
 	for _, chunk := range chatResult.ContentChunks {
-		if chunk.Type == "text" {
+		switch chunk.Type {
+		case "text":
 			chatResultText += chunk.Content.(string)
-		} else if chunk.Type == "table" {
+		case "table":
 			tableData := chunk.Content.(map[string]interface{})
 			chatResultText += "\n Table: " + tableData["caption"].(string) + "\n"
 
@@ -78,7 +79,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 				}
 				chatResultText += "\n"
 			}
-		} else if chunk.Type == "plot" {
+		case "plot":
 			if plotData, ok := chunk.Content.(map[string]interface{}); ok {
 				plotInfo := map[string]interface{}{
 					"index":        len(availablePlots),
@@ -125,7 +126,7 @@ func GenerateAskPeripheralTweet(conn *data.Conn, tweet ExtractedTweetData) error
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 	}
-	model := "o4-mini"
+	model := "gpt-5"
 	thinkingEffort := "medium"
 	rawSchema := ref.Reflect(AgentReplyTweet{})
 	b, _ := json.Marshal(rawSchema)

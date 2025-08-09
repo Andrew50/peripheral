@@ -61,7 +61,11 @@ func getOrFetchGeoLocation(conn *data.Conn, ipAddress string) (*GeoLocationData,
 		log.Printf("Failed to fetch geolocation for IP %s: %v", ipAddress, err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Warning: failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("ipinfo.io returned status %d for IP %s", resp.StatusCode, ipAddress)

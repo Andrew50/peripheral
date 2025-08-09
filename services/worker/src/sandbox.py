@@ -14,9 +14,9 @@ import math
 import sys
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, ContextManager, Callable, Iterator, cast
 
 import numpy as np
 import pandas as pd
@@ -25,10 +25,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from utils.plotlyToMatlab import plotly_to_matplotlib_png
-from utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
-from utils.context import Context
-from utils.error_utils import capture_exception
+from .utils.plotly_to_matlab import plotly_to_matplotlib_png
+from .utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
+from .utils.context import Context
+from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,8 @@ class SandboxResult:
     result: Any = None  # Main return value (renamed from return_value)
     prints: str = ""    # Stdout output (renamed from stdout)
     stderr: str = ""
-    plots: List[Dict] = None
-    response_images: List[str] = None
+    plots: List[Dict[str, Any]] = field(default_factory=list)
+    response_images: List[Optional[str]] = field(default_factory=list)
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
     execution_time_ms: float = 0.0
@@ -63,15 +63,15 @@ class PythonSandbox:
     with configurable imports, plotting support, and comprehensive error handling.
     """
 
-    def __init__(self, config: SandboxConfig, execution_id: str = None):
+    def __init__(self, config: SandboxConfig, execution_id: Optional[str] = None):
         self.config = config
-        self.execution_id = execution_id
-        self.plots_collection = []
-        self.response_images = []
-        self.plot_counter = 0
+        self.execution_id: Optional[str] = execution_id
+        self.plots_collection: List[Dict[str, Any]] = []
+        self.response_images: List[Optional[str]] = []
+        self.plot_counter: int = 0
 
-    async def execute_code(self, ctx: Context, code: str, additional_globals: Dict[str, Any] = None,
-                          execution_id: str = None) -> SandboxResult:
+    async def execute_code(self, ctx: Context, code: str, additional_globals: Optional[Dict[str, Any]] = None,
+                          execution_id: Optional[str] = None) -> SandboxResult:
         """
         Execute Python code in a secure sandbox environment
 
@@ -85,51 +85,46 @@ class PythonSandbox:
         """
         start_time = time.time()
 
+        #try:
+
+        # If an execution_id is provided for this run, override the instance value
+        if execution_id is not None:
+            self.execution_id = execution_id
+
+        # create execution environment
+        safe_globals = self._create_safe_globals(ctx, additional_globals or {})
+        safe_locals: Dict[str, Any] = {}
+
+        # Initialize capture systems
+        self._reset_capture_systems()
+
+        # Execute with timeout and capture
         try:
+            result = await asyncio.wait_for(
+                self._execute_with_capture(code, safe_globals, safe_locals),
+                timeout=self.config.execution_timeout
+            )
 
-            # Create execution environment
-            safe_globals = self._create_safe_globals(ctx, additional_globals or {})
-            safe_locals = {}
+            execution_time = (time.time() - start_time) * 1000
 
-            # Initialize capture systems
-            self._reset_capture_systems()
+            return SandboxResult(
+                success=True,
+                result=result['return_value'],
+                prints=result['prints'],
+                stderr=result['stderr'],
+                plots=self.plots_collection,
+                response_images=self.response_images,
+                execution_time_ms=execution_time
+            )
 
-            # Execute with timeout and capture
-            try:
-                result = await asyncio.wait_for(
-                    self._execute_with_capture(code, safe_globals, safe_locals),
-                    timeout=self.config.execution_timeout
-                )
-
-                execution_time = (time.time() - start_time) * 1000
-
-                return SandboxResult(
-                    success=True,
-                    result=result['return_value'],
-                    prints=result['prints'],
-                    stderr=result['stderr'],
-                    plots=self.plots_collection,
-                    response_images=self.response_images,
-                    execution_time_ms=execution_time
-                )
-
-            except asyncio.TimeoutError as e:
-                capture_exception(logger, e)
-                return SandboxResult(
-                    success=False,
-                    error=f"Execution timed out after {self.config.execution_timeout} seconds",
-                    execution_time_ms=(time.time() - start_time) * 1000
-                )
-            except Exception as e:
-                error_info = self._get_detailed_error_info(e, code)
-                capture_exception(logger, e)
-                return SandboxResult(
-                    success=False,
-                    error=str(e),
-                    error_details=error_info,
-                    execution_time_ms=(time.time() - start_time) * 1000
-                )
-        except Exception as e:
+        except asyncio.TimeoutError as e:
+            capture_exception(logger, e)
+            return SandboxResult(
+                success=False,
+                error=f"Execution timed out after {self.config.execution_timeout} seconds",
+                execution_time_ms=(time.time() - start_time) * 1000
+            )
+        except Exception as e: # pylint: disable=broad-exception-caught
             error_info = self._get_detailed_error_info(e, code)
             capture_exception(logger, e)
             return SandboxResult(
@@ -138,8 +133,17 @@ class PythonSandbox:
                 error_details=error_info,
                 execution_time_ms=(time.time() - start_time) * 1000
             )
+        #except Exception as e:
+            #error_info = self._get_detailed_error_info(e, code)
+            #capture_exception(logger, e)
+            #return SandboxResult(
+                #success=False,
+                #error=str(e),
+                #error_details=error_info,
+                #execution_time_ms=(time.time() - start_time) * 1000
+            #)
 
-    def _reset_capture_systems(self):
+    def _reset_capture_systems(self) -> None:
         """Reset plot and output capture systems"""
         self.plots_collection = []
         self.response_images = []
@@ -151,16 +155,19 @@ class PythonSandbox:
 
         stdout_buffer = io.StringIO()
         stderr_buffer = io.StringIO()
-        return_value = None
+        return_value: Any = None
 
         try:
-            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing
+            exec(code, safe_globals, safe_locals)  # nosec B102 - exec necessary with proper sandboxing  # pylint: disable=exec-used
             # Execute with stdout/stderr capture
-            code_func = safe_locals.get('code')
+            code_func: Optional[Callable[[], Any]] = safe_locals.get('code')
             if not code_func or not callable(code_func):
                 func = safe_locals.get('main')
                 if func and callable(func):
                     code_func = func
+
+            if not code_func or not callable(code_func):
+                raise RuntimeError("No callable 'code' or 'main' found in executed code")
 
             function_prints = ""
             with contextlib.redirect_stdout(stdout_buffer), self._plotly_capture_context():
@@ -175,7 +182,7 @@ class PythonSandbox:
                 'stderr': stderr_content
             }
 
-        except Exception as e:
+        except Exception as e:# pylint: disable=broad-exception-caught
             stderr_content = stderr_buffer.getvalue()
             if stderr_content:
                 logger.error("Stderr before error: %s", stderr_content)
@@ -186,7 +193,7 @@ class PythonSandbox:
         """Create safe execution environment with configurable globals"""
 
         # Start with configured builtins
-        safe_globals = {
+        safe_globals: Dict[str, Any] = {
             '__builtins__': self.config.allowed_builtins.copy()
         }
 
@@ -212,13 +219,16 @@ class PythonSandbox:
             #    end_date=datetime.now()
             #)
 
-            def bound_get_bar_data(timeframe="1d", columns=None, min_bars=1, filters=None,
-                                   extended_hours=False, start_date=None, end_date=None):
+            def bound_get_bar_data(timeframe: str = "1d", columns: Optional[List[str]] = None, min_bars: int = 1, filters: Optional[Dict[str, Any]] = None,
+                                   extended_hours: bool = False, start_date: Optional[dt] = None, end_date: Optional[dt] = None) -> Any:
                 """Wrapper to call utils.data_accessors._get_bar_data with the correct signature."""
-                return get_bar_data(ctx, start_date, end_date, timeframe,
+                # Ensure concrete datetimes when None
+                effective_start: dt = start_date if start_date is not None else datetime.datetime(2003, 1, 1)
+                effective_end: dt = end_date if end_date is not None else datetime.datetime.now()
+                return get_bar_data(ctx, effective_start, effective_end, timeframe,
                                     columns, min_bars, filters, extended_hours)
 
-            def bound_get_general_data(columns=None, filters=None):
+            def bound_get_general_data(columns: Optional[List[str]] = None, filters: Optional[Dict[str, Any]] = None) -> Any:
                 """Wrapper to call utils.data_accessors._get_general_data with context."""
                 return get_general_data(ctx, columns, filters)
 
@@ -236,7 +246,7 @@ class PythonSandbox:
 
         return safe_globals
 
-    def _plotly_capture_context(self):
+    def _plotly_capture_context(self) -> ContextManager[None]:
         """Context manager that captures plotly plots instead of displaying them"""
 
         if not self.config.enable_plots:
@@ -247,7 +257,7 @@ class PythonSandbox:
         original_figure_show = go.Figure.show
         original_make_subplots = make_subplots
 
-        def capture_plot(fig, *_args, **_kwargs):
+        def capture_plot(fig: Any, *_args: Any, **_kwargs: Any) -> None:
             """Capture plot instead of showing it"""
             try:
                 plot_id = self.plot_counter
@@ -266,14 +276,15 @@ class PythonSandbox:
 
                 # Generate PNG as base64
                 try:
-                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, "Execution ID", self.execution_id)
+                    id_label = f"Execution ID {self.execution_id}" if self.execution_id is not None else "Execution ID"
+                    png_base64 = plotly_to_matplotlib_png(fig, plot_id, id_label, -1)
                     if png_base64:
                         self.response_images.append(png_base64)
                     else:
                         logger.warning("Failed to generate PNG for plot %s", plot_id)
                         self.response_images.append(None)
-                except Exception as e:
-                    logger.warning("Failed to generate PNG for plot %s: %s", plot_id, e)
+                except ValueError as e:
+                    logger.error("Failed to generate PNG for plot %s: %s", plot_id, e)
                     self.response_images.append(None)
 
                 plot_data = {
@@ -283,8 +294,8 @@ class PythonSandbox:
                 }
                 self.plots_collection.append(plot_data)
 
-            except Exception as e:
-                logger.warning("Failed to capture plot: %s", e)
+            except ValueError as e:
+                logger.error("Failed to capture plot: %s", e)
                 plot_id = self.plot_counter
                 self.plot_counter += 1
                 fallback_plot = {
@@ -295,13 +306,13 @@ class PythonSandbox:
                 self.plots_collection.append(fallback_plot)
                 self.response_images.append(None)
 
-        def captured_make_subplots(*args, **kwargs):
+        def captured_make_subplots(*args: Any, **kwargs: Any) -> Any:
             fig = original_make_subplots(*args, **kwargs)
             fig.show = lambda *show_args, **show_kwargs: capture_plot(fig, *show_args, **show_kwargs)
             return fig
 
         @contextlib.contextmanager
-        def patch_context():
+        def patch_context() -> Iterator[None]:
             try:
                 # Apply patches
                 go.Figure.show = capture_plot
@@ -314,16 +325,16 @@ class PythonSandbox:
 
         return patch_context()
 
-    def _extract_plot_data(self, fig) -> dict:
+    def _extract_plot_data(self, fig: Any) -> dict:
         """Extract plot data from plotly figure"""
         try:
-            plot_data = json.loads(fig.to_json())
-            return self._decode_binary_arrays(plot_data)
-        except Exception as e:
-            logger.warning("Failed to extract plot data: %s", e)
+            plot_data: Dict[str, Any] = json.loads(fig.to_json())
+            return cast(Dict[str, Any], self._decode_binary_arrays(plot_data))
+        except ValueError as e:
+            logger.error("Failed to extract plot data: %s", e)
             return {}
 
-    def _decode_binary_arrays(self, data):
+    def _decode_binary_arrays(self, data: Any) -> Any:
         """Recursively decode binary arrays in plot data"""
 
         if isinstance(data, dict):
@@ -344,8 +355,8 @@ class PythonSandbox:
                         return []
 
                     return arr.tolist()
-                except Exception as e:
-                    logger.warning("Error decoding binary data: %s", e)
+                except ValueError as e:
+                    logger.error("Error decoding binary data: %s", e)
                     return []
             else:
                 return {k: self._decode_binary_arrays(v) for k, v in data.items()}
@@ -354,7 +365,7 @@ class PythonSandbox:
         else:
             return data
 
-    def _extract_plot_title_with_ticker(self, fig) -> Tuple[str, Optional[str]]:
+    def _extract_plot_title_with_ticker(self, fig: Any) -> Tuple[str, Optional[str]]:
         """Extract title and ticker from plotly figure"""
         try:
             title = 'Untitled Plot'
@@ -373,7 +384,7 @@ class PythonSandbox:
                     title = cleaned_title if cleaned_title else 'Untitled Plot'
 
             return title, ticker
-        except Exception:
+        except ValueError:
             return 'Untitled Plot', None
 
     def _get_detailed_error_info(self, error: Exception, code: str) -> Dict[str, Any]:
@@ -382,7 +393,7 @@ class PythonSandbox:
             tb = traceback.format_exc()
             _, _, exc_traceback = sys.exc_info()
 
-            error_info = {
+            error_info: Dict[str, Any] = {
                 'error_type': type(error).__name__,
                 'error_message': str(error),
                 'full_traceback': tb,
@@ -422,7 +433,7 @@ class PythonSandbox:
                                         context_lines.append(f"{marker}{i:3d}: {line_content}")
 
                                     error_info['code_context'] = '\n'.join(context_lines)
-                            except Exception as ctx_error:
+                            except ValueError as ctx_error:
                                 error_info['code_context'] = f"Could not extract code context: {ctx_error}"
 
                         break
@@ -431,7 +442,7 @@ class PythonSandbox:
 
             return error_info
 
-        except Exception as e:
+        except ValueError as e:
             return {
                 'error_type': type(error).__name__,
                 'error_message': str(error),

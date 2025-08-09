@@ -1,24 +1,30 @@
+<script lang="ts" context="module">
+	import type { Instance, Trade } from '$lib/utils/types/types';
+	export interface ExtendedInstance extends Instance {
+		trades?: Trade[];
+		[key: string]: any;
+	}
+	export interface ActionButton {
+		label: string;
+		action: (item: ExtendedInstance) => void;
+		class?: string;
+	}
+</script>
+
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { writable, get } from 'svelte/store';
 	import { UTCTimestampToESTString } from '$lib/utils/helpers/timestamp';
 	import type { Writable } from 'svelte/store';
-	import type { Instance } from '$lib/utils/types/types';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { queryChart } from '$lib/features/chart/interface';
 	import { flagWatchlist } from '$lib/utils/stores/stores';
 	import { flagSecurity } from '$lib/utils/stores/flag';
 	import { newAlert } from '$lib/features/alerts/interface';
 	import { queueRequest, privateRequest } from '$lib/utils/helpers/backend';
-	import type { Trade } from '$lib/utils/types/types';
 	import { fade } from 'svelte/transition';
 
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
-
-	interface ExtendedInstance extends Instance {
-		trades?: Trade[];
-		[key: string]: any; // Allow dynamic property access
-	}
 
 	// Response shape from getIcons API
 	interface IconResponse {
@@ -202,27 +208,28 @@
 	// NOTE: This function relies on the *original* `sortColumn` value.
 	function sortList() {
 		if (!sortColumn) return;
+		const currentSortColumn = sortColumn;
 
 		list.update((items: ExtendedInstance[]) => {
 			const sorted = [...items].sort((a, b) => {
 				// Handle special column cases first based on the *original* column name directly
 				// Keep these checks using the original column keys passed to handleSort
-				if (sortColumn === 'Price') {
+				if (currentSortColumn === 'Price') {
 					const priceA = typeof a.price === 'number' ? a.price : 0;
 					const priceB = typeof b.price === 'number' ? b.price : 0;
 					return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
 				}
-				if (sortColumn === 'Chg') {
+				if (currentSortColumn === 'Chg') {
 					const changeA = typeof a.change === 'number' ? a.change : 0;
 					const changeB = typeof b.change === 'number' ? b.change : 0;
 					return sortDirection === 'asc' ? changeA - changeB : changeB - changeA;
 				}
-				if (sortColumn === 'Chg%') {
+				if (currentSortColumn === 'Chg%') {
 					const pctA = typeof a['change%'] === 'number' ? a['change%'] : 0;
 					const pctB = typeof b['change%'] === 'number' ? b['change%'] : 0;
 					return sortDirection === 'asc' ? pctA - pctB : pctB - pctA;
 				}
-				if (sortColumn === 'Ext') {
+				if (currentSortColumn === 'Ext') {
 					const extA = typeof a['change%extended'] === 'number' ? a['change%extended'] : 0;
 					const extB = typeof b['change%extended'] === 'number' ? b['change%extended'] : 0;
 					return sortDirection === 'asc' ? extA - extB : extB - extA;
@@ -230,7 +237,7 @@
 
 				// For other columns, use the *original* sortColumn as the data key directly
 				// Or use getDataKey if that transformation is required for your data structure
-				const dataKey = sortColumn; // Assuming direct key access works for underscore columns like 'market_cap'
+				const dataKey = currentSortColumn; // Assuming direct key access works for underscore columns like 'market_cap'
 				// const dataKey = getDataKey(sortColumn); // Use this if you need the transformation from getDataKey
 
 				let valueA = a[dataKey];
@@ -625,7 +632,7 @@
 										on:contextmenu={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
-										}}>{UTCTimestampToESTString(watch.timestamp)}</td
+										}}>{watch.timestamp ? UTCTimestampToESTString(watch.timestamp) : 'N/A'}</td
 									>
 								{:else if col === 'Trade Duration'}
 									<td
@@ -710,7 +717,9 @@
 	}
 
 	tr {
-		transition: outline 0.2s ease;
+		transition:
+			outline 0.2s ease,
+			background-color 0.2s;
 	}
 
 	.list-container {
@@ -751,6 +760,25 @@
 		position: relative;
 	}
 
+	/* Sorting state styles applied to table via class binding */
+	.sorting tbody tr {
+		opacity: 0.7;
+		transition: opacity 0.3s ease;
+	}
+
+	.sorting {
+		position: relative;
+		background-color: var(--ui-bg-hover);
+	}
+
+	.sorting::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: rgb(0 0 0 / 5%);
+		pointer-events: none;
+	}
+
 	.th-content {
 		display: flex;
 		align-items: center;
@@ -763,39 +791,14 @@
 		opacity: 0.7;
 	}
 
-	.sorting {
-		background-color: var(--ui-bg-hover);
-	}
-
-	table.sorting tbody tr {
-		opacity: 0.7;
-		transition: opacity 0.3s ease;
-	}
-
-	table.sorting {
-		position: relative;
-	}
-
-	table.sorting::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: rgb(0 0 0 / 5%);
-		pointer-events: none;
-	}
-
 	.sort-asc .sort-icon,
 	.sort-desc .sort-icon {
 		opacity: 1;
 		color: var(--ui-accent);
 	}
 
-	th.sortable:hover {
+	.sortable:hover {
 		background-color: var(--ui-bg-hover);
-	}
-
-	tr {
-		transition: background-color 0.2s;
 	}
 
 	tr:hover {
@@ -880,39 +883,6 @@
 		padding-right: 8px;
 	}
 
-	td:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		text-align: center;
-		background-color: var(--ui-bg-primary);
-		vertical-align: middle;
-	}
-
-	th:last-child {
-		position: sticky;
-		right: 8px;
-		width: 24px;
-		max-width: 24px;
-		padding: 0;
-		transition: opacity 0.2s ease;
-	}
-
-	.delete-button {
-		opacity: 0;
-		transition: opacity 0.2s ease;
-	}
-
-	tr:hover .delete-button {
-		opacity: 1;
-	}
-
-	tr:hover td {
-		background-color: var(--ui-bg-hover);
-	}
-
 	.loading,
 	.error,
 	.no-results {
@@ -991,7 +961,6 @@
 	/* ---- START DELETE BUTTON / STICKY COLUMN STYLES ---- */
 
 	/* Sticky Last column (Delete Button) */
-	th:last-child,
 	td:last-child {
 		position: sticky;
 		right: 0; /* Stick to the very edge */
@@ -1005,6 +974,8 @@
 	}
 
 	th:last-child {
+		position: sticky;
+		right: 0;
 		z-index: 3; /* Above tbody cells and sort overlay */
 		background-color: var(--ui-bg-element); /* Ensure header BG */
 	}
@@ -1026,10 +997,6 @@
 
 	.delete-button:hover {
 		color: var(--negative-hover, red); /* Darker red on hover */
-	}
-
-	tr:hover .delete-button {
-		opacity: 1;
 	}
 
 	/* Adjust background for sticky columns on hover/select */

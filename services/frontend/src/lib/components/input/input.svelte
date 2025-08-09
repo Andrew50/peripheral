@@ -563,11 +563,11 @@
 			// Remove any existing listeners
 			document.removeEventListener('mousedown', handleOutsideClick, true);
 			document.removeEventListener('touchstart', handleOutsideClick, true);
-			
+
 			// Add multiple event types to ensure we catch interactions
-			document.addEventListener('mousedown', handleOutsideClick, true);	
+			document.addEventListener('mousedown', handleOutsideClick, true);
 			document.addEventListener('touchstart', handleOutsideClick, true);
-			
+
 			document.body.setAttribute('data-input-click-listener', 'true');
 			isDocumentListenerActive = true;
 		}
@@ -983,7 +983,7 @@
 {/if}
 
 <style>
-	#input-window.popup-container {
+	[id='input-window'].popup-container {
 		width: min(600px, 90vw);
 		height: auto;
 		max-height: 70vh;
@@ -1003,7 +1003,7 @@
 		gap: 0.5rem;
 	}
 
-	#input-window.timeframe-popup {
+	[id='input-window'].timeframe-popup {
 		top: 50% !important;
 		bottom: auto !important;
 		transform: translate(-50%, -50%) !important;
@@ -1331,14 +1331,14 @@
 	}
 
 	.box-expand {
-		animation-name: boxExpand;
+		animation-name: box-expand;
 	}
 
 	.search-bar-expand {
-		animation-name: searchBarExpand;
+		animation-name: search-bar-expand;
 	}
 
-	@keyframes boxExpand {
+	@keyframes box-expand {
 		from {
 			transform: scale(0.85);
 			opacity: 0.6;
@@ -1350,7 +1350,7 @@
 		}
 	}
 
-	@keyframes searchBarExpand {
+	@keyframes search-bar-expand {
 		from {
 			transform: scaleX(0.3);
 			opacity: 0.4;
@@ -1363,7 +1363,7 @@
 	}
 
 	@media (width <= 768px) {
-		#input-window.popup-container {
+		[id='input-window'].popup-container {
 			width: min(500px, 95vw);
 		}
 

@@ -29,6 +29,20 @@ linters:
       checks:
         - all # keep every other check …
         - "-SA9003" # … except the empty-branch rule
+        # Do not require comments via stylecheck rules
+        - "-ST1000" # package comment requirement
+        - "-ST1020" # comment on exported names must begin with name
+        - "-ST1021" # comment on exported methods must be of the form 'Receiver.Method ...'
+        - "-ST1022" # package comment should be of the form 'Package foo ...'
+    # Do not require code comments via revive
+    revive:
+      rules:
+        # Don't require doc comments for exported identifiers
+        - name: exported
+          disabled: true
+        # Don't require a package-level comment block
+        - name: package-comments
+          disabled: true
     forbidigo:
       # Block debug prints & accidental panics in library code
       forbid:

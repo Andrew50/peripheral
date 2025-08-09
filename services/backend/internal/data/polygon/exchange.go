@@ -20,6 +20,8 @@ type Response struct {
 	Results []Exchange `json:"results"`
 }
 
+// GetExchanges queries Polygon's reference endpoint for equity exchanges and
+// returns a map of exchange ID to MIC code using the provided connection's API key.
 func GetExchanges(conn *data.Conn) (map[int]string, error) {
 	baseURL := "https://api.polygon.io/v3/reference/exchanges"
 

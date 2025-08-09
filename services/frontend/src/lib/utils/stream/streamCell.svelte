@@ -264,7 +264,7 @@
 </div>
 
 <style>
-	@keyframes flashGreen {
+	@keyframes flash-green {
 		0% {
 			color: var(--positive, rgb(72 225 72));
 		}
@@ -275,7 +275,7 @@
 		}
 	}
 
-	@keyframes flashRed {
+	@keyframes flash-red {
 		0% {
 			color: var(--negative, rgb(225 72 72));
 		}
@@ -286,11 +286,11 @@
 	}
 
 	.flash-up {
-		animation: flashGreen 0.5s ease-out forwards;
+		animation: flash-green 0.5s ease-out forwards;
 	}
 
 	.flash-down {
-		animation: flashRed 0.5s ease-out forwards;
+		animation: flash-red 0.5s ease-out forwards;
 	}
 
 	/* Sticky colour for the changed digits */
@@ -321,7 +321,7 @@
 	}
 
 	/* Override flash animations and colors specifically for price type when flash is disabled */
-	@keyframes flashWhitePrice {
+	@keyframes flash-white-price {
 		0% {
 			color: #fff;
 		}
@@ -333,11 +333,11 @@
 
 	/* Only apply white overrides when flash is NOT disabled */
 	.price-type:not(.disable-flash-mode).flash-up {
-		animation: flashWhitePrice 0.5s ease-out forwards;
+		animation: flash-white-price 0.5s ease-out forwards;
 	}
 
 	.price-type:not(.disable-flash-mode).flash-down {
-		animation: flashWhitePrice 0.5s ease-out forwards;
+		animation: flash-white-price 0.5s ease-out forwards;
 	}
 
 	.price-type:not(.disable-flash-mode) .diff.up {

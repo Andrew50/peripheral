@@ -15,8 +15,7 @@
 	// Auth state - check immediately to prevent flash
 	let isAuthenticated = getAuthState();
 
-
-	// Subsections data
+	// Subsections data for the landing page
 	const subsections = [
 		{
 			title: 'Backtest trading ideas',
@@ -47,7 +46,6 @@
 			image: '/Group 10.png'
 		}
 	];
-
 </script>
 
 <SiteHeader {isAuthenticated} />
@@ -57,19 +55,16 @@
 	<!-- Title Section - Extracted from HeroAnimation -->
 	<section class="hero-title-section">
 		<div class="hero-title-container">
-			<h1 class="hero-title">
-				The Intelligent Trading Terminal
-			</h1>
+			<h1 class="hero-title">The Intelligent Trading Terminal</h1>
 			<p class="hero-subtitle">
-				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents in realtime.<br />
+				Backtest trading ideas, analyze breaking news and event driven strategies, and deploy agents
+				in realtime.<br />
 			</p>
 			<a href="/signup" class="hero-cta-button">
 				<div class="button-border-layer-1">
 					<div class="button-border-layer-2">
 						<div class="button-border-layer-3">
-							<div class="button-content">
-								Supercharge your trading →
-							</div>
+							<div class="button-content">Supercharge your trading →</div>
 						</div>
 					</div>
 				</div>
@@ -78,34 +73,40 @@
 	</section>
 	<ChipSection />
 	<main class="landing-container">
-	<!-- Subsections moved to be directly below title -->
-	<section class="subsections-section">
-		<h2 class="features-title">Features</h2>
-		
-		<div class="subsections-content">
-			{#each subsections as subsection, index}
-				<div class="subsection" class:reverse={index % 2 === 0} class:frictionless={index === 3} class:speed-analysis={index === 2} class:never-miss={index === 1}>
-					<div class="subsection-text">
-						<h2 class="subsection-title">{subsection.title}</h2>
-						<p class="subsection-description">{subsection.description}</p>
-						<p class="subsection-content">{subsection.content}</p>
+		<!-- Subsections moved to be directly below title -->
+		<section class="subsections-section">
+			<h2 class="features-title">Features</h2>
+
+			<div class="subsections-content">
+				{#each subsections as subsection, index}
+					<div
+						class="subsection"
+						class:reverse={index % 2 === 0}
+						class:frictionless={index === 3}
+						class:speed-analysis={index === 2}
+						class:never-miss={index === 1}
+					>
+						<div class="subsection-text">
+							<h2 class="subsection-title">{subsection.title}</h2>
+							<p class="subsection-description">{subsection.description}</p>
+							<p class="subsection-content">{subsection.content}</p>
+						</div>
+						<div class="subsection-image">
+							<img src={subsection.image} alt={subsection.title} />
+						</div>
 					</div>
-					<div class="subsection-image">
-						<img src={subsection.image} alt={subsection.title} />
-					</div>
-				</div>
-			{/each}
-		</div>
-	</section>
-	
-	<!-- HeroAnimation moved below subsections 
+				{/each}
+			</div>
+		</section>
+
+		<!-- HeroAnimation moved below subsections 
 	<HeroAnimation {defaultKey} {chartsByKey} />
 -->
-	
-	<!-- Ideas Chips Section -->
-	<!-- Footer -->
-	<SiteFooter />
-</main>
+
+		<!-- Ideas Chips Section -->
+		<!-- Footer -->
+		<SiteFooter />
+	</main>
 </div>
 <svelte:head>
 	<!-- Basic meta tags -->
@@ -142,7 +143,6 @@
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 	@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
 
-
 	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
 		box-sizing: border-box;
@@ -152,11 +152,9 @@
 		-ms-overflow-style: none; /* IE and Edge */
 	}
 
-
 	:global(body) {
 		-ms-overflow-style: none; /* IE and Edge */
 	}
-
 
 	/* Override width restrictions from global landing styles - moved to top for immediate application */
 	:global(.landing-container) {
@@ -169,12 +167,7 @@
 	.page-wrapper {
 		width: 100%;
 		min-height: 100vh;
-		background: linear-gradient(
-			180deg,
-			#010022 0%,
-			#02175F 100%
-
-		);
+		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 	}
 
 	.landing-container {
@@ -262,9 +255,7 @@
 
 	.button-border-layer-3 {
 		border-radius: 40px;
-		background: linear-gradient(135deg, 
-			rgb(255 255 255 / 95%) 0%, 
-			rgb(240 240 240 / 98%) 100%);
+		background: linear-gradient(135deg, rgb(255 255 255 / 95%) 0%, rgb(240 240 240 / 98%) 100%);
 		padding: 0;
 		overflow: hidden;
 	}
@@ -281,14 +272,13 @@
 		transition: transform 0.3s ease;
 	}
 
-	.hero-cta-button:hover  .button-content{
+	.hero-cta-button:hover .button-content {
 		transform: scale(1.05);
 	}
 
 	.hero-cta-button:active {
 		transform: translateY(0);
 	}
-
 
 	/* Subsections Section */
 	.subsections-section {
@@ -362,8 +352,6 @@
 		line-height: 1.5;
 	}
 
-
-
 	.subsection-content {
 		font-size: 1rem;
 		color: #f5f9ff;
@@ -391,7 +379,7 @@
 	.subsection:first-child .subsection-image {
 		max-width: 1200px;
 	}
-	
+
 	.subsection:first-child .subsection-image img {
 		max-width: 1200px;
 	}

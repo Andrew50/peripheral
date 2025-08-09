@@ -1,6 +1,9 @@
 # Minimal working requirements for Python Strategy System
 # This file contains only essential dependencies that are guaranteed to install
 
+# Build tools (security: mitigate CVE-2024-6345)
+setuptools>=70.0.0
+
 # Core dependencies - essential
 numpy>=1.21.0
 pandas>=1.3.0

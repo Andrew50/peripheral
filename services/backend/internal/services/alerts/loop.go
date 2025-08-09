@@ -1,3 +1,5 @@
+// Package alerts contains the core alert processing loops for price and
+// strategy alerts, including throttling, metrics, and Redis integration.
 package alerts
 
 import (
@@ -279,7 +281,7 @@ type StrategyAlert struct {
 
 var (
 	priceAlertFrequency    = time.Second * 1
-	strategyAlertFrequency = time.Minute * 1
+	strategyAlertFrequency = time.Second * 10
 	// Legacy global variables for backward compatibility - DEPRECATED in Stage 3
 	// TODO: Remove these in next major version after per-ticker throttling is stable
 	priceAlerts    sync.Map // DEPRECATED: use AlertService instance instead
@@ -853,10 +855,6 @@ func (a *AlertService) processStrategyAlertsPerTicker() {
 				return
 			}
 
-			// Execute strategy with filtered ticker list
-			log.Printf("🎯 Processing strategy %d: %s with %d tickers: %v",
-				alert.StrategyID, alert.Name, len(finalTickers), finalTickers)
-
 			data.IncrementStrategyRuns()
 			if err := executeStrategyAlert(context.Background(), a.conn, alert, finalTickers); err != nil {
 				log.Printf("Error processing strategy %d: %v", alert.StrategyID, err)
@@ -1135,7 +1133,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	// Use provided tickers if available (per-ticker throttling mode), otherwise parse universe
-	if tickers != nil && len(tickers) > 0 {
+	if len(tickers) > 0 {
 		args["symbols"] = tickers
 		log.Printf("🎯 Strategy %d (%s): submitting alert task with per-ticker filtered symbols (%d): %v",
 			strategy.StrategyID, strategy.Name, len(tickers), tickers)
@@ -1171,7 +1169,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 
 	log.Printf("🚀 Strategy %d (%s): queuing alert task with args: %+v", strategy.StrategyID, strategy.Name, args)
 	// Submit the alert task through the unified queue system and wait for the typed result.
-	result, err := queue.QueueAlertTyped(ctx, conn, args)
+	result, err := queue.AlertTyped(ctx, conn, args)
 	if err != nil {
 		log.Printf("❌ Strategy %d (%s): queue submission failed: %v", strategy.StrategyID, strategy.Name, err)
 		return fmt.Errorf("queue alert error: %w", err)

@@ -4,21 +4,21 @@
 
 {#if $shiftOverlay.isActive}
 	<div
-		class="shiftOverlayStyle"
+		class="shift-overlay"
 		style="left: {$shiftOverlay.x}px; top: {$shiftOverlay.y}px;
     width: {$shiftOverlay.width}px; height: {$shiftOverlay.height}px;"
 	>
-		<div class="percentageText">
+		<div class="percentage-text">
 			${Math.round(($shiftOverlay.currentPrice - $shiftOverlay.startPrice) * 100) / 100}
 		</div>
-		<div class="percentageText">
+		<div class="percentage-text">
 			{Math.round(($shiftOverlay.currentPrice / $shiftOverlay.startPrice - 1) * 10000) / 100}%
 		</div>
 	</div>
 {/if}
 
 <style>
-	.shiftOverlayStyle {
+	.shift-overlay {
 		position: absolute;
 		border: 2px dashed rgb(255 255 255 / 60%);
 		background: transparent;
@@ -33,7 +33,7 @@
 		padding: 8px;
 	}
 
-	.percentageText {
+	.percentage-text {
 		color: #fff;
 		font-size: 1.2rem;
 		font-weight: 600;

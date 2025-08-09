@@ -7,41 +7,57 @@ import re
 import time
 import asyncio
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional, cast, TYPE_CHECKING
 from datetime import datetime
-from google.genai import types
-from validator import validate_code
-from utils.context import Context
-from utils.data_accessors import get_available_filter_values
-from utils.error_utils import capture_exception
-from sandbox import PythonSandbox, create_default_config
-from generator import _parse_filter_needs_response
+import importlib.util as _importlib_util
+import importlib as _importlib
+
+from .validator import validate_code
+from .utils.context import Context
+from .utils.data_accessors import get_available_filter_values
+from .utils.error_utils import capture_exception
+from .sandbox import PythonSandbox, create_default_config
+from .generator import _parse_filter_needs_response
+
+if TYPE_CHECKING:
+    # Imported only for type checking; not executed at runtime
+    from google.genai import types as genai_types 
+
+# Runtime availability check without relying on import exceptions
+_genai_types_runtime: Any | None = (
+    _importlib.import_module("google.genai.types")
+    if _importlib_util.find_spec("google.genai.types") is not None
+    else None
+)
 
 
 logger = logging.getLogger(__name__)
 
 def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
-    contents = [
-        types.Content(role="user", parts=[
-            types.Part.from_text(text=prompt),
-        ])
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        thinking_config = types.ThinkingConfig(
-            thinking_budget=0
-        ),
-        system_instruction =[types.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
+    if _genai_types_runtime is not None:
+        contents = _genai_types_runtime.Content(
+            role="user",
+            parts=[_genai_types_runtime.Part.from_text(text=prompt)],
+        )
+        generate_content_config = _genai_types_runtime.GenerateContentConfig(
+            thinking_config=_genai_types_runtime.ThinkingConfig(thinking_budget=0),
+            system_instruction=[_genai_types_runtime.Part.from_text(text="""You are a lightweight classifier tasked to determine whether a the list of filter options is needed for a given strategy generation query. You will be given a strategy query and then
             you are to return a JSON struct of the following keys and false or true values of whether the filters values are needed.
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
             - primary_exchanges: NYSE, NASDAQ, ARCA
             ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
-    )
-    response = ctx.conn.gemini_client.models.generate_content(
-        model="gemini-2.5-flash-lite-preview-06-17",
-        contents=contents,
-        config=generate_content_config,
-    )
+        )
+        response = ctx.conn.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=contents,
+            config=generate_content_config,
+        )
+    else:
+        response = ctx.conn.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=str(prompt),
+        )
 
     # Parse the JSON response to determine which filters are needed
     filter_needs = _parse_filter_needs_response(response)
@@ -231,7 +247,21 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
 
 
 
-async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, data: str, conversation_id: str, message_id: str) -> Tuple[List[Dict], str, List[Dict], List[Dict], str, Exception]:
+async def start_general_python_agent(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    data: str,
+    conversation_id: str,
+    message_id: str,
+) -> Tuple[
+    List[Dict[str, Any]],
+    str,
+    List[Dict[str, Any]],
+    List[Optional[str]],
+    str,
+    Optional[Exception],
+]:
     # Generate unique execution_id for this run - accessible throughout method
     execution_serial = int(time.time())  # Seconds timestamp
     execution_id = f"{user_id}_{execution_serial}"
@@ -262,14 +292,20 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
 
         try:
             # Generate code
-            openai_response = ctx.conn.openai_client.responses.create(
-                model="o4-mini",
-                reasoning={"effort": "low"},
+            openai_client_any = cast(Any, ctx.conn.openai_client)
+            openai_response = openai_client_any.responses.create(
+                model="gpt-5-mini",
+                reasoning={"effort": "medium"},
                 input=user_prompt,
                 instructions=system_instruction,
                 user="user:0",
-                metadata={"userID": str(user_id), "env": ctx.conn.environment, "convID": conversation_id, "msgID": message_id},
-                timeout=120.0  # 2 minute timeout for other models
+                metadata={
+                    "userID": str(user_id),
+                    "env": ctx.conn.environment,
+                    "convID": conversation_id or "",
+                    "msgID": message_id or "",
+                },
+                timeout=120.0,
             )
             python_code = _extract_python_code(openai_response.output_text)
 
@@ -322,7 +358,14 @@ async def start_general_python_agent(ctx: Context, user_id: int, prompt: str, da
                 error_message=None
             ))
 
-            return result.result, result.prints, result.plots, result.response_images, execution_id, None
+            return (
+                result.result,
+                result.prints,
+                result.plots,
+                result.response_images,
+                execution_id,
+                None,
+            )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             capture_exception(logger, e)
@@ -356,7 +399,7 @@ def _extract_python_code(response: str) -> str:
     """Extract Python code from response, removing markdown formatting"""
     # Remove markdown code blocks
     code_block_pattern = r'```(?:python)?\s*(.*?)\s*```'
-    matches = re.findall(code_block_pattern, response, re.DOTALL)
+    matches = cast(List[str], re.findall(code_block_pattern, response, re.DOTALL))
 
     if matches:
         return matches[0].strip()
@@ -364,10 +407,18 @@ def _extract_python_code(response: str) -> str:
     # If no code blocks found, return the response as-is
     return response.strip()
 
-async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, python_code: str,
-                                execution_id: str, result: Any = None, prints: str = "",
-                                plots: list = None, response_images: list = None,
-                                error_message: str = None) -> bool:
+async def _save_agent_python_code(
+    ctx: Context,
+    user_id: int,
+    prompt: str,
+    python_code: str,
+    execution_id: str,
+    result: Any | None = None,
+    prints: str = "",
+    plots: Optional[List[Dict[str, Any]]] = None,
+    response_images: Optional[List[Optional[str]]] = None,
+    error_message: Optional[str] = None,
+) -> bool:
     """Save Python agent execution to database"""
     conn = None
     cursor = None
@@ -401,10 +452,19 @@ async def _save_agent_python_code(ctx: Context, user_id: int, prompt: str, pytho
 
 
 
-def python_agent(ctx: Context, user_id: int = None,
-                                    prompt: str = None, data: str = None, conversation_id: str = None, message_id: str = None) -> Dict[str, Any]:
+def python_agent(
+    ctx: Context,
+    user_id: Optional[int] = None,
+    prompt: Optional[str] = None,
+    data: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+) -> Dict[str, Any]:
 # Initialize defaults to avoid scope issues
-    result, prints, plots, response_images = [], "", [], []
+    result: List[Dict[str, Any]] = []
+    prints: str = ""
+    plots: List[Dict[str, Any]] = []
+    response_images: List[Optional[str]] = []
     execution_id = None  # Initialize to avoid UnboundLocalError
 
     #try:
@@ -424,9 +484,9 @@ def python_agent(ctx: Context, user_id: int = None,
             ctx=ctx,
             user_id=user_id,
             prompt=prompt,
-            data=data,
-            conversation_id=conversation_id,
-            message_id=message_id
+            data=data or "",
+            conversation_id=conversation_id or "",
+            message_id=message_id or "",
         )
     )
 

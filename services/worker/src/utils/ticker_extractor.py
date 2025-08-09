@@ -10,7 +10,7 @@ consistent ticker extraction across the codebase.
 
 import ast
 import logging
-from typing import Dict, List, Set, Any, Optional
+from typing import Dict, Set, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def extract_tickers(strategy_code: str) -> Dict[str, Any]:
     try:
         tree = ast.parse(strategy_code)
         
-        all_tickers = set()
+        all_tickers: Set[str] = set()
         has_global = False
         
         # Walk through all nodes to find function calls
@@ -63,7 +63,7 @@ def _get_function_name(call_node: ast.Call) -> Optional[str]:
     """Extract function name from call node, handling both direct and attribute calls."""
     if isinstance(call_node.func, ast.Name):
         return call_node.func.id
-    elif isinstance(call_node.func, ast.Attribute):
+    if isinstance(call_node.func, ast.Attribute):
         return call_node.func.attr
     return None
 
@@ -80,7 +80,7 @@ def _extract_tickers_from_call(call_node: ast.Call) -> tuple[Set[str], bool]:
         - ticker_set: Set of ticker strings found in filters
         - is_global_flag: True if no explicit tickers or non-literal filters detected
     """
-    tickers = set()
+    tickers: Set[str] = set()
     is_global = False
     
     # Find the filters argument - can be positional (index 3) or keyword
@@ -123,7 +123,7 @@ def _analyze_filters_node(filters_node: ast.AST) -> tuple[Set[str], bool]:
         - ticker_set: Set of ticker strings found
         - has_non_literal_flag: True if non-literal expressions were encountered
     """
-    tickers = set()
+    tickers: Set[str] = set()
     has_non_literal = False
     
     try:
@@ -158,7 +158,7 @@ def _extract_ticker_values(value_node: ast.AST) -> tuple[Set[str], bool]:
     Returns:
         Tuple of (ticker_set, has_non_literal_flag)
     """
-    tickers = set()
+    tickers: Set[str] = set()
     has_non_literal = False
     
     if isinstance(value_node, (ast.List, ast.Tuple)):
@@ -185,9 +185,11 @@ def _extract_ticker_values(value_node: ast.AST) -> tuple[Set[str], bool]:
     return tickers, has_non_literal
 
 
-def _extract_string_literal(node: ast.AST) -> Optional[str]:
+def _extract_string_literal(node: Optional[ast.AST]) -> Optional[str]:
     """Extract string literal from AST node if possible."""
     try:
+        if node is None:
+            return None
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
         if isinstance(node, ast.Str):  # Python < 3.8 compatibility

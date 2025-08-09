@@ -212,6 +212,7 @@ func GetQuote(client *polygon.Client, ticker string, nanoTimestamp models.Nanos,
 	return client.ListQuotes(context.Background(), params)
 }
 
+// GetLastTradeResponse represents the essential fields of a last trade from Polygon.
 type GetLastTradeResponse struct {
 	Ticker     string
 	Conditions []int32
@@ -457,6 +458,7 @@ func GetDailyOpen(client *polygon.Client, ticker string, referenceTime time.Time
 	return GetMostRecentRegularClose(client, ticker, startOfDay.Add(-time.Nanosecond))
 }
 
+// GetAllStocksDailyOHLCV retrieves grouped daily OHLCV aggregates for all US stocks on a given date.
 func GetAllStocksDailyOHLCV(ctx context.Context, client *polygon.Client, date string) (*models.GetGroupedDailyAggsResponse, error) {
 	on, err := time.Parse("2006-01-02", date)
 	if err != nil {
@@ -474,6 +476,7 @@ func GetAllStocksDailyOHLCV(ctx context.Context, client *polygon.Client, date st
 	return res, nil
 }
 
+// GetPolygonTickerSnapshot returns a real-time snapshot for a specific ticker.
 func GetPolygonTickerSnapshot(ctx context.Context, client *polygon.Client, ticker string) (*models.GetTickerSnapshotResponse, error) {
 	params := models.GetTickerSnapshotParams{
 		Ticker:     ticker,
@@ -487,6 +490,7 @@ func GetPolygonTickerSnapshot(ctx context.Context, client *polygon.Client, ticke
 	return res, nil
 }
 
+// GetPolygonAllTickerSnapshots returns real-time snapshots for all tickers.
 func GetPolygonAllTickerSnapshots(ctx context.Context, client *polygon.Client) (*models.GetAllTickersSnapshotResponse, error) {
 	params := models.GetAllTickersSnapshotParams{
 		Locale:     "us",
@@ -499,6 +503,7 @@ func GetPolygonAllTickerSnapshots(ctx context.Context, client *polygon.Client) (
 	return res, nil
 }
 
+// GetDailyOHLCVForTickerResponse contains the open, high, low, close, and volume for a given day.
 type GetDailyOHLCVForTickerResponse struct {
 	Open   float64 `json:"open"`
 	High   float64 `json:"high"`
@@ -508,6 +513,7 @@ type GetDailyOHLCVForTickerResponse struct {
 	Date   string  `json:"date"`
 }
 
+// GetDailyOHLCVForTicker fetches daily OHLCV for a specific ticker and date.
 func GetDailyOHLCVForTicker(ctx context.Context, client *polygon.Client, ticker string, date string, splitAdjusted bool) (GetDailyOHLCVForTickerResponse, error) {
 	on, err := time.Parse("2006-01-02", date)
 	if err != nil {

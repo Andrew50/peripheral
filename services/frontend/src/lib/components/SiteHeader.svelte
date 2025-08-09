@@ -4,7 +4,6 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 
-
 	// Auth state prop
 	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
@@ -20,7 +19,7 @@
 	function handleScroll() {
 		if (!browser) return;
 		const currentY = window.scrollY;
-		
+
 		// Show header when at top, within 20px, or scrolling up
 		if (currentY === 0 || currentY < 20 || currentY < prevScrollY) {
 			isHeaderVisible = true;
@@ -28,7 +27,6 @@
 			isHeaderVisible = false;
 		}
 		isHeaderTransparent = currentY < 30;
-
 
 		prevScrollY = currentY;
 	}
@@ -58,7 +56,7 @@
 		if (!browser) return;
 		const wasMobile = isMobile;
 		isMobile = window.innerWidth < 768;
-		
+
 		// Close sidebar when transitioning from mobile to desktop
 		if (wasMobile && !isMobile && isSidebarOpen) {
 			isSidebarOpen = false;
@@ -97,7 +95,11 @@
 <div class="sidebar" class:open={isSidebarOpen && isMobile}>
 	<div class="sidebar-header">
 		<div class="logo-section">
-			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
+			<img
+				src={isHeaderTransparent ? '/favicon.png' : '/favicon-black.png'}
+				alt="Peripheral Logo"
+				class="logo-image"
+			/>
 			<p class="logo-text">Peripheral</p>
 		</div>
 		<button class="close-button" on:click={closeSidebar}>
@@ -112,13 +114,16 @@
 		</button>
 	</div>
 	<nav class="sidebar-nav">
-		<button class="sidebar-nav-button secondary" on:click={() => navigateTo('/pricing')}>Pricing</button>
+		<button class="sidebar-nav-button secondary" on:click={() => navigateTo('/pricing')}
+			>Pricing</button
+		>
 		{#if isAuthenticated}
 			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}
 				>Go to Terminal</button
 			>
 		{:else}
-			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/login')}>Login</button>
+			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/login')}>Login</button
+			>
 			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/signup')}
 				>Sign up</button
 			>
@@ -127,7 +132,11 @@
 </div>
 
 <!-- Pill-style global site header reused across all pages -->
-<header id="site-header" class:transparent={isHeaderTransparent} class:hidden-up={!isHeaderVisible}>
+<header
+	class="site-header"
+	class:transparent={isHeaderTransparent}
+	class:hidden-up={!isHeaderVisible}
+>
 	<nav class="header-content">
 		<button
 			class="logo-section"
@@ -136,25 +145,47 @@
 			aria-label="Go to home page"
 			style="cursor: pointer; background: none; border: none; padding: 0;"
 		>
-			<img src={isHeaderTransparent ? "/favicon.png" : "/favicon-black.png"} alt="Peripheral Logo" class="logo-image" />
+			<img
+				src={isHeaderTransparent ? '/favicon.png' : '/favicon-black.png'}
+				alt="Peripheral Logo"
+				class="logo-image"
+			/>
 			<p class="logo-text" class:transparent={isHeaderTransparent}>Peripheral</p>
 		</button>
 
 		<!-- Desktop navigation -->
 		<div class="navigation desktop-nav">
-			<button class="nav-button secondary"  class:transparent={isHeaderTransparent} on:click={() => navigateTo('/pricing')}>Pricing</button>
+			<button
+				class="nav-button secondary"
+				class:transparent={isHeaderTransparent}
+				on:click={() => navigateTo('/pricing')}>Pricing</button
+			>
 			{#if isAuthenticated}
-				<button class="nav-button primary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/app')}
-					>Go to Terminal</button
+				<button
+					class="nav-button primary"
+					class:transparent={isHeaderTransparent}
+					on:click={() => navigateTo('/app')}>Go to Terminal</button
 				>
 			{:else}
-				<button class="nav-button secondary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/login')}>Login</button>
-				<button class="nav-button primary" class:transparent={isHeaderTransparent} on:click={() => navigateTo('/signup')}>Sign up</button>
+				<button
+					class="nav-button secondary"
+					class:transparent={isHeaderTransparent}
+					on:click={() => navigateTo('/login')}>Login</button
+				>
+				<button
+					class="nav-button primary"
+					class:transparent={isHeaderTransparent}
+					on:click={() => navigateTo('/signup')}>Sign up</button
+				>
 			{/if}
 		</div>
 
 		<!-- Mobile hamburger menu -->
-		<button class="hamburger-menu mobile-only" class:transparent={isHeaderTransparent} on:click={toggleSidebar}>
+		<button
+			class="hamburger-menu mobile-only"
+			class:transparent={isHeaderTransparent}
+			on:click={toggleSidebar}
+		>
 			<div class="hamburger-line"></div>
 			<div class="hamburger-line"></div>
 			<div class="hamburger-line"></div>
@@ -282,7 +313,6 @@
 		transform: translateY(-1px);
 		transition: none;
 	}
-
 
 	/* Hamburger Menu */
 	.hamburger-menu {
@@ -415,7 +445,7 @@
 		background: none;
 	}
 
-	#site-header {
+	.site-header {
 		position: fixed;
 		top: var(--header-top);
 		left: 50%;
@@ -442,14 +472,14 @@
 	}
 
 	/* Header behaviour modifiers */
-	#site-header.transparent {
+	.site-header.transparent {
 		background: none;
 		backdrop-filter: none;
 		box-shadow: none;
 		border: none;
 	}
 
-	#site-header.hidden-up {
+	.site-header.hidden-up {
 		transform: translateX(-50%) translateY(-120%);
 		opacity: 0;
 		pointer-events: none;
@@ -474,7 +504,7 @@
 	/* Responsive tweaks */
 	@media (width <= 768px) {
 		/* Mobile header becomes rectangle */
-		#site-header {
+		.site-header {
 			top: 0;
 			left: 0;
 			transform: none;
@@ -489,14 +519,14 @@
 			box-shadow: 0 2px 10px rgb(0 0 0 / 5%);
 		}
 
-		#site-header.transparent {
+		.site-header.transparent {
 			background: transparent;
 			backdrop-filter: none;
 			border-bottom: none;
 			box-shadow: none;
 		}
 
-		#site-header.hidden-up {
+		.site-header.hidden-up {
 			transform: translateY(-100%);
 		}
 

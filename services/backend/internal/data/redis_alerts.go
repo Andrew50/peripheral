@@ -36,15 +36,17 @@ func GetAlertMetrics() map[string]int64 {
 	}
 }
 
-// Increment metrics functions for per-ticker throttling
+// IncrementStrategyRuns increments the count of strategy runs.
 func IncrementStrategyRuns() {
 	atomic.AddInt64(&strategyRuns, 1)
 }
 
+// IncrementSkippedNoUpdate increments the count of skipped runs due to no update.
 func IncrementSkippedNoUpdate() {
 	atomic.AddInt64(&skippedNoUpdate, 1)
 }
 
+// IncrementSkippedBucketDup increments the count of skipped runs due to duplicate buckets.
 func IncrementSkippedBucketDup() {
 	atomic.AddInt64(&skippedBucketDup, 1)
 }
@@ -122,6 +124,8 @@ func GetStrategyUniverse(conn *Conn, strategyID int) ([]string, error) {
 		return nil, err
 	}
 
+	// DEBUG: full universe retrieved from Redis
+	log.Printf("🔍 [DEBUG] GetStrategyUniverse: strategyID=%d, universe=%v", strategyID, members)
 	return members, nil
 }
 
@@ -141,6 +145,8 @@ func GetTickersUpdatedSince(conn *Conn, sinceMs int64) ([]string, error) {
 		return nil, err
 	}
 
+	// DEBUG: tickers updated since timestamp retrieved
+	log.Printf("🔍 [DEBUG] GetTickersUpdatedSince: sinceMs=%d, updatedTickers=%v", sinceMs, tickers)
 	return tickers, nil
 }
 
@@ -157,9 +163,7 @@ func GetStrategyLastBuckets(conn *Conn, strategyID int, tickers []string) (map[s
 
 	// Convert tickers to interface{} slice for HMGET
 	fields := make([]string, len(tickers))
-	for i, ticker := range tickers {
-		fields[i] = ticker
-	}
+	copy(fields, tickers)
 
 	values, err := conn.Cache.HMGet(ctx, key, fields...).Result()
 	if err != nil {
@@ -179,6 +183,8 @@ func GetStrategyLastBuckets(conn *Conn, strategyID int, tickers []string) (map[s
 		// If value is nil or can't be parsed, ticker won't be in result map (treated as never triggered)
 	}
 
+	// DEBUG: last trigger buckets retrieved for strategy
+	log.Printf("🔍 [DEBUG] GetStrategyLastBuckets: strategyID=%d, tickers=%v, buckets=%v", strategyID, tickers, result)
 	return result, nil
 }
 
@@ -308,6 +314,8 @@ func IntersectTickersServerSide(conn *Conn, strategyID int, sinceMs int64) ([]st
 		}
 	}
 
+	// DEBUG: log server-side intersection result
+	log.Printf("🔍 [DEBUG] IntersectTickersServerSide: strategyID=%d, sinceMs=%d, result=%v", strategyID, sinceMs, tickers)
 	return tickers, nil
 }
 

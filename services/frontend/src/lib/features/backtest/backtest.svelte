@@ -330,7 +330,7 @@
 	}
 
 	/* Style date input fields */
-	input[type='date'] {
+	[type='date'] {
 		padding: 8px 12px;
 		border: 1px solid var(--ui-border);
 		border-radius: 4px;
@@ -342,12 +342,12 @@
 	}
 
 	/* Style for the date picker indicator */
-	input[type='date']::-webkit-calendar-picker-indicator {
+	[type='date']::-webkit-calendar-picker-indicator {
 		filter: invert(0.8); /* Make the calendar icon lighter */
 		cursor: pointer;
 	}
 
-	input[type='date']:focus {
+	[type='date']:focus {
 		outline: none;
 		border-color: var(--ui-accent); /* Highlight border on focus */
 		box-shadow: 0 0 0 2px rgb(59 130 246 / 30%); /* Subtle focus ring */

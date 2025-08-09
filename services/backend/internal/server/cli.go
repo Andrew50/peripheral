@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -55,31 +56,51 @@ func (t *TableWriter) Render() {
 	}
 
 	// Print headers
-	fmt.Fprint(t.writer, "| ")
-	for i, h := range t.headers {
-		fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], h)
+	if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+		return
 	}
-	fmt.Fprintln(t.writer)
+	for i, h := range t.headers {
+		if _, err := fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], h); err != nil {
+			return
+		}
+	}
+	if _, err := fmt.Fprintln(t.writer); err != nil {
+		return
+	}
 
 	// Print separator
-	fmt.Fprint(t.writer, "| ")
+	if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+		return
+	}
 	for i := range t.headers {
 		for j := 0; j < colWidths[i]; j++ {
-			fmt.Fprint(t.writer, "-")
+			if _, err := fmt.Fprint(t.writer, "-"); err != nil {
+				return
+			}
 		}
-		fmt.Fprint(t.writer, " | ")
+		if _, err := fmt.Fprint(t.writer, " | "); err != nil {
+			return
+		}
 	}
-	fmt.Fprintln(t.writer)
+	if _, err := fmt.Fprintln(t.writer); err != nil {
+		return
+	}
 
 	// Print rows
 	for _, row := range t.rows {
-		fmt.Fprint(t.writer, "| ")
+		if _, err := fmt.Fprint(t.writer, "| "); err != nil {
+			return
+		}
 		for i, cell := range row {
 			if i < len(colWidths) {
-				fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], cell)
+				if _, err := fmt.Fprintf(t.writer, "%-*s | ", colWidths[i], cell); err != nil {
+					return
+				}
 			}
 		}
-		fmt.Fprintln(t.writer)
+		if _, err := fmt.Fprintln(t.writer); err != nil {
+			return
+		}
 	}
 }
 
@@ -739,6 +760,59 @@ func monitorTask(taskID string) {
 	monitorTasks(conn, []string{taskID})
 }
 
+func hashPasswords() {
+	conn, cleanup := data.InitConn(true)
+	defer cleanup()
+
+	fmt.Println("Connected successfully!")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Get all users with unhashed passwords
+	rows, err := conn.DB.Query(ctx, `SELECT userId, password FROM users`)
+	if err != nil {
+		log.Fatalf("Query error: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var userID int
+		var password string
+
+		err := rows.Scan(&userID, &password)
+		if err != nil {
+			log.Printf("Scan error: %v", err)
+			continue
+		}
+
+		// Skip if already hashed
+		if strings.HasPrefix(password, "$2b$") {
+			continue
+		}
+
+		hashed, err := HashPassword(password)
+		if err != nil {
+			log.Printf("Hashing error for user %d: %v", userID, err)
+			continue
+		}
+
+		_, err = conn.DB.Exec(ctx, `UPDATE users SET password = $1 WHERE userId = $2`, string(hashed), userID)
+		if err != nil {
+			log.Printf("Update error for user %d: %v", userID, err)
+		} else {
+			fmt.Printf("User %d password hashed and updated.\n", userID)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Row error: %v", err)
+	}
+
+	fmt.Println("Migration complete.")
+
+}
+
 func createInvite(planName string, trialDays int) {
 	// Create a connection
 	inContainer := os.Getenv("IN_CONTAINER") == "true"
@@ -807,6 +881,13 @@ func printUsage() {
 				}
 
 				createInvite(planName, trialDays)
+			},
+		},
+		"hash-passwords": {
+			usage:       "CAN ONLY BE USED ONCE HASHES ALL PASSWORDS",
+			description: "THIS SHOULD ONLY EVER BE USED ONCE AND THEN REMOVED",
+			execute: func(args []string) {
+				hashPasswords()
 			},
 		},
 		"status": {
@@ -918,6 +999,13 @@ func StartCLI() {
 				}
 
 				createInvite(planName, trialDays)
+			},
+		},
+		"hash-passwords": {
+			usage:       "CAN ONLY BE USED ONCE HASHES ALL PASSWORDS",
+			description: "THIS SHOULD ONLY EVER BE USED ONCE AND THEN REMOVED",
+			execute: func(args []string) {
+				hashPasswords()
 			},
 		},
 		"status": {

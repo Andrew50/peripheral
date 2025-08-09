@@ -999,11 +999,6 @@
 	}
 
 	.animation-input-wrapper {
-		padding: 0.75rem 1rem;
-		gap: 0.75rem;
-	}
-
-	.animation-input-wrapper {
 		position: relative;
 		display: flex;
 		align-items: center;
@@ -1081,17 +1076,12 @@
 		fill: white;
 	}
 
-	.animation-send .send-icon {
-		width: 16px;
-		height: 16px;
-	}
-
 	.animation-input-container.complete {
 		/* Fade out instead of dropping down */
 		opacity: 1;
 		transform: none;
 		pointer-events: none;
-		animation: containerFadeOut 0.4s 0.2s forwards ease;
+		animation: container-fade-out 0.4s 0.2s forwards ease;
 	}
 
 	.animation-input-container.submitted::after {
@@ -1102,10 +1092,10 @@
 		pointer-events: none;
 		border: 2px solid var(--color-primary);
 		box-shadow: 0 0 0 0 rgb(79 124 130 / 60%);
-		animation: ringPulse 1s ease-out forwards;
+		animation: ring-pulse 1s ease-out forwards;
 	}
 
-	@keyframes ringPulse {
+	@keyframes ring-pulse {
 		/* Faster expansion (first 0.2s), longer hold (0.5s), then fade */
 		0% {
 			box-shadow: 0 0 0 0 rgb(79 124 130 / 60%);
@@ -1129,7 +1119,7 @@
 	}
 
 	/* Fade the entire container out once the ring pulse finishes */
-	@keyframes containerFadeOut {
+	@keyframes container-fade-out {
 		0% {
 			opacity: 1;
 			transform: scale(1);
@@ -1165,7 +1155,6 @@
 			#f59e0b 100%
 		);
 		background-size: 200% 200%;
-		background-clip: text;
 		background-clip: text;
 		-webkit-text-fill-color: transparent;
 		animation: gradient-shift 8s ease infinite;
@@ -1506,7 +1495,7 @@
 	/* Force Inter font inside chat */
 	.hero-chat-container,
 	.hero-chat-container * {
-		font-family: Geist;
+		font-family: Geist, sans-serif;
 	}
 
 	/* Ticker button styles */
@@ -1622,7 +1611,7 @@
 		vertical-align: middle;
 	}
 
-	.hero-chat-container :global(.chunk-table th.sortable:hover) {
+	.hero-chat-container :global(.chunk-table .sortable:hover) {
 		background: rgb(255 255 255 / 15%);
 	}
 
@@ -1774,7 +1763,7 @@
 		height: 100vh; /*  fills the viewport while pinned  */
 	}
 
-	.hero-chat-container :global(tr.selected-row) {
+	.hero-chat-container :global(.selected-row) {
 		background: rgb(79 124 130 / 20%) !important;
 	}
 </style>

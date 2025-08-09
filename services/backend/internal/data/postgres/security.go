@@ -178,6 +178,7 @@ func GetTickerEventsCustom(_ *polygon.Client, id string, apiKey string) (TickerE
 	return results, nil
 }
 
+// GetStockSplits retrieves recent split events for the given ticker via Polygon.io.
 func GetStockSplits(client *polygon.Client, ticker string) ([]models.Split, error) {
 	// Set up parameters for the splits API call
 	params := models.ListSplitsParams{
@@ -200,6 +201,8 @@ func GetStockSplits(client *polygon.Client, ticker string) ([]models.Split, erro
 
 	return splits, nil
 }
+
+// GetTickerFromCIK resolves a ticker symbol from a CIK using the Polygon.io API.
 func GetTickerFromCIK(client *polygon.Client, cik int, dateString string) (string, error) {
 	params := models.ListTickersParams{}.WithCIK(cik)
 	if dateString != "" {
