@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/big"
 	"net/smtp"
+	"strconv"
 	"strings"
 
 	//"log"
@@ -302,13 +303,13 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 
 	var userID int
 	var inviteCodeUsed sql.NullString
-	var otpCode int
+	var otpCode sql.NullString
 	var otpExpiresAt time.Time
 	var verified bool
 
 	// 1) Does the email exist? Get user details.
 	err := conn.DB.QueryRow(ctx,
-		`SELECT userId, invite_code_used, otp_code, otp_expires_at, verified
+		`SELECT userId, invite_code_used, otp_code::text, otp_expires_at, verified
 		 FROM users WHERE email=$1`,
 		a.Email).Scan(&userID, &inviteCodeUsed, &otpCode, &otpExpiresAt, &verified)
 
@@ -325,7 +326,7 @@ func VerifyOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{}, error) {
 		return nil, nil
 	}
 
-	if a.OTP != otpCode || time.Now().After(otpExpiresAt) {
+	if !otpCode.Valid || strconv.Itoa(a.OTP) != otpCode.String || time.Now().After(otpExpiresAt) {
 		return nil, fmt.Errorf("OTP invalid or expired")
 	}
 
@@ -501,7 +502,7 @@ func SendVerificationOTP(conn *data.Conn, rawArgs json.RawMessage) (interface{},
 	_, err = conn.DB.Exec(ctx,
 		`UPDATE users
          SET otp_code = $1, otp_expires_at = $2
-         WHERE userId = $3`, newOtp.otp, newOtp.otpExpiresAt, userID)
+         WHERE userId = $3`, strconv.Itoa(newOtp.otp), newOtp.otpExpiresAt, userID)
 	if err != nil {
 		log.Printf("ERROR: failed to insert otp for user %d: %v", userID, err)
 		return nil, fmt.Errorf("error inserting OTP in database")
