@@ -19,12 +19,23 @@ ALTER TABLE strategies
     ADD COLUMN IF NOT EXISTS alert_universe_full    TEXT[];
 
 -- Add constraint to ensure array elements are non-empty strings
-ALTER TABLE strategies
-    ADD CONSTRAINT alert_universe_full_nonempty
-    CHECK (
-        alert_universe_full IS NULL
-        OR NOT ('' = ANY(alert_universe_full))
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'alert_universe_full_nonempty'
+          AND conrelid = 'strategies'::regclass
+    ) THEN
+        ALTER TABLE strategies
+            ADD CONSTRAINT alert_universe_full_nonempty
+            CHECK (
+                alert_universe_full IS NULL
+                OR NOT ('' = ANY(alert_universe_full))
+            );
+    END IF;
+END
+$$;
 
 -- Update schema version
 INSERT INTO schema_versions (version, description)
