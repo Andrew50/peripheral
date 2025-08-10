@@ -196,3 +196,18 @@ function isDaylightSavingTime(date: Date): boolean {
 export function getRealTimeTime(): number {
 	return Date.now() + systemClockOffset;
 }
+
+export function formatTimeAgo(fromMs: number, toMs: number): string {
+	// Use negative values for past to ensure "ago" phrasing
+	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+	let diffSec = Math.round((toMs - fromMs) / 1000); // past => negative
+	if (diffSec > 0) diffSec = 0; // clamp future skews to now
+	const abs = Math.abs(diffSec);
+	if (abs < 60) return rtf.format(diffSec, 'second');
+	const diffMin = Math.round(diffSec / 60);
+	if (Math.abs(diffMin) < 60) return rtf.format(diffMin, 'minute');
+	const diffHr = Math.round(diffMin / 60);
+	if (Math.abs(diffHr) < 24) return rtf.format(diffHr, 'hour');
+	const diffDay = Math.round(diffHr / 24);
+	return rtf.format(diffDay, 'day');
+}

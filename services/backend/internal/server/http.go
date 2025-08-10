@@ -99,6 +99,8 @@ var privateFunc = map[string]func(*data.Conn, int, json.RawMessage) (interface{}
 	"getWatchlistItems":   watchlist.GetWatchlistItems,
 	"deleteWatchlistItem": watchlist.DeleteWatchlistItem,
 	"newWatchlistItem":    watchlist.NewWatchlistItem,
+	"moveWatchlistItem":   watchlist.MoveWatchlistItem,
+	"setWatchlistOrder":   watchlist.SetWatchlistOrder,
 
 	// --- user settings / profile ---------------------------------------------
 	"getSettings":          settings.GetSettings,

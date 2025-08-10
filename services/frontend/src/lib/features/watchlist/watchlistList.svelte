@@ -13,6 +13,7 @@
 	import { isMobileDevice } from '$lib/utils/stores/device';
 	import '$lib/styles/glass.css';
 	import { switchMobileTab } from '$lib/stores/mobileStore';
+	// privateRequest already imported above in this file
 	type StreamCellType = 'price' | 'change' | 'change %' | 'change % extended' | 'market cap';
 
 	// Define WatchlistItem to match what's used in watchlist.svelte
@@ -33,6 +34,13 @@
 	export let list: Writable<WatchlistItem[]> = writable([]);
 	export let columns: Array<string>;
 	export let parentDelete = (v: WatchlistItem) => {};
+	export let parentReorder: (args: {
+		movedId: number;
+		prevId?: number;
+		nextId?: number;
+		newIndex: number;
+	}) => void = () => {};
+	export let currentWatchlistId: number | undefined;
 	export let displayNames: { [key: string]: string } = {};
 	export let rowClass: (item: WatchlistItem) => string = () => '';
 	export const defaultSortColumn: string | null = null;
@@ -42,6 +50,13 @@
 	let sortDirection: 'asc' | 'desc' = 'asc';
 	let isSorting = false;
 	let selectedRowIndex = -1;
+	// Drag state
+	let isDragging = false;
+	let dragIndex: number = -1;
+	let insertionIndex: number = -1;
+	let tableBodyEl: HTMLDivElement | null = null;
+	let dropLineTop = 0;
+	let dragStartY = 0;
 
 	let isLoading = true;
 	let loadError: string | null = null;
@@ -162,6 +177,8 @@
 		isSorting = true;
 		setTimeout(() => {
 			sortList();
+			// Persist order after sorting
+			persistOrderAfterSort();
 			// Give some time for the animation to be visible
 			setTimeout(() => {
 				isSorting = false;
@@ -176,11 +193,11 @@
 		list.update((items: WatchlistItem[]) => {
 			const sorted = [...items].sort((a, b) => {
 				// Helper function to get value from StreamHub store
-				const getStreamValue = (item: WatchlistItem, columnType: string) => {
-					if (!item.securityId) return 0;
+				const getStreamValue = (item: WatchlistItem, columnType: string): any => {
+					if (!item.securityId) return {} as any;
 					const store = getColumnStore(Number(item.securityId), columnType as any);
-					const storeValue = get(store);
-					return storeValue;
+					const storeValue = get(store) as any;
+					return storeValue || ({} as any);
 				};
 
 				// Handle special column cases first based on the *original* column name directly
@@ -315,6 +332,127 @@
 		}
 	}
 
+	// Utilities for DnD
+	function getRowMidpoints(): number[] {
+		const mids: number[] = [];
+		const rows = document.querySelectorAll<HTMLTableRowElement>('.body-table tbody tr');
+		rows.forEach((row) => {
+			const rect = row.getBoundingClientRect();
+			mids.push((rect.top + rect.bottom) / 2);
+		});
+		return mids;
+	}
+
+	function computeInsertionIndexFromY(y: number): number {
+		const mids = getRowMidpoints();
+		let idx = -1;
+		for (let k = 0; k < mids.length; k++) {
+			if (y < mids[k]) {
+				idx = k;
+				break;
+			}
+		}
+		return idx === -1 ? mids.length : idx;
+	}
+
+	function updateDropLineTopForInsertion(index: number) {
+		const bodyRect = tableBodyEl?.getBoundingClientRect();
+		if (!bodyRect) {
+			dropLineTop = 0;
+			return;
+		}
+		const items = get(list) || [];
+		if (index <= 0) {
+			dropLineTop = 0;
+			return;
+		}
+		if (index >= items.length && items.length > 0) {
+			const last = document.getElementById(`row-${items.length - 1}`) as HTMLTableRowElement | null;
+			if (last) {
+				const lastRect = last.getBoundingClientRect();
+				dropLineTop = Math.max(0, lastRect.bottom - bodyRect.top);
+			} else {
+				dropLineTop = 0;
+			}
+			return;
+		}
+		const target = document.getElementById(`row-${index}`) as HTMLTableRowElement | null;
+		if (target) {
+			const tRect = target.getBoundingClientRect();
+			dropLineTop = Math.max(0, tRect.top - bodyRect.top);
+		} else {
+			dropLineTop = 0;
+		}
+	}
+
+	function onRowPointerDown(e: PointerEvent, i: number) {
+		// Only left button
+		if (e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const y = e.clientY;
+		const idx = computeInsertionIndexFromY(y);
+		insertionIndex = idx;
+		updateDropLineTopForInsertion(idx);
+		isDragging = true;
+		dragIndex = i;
+		dragStartY = e.clientY;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		document.body.style.cursor = 'grabbing';
+	}
+
+	function onRowPointerMove(e: PointerEvent) {
+		if (!isDragging) return;
+		const y = e.clientY;
+		insertionIndex = computeInsertionIndexFromY(y);
+
+		// Auto-scroll near edges of the scroll container
+		if (tableBodyEl) {
+			const rect = tableBodyEl.getBoundingClientRect();
+			const edge = 30;
+			if (y < rect.top + edge) tableBodyEl.scrollTop -= 10;
+			else if (y > rect.bottom - edge) tableBodyEl.scrollTop += 10;
+		}
+
+		// Compute drop line position relative to tableBodyEl
+		updateDropLineTopForInsertion(insertionIndex);
+	}
+
+	function onRowPointerUp(_e: PointerEvent, watch: WatchlistItem) {
+		if (!isDragging) return;
+		const from = dragIndex;
+		let to = insertionIndex;
+		isDragging = false;
+		dragIndex = -1;
+		insertionIndex = -1;
+		document.body.style.cursor = '';
+
+		if (from === -1 || to === -1) return;
+		// Adjust when moving downwards (removal shifts indices)
+		if (to > from) to = to - 1;
+		if (to === from) return;
+
+		// Perform local reorder
+		let movedId = watch.watchlistItemId!;
+		list.update((items: WatchlistItem[]) => {
+			const a = [...items];
+			const [moved] = a.splice(from, 1);
+			a.splice(to, 0, moved);
+			return a;
+		});
+
+		// Identify neighbors for minimal backend update
+		const current = get(list);
+		const prev = to > 0 ? current[to - 1] : undefined;
+		const next = to < current.length - 1 ? current[to + 1] : undefined;
+		parentReorder({
+			movedId,
+			prevId: prev?.watchlistItemId,
+			nextId: next?.watchlistItemId,
+			newIndex: to
+		});
+	}
+
 	// Whenever the Ticker column is active and there are rows, refresh icons (using cache)
 	// Use original column name 'Ticker'
 	$: if (columns?.includes('Ticker') && $list?.length > 0) {
@@ -414,6 +552,24 @@
 	$: if ($activeChartInstance?.ticker && $list?.length > 0) {
 		syncWatchlistWithActiveChart($activeChartInstance.ticker);
 	}
+
+	// Persist order when user sorts by header: debounce and send bulk order
+	let persistTimer: ReturnType<typeof setTimeout> | null = null;
+	function persistOrderAfterSort() {
+		if (persistTimer) clearTimeout(persistTimer);
+		persistTimer = setTimeout(() => {
+			const ids = (get(list) || []).map((it) => it.watchlistItemId).filter(Boolean) as number[];
+			const wlId = currentWatchlistId;
+			if (!wlId || ids.length === 0) return;
+			// Fire-and-forget; UI already reflects the new order
+			privateRequest('setWatchlistOrder', {
+				watchlistId: wlId,
+				orderedItemIds: ids
+			}).catch((e) => {
+				console.error('Failed to persist sorted order', e);
+			});
+		}, 400);
+	}
 </script>
 
 <div class="table-container" class:mobile={$isMobileDevice}>
@@ -456,18 +612,30 @@
 		</div>
 
 		<!-- Scrollable Body -->
-		<div class="table-body">
+		<div class="table-body" bind:this={tableBodyEl}>
+			{#if isDragging}
+				<div class="drop-line" style={`top:${dropLineTop}px`}></div>
+			{/if}
 			{#if Array.isArray($list) && $list.length > 0}
 				<table class="body-table">
 					<tbody>
-						{#each $list as watch, i (`${watch.watchlistItemId}-${i}`)}
+						{#each $list as watch, i (watch.watchlistItemId)}
 							<tr
 								class="default-tr {rowClass(watch)}"
 								on:click={(event) => clickHandler(event, watch, i)}
+								on:pointerdown={(e) => onRowPointerDown(e, i)}
+								on:pointermove={(e) => onRowPointerMove(e)}
+								on:pointerup={(e) => onRowPointerUp(e, watch)}
 								id="row-{i}"
 								class:selected={i === selectedRowIndex}
 								on:contextmenu={(event) => {
 									event.preventDefault();
+								}}
+								on:selectstart={(e) => {
+									if (isDragging) {
+										e.preventDefault();
+										e.stopPropagation();
+									}
 								}}
 							>
 								<td class="default-td">
@@ -877,6 +1045,52 @@
 		background: transparent;
 		border-radius: 6px;
 		position: relative;
+	}
+
+	/* Placeholder row indicating drop position */
+	.drop-placeholder td {
+		padding: 0;
+	}
+	.drop-placeholder {
+		height: 2px;
+	}
+	.drop-placeholder .default-td {
+		background: var(--ui-accent, rgba(255, 255, 255, 0.7));
+		border-radius: 1px;
+	}
+
+	/* Absolutely positioned drop-line overlay that does not affect table layout */
+	.table-body {
+		position: relative;
+		-webkit-user-select: none;
+		-moz-user-select: none;
+		-ms-user-select: none;
+		user-select: none;
+	}
+	.drop-line {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: var(--ui-accent, rgba(255, 255, 255, 0.7));
+		border-radius: 1px;
+		pointer-events: none;
+	}
+
+	/* Visual drop indicator using outline on hovered target row */
+	tbody tr::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 0;
+		top: 0;
+	}
+
+	/* We cannot bind :hoverIndex directly in CSS, but we can show subtle feedback by cursor change above. */
+
+	.dragging {
+		cursor: grabbing;
 	}
 
 	tbody tr::after {

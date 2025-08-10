@@ -50,16 +50,14 @@ body {
 	height: 100%;
 	margin: 0;
 	padding: 0;
-	overflow-x: hidden;
-
+	/* clamp horizontal overflow globally as a safety net */
+	overflow-x: clip;
+	/* always reserve vertical scrollbar to avoid first-paint flash */
+	overflow-y: scroll;
+	/* keep layout stable even if vertical scrollbar appears/disappears */
+	scrollbar-gutter: stable both-edges;
 	/* Prevent overscroll/bounce effects */
 	overscroll-behavior: none;
-
 	/* Prevent pull-to-refresh on mobile */
 	overscroll-behavior-y: none;
-
-	/* Ensure fixed positioning */
-	position: fixed;
-	top: 0;
-	left: 0;
 }

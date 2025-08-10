@@ -258,6 +258,7 @@ export const defaultSettings: Settings = {
 	filterTaS: true,
 	divideTaS: false,
 	showFilings: true,
+	chatSuggestionsEnabled: true,
 	colorScheme: 'default'
 };
 export const settings: Writable<Settings> = writable(defaultSettings);
@@ -292,7 +293,6 @@ function initStoresWithAuth() {
 
 			privateRequest<Strategy[]>('getStrategies', {})
 				.then((v: Strategy[]) => {
-					console.log(v)
 					if (!v) {
 						strategies.set([]);
 						return;

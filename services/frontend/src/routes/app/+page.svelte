@@ -362,10 +362,6 @@
 		// Expose mobile device override for debugging
 		import('$lib/utils/stores/device').then(({ setMobileDeviceOverride }) => {
 			(window as any).setMobileMode = setMobileDeviceOverride;
-			console.log(
-				'🛠️ [debug] Mobile device override available via window.setMobileMode(true/false/null)'
-			);
-			console.log('🛠️ [debug] URL override: add ?mobile=1 or ?mobile=0 to the URL');
 		});
 	});
 
@@ -1350,6 +1346,16 @@
 </div>
 
 <style>
+	:global(html, body) {
+		scrollbar-width: none;
+	}
+
+	:global(html::-webkit-scrollbar),
+	:global(body::-webkit-scrollbar) {
+		width: 0;
+		height: 0;
+	}
+
 	:root {
 		--left-sidebar-width: 0px;
 		--right-sidebar-width: 0px;

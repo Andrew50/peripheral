@@ -10,3 +10,16 @@
 <SiteHeader {isAuthenticated} />
 
 <Auth mode="signup" />
+
+<style>
+	/* Hide vertical scrollbar while preserving scroll */
+	:global(html, body) {
+		scrollbar-width: none;
+	}
+
+	:global(html::-webkit-scrollbar),
+	:global(body::-webkit-scrollbar) {
+		width: 0;
+		height: 0;
+	}
+</style>

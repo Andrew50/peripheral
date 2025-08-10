@@ -345,7 +345,7 @@
 		top: 0;
 		left: 0;
 		width: 100vw;
-		height: 100vh;
+		height: 100dvh;
 		background: rgb(0 0 0 / 50%);
 		z-index: 1999;
 	}
@@ -355,7 +355,7 @@
 		top: 0;
 		right: -100vw;
 		width: 100vw;
-		height: 100vh;
+		height: 100dvh;
 		background: #fff;
 		z-index: 2000;
 		transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -508,7 +508,7 @@
 			top: 0;
 			left: 0;
 			transform: none;
-			width: 100vw;
+			width: 100%;
 			max-width: none;
 			height: 60px;
 			border-radius: 0;

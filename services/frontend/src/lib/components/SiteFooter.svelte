@@ -107,9 +107,8 @@
 </footer>
 
 <style>
-	
 	.tagline-section {
-		width: 100vw;
+		width: 100%;
 		padding: 4rem 0 8rem;
 		display: flex;
 		justify-content: center;
@@ -158,7 +157,13 @@
 		justify-content: center;
 		text-decoration: none;
 		white-space: nowrap;
-		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Instrument Sans',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 	}
 
 	.tagline:hover {
@@ -178,9 +183,9 @@
 		position: relative;
 		z-index: 10;
 		background: #000;
-		width: 100vw;
-		left: 50%;
-		transform: translateX(-50%);
+		width: 100%;
+		left: 0;
+		transform: none;
 		padding: 3rem 0 2rem;
 		flex-shrink: 0;
 		margin-top: auto;
@@ -210,14 +215,26 @@
 		font-size: 1.1rem;
 		font-weight: 400;
 		margin: 0 0 1rem;
-		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Instrument Sans',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 	}
 
 	.footer-links {
 		list-style: none;
 		padding: 0;
 		margin: 0;
-		font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family:
+			'Instrument Sans',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			Roboto,
+			sans-serif;
 	}
 
 	.footer-links li {
@@ -256,10 +273,10 @@
 	}
 
 	.footer-brand {
-		width: 100vw;
+		width: 100%;
 		position: relative;
-		left: 50%;
-		transform: translateX(-50%);
+		left: 0;
+		transform: none;
 		text-align: center;
 		font-size: clamp(4rem, 14vw, 12rem);
 		font-weight: 900;

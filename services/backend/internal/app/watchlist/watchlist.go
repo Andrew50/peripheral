@@ -139,9 +139,10 @@ type GetWatchlistEntriesArgs struct {
 
 // GetWatchlistEntriesResult represents a structure for handling GetWatchlistEntriesResult data.
 type GetWatchlistEntriesResult struct {
-	SecurityID      int    `json:"securityId"`
-	Ticker          string `json:"ticker"`
-	WatchlistItemID int    `json:"watchlistItemId"`
+	SecurityID      int     `json:"securityId"`
+	Ticker          string  `json:"ticker"`
+	WatchlistItemID int     `json:"watchlistItemId"`
+	SortOrder       float64 `json:"sortOrder,omitempty"`
 }
 
 // GetWatchlistItems performs operations related to GetWatchlistItems functionality.
@@ -165,16 +166,16 @@ func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	}
 
 	rows, err := conn.DB.Query(context.Background(),
-		`SELECT securityId, ticker, watchlistItemId, maxDate
-		FROM (
-			SELECT w.securityId, s.ticker, w.watchlistItemId, s.maxDate,
-				   ROW_NUMBER() OVER (PARTITION BY w.securityId ORDER BY COALESCE(s.maxDate, CURRENT_TIMESTAMP) DESC, w.watchlistItemId DESC) as rn
-			FROM watchlistItems as w
-			JOIN securities as s ON s.securityId = w.securityId
-			WHERE w.watchlistId = $1
-		) ranked
-		WHERE rn = 1
-		ORDER BY COALESCE(maxDate, CURRENT_TIMESTAMP) DESC, watchlistItemId ASC`, args.WatchlistID)
+		`SELECT securityId, ticker, watchlistItemId, sortOrder
+        FROM (
+            SELECT w.securityId, s.ticker, w.watchlistItemId, w.sortOrder,
+                   ROW_NUMBER() OVER (PARTITION BY w.securityId ORDER BY w.watchlistItemId DESC) as rn
+            FROM watchlistItems as w
+            JOIN securities as s ON s.securityId = w.securityId
+            WHERE w.watchlistId = $1
+        ) ranked
+        WHERE rn = 1
+        ORDER BY sortOrder NULLS LAST, watchlistItemId ASC`, args.WatchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("sovn %v", err)
 	}
@@ -182,8 +183,7 @@ func GetWatchlistItems(conn *data.Conn, userID int, rawArgs json.RawMessage) (in
 	var entries []GetWatchlistEntriesResult
 	for rows.Next() {
 		var entry GetWatchlistEntriesResult
-		var maxDate interface{} // temporary variable to scan maxDate (for ordering only)
-		err = rows.Scan(&entry.SecurityID, &entry.Ticker, &entry.WatchlistItemID, &maxDate)
+		err = rows.Scan(&entry.SecurityID, &entry.Ticker, &entry.WatchlistItemID, &entry.SortOrder)
 		if err != nil {
 			return nil, fmt.Errorf("fi0w %v", err)
 		}
@@ -391,15 +391,184 @@ func NewWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (int
 		return nil, fmt.Errorf("watchlist not found or you don't have permission to modify it")
 	}
 
-	var watchlistID int
+	var watchlistItemID int
 	err = conn.DB.QueryRow(context.Background(),
-		"INSERT into watchlistItems (securityId,watchlistId) values ($1,$2) RETURNING watchlistItemId",
-		args.SecurityID, args.WatchlistID).Scan(&watchlistID)
+		`INSERT INTO watchlistItems (securityId, watchlistId, sortOrder)
+         VALUES ($1, $2, (
+           SELECT COALESCE(MAX(sortOrder), 0) + 1000
+           FROM watchlistItems WHERE watchlistId = $2
+         )) RETURNING watchlistItemId`,
+		args.SecurityID, args.WatchlistID).Scan(&watchlistItemID)
 	if err != nil {
 		return nil, err
 	}
 
-	return watchlistID, err
+	return watchlistItemID, err
+}
+
+type MoveWatchlistItemArgs struct {
+	WatchlistItemID int  `json:"watchlistItemId"`
+	PrevItemID      *int `json:"prevItemId,omitempty"`
+	NextItemID      *int `json:"nextItemId,omitempty"`
+}
+
+// MoveWatchlistItem updates a single item's sort order using neighbor-based midpointing.
+func MoveWatchlistItem(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args MoveWatchlistItemArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	if args.WatchlistItemID == 0 {
+		return nil, fmt.Errorf("watchlistItemId is required")
+	}
+
+	// Resolve watchlistId and verify ownership
+	var watchlistID int
+	err := conn.DB.QueryRow(context.Background(),
+		`SELECT w.watchlistId
+         FROM watchlistItems wi
+         JOIN watchlists w ON w.watchlistId = wi.watchlistId
+         WHERE wi.watchlistItemId = $1 AND w.userId = $2`,
+		args.WatchlistItemID, userID).Scan(&watchlistID)
+	if err != nil {
+		return nil, fmt.Errorf("watchlist item not found or no permission: %v", err)
+	}
+
+	// Helper to fetch sortOrder for an item ID (nullable)
+	fetchSort := func(itemID *int) (*float64, error) {
+		if itemID == nil || *itemID == 0 {
+			return nil, nil
+		}
+		var so *float64
+		err := conn.DB.QueryRow(context.Background(),
+			`SELECT sortOrder FROM watchlistItems WHERE watchlistItemId = $1 AND watchlistId = $2`,
+			*itemID, watchlistID).Scan(&so)
+		if err != nil {
+			return nil, err
+		}
+		return so, nil
+	}
+
+	prevSort, errPrev := fetchSort(args.PrevItemID)
+	if errPrev != nil {
+		return nil, fmt.Errorf("error fetching prev sort: %v", errPrev)
+	}
+	nextSort, errNext := fetchSort(args.NextItemID)
+	if errNext != nil {
+		return nil, fmt.Errorf("error fetching next sort: %v", errNext)
+	}
+
+	step := 1000.0
+	var newSort float64
+
+	switch {
+	case prevSort != nil && nextSort != nil:
+		// If gap is too small, rebalance and recompute
+		if *nextSort-*prevSort < 1e-6 {
+			if err := rebalanceSortOrder(conn, userID, watchlistID); err != nil {
+				return nil, err
+			}
+			// Re-fetch
+			prevSort, _ = fetchSort(args.PrevItemID)
+			nextSort, _ = fetchSort(args.NextItemID)
+		}
+		// Midpoint between neighbors
+		newSort = (*prevSort + *nextSort) / 2.0
+	case prevSort != nil && nextSort == nil:
+		newSort = *prevSort + step
+	case prevSort == nil && nextSort != nil:
+		newSort = *nextSort - step
+	default:
+		// No neighbors: place at end
+		var maxSort float64
+		_ = conn.DB.QueryRow(context.Background(),
+			`SELECT COALESCE(MAX(sortOrder), 0) FROM watchlistItems WHERE watchlistId = $1`, watchlistID).Scan(&maxSort)
+		newSort = maxSort + step
+	}
+
+	_, err = conn.DB.Exec(context.Background(),
+		`UPDATE watchlistItems SET sortOrder = $1 WHERE watchlistItemId = $2 AND watchlistId = $3`,
+		newSort, args.WatchlistItemID, watchlistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed updating sort order: %v", err)
+	}
+	return map[string]interface{}{"watchlistItemId": args.WatchlistItemID, "sortOrder": newSort}, nil
+}
+
+type SetWatchlistOrderArgs struct {
+	WatchlistID    int   `json:"watchlistId"`
+	OrderedItemIDs []int `json:"orderedItemIds"`
+}
+
+// SetWatchlistOrder bulk-renumbers sortOrder for the provided watchlist according to the given item order.
+func SetWatchlistOrder(conn *data.Conn, userID int, rawArgs json.RawMessage) (interface{}, error) {
+	var args SetWatchlistOrderArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return nil, fmt.Errorf("invalid args: %v", err)
+	}
+	if args.WatchlistID == 0 || len(args.OrderedItemIDs) == 0 {
+		return nil, fmt.Errorf("watchlistId and orderedItemIds are required")
+	}
+
+	owns, err := VerifyUserOwnsWatchlist(conn, userID, args.WatchlistID)
+	if err != nil {
+		return nil, err
+	}
+	if !owns {
+		return nil, fmt.Errorf("watchlist not found or you don't have permission to modify it")
+	}
+
+	// Renumber with step 1000
+	step := 1000
+	for i, itemID := range args.OrderedItemIDs {
+		_, err := conn.DB.Exec(context.Background(),
+			`UPDATE watchlistItems SET sortOrder = $1 WHERE watchlistItemId = $2 AND watchlistId = $3`,
+			(i+1)*step, itemID, args.WatchlistID)
+		if err != nil {
+			return nil, fmt.Errorf("failed bulk renumber at index %d: %v", i, err)
+		}
+	}
+	return map[string]interface{}{"watchlistId": args.WatchlistID, "updated": len(args.OrderedItemIDs)}, nil
+}
+
+// rebalanceSortOrder normalizes all sortOrder values to sequential gaps for a watchlist.
+func rebalanceSortOrder(conn *data.Conn, userID int, watchlistID int) error {
+	owns, err := VerifyUserOwnsWatchlist(conn, userID, watchlistID)
+	if err != nil {
+		return err
+	}
+	if !owns {
+		return fmt.Errorf("watchlist not found or you don't have permission to modify it")
+	}
+
+	// Reassign sortOrder by current ascending sortOrder
+	rows, err := conn.DB.Query(context.Background(),
+		`SELECT watchlistItemId FROM watchlistItems WHERE watchlistId = $1 ORDER BY sortOrder NULLS LAST, watchlistItemId ASC`,
+		watchlistID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	ids := make([]int, 0, 64)
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if rows.Err() != nil {
+		return rows.Err()
+	}
+	step := 1000
+	for i, id := range ids {
+		if _, err := conn.DB.Exec(context.Background(),
+			`UPDATE watchlistItems SET sortOrder = $1 WHERE watchlistItemId = $2 AND watchlistId = $3`,
+			(i+1)*step, id, watchlistID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type AddTickersToWatchlistArgs struct {

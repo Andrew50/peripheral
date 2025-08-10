@@ -88,6 +88,7 @@ export interface Settings {
 	divideTaS: boolean;
 	filterTaS: boolean;
 	showFilings: boolean;
+	chatSuggestionsEnabled: boolean;
 	// DEPRECATED: Screensaver properties
 	// enableScreensaver: boolean;
 	// screensaverTimeframes: string[];
@@ -239,3 +240,11 @@ export type SearchResult = {
 	titleHighlight: string;
 	contentHighlight: string;
 };
+
+// Why Moving API response item
+export interface WhyMovingItem {
+	ticker: string;
+	is_content: boolean;
+	content: string;
+	created_at: string; // ISO8601 string from backend
+}

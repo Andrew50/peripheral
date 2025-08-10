@@ -64,7 +64,7 @@
 	const renderer = new marked.Renderer();
 
 	// Override del renderer to disable strikethrough formatting
-	renderer.del = function({ tokens }) {
+	renderer.del = function ({ tokens }) {
 		return this.parser.parseInline(tokens); // Return plain text instead of wrapped in <del> tags
 	};
 
@@ -707,9 +707,9 @@
 
 				// Try to clean up pending message on backend for network errors
 				await cleanupPendingMessage(currentProcessingQuery);
-				
+
 				let errorMessage: Message;
-				
+
 				if (error.message === 'USAGE_LIMIT_REACHED') {
 					// Show upgrade prompt and set friendly error message
 					showUpgradePrompt = true;
@@ -754,7 +754,7 @@
 			// Add error message if we have a loading message
 			if (loadingMessage) {
 				let errorMessage: Message;
-				
+
 				if (error.message === 'USAGE_LIMIT_REACHED') {
 					// Show upgrade prompt and set friendly error message
 					showUpgradePrompt = true;
@@ -1345,8 +1345,8 @@
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->
 				<p class="capabilities-text">
-					Peripheral Agent analyzes market data, filings, breaking news, backtests
-					strategies and event driven research, and more.
+					Peripheral Agent analyzes market data, filings, breaking news, backtests strategies and
+					event driven research, and more.
 				</p>
 				<p class="suggestions-header">
 					Ask Peripheral Agent a question or to perform a task to get started.
@@ -1805,16 +1805,16 @@
 					{/if}
 				</div>
 			{/each}
-			
+
 			<!-- Upgrade prompt displayed as part of chat when usage limit is reached -->
 			{#if showUpgradePrompt && !isPublicViewing}
 				<div class="message-wrapper assistant">
 					<div class="upgrade-prompt">
-						<p>You've reached your query limit. Upgrade to continue using Peripheral Agent without interruption.</p>
-						<button 
-							class="upgrade-btn"
-							on:click={() => window.location.href = '/pricing'}
-						>
+						<p>
+							You've reached your query limit. Upgrade to continue using Peripheral Agent without
+							interruption.
+						</p>
+						<button class="upgrade-btn" on:click={() => (window.location.href = '/pricing')}>
 							View Plans
 						</button>
 					</div>

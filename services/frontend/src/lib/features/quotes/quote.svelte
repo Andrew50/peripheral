@@ -4,6 +4,7 @@
 	import { get, writable, type Writable } from 'svelte/store';
 	import type { Instance } from '$lib/utils/types/types';
 	import { activeChartInstance } from '$lib/features/chart/interface';
+	import type { WhyMovingItem } from '$lib/utils/types/types';
 	import StreamCell from '$lib/utils/stream/streamCell.svelte';
 	import { streamInfo, formatTimestamp } from '$lib/utils/stores/stores';
 	import { onMount, onDestroy } from 'svelte';
@@ -12,7 +13,8 @@
 		UTCSecondstoESTSeconds,
 		ESTSecondstoUTCSeconds,
 		ESTSecondstoUTCMillis,
-		getReferenceStartTimeForDateMilliseconds
+		getReferenceStartTimeForDateMilliseconds,
+		formatTimeAgo
 	} from '$lib/utils/helpers/timestamp';
 	import { getExchangeName } from '$lib/utils/helpers/exchanges';
 	import { showAuthModal } from '$lib/stores/authModal';
@@ -31,12 +33,17 @@
 	let currentDetails: Record<string, any> = {};
 	let lastFetchedSecurityId: number | null = null;
 	let whyMovingContent: string | null = null;
+	let whyMovingWhenMs: number | null = null;
+	let whyMovingAgo = '';
 	let lastFetchedWhyMovingTicker: string | null = null;
+
+	$: whyMovingAgo = whyMovingWhenMs ? formatTimeAgo($streamInfo.timestamp, whyMovingWhenMs) : '';
 	// Sync instance with activeChartInstance and handle details fetching
 	activeChartInstance.subscribe((chartInstance: Instance | null) => {
 		if (!chartInstance?.ticker) {
 			// Clear content when no ticker is selected
 			whyMovingContent = null;
+			whyMovingWhenMs = null;
 			lastFetchedWhyMovingTicker = null;
 			return;
 		}
@@ -47,6 +54,7 @@
 			// Clear whyMovingContent when ticker changes (before fetching new data)
 			if (chartInstance.ticker !== lastFetchedWhyMovingTicker) {
 				whyMovingContent = null;
+				whyMovingWhenMs = null;
 			}
 
 			// Fetch "Why It's Moving" once per new ticker (private endpoint, skip for public viewing)
@@ -56,17 +64,24 @@
 				chartInstance.ticker
 			) {
 				lastFetchedWhyMovingTicker = chartInstance.ticker;
-				privateRequest<any[]>('getWhyMoving', { tickers: [chartInstance.ticker] })
+				privateRequest<WhyMovingItem[]>('getWhyMoving', { tickers: [chartInstance.ticker] })
 					.then((res) => {
 						// Only process the response if this is still the current ticker
 						if (chartInstance.ticker === lastFetchedWhyMovingTicker) {
 							if (Array.isArray(res) && res.length > 0 && res[0]?.content) {
 								const item = res[0];
-								const timestamp = new Date(item.created_at).getTime();
+								const createdMs = new Date(item.created_at).getTime();
 								const maxAgeMs = 24 * 60 * 60 * 1000; // 24 hours
-								whyMovingContent = Date.now() - timestamp <= maxAgeMs ? item.content : null;
+								if (Date.now() - createdMs <= maxAgeMs) {
+									whyMovingContent = item.content;
+									whyMovingWhenMs = createdMs;
+								} else {
+									whyMovingContent = null;
+									whyMovingWhenMs = null;
+								}
 							} else {
 								whyMovingContent = null;
+								whyMovingWhenMs = null;
 							}
 						}
 					})
@@ -92,6 +107,7 @@
 								console.error('Quote component: Error fetching why moving:', e);
 							}
 							whyMovingContent = null;
+							whyMovingWhenMs = null;
 						}
 					});
 			}
@@ -315,7 +331,12 @@
 
 		{#if whyMovingContent}
 			<div class="why-moving">
-				<p class="value why-moving-text">{whyMovingContent}</p>
+				<p class="value why-moving-text">
+					{whyMovingContent}
+					{#if whyMovingAgo}
+						<span class="why-moving-ago"> — {whyMovingAgo}</span>
+					{/if}
+				</p>
 			</div>
 		{/if}
 
@@ -722,6 +743,12 @@
 		line-height: 1.4;
 		color: var(--text-secondary);
 		white-space: pre-wrap;
+	}
+
+	.why-moving-ago {
+		color: var(--text-secondary);
+		opacity: 0.85;
+		font-size: 0.85em;
 	}
 
 	/* Responsive adjustments */
