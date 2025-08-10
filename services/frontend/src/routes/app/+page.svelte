@@ -146,9 +146,16 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerInfoContainerHeight = 500; // Initial height
+	// Quote panel sizing: default ~1/3 of viewport, max ~2/3 of viewport
+	const QUOTE_DEFAULT_HEIGHT_RATIO = 1 / 3;
+	const QUOTE_MAX_HEIGHT_RATIO = 2 / 3;
+	let tickerInfoContainerHeight = browser
+		? Math.round(window.innerHeight * QUOTE_DEFAULT_HEIGHT_RATIO)
+		: 500; // SSR fallback
 	const MIN_TICKER_INFO_CONTAINER_HEIGHT = 100;
-	const MAX_TICKER_INFO_CONTAINER_HEIGHT = 600;
+	const MAX_TICKER_INFO_CONTAINER_HEIGHT = browser
+		? Math.round(window.innerHeight * QUOTE_MAX_HEIGHT_RATIO)
+		: 600; // SSR fallback
 
 	// Calendar state
 	let calendarVisible = false;
@@ -716,10 +723,11 @@
 		const bottomBarHeight = 40;
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
-		// Clamp the height between min and max values
+		// Clamp the height between min and a dynamic max (2/3 of viewport)
+		const maxAllowed = Math.round(window.innerHeight * QUOTE_MAX_HEIGHT_RATIO);
 		tickerInfoContainerHeight = Math.min(
 			Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT),
-			MAX_TICKER_INFO_CONTAINER_HEIGHT
+			maxAllowed
 		);
 
 		// Update the CSS variable
