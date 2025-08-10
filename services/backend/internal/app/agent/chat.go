@@ -102,6 +102,31 @@ type QueryResponse struct {
 
 var defaultSystemPromptTokenCount int
 
+// getUserChatSuggestionsEnabled reads the user's settings JSON and returns the chatSuggestionsEnabled flag.
+// Defaults to true on any error or if the flag is missing.
+func getUserChatSuggestionsEnabled(ctx context.Context, conn *data.Conn, userID int) bool {
+	if userID == 0 {
+		// Public user: default behavior (enabled)
+		return true
+	}
+	var raw json.RawMessage
+	// Fast single-row lookup
+	err := conn.DB.QueryRow(ctx, "SELECT settings FROM users WHERE userId = $1", userID).Scan(&raw)
+	if err != nil || len(raw) == 0 {
+		return true
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return true
+	}
+	if v, ok := m["chatSuggestionsEnabled"]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return true
+}
+
 // GetChatRequest is the main context-aware chat request handler
 func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.RawMessage) (interface{}, error) {
 	// Check if context is already cancelled
@@ -145,6 +170,9 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 	ctx = context.WithValue(ctx, conversationIDKey, conversationID)
 	ctx = context.WithValue(ctx, messageIDKey, messageID)
 	go socket.SendChatInitializationUpdate(userID, messageID, conversationID)
+
+	// Read user preference for suggestions once per chat request
+	includeSuggestions := getUserChatSuggestionsEnabled(ctx, conn, userID)
 
 	// replaced with activeChatMu
 	if userID != 0 {
@@ -197,7 +225,12 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					Timestamp:      time.Now(),
 				}, fmt.Errorf("error building planning prompt: %w", err)
 			}
-			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "defaultSystemPrompt", activeResults, accumulatedThoughts)
+			// Compose prompt from base + optional suggestions appendix
+			systemPrompt, bErr := buildSystemPrompt("defaultSystemPromptBase", includeSuggestions, suggestionsGuidelinesPlanner)
+			if bErr != nil {
+				return QueryResponse{ContentChunks: []ContentChunk{}, Suggestions: []string{}, ConversationID: conversationID, MessageID: messageID, Timestamp: time.Now()}, fmt.Errorf("error building system prompt: %w", bErr)
+			}
+			result, err = RunPlannerWithSystemPrompt(ctx, conn, conversationID, userID, planningPrompt, systemPrompt, activeResults, accumulatedThoughts)
 		} else {
 			result, err = RunPlanner(ctx, conn, conversationID, userID, planningPrompt, "IntermediateSystemPrompt", activeResults, accumulatedThoughts)
 		}
@@ -227,8 +260,15 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 			chunksForDB := processContentChunksForDB(ctx, conn, userID, v.ContentChunks)
 
+			// Respect user setting: drop suggestions if disabled
+			var directSuggestions []string
+			if includeSuggestions {
+				directSuggestions = v.Suggestions
+			} else {
+				directSuggestions = nil
+			}
 			// Update pending message to completed and get message data with timestamps
-			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, v.Suggestions, totalTokenCounts)
+			messageData, err := UpdatePendingMessageToCompletedInConversation(ctx, conn, userID, conversationID, query.Query, chunksForDB, []FunctionCall{}, allResults, directSuggestions, totalTokenCounts)
 
 			if err != nil {
 				return QueryResponse{
@@ -283,7 +323,7 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 
 			return QueryResponse{
 				ContentChunks:  processedChunks,
-				Suggestions:    v.Suggestions, // Include suggestions from direct answer
+				Suggestions:    directSuggestions,
 				ConversationID: conversationID,
 				MessageID:      messageID,
 				Timestamp:      messageData.CreatedAt,
@@ -406,8 +446,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 				// Generate final response based on active execution results
 				var finalResponse *FinalResponse
 
-				// Get the final response from the model
-				finalResponse, err = GetFinalResponseGPT(ctx, conn, userID, query.Query, conversationID, messageID, activeResults, accumulatedThoughts)
+				// Get the final response from the model with or without suggestions per user setting
+				// Compose final response prompt from base + optional suggestions appendix
+				systemPromptFinal, bErr := buildSystemPrompt("finalResponseSystemPromptBase", includeSuggestions, suggestionsGuidelinesFinal)
+				if bErr != nil {
+					return QueryResponse{ContentChunks: []ContentChunk{}, Suggestions: []string{}, ConversationID: conversationID, MessageID: messageID, Timestamp: time.Now()}, fmt.Errorf("error building final system prompt: %w", bErr)
+				}
+				finalResponse, err = GetFinalResponse(ctx, conn, userID, query.Query, conversationID, messageID, activeResults, accumulatedThoughts, systemPromptFinal, includeSuggestions)
 				if err != nil {
 					// Mark as error instead of deleting for debugging
 					if markErr := MarkPendingMessageAsError(ctx, conn, userID, conversationID, messageID, fmt.Sprintf("Final response error: %v", err)); markErr != nil {
@@ -488,8 +533,13 @@ func GetChatRequest(ctx context.Context, conn *data.Conn, userID int, args json.
 					}
 				}()
 				return QueryResponse{
-					ContentChunks:  processedChunks,
-					Suggestions:    finalResponse.Suggestions, // Include suggestions from final response
+					ContentChunks: processedChunks,
+					Suggestions: func() []string {
+						if includeSuggestions {
+							return finalResponse.Suggestions
+						}
+						return nil
+					}(),
 					ConversationID: conversationID,
 					MessageID:      messageID,
 					Timestamp:      messageData.CreatedAt,

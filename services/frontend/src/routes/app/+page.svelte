@@ -146,9 +146,16 @@
 	let currentProfileDisplay = ''; // Add this to hold the current display value
 
 	let sidebarResizing = false;
-	let tickerInfoContainerHeight = 500; // Initial height
+	// Quote panel sizing: default ~1/3 of viewport, max ~2/3 of viewport
+	const QUOTE_DEFAULT_HEIGHT_RATIO = 1 / 3;
+	const QUOTE_MAX_HEIGHT_RATIO = 2 / 3;
+	let tickerInfoContainerHeight = browser
+		? Math.round(window.innerHeight * QUOTE_DEFAULT_HEIGHT_RATIO)
+		: 500; // SSR fallback
 	const MIN_TICKER_INFO_CONTAINER_HEIGHT = 100;
-	const MAX_TICKER_INFO_CONTAINER_HEIGHT = 600;
+	const MAX_TICKER_INFO_CONTAINER_HEIGHT = browser
+		? Math.round(window.innerHeight * QUOTE_MAX_HEIGHT_RATIO)
+		: 600; // SSR fallback
 
 	// Calendar state
 	let calendarVisible = false;
@@ -355,10 +362,6 @@
 		// Expose mobile device override for debugging
 		import('$lib/utils/stores/device').then(({ setMobileDeviceOverride }) => {
 			(window as any).setMobileMode = setMobileDeviceOverride;
-			console.log(
-				'🛠️ [debug] Mobile device override available via window.setMobileMode(true/false/null)'
-			);
-			console.log('🛠️ [debug] URL override: add ?mobile=1 or ?mobile=0 to the URL');
 		});
 	});
 
@@ -716,10 +719,11 @@
 		const bottomBarHeight = 40;
 		const newHeight = window.innerHeight - currentY - bottomBarHeight;
 
-		// Clamp the height between min and max values
+		// Clamp the height between min and a dynamic max (2/3 of viewport)
+		const maxAllowed = Math.round(window.innerHeight * QUOTE_MAX_HEIGHT_RATIO);
 		tickerInfoContainerHeight = Math.min(
 			Math.max(newHeight, MIN_TICKER_INFO_CONTAINER_HEIGHT),
-			MAX_TICKER_INFO_CONTAINER_HEIGHT
+			maxAllowed
 		);
 
 		// Update the CSS variable
@@ -965,17 +969,13 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
-<div
-	class="page"
-	role="application"
-	tabindex="-1"
+<svelte:window
 	on:keydown={(e) => {
-		if (e.key === 'Escape') {
-			minimizeBottomWindow();
-		}
+		if (e.key === 'Escape') minimizeBottomWindow();
 	}}
->
+/>
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
+<div class="page" role="application">
 	<!-- Global Popups (always available) -->
 	<Input />
 	<RightClick />
@@ -1346,6 +1346,16 @@
 </div>
 
 <style>
+	:global(html, body) {
+		scrollbar-width: none;
+	}
+
+	:global(html::-webkit-scrollbar),
+	:global(body::-webkit-scrollbar) {
+		width: 0;
+		height: 0;
+	}
+
 	:root {
 		--left-sidebar-width: 0px;
 		--right-sidebar-width: 0px;
@@ -1418,6 +1428,8 @@
 		grid-area: center;
 		display: flex;
 		flex-direction: column;
+		min-width: 0;
+		flex: 1;
 	}
 
 	.sidebar {

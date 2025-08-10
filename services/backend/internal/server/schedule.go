@@ -202,8 +202,30 @@ func initUserTelegramBotJob(conn *data.Conn) error {
 	return telegram.InitTelegramUserNotificationBot()
 }
 
+// Wrapper for nightly short data update
+func updateShortDataJob(conn *data.Conn) error {
+	return marketdata.UpdateShortData(conn)
+}
+
+// Wrapper for alert loop start with market-hours gating
+func startAlertLoopJob(conn *data.Conn) error {
+	now := time.Now().In(time.FixedZone("ET", -5*3600))
+	if !isMarketHours(now) {
+		log.Printf("⏰ Alert loop not started - outside market hours")
+		return nil
+	}
+	return alerts.StartAlertLoop(conn)
+}
+
 // startPolygonWebSocketInternal is the internal implementation for starting polygon websocket
 func startPolygonWebSocketInternal(conn *data.Conn) error {
+	// Gate: Only start Polygon WebSocket during market hours
+	now := time.Now().In(time.FixedZone("ET", -5*3600))
+	if !isMarketHours(now) {
+		log.Printf("⏰ Skipping Polygon WebSocket start - outside market hours")
+		return nil
+	}
+
 	// Set up critical alert callback for socket package before starting WebSocket
 	socket.SetCriticalAlertCallback(alerts.LogCriticalAlert)
 
@@ -268,9 +290,8 @@ var (
 			RetryDelay:     5 * time.Minute, // Retry every 5 minutes
 		},
 		{
-			Name: "StartAlertLoop",
-
-			Function:       alerts.StartAlertLoop,
+			Name:           "StartAlertLoop",
+			Function:       startAlertLoopJob,
 			Schedule:       []TimeOfDay{{Hour: 3, Minute: 57}}, // Run before market open
 			RunOnInit:      true,
 			SkipOnWeekends: true,
@@ -371,6 +392,26 @@ var (
 			SkipOnWeekends: false,
 			RetryOnFailure: true,
 			MaxRetries:     2,
+		},
+		{
+			Name:           "UpdateFundamentals",
+			Function:       marketdata.UpdateAllFundamentals,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 30}}, // 10:30 PM ET nightly
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     100,
+			RetryDelay:     5 * time.Minute,
+		},
+		{
+			Name:           "UpdateShortData",
+			Function:       updateShortDataJob,
+			Schedule:       []TimeOfDay{{Hour: 22, Minute: 45}}, // 10:45 PM ET nightly
+			RunOnInit:      true,
+			SkipOnWeekends: false,
+			RetryOnFailure: true,
+			MaxRetries:     100,
+			RetryDelay:     5 * time.Minute,
 		},
 	}
 )

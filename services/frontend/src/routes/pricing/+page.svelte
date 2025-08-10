@@ -249,8 +249,9 @@
 		return plan.prices.some((p) => p.billing_period === apiPeriod);
 	});
 
-	// Auth state - check immediately to prevent flash
-	let isAuthenticated = getAuthState();
+	// Auth state from server
+	import { page } from '$app/stores';
+	$: isAuthenticated = $page.data?.isAuthenticated ?? false;
 
 	// Function to determine if the current user is authenticated
 	const isAuthenticatedFn = (): boolean => {
@@ -1095,6 +1096,17 @@
 </div>
 
 <style>
+	/* Hide vertical scrollbar while preserving scroll */
+	:global(html, body) {
+		scrollbar-width: none;
+	}
+
+	:global(html::-webkit-scrollbar),
+	:global(body::-webkit-scrollbar) {
+		width: 0;
+		height: 0;
+	}
+
 	/* Critical global styles - applied immediately to prevent layout shift */
 	:global(*) {
 		box-sizing: border-box;
@@ -1119,7 +1131,7 @@
 	/* Apply the same gradient background as landing page */
 	.page-wrapper {
 		width: 100%;
-		min-height: 100vh;
+		min-height: 100dvh;
 		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 	}
 
@@ -1139,7 +1151,7 @@
 			sans-serif;
 		display: flex;
 		flex-direction: column;
-		min-height: 100vh;
+		min-height: 100dvh;
 	}
 
 	/* Pricing-specific styles that build on landing system */

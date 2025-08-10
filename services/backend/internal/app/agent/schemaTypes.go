@@ -56,7 +56,7 @@ type AtlantisContentChunk struct {
 // The top-level assistant reply.
 type AtlantisFinalResponse struct {
 	ContentChunks []AtlantisContentChunk `json:"content_chunks" jsonschema:"required"`
-	Suggestions   []string               `json:"suggestions"      jsonschema:"required"`
+	Suggestions   []string               `json:"suggestions"`
 }
 type PlanningOutput struct {
 	// planning-output fields

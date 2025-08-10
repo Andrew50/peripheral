@@ -56,6 +56,7 @@
 		if (!item.watchlistItemId) {
 			throw new Error('missing id on delete');
 		}
+
 		privateRequest<void>('deleteWatchlistItem', { watchlistItemId: item.watchlistItemId }).then(
 			() => {
 				// Update currentWatchlistItems (what the UI shows)
@@ -73,6 +74,26 @@
 				}
 			}
 		);
+	}
+
+	async function reorderItem(args: {
+		movedId: number;
+		prevId?: number;
+		nextId?: number;
+		newIndex: number;
+	}) {
+		try {
+			await privateRequest('moveWatchlistItem', {
+				watchlistItemId: args.movedId,
+				prevItemId: args.prevId,
+				nextItemId: args.nextId
+			});
+		} catch (e) {
+			console.error('Failed to persist reorder, reloading list', e);
+			import('./watchlistUtils').then(({ selectWatchlist }) => {
+				if (currentWatchlistId) selectWatchlist(String(currentWatchlistId));
+			});
+		}
 	}
 	function closeNewWatchlistWindow() {
 		showWatchlistInput = false;
@@ -241,7 +262,7 @@
 		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
 </script>
 
-<div tabindex="-1" class="feature-container" bind:this={container}>
+<div class="feature-container" bind:this={container}>
 	<!-- Watchlist Tabs -->
 	{#if showTabs}
 		<div class="watchlist-tabs-container">
@@ -353,6 +374,8 @@
 
 		<WatchlistList
 			parentDelete={deleteItem}
+			parentReorder={reorderItem}
+			{currentWatchlistId}
 			columns={['Ticker', 'Price', 'Chg', 'Chg%', 'Ext']}
 			list={currentWatchlistItems}
 		/>

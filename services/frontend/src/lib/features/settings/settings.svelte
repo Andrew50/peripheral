@@ -207,6 +207,18 @@
 					</label>
 				</div>
 
+				<div class="settings-section">
+					<h4>Assistant</h4>
+					<label class="setting-item">
+						<span>Show suggested follow-ups:</span>
+						<input
+							type="checkbox"
+							bind:checked={tempSettings.chatSuggestionsEnabled}
+							on:change={checkForChanges}
+						/>
+					</label>
+				</div>
+
 				<!-- <div class="settings-section">
 					<h4>Time & Sales</h4>
 					<label class="setting-item">

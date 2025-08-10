@@ -238,6 +238,86 @@ func RunPlanner(ctx context.Context, conn *data.Conn, conversationID string, use
 
 }
 
+// RunPlannerWithSystemPrompt allows passing a precomposed system prompt string
+func RunPlannerWithSystemPrompt(ctx context.Context, conn *data.Conn, conversationID string, userID int, prompt string, systemPrompt string, executionResults []ExecuteResult, thoughts []string) (interface{}, error) {
+	plan, err := _gptGeneratePlan(ctx, conn, conversationID, userID, systemPrompt, prompt, executionResults, thoughts)
+	if err != nil {
+		return nil, fmt.Errorf("error generating plan: %w", err)
+	}
+	return plan, nil
+}
+
+// GetFinalResponseGPTWithPrompt mirrors GetFinalResponseGPT but uses a provided systemPrompt instead of loading from file
+func GetFinalResponse(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string, systemPrompt string, includeSuggestions bool) (*FinalResponse, error) {
+	client := conn.OpenAIClient
+	conversationHistory, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting conversation history: %w", err)
+	}
+	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
+	if err != nil {
+		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
+	}
+
+	ref := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	model := "gpt-5"
+
+	rawSchema := ref.Reflect(AtlantisFinalResponse{})
+	b, _ := json.Marshal(rawSchema)
+	var oaSchema map[string]any
+	_ = json.Unmarshal(b, &oaSchema)
+
+	textConfig := responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   "peripheral_response",
+				Schema: oaSchema,
+				Strict: openai.Bool(true),
+			},
+		},
+	}
+	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: messages,
+		},
+		Model: model,
+		Reasoning: shared.ReasoningParam{
+			Effort: "low",
+		},
+		Instructions: openai.String(systemPrompt),
+		User:         openai.String(fmt.Sprintf("user:%d", userID)),
+		Text:         textConfig,
+		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment, "convID": conversationID, "msgID": messageID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error generating final response: %w", err)
+	}
+	raw := res.OutputText()
+
+	var finalResp FinalResponse
+	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
+		return &FinalResponse{
+			ContentChunks: []ContentChunk{{Type: "text", Content: raw}},
+			TokenCounts:   TokenCounts{},
+		}, nil
+	}
+	if includeSuggestions {
+		finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
+	} else {
+		finalResp.Suggestions = nil
+	}
+	finalResp.TokenCounts = TokenCounts{
+		InputTokenCount:    res.Usage.InputTokens,
+		OutputTokenCount:   res.Usage.OutputTokens,
+		ThoughtsTokenCount: res.Usage.OutputTokensDetails.ReasoningTokens,
+		TotalTokenCount:    res.Usage.TotalTokens,
+	}
+	return &finalResp, nil
+}
+
 /*func _geminiGeneratePlan(ctx context.Context, conn *data.Conn, systemPrompt string, prompt string) (interface{}, error) {
 	apiKey, err := conn.GetGeminiKey()
 	if err != nil {
@@ -511,77 +591,10 @@ func _gptGeneratePlan(ctx context.Context, conn *data.Conn, conversationID strin
 	return nil, fmt.Errorf("no valid plan or direct answer found in response")
 }
 
-func GetFinalResponseGPT(ctx context.Context, conn *data.Conn, userID int, userQuery string, conversationID string, messageID string, executionResults []ExecuteResult, thoughts []string) (*FinalResponse, error) {
-	client := conn.OpenAIClient
+// Deprecated variants kept below for reference; use GetFinalResponse instead
 
-	systemPrompt, err := GetSystemInstruction("finalResponseSystemPrompt")
-	if err != nil {
-		return nil, fmt.Errorf("error getting system instruction: %w", err)
-	}
-	conversationHistory, err := GetConversationMessagesRaw(ctx, conn, conversationID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("error getting conversation history: %w", err)
-	}
-	// Build OpenAI messages with rich context
-	messages, err := buildOpenAIFinalResponseMessages(userQuery, conversationHistory.([]DBConversationMessage), executionResults, thoughts)
-	if err != nil {
-		return nil, fmt.Errorf("error building OpenAI messages: %w", err)
-	}
-
-	ref := jsonschema.Reflector{
-		AllowAdditionalProperties: false,
-		DoNotReference:            true,
-	}
-	model := "gpt-5"
-
-	rawSchema := ref.Reflect(AtlantisFinalResponse{})
-	b, _ := json.Marshal(rawSchema)
-	var oaSchema map[string]any
-	_ = json.Unmarshal(b, &oaSchema)
-
-	textConfig := responses.ResponseTextConfigParam{
-		Format: responses.ResponseFormatTextConfigUnionParam{
-			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-				Name:   "peripheral_response",
-				Schema: oaSchema,
-				Strict: openai.Bool(true),
-			},
-		},
-	}
-	res, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: messages,
-		},
-		Model: model,
-		Reasoning: shared.ReasoningParam{
-			Effort: "low",
-		},
-		Instructions: openai.String(systemPrompt),
-		User:         openai.String(fmt.Sprintf("user:%d", userID)),
-		Text:         textConfig,
-		Metadata:     shared.Metadata{"userID": strconv.Itoa(userID), "env": conn.ExecutionEnvironment, "convID": conversationID, "msgID": messageID},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error generating final response: %w", err)
-	}
-	raw := res.OutputText()
-
-	var finalResp FinalResponse
-	if err := json.Unmarshal([]byte(raw), &finalResp); err != nil {
-		return &FinalResponse{
-			ContentChunks: []ContentChunk{{Type: "text", Content: raw}},
-			TokenCounts:   TokenCounts{},
-		}, nil
-	}
-	finalResp.Suggestions = cleanTickerFormattingFromSuggestions(finalResp.Suggestions)
-	finalResp.TokenCounts = TokenCounts{
-		InputTokenCount:    res.Usage.InputTokens,
-		OutputTokenCount:   res.Usage.OutputTokens,
-		ThoughtsTokenCount: res.Usage.OutputTokensDetails.ReasoningTokens,
-		TotalTokenCount:    res.Usage.TotalTokens,
-	}
-	return &finalResp, nil
-}
+// GetFinalResponseGPTNoSuggestions mirrors GetFinalResponseGPT but uses a prompt and schema that do not include suggestions
+// Deprecated: use GetFinalResponse with includeSuggestions=false
 
 func buildOpenAIConversationHistory(userQuery string, conversationHistory []DBConversationMessage) (responses.ResponseInputParam, error) {
 	var messages []responses.ResponseInputItemUnionParam

@@ -1123,7 +1123,7 @@ def get_available_filter_values(ctx: Context) -> Dict[str, List[str]]:
     """Get all available values for filter fields from the database"""
     #try:
     with ctx.conn.get_connection() as conn:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         filter_values = {}
 
@@ -1168,3 +1168,395 @@ def get_available_filter_values(ctx: Context) -> Dict[str, List[str]]:
             #'industries': [],
             #'primary_exchanges': [],
         #}
+        
+
+# -----------------------------
+# Fundamentals Accessor
+# -----------------------------
+
+def _get_fundamentals_data(
+    ctx: Context,
+    columns: Optional[List[str]] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    date_field: str = "filing_date",
+    latest_only: bool = True,
+    limit: Optional[int] = None,
+) -> pd.DataFrame:
+    """Fetch fundamentals rows from fundamentals with robust filtering.
+
+    Args:
+        columns: Desired columns. If None, a sensible default is returned.
+        filters: Dict of filter criteria including tickers, cik, fiscal_year, fiscal_period,
+                 timeframe, sector/industry/primary_exchange and numeric ranges on securities.
+        start_date: Start datetime for date-range mode (paired with end_date).
+        end_date: End datetime for date-range mode (paired with start_date).
+        date_field: Either "filing_date" or "end_date" to control date filtering and ranking.
+        latest_only: If True, return latest record per ticker (as of end_date if provided).
+        limit: Optional row cap. A safety cap is applied by default.
+
+    Returns:
+        pandas.DataFrame
+    """
+    logger.info(
+        "📄 _get_fundamentals_data called with: columns=%s, date_field=%s, latest_only=%s, start_date=%s, end_date=%s, filters_keys=%s, limit=%s",
+        columns, date_field, latest_only, start_date, end_date,
+        list(filters.keys()) if isinstance(filters, dict) else None, limit,
+    )
+
+    # Validate date params pairing
+    if (start_date is None) ^ (end_date is None):
+        raise ValueError("start_date and end_date must be provided together")
+
+    # Validate date_field
+    if date_field not in {"filing_date", "end_date"}:
+        raise ValueError("date_field must be either 'filing_date' or 'end_date'")
+
+    # Allowed columns (strict allowlist) – includes everything from fundamentals.go flattened upsert
+    allowed_columns: set[str] = {
+        # Meta and period
+        "ticker", "cik", "sic", "company_name", "source_filing_file_url", "source_filing_url",
+        "start_date", "end_date", "filing_date", "timeframe", "fiscal_period", "fiscal_year",
+        # Balance sheet
+        "assets", "liabilities", "current_assets", "noncurrent_liabilities", "liabilities_and_equity",
+        "other_current_liabilities", "equity_attributable_to_noncontrolling_interest", "accounts_payable",
+        "other_noncurrent_assets", "inventory", "equity_attributable_to_parent", "equity",
+        "current_liabilities", "noncurrent_assets", "intangible_assets", "other_current_assets",
+        # Comprehensive income
+        "other_comprehensive_income_loss", "comprehensive_income_loss",
+        "comprehensive_income_loss_attributable_to_noncontrolling_interest",
+        "comprehensive_income_loss_attributable_to_parent",
+        "other_comprehensive_income_loss_attributable_to_parent",
+        # Income statement
+        "cost_of_revenue", "revenues", "diluted_average_shares", "basic_average_shares",
+        "income_loss_from_continuing_operations_before_tax",
+        "net_income_loss_available_to_common_stockholders_basic",
+        "income_loss_from_continuing_operations_after_tax", "income_tax_expense_benefit",
+        "basic_earnings_per_share", "operating_expenses", "operating_income_loss",
+        "costs_and_expenses", "nonoperating_income_loss",
+        "preferred_stock_dividends_and_other_adjustments",
+        "net_income_loss_attributable_to_parent", "benefits_costs_expenses", "net_income_loss",
+        "selling_general_and_administrative_expenses",
+        "participating_securities_distributed_and_undistributed_earnings_loss_basic",
+        "income_tax_expense_benefit_deferred", "research_and_development",
+        "income_loss_before_equity_method_investments", "diluted_earnings_per_share",
+        "net_income_loss_attributable_to_noncontrolling_interest", "gross_profit",
+        "interest_expense_operating",
+        # Cash flow
+        "net_cash_flow_from_operating_activities", "net_cash_flow_continuing",
+        "net_cash_flow_from_operating_activities_continuing", "net_cash_flow_from_financing_activities",
+        "net_cash_flow", "net_cash_flow_from_investing_activities",
+        "net_cash_flow_from_financing_activities_continuing",
+        "net_cash_flow_from_investing_activities_continuing", "exchange_gains_losses",
+    }
+
+    # Default columns when None
+    if columns is None:
+        columns = [
+            "ticker", "filing_date", "end_date",
+            "revenues", "net_income_loss", "assets", "liabilities",
+            "operating_income_loss", "gross_profit", "basic_earnings_per_share",
+        ]
+
+    safe_columns = [col for col in columns if col in allowed_columns]
+    if not safe_columns:
+        return pd.DataFrame(columns=columns or [])
+
+    # Build SQL and execute
+    query, params, out_columns = _build_fundamentals_query(
+        columns=safe_columns,
+        filters=filters,
+        date_field=date_field,
+        latest_only=latest_only,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
+
+    return _execute_fundamentals_query(ctx, query, params, out_columns)
+
+
+def _build_fundamentals_filters(
+    filters: Optional[Dict[str, Any]] = None,
+) -> Tuple[List[str], List[Any], bool]:
+    """Build WHERE clause parts and params for fundamentals queries.
+
+    Returns filter_sql_parts, params, requires_securities_join
+    """
+    filter_parts: List[str] = []
+    params: List[Any] = []
+
+    requires_securities_join = True  # We always join to recover ticker reliably and apply active default
+
+    if not filters:
+        # Default to active only if no filters provided
+        filter_parts.append("s.active = true")
+        return filter_parts, params, requires_securities_join
+
+    # Tickers (apply to COALESCE(f.ticker, s.ticker))
+    if 'tickers' in filters:
+        tickers = filters['tickers']
+        if isinstance(tickers, str):
+            tickers = [tickers]
+        if isinstance(tickers, list) and len(tickers) > 0:
+            placeholders = ','.join(['%s'] * len(tickers))
+            filter_parts.append(f"COALESCE(f.ticker, s.ticker) IN ({placeholders})")
+            params.extend(tickers)
+
+    # Direct f.* filters
+    if 'cik' in filters:
+        cik_val = filters['cik']
+        if isinstance(cik_val, list):
+            placeholders = ','.join(['%s'] * len(cik_val))
+            filter_parts.append(f"f.cik IN ({placeholders})")
+            params.extend(cik_val)
+        else:
+            filter_parts.append("f.cik = %s")
+            params.append(cik_val)
+
+    if 'fiscal_year' in filters:
+        fy_val = filters['fiscal_year']
+        if isinstance(fy_val, list):
+            placeholders = ','.join(['%s'] * len(fy_val))
+            filter_parts.append(f"f.fiscal_year IN ({placeholders})")
+            params.extend(fy_val)
+        else:
+            filter_parts.append("f.fiscal_year = %s")
+            params.append(fy_val)
+
+    if 'fiscal_period' in filters:
+        fp_val = filters['fiscal_period']
+        if isinstance(fp_val, list):
+            placeholders = ','.join(['%s'] * len(fp_val))
+            filter_parts.append(f"f.fiscal_period IN ({placeholders})")
+            params.extend(fp_val)
+        else:
+            filter_parts.append("f.fiscal_period = %s")
+            params.append(fp_val)
+
+    if 'timeframe' in filters:
+        tf_val = filters['timeframe']
+        if isinstance(tf_val, list):
+            placeholders = ','.join(['%s'] * len(tf_val))
+            filter_parts.append(f"f.timeframe IN ({placeholders})")
+            params.extend(tf_val)
+        else:
+            filter_parts.append("f.timeframe = %s")
+            params.append(tf_val)
+
+    # Securities-joined filters
+    sec_filters_present = False
+    def _add_sec_filter(expr: str, value: Any) -> None:
+        nonlocal sec_filters_present
+        filter_parts.append(expr)
+        params.append(value)
+        sec_filters_present = True
+
+    if 'sector' in filters:
+        _add_sec_filter("s.sector = %s", filters['sector'])
+    if 'industry' in filters:
+        _add_sec_filter("s.industry = %s", filters['industry'])
+    if 'primary_exchange' in filters:
+        _add_sec_filter("s.primary_exchange = %s", filters['primary_exchange'])
+    if 'market_cap_min' in filters:
+        _add_sec_filter("s.market_cap >= %s", filters['market_cap_min'])
+    if 'market_cap_max' in filters:
+        _add_sec_filter("s.market_cap <= %s", filters['market_cap_max'])
+    if 'total_employees_min' in filters:
+        _add_sec_filter("s.total_employees >= %s", filters['total_employees_min'])
+    if 'total_employees_max' in filters:
+        _add_sec_filter("s.total_employees <= %s", filters['total_employees_max'])
+    if 'weighted_shares_outstanding_min' in filters:
+        _add_sec_filter("s.weighted_shares_outstanding >= %s", filters['weighted_shares_outstanding_min'])
+    if 'weighted_shares_outstanding_max' in filters:
+        _add_sec_filter("s.weighted_shares_outstanding <= %s", filters['weighted_shares_outstanding_max'])
+
+    # Active default (unless explicitly provided)
+    if 'active' in filters:
+        filter_parts.append("s.active = %s")
+        params.append(filters['active'])
+    else:
+        filter_parts.append("s.active = true")
+
+    return filter_parts, params, (requires_securities_join or sec_filters_present)
+
+
+def _build_fundamentals_query(
+    columns: List[str],
+    filters: Optional[Dict[str, Any]],
+    date_field: str,
+    latest_only: bool,
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    limit: Optional[int],
+) -> Tuple[str, List[Any], List[str]]:
+    """Build SELECT SQL for fundamentals with optional ranking and date filters."""
+
+    # Map columns to outer select items
+    outer_select_items: List[str] = []
+    for col in columns:
+        if col == 'ticker':
+            outer_select_items.append("ticker")
+        else:
+            outer_select_items.append(col)
+    outer_select_clause = ', '.join(outer_select_items)
+
+    # Inner select always includes ticker alias so ORDER BY works even when user didn't request ticker
+    inner_select_items: List[str] = ["COALESCE(f.ticker, s.ticker) AS ticker"]
+    for col in columns:
+        if col == 'ticker':
+            continue
+        inner_select_items.append(f"f.{col}")
+    inner_select_clause = ', '.join(inner_select_items)
+
+    filter_parts, params, _requires_join = _build_fundamentals_filters(filters)
+
+    # Date filters
+    date_col = f"f.{date_field}"
+    if latest_only:
+        # Only restrict by end_date if provided (latest-as-of semantics)
+        if end_date is not None:
+            filter_parts.append(f"{date_col} <= %s")
+            params.append(_normalize_est(end_date))
+    else:
+        if start_date is not None and end_date is not None:
+            filter_parts.append(f"{date_col} >= %s")
+            filter_parts.append(f"{date_col} <= %s")
+            params.append(_normalize_est(start_date))
+            params.append(_normalize_est(end_date))
+
+    where_clause = " AND ".join(filter_parts) if filter_parts else "TRUE"
+
+    default_limit = 50000
+    effective_limit = default_limit
+    if isinstance(limit, int) and limit > 0:
+        effective_limit = min(limit, default_limit)
+
+    base_from = (
+        "FROM fundamentals f "
+        # Join securities by normalized ticker; CIK is unreliable/missing in many rows
+        "LEFT JOIN securities s ON s.maxdate IS NULL AND upper(s.ticker) = upper(btrim(f.ticker))"
+    )
+
+    if latest_only:
+        query = f"""
+            WITH ranked_data AS (
+                SELECT {inner_select_clause},
+                       ROW_NUMBER() OVER (
+                           PARTITION BY COALESCE(f.ticker, s.ticker)
+                           ORDER BY {date_col} DESC
+                       ) AS rn
+                {base_from}
+                WHERE {where_clause}
+            )
+            SELECT {outer_select_clause}
+            FROM ranked_data
+            WHERE rn = 1
+            ORDER BY ticker ASC
+            LIMIT %s
+        """  # nosec B608
+        params_out = params + [effective_limit]
+    else:
+        # Date-range mode: no ranking
+        order_clause = f"ORDER BY COALESCE(f.ticker, s.ticker), {date_col} ASC"
+        query = f"""
+            SELECT {inner_select_clause}
+            {base_from}
+            WHERE {where_clause}
+            {order_clause}
+            LIMIT %s
+        """  # nosec B608
+        params_out = params + [effective_limit]
+
+    return query, params_out, columns
+
+
+def _execute_fundamentals_query(
+    ctx: Context,
+    sql: str,
+    params: List[Any],
+    out_columns: List[str],
+) -> pd.DataFrame:
+    """Execute fundamentals query and return DataFrame with columns in requested order."""
+    with ctx.conn.get_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        logger.info("🗃️ Executing fundamentals query with %d parameters", len(params))
+        logger.info("📝 Fundamentals SQL: %s", sql)
+        logger.info("🔢 Fundamentals Params: %s", params)
+        cursor.execute(sql, params)
+        results = cursor.fetchall()
+        cursor.close()
+
+    if not results:
+        logger.info("⚠️ Fundamentals returned no rows")
+        return pd.DataFrame(columns=out_columns)
+
+    df = pd.DataFrame(results)
+    # Ensure ordering of columns and include only requested ones
+    final_cols = [c for c in out_columns if c in df.columns]
+    if final_cols:
+        df = df[final_cols]
+    return df
+
+
+def get_available_fundamental_fields(ctx: Context) -> List[str]:
+    """Return available fundamentals fields intersected with the allowlist.
+
+    Includes synthetic 'ticker' field which is produced via COALESCE(f.ticker, s.ticker).
+    """
+    # Reuse the same allowlist as accessor
+    allowlist = {
+        "ticker", "cik", "sic", "company_name", "source_filing_file_url", "source_filing_url",
+        "start_date", "end_date", "filing_date", "timeframe", "fiscal_period", "fiscal_year",
+        "assets", "liabilities", "current_assets", "noncurrent_liabilities", "liabilities_and_equity",
+        "other_current_liabilities", "equity_attributable_to_noncontrolling_interest", "accounts_payable",
+        "other_noncurrent_assets", "inventory", "equity_attributable_to_parent", "equity",
+        "current_liabilities", "noncurrent_assets", "intangible_assets", "other_current_assets",
+        "other_comprehensive_income_loss", "comprehensive_income_loss",
+        "comprehensive_income_loss_attributable_to_noncontrolling_interest",
+        "comprehensive_income_loss_attributable_to_parent",
+        "other_comprehensive_income_loss_attributable_to_parent",
+        "cost_of_revenue", "revenues", "diluted_average_shares", "basic_average_shares",
+        "income_loss_from_continuing_operations_before_tax",
+        "net_income_loss_available_to_common_stockholders_basic",
+        "income_loss_from_continuing_operations_after_tax", "income_tax_expense_benefit",
+        "basic_earnings_per_share", "operating_expenses", "operating_income_loss",
+        "costs_and_expenses", "nonoperating_income_loss",
+        "preferred_stock_dividends_and_other_adjustments",
+        "net_income_loss_attributable_to_parent", "benefits_costs_expenses", "net_income_loss",
+        "selling_general_and_administrative_expenses",
+        "participating_securities_distributed_and_undistributed_earnings_loss_basic",
+        "income_tax_expense_benefit_deferred", "research_and_development",
+        "income_loss_before_equity_method_investments", "diluted_earnings_per_share",
+        "net_income_loss_attributable_to_noncontrolling_interest", "gross_profit",
+        "interest_expense_operating",
+        "net_cash_flow_from_operating_activities", "net_cash_flow_continuing",
+        "net_cash_flow_from_operating_activities_continuing", "net_cash_flow_from_financing_activities",
+        "net_cash_flow", "net_cash_flow_from_investing_activities",
+        "net_cash_flow_from_financing_activities_continuing",
+        "net_cash_flow_from_investing_activities_continuing", "exchange_gains_losses",
+    }
+
+    try:
+        with ctx.conn.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'fundamentals'
+                ORDER BY ordinal_position
+                """
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+        cols_in_db = {str(r.get('column_name')) for r in rows if 'column_name' in r}
+        available = sorted(list((cols_in_db | {"ticker"}) & allowlist))
+        if not available:
+            # Fallback to allowlist if introspection failed
+            available = sorted(list(allowlist))
+        return available
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Unable to introspect fundamentals columns: %s", exc)
+        return sorted(list(allowlist))

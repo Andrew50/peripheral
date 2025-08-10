@@ -15,7 +15,7 @@ from .utils.context import Context
 from .utils.strategy_crud import fetch_strategy_code, save_strategy
 from .utils.error_utils import capture_exception
 from .utils.errors import ModelGenerationError
-from .utils.data_accessors import get_available_filter_values
+from .utils.data_accessors import get_available_filter_values, get_available_fundamental_fields
 from .utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
@@ -80,8 +80,8 @@ def _parse_filter_needs_response(response: Any) -> Dict[str, bool]:
         return filter_needs
     except (json.JSONDecodeError, AttributeError) as e:
         logger.warning("Failed to parse filter needs JSON: %s, response: %s", e, response.text)
-        # Default to needing all filters if parsing fails
-        return {"sectors": True, "industries": True, "primary_exchanges": True}
+        # Default to needing sector/industry/exchange; be conservative with fundamentals list
+        return {"sectors": True, "industries": True, "primary_exchanges": True, "fundamentals": False}
 
 def _get_system_instruction(ctx: Context, prompt: str) -> str:
     """Get system instruction for OpenAI code generation with current database filter values"""
@@ -98,6 +98,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
             - primary_exchanges: NYSE, NASDAQ, ARCA
+            - fundamentals: revenue, net_income, earnings_per_share, etc.
             ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
     )
     response = ctx.conn.gemini_client.models.generate_content(
@@ -106,7 +107,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         config=generate_content_config,
     )
 
-    # Parse the JSON response to determine which filters are needed
+    # Parse the JSON response to determine which lists are needed
     filter_needs = _parse_filter_needs_response(response)
 
     # Only get filter values from database if they're needed
@@ -127,6 +128,18 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
     industries_str = '", "'.join(filter_values.get('industries', [])) if filter_values.get('industries') else ""
     exchanges_str = '", "'.join(filter_values.get('primary_exchanges', [])) if filter_values.get('primary_exchanges') else ""
 
+    # Fundamentals field list (gate by classifier)
+    fundamentals_section_str = ""
+    if filter_needs.get("fundamentals", False):
+        fundamentals_fields = get_available_fundamental_fields(ctx)
+        fundamentals_fields_str = ', '.join(fundamentals_fields[:120])  # truncate long lists
+        fundamentals_section_str = f"""
+
+        FUNDAMENTALS FIELDS:
+        - Available fields include: {fundamentals_fields_str}
+        - Date filtering uses filing_date and is bounded by the execution start_date/end_date
+        """
+
     return f"""You are a trading strategy generator that creates Python functions using data accessor functions.
 
         Allowed imports:
@@ -134,8 +147,9 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
         FUNCTION VALIDATION - ONLY these functions exist, automatically available in the execution environment:
-        - get_bar_data(timeframe, columns, min_bars, filters, aggregate_mode, extended_hours, start_date, end_date) → pandas.DataFrame
-        - get_general_data(columns, filters) → pandas.DataFrame
+        - get_bar_data(timeframe, min_bars, columns=None, filters=None, extended_hours=False) → pandas.DataFrame
+        - get_general_data(columns=None, filters=None) → pandas.DataFrame
+        - get_fundamentals_data(columns=None, filters=None) → pandas.DataFrame
         - apply_drawdown_styling(fig) → returns styled fig
         - apply_equity_curve_styling(fig) → returns styled fig
 
@@ -144,8 +158,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         - Use data accessor functions with filters (get_bar_data returns pandas.DataFrame directly):
         * get_bar_data(timeframe="1d", columns=[], min_bars=1, filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas.DataFrame
             Columns: ticker, timestamp, open, high, low, close, volume
-        * get_bar_data(timeframe="5", filters={{"tickers": ["AAPL"]}}, start_date=datetime(2024,1,15), end_date=datetime(2024,1,15)+timedelta(days=1)) -> pandas.DataFrame
-            For precise date filtering - essential for multi-timeframe strategies and exact stop loss timing
+        Note: Date ranges are controlled by the execution context's start_date/end_date. Strategies do not pass start_date/end_date to get_bar_data.
 
             SUPPORTED TIMEFRAMES:
             • Custom aggregations: Any integer prefix (1 to within reason) + time unit:
@@ -170,8 +183,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
                 - 20+ bars: Technical indicators (moving averages, RSI)
                 - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
 
-        * get_bar_data(timeframe="1d", aggregate_mode=True, filters={{}})
-            Use aggregate_mode=True ONLY when you need ALL market data together for calculations like market averages
+        
         * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame
             Columns: ticker, name, sector, industry, market_cap, primary_exchange, active, total_shares
 
@@ -190,6 +202,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         - NASDAQ stocks: filters={"primary_exchange": "NASDAQ"}''' if exchanges_str else ""}
         - Small cap stocks: filters={{"market_cap_max": 2000000000}}
         - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
+        {fundamentals_section_str}
 
         TICKER USAGE:
         - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}
@@ -385,7 +398,7 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         ✅ aggregate_mode=True ONLY for market averages/correlations  # CORRECT - when you need ALL data
         ✅ GOOD STOP LOSS: if open <= stop: exit_price = open  # CORRECT - handles gaps
         ✅ GOOD STOP LOSS: Check gap first, then intraday  # CORRECT - proper order
-        ✅ DATE FILTERING: get_bar_data(start_date=day_start, end_date=day_end)  # CORRECT - precise timing
+        ✅ DATE FILTERING: Date range is controlled by the execution context; do not pass start_date/end_date in strategies
 
         PATTERN RECOGNITION:
         - Gap patterns: Compare open vs previous close - return ALL gaps in timeframe
@@ -433,11 +446,8 @@ def _get_system_instruction(ctx: Context, prompt: str) -> str:
         ENHANCED PRECISION WITH DATE FILTERING:
         For exact stop timing, use multi-timeframe analysis:
         1. Daily data identifies potential stop days
-        2. Use start_date/end_date to get intraday bars for specific days
-        3. Walk through intraday bars to find exact stop hit timing
-        4. Always check gap-down scenarios first before intraday analysis
-
-        Example: get_bar_data(timeframe="5", filters={{"tickers": ["COIN"]}}, start_date=day_start, end_date=day_end)
+        2. Walk through intraday bars to find exact stop hit timing
+        3. Always check gap-down scenarios first before intraday analysis
 
         PRINTING DATA (REQUIRED):
         - Use print() to print useful data for the user

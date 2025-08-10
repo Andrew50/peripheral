@@ -67,6 +67,12 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return value
 }
 
+// JWT metadata (hardcoded)
+const (
+	jwtIssuer   = "peripheral.io"
+	jwtAudience = "peripheral-web-app"
+)
+
 // Claims represents a structure for handling Claims data.
 type Claims struct {
 	UserID int `json:"userId"`
@@ -574,10 +580,14 @@ func createOTP() (OTP, error) {
 }
 
 func createToken(userID int) (string, error) {
-	expirationTime := time.Now().Add(6 * time.Hour)
+	now := time.Now().UTC()
+	expirationTime := now.Add(6 * time.Hour)
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    jwtIssuer,
+			Audience:  jwt.ClaimStrings{jwtAudience},
+			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
 	}
@@ -590,14 +600,25 @@ func validateToken(tokenString string) (int, error) {
 
 	// Default profile pic is empty (frontend will generate initial)
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (interface{}, error) {
-		return privateKey, nil // Adjust this to match your token's signing method
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		// Enforce expected signing method
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return privateKey, nil
 	})
 	if err != nil {
 		return -1, fmt.Errorf("cannot parse token: %w", err)
 	}
 	if !token.Valid {
 		return -1, fmt.Errorf("invalid token")
+	}
+	// Validate issuer and audience
+	if !claims.VerifyIssuer(jwtIssuer, true) {
+		return -1, fmt.Errorf("token issuer mismatch")
+	}
+	if !claims.VerifyAudience(jwtAudience, true) {
+		return -1, fmt.Errorf("token audience mismatch")
 	}
 	return claims.UserID, nil
 }

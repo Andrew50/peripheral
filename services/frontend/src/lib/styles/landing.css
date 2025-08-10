@@ -58,7 +58,7 @@
 		'Segoe UI',
 		Roboto,
 		sans-serif;
-	min-height: 100vh;
+	min-height: 100dvh;
 }
 
 .landing-background-animation {
@@ -112,16 +112,15 @@
 	left: 0;
 	width: 100%;
 	height: 100%;
-	background: linear-gradient(
-		135deg,
-		var(--landing-bg-primary) 0%,
-		var(--landing-bg-secondary) 50%,
-		var(--landing-bg-primary) 100%
-	);
+	background: linear-gradient(135deg,
+			var(--landing-bg-primary) 0%,
+			var(--landing-bg-secondary) 50%,
+			var(--landing-bg-primary) 100%);
 	z-index: -1;
 }
 
 @keyframes landing-float {
+
 	0%,
 	100% {
 		transform: translate(0, 0) scale(1);
@@ -383,14 +382,12 @@
 
 /* Gradient Text */
 .landing-gradient-text {
-	background: linear-gradient(
-		135deg,
-		#3b82f6 0%,
-		#6366f1 25%,
-		#8b5cf6 50%,
-		#ec4899 75%,
-		#f59e0b 100%
-	);
+	background: linear-gradient(135deg,
+			#3b82f6 0%,
+			#6366f1 25%,
+			#8b5cf6 50%,
+			#ec4899 75%,
+			#f59e0b 100%);
 	background-size: 200% 200%;
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
@@ -398,6 +395,7 @@
 }
 
 @keyframes landing-gradient-shift {
+
 	0%,
 	100% {
 		background-position: 0% 50%;
@@ -417,7 +415,7 @@
 }
 
 /* Responsive Design */
-@media (width <= 768px) {
+@media (width <=768px) {
 	.landing-header-content {
 		padding: 1rem;
 	}
@@ -436,7 +434,7 @@
 	}
 }
 
-@media (width <= 480px) {
+@media (width <=480px) {
 	.landing-container {
 		padding: 1rem;
 	}

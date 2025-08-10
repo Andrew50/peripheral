@@ -132,9 +132,21 @@
 </main>
 
 <style>
+	/* Hide vertical scrollbar while preserving scroll */
+	:global(html, body) {
+		scrollbar-width: none;
+	}
+
+	:global(html::-webkit-scrollbar),
+	:global(body::-webkit-scrollbar) {
+		width: 0;
+		height: 0;
+	}
+
 	/* Custom styles for the invite page */
 	main {
-		background-image: radial-gradient(circle at 25% 25%, rgb(59 130 246 / 10%) 0%, transparent 50%),
+		background-image:
+			radial-gradient(circle at 25% 25%, rgb(59 130 246 / 10%) 0%, transparent 50%),
 			radial-gradient(circle at 75% 75%, rgb(168 85 247 / 10%) 0%, transparent 50%);
 	}
 </style>

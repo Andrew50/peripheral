@@ -6,14 +6,14 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
-	import { getAuthState, getCookie } from '$lib/auth';
+	import { page } from '$app/stores';
 
 	if (browser) {
 		document.title = 'Peripheral';
 	}
 
-	// Auth state - check immediately to prevent flash
-	let isAuthenticated = getAuthState();
+	// Auth state from server for header
+	$: isAuthenticated = $page.data?.isAuthenticated ?? false;
 
 	// Subsections data for the landing page
 	const subsections = [
@@ -166,7 +166,7 @@
 
 	.page-wrapper {
 		width: 100%;
-		min-height: 100vh;
+		min-height: 100dvh;
 		background: linear-gradient(180deg, #010022 0%, #02175f 100%);
 	}
 
@@ -184,7 +184,7 @@
 			sans-serif;
 		display: flex;
 		flex-direction: column;
-		min-height: 100vh;
+		min-height: 100dvh;
 	}
 
 	.hero-title-section {
@@ -388,7 +388,7 @@
 	@media (width <= 768px) {
 		.hero-title-section {
 			padding: 2rem 1rem;
-			min-height: 100vh;
+			min-height: 100dvh;
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -422,7 +422,7 @@
 	@media (width <= 480px) {
 		.hero-title-section {
 			padding: 1.5rem 1rem;
-			min-height: 100vh;
+			min-height: 100dvh;
 			display: flex;
 			align-items: center;
 			justify-content: center;

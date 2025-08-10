@@ -4,15 +4,16 @@ Validates Python code for security issues before execution and ensures complianc
  strategy requirements.
 
 The strategy engine expects functions that:
-1. Accept no parameters (use get_bar_data() and get_general_data() instead)
+1. Accept no parameters (use get_bar_data(), get_general_data(), or get_fundamentals_data() instead)
 2. Return a list of dictionaries with 'ticker' and 'timestamp' fields
 3. Use only approved safe modules (pandas, numpy, math, datetime, etc.)
-4. Use get_bar_data() and get_general_data() functions to fetch required data
+4. Use get_bar_data(), get_general_data(), and get_fundamentals_data() functions to fetch required data
 5. Do not access dangerous system functions or attributes
 
 Available data accessor functions:
 - get_bar_data(timeframe, security_ids, columns, min_bars): Returns numpy array with OHLCV data
 - get_general_data(security_ids, columns): Returns pandas DataFrame with security metadata
+- get_fundamentals_data(columns, filters, start_date, end_date, date_field="filing_date", latest_only=True, limit=None): Returns pandas DataFrame with fundamentals
 """
 
 import ast
@@ -46,7 +47,7 @@ forbidden_functions = {
     "exit", "quit", "help", "copyright", "credits", "license",
     # Memory and object manipulation that could be dangerous
     "memoryview", "bytearray", "callable", "classmethod", "staticmethod",
-    "property", "super", "isinstance", "issubclass", "iter", "next",
+    "property", "super", "issubclass", "iter", "next",
     # Dangerous built-ins
     "id", "hash", "repr", "ascii", "bin", "hex", "oct",
 }
@@ -67,7 +68,7 @@ allowed_functions = {
     # Safe console output
     "print",
     # Data accessor functions
-    "get_bar_data", "get_general_data"
+    "get_bar_data", "get_general_data", "get_fundamentals_data"
 }
 
         # Forbidden modules (exhaustive security list)
@@ -153,10 +154,10 @@ ALLOWED_ENTRYPOINTS = {"strategy", "code"}
 
 required_instance_fields = {"ticker", "timestamp"}
 reserved_global_names = {"pd", "pandas", "np", "numpy", "datetime", "timedelta", "math",
-                                     "get_bar_data", "get_general_data"}
+                                     "get_bar_data", "get_general_data", "get_fundamentals_data"}
 
         # Data accessor function names
-data_accessor_functions = {"get_bar_data", "get_general_data"}
+data_accessor_functions = {"get_bar_data", "get_general_data", "get_fundamentals_data"}
 
 
 
@@ -433,7 +434,7 @@ def _analyze_ast(tree: ast.AST, *, allow_none_return: bool = False, allowed_entr
                 if node.name == 'classify_symbol':
                     raise ValidationError(
                         "Old pattern function 'classify_symbol' is no longer supported. "
-                        "Use 'strategy()' with get_bar_data() and get_general_data() instead."
+                        "Use 'strategy()' with get_bar_data(), get_general_data(), or get_fundamentals_data() instead."
                     )
 
                 if node.name.startswith('run_'):
@@ -470,7 +471,7 @@ def _validate_function_signature(func_node: ast.FunctionDef) -> bool:
     if len(func_node.args.args) != 0:
         raise ValidationError(
             "Strategy function must have no parameters "
-            + "(use get_bar_data() and get_general_data() instead), "
+            + "(use get_bar_data(), get_general_data(), or get_fundamentals_data() instead), "
             + f"found {len(func_node.args.args)} parameters"
         )
 

@@ -396,19 +396,7 @@ func refreshStaticRefs1m(conn *data.Conn) {
 	//log.Printf("🔄 Refreshing static_refs_1m (now includes range and volume calculations)...")
 	start := time.Now()
 
-	// Apply aggressive vacuum settings for high-frequency update table
-	vacuumOptimizations := []string{
-		"ALTER TABLE static_refs_1m SET (autovacuum_vacuum_threshold = 100, autovacuum_vacuum_scale_factor = 0.02)",
-		"ALTER TABLE static_refs_1m SET (autovacuum_analyze_threshold = 50, autovacuum_analyze_scale_factor = 0.01)",
-		"ALTER TABLE static_refs_1m SET (autovacuum_vacuum_cost_delay = 2, autovacuum_vacuum_cost_limit = 2000)",
-	}
-
-	// Apply vacuum optimizations (ignore errors if already set)
-	for _, opt := range vacuumOptimizations {
-		if _, err := conn.DB.Exec(ctx, opt); err != nil {
-			log.Printf("Warning: vacuum optimization failed: %v", err)
-		}
-	}
+	// Vacuum/Autovacuum table settings are now set via migration 94; avoid runtime DDL here
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefs1mQuery)
 
@@ -436,19 +424,7 @@ func refreshStaticRefsDaily(conn *data.Conn) {
 	//log.Printf("🔄 Refreshing static_refs_daily (now includes moving averages, volatility, and volume calculations)...")
 	start := time.Now()
 
-	// Apply aggressive vacuum settings for frequent update table
-	vacuumOptimizations := []string{
-		"ALTER TABLE static_refs_daily SET (autovacuum_vacuum_threshold = 200, autovacuum_vacuum_scale_factor = 0.03)",
-		"ALTER TABLE static_refs_daily SET (autovacuum_analyze_threshold = 100, autovacuum_analyze_scale_factor = 0.02)",
-		"ALTER TABLE static_refs_daily SET (autovacuum_vacuum_cost_delay = 2, autovacuum_vacuum_cost_limit = 2000)",
-	}
-
-	// Apply vacuum optimizations (ignore errors if already set)
-	for _, opt := range vacuumOptimizations {
-		if _, err := conn.DB.Exec(ctx, opt); err != nil {
-			log.Printf("Warning: vacuum optimization failed: %v", err)
-		}
-	}
+	// Vacuum/Autovacuum table settings are now set via migration 94; avoid runtime DDL here
 
 	_, err := conn.DB.Exec(ctx, refreshStaticRefsQuery)
 

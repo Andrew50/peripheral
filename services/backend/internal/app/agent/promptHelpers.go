@@ -58,6 +58,18 @@ func GetSystemInstruction(name string) (string, error) {
 	return s, nil
 }
 
+// buildSystemPrompt loads a base prompt and conditionally appends a suggestions appendix
+func buildSystemPrompt(baseName string, includeSuggestions bool, suggestionsAppendix string) (string, error) {
+	base, err := GetSystemInstruction(baseName)
+	if err != nil {
+		return "", err
+	}
+	if includeSuggestions && suggestionsAppendix != "" {
+		return base + "\n\n" + suggestionsAppendix, nil
+	}
+	return base, nil
+}
+
 func getCleanThinkingTracePrompt() string {
 	raw, err := fs.ReadFile("chatUXPrompts/cleanThinkingTrace.txt")
 	if err != nil {

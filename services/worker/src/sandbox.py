@@ -26,7 +26,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from .utils.plotly_to_matlab import plotly_to_matplotlib_png
-from .utils.data_accessors import _get_bar_data as get_bar_data, _get_general_data as get_general_data
+from .utils.data_accessors import (
+    _get_bar_data as get_bar_data,
+    _get_general_data as get_general_data,
+    _get_fundamentals_data as get_fundamentals_data,
+)
 from .utils.context import Context
 from .utils.error_utils import capture_exception
 
@@ -232,10 +236,33 @@ class PythonSandbox:
                 """Wrapper to call utils.data_accessors._get_general_data with context."""
                 return get_general_data(ctx, columns, filters)
 
+            def bound_get_fundamentals_data(
+                columns: Optional[List[str]] = None,
+                filters: Optional[Dict[str, Any]] = None,
+                start_date: Optional[dt] = None,
+                end_date: Optional[dt] = None,
+            ) -> Any:
+                """Wrapper to call utils.data_accessors._get_fundamentals_data with context.
+                - date_field: filing_date
+                - latest_only: False
+                - limit: None
+                """
+                return get_fundamentals_data(
+                    ctx=ctx,
+                    columns=columns,
+                    filters=filters,
+                    start_date=start_date,
+                    end_date=end_date,
+                    date_field="filing_date",
+                    latest_only=False,
+                    limit=None,
+                )
+
             # Update safe_globals with bound accessor functions
             safe_globals.update({
                 'get_bar_data': bound_get_bar_data,
                 'get_general_data': bound_get_general_data,
+                'get_fundamentals_data': bound_get_fundamentals_data,
             })
 
         except Exception as e:

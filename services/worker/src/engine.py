@@ -26,7 +26,7 @@ import plotly.graph_objects as go
 
 from .utils.plotly_to_matlab import plotly_to_matplotlib_png
 from .utils.context import Context
-from .utils.data_accessors import _get_bar_data, _get_general_data
+from .utils.data_accessors import _get_bar_data, _get_general_data, _get_fundamentals_data
 from .utils.error_utils import capture_exception
 
 logger = logging.getLogger(__name__)
@@ -248,6 +248,42 @@ def _create_safe_globals(
         return _get_general_data(ctx, columns, actual_filters)
     
 
+    def get_fundamentals_data(
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Fetch fundamentals with engine execution dates.
+        - date_field: filing_date
+        - latest_only: False
+        - limit: None
+        """
+        actual_filters: Optional[Dict[str, Any]] = _normalize_filters(filters)
+        if symbols_intersect:
+            if actual_filters is None:
+                actual_filters = {}
+            if 'tickers' in actual_filters and actual_filters['tickers'] is not None:
+                tickers_val = actual_filters['tickers']
+                if isinstance(tickers_val, str):
+                    tickers_list: List[str] = [tickers_val]
+                elif isinstance(tickers_val, list):
+                    tickers_list = tickers_val
+                else:
+                    tickers_list = []
+                actual_filters['tickers'] = list(symbols_intersect.intersection(set(tickers_list)))
+            else:
+                actual_filters['tickers'] = list(symbols_intersect)
+        return _get_fundamentals_data(
+            ctx,
+            columns=columns,
+            filters=actual_filters,
+            start_date=start_date,
+            end_date=end_date,
+            date_field="filing_date",
+            latest_only=False,
+            limit=None,
+        )
+    
+
     safe_globals: Dict[str, Any] = {
         # Built-ins for safe execution (including __import__ for import statements)
         # we dont use defaults becuase that would allow for things like open, eval, exec, etc.
@@ -284,6 +320,7 @@ def _create_safe_globals(
         # Bound data accessor functions (use this engine's instance)
         'get_bar_data': get_bar_data,
         'get_general_data': get_general_data,
+        'get_fundamentals_data': get_fundamentals_data,
         # Plot styling functions
         'apply_drawdown_styling': apply_drawdown_styling,
         'apply_equity_curve_styling': apply_equity_curve_styling,

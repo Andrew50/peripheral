@@ -42,6 +42,7 @@
 	import './chat.css'; // Import the CSS file
 	import { showAuthModal } from '$lib/stores/authModal';
 	import type { ConversationInfo } from './interface';
+	import { settings } from '$lib/utils/stores/stores';
 
 	export let sharedConversationId: string = '';
 	export let isPublicViewing: boolean;
@@ -64,7 +65,7 @@
 	const renderer = new marked.Renderer();
 
 	// Override del renderer to disable strikethrough formatting
-	renderer.del = function({ tokens }) {
+	renderer.del = function ({ tokens }) {
 		return this.parser.parseInline(tokens); // Return plain text instead of wrapped in <del> tags
 	};
 
@@ -90,8 +91,9 @@
 
 	// Derived store to control initial chip visibility
 	const showChips = derived(
-		[inputValue, messagesStore],
-		([$val, $msgs]) => $msgs.length === 0 && $val.trim() === ''
+		[inputValue, messagesStore, settings],
+		([$val, $msgs, $settings]) =>
+			$msgs.length === 0 && $val.trim() === '' && $settings.chatSuggestionsEnabled
 	);
 
 	// Reactive variable for top 3 suggestions
@@ -128,9 +130,27 @@
 	// Usage limit state
 	let showUpgradePrompt = false;
 
+	// Helper: wrapper to satisfy unknown -> string typing for plots when copying
+	function plotDataToTextUnknown(data: unknown): string {
+		const pd = getPlotData(data);
+		return pd ? plotDataToText(pd) : '';
+	}
+
+	// Helper: extract cleaned plot content safely for markup use
+	function getCleanedPlotContent(chunk: { type: string; content: unknown } | any): unknown {
+		const cleaned: any = cleanContentChunk(chunk) as any;
+		return cleaned && typeof cleaned === 'object' ? cleaned.content : undefined;
+	}
+
 	// Function to fetch initial suggestions based on active chart
 	async function fetchInitialSuggestions() {
 		initialSuggestions = []; // Clear previous suggestions first
+		// Respect user setting: don't fetch or show initial suggestions when disabled
+		const s = get(settings);
+		if (!s.chatSuggestionsEnabled) {
+			initialSuggestions = [];
+			return;
+		}
 		if ($activeChartInstance) {
 			// Only fetch if there's an active instance
 			try {
@@ -150,6 +170,11 @@
 				initialSuggestions = []; // Ensure it's an empty array on error
 			}
 		}
+	}
+
+	// Reactively clear any existing initial suggestions if the user disables them
+	$: if (!$settings.chatSuggestionsEnabled) {
+		initialSuggestions = [];
 	}
 
 	// Conversation management functions
@@ -707,9 +732,9 @@
 
 				// Try to clean up pending message on backend for network errors
 				await cleanupPendingMessage(currentProcessingQuery);
-				
+
 				let errorMessage: Message;
-				
+
 				if (error.message === 'USAGE_LIMIT_REACHED') {
 					// Show upgrade prompt and set friendly error message
 					showUpgradePrompt = true;
@@ -754,7 +779,7 @@
 			// Add error message if we have a loading message
 			if (loadingMessage) {
 				let errorMessage: Message;
-				
+
 				if (error.message === 'USAGE_LIMIT_REACHED') {
 					// Show upgrade prompt and set friendly error message
 					showUpgradePrompt = true;
@@ -1036,7 +1061,7 @@
 			if (message.contentChunks && message.contentChunks.length > 0) {
 				// For messages with content chunks, extract text from each chunk
 				textToCopy = message.contentChunks
-					.map((chunk) => getContentChunkTextForCopy(chunk, isTableData, plotDataToText))
+					.map((chunk) => getContentChunkTextForCopy(chunk, isTableData, plotDataToTextUnknown))
 					.filter((text) => text.length > 0)
 					.join('\n\n');
 			} else {
@@ -1345,8 +1370,8 @@
 			<div class="initial-container">
 				<!-- Capabilities text merged here -->
 				<p class="capabilities-text">
-					Peripheral Agent analyzes market data, filings, breaking news, backtests
-					strategies and event driven research, and more.
+					Peripheral Agent analyzes market data, filings, breaking news, backtests strategies and
+					event driven research, and more.
 				</p>
 				<p class="suggestions-header">
 					Ask Peripheral Agent a question or to perform a task to get started.
@@ -1614,9 +1639,9 @@
 													<div class="chunk-error">Invalid table data format</div>
 												{/if}
 											{:else if chunk.type === 'plot'}
-												{@const cleanedChunk = cleanContentChunk(chunk)}
-												{#if isPlotData(cleanedChunk.content)}
-													{@const plotData = getPlotData(cleanedChunk.content)}
+												{@const cleanedContent = getCleanedPlotContent(chunk)}
+												{#if isPlotData(cleanedContent)}
+													{@const plotData = getPlotData(cleanedContent)}
 													{@const plotKey = generatePlotKey(message.message_id, index)}
 
 													{#if plotData}
@@ -1805,16 +1830,16 @@
 					{/if}
 				</div>
 			{/each}
-			
+
 			<!-- Upgrade prompt displayed as part of chat when usage limit is reached -->
 			{#if showUpgradePrompt && !isPublicViewing}
 				<div class="message-wrapper assistant">
 					<div class="upgrade-prompt">
-						<p>You've reached your query limit. Upgrade to continue using Peripheral Agent without interruption.</p>
-						<button 
-							class="upgrade-btn"
-							on:click={() => window.location.href = '/pricing'}
-						>
+						<p>
+							You've reached your query limit. Upgrade to continue using Peripheral Agent without
+							interruption.
+						</p>
+						<button class="upgrade-btn" on:click={() => (window.location.href = '/pricing')}>
 							View Plans
 						</button>
 					</div>
