@@ -14,7 +14,7 @@ import importlib as _importlib
 
 from .validator import validate_code
 from .utils.context import Context
-from .utils.data_accessors import get_available_filter_values
+from .utils.data_accessors import get_available_filter_values, get_available_fundamental_fields
 from .utils.error_utils import capture_exception
 from .sandbox import PythonSandbox, create_default_config
 from .generator import _parse_filter_needs_response
@@ -46,6 +46,7 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
             - sectors: A list of sector options like \"Energy\", \"Finance\", \"Health Care\"
             - industries: \"Life Insurance\", \"Major Banks\", \"Major Chemicals\"
             - primary_exchanges: NYSE, NASDAQ, ARCA
+            - fundamentals: revenue, net_income, earnings_per_share, etc.
             ONLY include true if building a strategy around the prompt REQUIRES one of the filter options.""")],
         )
         response = ctx.conn.gemini_client.models.generate_content(
@@ -79,6 +80,17 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
     sectors_str = '", "'.join(filter_values.get('sectors', [])) if filter_values.get('sectors') else ""
     industries_str = '", "'.join(filter_values.get('industries', [])) if filter_values.get('industries') else ""
     exchanges_str = '", "'.join(filter_values.get('primary_exchanges', [])) if filter_values.get('primary_exchanges') else ""
+    fundamentals_section_str = ""
+    if filter_needs.get("fundamentals", False):
+        fundamentals_fields = get_available_fundamental_fields(ctx)
+        fundamentals_fields_str = ', '.join(fundamentals_fields[:120])
+        fundamentals_section_str = f"""
+
+    FUNDAMENTALS FIELDS:
+    - Available fields include: {fundamentals_fields_str}
+    - Date filtering uses filing_date and is bounded by the execution start_date/end_date
+    """
+
     return f"""You are a agent that generates Python code for financial data queries.
 
     Allowed imports:
@@ -86,8 +98,9 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
     - for datetime.datetime, ALWAYS do from datetime import datetime as dt
 
     FUNCTION VALIDATION - ONLY these custom functions exist, automatically available in the execution environment:
-    - get_bar_data(timeframe, columns, min_bars, filters, extended_hours, start_date, end_date) → pandas.DataFrame
-    - get_general_data(columns, filters) → pandas.DataFrame
+    - get_bar_data(timeframe, min_bars, columns=None, filters=None, extended_hours=False) → pandas.DataFrame
+    - get_general_data(columns=None, filters=None) → pandas.DataFrame
+    - get_fundamentals_data(columns=None, filters=None, start_date=None, end_date=None) → pandas.DataFrame
 
     CRITICAL REQUIREMENTS:
     - code() function with no parameters
@@ -114,9 +127,9 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
             - 1 bar: Simple current patterns (volume spikes, price thresholds)
             - 2 bars: Patterns using shift() for previous values (gaps, daily changes)
             - 20+ bars: Technical indicators (moving averages, RSI)
-            - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
+        - 10,000 bars: This is the maximum number of bars that can be used. If you need more than 10,000 bars, you should use the 1d timeframe.
             - min_bars enforces returning exactly that many bars if available, or all available bars if fewer exist.
-            - If start_date and end_date are not provided, retrieves the most recent min_bars bars. For specific date ranges, always provide start_date and end_date.
+            - If start_date and end_date are not provided, retrieves all bars. For specific date ranges, always provide start_date and end_date.
 
     * get_bar_data(timeframe="1d", filters={{}})
     * get_general_data(columns=[], filters={{"tickers": ["AAPL", "MRNA"]}}) -> pandas DataFrame
@@ -136,6 +149,7 @@ def _get_general_python_system_instruction(ctx: Context, prompt: str) -> str:
     - Biotechnology stocks: filters={"industry": "Biotechnology"}''' if industries_str else ""}
     - Small cap stocks: filters={{"market_cap_max": 2000000000}}
     - Specific tickers: filters={{"tickers": ["AAPL", "MRNA", "TSLA"]}}
+    {fundamentals_section_str}
 
     TICKER USAGE:
     - Always use ticker symbols (strings) like "MRNA", "AAPL", "TSLA" in filters={{"tickers": ["SYMBOL"]}}

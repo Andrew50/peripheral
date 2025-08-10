@@ -483,12 +483,12 @@ var (
 		"runPythonAgent": {
 			FunctionDeclaration: &genai.FunctionDeclaration{
 				Name:        "runPythonAgent",
-				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
+				Description: "[DO NOT RUN SEVERAL OF THESE IN PARALLEL.] Run a Python agent to analyze historical market data and fundamentals, do comparative analysis, create plot visualizations, or do other analysis. This is good for ad hoc data querying/analysis. For event driven analysis, use this. For more persistent backtesting, use run_backtest. This agent already has access to market data. THIS AGENT DOES NOT HAVE ACCESS TO WEBSEARCH. IF IT NEEDS DATES OF EVENTS, YOU MUST GIVE IT THIS INFORMATION. DO NOT ASK FOR SPECIFIC RETURN TYPES OR INFORMATION IN THE QUERY.",
 				Parameters: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
 						"prompt": {Type: genai.TypeString, Description: "The NL query to pass to the Python agent."},
-						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data. Data such as EPS/Revenue/other fundamental data/dates of events MUST be passed to the agent, or else the agent will not have access."},
+						"data":   {Type: genai.TypeString, Description: "[THIS MUST!!! BE A STRING] Data to pass to the Python agent. The only data that the agent has access to is stock OHLCV data, general company metadata, and fundamental data. Data such as specific dates of events MUST be passed to the agent, or else the agent will not have access."},
 					},
 					Required: []string{"prompt"},
 				},
@@ -514,11 +514,11 @@ var (
 						},
 						"startDate": {
 							Type:        genai.TypeString,
-							Description: "The start date of the backtest in YYYY-MM-DD format.",
+							Description: "REQUIRED. Non-empty. The start date of the backtest in strict YYYY-MM-DD format. If the user did not provide a date, ask them for it before calling.",
 						},
 						"endDate": {
 							Type:        genai.TypeString,
-							Description: "The end date of the backtest in YYYY-MM-DD format.",
+							Description: "REQUIRED. Non-empty. The end date of the backtest in strict YYYY-MM-DD format. Ensure endDate >= startDate. If the user did not provide a date, ask them for it before calling.",
 						},
 					},
 					Required: []string{"strategyId", "startDate", "endDate"},

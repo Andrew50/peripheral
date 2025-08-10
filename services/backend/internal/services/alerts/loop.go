@@ -1246,7 +1246,7 @@ func executeStrategyAlert(ctx context.Context, conn *data.Conn, strategy Strateg
 	}
 
 	tickerCSV := strings.Join(hitTickers, ",")
-	log.Printf("🎉 Strategy %d (%s): %d instances matched, tickers: [%s]", strategy.StrategyID, strategy.Name, numInstances, tickerCSV)
+	//log.Printf("🎉 Strategy %d (%s): %d instances matched, tickers: [%s]", strategy.StrategyID, strategy.Name, numInstances, tickerCSV)
 
 	additionalData := map[string]interface{}{
 		"num_matches": numInstances,
