@@ -743,6 +743,8 @@
 		flex-grow: 1;
 		overflow: hidden auto;
 		width: 100%;
+		position: relative;
+		user-select: none;
 	}
 
 	.header-table,
@@ -1051,28 +1053,24 @@
 	.drop-placeholder td {
 		padding: 0;
 	}
+
 	.drop-placeholder {
 		height: 2px;
 	}
+
 	.drop-placeholder .default-td {
-		background: var(--ui-accent, rgba(255, 255, 255, 0.7));
+		background: var(--ui-accent, rgb(255 255 255 / 70%));
 		border-radius: 1px;
 	}
 
 	/* Absolutely positioned drop-line overlay that does not affect table layout */
-	.table-body {
-		position: relative;
-		-webkit-user-select: none;
-		-moz-user-select: none;
-		-ms-user-select: none;
-		user-select: none;
-	}
+
 	.drop-line {
 		position: absolute;
 		left: 0;
 		right: 0;
 		height: 2px;
-		background: var(--ui-accent, rgba(255, 255, 255, 0.7));
+		background: var(--ui-accent, rgb(255 255 255 / 70%));
 		border-radius: 1px;
 		pointer-events: none;
 	}
