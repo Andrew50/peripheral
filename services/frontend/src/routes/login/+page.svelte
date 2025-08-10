@@ -2,17 +2,23 @@
 	import Auth from '$lib/components/auth.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import '$lib/styles/splash.css';
-	import { getAuthState } from '$lib/auth';
+	import { goto } from '$app/navigation';
+	// Auth now comes from server via $page.data in header
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
-	// Auth state - check immediately to prevent flash
-	let isAuthenticated = getAuthState();
+	// Use server-provided auth state for header
+	$: isAuthenticated = $page.data?.isAuthenticated ?? false;
 
 	// Invite code from URL query parameter
 	let inviteCode = '';
 
 	onMount(() => {
+		// If already authenticated (server-validated), redirect immediately
+		if ($page.data?.isAuthenticated) {
+			goto('/app');
+			return;
+		}
 		// Extract invite code from URL query parameter
 		inviteCode = $page.url.searchParams.get('invite') || '';
 	});

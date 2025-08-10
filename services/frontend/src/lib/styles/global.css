@@ -50,10 +50,14 @@ body {
 	height: 100%;
 	margin: 0;
 	padding: 0;
+}
+
+/* Use body as the scroll container for pages by default */
+body {
 	/* clamp horizontal overflow globally as a safety net */
 	overflow-x: clip;
-	/* always reserve vertical scrollbar to avoid first-paint flash */
-	overflow-y: scroll;
+	/* avoid first-paint scrollbar flash while keeping layout stable */
+	overflow-y: auto;
 	/* keep layout stable even if vertical scrollbar appears/disappears */
 	scrollbar-gutter: stable both-edges;
 	/* Prevent overscroll/bounce effects */

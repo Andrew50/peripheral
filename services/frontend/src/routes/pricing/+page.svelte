@@ -249,8 +249,9 @@
 		return plan.prices.some((p) => p.billing_period === apiPeriod);
 	});
 
-	// Auth state - check immediately to prevent flash
-	let isAuthenticated = getAuthState();
+	// Auth state from server
+	import { page } from '$app/stores';
+	$: isAuthenticated = $page.data?.isAuthenticated ?? false;
 
 	// Function to determine if the current user is authenticated
 	const isAuthenticatedFn = (): boolean => {

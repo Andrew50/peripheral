@@ -4,7 +4,7 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 
-	// Auth state prop
+	// Auth state prop (fallback) — server data preferred when available
 	export let isAuthenticated: boolean = false;
 	// Visibility & transparency state
 	let isHeaderVisible = true;
@@ -32,10 +32,52 @@
 	}
 
 	// Navigation helpers
+	async function preflightAndNavigateToApp() {
+		if (!browser) return;
+		try {
+			// Prefer cookie for verification; sessionStorage may be missing on public pages
+			const token = (document.cookie.match(/(?:^|;\s*)authToken=([^;]+)/) || [])[1];
+			if (!token) {
+				goto('/login');
+				return;
+			}
+			const baseUrl =
+				window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+					? 'http://localhost:5058'
+					: window.location.origin;
+			const response = await fetch(`${baseUrl}/private`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: decodeURIComponent(token)
+				},
+				body: JSON.stringify({ func: 'verifyAuth', args: {} })
+			});
+			if (response.ok) {
+				goto('/app');
+			} else {
+				// Clear local auth state to prevent UI drift
+				document.cookie = 'authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+				document.cookie = 'profilePic=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+				try {
+					sessionStorage.removeItem('authToken');
+					sessionStorage.removeItem('profilePic');
+				} catch {}
+				goto('/login');
+			}
+		} catch {
+			goto('/login');
+		}
+	}
+
 	function navigateTo(path: string) {
 		if (!browser) return;
 		// Close sidebar on navigation
 		isSidebarOpen = false;
+		if (path === '/app') {
+			preflightAndNavigateToApp();
+			return;
+		}
 		if (window.location.pathname === path) {
 			// Already on the desired route – just scroll to top for a snappy UX
 			window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -117,7 +159,7 @@
 		<button class="sidebar-nav-button secondary" on:click={() => navigateTo('/pricing')}
 			>Pricing</button
 		>
-		{#if isAuthenticated}
+		{#if $page.data?.isAuthenticated ?? isAuthenticated}
 			<button class="sidebar-nav-button primary" on:click={() => navigateTo('/app')}
 				>Go to Terminal</button
 			>
@@ -160,7 +202,7 @@
 				class:transparent={isHeaderTransparent}
 				on:click={() => navigateTo('/pricing')}>Pricing</button
 			>
-			{#if isAuthenticated}
+			{#if $page.data?.isAuthenticated ?? isAuthenticated}
 				<button
 					class="nav-button primary"
 					class:transparent={isHeaderTransparent}

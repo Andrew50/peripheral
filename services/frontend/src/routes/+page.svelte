@@ -6,14 +6,14 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import '$lib/styles/splash.css';
-	import { getAuthState, getCookie } from '$lib/auth';
+	import { page } from '$app/stores';
 
 	if (browser) {
 		document.title = 'Peripheral';
 	}
 
-	// Auth state - check immediately to prevent flash
-	let isAuthenticated = getAuthState();
+	// Auth state from server for header
+	$: isAuthenticated = $page.data?.isAuthenticated ?? false;
 
 	// Subsections data for the landing page
 	const subsections = [
