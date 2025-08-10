@@ -965,17 +965,13 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
-<div
-	class="page"
-	role="application"
-	tabindex="-1"
+<svelte:window
 	on:keydown={(e) => {
-		if (e.key === 'Escape') {
-			minimizeBottomWindow();
-		}
+		if (e.key === 'Escape') minimizeBottomWindow();
 	}}
->
+/>
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions-->
+<div class="page" role="application">
 	<!-- Global Popups (always available) -->
 	<Input />
 	<RightClick />

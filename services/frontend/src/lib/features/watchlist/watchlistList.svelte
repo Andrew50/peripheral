@@ -382,7 +382,8 @@
 	onMount(() => {
 		try {
 			isLoading = true;
-			window.addEventListener('keydown', handleKeydown);
+			// Use capture so upstream handlers cannot swallow Arrow/Space before we see them
+			window.addEventListener('keydown', handleKeydown, true);
 			const preventContextMenu = (e: Event) => {
 				e.preventDefault();
 			};
@@ -406,7 +407,7 @@
 		}
 	});
 	onDestroy(() => {
-		window.removeEventListener('keydown', handleKeydown);
+		window.removeEventListener('keydown', handleKeydown, true);
 	});
 
 	// Add reactive synchronization with activeChartInstance

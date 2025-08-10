@@ -241,7 +241,7 @@
 		.filter((watchlist): watchlist is Watchlist => Boolean(watchlist));
 </script>
 
-<div tabindex="-1" class="feature-container" bind:this={container}>
+<div class="feature-container" bind:this={container}>
 	<!-- Watchlist Tabs -->
 	{#if showTabs}
 		<div class="watchlist-tabs-container">
