@@ -123,6 +123,11 @@ func GetInitialQuerySuggestions(conn *data.Conn, userID int, rawArgs json.RawMes
 		return nil, fmt.Errorf("error unmarshalling initial query suggestions args: %w", err)
 	}
 
+	// Respect user setting: if suggestions are disabled, return empty immediately
+	if !getUserChatSuggestionsEnabled(ctx, conn, userID) {
+		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
+	}
+
 	if args.ActiveChartInstance == nil {
 		return GetInitialQuerySuggestionsResponse{Suggestions: []string{}}, nil
 	}
