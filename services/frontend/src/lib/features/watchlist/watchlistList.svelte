@@ -145,6 +145,8 @@
 		scrollToRow(selectedRowIndex);
 	}
 
+	// Scroll the watchlist to the row at `index`; optionally trigger a chart query for that row.
+	// Pass shouldQueryChart=false when programmatically syncing selection (to avoid redundant queries).
 	function scrollToRow(index: number, shouldQueryChart: boolean = true) {
 		const row = document.getElementById(`row-${index}`);
 		if (row) {
