@@ -6,6 +6,8 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
 # Editor and IDE Files
 .vscode/
@@ -20,18 +22,22 @@ Thumbs.db
 .vim/
 
 # Build Artifacts and Temporary Files
-services/backend/tmp/
-tmp/
-temp/
+**/node_modules/
+**/dist/
+**/build/
+**/out/
+**/target/
+**/tmp/
+**/temp/
 *.tmp
 *.orig
 *.rej
 *.patch
-build/
-dist/
-out/
+*.bak
+*.old
 
-# Go Build Artifacts
+# Go
+**/services/backend/tmp/
 *.exe
 *.exe~
 *.dll
@@ -40,22 +46,26 @@ out/
 *.test
 *.out
 go.work
+services/backend/app.log
 
-# Node.js and NPM
-node_modules/
+# Node.js / Frontend
+.svelte-kit/
+.vercel/
+.output/
+.eslintcache
+.stylelintcache
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-.npm
-.eslintcache
-.stylelintcache
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+waitlist.json
 
 # Python
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
-*.so
 .Python
 env/
 venv/
@@ -63,170 +73,55 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.env
 *.egg-info/
 .coverage
 .pytest_cache/
 .tox/
+.hypothesis/
+services/worker/core*
+bandit-report*.json
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-
-# Service-specific log directories (deprecated - now using console logging)
-# services/*/logs/
-# services/worker/logs/
-# services/backend/logs/
-# services/frontend/logs/
 logs/
-
-# Runtime Data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage and Testing
-coverage/
-.nyc_output
-*.coverage
-.hypothesis/
-.pytest_cache/
-.cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
+**/logs/*.log
 
 # Environment Variables and Secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.*.local
+.env.*
+!.env.example
+!.env.test
 *.key
 *.pem
 *.crt
 *.cert
 
-# Database
+# Database & Backups
 *.db
 *.sqlite
 *.sqlite3
+backups/
+services/db/backups/
 
-# Docker
+# Docker & Kubernetes
 .dockerignore
 docker-compose.override.yml
-
-# Kubernetes
 *.kubeconfig
-
-# macOS
-.AppleDouble
-.LSOverride
-
-# Linux
-*~
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# Backup Files
-*.bak
-*.backup
-*.old
-*.orig
 
 # Misc
 .sass-cache/
 .connect.lock
 .typings/
 .lock-wscript
-
-# Optional eslint cache
-.eslintcache
-
-# Optional stylelint cache
-.stylelintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
 .node_repl_history
-
-# Output of 'npm pack'
 *.tgz
-
-# Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
-.env.production
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
 .parcel-cache
-
-# Next.js build output
 .next
-
-# Nuxt.js build / generate output
 .nuxt
-dist
-
-# Gatsby files
-.cache/
-public
-
-# Svelte kit build
-.svelte-kit
-
-# Storybook build outputs
-.out
+public/
 .storybook-out
-
-# Temporary folders
-tmp/
-temp/
-services/backend/tmp/build-errors.log
-services/backend/tmp/build-errors.log
-config/dev/.env
-services/worker/logs/worker.log
-
-# Merged patterns from services/.gitignore
-services/backend/app.log
-services/worker/__pycache__
-services/worker/core*
-services/db/backups
-services/worker/venv
-.github/tmp
-
-# Merged patterns from services/frontend/.gitignore
-.output
-.vercel
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-waitlist.json
-.env.*
-!.env.example
-!.env.test
+.rpt2_cache/
+.rts2_cache_*/
+.cache/
+.nyc_output
